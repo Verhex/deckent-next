@@ -20,7 +20,7 @@
   "agentstats.cost.none": "ölçülmedi",
   "agentstats.failures": "    sayılan başarısızlıklar: ölçüt {criteria}, işçi raporu {report}, kişinin reddi {human}",
   "agentstats.uncounted": "    ajana sayılmayan: altyapı {infra}, model {model}, bağımlılık {dependency}, politika {policy}, operatör {operator}, nedeni kayıtsız {unattributed}",
-  "agentstats.excluded": "    ayrı tutulan: karar bekliyor {awaiting}, yalnız bilinmeyen kanıt {unknown}, eski kayıt biçimi {legacy}, mühürlü zamanı yok {undated}, Run eksik bitti {incomplete}",
+  "agentstats.excluded": "    ayrı tutulan: karar bekliyor {awaiting}, yalnız bilinmeyen kanıt {unknown}, eski kayıt biçimi {legacy}, mühürlü zamanı yok {undated}, iş eksik bitti {incomplete}",
   "agentstats.baseline": "    bu ajan hariç iş türü geneli: {line} · süre oranı {ratio}",
   "agentstats.ratio.none": "ölçülmedi",
   "agentstats.active": "    terfili ajan {id} sürüm {revision}: {line}",
@@ -34,12 +34,15 @@
   "agentstats.workClasses": "İş türleri",
   "agentstats.none": "Bu kapsamda ajan yok.",
   "agentstats.notFound": "Bu kapsamda {id} ajanı yok.",
-  "agentstats.config.section": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği ile mühürlü öneri kaydeden geçişi açar (off kapalı; shadow öneriler yalnız kanıt, kart ve daraltma yok; on öneriler kart için, daraltma yalnız ölçümle onaylanmış kurallarda); geçiş yalnız toplayıcının kendi anahtarıyla imzalayarak yazar; overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür.",
-  "error.CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE": "Katalog istatistik kuralları eksik ya da geçersiz. Hiçbir istatistik hesaplanmadı, hiçbir şey yazılmadı; Run'lar, ajan seçimi ve durumlar etkilenmedi.",
+  "agentstats.config.section": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği ile mühürlü öneri kaydeden geçişi açar (off kapalı; shadow öneriler yalnız kanıt, kart ve daraltma yok; on öneriler kart için, daraltma yalnız ölçümle onaylanmış kurallarda); geçiş yalnız toplayıcının kendi anahtarıyla imzalayarak yazar; overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür. Kip değişikliği çalışma hizmetinin yeniden başlatılmasını gerektirir.",
+  "error.CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE": "Katalog istatistik kuralları eksik ya da geçersiz. Hiçbir istatistik hesaplanmadı, hiçbir şey yazılmadı; işler, ajan seçimi ve durumlar etkilenmedi.",
   "error.CATALOG_EVOLUTION_CORRUPT": "Bir katalog istatistik kaydı ya da metrik satırı bütünlük denetiminden geçmedi. Hiçbir şey değiştirilmedi.",
   "error.CATALOG_EVOLUTION_POSITION_CONFLICT": "Bu kapsamın başka bir toplama geçişi önce ilerledi. Hiçbir şey iki kez yazılmadı; sonraki geçiş onun konumundan devam eder.",
   "agentstats.percent": "%{n}",
   "mcp.tool.inspectAgentStats": "Mühürlü işten ajan istatistiklerini gösterir: güven aralığıyla kabul edilen sonuçlar, süre, ölçülen maliyet, her başarısızlık türü ve ayrı tutulanlar, yanında iş türünün geneli; agentId ile sürüm, model, sabitlenmiş skill ve ekip toplamı. İlişkidir, nedensellik değil; kabul oranıdır, doğruluk değil (salt okunur).",
   "agentstats.config.name": "Ajan kataloğu toplaması",
-  "agentstats.help.action.stats": "mühürlü işten ajan istatistiklerini göster (ilişki, kabul oranı)"
+  "agentstats.help.action.stats": "mühürlü işten ajan istatistiklerini göster (ilişki, kabul oranı)",
+  "agentstats.mode.label.shadow": "gölge",
+  "agentstats.mode.label.on": "açık",
+  "agentstats.signer.unavailable": "Katalog imza anahtarının hazır olup olmadığı okunamadı."
 }

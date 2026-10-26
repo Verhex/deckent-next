@@ -1,6 +1,6 @@
-export { monitorQuerySchema } from './internal/contract.js';
+export { monitorQuerySchema, MONITOR_BLOCKER_CODES } from './internal/contract.js';
 export type { MonitorQuery, MonitorSnapshot, MonitorInstall, MonitorInstallStatus, MonitorDeliveryState, MonitorRun, MonitorRunState, MonitorTask, MonitorAttempt, MonitorCloseReason, MonitorDeliveryOutlook, MonitorBlocker, MonitorBlockerCode,
-  MonitorApproval, MonitorPool, MonitorService, MonitorBuild, MonitorMap, MonitorWorkerHuman, MonitorWorker, MonitorWorkerContent } from './internal/contract.js';
+  MonitorApproval, MonitorPool, MonitorService, MonitorBuild, MonitorMap, MonitorRecoveryRollout, MonitorWorkerHuman, MonitorWorker, MonitorWorkerContent } from './internal/contract.js';
 export type { MonitorLedgerReading, MonitorLedgerRun, MonitorLedgerAttempt, MonitorLedgerDispatch, MonitorLedgerApproval, MonitorLedgerPool, MonitorTarget,
   MonitorLedgerIndex, MonitorReadScope, MonitorScopeObservation, MonitorPorts, MonitorEvent } from './internal/evidence.js';
 export { deriveRunBlocker, deriveRunState, projectMonitorRun, MONITOR_BLOCKER_PRECEDENCE, MONITOR_ENVIRONMENT_DETAIL } from './internal/derive.js';

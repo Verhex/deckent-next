@@ -4,7 +4,7 @@ import { fillTemplate, span, type PermissionModeStop } from '#surfaces/core/term
 import { pickerView, PICKER_INITIAL, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import type { WindowLine } from '#surfaces/core/terminal-window/index.js';
 import type { ModePanelLabels, ModePanelPort, PanelLabels } from './contract.js';
-import { PickerWindow } from './picker-window.js';
+import { PickerWindow, useLoadingText } from './picker-window.js';
 
 const STOPS: readonly PermissionModeStop[] = ['standart', 'ask-edits', 'full-auto', 'full-access'];
 /** The focused mode's sentence: the body rows the window keeps for it (a longer one scrolls). */
@@ -19,9 +19,9 @@ function blockedReason(stop: PermissionModeStop, view: PermissionModeView, curre
 }
 
 /** `/mode` as a list (Shift+Tab's panel form): every mode with what it does; the ones this person may not take are shown locked, with why. */
-export function modePanelTree(view: PermissionModeView, current: PermissionModeStop | null, labels: ModePanelLabels): PickerTree {
+export function modePanelTree(view: PermissionModeView, current: PermissionModeStop | null, labels: ModePanelLabels, canOpen = false): PickerTree {
   return { title: labels.title, items: STOPS.map(stop => {
-    const blocked = blockedReason(stop, view, current, labels);
+    const blocked = !view.supported || !canOpen ? blockedReason(stop, view, current, labels) : null;
     return { id: stop, label: stop === current ? `${labels.stops[stop]} · ${labels.current}` : labels.stops[stop], keywords: [stop],
       ...(blocked ? { blocked: { reason: blocked } } : {}) };
   }) };
@@ -38,10 +38,10 @@ export function ModePanel({ port, labels, onError, onClose }: { readonly port: M
     port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
     return () => { live = false; };
   }, [port]);
-  const words = labels.mode;
-  if (!view) return <PickerWindow title={[span(words.title)]} body={[{ spans: [span(labels.loading)] }]} bodyRows={MODE_BODY_ROWS} tree={null} labels={labels.picker}
+  const words = labels.mode, loading = useLoadingText(labels, !view);
+  if (!view) return <PickerWindow title={[span(words.title)]} body={[{ spans: [span(loading)] }]} bodyRows={MODE_BODY_ROWS} tree={null} labels={labels.picker}
     listHints={words.hints} position={labels.position} onClose={onClose} onResult={onClose} />;
-  const current = port.current(), tree = modePanelTree(view, current, words);
+  const current = port.current(), tree = modePanelTree(view, current, words, port.canOpen);
   const shown = pickerView(tree, state), focused = shown.rows[shown.pos];
   // A locked row's reason stands under the list; its effect sentence would only push the window past a short terminal.
   const stop = focused?.blocked ? undefined : STOPS.find(item => item === focused?.id);

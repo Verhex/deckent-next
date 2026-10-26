@@ -9,6 +9,7 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
+The alpha.56 items below describe candidate code and owner decisions; they do not claim a release or live/N1 acceptance.
 
 ## Platforms: tried and not tried
 
@@ -19,6 +20,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   not available there. The OS-user identity cannot be read and the private ledger files cannot be opened, so backup, the
   monitor, model calls, the Brain and acceptance do not work natively either. Platform tests skip these with an
   `[unsupported on Windows: …]` tag, so a green Windows check does not mean these parts work. *Workaround:* use WSL2.
+- **Conversation origins only filter the resume list.** `/resume` starts with the current OS user and launch folder; “All folders” widens it within the project. Older snapshots appear at the project root to their file owner. These labels grant no permissions.
+- **Native Windows does not open a project from its subfolders.** Elsewhere `deckent` and `deckent-mcp` started in a subfolder
+  use the installation above it, never one above the home folder; native Windows has no owner and mode checks for that walk, so it stops with
+  `INSTALLATION_ROOT_WALK_UNSUPPORTED`. *Workaround:* run in the project's own folder or pass `deckent-mcp --project`.
 - **macOS has separate, incomplete verification.** It is not part of the required checks. *Impact:* execution and security
   behavior there is unproven; do not rely on it for real work. The local runtime socket is Linux-only, so the service
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
@@ -36,24 +41,14 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
 - **Some install-time messages are English only** (build and sandbox preparation messages appear before translation exists).
-- **`deckent init` prepares the first job only for a person at a terminal** (alpha.54 BR1; alpha.48 I-S3). It applies the
-  first-run permissions, the language, the sandbox check, the Docker install (person only), the model connection (`models connect`),
-  the project instructions and the final check, each through its existing command. Since alpha.54 it also builds the worker image from
-  the installed package after a card that names its size and time limit (or adopts an image you name with `deckent init --image-id
-  sha256:<id>`), writes the execution settings from the Docker and Git paths it found, declares the first work kind `coding` on the
-  coding CLI you pick with the pool `workers` and one running slot, and sets up that pool, each after its own card. *Impact:* each of these
-  steps waits for a person's card, and `--yes` never builds, adopts or declares anything: the summary (and `deckent init --json`, `firstJob`) lists the missing
-  first-job steps in order with their exact commands (`deckent init`, `deckent init registry`, `deckent init pool`) and doctor names the
-  first one. Another kind, pool name or capacity still needs `deckent init registry` with its own flags. The image build needs Docker
-  and the network, and a running service reads the new `execution` settings and pool capacity only after `deckent runtime restart` (the admission
-  registry is read on every request).
-  `deckent doctor` checks read-only (`docker image inspect`, no container) that the configured image is on this Docker. A delivery
-  clone is not a setup stage. The profile you choose (solo, team, enterprise or custom) is saved in your user's global configuration
-  (`identity.profile`; distribution stays `deckent identity distribute`); the next `deckent init` reads it back and shows the stage done,
-  and doctor no longer asks for one. Unattended `--yes` does not save the profile. The final check is doctor's own rows: it reads done only with no
-  warning and every other stage done or skipped. Unattended `deckent init --yes --scope <id>` applies only the fresh permissions, the
-  language and the final check.
-- **Docker Engine install from setup is new** (alpha.48 I-D2; offered in the `deckent init` window since I-S3, only to a
+- **`deckent init` installs only.** Language is the first step; the profile is answered before permissions and saved through the
+  existing configuration owner once installation exists. Model, execution, work and instruction stages are onboarding; init neither asks
+  nor applies them. `init --json` is schema v2 with `phase`, without `firstJob`; `init --json --phase onboarding` is read-only.
+  The interactive first-open onboarding is a separate integration; the phase document alone does not prove that journey works.
+  `--yes --scope <id>` applies only fresh permissions and language, never read-only checks or person-only stages. It does not save the profile.
+  The final check settles only over install stages; a completed check with warnings can be done, with warnings visible. A repeat `--yes`
+  applies no already-settled work. Doctor derives work guidance from the setup stage evaluators and points onboarding work to `deckent` / `/setup`.
+- **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
   lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
   Desktop on WSL, derivatives such as Linux Mint, conflicting `docker.io`/`containerd`/`runc` packages, an older
@@ -191,18 +186,35 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. It runs only where
   Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers). Terminal chat with a Claude subscription is not
   supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
-- **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;
-  a paid API turn without a scope budget is refused. *Workaround:* connect an API key with `/provider`, set a budget, choose `/model`.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** Of the subscriptions only Sign in with ChatGPT serves
+  terminal chat (below); a paid API turn without a scope budget is refused. *Workaround:* sign in with ChatGPT in `/provider`, or
+  connect an API key there, set a budget and choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
 - **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
   access token (for Codex also the ID token) into the worker's container and checks that it has not expired; refresh tokens,
   API keys and the rest of the login file stay on the host. *Impact:* the worker's CLI can act as your subscription account
   until that token expires. *Workaround:* none; the token's own lifetime is the bound.
-- **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
-  Codex worker with its own login.
+- **Sign in with ChatGPT serves chat; the Codex worker on the plan is still held.** Alpha.56 opens person sign-in for terminal
+  chat and Deckent's own features (`/provider` → ChatGPT, or `deckent models connect --connection chatgpt-login`, from your own
+  terminal). The session stays only in your own local encrypted store: Linux or WSL, a folder only you can open (0700) on this
+  computer's local disk. A shared team host, a store on a network share or `/mnt/c`, or a folder other users can open is refused
+  before the browser opens; `deckent doctor` names the folder and the fix (for example `chmod 700 <folder>`), and Deckent never
+  changes permissions itself. macOS and native Windows are not supported yet. One sign-in per project; OpenAI offers no plan-limit
+  query, so Deckent shows only its own 30-day usage. Tools connected over MCP cannot use the plan as a raw API.
+  The Codex app-server runs inside the isolated worker; the host app-server route was rejected.
+  Worker activation stays on HOLD until real-binary N1 proof (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, reason `activation-hold`);
+  missing isolation is a typed refusal, never a host/token-file fallback. While held, no Run is assigned this route and a
+  Codex worker keeps its existing connection; a Run frozen on it closes `launch-refused` before any workspace or container.
+  OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental; Deckent's boundary
+  proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination,
+  and an unsupported combination stops with a typed refusal before any authenticated work. *Workaround:* use an already
+  supported connection; do not treat successful sign-in as proof that a Codex worker is available.
+
 - **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
-  window is used up. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
+  window is used up. Exception: a ChatGPT sign-in where you explicitly enabled continuation and chose an API model at connect may
+  continue on that model from your budget at a confirmed plan limit; every switch is shown and recorded, and the permission is
+  revocable. Temporary errors never switch billing paths. The Claude subscription never switches. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
   (`runRuntime.quotaRecovery.maxWaitMs`) and then asks you on a card whether to keep waiting or to use the next candidate of its
   WorkClass list; nothing is cancelled on its own and no AI can answer. A Run that was parked before the upgrade keeps the deadline it
   sealed then (the old default was 7 days). *Workaround:* answer with `deckent run resume --quota wait` or
@@ -458,12 +470,30 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
   before-upgrade instead of daily.
-- **A lost worker can keep its slot; automatic recovery is built but not active yet.** A granted attempt can stay active and hold an
-  execution slot until custody is resolved. alpha.55 adds deterministic detection (Nervous) and a recovery decision that may continue the
-  task in a new attempt, but both start `off`, and even in `live` mode Nervous executes nothing until the owner promotes a measured rule:
-  every rule in the Core seed is still provisional, and recovery only decides cases whose stop step Nervous really ran.
-  `deckent run inspect` names the recovery mode the Run froze and what it means. *Workaround:* watch it with `deckent monitor`; the slot
-  is freed only by a typed manual decision or by evidence that the worker ended.
+- **A lost worker can keep its slot until custody is resolved.** Nervous and recovery start `off`; seed rules stay
+  provisional until a person promotes a measured rule and grants its recovery action. The alpha.56 candidate adds
+  `deckent policy recovery` and blind case review through `deckent recovery review`; its recovery shadow also consumes
+  sealed would-stop records without actually stopping a worker. Shadow decisions can call the configured model and spend
+  money; they apply no recovery effect. *Workaround:* inspect the Run's frozen mode and watch with `deckent monitor`;
+  release still needs the required fence and termination proof. N1 scenario/owner acceptance remains open.
+
+- **A worker has no network route of its own, and recovery relies on that.** Each worker container runs with no network; its one way
+  out is the host gateway, which reaches only the hosts of the worker's model provider. Changes to outside systems (ERP, CRM, an HTTP
+  target) are made by governed operations of a person or an approved agent. From alpha.56 each worker's dispatch record declares this,
+  the worker starts only when Docker reports that network mode, and automatic recovery continues a lost worker only with that record;
+  a lost worker started before alpha.56 has no such record and goes to a person (`isolation-unproven`). This covers the network only:
+  a unix socket inside a read-only folder bound into the worker is not checked. *Workaround:* do not bind folders that hold another
+  service's socket. Letting workers act on outside systems themselves is not offered yet.
+- **Recovery is turned on only through your own exact policy cells.** Template v16 introduced the named person's
+  require-approval recovery-action and Nervous-promotion cells; current template v18 retains them, adds v17's first-commit
+  grant and v18's uninstall grants. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
+  overlapping require-approval cells. Old installations change only through explicit upgrade; use the witnessed
+  `deckent init policy --upgrade` path when the managed `deckent policy upgrade` path cannot add authority the caller lacks.
+  Current rollback removes only the content-equal v18 delta, not historical v16 recovery grants; customized rows are kept
+  and reported. Adding a Nervous/recovery rule or version still needs a template version and policy upgrade: this remains
+  an OPEN owner issue, also after v17/v18. Measured-exit rechecks bind the policy revision, not later sealed measurements.
+  Lost workers dispatched before alpha.56 have no isolation record; they go to a person and shadow measurement restarts.
+
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
   registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
   toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.
@@ -522,11 +552,10 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then `--apply` (without `--person` it changes
   nothing and names the people of the scope). Turn a layer to shadow first, for example
   `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
-- **The numbers are seed values, not measurements.** Nervous rules, recovery bounds (one automatic continuation per lost task, three
-  attempts per task), memory bounds and rollout thresholds and the agent-statistics thresholds are marked provisional until N1 measures
-  them. Every Nervous seed rule is provisional, and alpha.55 has no command to promote a rule or to grant `recovery-action/apply`, so
-  `live` runs nothing and automatic recovery cannot start yet. Recovery reads only stop steps Nervous really executed, so recovery
-  shadow produces no data while Nervous is in shadow. The promotion card is planned for alpha.56.
+- **The numbers are seed values, not measurements.** Nervous/recovery bounds, memory/retention defaults and agent
+  statistics thresholds remain provisional until measured on N1. Alpha.56 supplies the recovery promotion/grant cards and
+  would-stop shadow input; it does not certify the numeric exits, activate recovery or prove production safety.
+
 - **Memory fills from one work kind only.** The Core registry lets only the `small` WorkClass (provisional 90-day retention, no personal
   data) produce memory candidates; accepted work of other kinds adds nothing until its retention is declared.
 - **Automatic memory verification needs a second model maker.** The evaluator's model must come from a different maker than every
@@ -574,6 +603,27 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
   (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
   owner's detail).
+
+## Hub packages and uninstall
+
+- **Hub networking needs distribution wiring.** The alpha.56 candidate supplies signed packages, local source/trust cards,
+  cached offline verification and governed transport ports. Search, remote inspection and publication refuse
+  `HUB_CONNECTION_UNAVAILABLE` without the bound first-use, authentication and trust services. No public Hub/source is
+  enabled by default; public opening remains a separate owner gate. *Workaround:* use verified offline bundles and the
+  [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
+- **Skills with support files are refused by owner decision (2026-10-26, H6).** SKILL.md-only skills may be used; a skill
+  requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
+  *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
+- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews; application needs the
+  person's real-terminal card. Ledger, audit/identity keys, secrets and project data stay by default. Images remain until a
+  complete usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
+  *Workaround:* follow the plan's per-item instructions, then the package removal command it prints; see the
+  [AI installation guide](ai-install.md#uninstall).
+- **Purge is bounded by ownership, backup and delete authority.** `deckent uninstall --purge` removes only covered files
+  after a managed backup and person confirmation. Company retention and unready folders stay, with their paths shown.
+  Moved/unsafe authority files stop purge before it starts. A partial final purge resumes only after remaining bytes and
+  delete authority are re-verified; otherwise files stay and managed backup restore remains available. An unknown step
+  stays unknown. *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
 
 ## Desktop and other surfaces
 
@@ -673,3 +723,11 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
   retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
   lock and the running service keeps the ledger's side files in place; this was measured on one loaded core, not at fleet scale.
+
+A founder who explicitly accepts the managed `decision-steps` baseline can make
+unwitnessed pipe/SDK decisions for an operator hold, close or answer. These currently
+retain the `ai-policy` audit label with the person's principal and rule id; a separate
+versioned decision-evidence migration remains required before beta.1. Safety holds,
+quota answers and scripted accept/reject keep their existing person/card floors.
+Agent shell authority commands keep the person's card in every mode; a same-user
+process launched outside Deckent remains part of the operating-system trust boundary.

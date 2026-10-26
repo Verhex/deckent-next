@@ -4,6 +4,7 @@ import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { PolicyUpgradeHandler, StandingGrantsHandler, StandingRevokeHandler } from './policy-grants.js';
 import type { AllStandingGrantsHandler } from './policy-grants-all.js';
+import type { RecoveryHandlers } from './recovery.js';
 
 /** The host operations the `approval` and `policy` commands use; the CLI's full command context satisfies it. */
 export interface ApprovalCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'decideApproval' | 'listApprovals' | 'mcpCapabilities' | 'delegations' | 'configChoiceSources'> {
@@ -16,4 +17,6 @@ export interface ApprovalCommandContext extends CliBaseContext, Pick<TerminalLau
   revokeStandingGrant?: StandingRevokeHandler;
   inspectPolicyAdministration?: (root: string, query: PolicyAdministrationQuery, options: ConfigLoadOptions) => Promise<PolicyAdministrationStatus>;
   upgradePolicyTemplate?: PolicyUpgradeHandler;
+  /** alpha.56: the lost-worker recovery cards (`deckent policy recovery`, `deckent recovery [review]`). */
+  recovery?: RecoveryHandlers;
 }

@@ -15,6 +15,7 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout, withConfigW
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
+import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
 
 // T-L4 slice 4c (MODES-3: v17, three modes) at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process,
 // the company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode full-auto` changes it through the
@@ -162,6 +163,7 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+  await settleOnboarding(resolveProductLayout({ projectRoot, root: data }));
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const me = { issuer: principal.issuer, subject: principal.subject };
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
@@ -274,18 +276,15 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     expect(changes(f)).toEqual([]);
   }, 180_000);
 
-  it('without a set grant the window shows full auto locked with the reason; nothing is sent, the file is untouched and no audit row is written', async () => {
+  it('U5-S5: a closed mode selected in the window opens one owner card, then saves full auto through the existing service', async () => {
     const f = await modeProject('no-set-grant');
     await startRuntime(f.projectRoot, f.env);
-    const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
-    // SLASH-WINDOWS: the typed refusal is replaced by the window itself: a mode the person may not take is a locked row with its reason.
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['standard · now', '\u001b[B\u001b[B'],
-      ['not open for you', '\r'], ['not open for you', '\u001b'], ['Deckent workline', '/exit\r']]);
-    expect(run.timeout, run.output).toBeUndefined();
-    expect(modeLines(run.output)).toContain('Full-auto is not open for you in this scope');
-    expect(modeLines(run.output)).not.toContain('Policy does not permit');
-    expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
-    expect(changes(f)).toEqual([]);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'],
+      ['standard · now', '\u001b[B\u001b[B\r'], ['Open full auto', 'y'], ['Mode: standard → full auto', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined(); expect(run.status, run.output).toBe(0);
+    expect(changes(f)).toHaveLength(1);
+    expect(f.audit().filter(row => (row as { kind: string }).kind === 'authority-change')).toHaveLength(1);
+    expect(JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')).modes).toEqual(expect.arrayContaining([expect.objectContaining({ principal: f.me, mode: 'full-auto' })]));
   }, 180_000);
 
   it('a held authority write lock is explained as another process at work with a retry instruction; nothing is written', async () => {
@@ -329,16 +328,15 @@ describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-term
     expect(narrow.status, narrow.output).toBe(0);
   }, 180_000);
 
-  it('`deckent --full-access` without the company grant does not open: the refusal names the missing grant; nothing ran', async () => {
+  it('U5-S5: --full-access on a closed mode asks the owner, then opens the banner without running a tool', async () => {
     const f = await modeProject('no-set-grant');
     await startRuntime(f.projectRoot, f.env);
-    const run = await inPty(f.projectRoot, f.env, ['--full-access'], []);
-    expect(run.timeout, run.output).toBeUndefined();
-    expect(run.status, run.output).not.toBe(0);
-    expect(plain(run.output)).toContain('No grant lets you set full-access');
-    expect(plain(run.output)).not.toContain('Deckent workline');
+    const run = await inPty(f.projectRoot, f.env, ['--full-access'], [['Open full access', 'y'], ['Deckent workline', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined(); expect(run.status, run.output).toBe(0);
+    expect(plain(run.output)).toContain('W3-SANDBOX');
+    expect(plain(run.output)).toContain('full access');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
-    expect(kinds(f)).toEqual([]);
+    expect(kinds(f)).toEqual(['authority-change']);
   }, 180_000);
 
   it('a stored full-access start mode opens in full access on the grant, and as standart with a notice without it', async () => {
@@ -411,17 +409,14 @@ describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real ps
     expect(subjects(f).map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-session']);
   }, 180_000);
 
-  it('without a set grant the cycle is standard ↔ careful: full auto and full access are skipped, nothing is refused', async () => {
+  it('U5-S5: Shift+Tab visits a closed mode, y opens it once, then the service changes the mode', async () => {
     const f = await modeProject('no-set-grant');
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', SHIFT_TAB],
-      ['Mode: standard → careful', SHIFT_TAB], ['Mode: careful → standard', '/exit\r']]);
-    expect(run.timeout, run.output).toBeUndefined();
-    expect(run.status, run.output).toBe(0);
-    expect(plain(run.output)).not.toContain('full auto');
-    expect(plain(run.output)).not.toContain('No grant lets you set');
-    expect(subjects(f).map(subject => [subject['kind'], subject['requested'], (subject['decision'] as { effect: string }).effect]))
-      .toEqual([['permission-mode-change', 'standart', 'allow'], ['permission-mode-change', 'standart', 'allow']]);
+      ['Mode: standard → careful', SHIFT_TAB], ['Open full auto', 'y'], ['Mode: careful → full auto', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined(); expect(run.status, run.output).toBe(0);
+    expect(subjects(f).map(subject => subject['kind'])).toEqual(['permission-mode-change', 'authority-change', 'permission-mode-change']);
+    expect(subjects(f).filter(subject => subject['kind'] === 'permission-mode-change').map(subject => subject['requested'])).toEqual(['standart', 'full-auto']);
   }, 180_000);
 
   it('hard floor: in full access entered with Shift+Tab, a write of Deckent\'s own configuration is refused; nothing changes, nothing is audited as run', async () => {

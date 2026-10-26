@@ -32,9 +32,9 @@ const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_C
   // S6: the Run's base commit is pinned, so the same tree is refused on every turn; the person fixes it in a new Run (or raises a bound).
   // A `time` bound depends on load, not on the tree (R2, D3a 2026-10-18): the gate throws it as WORKER_TREE_SCAN_DEFERRED, deliberately absent
   // here (transient), until the Attempt's `maxTimeRefusals` are spent; only the refusal after that arrives here as WORKER_TREE_SCAN_INCOMPLETE.
-  'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
+  'HUB_SKILL_FILES_UNAVAILABLE', 'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
   // PRE-7: Deckent's preflight found a declared requirement unmet. It carries the requirement; the Run parks for the operator (no turn retries it).
-  ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE]);
+  ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE, /* U9-7 relay worker gate: closes before any workspace or container, never another route */ 'SIWC_WORKER_ISOLATION_UNAVAILABLE', 'SIWC_APP_SERVER_AUTH_UNAVAILABLE']);
 /** E1: refusals that hold the Run (the existing progression park, failure code = the refusal code) instead of closing the attempt: no answer
  * was obtained, so nothing is recorded on the attempt (its record shape is unchanged) and the operator re-runs it explicitly (resume), which
  * prepares the same reserved attempt and probes again. Never retried automatically, never an installation-defect park. */

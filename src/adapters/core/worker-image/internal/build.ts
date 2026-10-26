@@ -1,3 +1,5 @@
+import { workerImageBudget } from '#engine/index.js';
+import limits from './limits.json' with { type: 'json' };
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { copyFile, lstat, mkdir, open, readFile, realpath } from 'node:fs/promises';
@@ -15,7 +17,8 @@ const BUILDER_REASONS = [
   'WORKER_HISTORY_IDS', 'WORKER_HISTORY_LINE', 'WORKER_HISTORY_MISMATCH',
   'WORKER_HISTORY_ORDER', 'WORKER_RECIPE_INVALID', 'WORKER_RECIPE_PREVIOUS',
   'WORKER_RECIPE_REPOSITORY', 'WORKER_RECIPE_VERSION', 'WORKER_CLI_INCOMPATIBLE',
-  'WORKER_VERSION_INVALID',
+  'WORKER_VERSION_INVALID', 'WORKER_PLAN_INVALID', 'WORKER_IMAGE_VERSIONS_UNRESOLVABLE', 'WORKER_IMAGE_INSTALLER_CHANGED',
+  'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED', 'WORKER_IMAGE_SOURCE_INSECURE', 'WORKER_LINEAGE_INVALID', 'WORKER_IMAGE_BUILDKIT_REQUIRED',
 ] as const;
 export type WorkerImageBuildErrorCode = typeof BUILDER_REASONS[number] | 'WORKER_IMAGE_VERSION_CHECK_FAILED' | 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT' | 'WORKER_IMAGE_SOURCE_INVALID' | 'WORKER_IMAGE_CONTEXT_EXISTS' | 'WORKER_IMAGE_CONTEXT_UNSAFE'
   | 'WORKER_IMAGE_BUILD_FAILED' | 'WORKER_IMAGE_BUILD_TIMEOUT' | 'WORKER_IMAGE_RECEIPT_MISSING';
@@ -47,13 +50,12 @@ function assertBuilderExited(evidence: ProcessEvidence, timeout: WorkerImageBuil
 }
 const allowedEnvironment = (input: Readonly<Record<string, string | undefined>>) => Object.fromEntries(Object.entries(input)
   .filter((entry): entry is [string, string] => ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0]) && typeof entry[1] === 'string'));
-/** Reads the highest revision this repository's daemon tags hold (null for none) through the installed builder's shared history owner, so the
- * planner floors its counter on it. No build context, receipt, tag or image is created; anything but one well-formed answer is a failed check. */
-export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
+/** Highest daemon-held counter, read-only; malformed answers refuse. */
+export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: string; home?: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
   runner: WorkerImageBuildRunner = runNodeProcess): Promise<string | null> {
   if (!isAbsolute(input.packageRoot)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   const directory = join(input.packageRoot, WORKER_IMAGE_ASSET_DIRECTORY);
-  const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(directory, 'build.mjs'), '--held-version'], cwd: directory,
+  const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(directory, 'build.mjs'), '--held-version', ...(input.home ? [input.home, String(limits.receiptScan), String(limits.receiptBytes)] : [])], cwd: directory,
     env: allowedEnvironment(input.env ?? process.env), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }, input.signal); // a stopping service ends the daemon check too
   assertBuilderExited(evidence, 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT', 'WORKER_IMAGE_VERSION_CHECK_FAILED');
   const answer = /^\{"heldVersion":(null|"r[1-9][0-9]*-\d{8}")\}\n?$/.exec(Buffer.from(evidence.stdoutBase64, 'base64').toString('utf8')); // a truncated answer never matches
@@ -61,10 +63,10 @@ export async function readWorkerImageHeldVersion(input: Readonly<{ packageRoot: 
   return JSON.parse(answer[1]!) as string | null;
 }
 /** The builder reads its inputs from its own directory, so a build context is a private copy of exactly these files. */
-export const WORKER_IMAGE_BUILDER_FILES = Object.freeze(['build.mjs', 'history.mjs', 'install.mjs', 'inspect.mjs'] as const);
+export const WORKER_IMAGE_BUILDER_FILES = Object.freeze(['build.mjs', 'history.mjs', 'receipts.mjs', 'recover.mjs', 'layers.mjs', 'install.mjs', 'inspect.mjs', 'lineage.json', 'lineage.lock.json'] as const);
 export const WORKER_IMAGE_ASSET_DIRECTORY = 'assets/worker-image';
 
-async function privateDirectory(path: string) {
+export async function privateDirectory(path: string) {
   const stat = await lstat(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o077) || await realpath(path) !== path) throw new WorkerImageBuildError('WORKER_IMAGE_CONTEXT_UNSAFE');
 }
@@ -78,11 +80,11 @@ export async function readWorkerImageSources(packageRoot: string) {
   const directory = join(packageRoot, WORKER_IMAGE_ASSET_DIRECTORY);
   try {
     const recipe: unknown = JSON.parse(await readFile(join(directory, 'recipe.json'), 'utf8'));
-    return Object.freeze({ directory, recipe, dockerfile: await readFile(join(directory, 'Dockerfile'), 'utf8') });
+    return Object.freeze({ directory, recipe, dockerfile: await readFile(join(directory, 'history.log'), 'utf8') });
   } catch { throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID'); }
 }
 /** Creates `<parent>/<imageVersion>` exclusively, copies the builder files and writes the edited Dockerfile/recipe. Package bytes stay untouched. */
-export async function prepareWorkerImageBuildContext(input: Readonly<{ packageRoot: string; parent: string; imageVersion: string; dockerfile: string; recipe: unknown }>) {
+export async function prepareWorkerImageBuildContext(input: Readonly<{ packageRoot: string; parent: string; imageVersion: string; dockerfile: string; recipe: unknown; plan?: unknown }>) {
   if (!isAbsolute(input.parent) || !/^r[1-9][0-9]*-\d{8}$/.test(input.imageVersion)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   const sources = await readWorkerImageSources(input.packageRoot);
   await mkdir(input.parent, { recursive: true, mode: 0o700 }); await privateDirectory(input.parent);
@@ -93,19 +95,22 @@ export async function prepareWorkerImageBuildContext(input: Readonly<{ packageRo
   }
   await privateDirectory(context);
   for (const name of WORKER_IMAGE_BUILDER_FILES) await copyFile(join(sources.directory, name), join(context, name), constants.COPYFILE_EXCL);
-  await writeExclusive(join(context, 'Dockerfile'), input.dockerfile);
+  await writeExclusive(join(context, 'history.log'), input.dockerfile);
+  if (input.plan) {
+    const plan = input.plan as { buildTimeoutMs: number; images?: unknown[] };
+    await writeExclusive(join(context, 'plan.json'), JSON.stringify({ ...input.plan as object, totalBudgetMs: plan.images ? workerImageBudget(plan.buildTimeoutMs, plan.images.length) : plan.buildTimeoutMs, probeOwner: randomUUID(), receiptLimits: { files: limits.receiptScan, bytes: limits.receiptBytes } }, null, 2) + '\n');
+  }
   await writeExclusive(join(context, 'recipe.json'), JSON.stringify(input.recipe, null, 2) + '\n');
-  return Object.freeze({ context, files: [...WORKER_IMAGE_BUILDER_FILES, 'Dockerfile', 'recipe.json'] });
+  return Object.freeze({ context, files: [...WORKER_IMAGE_BUILDER_FILES, 'history.log', 'recipe.json', ...(input.plan ? ['plan.json'] : [])] });
 }
 export type WorkerImageBuildRunner = (command: ProcessCommand, signal?: AbortSignal) => Promise<ProcessEvidence>;
-/** Runs the copied builder through the bounded process runner; the receipt file it writes is the only success evidence. `imageId` (BR1 adopt):
- * the builder's own `--image-id` re-probe of an existing image instead of a build (its receipt says so). */
-export async function runWorkerImageBuild(input: Readonly<{ context: string; receiptPath: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal; imageId?: string }>,
+/** Bounded builder run; only its retained receipt proves completion. */
+export async function runWorkerImageBuild(input: Readonly<{ context: string; receiptPath: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal; imageId?: string; npmrcSecret?: string }>,
   runner: WorkerImageBuildRunner = runNodeProcess) {
   if (!isAbsolute(input.context) || !isAbsolute(input.receiptPath)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   await privateDirectory(input.context);
   const env = allowedEnvironment(input.env ?? process.env);
-  const command: ProcessCommand = { schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(input.context, 'build.mjs'), input.receiptPath, ...(input.imageId ? ['--image-id', input.imageId] : [])],
+  const command: ProcessCommand = { schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(input.context, 'build.mjs'), input.receiptPath, ...(input.imageId ? ['--image-id', input.imageId] : []), ...(input.npmrcSecret ? ['--npmrc-secret', input.npmrcSecret] : [])],
     cwd: input.context, env, timeoutMs: input.timeoutMs, outputBytes: input.outputBytes };
   // An aborted signal ends the builder process through the runner's own termination (reason `cancelled`); it is a failed build, never a receipt.
   const evidence = await runner(command, input.signal);

@@ -5,6 +5,7 @@ import { configSections, configRegistryGeneration, createDefaultConfig } from '#
 import { isRecord, isSensitiveConfigKey, redactSensitive } from '#platform/index.js';
 import { resolveLocale, MESSAGE_REGISTRY } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
+import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
 export function configDefinitions(): ReadonlyMap<string, ConfigDefinition> {
   const definitions = new Map<string, ConfigDefinition>();
@@ -109,14 +110,19 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const field = Object.entries(CONFIG_FIELDS).find(([key]) => key === path[0])?.[1];
   const env = field?.environment.some(binding => binding.names.some(name => snapshot.env[name] !== undefined && snapshot.env[name] !== '') &&
     (() => { const bound = [path[0]!, ...(binding.path ?? [])]; return path.slice(0, bound.length).join('.') === bound.join('.'); })());
-  const source = env ? 'env' : atConfigPath(snapshot.project, path) !== undefined ? 'project' : atConfigPath(snapshot.global, path) !== undefined ? 'global' : 'default';
+  const sourcePath = keyPath === 'toolchains.image.providers' ? ['toolchains', 'image', 'consents'] : path;
+  const source = env ? 'env' : atConfigPath(snapshot.project, sourcePath) !== undefined ? 'project' : atConfigPath(snapshot.global, sourcePath) !== undefined ? 'global' : 'default';
   const provenance = snapshot.effective['secretPaths'];
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const declaredDefault = schema.safeParse(undefined);
-  const value = redact(atConfigPath(snapshot.effective, path), path, secretPaths), defaultValue = redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
-  return { key: keyPath, value, defaultValue, source, descriptionKey: definition.descriptionKey,
-    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[definition.descriptionKey] ?? definition.descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
-    binding: definition.binding, apply: definition.apply, redacted: value === '[REDACTED]' };
+  const toolchains = snapshot.effective.toolchains, providers = [...new Set(toolchains.image.consents.flatMap(record => record.providers))];
+  const derived = atConfigPath({ ...snapshot.effective, toolchains: { ...toolchains, image: { ...toolchains.image, providers } } }, path);
+  const value = redact(derived, path, secretPaths), defaultValue = redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
+  const descriptionKey = schema.description ?? definition.descriptionKey;
+  return { key: keyPath, value, defaultValue, source, descriptionKey,
+    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[descriptionKey] ?? descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
+    binding: definition.binding, apply: path.length > 1 && (RESTART_EXEMPT as Readonly<Record<string, readonly string[]>>)[path[0]!]?.includes(path[1]!) ? 'live' : definition.apply,
+    redacted: value === '[REDACTED]' };
 }
 /** A card's bounded display copy of a value at `keyPath` (T3 L2): redacted like every field view, JSON text, cut with "…" past `max`. */
 export function configDisplayText(snapshot: ConfigSnapshot, keyPath: string, value: unknown, max: number): string {

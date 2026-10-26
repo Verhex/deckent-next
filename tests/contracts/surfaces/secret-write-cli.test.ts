@@ -141,3 +141,15 @@ it('PRE-8 v2: grant/revoke/handover need a person terminal before any handler; s
   expect(listed.text()).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope <scope>');
   expect(seen).toEqual([{ grant: { scopeId: 'scope', name: 'K', action: 'grant' } }, { project: { scopeId: 'scope', name: 'OWN', value: CANARY } }, { list: { scopeId: 'scope', all: false } }]);
 });
+
+it('U1 main-vault custody refusal is shown before the hidden reader starts or any key is sent', async () => {
+  const f = await project('scope'), out = screen(), err = capture(), calls: Call[] = [];
+  let raw = 0, prepared = 0;
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { raw++; return stdin; } });
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope'], {
+    root: f.root, env: f.env, stdin, stdout: out.sink, stderr: err.sink, ...handlers(calls),
+    prepareMainSecret: async () => { prepared++; return { state: 'refused', backend: null, code: 'SECRET_STORE_UNSAFE', path: '/synthetic/private-root' }; },
+  })).toBe(1);
+  expect(prepared).toBe(1); expect(raw).toBe(0); expect(calls).toEqual([]);
+  expect(err.text()).toContain('SECRET_STORE_UNSAFE'); expect(err.text()).toContain('/synthetic/private-root');
+});

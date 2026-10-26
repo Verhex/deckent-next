@@ -28,7 +28,7 @@ async function setup(options: { evaluatorGrants: boolean; invoke: boolean; roles
   const policy = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')) as { grants: object[] };
   const grant = (id: string, principals: object[], kind: string, actions: string[], ids: 'all' | string[] = 'all', scopes: 'all' | string[] = ['s']) =>
     ({ id, effect: 'allow', actions, scopes, principals, resource: { kind, ids } });
-  policy.grants.push(grant('person-catalog', [person], 'model-activation', ['activate', 'inspect'], 'all', 'all'), grant('person-memory', [person], 'memory', ['inspect']),
+  policy.grants.push(grant('person-catalog', [person], 'model-activation', ['activate', 'deactivate', 'inspect'], 'all', 'all'), grant('person-memory', [person], 'memory', ['inspect']),
     ...(options.evaluatorGrants ? [grant('evaluator-memory', [evaluator], 'memory', ['inspect', 'verify', 'contest']), grant('evaluator-runs', [evaluator], 'run', ['inspect'])] : []),
     ...(options.invoke ? [grant('evaluator-model', [evaluator], 'model-invocation', ['invoke'], [modelInvocationTargetId(reference)])] : []));
   await writeFile(join(f.data, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
@@ -38,6 +38,8 @@ async function setup(options: { evaluatorGrants: boolean; invoke: boolean; roles
     pricing: { ...(seed.providers[0]!.models[0]!['pricing'] as object), inputPerMTok: '3', outputPerMTok: '15' } };
   const catalog = { ...seed, revision: 'fixture-evaluator-catalog', recommendedActivations: [], providers: [{ ...seed.providers[0]!, id: reference.providerId, models: [model] }] };
   await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'register-evaluator', scopeId: 's', action: 'register', catalog }, f.options);
+  for (const id of [null, modelId]) await applyModelCatalog(f.project, { schemaVersion: 1, commandId: `activate-evaluator-${id ?? 'channel'}`, scopeId: 's', action: 'activate',
+    channelId: CHANNEL, modelId: id, expectedRevision: 0 }, f.options);
   return { f, reference, evaluator: memoryEvaluatorPrincipal(person, ['s']) };
 }
 
@@ -60,7 +62,17 @@ it('the read-only view names the evaluator row, its catalog maker and its price 
   let text = '';
   await memoryCommand(['memory', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.options.env, listMemory: listConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
     stdout: { write(chunk: string) { text += chunk; } } });
-  expect(text).toContain(`Evaluator for this scope: ${reference.providerId}/vendor/model by maker-b`); expect(text).toContain('at most 0.9216 a day');
+  expect(text).toContain(`Evaluator for this scope: ${reference.providerId}/vendor/model by maker-b`); expect(text).toContain('at most $0.9216 a day');
+  let turkish = '';
+  await memoryCommand(['memory', '--scope', 's', '--lang', 'tr'], { root: f.project, env: f.options.env, listMemory: listConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
+    stdout: { write(chunk: string) { turkish += chunk; } } });
+  expect(turkish).toContain('0,9216 USD');
+  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'deactivate-evaluator-channel', scopeId: 's', action: 'deactivate', channelId: CHANNEL, modelId: null, expectedRevision: 1 }, f.options);
+  expect(await inspectConfiguredMemoryEvaluators(f.project, 's', f.options)).toMatchObject({ available: false, rows: [] });
+  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'reactivate-evaluator-channel', scopeId: 's', action: 'activate', channelId: CHANNEL, modelId: null, expectedRevision: 2 }, f.options);
+  await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'deactivate-evaluator-model', scopeId: 's', action: 'deactivate', channelId: CHANNEL, modelId, expectedRevision: 1 }, f.options);
+  expect(await inspectConfiguredMemoryEvaluators(f.project, 's', f.options)).toMatchObject({ available: false, rows: [] });
+  expect(f.posts).toBe(0);
   // N3: a model holding only the Brain role is never an evaluator row.
   const brainOnly = await setup({ evaluatorGrants: true, invoke: true, roles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture-brain-only', roles: [],
     models: [{ channelId: CHANNEL, modelId, version: 1, tier: 'frontier', roles: ['brain'] }], exceptions: [] }] } });

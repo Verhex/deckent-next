@@ -5,8 +5,45 @@ import type { ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
 import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
 export type { ErrorEntry } from './definition.js';
+function invocationInputSubject(p: Params, l: Locale): string {
+  switch (p['subject']) {
+    case 'cli.input.subject.queue': return t('cli.input.subject.queue', {}, l);
+    case 'cli.input.subject.memory': return t('cli.input.subject.memory', {}, l);
+    case 'cli.input.subject.approval': return t('cli.input.subject.approval', {}, l);
+    case 'cli.input.subject.operation': return t('cli.input.subject.operation', {}, l);
+    case 'cli.input.subject.decision': return t('cli.input.subject.decision', {}, l);
+    case 'cli.input.subject.spending': return t('cli.input.subject.spending', {}, l);
+    case 'cli.input.subject.identity': return t('cli.input.subject.identity', {}, l);
+    case 'cli.input.subject.agent': return t('cli.input.subject.agent', {}, l);
+    case 'cli.input.subject.hub': return t('cli.input.subject.hub', {}, l);
+    default: return t('cli.input.subject.model', {}, l);
+  }
+}
+function discoveryCause(p: Params, l: Locale): string {
+  switch (p['cause']) {
+    case 'no-credential': return t('models.connect.cause.no-credential', { status: p['status'] ?? '-' }, l);
+    case 'credential-rejected': return t('models.connect.cause.credential-rejected', { status: p['status'] ?? '-' }, l);
+    case 'access-denied': return t('models.connect.cause.access-denied', { status: p['status'] ?? '-' }, l);
+    case 'rate-limit': return t('models.connect.cause.rate-limit', { status: p['status'] ?? '-' }, l);
+    case 'spend-limit': return t('models.connect.cause.spend-limit', { status: p['status'] ?? '-' }, l);
+    case 'limit-reached': return t('models.connect.cause.limit-reached', { status: p['status'] ?? '-' }, l);
+    case 'http-status': return t('models.connect.cause.http-status', { status: p['status'] ?? '-' }, l);
+    case 'redirect': return t('models.connect.cause.redirect', { status: p['status'] ?? '-' }, l);
+    case 'network': return t('models.connect.cause.network', { status: p['status'] ?? '-' }, l);
+    case 'timeout': return t('models.connect.cause.timeout', { status: p['status'] ?? '-' }, l);
+    case 'invalid-list': return t('models.connect.cause.invalid-list', { status: p['status'] ?? '-' }, l);
+    case 'not-listable': return t('models.connect.cause.not-listable', { status: p['status'] ?? '-' }, l);
+    default: return t('models.connect.cause.unexpected', {}, l);
+  }
+}
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
+function installationFileUnsafe(p: Params, l: Locale): string {
+  const reasons = { type: t('installation.fileUnsafe.type', {}, l), owner: t('installation.fileUnsafe.owner', {}, l), mode: t('installation.fileUnsafe.mode', {}, l),
+    links: t('installation.fileUnsafe.links', {}, l), size: t('installation.fileUnsafe.size', {}, l) };
+  const reason = String(p['reason']);
+  return p['path'] && Object.hasOwn(reasons, reason) ? t('installation.fileUnsafeDetail', { ...p, reason: reasons[reason as keyof typeof reasons] }, l) : t('error.INSTALLATION_FILE_UNSAFE', p, l);
+}
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
 function patchLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -70,7 +107,31 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 const DOCKER_IMAGE_PROBE_CAUSES: Readonly<Record<string, (l: Locale) => string>> = { deadline: l => t('docker.imageProbe.cause.deadline', {}, l),
   exit: l => t('docker.imageProbe.cause.exit', {}, l), signal: l => t('docker.imageProbe.cause.signal', {}, l), parse: l => t('docker.imageProbe.cause.parse', {}, l) };
 const dockerImageProbeCause = (cause: unknown) => typeof cause === 'string' && Object.hasOwn(DOCKER_IMAGE_PROBE_CAUSES, cause) ? DOCKER_IMAGE_PROBE_CAUSES[cause]! : null;
+/** alpha.56 U5-S1: the delegation refusal's next step, chosen by the caller from display facts (the bound already decided). */
+const DELEGATION_HINTS: Readonly<Record<string, (p: Params, l: Locale) => string>> = { owner: (p, l) => t('policy.hint.owner', p, l), other: (p, l) => t('policy.hint.other', p, l),
+  unnamed: (p, l) => t('policy.hint.unnamed', p, l), deny: (p, l) => t('policy.hint.deny', p, l), approval: (p, l) => t('policy.hint.approval', p, l) };
+/** FIX8b: each custody refusal names its own next step; an open folder is named with its mode only on the person's own terminal path. */
+function siwcCustodyMessage(p: Params, l: Locale): string {
+  const reason = p['reason'];
+  if (reason === 'unsafe-root') return typeof p['path'] !== 'string' ? t('siwc.custody.unsafeRoot', p, l) : p['folder'] === 'parent' ? t('siwc.custody.privateParent', p, l) : t('siwc.custody.privateFolder', p, l);
+  if (reason === 'unknown-locality' || reason === 'remote-store') return t('siwc.custody.localDisk', p, l);
+  if (reason === 'shared-store' || reason === 'foreign-os-owner') return t('siwc.custody.personalRequired', p, l);
+  return reason === 'profile-unresolved' ? t('siwc.custody.profileRequired', p, l) : reason === 'cleanup-pending' ? t('siwc.custody.cleanupPending', p, l)
+    : reason === 'non-person-owner' ? t('siwc.custody.nonPersonOwner', p, l) : t('error.SIWC_STORE_NOT_PERSONAL', p, l);
+}
 const coreDefinitions: ErrorDefinitions = Object.freeze({
+  SIWC_ACCOUNT_STILL_CONNECTED: { category: 'error', render: (p, l) => ({ message: t('siwc.account.signOutFirst', p, l) }) },
+  SIWC_USAGE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.usageUnavailable', p, l) }) },
+  SIWC_SERVICE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.serviceUnavailable', p, l) }) },
+  SIWC_WORKER_ISOLATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_WORKER_ISOLATION_UNAVAILABLE', p, l) }) },
+  SIWC_APP_SERVER_AUTH_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'activation-hold' ? t('siwc.worker.activationHold', p, l) : t('error.SIWC_APP_SERVER_AUTH_UNAVAILABLE', p, l) }) },
+  SIWC_RELAY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_RELAY_REFUSED', p, l) }) },
+  SIWC_APP_SERVER_EFFECT_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_APP_SERVER_EFFECT_UNKNOWN', p, l) }) },
+  SIWC_WORKER_CLEANUP_UNPROVEN: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_WORKER_CLEANUP_UNPROVEN', p, l) }) },
+  HEADLESS_PLAN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.notEligible', p, l) }) },
+  SUBSCRIPTION_RAW_USE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.SUBSCRIPTION_RAW_USE_REFUSED', p, l) }) },
+  SECRET_SESSION_RESERVED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_SESSION_RESERVED', p, l) }) },
+  SIWC_STORE_NOT_PERSONAL: { category: 'error', render: (p, l) => ({ message: siwcCustodyMessage(p, l) }) },
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_PLATFORM_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED', p, l) }) },
@@ -87,6 +148,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BACKUP_TARGET_IDENTITY_MISMATCH: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_TARGET_IDENTITY_MISMATCH', p, l) }) },
   BACKUP_RESTORE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_INCOMPLETE', p, l) }) },
   BACKUP_RESTORE_HOLD: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_HOLD', p, l) }) },
+  BACKUP_COVERAGE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_COVERAGE_INCOMPLETE', p, l) }) },
   BACKUP_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.BACKUP_INPUT_INVALID', p, l) }) },
   BACKUP_POLICY_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_POLICY_DENIED', p, l) }) },
   BACKUP_PASSPHRASE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PASSPHRASE_INVALID', p, l) }) },
@@ -110,6 +172,12 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BACKUP_AUDIT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_AUDIT_UNAVAILABLE', p, l) }) },
   BACKUP_SCHEDULE_IDENTITY_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_SCHEDULE_IDENTITY_REQUIRED', p, l) }) },
   BACKUP_SCHEDULE_SECRET_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_SCHEDULE_SECRET_REQUIRED', p, l) }) },
+  // U7 (İ-6): the walk-up from a subfolder found an installation above it that it may not adopt (params path/root; reason picks the sentence).
+  INSTALLATION_ROOT_UNSAFE: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'mode' ? t('error.INSTALLATION_ROOT_UNSAFE.mode', p, l) : t('error.INSTALLATION_ROOT_UNSAFE', p, l) }) },
+  INSTALLATION_ROOT_FOREIGN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ROOT_FOREIGN', p, l) }) },
+  INSTALLATION_ROOT_INSIDE_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ROOT_INSIDE_DATA_ROOT', p, l) }) },
+  INSTALLATION_ROOT_WALK_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ROOT_WALK_UNSUPPORTED', p, l) }) },
+  INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
   INSTALLATION_IDENTITY_RELOCATED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RELOCATED', p, l) }) },
   INSTALLATION_IDENTITY_RESOLUTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RESOLUTION_INVALID', p, l) }) },
   INSTALLATION_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_INVALID', p, l) }) },
@@ -157,20 +225,21 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INTEGRITY_KEY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INTEGRITY_KEY_UNAVAILABLE', p, l) }) },
   PREFIX_CACHE_SALT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PREFIX_CACHE_SALT_UNAVAILABLE', p, l) }) },
 
-  CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', p, l) }) },
-  CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', p, l) }) },
-  CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', p, l) }) },
-  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
   CLI_CATALOG_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_LIMIT', p, l) }) },
   CLI_CATALOG_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_INVALID', p, l) }) },
   CLI_CATALOG_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_TTY', p, l) }) },
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
-  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', p, l) }) },
+  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause: discoveryCause(p, l) }, l) }) },
   MODEL_CONNECT_DISCOVERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_INVALID', p, l) }) },
   MODEL_CONNECT_DISCOVERY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_LIMIT', p, l) }) },
   MODEL_CONNECT_PRICE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_PRICE_REQUIRED', p, l) }) },
+  MODEL_CONNECT_NO_AVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NO_AVAILABLE', p, l) }) },
   MODEL_CONNECT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_INVALID', p, l) }) },
   MODEL_CONNECT_NOT_CONNECTABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NOT_CONNECTABLE', p, l) }) },
   MODEL_CONNECT_ENDPOINT_FIXED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_FIXED', p, l) }) },
@@ -197,6 +266,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   AGENT_TURN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_UNAVAILABLE', p, l) }) },
   TERMINAL_TTY_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_TTY_REQUIRED', p, l) }) },
   INFERENCE_METRICS_UNREAD: { category: 'error', render: (p, l) => ({ message: t('error.INFERENCE_METRICS_UNREAD', p, l) }) },
+  INFERENCE_NOT_CONFIGURED: { category: 'error', render: (_p, l) => ({ message: t('inference.notConfigured', {}, l) }) },
   INFERENCE_PROFILE_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.INFERENCE_PROFILE_UNKNOWN', p, l) }) },
   DECISION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.DECISION_INVALID', p, l) }) },
   DECISION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.DECISION_UNAVAILABLE', p, l) }) },
@@ -279,6 +349,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CATALOG_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_OUTCOME_UNKNOWN', p, l) }) },
   WORKER_MODEL_BINDING_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_MODEL_BINDING_MISMATCH', p, l) }) },
   MODEL_CATALOG_ALIAS_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_ALIAS_CONFLICT', p, l) }) },
+  MODEL_CATALOG_MODEL_RETIRED: { category: 'error', render: (p, l) => ({ message: [t('error.MODEL_CATALOG_MODEL_RETIRED', p, l), ...(p['successor'] ? [t('error.MODEL_CATALOG_MODEL_RETIRED.successor', p, l)] : [])].join(' ') }) },
   WORK_INPUT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_REQUIRED', p, l) }) },
   WORK_INPUT_TEMPLATE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TEMPLATE_REQUIRED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED', p, l) }) },
@@ -484,6 +555,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // or runner); the sentence is chosen by the diagnosis kind.
   MCP_SANDBOX_COMMAND_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: mcpSandboxUnreachable(p, l) }) },
   MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
+  // The Deckent MCP server's own refusals (Ek A: an MCP error carries its localized message).
+  MCP_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.MCP_BUSY', p, l) }) },
+  MCP_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_INPUT_INVALID', p, l) }) },
+  MCP_RESPONSE_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.MCP_RESPONSE_LIMIT', p, l) }) },
+  MCP_TOOL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TOOL_FAILED', p, l) }) },
   MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },
   MCP_SERVER_NOT_TRUSTED: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NOT_TRUSTED', p, l) }) },
   MCP_TRUST_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TRUST_STORE_UNAVAILABLE', p, l) }) },
@@ -582,6 +658,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SUPERVISOR_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_PROFILE_INVALID', p, l) }) },
   SUPERVISOR_PROFILE_ORIGIN_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_PROFILE_ORIGIN_MISMATCH', p, l) }) },
   SUPERVISOR_OPTIONS_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_OPTIONS_INVALID', p, l) }) },
+  SUPERVISOR_ISOLATION_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_ISOLATION_MISMATCH', p, l) }) },
   SUPERVISOR_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_CANCELLED', p, l) }) },
   SUPERVISOR_CONTROL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_CONTROL_FAILED', p, l) }) },
   SUPERVISOR_NOT_TERMINAL: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_NOT_TERMINAL', p, l) }) },
@@ -606,7 +683,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
-  POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_EXCEEDS', p, l) }) },
+  // alpha.56 U5-S1: params kind, action, target, scope, reason, hint (owner|other|unnamed|deny|approval), people; without them the summary sentence.
+  POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: p['kind'] === undefined ? t('error.POLICY_DELEGATION_EXCEEDS.summary', p, l)
+    : t('error.POLICY_DELEGATION_EXCEEDS', { ...p, hint: (DELEGATION_HINTS[String(p['hint'])] ?? DELEGATION_HINTS['unnamed']!)(p, l) }, l) }) },
   POLICY_LAST_ADMIN: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_LAST_ADMIN', p, l) }) },
   POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
   POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
@@ -657,7 +736,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SECRET_VAULT_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_VAULT_REQUIRED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
-  PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },
+  PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: (p['scope'] === undefined ? t('error.PERMISSION_MODE_DENIED', p, l) : t('error.PERMISSION_MODE_DENIED.scoped', p, l))
+    + (p['hint'] === 'modeOwner' ? ` ${t('policy.hint.modeOwner', p, l)}` : '') }) },
   PERMISSION_MODE_LOCKED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_LOCKED', p, l) }) },
   PERMISSION_MODE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.PERMISSION_MODE_INVALID', p, l) }) },
   AUDIT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INVALID', p, l) }) },
@@ -785,7 +865,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_JOURNAL_EXPIRED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_EXPIRED', p, l) }) },
   INSTALLATION_JOURNAL_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_UNSUPPORTED', p, l) }) },
   INSTALLATION_FILE_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_CONFLICT', p, l) }) },
-  INSTALLATION_FILE_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_UNSAFE', p, l) }) },
+  INSTALLATION_FILE_UNSAFE: { category: 'config', render: (p, l) => ({ message: installationFileUnsafe(p, l) }) },
   INSTALLATION_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_INVALID', p, l) }) },
   INSTALLATION_FILE_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_UNAVAILABLE', p, l) }) },
   INSTALLATION_FILE_OUTCOME_UNKNOWN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_OUTCOME_UNKNOWN', p, l) }) },
@@ -798,6 +878,22 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_RECOVERY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_RECOVERY_INVALID', p, l) }) },
   INSTALLATION_RECOVERY_CONSENT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_RECOVERY_CONSENT', p, l) }) },
   INSTALLATION_RECOVERY_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_RECOVERY_CHANGED', p, l) }) },
+  UNINSTALL_NATIVE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_NATIVE_UNSUPPORTED', p, l) }) },
+  UNINSTALL_PURGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_DENIED', p, l) }) },
+  UNINSTALL_LIFECYCLE_HOLD: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_LIFECYCLE_HOLD', p, l) }) },
+  UNINSTALL_RECOVERY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_INVALID', p, l) }) },
+  UNINSTALL_WORK_ACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_WORK_ACTIVE', p, l) }) },
+  UNINSTALL_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_MANAGED', p, l) }) },
+  UNINSTALL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_INVALID', p, l) }) },
+  UNINSTALL_PLAN_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PLAN_CHANGED', p, l) }) },
+  UNINSTALL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNSUPPORTED', p, l) }) },
+  UNINSTALL_BACKUP_COVERAGE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_BACKUP_COVERAGE', p, l) }) },
+  UNINSTALL_OWNERSHIP: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_OWNERSHIP', p, l) }) },
+  UNINSTALL_PATH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PATH_UNSAFE', p, l) }) },
+  UNINSTALL_SCOPE_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_SCOPE_UNVERIFIED', p, l) }) },
+  UNINSTALL_FINAL_TAIL_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_FINAL_TAIL_UNKNOWN', p, l) }) },
+  UNINSTALL_AUTHORITY_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_AUTHORITY_UNVERIFIED', p, l) }) },
+  UNINSTALL_PURGE_PROJECT_DATA: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_PROJECT_DATA', p, l) }) },
   INSTALLATION_PUBLICATION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_INVALID', p, l) }) },
   INSTALLATION_PUBLICATION_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_CONFLICT', p, l) }) },
   INSTALLATION_PUBLICATION_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_CHANGED', p, l) }) },
@@ -825,6 +921,21 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORKER_RECIPE_VERSION: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_RECIPE_VERSION', { detail: '', ...p }, l) }) },
   WORKER_CLI_INCOMPATIBLE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_CLI_INCOMPATIBLE', { detail: '', ...p }, l) }) },
   WORKER_VERSION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_VERSION_INVALID', { detail: '', ...p }, l) }) },
+  WORKER_PLAN_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_PLAN_INVALID', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_VERSIONS_UNRESOLVABLE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_VERSIONS_UNRESOLVABLE', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_INSTALLER_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_INSTALLER_CHANGED', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_SOURCE_INSECURE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_SOURCE_INSECURE', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_BUILDKIT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILDKIT_REQUIRED', { detail: '', ...p }, l) }) },
+  WORKER_LINEAGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_LINEAGE_INVALID', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_CONSENT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONSENT_MISSING', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_CONSENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONSENT_INVALID', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_PROVIDERS_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_PROVIDERS_READ_ONLY', { detail: '', ...p }, l) }) },
+  WORKER_SETUP_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_SETUP_PENDING', { phase: '-', ...p }, l) }) },
+  WORKER_IMAGE_DECLINED: { category: 'error', render: (_p, l) => ({ message: t('error.WORKER_IMAGE_DECLINED', {}, l) }) },
+  WORKER_IMAGE_BUILDING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILDING', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_DOCKER_WAITING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_DOCKER_WAITING', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_BUILD_INTERRUPTED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILD_INTERRUPTED', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_SOURCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_SOURCE_INVALID', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONTEXT_EXISTS: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONTEXT_EXISTS', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONTEXT_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONTEXT_UNSAFE', { detail: '', ...p }, l) }) },
@@ -836,6 +947,51 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   TOOLCHAIN_RECEIPT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_RECEIPT_INVALID', { detail: '', ...p }, l) }) },
   TOOLCHAIN_PLAN_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_PLAN_INVALID', { detail: '', ...p }, l) }) },
   TOOLCHAIN_UPDATE_TERMINAL_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_UPDATE_TERMINAL_ONLY', p, l) }) },
+  HUB_STORE_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_OUTCOME_UNKNOWN', p, l) }) },
+  HUB_ACCOUNT_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_ACCOUNT_REFUSED', p, l) }) },
+  HUB_PROFILE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PROFILE_REFUSED', p, l) }) },
+  HUB_RATE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_RATE_REFUSED', p, l) }) },
+  HUB_SERVER_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SERVER_DENIED', p, l) }) },
+  HUB_VERSION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_VERSION_CONFLICT', p, l) }) },
+  HUB_DEPENDENCY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DEPENDENCY_INVALID', p, l) }) },
+  HUB_SECRET_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SECRET_REFUSED', p, l) }) },
+  HUB_REVIEW_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_REVIEW_REFUSED', p, l) }) },
+  HUB_STORE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_UNSAFE', p, l) }) },
+  HUB_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_CONFLICT', p, l) }) },
+  HUB_TLS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_TLS_REQUIRED', p, l) }) },
+  HUB_NETWORK_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_NETWORK_INVALID', p, l) }) },
+  HUB_NETWORK_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_NETWORK_FAILED', p, l) }) },
+  HUB_FIRST_USE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FIRST_USE_REQUIRED', p, l) }) },
+  HUB_RESOURCE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.HUB_RESOURCE_UNKNOWN', p, l) }) },
+  HUB_STORE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_UNSUPPORTED', p, l) }) },
+  HUB_PACKAGE_SCHEMA_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PACKAGE_SCHEMA_UNSUPPORTED', p, l) }) },
+  HUB_ENVELOPE_SCHEMA_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_ENVELOPE_SCHEMA_UNSUPPORTED', p, l) }) },
+  HUB_FEED_SCHEMA_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_SCHEMA_UNSUPPORTED', p, l) }) },
+  HUB_PACKAGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PACKAGE_INVALID', p, l) }) },
+  HUB_ENVELOPE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_ENVELOPE_INVALID', p, l) }) },
+  HUB_FEED_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_INVALID', p, l) }) },
+  HUB_LIMIT_EXCEEDED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_LIMIT_EXCEEDED', p, l) }) },
+  HUB_DIGEST_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DIGEST_MISMATCH', p, l) }) },
+  HUB_SIGNATURE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SIGNATURE_INVALID', p, l) }) },
+  HUB_SIGNER_UNTRUSTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SIGNER_UNTRUSTED', p, l) }) },
+  HUB_IDENTITY_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.HUB_IDENTITY_MISMATCH', p, l) }) },
+  HUB_FOREIGN_PACKAGE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FOREIGN_PACKAGE', p, l) }) },
+  HUB_FEED_REPLAYED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_REPLAYED', p, l) }) },
+  HUB_FEED_STALE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_STALE', p, l) }) },
+  HUB_SKILL_FILES_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_FILES_UNAVAILABLE', p, l) }) },
+  HUB_SKILL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_INVALID', p, l) }) },
+  HUB_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FILE_UNSUPPORTED', p, l) }) },
+  HUB_SOURCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SOURCE_INVALID', p, l) }) },
+  HUB_SOURCE_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SOURCE_NOT_FOUND', p, l) }) },
+  HUB_AUTHORITY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_AUTHORITY_REFUSED', p, l) }) },
+  HUB_INSTALL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_INSTALL_CONFLICT', p, l) }) },
+  HUB_DEPENDENCY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DEPENDENCY_REFUSED', p, l) }) },
+  HUB_DOWNGRADE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DOWNGRADE_REFUSED', p, l) }) },
+  HUB_PACKAGE_REVOKED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PACKAGE_REVOKED', p, l) }) },
+  HUB_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_CORRUPT', p, l) }) },
+  HUB_CONNECTION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_CONNECTION_UNAVAILABLE', p, l) }) },
+  HUB_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_UNAVAILABLE', p, l) }) },
+  HUB_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.HUB_OUTCOME_UNKNOWN', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
 // Duplicate codes across the core table and the family fragments fail at load (ERROR_REGISTRY_DUPLICATE), never last-wins.

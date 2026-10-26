@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 
 // T5 (alpha.54): `/rename <title>` names the open conversation through the session port; the `/resume` picker shows the title and narrows by typed text.
 const mounted: Array<{ unmount(): void }> = [];
@@ -16,9 +17,10 @@ const ready = async (view: ReturnType<typeof mountWorkline>) => { mounted.push(v
 const row = (n: number, preview: string, title?: string) => ({ sessionId: `0000000${n}-2222-4333-8444-555555555555`, updatedAtMs: n, messages: 2, preview, ...(title ? { title } : {}) });
 
 describe('/rename', () => {
-  it('names the open conversation through the port and says so', async () => {
+  // TRM-40: the rich terminal (slash windows) runs window commands bare, but no window replaces the title, so it keeps the argument.
+  it.each([['line terminal', labels], ['rich terminal with slash windows', { ...labels, windows: SLASH_WINDOW_TEST_LABELS }]] as const)('names the open conversation through the port and says so (%s)', async (_name, words) => {
     const rename = vi.fn(async () => true);
-    const view = mountWorkline({ labels, sessions: { async save() { /* unused */ }, async list() { return []; }, async load() { return null; }, rename } });
+    const view = mountWorkline({ labels: words, sessions: { async save() { /* unused */ }, async list() { return []; }, async load() { return null; }, rename } });
     await ready(view);
     await send(view, '/rename release notes\r');
     await until(() => frameOf(view).includes('RENAME-DONE'), 'renamed');
@@ -54,6 +56,24 @@ describe('/rename', () => {
 });
 
 describe('/resume picker', () => {
+  it('U7 can widen an empty current-folder list and load a session from all folders', async () => {
+    const list = vi.fn(async (all?: boolean) => all ? [row(2, 'another folder')] : []);
+    const load = vi.fn(async () => [{ role: 'user' as const, content: 'q' }]);
+    const view = mountWorkline({ labels: { ...labels, sessions: { ...sessions, folders: { all: 'ALL-FOLDERS', current: 'THIS-FOLDER' } } },
+      sessions: { async save() { /* unused */ }, list, load } });
+    await ready(view); await send(view, '/resume\r');
+    await until(() => frameOf(view).includes('ALL-FOLDERS'), 'widen choice');
+    view.stdin.write(ENTER);
+    await until(() => frameOf(view).includes('another folder') && frameOf(view).includes('THIS-FOLDER'), 'all folders');
+    view.stdin.write(DOWN); await settle(30); view.stdin.write(ENTER);
+    await until(() => frameOf(view).includes('ALL-FOLDERS') && !frameOf(view).includes('another folder'), 'current folder again');
+    view.stdin.write(ENTER);
+    await until(() => frameOf(view).includes('another folder'), 'all folders again');
+    view.stdin.write(ENTER);
+    await until(() => load.mock.calls.length === 1, 'resumed');
+    expect(list.mock.calls.map(call => call[0])).toEqual([false, true, false, true, true]);
+    expect(load.mock.calls[0]![0]).toBe(row(2, '').sessionId);
+  });
   const list = [row(1, 'alpha question'), row(2, 'beta question', 'My Release Notes'), row(3, 'gamma question')];
   const port = (load = vi.fn(async () => [{ role: 'user' as const, content: 'q' }])) => ({ async save() { /* unused */ }, async list() { return list; }, load });
 

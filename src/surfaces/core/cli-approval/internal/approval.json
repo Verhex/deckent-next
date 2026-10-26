@@ -3,7 +3,8 @@
   "list": {
     "maxPages": 10,
     "rowsShown": 20,
-    "menuRounds": 20
+    "menuRounds": 20,
+    "tableWidth": 120
   },
   "examples": {
     "list": {

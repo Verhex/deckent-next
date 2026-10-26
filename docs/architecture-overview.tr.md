@@ -188,3 +188,61 @@ Sürüm-1 çıktı `{schemaVersion: 1, kind: "deckent-audit-checkpoint", checkpo
 Sonuçlar `match`, `truncated`, `possible-wipe`, `policy-changed`, `producers-changed`, `chain-broken`, `unknown` ayrımını korur; `deckent audit verify` `match` dışındaki her sonuçta 1 ile çıkar. Özgün anahtar yoksa, witness başka kuruluma/scope'a aitse veya config tarama sınırı aşılmışsa bilinmiyor kalır; eski ledger için `no-checkpoint-yet` döner. Her checkpoint aynı işlemde yazılan mühürlü bir `audit-checkpoint` audit olayıyla duyurulur ve bu olay checkpointin başıdır. Checkpointi kaybolmuş bir işaret (silinmiş satırlar, kesilmiş kuyruk) `possible-wipe` / `checkpoints-missing` verir; güncel ledgerda silinmiş checkpoint tablosu `chain-broken` olur. İkisi de hiçbir zaman yeni baseline ile örtülmez; yalnız checkpointi ve işareti olmayan scope ilk checkpointini alır. Tek açık geri dönüş `deckent audit rebaseline --scope <id> --reason <metin>` komutudur: `audit-rebaseline` üzerinde scope approval `decide` izni (AI aktörleri için reddedilir), doğrulanmış etkileşimli terminal ve gösterilen durum için y/N gerekir; yalnız policy/üretici değişimini veya olası silmeyi kabul eder ve nedeni yeni işarete mühürler. Önceden dışa aktarılan witness'lar artık eşleşmez. İşaretleri de silmek audit kaydını onların gerisine kadar kesmek demektir; iki yerel geçmişin birlikte silinmesi veya tam silme dış cihazdaki özgün witness ile tespit edilir. Checkpointler arasındaki son bölüm henüz sabitlenmemiştir; tüm yerel kanıtın silinmesi veya eski sürüme döndürülmesi yalnız yerel kanıtla dışlanamaz. Revision etiketi değişmeden policy içeriği değişirse de tespit edilir. Yönetilen policy değişimi (`policy.administer`, `/mode`, kurucu şablon yükseltmesi) değiştirdiği ve ürettiği policy'nin digest'lerini audit olayına mühürler; doğrulama yalnız son checkpointten kesintisiz zinciri kabul eder; `match` kalır ve sonraki checkpoint onu benimser; bant dışı dosya düzenlemesi — ardından yönetilen bir değişiklik gelse bile — kişi yeniden baseline alana kadar `policy-changed` okunur. Yeniden baseline kartı audit başını ve digest'leri gösterir; yanıttan sonra biri değişirse yazma reddedilir ve yeniden sorulur.
 
 Checkpointi servis başlangıçta ve config aralığında üretir. Tarama `audit.pageSize`, `audit.maxRecords` (olay ve checkpoint), `audit.maxScopes` ile sınırlıdır; sınıra ulaşınca tam doğrulandı demez. Okumalar yazma, migration, healing veya eksik anahtar/kimlik üretimi yapmaz. Ayrı pull cihazı uygulaması beta sonrasıdır; FIDO2 imzalı policy paketi ilk beta sonrası iştir. Kaynak testleri canlı veya bağımsız kabul değildir.
+
+<a id="imzali-hub-paketleri"></a>
+
+## İmzalı Hub paketleri
+
+Hub kaynakları ve imzalı paketler CLI, terminal, MCP ve SDK'da aynı işlem
+sözleşmesini kullanır. Paket kurulumu araç izni, politika veya terfi vermez.
+
+`deckent hub` kapsamın kaynaklarını listeler. Terminaldeki `/hub` penceresi
+işlemleri ve güvenlik bildirimlerini gösterir. Yazmalar kesin kapsamı, kaynağı,
+güven ayarlarını, manifest'i, imza zarfını ve çözümlenmiş paket metnini gösteren
+kişi kartını açar. Onaydan önce vazgeçmek işlem uygulamaz. Gönderimden sonra pencereyi kapatmak kalıcılaşmış değişikliği geri almaz. Bildirimlerde
+çekilme, geri açılma, iptal ve yank vardır. Yank yeni kurulumu durdurur, mevcut
+kullanım sürer; iptal içeriği yeni ajan seçiminden çıkarır.
+
+Girdi dosyasını hazırlamadan önce işlemin JSON sözleşmesini inceleyin:
+
+```sh
+deckent hub sources add --schema
+deckent hub install --schema
+deckent hub cards --scope company-scope --json
+```
+
+Girdi isteyen komutlarda bu şemayla `--input <dosya>` kullanın. `--scope`, dosyada
+kapsam varsa onunla aynı olmalıdır. Paketler kanonik `.deckentpkg` baytlarının
+base64 gösterimidir. Install ve update tam bağımlılık paketlerini, imzalı iptal
+listesini ve yerel WorkClass eşlemesini alır. `hub refresh` verilen imzalı listeyi
+uygular; `hub verify` kurulu önbellek baytlarını çevrimdışı yeniden doğrular.
+`hub inspect` varsayılan olarak kurulu durumu okur; `location: "source"` kaynaktaki
+paketi ister. Bu biçimde kesin sürüm gerekir. `hub export`, `encoding: "base64"`
+ve `bundle` alanlarıyla hava boşluklu aktarıma uygun nesne döndürür; host dosyası yazmaz.
+Kaynak, hub'ın kök anahtarını sabitler. Hub'ın çevrimiçi anahtarlarından biriyle atılan
+hub imzası ya da iptal listesi, yalnız kökün o anahtarı o amaç için imzalı yetkilendirmesiyle,
+geçerlilik aralığı içinde ve iptal edilmemişse sayılır; bu yetkilendirme paketle ya da listeyle gelir.
+
+Kişi yazmaları etkileşimli terminal gerektirir; `--json`, pipe ve AI ortamları
+kartı onaylayamaz. SDK `executeHub(root, request, options)` sunar; `request`,
+`operation` (örneğin `hub.verify`) ve tipli `input` alanlarını taşır.
+`hub` kaynak türü için açık kapsam politikası izni gerekir. Yüzeyi kullanmak izin
+oluşturmaz. AI yazması ayrıca kendi etkin imza anahtarını gerektirir; Hub sunucusu
+yayıncı imzasını ve yetkiyi bağımsız denetler. MCP kaynak güveni değişikliklerini
+ve kişi güvenlik kartlarını sunmaz. Yayıncı anahtarı yönetimi mevcut kişi signer
+kartlarından devam eder.
+
+Kaynak, host veya bağlantı başlangıç verisi eklenmez. Kaynak eklemek ilk ağ
+bağlantısını onaylamaz. Arama, kaynak inceleme ve yayın için registry eklenti
+kimliği, kişinin kalıcı ilk kullanım kararı, kaynağa bağlı kimlik doğrulama ve
+yönetilen ağ etkisi yolu bağlanmalıdır. Eksik bağlantı
+`HUB_CONNECTION_UNAVAILABLE` döndürür; ham HTTP'ye geçilmez. Yayın öncesi yerel
+uygulama manifest'i ve her çözümlenmiş dosyayı bilinen sırlar için tarar.
+AI'ın dersten türeyen içeriği yayınlaması reddedilir.
+
+Bu yazar dilimi bağlantı portunu ve yönetilen taşıma köprüsünü sağlar. Kurulum
+composition'ı ağ işlemleri açılmadan önce ilk kullanım, kimlik doğrulama ve imzalı
+güven kanıtı hizmetlerini bağlamalıdır. Binary, iki kurulum ve native platform
+kabulü kaynak veya birim test doğrulamasından ayrıdır.
+
+Hub'ın halka açılması ayrı sürüm kapısıdır. Bu composition varsayılan kaynak veya üretim bağlantısı eklemez.

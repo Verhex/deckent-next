@@ -43,7 +43,7 @@ it.for(['complete', 'cancel', 'recovery'] as const)('Docker %s preserves exact b
     if (verb === 'inspect') {
       if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
       return { stdout: JSON.stringify([{ Id: container.containerId, Image: container.imageId, Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] }, Mounts: [{ Type: 'bind', Source: workspace, Destination: '/workspace', RW: true }],
-        State: { Status: state, ExitCode: mode === 'cancel' ? 137 : 0, StartedAt: container.startedAt, FinishedAt: container.finishedAt } }]), stderr: '' };
+        HostConfig: { NetworkMode: 'none' }, State: { Status: state, ExitCode: mode === 'cancel' ? 137 : 0, StartedAt: container.startedAt, FinishedAt: container.finishedAt } }]), stderr: '' };
     }
     if (verb === 'create') { label = args[args.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created'; return { stdout: container.containerId, stderr: '' }; }
     if (verb === 'start') { launches++; state = mode === 'cancel' ? 'running' : 'exited'; return { stdout: '', stderr: '' }; }
@@ -115,7 +115,7 @@ it.for([
       if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
       return { stdout: JSON.stringify([{ Id: variant.id ?? container.containerId, Image: variant.image === null ? undefined : container.imageId,
         Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] }, Args: ['secret-argv'], Mounts: [{ Type: 'bind', Source: workspace, Destination: '/workspace', RW: true }],
-        HostConfig: { Memory: 0, NanoCpus: 0, PidsLimit: null },
+        HostConfig: { Memory: 0, NanoCpus: 0, PidsLimit: null, NetworkMode: 'none' },
         State: { Status: state, ExitCode: 137, StartedAt: container.startedAt, FinishedAt: container.finishedAt, ...variant.fields } }]), stderr: '' };
     }
     if (verb === 'create') { label = args[args.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created'; return { stdout: container.containerId, stderr: '' }; }

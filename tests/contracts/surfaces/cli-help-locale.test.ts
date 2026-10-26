@@ -79,6 +79,19 @@ it('uses the default with missing config and creates no files', async () => {
   expect(await readdir(join(root, '.deckent'))).toEqual([]);
   expect(await readdir(globalRoot)).toEqual([]);
 });
+
+it('F5: invalid input names only registered command words and uses config language before parsing', async () => {
+  await config('tr');
+  for (const argv of [['doctor', 'private-value'], ['init', 'private-value'], ['do', '--request']]) {
+    let errors = '';
+    const code = await main(argv, { root, env, initialize() {}, stdout: { write() {} }, stderr: { write: text => { errors += text; } } });
+    expect(code).toBe(2);
+    expect(errors).toContain(`deckent ${argv[0]}`);
+    expect(errors).not.toContain('private-value');
+    expect(errors).not.toContain('Reuse the command');
+    expect(errors).toContain('için');
+  }
+});
 it('keeps environment locale available with invalid config', async () => {
   await writeFile(join(root, '.deckent', 'config.json'), '{broken');
   env['DECKENT_LANG'] = 'tr'; await help(['run', '--help'], 'tr');
@@ -106,6 +119,12 @@ it('an unknown command and --version follow the configured language', async () =
   const unknown = await run(['frobnicate'], 'tr');
   expect(unknown.code).toBe(2); expect(unknown.errors + unknown.output).toContain(t('cli.unknownCommand', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}`, command: 'frobnicate' }, 'tr'));
   expect((await run(['--version'], 'tr')).output).toContain(t('cli.version', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` }, 'tr').split('\n')[0]);
+});
+it('a leading --lang is the documented global option, not a command (R34)', async () => {
+  const stdin = { isTTY: false } as NodeJS.ReadStream, bare = await main(['--lang', 'en'], { root, env, stdin, stdout: { write: () => undefined }, stderr: { write: () => undefined } });
+  const unknown = await run(['--lang', 'en', 'frobnicate']);
+  expect(bare).toBe(0); expect(unknown.code).toBe(2);
+  expect(unknown.errors + unknown.output).toContain(t('cli.unknownCommand', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}`, command: 'frobnicate' }, 'en'));
 });
 it('run propose without its argument follows the configured language', async () => {
   await config('tr');

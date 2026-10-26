@@ -10,7 +10,8 @@ export async function openSqliteRunProposalStore(path: string, options: SqliteLe
 /** Observation opens a read-only connection; it cannot migrate or write a proposal. */
 export async function openSqliteRunProposalReader(path: string, options: SqliteLedgerOptions) {
   const { openSqliteLedgerReadOnly } = await import('#adapters/core/sqlite-ledger/index.js');
-  const { readRunProposal } = await import('./internal/store.js');
+  const { readRunProposal, SqliteRunProposals } = await import('./internal/store.js');
   const db = openSqliteLedgerReadOnly(path, options);
-  return { loadProposal: async (scopeId: string, commandId: string) => readRunProposal(db, scopeId, commandId), close: () => db.close() };
+  const store = new SqliteRunProposals(db);
+  return { listIntents: (scopeId: string) => store.listIntents(scopeId), loadProposal: async (scopeId: string, commandId: string) => readRunProposal(db, scopeId, commandId), close: () => db.close() };
 }

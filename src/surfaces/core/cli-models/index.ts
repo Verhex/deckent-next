@@ -11,3 +11,5 @@ export { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeB
 export { modelRetirementWarnings, renderRetirementWarning, type ModelRetirementWarning } from './internal/models-table.js';
 export type { ModelRoleAssignHandler, ModelRoleInspectionHandler } from './internal/model-roles.js';
 export { renderModelRoleInspection } from './internal/model-roles.js';
+
+export { spendPeriodLines } from './internal/spend-period.js';

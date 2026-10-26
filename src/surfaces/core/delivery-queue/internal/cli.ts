@@ -65,9 +65,9 @@ export async function queueCommand(argv: readonly string[], context: QueueComman
   if (action === 'integration-queue-enqueue') {
     const source = values.get('--input')!;
     const input = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
-      { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+      { subject: 'cli.input.subject.queue', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
     let enqueue: ReturnType<typeof queueEnqueueSchema.parse>;
-    try { enqueue = queueEnqueueSchema.parse(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
+    try { enqueue = queueEnqueueSchema.parse(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.queue' } }); }
     result = await client.enqueueTargetQueue(enqueue); scopeId = enqueue.identity.scopeId;
   } else if (action === 'integration-queue-rollback') {
     result = await client.enqueueTargetQueueRollback(parseFlags(command, locale, () => queueRollbackSchema.parse({ schemaVersion: 1, scopeId, commandId: values.get('--command-id'), sourceCommandId: values.get('--source-command-id') })));

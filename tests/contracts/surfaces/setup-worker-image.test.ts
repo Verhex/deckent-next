@@ -3,11 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planSetup, planFirstWorkerImage, SetupStageRegistry, WORK_SETUP_FAMILY, WorkerImageSetupApplication, type SetupObservation, type WorkerImageCard, type WorkerImagePorts } from '#engine/index.js';
-import { MESSAGE_REGISTRY } from '#platform/index.js';
 import { nativeCliIds } from '#domain/index.js';
 import { executionSetupFamily, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-import { buildWorkerImageInHome, observeWorkerImage, readNewestWorkerReceipt, readWorkerImageSources, workerImagePresence, type WorkerImageBuildRunner } from '#adapters/index.js';
-import { doctorChecks, firstJobCommand, firstJobSteps, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
+import { buildWorkerImageInHome, observeWorkerImage, readNewestWorkerReceipt, readWorkerImageSources, workerImagePresence, workerImageSetupPorts, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { doctorChecks, firstJobStages, firstJobSteps, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { isForegroundStage, parseSetupFlags, runForegroundStage, stageChoices, unattendedAnswers, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
 import { parseVersionHistory, validateRecipe } from '../../../assets/worker-image/history.mjs';
@@ -26,28 +25,28 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 const docker = { id: 'docker', label: 'Docker', support: 'supported', cli: 'found', path: '/usr/bin/docker', version: '29.1.3', daemon: 'reachable', serverVersion: '29.1.3',
   kind: 'engine', endpoint: 'system', group: null } as const;
 type Worker = NonNullable<ExecutionFacts['worker']>;
-const worker = (extra: Partial<Worker> = {}): Worker => ({ configured: null, receipt: null, image: 'not-run', git: '/usr/bin/git', ...extra });
-const observation = (execution: Partial<ExecutionFacts> | null, scope: string | null = 'erp-demo'): SetupObservation => ({ schemaVersion: 1,
+const worker = (extra: Partial<Worker> = {}): Worker => ({ provider: nativeCliIds[0], configured: null, receipt: null, image: 'not-run', git: '/usr/bin/git', ...extra });
+const observation = (execution: Partial<ExecutionFacts> | null, scope: string | null = 'erp-demo'): SetupObservation => ({ schemaVersion: 2,
   environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: 'en' },
   folder: { installation: 'present', homeRoot: false, configuredScope: scope, suggestedScope: 'erp-demo' }, profile: { available: [{ id: 'core:solo', version: 1 }], selected: { id: 'core:solo', version: 1 } },
   policy: { state: scope ? 'current' : 'absent' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 1 }, check: { state: 'ok' },
   families: execution ? { execution: { schemaVersion: 1, runtimes: [docker], ...execution } } : {} });
 const stages = (facts: Partial<ExecutionFacts> | null, values: Record<string, unknown> = {}, person = true, scope: string | null = 'erp-demo') => {
-  const plan = planSetup(observation(facts, scope), { schemaVersion: 1, values }, new SetupStageRegistry([executionSetupFamily({ person })]));
+  const plan = planSetup(observation(facts, scope), { schemaVersion: 2, values }, new SetupStageRegistry([executionSetupFamily({ person })]));
   const find = (id: string) => plan.stages.find(stage => stage.id === id)!;
   return { plan, image: find('execution:worker'), settings: find('execution:worker-settings') };
 };
 
 describe('BR1 setup stages: worker image, then the execution settings (pure plan)', () => {
-  it('order: the runtime, the worker image, the execution settings, then the model; family stages are never --yes-eligible', () => {
+  it('onboarding order: model before runtime, worker image and execution settings; family stages are never --yes-eligible', () => {
     const { plan } = stages({ worker: worker() });
     const ids = plan.stages.map(stage => stage.id);
-    expect(ids.slice(ids.indexOf('core:sandbox'), ids.indexOf('core:model') + 1)).toEqual(['core:sandbox', 'execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model']);
+    expect(ids.slice(ids.indexOf('core:model'))).toEqual(['core:model', 'execution:runtime', 'execution:worker', 'execution:worker-settings']);
     expect(plan.stages.filter(stage => stage.namespace === 'execution').every(stage => !stage.autoEligible)).toBe(true);
   });
 
   it('negative: no worker facts (no installation to read) or Docker not ready → both blocked, no operation', () => {
-    for (const { image, settings } of [stages({}), stages({ runtimes: [{ ...docker, daemon: 'unreachable', serverVersion: null }], worker: worker() })]) {
+    for (const { image, settings } of [stages({ runtimes: [{ ...docker, daemon: 'unreachable', serverVersion: null }], worker: worker() })]) {
       expect(image.operation).toBeNull(); expect(settings.operation).toBeNull();
       expect([image.state, settings.state]).toEqual(['blocked', 'blocked']);
     }
@@ -55,22 +54,13 @@ describe('BR1 setup stages: worker image, then the execution settings (pure plan
     expect(stages({ worker: worker() }, {}, true, null).image.reason).toEqual({ code: 'setup.execution.workerWaits', params: { stage: 'core:policy' } });
   });
 
-  it('a person is asked (size named; default no); without a person it is blocked with the exact command a person runs', () => {
-    const asked = stages({ worker: worker() }).image;
-    expect(asked).toMatchObject({ state: 'needs-answer', default: false, question: { key: 'setup.execution.workerBuild', params: { size: '3.3' } },
-      operation: { id: 'execution.worker-image', version: 1, input: { scopeId: 'erp-demo' } }, cli: ['deckent', 'init', '--scope', 'erp-demo'] });
-    expect(MESSAGE_REGISTRY.catalogs.en['setup.execution.workerBuild']).toContain('{size} GB');
-    expect(stages({ worker: worker() }, {}, false).image).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerNone' }, operation: null, cli: ['deckent', 'init', '--scope', 'erp-demo'] });
-    expect(stages({ worker: worker() }).settings).toMatchObject({ state: 'blocked', reason: { params: { stage: 'execution:worker' } }, operation: null });
-  });
-
-  it('yes → ready to build (a foreground stage); no → skipped; --image-id → ready to adopt that image', () => {
-    const built = stages({ worker: worker() }, { 'execution:worker': true }).image;
-    expect(built).toMatchObject({ state: 'ready', operation: { id: 'execution.worker-image', input: { scopeId: 'erp-demo' } } });
-    expect(isForegroundStage(built)).toBe(true);
-    expect(stages({ worker: worker() }, { 'execution:worker': false }).image).toMatchObject({ state: 'skipped', reason: { code: 'setup.execution.workerDeclined' }, operation: null });
-    expect(stages({ worker: worker() }, { 'execution:worker': { imageId: OTHER } }, false).image).toMatchObject({ state: 'ready', reason: { code: 'setup.execution.workerAdopt' },
-      operation: { input: { scopeId: 'erp-demo', imageId: OTHER } }, cli: ['deckent', 'init', '--scope', 'erp-demo', '--image-id', OTHER] });
+  it('initial image selection is a consent-backed onboarding job; init answers cannot start a build or adoption', () => {
+    for (const answer of [undefined, true, false, { imageId: OTHER }]) {
+      const image = stages({ worker: worker() }, { 'execution:worker': answer }).image;
+      expect(image).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerConsentRequired' }, operation: null, question: null });
+    }
+    expect(stages({ worker: worker({ provider: undefined }) }).image).toMatchObject({ state: 'skipped', reason: { code: 'setup.execution.noWorkKind' } });
+    expect(stages({ worker: worker() }, {}, false).image.state).toBe('blocked');
   });
 
   it('a receipt whose image is present: image done; the settings are composed from the detected paths and written through config.set', () => {
@@ -85,7 +75,7 @@ describe('BR1 setup stages: worker image, then the execution settings (pure plan
   });
 
   it('negative: a receipt whose image is gone is asked again; no Git → the settings wait, nothing composed', () => {
-    expect(stages({ worker: worker({ receipt: { imageId: IMAGE, imageVersion: 'r4-20260930' }, image: 'missing' }) }).image.state).toBe('needs-answer');
+    expect(stages({ worker: worker({ receipt: { imageId: IMAGE, imageVersion: 'r4-20260930' }, image: 'missing' }) }).image.state).toBe('blocked');
     expect(stages({ worker: worker({ receipt: { imageId: IMAGE, imageVersion: 'r4-20260930' }, image: 'present', git: null }) }).settings)
       .toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerGitMissing' }, operation: null });
   });
@@ -95,7 +85,7 @@ describe('BR1 setup stages: worker image, then the execution settings (pure plan
     expect([ready.image.state, ready.settings.state, ready.image.operation, ready.settings.operation]).toEqual(['done', 'done', null, null]);
     const missing = stages({ worker: worker({ configured: IMAGE, image: 'missing' }) });
     expect(missing.image).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerMissing', params: { image: 'a'.repeat(12) } }, operation: null });
-    expect(missing.settings).toMatchObject({ state: 'done', operation: null });
+    expect(missing.settings).toMatchObject({ state: 'blocked', operation: null });
     expect(stages({ worker: worker({ configured: IMAGE, image: 'unknown' }) }).image.reason.code).toBe('setup.execution.workerUnknown');
   });
 
@@ -118,7 +108,7 @@ describe('BR1 engine owner: the first image version and the card before anything
       const plan = planFirstWorkerImage({ recipe, dockerfile, held, plannedAt: '2026-10-23T05:00:00.000Z' });
       expect(plan.imageVersion).toBe(`r${Math.max(counter, Number(/^r(\d+)-/u.exec(held)![1])) + 1}-20261023`);
       // The installed builder's own history owner accepts the edited lineage (the same check it runs before a build).
-      expect(() => parseVersionHistory(plan.dockerfile, validateRecipe(plan.recipe))).not.toThrow();
+      expect(() => parseVersionHistory(plan.dockerfile, { ...validateRecipe(plan.recipe), imageVersion: plan.imageVersion, previousVersion: packaged })).not.toThrow();
       expect(plan.dockerfile).toContain(`supersedes ${packaged} | first image of this installation (deckent init); counter past daemon-held ${held}`);
     }
     expect(() => planFirstWorkerImage({ recipe: { schemaVersion: 1 }, dockerfile, held: null, plannedAt: '2026-10-23T05:00:00.000Z' })).toThrow(expect.objectContaining({ code: 'WORKER_IMAGE_SOURCE_INVALID' }));
@@ -167,6 +157,10 @@ describe.skipIf(process.platform !== 'linux')('BR1 adapters: receipts, read-only
     const outside = join(home, 'outside.json');
     await writeFile(outside, receipt(IMAGE, 'r7-20261003', '2026-10-24T00:00:00.000Z')); await symlink(outside, join(receipts, 'r7-20261003.json'));
     expect(await readNewestWorkerReceipt(home)).toEqual({ imageId: OTHER, imageVersion: 'r4-20260930' });
+    await writeFile(join(receipts, 'r8-20261024.json'), receipt(IMAGE, 'r8-20261024', '2026-01-01T00:00:00.000Z'));
+    const heldRunner: WorkerImageBuildRunner = async command => ({ schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+      stdoutBase64: Buffer.from('{"heldVersion":"r8-20261024"}\n').toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
+    expect(await workerImageSetupPorts({ home, executable: 'docker', env: {}, timeoutMs: 1000, outputBytes: 4096, failedContextsKept: 3 }, heldRunner).held()).toBe('r8-20261024');
     // No Docker → the image is not checked; a configured image is the one checked when present.
     expect(await observeWorkerImage({ home, docker: null, configured: null, git: '/usr/bin/git' })).toEqual({ configured: null, receipt: { imageId: OTHER, imageVersion: 'r4-20260930' }, image: 'not-run', git: '/usr/bin/git' });
   });
@@ -205,7 +199,7 @@ esac
     const { recipe, dockerfile } = await readWorkerImageSources(process.cwd()), version = (recipe as { imageVersion: string }).imageVersion;
     const seen: string[][] = [];
     const ok: WorkerImageBuildRunner = async command => { seen.push([...command.args]); await writeFile(command.args[1]!, receipt(IMAGE, version, '2026-10-23T05:00:00.000Z')); return evidence(command) as never; };
-    const base = { packageRoot: process.cwd(), home, imageVersion: version, recipe, dockerfile, timeoutMs: 1000, outputBytes: 4096, failedContextsKept: 3, replace: true };
+    const base = { packageRoot: process.cwd(), home, imageVersion: version, recipe, dockerfile, timeoutMs: 1000, outputBytes: 4096, failedContextsKept: 3, replace: true, resolution: { selected: ['codex'], resolved: { codex: { kind: 'npm' as const, package: '@openai/codex', version: '0.156.0' } } } };
     await mkdir(join(home, 'builds', version), { recursive: true, mode: 0o700 }); // a half-done earlier attempt, no receipt
     const built = await buildWorkerImageInHome(base, ok);
     expect(built.receiptPath).toBe(join(home, 'receipts', `${version}.json`));
@@ -224,10 +218,9 @@ esac
 
 describe('BR1 doctor and the first-job list: one step, deckent init; the configured image checked read-only', () => {
   it('first-job: no hand JSON and no source-checkout command; execution → registry → pool', () => {
-    const steps = firstJobSteps({ execution: false, registry: false, pool: false }, 'erp-demo');
-    expect(steps.map(step => step.id)).toEqual(['execution', 'registry', 'pool']);
-    expect(firstJobCommand(steps[0]!)).toBe('deckent init');
-    expect(steps.map(firstJobCommand).join('\n')).not.toMatch(/npm run|worker:image|config set execution/u);
+    const steps = firstJobSteps(firstJobStages({ execution: false, registry: false, pool: false }, 'erp-demo'));
+    expect(steps.map(step => step.id)).toEqual(['work:kind', 'work:pool']);
+    expect(steps.every(step => step.phase === 'onboarding')).toBe(true);
   });
   const report = { platform: 'linux', host: { cpuCores: 4, totalMemMB: 8192, recommendedMaxWorkers: 3 }, company: { companyId: 'default' }, principal: { id: 'me' },
     secretStore: null, imageRefresh: null, installationBinding: null, shellRealm: null };
@@ -235,21 +228,22 @@ describe('BR1 doctor and the first-job list: one step, deckent init; the configu
     backupPassphraseStored: null, retiringModels: [], poolStatus: 'unconfigured', toolchainUpdateEnabled: false, imageId: IMAGE, ...extra }, 'en').find(check => check.id === id);
   it('present ok · missing error with next deckent init · unknown not tested · not checked no row; the pool row names deckent init first', () => {
     expect(row({ workerImage: 'present' })).toMatchObject({ state: 'ok', text: `Worker image sha256:${'a'.repeat(12)} is on this Docker` });
-    expect(row({ workerImage: 'missing' })).toMatchObject({ state: 'error', next: 'deckent init' });
+    expect(row({ workerImage: 'missing' })).toMatchObject({ state: 'error' });
+    expect(row({ workerImage: 'missing' })?.next).toContain('/setup');
     expect(row({ workerImage: 'unknown' })?.state).toBe('untested');
     expect(row({ workerImage: null })).toBeUndefined();
-    expect(row({ firstJob: { execution: false, registry: false } }, 'work.pool')?.next).toMatch(/: deckent init$/u);
+    expect(row({ firstJob: { execution: false, registry: false } }, 'work.pool')?.next).toContain('/setup');
   });
 });
 
 describe('BR1 foreground: the window closes for the worker image; the composed owner refuses off a terminal before anything', () => {
-  const stage = (input: Record<string, string>) => ({ id: 'execution:worker', namespace: 'execution', title: 'setup.execution.workerTitle', state: 'ready' as const,
+  const stage = (input: Record<string, string>) => ({ id: 'execution:worker', namespace: 'execution', phase: 'onboarding' as const, title: 'setup.execution.workerTitle', state: 'ready' as const,
     reason: { code: 'setup.execution.workerBuildChosen', params: {} }, operation: { id: 'execution.worker-image', version: 1, input }, question: null, default: null, cli: null, autoEligible: false });
   it('the stage reaches the composed owner with the adopt image; a declined card is a refusal, never applied', async () => {
     const calls: unknown[] = [];
     const context = (status: string) => ({ env: {}, prepareWorkerImage: async (_root: string, _io: unknown, request: unknown) => { calls.push(request); return status; } }) as unknown as SetupCommandContext;
     expect(await runForegroundStage(context('adopted'), '/x', stage({ scopeId: 'erp-demo', imageId: OTHER }), 'erp-demo', 'en')).toMatchObject({ status: 'applied' });
-    expect(await runForegroundStage(context('declined'), '/x', stage({ scopeId: 'erp-demo' }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'SETUP_STAGE_DECLINED' });
+    expect(await runForegroundStage(context('declined'), '/x', stage({ scopeId: 'erp-demo' }), 'erp-demo', 'en')).toMatchObject({ status: 'declined' });
     expect(calls).toEqual([{ imageId: OTHER }, {}]);
   });
   it('negative: no terminal (a pipe, an agent) → TERMINAL_TTY_REQUIRED; nothing is read, built or written in the folder', async () => {
@@ -261,24 +255,24 @@ describe('BR1 foreground: the window closes for the worker image; the composed o
 });
 
 describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags command for a person)', () => {
-  const plan = (work: Record<string, boolean> | null, values: Record<string, unknown> = {}, execution: Partial<ExecutionFacts> | null = null) => {
+  const plan = (work: Record<string, unknown> | null, values: Record<string, unknown> = {}, execution: Partial<ExecutionFacts> | null = null) => {
     const observed = observation(execution), families = { ...observed.families, ...(work ? { work } : {}) };
     const packages = [WORK_SETUP_FAMILY, ...(execution ? [executionSetupFamily({ person: true })] : [])];
-    const result = planSetup({ ...observed, families }, { schemaVersion: 1, values }, new SetupStageRegistry(packages));
+    const result = planSetup({ ...observed, families }, { schemaVersion: 2, values }, new SetupStageRegistry(packages));
     return { result, kind: result.stages.find(stage => stage.id === 'work:kind')!, pool: result.stages.find(stage => stage.id === 'work:pool')! };
   };
   it('waits for the execution settings (the family stage when observed, else configuration); then asks which CLI, choices from the native CLI registry', () => {
     expect(plan(null).kind).toMatchObject({ state: 'blocked', reason: { code: 'setup.work.unavailable' } });
-    expect(plan({ execution: false, registry: false, pool: false }).kind).toMatchObject({ state: 'blocked', operation: null });
-    expect(plan({ execution: true, registry: false, pool: false }, {}, { worker: worker() }).kind).toMatchObject({ state: 'blocked', operation: null }); // image not built yet
+    expect(plan({ execution: false, registry: false, pool: false }).kind).toMatchObject({ state: 'needs-answer', operation: null });
+    expect(plan({ execution: true, registry: false, pool: false }, {}, { worker: worker() }).kind).toMatchObject({ state: 'needs-answer', operation: null }); // image not built yet
     const asked = plan({ execution: true, registry: false, pool: false }).kind;
     expect(asked).toMatchObject({ state: 'needs-answer', question: { key: 'setup.work.kindQuestion' }, operation: null });
     expect(asked.cli?.join(' ')).toBe(`deckent init registry --scope erp-demo --provider <${nativeCliIds.join('|')}> --kind coding --pool workers --execution-slots 1 --in-flight-slots 1 --preview`);
     expect(stageChoices(asked, observation(null), 'en').map(choice => choice.id)).toEqual([...nativeCliIds, 'later']);
   });
   it('a chosen CLI → the registry owner as a foreground stage with the registry defaults; then the pool; both never --yes-eligible', () => {
-    const chosen = plan({ execution: true, registry: false, pool: false }, { 'work:kind': nativeCliIds[0] }).kind;
-    expect(chosen).toMatchObject({ state: 'ready', autoEligible: false, operation: { id: 'work.registry', input: { scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers',
+    const chosen = plan({ execution: true, registry: false, pool: false, images: { [nativeCliIds[0]!]: IMAGE } }, { 'work:kind': nativeCliIds[0] }).kind;
+    expect(chosen).toMatchObject({ state: 'ready', autoEligible: false, operation: { id: 'work.registry', input: { scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers',
       executionSlots: 1, inFlightSlots: 1 } } });
     expect(isForegroundStage(chosen)).toBe(true);
     expect(() => plan({ execution: true, registry: false, pool: false }, { 'work:kind': 'not-a-cli' })).not.toThrow();
@@ -295,9 +289,11 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
     const calls: unknown[] = [];
     const context = { env: {}, initializeNativeCodingRegistry: async (_root: string, input: unknown) => { calls.push(input); return { status: 'current' }; },
       installConfiguredExecutionPool: async (_root: string, _scope: string, apply: boolean) => { calls.push(apply); return { status: 'conflict', configured: null }; } } as unknown as SetupCommandContext;
-    const input = { scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
+    const input = { scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
+    // U4-1r: the first registry is bound to the chosen provider's image; without it nothing is previewed.
+    expect(await runForegroundStage(context, '/x', stage('work.registry', { ...input, image: undefined }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
     expect(await runForegroundStage(context, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'applied' });
-    expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
+    expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
     expect(await runForegroundStage(context, '/x', stage('work.pool', { scopeId: 'erp-demo' }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'POOL_CONFLICT' });
     const failing = { env: {}, initializeNativeCodingRegistry: async () => { throw Object.assign(new Error('x'), { code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' }); } } as unknown as SetupCommandContext;
     expect(await runForegroundStage(failing, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' });
@@ -309,4 +305,17 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
       expect(await setup.applySetupStage(root, stage(operation, input), { env: {} })).toMatchObject({ status: 'refused', code: 'TERMINAL_TTY_REQUIRED' });
     expect(await readdir(root)).toEqual([]);
   });
+});
+
+it('U4C: a second provider keeps the registry and fallback, asks its own consent and emits profile-add only with its explicit image', () => {
+  const kind = WORK_SETUP_FAMILY.stages[0]!.evaluate;
+  const context = { scopeId: 'erp-demo', states: new Map(), prior: new Map(), answer: nativeCliIds[1],
+    facts: { registry: true, execution: true, pool: true, providers: [nativeCliIds[0]], kinds: ['coding'], images: { [nativeCliIds[1]!]: OTHER } } };
+  expect(kind({ ...context, answer: undefined }).state).toBe('done');
+  expect(kind({ ...context, answer: undefined }).operation).toBeUndefined();
+  expect(kind(context)).toMatchObject({ state: 'ready', operation: { id: 'work.profile-add', input: { provider: nativeCliIds[1], image: OTHER, kind: `${nativeCliIds[1]}-coding` } } });
+  const stage = executionSetupFamily().stages.find(row => row.id === 'execution:worker')!;
+  const decision = stage.evaluate({ ...context, facts: { runtimes: [docker], worker: worker({ configured: IMAGE, image: 'present', provider: nativeCliIds[1], providerPending: true }) },
+    states: new Map([['core:policy', 'done'], ['work:kind', 'done'], ['execution:runtime', 'done']]) });
+  expect(decision).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerConsentRequired' } });
 });

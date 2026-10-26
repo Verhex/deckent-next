@@ -203,6 +203,13 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'toolchains.currency.registryEndpoint': { kind: 'entry', format: 'url', presets: ['https://registry.npmjs.org'] },
   'toolchains.currency.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'toolchains.currency.responseMaxBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
+  // alpha.56 U6/U6-S3: providers are projected from consents, consents are appended only by the witnessed consent writer, and the sources are bound
+  // into each consent, so the window shows them read-only.
+  'toolchains.image.providers': { kind: 'document' },
+  'toolchains.image.consents': { kind: 'document' },
+  'toolchains.image.sources': { kind: 'document' },
+  'toolchains.image.baseRefreshMs': { kind: 'numeric', unit: 'ms', step: 3600000, presets: [86400000, 259200000, 604800000, 1209600000] },
+  'policy.mcp.optInGroups': { kind: 'document' }, // alpha.56 U5-S2: protected availability list, set by an operator, never picked in the window
   'toolchains.update.mode': { kind: 'schema' },
   'toolchains.update.buildTimeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'toolchains.update.outputBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },

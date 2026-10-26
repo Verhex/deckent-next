@@ -194,6 +194,8 @@ describe('short ids', () => {
     expect(displayId('0a1b2c3d4e5f', ids)).toBe('0a1b2c3d');
     expect(displayId('5ff7e6cb11aa', ids)).toBe('5ff7e6cb');
     expect(displayId('5ff7e6cb11aa', ['5ff7e6cb11aa', '5ff7e6cb11ab'])).toBe('5ff7e6cb11aa');
+    expect(displayId('owner-review', ['owner-review'])).toBe('owner-review');
+    expect(displayId('queue-verify-readme', ['queue-verify-readme'])).toBe('queue-verify-readme');
   });
   it('run ids come from the /runs queries: surface ids first, else the first inventory page, else none', async () => {
     const options = {};
@@ -211,7 +213,7 @@ describe('scope rule', () => {
   it('a read uses --scope or the configured default and says which', async () => {
     const read = await resolveCommandScope({ command: 'deckent workers', locale: 'tr', configured: 'live', mutating: false, interactive: false, listScopes });
     expect(read).toEqual({ scopeId: 'live', source: 'default' });
-    expect(scopeNotice(read!, 'tr')).toBe('scope: live (varsayılan)');
+    expect(scopeNotice(read!, 'tr')).toBe('Kapsam: live (varsayılan)');
     expect(await resolveCommandScope({ command: 'deckent workers', locale: 'en', explicit: 'pilot', configured: 'live', mutating: false, interactive: false, listScopes }))
       .toEqual({ scopeId: 'pilot', source: 'flag' });
   });
@@ -227,7 +229,7 @@ describe('scope rule', () => {
     // A terminal without a card launcher is treated the same: never a silent default.
     expect(await caught(() => command(true))).toMatchObject({ code: 'CLI_SCOPE_REQUIRED' });
     expect(applied).toBe(0);
-    expect(ErrorRegistry.createError('CLI_SCOPE_REQUIRED', { params: { command: 'deckent pool hold', scopes: 'live' }, locale: 'tr' }).message).toContain("Geçerli scope'lar: live");
+    expect(ErrorRegistry.createError('CLI_SCOPE_REQUIRED', { params: { command: 'deckent pool hold', scopes: 'live' }, locale: 'tr' }).message).toContain('Geçerli kapsamlar: live');
   });
   it('on a terminal the person picks (default preselected); a cancelled card applies nothing', async () => {
     const asked: CliCardRequest[] = [];
@@ -344,7 +346,7 @@ describe('--schema and acceptance wording', () => {
   it('says what an acceptance rests on (law 1)', () => {
     expect(acceptanceEvidenceText({ id: 'process-exit', version: 1 }, 'tr')).toBe('kabul: çıkış kodu · içerik bağımsız doğrulanmadı');
     expect(acceptanceEvidenceText({ id: 'process-exit', version: 1 }, 'en')).toBe('accepted on: exit code · content not independently verified');
-    expect(acceptanceEvidenceText({ id: 'operation-evidence', version: 1 }, 'tr')).toBe('kabul: sistemin geri okuduğu işlem kaydı · worker beyanı değil, sistem doğruladı');
+    expect(acceptanceEvidenceText({ id: 'operation-evidence', version: 1 }, 'tr')).toBe('kabul: sistemin geri okuduğu işlem kaydı · işçi beyanı değil, sistem doğruladı');
     expect(acceptanceEvidenceText({ id: 'ext:erp-posting', version: 2 }, 'en')).toBe('accepted on: evaluator ext:erp-posting@2 · what it checks is not known to this version');
   });
 });

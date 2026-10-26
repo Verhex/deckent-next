@@ -8,13 +8,14 @@ import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
+export type PanelKind = 'hub' | 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
 export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string; identity?: ModelProviderLabel }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
 
 /** `/mode`: the person's permission mode through the runtime service (the same port and audit as `/mode <mode>` and Shift+Tab). */
 export interface ModePanelPort {
+  readonly canOpen?: boolean;
   inspect(): Promise<PermissionModeView>;
   /** The stop this session runs in now (full access is the session's own), or null when unknown. */
   current(): PermissionModeStop | null;
@@ -125,17 +126,20 @@ export type ModelPanelReference = Readonly<{ providerId: string; providerVersion
 export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label: string; providerLabel?: string; detail: string; group: string; blocked: string | null;
   /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
    * reference, and for a locked row the governed command that would fix it. */
-  exact: string; command: string | null;
+  exact: string; command: string | null; stateToken?: string;
+  fixes?: readonly Readonly<{ id: 'activate' | 'deactivate' | 'reconcile' | 'budget' | 'provider'; label: string }>[];
   /** The configured default (`terminal.chat.reference`). */
   configured: boolean }>;
 export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPanelChoice[]; notes: readonly string[];
   /** Why "also make default" cannot be offered (null: it can). */
-  defaultBlocked: string | null }>;
+  defaultBlocked: string | null; fixTitle?: string; fixApply?: string; fixKeep?: string }>;
 /** What the host binds for `/model`: the models and, when decided, the governed default write (the `/config` writer, approval-aware). */
 /** T4-B (owner 2026-10-08, Jev 77898686): the default was written but this project names its own model, which keeps winning here. */
 export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
+  readonly provider?: ProviderPanelPort;
+  fix?(choice: ModelPanelChoice, action: 'activate' | 'deactivate' | 'reconcile'): Promise<void>;
   /** Rechecks runnability and refreshes an eligible stale activation through its governed owner before any session pin. */
   prepare?(choice: ModelPanelChoice, reasoning?: 'off'): Promise<void>;
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
@@ -205,16 +209,18 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   models: readonly Readonly<{ id: string; label: string; detail: string; blocked?: string }>[]; modelBlocked: string | null;
   /** Seedless kinds offer the model action before a list exists; the selected address supplies that list. */
   discoversModels?: boolean;
+  /** A stored main key needs the existing first-use card before models can be bound here. */
+  grantRequired?: boolean;
   /** K6: shown on the row (muted) when the kind stores a key but no model can be connected to it yet. */
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
   legacy?: true }>;
 export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[];
   invocableModels?: readonly import('#engine/index.js').InvocableModel[] }>;
-export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
+export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null; grant?: boolean }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
 /** `keyName` (PRE-8 v2): the main-vault name a successful connect stored, so the window can ask the first-use card for this project right away. */
-export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[]; keyName?: string | null }>;
+export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[]; keyName?: string | null; workspaces?: readonly Readonly<{ id: string; name: string }>[] }>;
 /**
  * PRE-8 v2 first-use card in `/provider` (lead 2026-10-21): the SAME card as the chat turn (composition offer: solo + attested terminal; governed
  * `secret grant`, source card). `check` refuses with the typed `SECRET_GRANT_REQUIRED` when this project may not use a main-vault key yet.
@@ -226,15 +232,17 @@ export interface ProviderSecretGrantPort {
   check?(name: string): Promise<void>;
 }
 /** T4-B `models.connect` from the window: the model chosen from the kind's list (and the address, where the kind takes one). */
-export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | null; model: string }>;
+export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | null; model: string; workspaceId?: string }>;
 /** Its typed result as labelled rows, the one system summary line it leaves, and the approval to answer when policy asked for one. */
 export type ProviderModelOutcome = Readonly<{ connected: boolean; title: string; lines: readonly PanelLine[]; summary: string; approvalId: string | null }>;
 export interface ProviderPanelPort {
+  readonly siwc?: import('#surfaces/core/siwc/index.js').SiwcWindowPort;
   inspect(): Promise<ProviderPanelView>;
   /** A typed address checked by the endpoint rule (https anywhere, plain http only on this machine): the base it becomes and the URL the free
    * check will call (the preview), or the localized reason it is refused. */
   endpoint(kind: string, text: string): Readonly<{ ok: true; base: string; check: string }> | Readonly<{ ok: false; reason: string }>;
   /** The free check, then (only on success) the key into the secret store through the runtime service. */
+  prepareKey?(kind: string, endpoint: string | null): Promise<Readonly<{ lines: readonly PanelLine[]; grant: boolean }>>;
   connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome>;
   /** Removes the kind's stored key through the runtime service. */
   disconnect(kind: string): Promise<readonly string[]>;
@@ -254,13 +262,14 @@ export interface ProviderPanelPort {
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
-  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model', string>>;
+  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model' | 'grant' | 'signIn', string>>;
   /** T4-B: the model list's title (`{kind}`), its empty note, and the key-name row the key step shows. */
   readonly modelTitle: string; readonly modelEmpty: string; readonly keyName: string;
   readonly endpointTitle: string; readonly endpointHint: string;
   /** The list's last row (a typed address) and its preview question: title, the two rows' labels, the key row. */
   readonly endpointOther: string; readonly previewTitle: string; readonly previewAddress: string; readonly previewCheck: string; readonly previewKeys: string;
   /** `{kind}`: the key step's title; its hints (required key / optional key). */
+  readonly optionalKeyQuestion: string; readonly optionalKeyKeys: string;
   readonly keyTitle: string; readonly keyHint: string; readonly keyOptionalHint: string; readonly keyRequired: string;
   readonly checking: string; readonly resultHints: string;
   /** `{kind}`: the question before a disconnect; its key row. */
@@ -296,6 +305,8 @@ export interface PanelLabels {
   readonly picker: PickerLabels;
   readonly position: string;
   readonly loading: string;
+  /** `{seconds}` of a load that has lasted a second or more, shown after `loading`. */
+  readonly elapsed: string;
   readonly mode: ModePanelLabels;
   readonly config: ConfigPanelLabels;
   readonly mcp: McpPanelLabels;
@@ -307,6 +318,7 @@ export interface PanelLabels {
   readonly workspace?: Readonly<{ entry: string; title: string; confirm: string; empty: string; note: string; hints: string }>;
 }
 export interface PanelPorts {
+  readonly hub?: { render(input: { readonly labels: PanelLabels; readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void }): import('react').ReactNode };
   readonly policy?: PolicyPanelPort;
   readonly mode?: ModePanelPort;
   readonly config?: ConfigPanelPort;
@@ -316,19 +328,21 @@ export interface PanelPorts {
 }
 /** Localized presentation of the shared typed MCP capability contract. No typed values or rule editor. */
 export interface PolicyPanelPort {
+  ownerBaseline?(scopeId: string): Promise<PolicyPanelPreview>;
   scopes(): Promise<readonly string[]>;
   delegations?(scopeId: string): ReturnType<PolicyPanelPort['inspect']>;
-  inspect(scopeId: string): Promise<Readonly<{ groups: readonly Readonly<{ id: string; label: string; detail: string; note: string }>[] }>>;
-  preview(scopeId: string, groupId: string, action: 'grant' | 'revoke'): Promise<PolicyPanelPreview>;
+  inspect(scopeId: string): Promise<Readonly<{ groups: readonly Readonly<{ id: string; label: string; detail: string; note: string; widerEarlier?: boolean }>[] }>>;
+  preview(scopeId: string, groupId: string, action: 'grant' | 'revoke' | 'narrow'): Promise<PolicyPanelPreview>;
   apply(preview: PolicyPanelPreview): Promise<readonly PanelNotice[]>;
 }
 export interface PolicyPanelPreview {
+  readonly needsBaseline?: boolean; readonly ownerBaseline?: boolean;
   readonly delegation?: boolean;
-  readonly scopeId: string; readonly groupId: string; readonly action: 'grant' | 'revoke'; readonly digest: string;
+  readonly scopeId: string; readonly groupId: string; readonly action: 'grant' | 'revoke' | 'narrow'; readonly digest: string;
   readonly lines: readonly PanelLine[]; readonly applicable: boolean;
 }
 export interface PolicyPanelLabels {
   readonly delegations?: string; readonly delegationConfirm?: string; readonly delegateGrant?: string; readonly delegateRevoke?: string;
   readonly title: string; readonly scope: string; readonly groups: string; readonly preview: string;
-  readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;
+  readonly completeBaseline?: string; readonly narrow?: string; readonly grant: string; readonly revoke: string; readonly confirm: string; readonly back: string; readonly hints: string; readonly empty: string;
 }

@@ -22,7 +22,7 @@ export interface ShellMutationVerdict {
   readonly detail?: string;
 }
 
-export const PACKAGE_PROGRAMS: ReadonlySet<string> = new Set(['npm', 'npx', 'pnpm', 'pnpx', 'yarn', 'corepack', 'pip', 'pip3', 'pipx', 'uv', 'poetry', 'conda', 'mamba',
+export const PACKAGE_PROGRAMS: ReadonlySet<string> = new Set(['npm', 'bunx', 'npx', 'pnpm', 'pnpx', 'yarn', 'corepack', 'pip', 'pip3', 'pipx', 'uv', 'poetry', 'conda', 'mamba',
   'cargo', 'rustup', 'gem', 'bundle', 'go', 'composer', 'apt', 'apt-get', 'dpkg', 'snap', 'brew', 'dnf', 'yum', 'rpm', 'apk', 'pacman', 'zypper', 'nix', 'nix-env']);
 export const NETWORK_PROGRAMS: ReadonlySet<string> = new Set(['curl', 'wget', 'ssh', 'scp', 'sftp', 'rsync', 'nc', 'ncat', 'netcat', 'socat', 'telnet', 'ftp',
   'http', 'https', 'aria2c', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm']);
@@ -55,7 +55,7 @@ function alwaysAsk(name: string): ShellMutationVerdict | null {
 function productAuthority(stage: ShellStage): ShellMutationVerdict | null {
   const [head, group, action] = stage.words, name = head ? (PROGRAM_ALIASES[head.text] ?? head.text).split('/').pop()!.toLowerCase() : '';
   const actions = Object.hasOwn(PRODUCT_AUTHORITY_COMMANDS, name) && group && Object.hasOwn(PRODUCT_AUTHORITY_COMMANDS[name]!, group.text) ? PRODUCT_AUTHORITY_COMMANDS[name]![group.text]! : null;
-  return actions && action && actions.includes(action.text) ? verdict('always-ask', 'PRIVILEGE_ESCALATION', `${name} ${group!.text} ${action.text}`) : null;
+  return actions && action && actions.actions.includes(action.text) && (!actions.requiredFlags || stage.words.some(word => actions.requiredFlags!.includes(word.text))) ? verdict('always-ask', 'PRIVILEGE_ESCALATION', `${name} ${group!.text} ${action.text}`) : null;
 }
 
 async function classifyStage(stage: ShellStage, reads: ShellPathContext, writes: ShellWritePathContext): Promise<ShellMutationVerdict> {

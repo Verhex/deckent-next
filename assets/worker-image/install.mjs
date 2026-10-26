@@ -1,30 +1,44 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-const root = '/opt/deckent-worker';
-const recipe = JSON.parse(readFileSync(`${root}/recipe.json`, 'utf8'));
-const run = (file, args, env = process.env) => execFileSync(file, args, {
-  env, encoding: 'utf8', timeout: 300_000, maxBuffer: 8 * 1024 * 1024,
+// One provider layer of a worker image (recipe schema 3): the descriptor is this RUN line's own argument (layers.mjs), so the layer's cache
+// key is exactly its install input. A known refusal is one `Error: WORKER_<CODE>: <detail>` line (the builder promotes it), never a stack.
+process.on('uncaughtException', error => {
+  process.stderr.write(/^WORKER_[A-Z_]+(?::|$)/.test(error?.message ?? '') ? `Error: ${error.message}\n` : `${error?.stack ?? error}\n`);
+  process.exit(1);
 });
-const resolved = [];
-for (const provider of recipe.npmProviders) {
-  const version = JSON.parse(run('npm', ['view', `${provider.package}@${provider.channel}`, 'version', '--json']));
-  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(version)) throw new Error('WORKER_VERSION_INVALID');
-  run('npm', ['install', '--global', '--no-audit', '--no-fund', `${provider.package}@${version}`]);
-  resolved.push({ id: provider.id, package: provider.package, version });
-}
-const installer = `${root}/cursor-install.sh`;
-run('curl', ['--fail', '--silent', '--show-error', '--location', '--max-time', '60', recipe.cursor.installer, '--output', installer]);
-const installerSha256 = createHash('sha256').update(readFileSync(installer)).digest('hex');
-const cursorHome = '/opt/cursor-agent';
-mkdirSync(cursorHome, { recursive: true });
-run('bash', [installer], { ...process.env, HOME: cursorHome });
-run('chmod', ['-R', 'a+rX', cursorHome]);
-for (const name of ['cursor-agent', 'agent']) symlinkSync(`${cursorHome}/.local/bin/${name}`, `/usr/local/bin/${name}`);
-rmSync(installer);
-// The installed Cursor version is read from the binary after install, so the receipt records what the image really contains.
-const cursorVersion = run('cursor-agent', ['--version']).trim();
-if (!/^[\w.+-]{1,64}$/.test(cursorVersion)) throw new Error('WORKER_VERSION_INVALID');
-writeFileSync(`${root}/installed.json`, JSON.stringify({ schemaVersion: 1, builtAt: new Date().toISOString(),
-  resolved, cursorInstallerSha256: installerSha256, cursor: { version: cursorVersion, installerSha256 } }, null, 2) + '\n');
-run('node', [`${root}/inspect.mjs`]);
+const root = '/opt/deckent-worker';
+let d;
+try { d = JSON.parse(process.argv[2] ?? ''); } catch { throw new Error('WORKER_PLAN_INVALID: the install descriptor is not JSON'); }
+if (!/^[a-z0-9]{1,32}$/.test(d?.id ?? '')) throw new Error('WORKER_PLAN_INVALID: the install descriptor names no provider');
+const run = (file, args, env = process.env) => {
+  try { return execFileSync(file, args, { env, encoding: 'utf8', timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }); }
+  catch { throw new Error(`WORKER_IMAGE_COMMAND_FAILED: ${d.id}`); }
+};
+let record;
+if (d.kind === 'npm') {
+  // The npm tarball cache stays out of the layer (it was ~0.3 GB of dead weight in r31): a private cache inside this RUN, removed in the same RUN.
+  const cache = `/tmp/deckent-npm-cache-${d.id}`;
+  try { run('npm', ['install', '--global', '--no-audit', '--no-fund', '--cache', cache, '--registry', d.registry, ...(existsSync('/run/secrets/worker-npmrc') ? ['--userconfig', '/run/secrets/worker-npmrc'] : []), `${d.package}@${d.version}`]); }
+  finally { rmSync(cache, { recursive: true, force: true }); }
+  record = { kind: 'npm', package: d.package, version: d.version, registry: d.registry };
+} else if (d.kind === 'vendor-script') {
+  // The installer runs only inside this build container, and only when its bytes are the ones the plan hashed (U6 §4: the sha is the cache key).
+  const installer = `/tmp/deckent-${d.id}-install.sh`;
+  run('curl', ['--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-time', '60', d.url, '--output', installer]);
+  const installerSha256 = createHash('sha256').update(readFileSync(installer)).digest('hex');
+  if (installerSha256 !== d.sha256) throw new Error(`WORKER_IMAGE_INSTALLER_CHANGED: ${d.id} installer is ${installerSha256}, the plan hashed ${d.sha256}; plan again to review the change`);
+  mkdirSync(d.home, { recursive: true });
+  run('bash', [installer], { ...process.env, HOME: d.home });
+  run('chmod', ['-R', 'a+rX', d.home]);
+  for (const name of d.bin) symlinkSync(`${d.home}/.local/bin/${name}`, `/usr/local/bin/${name}`);
+  rmSync(installer);
+  // The vendor script fetches whatever it serves: the installed version is read from the binary, so the receipt records what the image holds.
+  const version = run(d.command, ['--version']).trim();
+  if (!/^[\w.+-]{1,64}$/.test(version)) throw new Error('WORKER_VERSION_INVALID');
+  record = { kind: 'vendor-script', url: d.url, installerSha256, version };
+} else throw new Error('WORKER_PLAN_INVALID: unknown installer kind');
+// IMGOPT: what the install left in /tmp (npm's compile cache, the vendor CLI's build-time HOME and logs) stays out of the layer; the base's /tmp is empty.
+for (const name of readdirSync('/tmp')) rmSync(`/tmp/${name}`, { recursive: true, force: true });
+mkdirSync(`${root}/installed`, { recursive: true });
+writeFileSync(`${root}/installed/${d.id}.json`, JSON.stringify({ schemaVersion: 2, id: d.id, ...record }, null, 2) + '\n');

@@ -24,18 +24,18 @@ async function v65() {
 const insert = (db: DatabaseSync, state: string, revision = 1) => db.prepare("INSERT INTO recovery_cases(scope_id,case_id,run_id,task_id,attempt_id,state,revision,record) VALUES('s','c','r','t','a',?,?,'{}')").run(state, revision);
 
 it('pins the step: v66 is the recovery-case table (v67 agent standing is current)', () => {
-  expect(RECOVERY_CASES_LEDGER_VERSION).toBe(66); expect(CURRENT_LEDGER_VERSION).toBe(70);
+  expect(RECOVERY_CASES_LEDGER_VERSION).toBe(66); expect(CURRENT_LEDGER_VERSION).toBe(73);
 });
 it('backs up a v65 ledger and adds only the empty recovery-case table; an older build (v65) refuses the result', async () => {
   const f = await v65();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   expect(() => openSqliteRecoveryStore(f.path, options)).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 65, to: 70 });
+  expect(upgrade).toMatchObject({ from: 65, to: 73 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
   try {
     expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(65); expect(tables(backup)).toEqual([]);
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(70); expect(tables(db)).toEqual(['recovery_cases']);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(73); expect(tables(db)).toEqual(['recovery_cases']);
     expect(db.prepare('SELECT count(*) AS n FROM recovery_cases').get()?.['n']).toBe(0);
   } finally { backup.close(); db.close(); }
   openSqliteRecoveryStore(f.path, options).close();

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
-  parseModelCatalogCommand, parseModelCatalogReceipt, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
+import { catalogModelRetired, retiredModelActivationRefusal, encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
+  parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import { catalogDay } from './worker-admission.js';
 
 /** Trusted admission after authentication and policy; the store re-validates it inside its transaction. */
 export interface ModelCatalogAdmission {
@@ -78,7 +79,7 @@ export type ModelCatalogChannelView = Readonly<{ channelId: string; access: 'den
   revision: number; providerVersion: number; catalogRevision: string; channel: ModelCatalogChannelRecord['channel'];
   activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null;
   models: readonly Readonly<{ modelId: string; revision: number; model: ModelCatalogModelRecord['model'];
-    activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null }>[] }>;
+    activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null; chatState?: 'active' | 'inactive' | null; activationConflict?: boolean }>[] }>;
 export interface ModelCatalogInspection { readonly schemaVersion: 1; readonly scopeId: string; readonly channels: readonly ModelCatalogChannelView[] }
 /** Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
 export class ModelCatalogInspectionApplication {
@@ -108,4 +109,26 @@ export class ModelCatalogInspectionApplication {
       return Object.freeze({ schemaVersion: 1, scopeId: query.scopeId, channels: Object.freeze(channels) });
     } finally { reader.close(); }
   }
+}
+
+/** A person's explicit activation of a retired model is refused with its retirement day and a recorded successor; deactivation stays allowed. */
+export function refuseRetiredModelActivation(models: Parameters<typeof retiredModelActivationRefusal>[0], modelId: string, nowMs: number): void {
+  const refusal = retiredModelActivationRefusal(models, modelId, catalogDay(nowMs));
+  if (refusal) throw refusal;
+}
+
+/** Write-time channel cascade. Explicit inactive rows always win; a retired model is never turned on by it (law 6 amendment: only current,
+ * priced models); catalog observation never calls this planner. */
+export function planCatalogStateCascade(command: Exclude<ModelCatalogCommand, { action: 'register' }>, channel: Extract<ModelCatalogChannelView, { access: 'allowed' }>,
+  declared: ProviderCatalog['providers'][number] | undefined, priced: readonly string[], nowMs: number) {
+  return channel.models.flatMap(entry => {
+    if (command.modelId !== null && command.modelId !== entry.modelId) return [];
+    const named = command.modelId !== null, current = entry.model.lifecycle.state === 'active' && !catalogModelRetired(entry.model.lifecycle, catalogDay(nowMs));
+    const fresh = entry.activation === null && current && priced.includes(entry.modelId);
+    const enabled = command.action === 'activate' && (named || (current && entry.activation?.state === 'active') || fresh);
+    if (command.action === 'activate' && !enabled) return [];
+    const model = declared?.models.find(model => model.nativeId === entry.modelId);
+    return [{ entry, enabled, activateWorker: !named && fresh && enabled,
+      reference: model ? { providerId: declared!.id, providerVersion: declared!.version, modelId: model.id, modelVersion: model.version } : null }];
+  });
 }

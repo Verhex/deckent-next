@@ -80,7 +80,10 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
 export type NativeCliHeadless = z.infer<typeof nativeCliHeadlessSchema>;
 const commandSchema = z.object({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,
   disabledArgs: argumentsSchema.nullable(), coreArgs: argumentsSchema, modelAliases: argumentsSchema,
-  capabilities: nativeCliCapabilitiesSchema, headless: nativeCliHeadlessSchema.optional() }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
+  capabilities: nativeCliCapabilitiesSchema, headless: nativeCliHeadlessSchema.optional(),
+  /** U9-6: the CLI's app-server subcommand that runs embedded in the isolated worker (one source for worker commands; transport data stays with the relay). */
+  appServer: z.object({ args: argumentsSchema.refine(value => value.length > 0), source: z.string().url(), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    support: z.literal('experimental') }).strict().readonly().optional() }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
     && (value.capabilities.discovery === null || (value.disabledArgs!.length === 0) === (value.capabilities.discovery.checkout !== null))).readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly(), instructionSurface: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly() }).strict().readonly();
@@ -99,6 +102,12 @@ export function nativeCliCommand(provider: z.infer<typeof nativeCliIdSchema>) {
   return registry.adapters[parsed.data]!;
 }
 
+/** U9-6: the one CLI that declares an embedded app-server, selected by data (never by a CLI name); `id` is its registry key. */
+export function nativeCliAppServer() {
+  const found = Object.entries(registry.adapters).filter(([, command]) => command.appServer);
+  if (found.length !== 1) throw new NativeCliRegistryError();
+  return Object.freeze({ id: found[0]![0], executable: found[0]![1].executable, ...found[0]![1].appServer! });
+}
 /** The CLI whose event stream is `protocolFamily` and that declares a headless model step; selected by data, never by a CLI name. `id` is its
  * registry key (S3-5: the native provider whose gateway destinations its isolated network may reach). */
 export function nativeCliHeadless(protocolFamily: string) {

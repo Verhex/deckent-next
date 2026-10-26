@@ -1,4 +1,4 @@
-import { delegatedUseOf, delegationOwner, delegationPrincipalClass, subscriptionDelegationRefusal, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
+import { delegatedUseOf, delegationOwner, delegationPrincipalClass, subscriptionDelegationRefusal, subscriptionRawUseRefusal, subscriptionConsent, readHeadlessRejection, verifiedPrincipalSchema, type JsonObject, type ModelInvocationProfile, type VerifiedPrincipal } from '#domain/index.js';
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
@@ -11,4 +11,22 @@ export function assertSubscriptionDelegation(principal: VerifiedPrincipal, profi
   const refusal = subscriptionDelegationRefusal({ billing: modelInvocationBillingAxis(profile), principalClass: delegationPrincipalClass(principal),
     owner: delegationOwner(principal), consent: delegatedUseOf(profile.adapter.definition) });
   if (refusal) throw ErrorRegistry.createError(refusal);
+}
+
+export function assertSubscriptionRawUse(principal: VerifiedPrincipal, profile: ModelInvocationProfile, entry: 'raw' | 'feature'): void {
+  const refusal = subscriptionRawUseRefusal({ entry, principalClass: delegationPrincipalClass(principal), rawUse: profile.adapter.definition['rawUse'] });
+  if (refusal) throw ErrorRegistry.createError(refusal);
+}
+
+/** Application-owned access interpretation shared by connection composition and invocation. Authentication remains with the caller. */
+export function subscriptionActor(input: VerifiedPrincipal) {
+  const principal = verifiedPrincipalSchema.parse(input);
+  return Object.freeze({ owner: delegationOwner(principal), principalClass: delegationPrincipalClass(principal) });
+}
+export function prepareSubscriptionConsent(existing: JsonObject | null | undefined, classes: readonly ('ai' | 'system')[] | undefined,
+  by: Readonly<{ issuer: string; subject: string }>, atMs: number) {
+  return subscriptionConsent(existing, classes, by, atMs);
+}
+export function readSubscriptionRejection(evidence: Parameters<typeof readHeadlessRejection>[0], adapterIds: ReadonlySet<string>) {
+  return readHeadlessRejection(evidence, adapterIds);
 }

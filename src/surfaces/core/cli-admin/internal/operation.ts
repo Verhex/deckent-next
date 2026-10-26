@@ -65,7 +65,7 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
   if (timeoutMs !== undefined && (!/^\d{1,9}$/.test(wait!) || timeoutMs < 1)) throw ErrorRegistry.createError('CLI_USAGE');
   const config = await loadConfig(root, options);
   const input = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.operation', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   // The command is checked here against its own schema, so a bad document names its field before anything is sent (no inventory wording).
   const command = effectCommandSchema.safeParse(input);
   if (!command.success) {

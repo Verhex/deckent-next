@@ -1,19 +1,24 @@
+import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
+import { SIWC_INFERENCE } from '#adapters/index.js';
 import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
+import { OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
-import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
-import { discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
+import { activateConfiguredWorkerModel, carryConfiguredModelActivation, admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { listConfiguredConnectionWorkspaces, listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
 import { headlessConnectPorts } from './headless.js';
+import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
+import { providerSpendingConfiguredBudget } from '#adapters/index.js';
 import { modelConnectCommandSchema } from '#domain/index.js';
 /** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
-export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
+export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
   try {
@@ -24,14 +29,47 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
     let effective: Record<string, unknown> = {};
     const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal) : null;
+    if (parsed.success && parsed.data.workspaceId) {
+      const rows = await listConfiguredConnectionWorkspaces(projectRoot, String(scopeId), parsed.data.connection, parsed.data.endpoint, options, host);
+      if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+      host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: parsed.data.workspaceId } };
+    }
+    const siwc = parsed.success && kindOf(parsed.data.connection)?.connect?.adapter === SIWC_INFERENCE.adapter.id ? configuredSiwcConnect(projectRoot, parsed.data, options, host.siwcPresentation) : null;
+    const pulled = new Map<string, readonly string[]>();
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
       defaults: registry.profileDefaults,
+      async available(id, base) {
+        const kind = kindOf(id)!;
+        if (kind.connect?.catalogOnly) return workerConnectionModelIds(await readProviderConnectSeed(kind.connect.seed!), effective as never);
+        if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc) { const ids = (await siwc.models()).map(row => row.slug); pulled.set(id, ids); return ids; }
+        if (!kind.probe?.listsModels) return null;
+        const ids = (await listConfiguredConnectionModels(projectRoot, String(scopeId), id, base, options, host)).map(row => row.nativeId);
+        pulled.set(id, ids); return ids;
+      },
+      priced: (id, nativeId, base) => providerConnectModelPriced(kindOf(id)!, nativeId, base),
+      async preflight(scopeId, principal, target) {
+        const kind = parsed.success ? kindOf(parsed.data.connection) : null;
+        const channelId = target?.reference.providerId ?? kind?.connect?.seed ?? (kind ? providerDiscoveryChannel(kind, parsed.success ? parsed.data.endpoint : null) : 'unknown');
+        const source = { load: async () => (await scope()).document };
+        await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: null }, principal, 'scope');
+        if (target) {
+          await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: target.nativeId }, principal, 'scope');
+          await new ModelActivationPolicyAuthorization(source).authorize('activate', { scopeId, reference: target.reference }, principal);
+        }
+      },
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
       seed: readProviderConnectSeed,
-      discover: (id, base, nativeId) => discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host),
-      adapter: (id, value) => kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
+      discover: async (id, base, nativeId) => {
+        if (kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc && !pulled.has(id)) pulled.set(id, (await siwc.models()).map(row => row.slug));
+        return pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host);
+      },
+      adapter: (id, value) => kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc ? siwc.adapter(value.existing) : kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
+      async workerActivate(reference, commandId) {
+        return kindOf(parsed.success ? parsed.data.connection : '')?.connect?.catalogOnly
+          ? activateConfiguredWorkerModel(projectRoot, String(scopeId), reference, commandId, options) : false;
+      },
       principal,
       async layers() {
         const snapshot = await snapshotConfiguredConfig(projectRoot, options); effective = snapshot.effective as never;
@@ -60,21 +98,33 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async activate(value) {
         await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
           expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options); },
+      async carryActivate(value) {
+        await carryConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
+          expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options);
+      },
       delivers: (profile, binding, spare) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
         configuredModelInvocationDeliverySurfaces(effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
-      async audit(event) {
-        const context = await scope(), store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-        try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)).record(event); } finally { store.close(); }
-      },
+      async audit(event) { await withScopeAudit(await scope(), audit => { audit.record(event); }); },
       async policyRevision() { return (await scope()).document.revision; },
       async keyStored(name) { if (!host.listSecretNames) return null; try { return (await host.listSecretNames(projectRoot, options)).names.includes(name); } catch { return null; } },
       service: () => configServiceState(projectRoot, options, host.describeService),
     });
-    return await app.connect(input);
+    const result = await app.connect(input);
+    return result.status === 'connected' && result.tariff === 'published' ? Object.freeze({ ...result, budget: await connectBudget(projectRoot, result.scopeId, options) }) : result;
   } catch (error) {
-    if (error instanceof ModelConnectError || error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
+    if (error instanceof OAuthConnectionError) throw ErrorRegistry.createError(error.code, { params: error.reason ? { reason: error.reason } : {} });
+    if (error instanceof ModelConnectError) throw ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId).join(', ') } });
+    if (error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
     throw error instanceof DeckentError ? error : queryFailure(error);
   }
+}
+/** İ-12 budget step: the priced-turn gate's own rule (`model-invocation/internal/native.ts` budgetFor — the scope's account, else a configured budget). */
+async function connectBudget(projectRoot: string, scopeId: string, options: ConfigLoadOptions): Promise<NonNullable<ModelConnectResult['budget']>> {
+  try {
+    const config = await loadComposedConfig(projectRoot, options), account = await inspectConfiguredProviderSpendAccount(projectRoot, { schemaVersion: 1, scopeId, current: true }, options);
+    return { state: account.checkpoint || providerSpendingConfiguredBudget(config, scopeId) ? 'present' : 'missing' };
+  }
+  catch (error) { return { state: 'unknown', code: error instanceof DeckentError ? error.code : 'QUERY_UNEXPECTED_FAILURE' }; }
 }
 /** Read-only cache preview; every resulting change goes through the governed config writer. */
 export async function planConfiguredProfileCache(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileCachePlan> {

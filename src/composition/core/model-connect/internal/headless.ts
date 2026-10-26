@@ -11,6 +11,7 @@ import { ErrorRegistry, globalStateRoot, normalizeGlobalScopePlatform, preparePr
 type Env = NodeJS.ProcessEnv;
 const stateRoot = (env: Env) => resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env).stateDir;
 const loginsLayout = (env: Env) => { const root = stateRoot(env); return resolveProductLayout({ projectRoot: root, root }); };
+export const configuredHeadlessLoginRoot = (options: ConfigLoadOptions = {}) => productResourcePath(loginsLayout(options.env ?? process.env), 'headlessLogins');
 /** s3c (owner 2026-10-24): the Brain's own login dir of a CLI family under the global state root (layout `headlessLogins`, 0700, never backed up). */
 async function ownedLoginDir(family: string, env: Env): Promise<string> {
   const resource = await prepareProductDirectory(loginsLayout(env), 'headlessLogins').catch(() => { throw ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'state-dir' } }); });
@@ -24,8 +25,10 @@ const isolation = (env: Env) => async () => (await shellSandboxCapabilities(glob
  */
 export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>) {
   const env = options.env ?? process.env;
-  let prepared: Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>> | undefined;
-  const prepare = (kind: ProviderConnectKind, nativeId: string) => prepared ??= (async () => {
+  const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>>>();
+  const prepare = (kind: ProviderConnectKind, nativeId: string) => {
+    const held = prepared.get(nativeId); if (held) return held;
+    const next = (async () => {
     const seed = await readProviderConnectSeed(kind.connect!.seed!), model = seed.providers.flatMap(provider => provider.models).find(row => row.nativeId === nativeId);
     const protocol = model?.protocols.find(row => row.family === kind.connect!.protocolFamily), minCliVersion = (model as { minCliVersion?: string | null } | undefined)?.minCliVersion;
     if (!protocol || !minCliVersion) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
@@ -33,7 +36,8 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
     const owned = await ownedLoginDir(protocol.family, env);
     return { protocol, owned, base: await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir,
       ownedConfigDir: owned, env, now: Date.now, isolation: isolation(env) }) };
-  })();
+    })(); prepared.set(nativeId, next); return next;
+  };
   return {
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
       const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, await person(), Date.now());
@@ -43,7 +47,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
 }
 /** The doctor's Brain-login rows (no spawn, nothing created): s3c each connection says whether it uses the Brain's own login dir. */
 export async function readConfiguredHeadlessLogins(section: unknown, scopeId: string, options: ConfigLoadOptions = {}) {
-  const env = options.env ?? process.env, root = await realpath(productResourcePath(loginsLayout(env), 'headlessLogins')).catch(() => null);
+  const root = await realpath(configuredHeadlessLoginRoot(options)).catch(() => null);
   return readHeadlessLogins(section, scopeId, root);
 }
 export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined }>;

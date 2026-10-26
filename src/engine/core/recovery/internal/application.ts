@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_CAUSE_CLASSES, RECOVERY_ESCALATION_CODES, RecoveryError, recoveryNoteCodeSchema, assessRecoveryEffectGate, closeRecoveryCase, encodeCommandProjection,
-  encodeExecutionProfileDefinition, identitySchema, isRecoveryPrincipal, lostContinuationRefusal, recoveryCaseSchema, recoveryEscalationCode, recoveryHoldNote,
-  type AuditEvent, type AuditRecord, type RecoveryCase, type RecoveryEscalationCode, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
+  encodeExecutionProfileDefinition, identitySchema, isRecoveryPrincipal, lostContinuationRefusal, recoveryCaseSchema, recoveryEscalationCode, recoveryHoldNote, workerIsolationProven,
+  type AttemptIdentity, type AuditEvent, type AuditRecord, type RecoveryCase, type RecoveryEscalationCode, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
@@ -26,6 +26,8 @@ export interface RecoveryPorts {
   readonly recorder: (store: AuditStore) => { record(event: unknown): AuditRecord };
   readonly approval: (scopeId: string) => Promise<unknown>;
   readonly hold: (command: Readonly<{ schemaVersion: 1; scopeId: string; runId: string; commandId: string; holdReason: string }>) => Promise<unknown>;
+  /** alpha.56 D2: the isolation block the lost Attempt's dispatch record carries (composition reads it from the record; null: none recorded). */
+  readonly isolation: (identity: AttemptIdentity) => Promise<unknown>;
   readonly policyRevision: string;
   readonly now: () => number;
   readonly timeoutMs: number;
@@ -53,8 +55,9 @@ export class RecoveryApplication {
     // A sealed escalation re-issues its hold (idempotent by its case-derived command id): a crash between the seal and the hold never strands the Run.
     if (existing) { if (existing.decision?.action === 'escalate-human') await this.hold(existing, existing.decision.code); return existing; }
     const { draft, refused, run } = await this.draft(command);
-    // S6R-5: only a Run frozen `live` writes a case; a shadow Run's decision is sealed elsewhere and changes nothing.
-    if (run.execution.recovery?.mode !== 'live') throw new RecoveryError('RECOVERY_OFF');
+    // S6R-5: only a Run frozen `live` writes a case; a shadow Run's decision is sealed elsewhere and changes nothing. alpha.56 G1: a would-stop case
+    // (its stop step never ran) is shadow input only — never stored, held or applied.
+    if (run.execution.recovery?.mode !== 'live' || draft.basis) throw new RecoveryError('RECOVERY_OFF');
     const saved = await this.ports.store.saveCase(null, draft);
     return refused ? this.close(saved, refused) : saved;
   }
@@ -72,17 +75,23 @@ export class RecoveryApplication {
     if (!run || !binding) throw new RecoveryError('RECOVERY_NOT_READY');
     const identity = binding.identity, policy = run.execution.recovery;
     if (!policy) throw new RecoveryError('RECOVERY_OFF');
-    const custody = run.progress.find(row => row.taskId === identity.taskId)?.workerCustody;
-    const termination = custody?.state === 'released' && custody.proofReceiptId ? await this.ports.store.loadTermination(command.scopeId, custody.proofReceiptId) : null;
+    // alpha.56 G1 (Jev JD): the basis follows the sealed detection — an executed stop step released the slot; any other disposition is would-stop,
+    // decided as if the stop had run, with the termination that stop would yield (no receipt).
+    const wouldStop = subject.disposition !== 'execute', custody = run.progress.find(row => row.taskId === identity.taskId)?.workerCustody;
+    const termination = wouldStop ? { receiptId: null, kind: subject.evidence.activity === 'missing' ? 'worker-absent' as const : 'supervisor-exit' as const, exitCode: null }
+      : custody?.state === 'released' && custody.proofReceiptId ? await this.ports.store.loadTermination(command.scopeId, custody.proofReceiptId) : null;
     if (!termination) throw new RecoveryError('RECOVERY_NOT_READY');
     const gate = assessRecoveryEffectGate(identity, await this.ports.store.listGateEffects(identity, policy.maxGateIntents + 1), policy);
-    const refused = lostContinuationRefusal(run, identity, { signature: null, gate, priorSignatures: [] });
+    // alpha.56 D2: a worker whose record does not prove it had no route to a customer system is never continued automatically (a person decides).
+    const refused = lostContinuationRefusal(run, identity, { signature: null, gate, priorSignatures: [] }, wouldStop ? 'would-stop' : 'released')
+      ?? (await this.isolated(identity) ? null : 'RECOVERY_ISOLATION_UNPROVEN');
     if (refused && NOTHING_WRITTEN.has(refused)) throw new RecoveryError(refused);
     const detection = { eventId, ruleId: subject.rule.id, ruleVersion: subject.rule.version, registryRevision: subject.registryRevision, evidenceDigest: subject.evidenceDigest,
       activity: subject.evidence.activity, launcherPhase: subject.evidence.launcherPhase };
     const now = this.ports.now();
-    const draft = recoveryCaseSchema.parse({ schemaVersion: 1, caseId: command.caseId, revision: 1, state: 'gated', identity, detection, termination, gate,
-      evidenceDigest: sha256(encodeCommandProjection('recovery-case-evidence:1', { caseId: command.caseId, identity, detection, termination, gate })), openedAtMs: now, updatedAtMs: now });
+    const basis = wouldStop ? { basis: 'would-stop' as const } : {};
+    const draft = recoveryCaseSchema.parse({ schemaVersion: 1, caseId: command.caseId, revision: 1, state: 'gated', identity, detection, ...basis, termination, gate,
+      evidenceDigest: sha256(encodeCommandProjection('recovery-case-evidence:1', { caseId: command.caseId, identity, detection, termination, gate, ...basis })), openedAtMs: now, updatedAtMs: now });
     return Object.freeze({ draft, refused: refused ? recoveryEscalationCode(new RecoveryError(refused)) : null, run });
   }
   async continueLostTask(input: unknown, credential?: unknown): Promise<RecoveryOutcome> {
@@ -100,6 +109,7 @@ export class RecoveryApplication {
     // S6R-6: no owner standing grant (never given, or revoked after the decision) ends the case consistently: sealed escalated and the Run held for a
     // person (`continuation-not-approved`), never a case left gated for a later pass to retry.
     if (!approval.success || !approval.data.scopeIds.includes(command.scopeId)) return Object.freeze({ kind: 'escalated' as const, case: await this.close(current, 'continuation-not-approved') });
+    if (!await this.isolated(current.identity)) return Object.freeze({ kind: 'escalated' as const, case: await this.close(current, 'isolation-unproven') });
     const run = await this.ports.store.loadRun(command.scopeId, current.identity.runId);
     const profile = run?.execution.tasks.find(row => row.taskId === current.identity.taskId)?.profile;
     if (!run || !profile) throw new RecoveryError('RECOVERY_CORRUPT');
@@ -133,6 +143,8 @@ export class RecoveryApplication {
     if (current.state === 'applied' || current.state === 'escalated') throw new RecoveryError('RECOVERY_CONFLICT');
     return this.close(current, command.code);
   }
+  /** The recorded isolation proves no customer-system route; an unreadable record proves nothing. */
+  private async isolated(identity: AttemptIdentity) { try { return workerIsolationProven(await this.ports.isolation(identity)); } catch { return false; } }
   /** A case a decision may act on: it exists and the decision echoes its sealed evidence (any other digest, or a case already escalated, is stale). */
   private async open(scopeId: string, caseId: string, evidenceDigest: string) {
     const current = await this.ports.store.loadCase(scopeId, caseId);

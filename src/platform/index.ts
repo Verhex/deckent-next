@@ -20,16 +20,16 @@ export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionM
 export { getConfigKnownSecrets } from '#platform/core/config/index.js';
 export { formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal } from '#platform/core/crash-reporting/index.js';
 export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
-export { ENVIRONMENT_KEYS, envValue } from '#platform/core/host/index.js';
+export { ENVIRONMENT_KEYS, envValue, adoptProductionReact, callerEnvironment } from '#platform/core/host/index.js';
 export { isMainModule } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
-export { resolveProductPaths } from '#platform/core/host/index.js';
+export { resolveProductPaths, resolveProjectRoot, type ProjectRootPorts, type ProjectRootResolution } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
-export { detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
-export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';
+export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
+export { readBuildIdentity, isSourceCheckout, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
 export { isLiteralLoopbackHostname } from '#platform/core/validate/index.js';
 // Library-independent schema contract (Standard Schema 1.1.0) for external boundaries: adapter module options today (DEPS-SCHEMA).
@@ -52,7 +52,7 @@ export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
-export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, clearConfigCache, restoreHoldPath } from '#platform/core/config/index.js';
+export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';
@@ -97,3 +97,6 @@ export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit, Con
 
 export { EMPTY_RECORD_STREAM, RECORD_STREAM_LOOKBACK, feedRecordStream, previewRecordStream, finishRecordStream } from '#platform/core/redaction/index.js';
 export type { RecordStreamState } from '#platform/core/redaction/index.js';
+export { unifiedDiff } from '#platform/core/common/index.js';
+
+export { workerImageConsentSchema, type WorkerImageConsent } from '#platform/core/config-fields/index.js';

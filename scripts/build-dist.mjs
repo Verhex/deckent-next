@@ -14,6 +14,7 @@
 // own unsplit bundle (code splitting gave every entry a side-effect import of the shared esbuild-runtime chunk) and may import node: builtins only.
 // BWRAP-SELECT: the bundled bubblewrap (owner S4/S5) comes from a build-bwrap output (CI check-mode build) and must be exactly the locked
 // build for the shipped architectures with its notice, licenses and corresponding source; otherwise the package is not publishable.
+import { workerLineage } from './build-worker-lineage.mjs';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -32,9 +33,10 @@ export const OPTIONAL_EXTERNALS = ['react-devtools-core', 'bufferutil', 'utf-8-v
  * ws, …); a module-scope `require` from createRequire makes the shim use Node's real require. Added only to outputs that define the shim. */
 const REQUIRE_SHIM = 'Dynamic require of "';
 const REQUIRE_BANNER = "import { createRequire as __deckentCreateRequire } from 'node:module'; const require = __deckentCreateRequire(import.meta.url);";
-/** dist-relative files the docker supervisor bind-mounts by themselves (native-connection gateway → /run/deckent-bootstrap.mjs): nothing next to
+/** dist-relative files the docker supervisor bind-mounts by themselves (native-connection gateway → /run/deckent-bootstrap.mjs; SIWC relay bootstrap + auth helper): nothing next to
  * them exists in the container, so each must be one file importing only node: builtins. */
-export const STANDALONE_ENTRIES = Object.freeze(['adapters/core/native-connection/internal/worker.js']);
+export const STANDALONE_ENTRIES = Object.freeze(['adapters/core/native-connection/internal/worker.js',
+  'adapters/core/siwc-worker/internal/bootstrap.js', 'adapters/core/siwc-worker/internal/helper.js']);
 /** Imports of a standalone output (from the esbuild metafile) that the container cannot resolve: anything but an external node: builtin. */
 export function standaloneImportProblems(output, label) {
   return (output?.imports ?? []).filter(item => !(item.external && item.path.startsWith('node:'))).map(item => `${label} imports ${item.path} (${item.kind})`);
@@ -89,6 +91,10 @@ export function ajvGuard({ metafile, shipped, embedded, hits }) {
   return out;
 }
 
+/** Third-party development builds (`*.development.js`, e.g. React's dev reconciler) that reached the bundle. */
+export const developmentInputs = metafile => Object.keys(metafile.inputs).map(input => input.replaceAll('\\', '/'))
+  .filter(input => /(?:^|\/)node_modules\/.*\.development\.[cm]?js$/u.test(input));
+
 const walk = (dir, out = []) => { for (const entry of readdirSync(dir, { withFileTypes: true })) { const path = join(dir, entry.name);
   if (entry.isDirectory()) walk(path, out); else out.push(path); } return out; };
 const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -117,6 +123,7 @@ export function publishedManifest(source, extraFiles) {
 }
 
 export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timestamp, bwrap = null } = {}) {
+  workerLineage(root);
   const dist = join(root, 'dist'), stage = join(out, 'package');
   if (!existsSync(join(dist, 'build-identity.json'))) throw new Error('dist/build-identity.json missing: run `npm run build` first (or pass --build)');
   const identity = JSON.parse(readFileSync(join(dist, 'build-identity.json'), 'utf8'));
@@ -134,8 +141,9 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   } };
   const standalone = STANDALONE_ENTRIES.map(entry => join(dist, entry));
   for (const entry of standalone) if (!files.includes(entry)) throw new Error(`standalone entry ${relative(dist, entry)} missing from dist`);
+  // FIX8a R27: the package is a production build; React/scheduler/reconciler pick their builds by NODE_ENV, which a customer's shell rarely sets.
   const common = { absWorkingDir: root, outbase: dist, outdir: join(stage, 'dist'), bundle: true, format: 'esm', platform: 'node', target: 'node24',
-    legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] };
+    define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] };
   const split = await build({ ...common, entryPoints: files.filter(file => file.endsWith('.js') && !standalone.includes(file)), splitting: true,
     chunkNames: 'vendor/[name]-[hash]' });
   // Unsplit: one output file per entry, nothing shared with the split build. Same plugins, so a relative import stays external and is refused below.
@@ -172,6 +180,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const embedded = embeddedInBundle(root, shipped, licenses);
   const ajvViolations = ajvGuard({ metafile: result.metafile, shipped, embedded, hits: stubHits });
   if (ajvViolations.length) throw new Error(`the package would ship the MCP SDK's ajv/fast-uri (FASTURI-OUT):\n  ${ajvViolations.join('\n  ')}`);
+  const development = developmentInputs(result.metafile);
+  if (development.length) throw new Error(`the package would ship development builds (React dev reconciler: unbounded performance entries):\n  ${development.join('\n  ')}`);
   const bom = cyclonedx({ pkg: manifest, identity, tools: [{ name: 'esbuild', version: esbuildVersion }, { name: 'deckent build-dist', version: '1' }],
     shipped, embedded, native, timestamp: timestamp ?? identity.builtAt });
   const locked = lockedLicenseTexts(root);

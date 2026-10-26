@@ -71,7 +71,7 @@ it('C-DOCTOR: the default view lists only open workers with a summary first; --a
   expect(lines[0]).toBe('scope: s (default) · 1 running · 1 need attention · 3 in history');
   expect(view.text).toContain('Source a has more records; next page: deckent workers --scope s --source a --after cursor9');
   for (const header of ['Task', 'Run', 'State', 'Model', 'Duration', 'CPU (cores)', 'Memory', 'Last signal']) expect(view.text).toContain(header);
-  expect(view.text).toMatch(/t2 +run1 +running, signal old +codex/u);
+  expect(view.text).toMatch(/t2 +run1 +running, signal old +- /u);
   expect(view.text).not.toMatch(/\bt1\b/u); // finished: history only
   expect(view.text).not.toMatch(/\bt5\b/u); // released custody: history only
   expect(view.text).toContain('Task t4: its process could not be checked');
@@ -80,7 +80,7 @@ it('C-DOCTOR: the default view lists only open workers with a summary first; --a
   expect(all.text).toMatch(/t1 +run1 +finished +gpt-exact-1 +24\.7 s/u);
   expect(all.text).toMatch(/t3 +run1 +finished with error/u);
   const tr = await run(['list', '--all'], 'tr');
-  expect(tr.text.split('\n')[0]).toBe('scope: s (varsayılan) · 1 çalışan · 1 dikkat bekleyen · 3 geçmiş');
+  expect(tr.text.split('\n')[0]).toBe('Kapsam: s (varsayılan) · 1 çalışan · 1 dikkat bekleyen · 3 geçmiş');
   expect(tr.text).toContain('hatayla bitti');
   expect(tr.text).not.toMatch(/\bunknown\b/u); // PRE-5: the engine's unknown provider reads in Turkish in the table too
   // A lost worker (no process, no result) names the command that shows its Run.
@@ -107,4 +107,14 @@ it('C-DOCTOR: no scope flag and no configured scope off a terminal names the val
   errors.length = 0;
   expect(await main(['workers', 'list', '--scope', 'nope', '--json'], context as never)).toBe(1);
   expect(errors.join('')).not.toContain('Valid scopes'); // --json: one typed error, no human line
+});
+
+it('the model column uses measured model usage or unknown, never the docker execution backend', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'workers-f1-')); roots.push(root);
+  const output: string[] = [];
+  const workers = [{ ...report.sources[0]!.workers[2]!, usage: { model: 'observed-model', turns: 1, durationMs: 10, tokenUsageRecorded: false, outcome: 'success' } },
+    { ...report.sources[0]!.workers[2]!, taskId: 'unknown-model', identity: id('unknown-model', 'unknown') }];
+  expect(await main(['workers', '--scope', 's', '--all'], { root, env: { DECKENT_GLOBAL_HOME: join(root, 'global') },
+    stdout: { write: (s: string) => { output.push(s); } }, stderr: { write() {} }, inspectWorkers: async () => ({ ...report, sources: [{ ...report.sources[0], workers }] }) } as never)).toBe(0);
+  expect(output.join('')).toContain('observed-model'); expect(output.join('')).not.toContain('docker');
 });

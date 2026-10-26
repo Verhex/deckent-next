@@ -100,12 +100,18 @@ it('doctor: live recovery without the standing grant is a warning naming the gra
   const row = (recovery: 'off' | 'shadow' | 'live', grant: 'present' | 'missing' | 'partial' | 'unknown') => doctorChecks(report as never, { scopeId: 's', toolchainsRequested: false,
     identityProfile: null, backupPassphraseStored: null, retiringModels: [], poolStatus: 'ready', toolchainUpdateEnabled: false,
     recoveryMode: recoveryModeState({ nervous: 'live', recovery }, grant) }, 'en').find(check => check.id === 'work.recovery');
-  expect(row('live', 'missing')).toMatchObject({ group: 'work', state: 'warning', next: 'deckent policy grants --scope s', text: expect.stringContaining('goes to a person') });
+  expect(row('live', 'missing')).toMatchObject({ group: 'work', state: 'warning', next: 'deckent policy recovery --scope s', text: expect.stringContaining('goes to a person') });
   expect(row('live', 'partial')).toMatchObject({ state: 'warning' });
   expect(row('live', 'unknown')).toMatchObject({ state: 'untested' });
   expect(row('live', 'present')).toMatchObject({ state: 'ok', text: expect.stringContaining('may continue in a new attempt') });
   expect(row('shadow', 'missing')).toMatchObject({ state: 'ok', text: expect.stringContaining('only recorded') });
   expect(row('off', 'missing')).toMatchObject({ state: 'ok' });
+  // alpha.56 G4: the exit progress in counts only; with a case waiting the next step is the person's blind review.
+  const view = { registry: { revision: 'r', status: 'provisional' }, complete: true, rules: [{ id: 'container-gone', version: 1, shadowCases: 20, sinceFalsePositive: 20, falsePositives: 0, met: true }],
+    decisions: { decided: 10, agreements: 9, perMille: 900, waiting: 2, met: true } } as const;
+  expect(doctorChecks(report as never, { scopeId: 's', toolchainsRequested: false, identityProfile: null, backupPassphraseStored: null, retiringModels: [], poolStatus: 'ready',
+    toolchainUpdateEnabled: false, recoveryMode: recoveryModeState({ nervous: 'shadow', recovery: 'shadow' }, 'missing'), recoveryRollout: view }, 'en').find(check => check.id === 'work.recovery'))
+    .toMatchObject({ state: 'ok', next: 'deckent recovery review --scope s', text: expect.stringContaining('rules ready 1/1 · agreement 9/10 · 2 waiting for your choice') });
   expect(doctorChecks(report as never, { scopeId: 's', toolchainsRequested: false, identityProfile: null, backupPassphraseStored: null, retiringModels: [], poolStatus: 'ready',
     toolchainUpdateEnabled: false }, 'en').find(check => check.id === 'work.recovery')).toBeUndefined();
 });

@@ -1,6 +1,6 @@
 import { collectDockerOutputFiles } from './output-files.js';
 import { sampleDockerResources } from './resources.js';
-import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
+import { captureDockerProfile, readDockerProfile, dockerEndpointSchema, DOCKER_WORKER_NETWORK } from './profile.js';
 import { createHash } from 'node:crypto';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
@@ -8,21 +8,23 @@ import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, sand
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
 import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, DockerCommandFailure, type DockerCommandRunner } from './command.js';
-import { dockerConnectionMounts } from './connection.js';
+import { dockerConnectionMounts, dockerRelayMounts, DOCKER_RELAY_TARGETS } from './connection.js';
 import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpectedMount } from './mounts.js';
 import { dockerNodeHeapEnvironment } from './node-heap.js';
 /** `docker run`'s own exit status when the daemon could not create or start the container (not the probe's answer). */
 const DOCKER_RUN_DAEMON_FAILURE = 125;
 /** The only container names a probe removal may touch (probeIdentity's form). */
 const PREFLIGHT_PROBE_NAME = /^deckent-env-[a-f0-9]{64}$/;
-type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
+type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; HostConfig?: { NetworkMode?: unknown }; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
 export class DockerSupervisor implements ExecutionSupervisor {
   private readonly options: DockerSupervisorOptions;
   private endpoint?: Promise<string>;
-  constructor(input: DockerSupervisorOptions, private readonly runner: DockerCommandRunner = runNodeDockerCommand) {
+  /** `observer.created` (U9-7a): the SIWC relay learns the immutable container id before start, so it serves no other container. */
+  constructor(input: DockerSupervisorOptions, private readonly runner: DockerCommandRunner = runNodeDockerCommand,
+    private readonly observer: Readonly<{ created?: (containerId: string) => void }> = {}) {
     const parsed = dockerSupervisorOptionsSchema.safeParse(input);
     if (!parsed.success || !isAbsolute(parsed.data.workspaceRoot) || !isAbsolute(parsed.data.executable)) throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID');
     this.options = parsed.data;
@@ -201,13 +203,17 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const connectionMounts = o.connection ? await dockerConnectionMounts(o.connection, o.uid) : [];
     if (o.connection) expected.push({ source: o.connection.socketPath, target: '/run/deckent-connection.sock', writable: false },
       { source: o.connection.bootstrapPath, target: '/run/deckent-bootstrap.mjs', writable: false });
-    const argv = o.connection ? ['node', '/run/deckent-bootstrap.mjs', ...request.argv] : request.argv;
+    const relayMounts = o.relay ? await dockerRelayMounts(o.relay, o.uid) : [];
+    if (o.relay) expected.push({ source: o.relay.socketPath, target: DOCKER_RELAY_TARGETS.socket, writable: false }, { source: o.relay.bootstrapPath, target: DOCKER_RELAY_TARGETS.bootstrap, writable: false },
+      { source: o.relay.helperPath, target: DOCKER_RELAY_TARGETS.helper, writable: false }, { source: o.relay.hardeningPath, target: DOCKER_RELAY_TARGETS.hardening, writable: false });
+    // A relay worker runs the pinned bootstrap alone (it starts the app-server); the task argv never reaches its entrypoint.
+    const argv = o.connection ? ['node', '/run/deckent-bootstrap.mjs', ...request.argv] : o.relay ? ['node', DOCKER_RELAY_TARGETS.bootstrap] : request.argv;
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
-        '--network', 'none', '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
+        '--network', DOCKER_WORKER_NETWORK, '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
         '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', ...this.floor(),
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
-        ...inputMounts, ...readOnlyMounts, ...connectionMounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
+        ...inputMounts, ...readOnlyMounts, ...connectionMounts, ...relayMounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
     } catch {
       const existing = await this.inspect(handle, digest);
       if (existing) return this.result(handle, existing);
@@ -217,10 +223,12 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const created = await this.inspect(handle, digest);
     if (!created) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
     assertDockerMountsMatch(created.Mounts, expected);
+    // alpha.56 D2: the recorded isolation block holds only if the daemon realised it; any other network mode starts nothing (fail closed).
+    if (created.HostConfig?.NetworkMode !== DOCKER_WORKER_NETWORK) throw new SupervisorError('SUPERVISOR_ISOLATION_MISMATCH');
     // S6R-1: the immutable id is durable before start, so a launcher that dies during `start --attach` still leaves the container named.
-    if (hooks) {
+    if (hooks || o.relay) {
       if (!/^[a-f0-9]{64}$/.test(created.Id)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
-      await hooks.created(created.Id);
+      await hooks?.created(created.Id); this.observer.created?.(created.Id);
     }
     let stdout: string; let stderr: string; let interrupted = false, cause: SandboxResult['interruptCause'];
     try {

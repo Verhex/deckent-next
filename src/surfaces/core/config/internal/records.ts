@@ -1,7 +1,7 @@
 import { relative, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type ConfigStepper, type Locale, PRODUCT_LAYOUT_REGISTRY, resolveProductLayout } from '#platform/index.js';
-import { PROVIDER_SPEND_SCOPE_BUDGET_ID } from '#domain/index.js';
+import { PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_PERIOD_REGISTRY } from '#domain/index.js';
 import { SCOPE_BUDGET_CHOICES } from '#surfaces/core/cli-models/index.js';
 import { terminalConfigWrite, type ConfigCommandContext } from './command.js';
 import type { ConfigChoiceSourcePort, ConfigValueChoice } from './choices.js';
@@ -46,7 +46,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
     if (!context.resolveConfigPrincipal || !scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
     const principal = await context.resolveConfigPrincipal(root, scopeId, options);
     const targetKey = requestedKey ?? writeKey;
-    const actualValue = targetKey === 'provider_spending' ? { schemaVersion: 1, budgets: value } : value;
+    const actualValue = targetKey === 'provider_spending' ? { schemaVersion: 2, budgets: value } : value;
     const command = { keyPath: targetKey, value: actualValue, layer: view.layer, expect: view.digest, principal, scopeId, commandId: randomUUID() };
     const result = await app().preview(action, command);
     const token = randomUUID(); prepared = { token, action, writeKey: targetKey, value: structuredClone(actualValue), expect: result.digest };
@@ -121,7 +121,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
       const previous = isRecord(value[index]) ? value[index] as Record<string, unknown> : {};
       if (view.key === 'provider_spending.budgets') {
         if (next.some((entry, i) => i !== index && isRecord(entry) && entry['scopeId'] === values['scopeId'])) throw refused();
-        next[index] = { schemaVersion: 1, scopeId: values['scopeId'], budgetId: previous['budgetId'] ?? PROVIDER_SPEND_SCOPE_BUDGET_ID, revision: previous['revision'] ?? 1,
+        next[index] = { schemaVersion: 2, period: previous['period'] ?? PROVIDER_SPEND_PERIOD_REGISTRY.defaultPeriod, scopeId: values['scopeId'], budgetId: previous['budgetId'] ?? PROVIDER_SPEND_SCOPE_BUDGET_ID, revision: previous['revision'] ?? 1,
           currency: 'USD', limitMinorUnits: Number(values['usd']) * SCOPE_BUDGET_CHOICES.minorUnitsPerUsd };
       } else if (view.key === 'inspection.workers.sources') {
         next[index] = { id: previous['id'] ?? `source-${randomUUID().slice(0, 32)}`, kind: values['kind'], path: values['path'], scopeId: values['scopeId'] };

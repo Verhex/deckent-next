@@ -97,10 +97,8 @@ export async function readScopeRuns(context: RunCommandContext, scopeId: string)
   return orderPendingFirst(views.filter((view): view is RunView => view !== null), { pending: runWaits, time: view => -(order.get(view.runId) ?? 0) });
 }
 
-/** Opaque generated ids (64-hex Run ids, attempt UUIDs) read better short; a name a person or a process chose (`purchase-order-2026-10`) is shown whole. */
-const OPAQUE_ID = /^[0-9a-f-]{16,}$/iu;
 /** The id a person sees: git-like short form of an opaque id, long enough to tell it from the others listed; any other id unchanged. */
-export const shownId = (id: string, among: readonly string[] = []): string => OPAQUE_ID.test(id) ? displayId(id, among) : id;
+export const shownId = (id: string, among: readonly string[] = []): string => displayId(id, among);
 
 /** One Run row in a person's words: short id, state, accepted tasks, title. */
 export function runRowLabel(run: RunView, ids: readonly string[], locale: Locale): string {

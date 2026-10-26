@@ -80,7 +80,8 @@ export function assessToolchain(provider: string, admittedInput: readonly Admitt
   const entry = (status: ToolchainStatus, latest: PublishedVersion | null = null, reason?: string): ToolchainCurrencyEntry =>
     toolchainCurrencyEntrySchema.parse({ ...base, latest, status, ...(reason ? { reason } : {}) });
   if (!admitted.length) return entry('not-admitted');
-  if (mechanism.mechanism !== 'npm' || lookup.kind === 'unsupported') return entry('unsupported');
+  if (mechanism.mechanism !== 'npm') return entry('unsupported', null, 'no-version-feed');
+  if (lookup.kind === 'unsupported') return entry('unsupported');
   if (lookup.kind === 'disabled') return entry('disabled');
   if (lookup.kind === 'unavailable') return entry('unknown-offline', null, lookup.reason);
   if (admitted.some(item => item.version === null)) return entry('unparsed', lookup.published);

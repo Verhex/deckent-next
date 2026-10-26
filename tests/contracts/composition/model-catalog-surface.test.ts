@@ -114,20 +114,35 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     await admin.policy('all');
     const english = await admin.cli('list', '--scope', 's', '--lang', 'en');
     expect(english.stdout).toContain(`Channel ${SEED_CHANNEL} (native-cli, CLI claude)`); expect(english.stdout).toContain('active in this scope');
-    expect(english.stdout).toMatch(/claude-sonnet-5-5 · lifecycle active \(retire 2027-09-28\) · CLI ≥ 2\.1\.284/);
+    expect(english.stdout).toMatch(/claude-sonnet-5-5 · lifecycle available \(retire 2027-09-28\) · CLI ≥ 2\.1\.284/);
     const turkish = await admin.cli('list', '--scope', 'b', '--lang', 'tr');
     expect(turkish.stdout).toContain('bu kapsamda etkin değil'); expect(turkish.stdout).toContain('b kapsamının gördüğü model kataloğu');
     const json = JSON.parse((await admin.cli('list', '--scope', 's', '--json')).stdout);
     expect(json.channels[0]).toMatchObject({ channelId: SEED_CHANNEL, access: 'allowed', activation: { state: 'active', revision: 1 } });
-    expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-sonnet-5-5')).toMatchObject({ activation: null, model: { minCliVersion: '2.1.284' } });
-    // Model activation, deactivation, a stale revision and an unknown model are typed; a replay returns the receipt.
-    expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm1', '--expected-revision', '0')).code).toBe(0);
+    expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-sonnet-5-5')).toMatchObject({ activation: { state: 'active', revision: 1 }, model: { minCliVersion: '2.1.284' } });
+    // The seed's retired model (its recorded retirement day has passed) is never turned on by the channel.
+    expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-haiku-4-5-20251001')).toMatchObject({ activation: null });
+    // U2-S4: the channel's activation turned on its never-touched, priced models (rev 1). Deactivation, a stale revision and an unknown model are typed; a replay returns the receipt.
     const stale = await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm2', '--expected-revision', '0');
     expect(stale.stderr).toContain('MODEL_CATALOG_REVISION_CONFLICT');
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-9-9', '--command-id', 'm3', '--expected-revision', '0')).stderr).toContain('MODEL_CATALOG_NOT_FOUND');
     const off = JSON.parse((await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm4', '--expected-revision', '1', '--json')).stdout);
     expect(off.receipt).toMatchObject({ authorizations: [{ level: 'scope', action: 'deactivate' }], changes: [{ kind: 'activation', revision: 2 }] });
     expect(JSON.parse((await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm4', '--expected-revision', '1', '--json')).stdout).replayed).toBe(true);
+    // Lead 2026-10-26: a person's explicit activation of a retired model is refused with its retirement day (EN/TR); turning it off stays possible.
+    const retiredArgs = ['activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r1', '--expected-revision', '0'];
+    const refusedEn = await admin.cli(...retiredArgs, '--lang', 'en'), refusedTr = await admin.cli(...retiredArgs, '--lang', 'tr');
+    expect(refusedEn.code).toBe(1); expect(refusedEn.stderr).toContain('Model claude-haiku-4-5-20251001 was retired on 2026-10-15; it cannot be activated');
+    expect(refusedTr.stderr).toContain('claude-haiku-4-5-20251001 modeli 2026-10-15 tarihinde emekliye ayrıldı');
+    // A model turned on before its retirement is still turned off: activate it while current, record its retirement, then deactivate.
+    const register = async (commandId: string, retiredOn: string | null) => { const catalog = await seedCatalog(); catalog.revision = commandId;
+      Object.assign(catalog.providers[0].models.find((model: { nativeId: string }) => model.nativeId === 'claude-haiku-4-5-20251001').lifecycle,
+        retiredOn ? { retiredOn, retireNotBefore: retiredOn } : { retiredOn: null, retireNotBefore: '2099-01-01' });
+      await applyModelCatalog(admin.project, { schemaVersion: 1, commandId, scopeId: 's', action: 'register', catalog }, admin.options); };
+    await register('current', null);
+    expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r2', '--expected-revision', '0')).code).toBe(0);
+    await register('retired', '2026-10-15');
+    expect((await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-haiku-4-5-20251001', '--command-id', 'r3', '--expected-revision', '1')).code).toBe(0);
     // Usage errors never reach the application.
     for (const argv of [['activate', '--scope', 's', '--channel', SEED_CHANNEL, '--command-id', 'x'], ['register', '--scope', 's', '--command-id', 'x'],
       ['register', '--scope', 's', '--command-id', 'x', '--seed', 'a', '--file', 'b'], ['list']]) expect((await admin.cli(...argv)).code).toBe(2);
@@ -149,6 +164,14 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
       expect(listed.structuredContent).toEqual(await inspectModelCatalog(admin.project, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, admin.options));
       const bad = await session.client.callTool({ name: 'apply_model_catalog', arguments: { schemaVersion: 1, commandId: 'x', scopeId: 's', action: 'register', catalog: { schemaVersion: 1 } } });
       expect(bad.isError).toBe(true);
+      // The same refusal over MCP names the successor the catalog records (the retired model's replacement).
+      const successor = await seedCatalog(); successor.revision = 'with-successor';
+      successor.providers[0].models.find((model: { nativeId: string }) => model.nativeId === 'claude-haiku-4-5-20251001').lifecycle.replacementModelId = 'claude-haiku-5-5';
+      expect((await session.client.callTool({ name: 'apply_model_catalog', arguments: { schemaVersion: 1, commandId: 'mcp-successor', scopeId: 's', action: 'register', catalog: successor } })).isError).not.toBe(true);
+      const retired = await session.client.callTool({ name: 'apply_model_catalog', arguments: { schemaVersion: 1, commandId: 'mcp-retired', scopeId: 's', action: 'activate',
+        channelId: SEED_CHANNEL, modelId: 'claude-haiku-4-5-20251001', expectedRevision: 0 } });
+      expect(retired.isError).toBe(true); expect(JSON.stringify(retired.content)).toContain('MODEL_CATALOG_MODEL_RETIRED');
+      expect(JSON.stringify(retired.content)).toContain('The current model of its family is claude-haiku-5-5.');
     } finally { await session.close(); }
   });
 });

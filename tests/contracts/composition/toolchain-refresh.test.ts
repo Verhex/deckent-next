@@ -9,9 +9,9 @@ import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRef
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { configServiceState, restartConfigDigest } from '#engine/index.js';
+import { workerConsentBinding, configServiceState, restartConfigDigest } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
-import type { WorkerImageBuildRunner } from '#adapters/index.js';
+import { readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 
 beforeEach(context => { if (process.platform !== 'linux') context.skip('configured policy/integrity flows need a verified POSIX UID'); });
 const roots: string[] = [];
@@ -35,13 +35,21 @@ async function fixture(update: Record<string, unknown> = {}) {
   const path = join(root, '.deckent/config.json'); await mkdir(join(root, '.deckent'), { recursive: true });
   const existing = (() => { try { return {}; } catch { return {}; } })();
   await writeFile(path, JSON.stringify({ ...existing, execution: { docker: { executable: 'docker', imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 2147483648, pids: 128, cpus: 2, logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 } },
-    service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'http://127.0.0.1:1' }, update },
+    service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'https://registry.example.invalid' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
+  const source = await readWorkerImageSources(process.cwd()), document = JSON.parse(await readFile(path, 'utf8'));
+  const binding = workerConsentBinding({ recipe: source.recipe, providers: ['codex'], npmRegistry: 'https://registry.example.invalid', sources: {} });
+  const consent = { operation: 'worker-image.consent@1', id: 'fixture-consent', person: { id: 'fixture', issuer: 'local-os', subject: 'fixture' }, scopeId: 'installation', ...binding, createdAt: new Date().toISOString() };
+  document.toolchains.image = { consents: [consent] }; await writeFile(path, JSON.stringify(document));
+  const imageHome = join(root, '.deckent/workspaces/toolchains'); await mkdir(imageHome, { recursive: true });
+  await writeFile(join(imageHome, 'worker-image-state.json'), JSON.stringify({ schemaVersion: 1, revision: 1, instanceId: 'fixture', consentId: consent.id, phase: 'ready', step: null,
+    startedAt: consent.createdAt, lastProgressAt: consent.createdAt, expiresAt: consent.createdAt, daemonId: 'fixture-daemon', images: [], code: null, context: null }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
   const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null, tags: ['r4-20260930'], checks: [] as string[], fill: null as string | null };
   const runner: WorkerImageBuildRunner = async (command, signal) => {
+    if (command.args[1] === '--daemon-identity') return { ...ok(command.requestId), stdoutBase64: Buffer.from(JSON.stringify({ daemonId: 'fixture-daemon', endpoint: 'unix:///fixture' })).toString('base64') };
     if (command.args[1] === '--held-version') {
       const heldVersion = (await historyOwner()).heldVersion(state.tags); state.checks.push(heldVersion ?? 'none');
       return { ...ok(command.requestId), stdoutBase64: Buffer.from(JSON.stringify({ heldVersion }) + '\n').toString('base64') };
@@ -50,11 +58,12 @@ async function fixture(update: Record<string, unknown> = {}) {
     if (state.gate) await Promise.race([state.gate, new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }))]);
     if (signal?.aborted) return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null, started: true };
     if (state.failFirst > 0) { state.failFirst--; return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from('Error: WORKER_IMAGE_BUILD_FAILED fixture').toString('base64') }; }
-    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
-    (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'Dockerfile'), 'utf8'), recipe); // the context's own history chain must validate
-    (await historyOwner()).assertVersionAdvances(recipe.imageVersion, state.tags); // the builder's own guard before it tags
-    state.tags.push(recipe.imageVersion);
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { repository: string };
+    const plan = JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8')) as { imageVersion: string; previousVersion: string; base: { image: string } };
+    (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'history.log'), 'utf8'), plan); // the context's own history chain must validate
+    (await historyOwner()).assertVersionAdvances(plan.imageVersion, state.tags); // the builder's own guard before it tags
+    state.tags.push(plan.imageVersion);
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, daemonId: 'fixture-daemon', imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: `codex-cli ${latest['@openai/codex']}` }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };
@@ -66,6 +75,38 @@ async function fixture(update: Record<string, unknown> = {}) {
 const settle = async (check: () => boolean | Promise<boolean>) => { for (let i = 0; i < 400; i++) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 10)); } throw new Error('condition not reached'); };
 
 describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
+  it('INT2: legacy refresh needs exact installed provider receipts and default sources; a non-default source still needs consent', async () => {
+    const f = await fixture(), document = JSON.parse(await readFile(f.path, 'utf8'));
+    document.toolchains.image = { consents: [] };
+    const write = async () => { await writeFile(f.path, JSON.stringify(document)); clearConfigCache(); };
+    const receipts = join(f.root, '.deckent/workspaces/toolchains/receipts'); await mkdir(receipts, { recursive: true });
+    const receiptPath = join(receipts, 'r4-20260930.json');
+    const receipt = { schemaVersion: 2, daemonId: 'fixture-daemon', imageVersion: 'r4-20260930', imageId: bounds.imageId, measuredAt: new Date().toISOString(),
+      manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.155.1' }] } };
+    await writeFile(receiptPath, JSON.stringify(receipt)); await write();
+    const refused = async () => {
+      expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+      expect(f.state.builds).toBe(0); expect(f.state.checks).toEqual([]);
+    };
+    await refused(); // custom registry, despite an exact receipt
+    document.toolchains.currency.registryEndpoint = getConfigFieldDefault('toolchains').currency.registryEndpoint;
+    document.toolchains.image.sources = { proxy: 'https://proxy.example.invalid' }; await write(); await refused();
+    document.toolchains.image.sources = {}; await write();
+    await rm(receiptPath); await refused(); // registry pins alone never fabricate consent
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, imageId: 'sha256:' + 'f'.repeat(64) })); await refused();
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, manifest: { providers: [...receipt.manifest.providers, { id: 'claude', version: '2.1.278' }] } })); await refused();
+    await writeFile(receiptPath, JSON.stringify(receipt));
+    expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(1);
+    // A layered receipt binds providers to each image, including a provider image that is not its first entry.
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, schemaVersion: 3, imageId: 'sha256:' + 'f'.repeat(64), images: [
+      { imageId: 'sha256:' + 'f'.repeat(64), providers: ['claude'] }, { imageId: bounds.imageId, providers: ['codex'] },
+    ] }));
+    await write(); // the same old registry pins, now attested by the layered receipt
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(2);
+  });
+
   it('a stale install starts the refresh in the background without delaying the caller, then revises only the active profile version', async () => {
     const f = await fixture(); let release!: () => void; f.state.gate = new Promise<void>(resolve => { release = resolve; });
     const controller = new AbortController();
@@ -138,7 +179,7 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
   it.each([['off', {}], ['propose', {}], ['auto', { atStartup: false, intervalMs: 0 }]])('mode %s with these settings never starts a build', async (mode, extra) => {
     const f = await fixture({ mode, ...extra });
     const controller = new AbortController(); const handle = startToolchainRefresh(f.root, f.options, f.observer, controller.signal, f.deps);
-    await handle.done.then(() => undefined); controller.abort();
+    await new Promise(resolve => setTimeout(resolve, 30)); controller.abort(); await handle.done;
     expect(f.state.builds).toBe(0); expect(f.events).toEqual([]); expect(await readToolchainRefreshState(f.root, f.options)).toBeNull();
   });
 
@@ -231,7 +272,7 @@ describe('version lineage across refreshes (Astra 2371 P1-1)', () => {
     expect(advanced.outcome).toBe('current'); expect(advanced.event!.imageVersion).toBe('r13-20261011');
     expect(f.state.builds).toBe(4);
     const builds = join(productResourcePath((await loadConfig(f.root, f.options)).productLayout, 'workspaces'), 'toolchains/builds');
-    const lineage = JSON.parse(await readFile(join(builds, 'r13-20261011/recipe.json'), 'utf8'));
+    const lineage = JSON.parse(await readFile(join(builds, 'r13-20261011/plan.json'), 'utf8'));
     expect(lineage).toMatchObject({ imageVersion: 'r13-20261011', previousVersion: 'r7-20261009' });
   });
 

@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationReport, type WorkerObservationSource, type WorkerProcessState } from '#engine/index.js';
-import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, formatKnown, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
+import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 
 /** What a person needs to know about one worker: running now, finished (history), lost (no process and no result) or unknown (not verifiable). */
 export type WorkerKind = 'active' | 'finished' | 'lost' | 'unknown';
@@ -74,7 +74,7 @@ export function renderWorkersView(input: WorkersViewInput): string {
     const rows = shown.map(worker => {
       const usage = resolveWorkerUsage(worker), sample = worker.resources?.latest ?? null;
       return [displayId(worker.taskId, taskIds), worker.identity ? displayId(worker.identity.runId, runIds) : '-', stateWord(worker, kinds.get(worker)!, locale),
-        worker.model?.requested.modelId ?? formatKnown(worker.provider, locale), usage?.durationMs === null || usage?.durationMs === undefined ? '-' : formatDuration(usage.durationMs, locale),
+        worker.model?.requested.modelId ?? usage?.model ?? '-', usage?.durationMs === null || usage?.durationMs === undefined ? '-' : formatDuration(usage.durationMs, locale),
         sample?.cpuCores === null || sample?.cpuCores === undefined ? '-' : formatDecimal(sample.cpuCores, locale),
         formatBytes(sample?.memoryBytes ?? worker.resources?.sampledPeakBytes ?? null, locale), formatAgo(lastSignalAt(worker, now), now, locale)];
     });

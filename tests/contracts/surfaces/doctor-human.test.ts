@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { main } from '#surfaces/core/cli/index.js';
+import { ErrorRegistry, t, clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
@@ -47,9 +48,9 @@ describe('doctor rows (pure)', () => {
     expect(text).toContain('tamam      Node.js v26.10.0 (en az 24.22.0)');
     expect(text).toContain('uyarı      Kimlik profili seçilmemiş');
     // Lead J3 (I-S3 Q2): the next step is the command that writes the fact, never a bare `deckent init` that cannot (no loop).
-    expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config set identity.profile --global');
-    // I-S7: no registry yet → the first missing first-job step (the registry, which also names the pool), never `init pool` without --preview|--apply (CLI_USAGE).
-    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toMatch(/^İlk iş türünü ve worker havuzunu tanımlayın: .*; komut: deckent init registry --scope live --provider /u);
+    expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config');
+    // alpha.56 U3: the first work kind is an onboarding step — doctor points to the terminal (/setup), never back to `deckent init`.
+    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toBe("İlk iş türü: deckent'i açın, ilk açılışta ayarlanır (terminalde: /setup)");
     expect(text).toContain('uyarı      Kurulum klasörü başka kullanıcılara açık (mod 0755)');
     expect(text).toContain('sonraki adım: chmod 700 /home/me/.deckent');
     expect(text).toContain('Yedek parolası bu kurulumun içinde saklanıyor'); // J2e: owner wording, joined with C-ADMIN's backup line
@@ -65,15 +66,16 @@ describe('doctor rows (pure)', () => {
   it('PRE-34: the Docker row is the setup decision in the setup\'s words; not reachable is an error only when work is configured to run there', () => {
     const docker = (state: string, code: string, extra: Partial<DoctorCheckFacts> = {}) => doctorChecks(report, facts({ executionEnvironment: { state, reason: { code, params: { runtime: 'Docker', version: '27.3.1' } } }, ...extra }), 'tr')
       .find(row => row.id === 'work.docker')!;
-    expect(docker('done', 'setup.execution.ready')).toEqual({ group: 'work', id: 'work.docker', state: 'ok', text: 'Docker 27.3.1 hazır: Run, /do ve teslim onu kullanabilir.' });
-    expect(docker('blocked', 'setup.execution.stopped')).toMatchObject({ state: 'warning', next: 'deckent init', text: expect.stringContaining('Docker kurulu ama hizmeti çalışmıyor') });
-    expect(docker('blocked', 'setup.execution.stopped', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error', next: 'deckent init' });
+    expect(docker('done', 'setup.execution.ready')).toEqual({ group: 'work', id: 'work.docker', state: 'ok', text: 'Docker 27.3.1 hazır: iş, /do ve teslim onu kullanabilir.' });
+    const onboarding = "Çalıştırma ortamı: deckent'i açın, ilk açılışta ayarlanır (terminalde: /setup)";
+    expect(docker('blocked', 'setup.execution.stopped')).toMatchObject({ state: 'warning', next: onboarding, text: expect.stringContaining('Docker kurulu ama hizmeti çalışmıyor') });
+    expect(docker('blocked', 'setup.execution.stopped', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error', next: onboarding });
     expect(docker('blocked', 'setup.execution.none')).toMatchObject({ state: 'warning', text: expect.stringContaining('Kurulu çalıştırma ortamı yok') });
     expect(docker('blocked', 'setup.execution.noPermission', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error' });
     expect(docker('blocked', 'setup.execution.unknown')).toMatchObject({ state: 'untested' });
     expect(docker('blocked', 'setup.execution.unknown').next).toBeUndefined();
     const en = doctorChecks(report, facts({ executionEnvironment: { state: 'blocked', reason: { code: 'setup.execution.none', params: {} } } }), 'en').find(row => row.id === 'work.docker')!;
-    expect(en.text).toBe('No execution environment is installed: no Run, /do or delivery. Chat, MCP and governed tools work.');
+    expect(en.text).toBe('No execution environment is installed: work, /do and delivery cannot run. Chat, MCP and governed tools work. Open /setup in the Deckent terminal to set up execution.');
   });
   it('PRE-34: a current worker image without a version names the configured image instead of nothing', () => {
     const image = { ...report, imageRefresh: { status: 'current', reason: null, imageVersion: null } };
@@ -116,7 +118,7 @@ describe('doctor rows (pure)', () => {
     const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
     expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
       ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
-      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', 'deckent models connect --connection claude-cli-subscription --scope live'],
+      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', 'deckent models connect --scope live'],
       ['untested', 'Brain girişi: henüz denetlenmedi (dizin /home/p/.other); ilk çağrı ya da yeniden bağlama denetimi koşar', undefined]]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'en').find(row => row.id === 'work.brainLogin')?.text)
       .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
@@ -317,4 +319,66 @@ describe('PRE-8 v2: doctor names the keys a model here cannot use, with the exac
     expect(out.join('')).toContain('Key DECKENT_ANTHROPIC_KEY is used by a model here but not granted to this project');
     expect(out.join('')).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope live');
   });
+});
+
+it('reports an unreadable catalog monitor as not tested and no row when the monitor has nothing to say (HAF-37)', () => {
+  expect(doctorChecks(report, facts({ catalogDiagnostics: null }), 'tr').find(row => row.id === 'security.catalogSigner')).toMatchObject({ state: 'untested' });
+  expect(doctorChecks(report, facts({ catalogDiagnostics: [] }), 'en').some(row => row.id === 'security.catalogSigner')).toBe(false);
+});
+
+it('doctor shares the catalog signer warning and uses the observed aggregator identity in its next command', () => {
+  const checks = doctorChecks(report, facts({ catalogDiagnostics: ['catalog-aggregator-unsigned:["live","local/catalog-aggregator","person"]'] }), 'tr');
+  const warning = checks.find(row => row.id === 'security.catalogSigner')!;
+  expect(warning.state).toBe('warning'); expect(warning.next).toContain("--principal 'local/catalog-aggregator:person'");
+  expect(warning.next).toContain("--scope 'live'"); expect(warning.next).not.toContain('<issuer>');
+});
+
+it('parses every doctor next-step command from the generated warning rows through the real CLI, including subscription and model guidance', async () => {
+  const root = await project(), stopped = async () => { throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); };
+  const variants = [facts({ catalogDiagnostics: ['catalog-aggregator-unsigned:["live","local/catalog-aggregator","person"]'],
+    headlessLogins: [{ state: 'closed', authMethod: null, subscriptionType: null, configDir: '/tmp/login', consent: [] }] }),
+    facts({ headlessLogins: [{ state: 'closed', authMethod: null, subscriptionType: null, configDir: '/tmp/login', owned: false, consent: [] }], poolStatus: 'missing' })];
+  variants.push(facts({ poolStatus: 'drift', pendingRoleModels: [{ channelId: 'fixture-channel', modelId: 'fixture-model' }],
+    secretUse: [{ kind: 'grant-required', name: 'FIXTURE_KEY' }, { kind: 'declared-missing', name: 'FIXTURE_KEY' }, { kind: 'not-stored', name: 'FIXTURE_KEY' }] }));
+  const reports = [report, { ...report, serviceConfig: 'stale', policyAdministration: { usableAdminCount: 0, bootstrapRequired: false, recoveryRequired: true },
+    installationBinding: { capability: 'source-invalid', strength: null, source: 'platform' }, auditIntegrity: { status: 'unknown', reason: 'unavailable' },
+    modelInvocationDelivery: [{ profileId: 'fixture', reference: { modelId: 'fixture' }, surface: 'mcp' }, { profileId: 'fixture', reference: { modelId: 'fixture' }, surface: 'service' }] }];
+  const commands = new Set(reports.flatMap(r => variants.flatMap(f => doctorChecks(r as never, f, 'en'))).flatMap(row => row.next?.match(/deckent [^;\n]+/gu) ?? []));
+  commands.add(t('error.HEADLESS_DELEGATION_REFUSED', {}, 'en').match(/`(deckent [^`]+)`/u)![1]!);
+  for (const command of commands) {
+    const errors: string[] = [];
+    const words = command.match(/'[^']*'|"[^"]*"|\S+/gu)!.map(word => word.replace(/^['"]|['"]$/gu, ''));
+    const argv = words.slice(1).map(word => word.startsWith('<') ? word === '<n>' ? '2' : word === '<tier>' ? 'frontier' : word.includes('disabled') ? 'disabled' : word.includes('claude') ? 'claude' : 'fixture' : word);
+    const context = { root, env: { DECKENT_GLOBAL_HOME: join(root, 'global'), TERM: 'xterm' }, locale: 'en' as const,
+      stdin: { isTTY: true } as never, stdout: { isTTY: true, write() {} }, stderr: { write: (s: string) => { errors.push(s); } },
+      configApplication: () => ({ inspect: stopped, explain: stopped }) as never, openConfigPanel: async () => [], restartRuntimeService: stopped,
+      inspectModelCatalog: stopped, inspectModelRoles: stopped, assignModelRole: stopped, setSecret: stopped, setProjectSecret: stopped, changeSecretGrant: stopped, listSecretStores: stopped, inspectPolicyAdministration: stopped, listSecretNames: stopped, inspectSecretStore: stopped, initializeNativeCodingRegistry: stopped,
+      installConfiguredExecutionPool: stopped, inspectPoolCapacity: stopped, verifyAudit: stopped, loginHeadless: stopped, connectModel: stopped, updateToolchains: stopped, inspectToolchainCurrency: stopped };
+    await main(argv, context as never);
+    expect(errors.join(''), command).not.toMatch(/CLI_USAGE|CLI_ARGUMENT_MISSING|CLI_CONFIG_VALUE_MISSING/u);
+  }
+});
+
+
+it('shows scoped ChatGPT custody refusals without account labels, tokens or host paths', () => {
+  const reference = { providerId: 'fixture-subscription', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
+  const rows = doctorChecks(report, facts({ siwcConnections: [{ reference, connection: 'fixture-subscription', state: 'unavailable', planUse: false,
+    code: 'SIWC_STORE_NOT_PERSONAL', reason: 'profile-unresolved' }] }), 'tr').filter(row => row.id === 'work.chatgptConnection');
+  expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ state: 'warning', next: 'deckent models connect --connection fixture-subscription --scope live' });
+  expect(rows[0]!.text).toContain('kimlik profili');
+  expect(JSON.stringify(rows)).not.toContain('/home/');
+});
+
+it('names an open secret folder ssh-style with chmod 700 and says when ChatGPT sign-in custody would refuse (FIX8b E01, R22)', () => {
+  const store = (extra: object) => ({ ...report, secretStore: { ...report.secretStore, ...extra } }) as typeof report;
+  const custody = (extra: object, locale: 'en' | 'tr' = 'en') => doctorChecks(store(extra), facts(), locale).filter(row => row.id.startsWith('security.secretsRoot') || row.id === 'security.siwcCustody');
+  const open = custody({ globalRoot: { path: '/fixture/global', mode: '0755' }, personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/fixture/global', mode: '0755', folder: 'root' } });
+  // One fix for one folder: the root row carries the exact command; the custody row would only repeat it.
+  expect(open).toEqual([expect.objectContaining({ id: 'security.secretsRoot', state: 'warning', next: 'chmod 700 /fixture/global' })]);
+  expect(open[0]!.text).toContain('0755');
+  const parent = custody({ personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } }, 'tr');
+  expect(parent).toHaveLength(1); expect(parent[0]!.text).toContain('/tmp'); expect(parent[0]!.next).toBeUndefined();
+  expect(custody({ personalCustody: { status: 'refused', reason: 'unknown-locality' } })[0]!.text).toContain('local disk');
+  expect(custody({ backend: 'core.secret-store.env@1', personalCustody: { status: 'store' } })[0]).toMatchObject({ state: 'warning', next: 'deckent secret store --to core.secret-store.encrypted-file@1' });
+  expect(custody({ personalCustody: { status: 'ready' } })[0]).toMatchObject({ state: 'ok' });
 });

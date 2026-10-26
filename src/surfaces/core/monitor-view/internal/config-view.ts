@@ -26,6 +26,7 @@ function fieldWords(locale: Locale): Readonly<Record<string, readonly [Section, 
     reconciliationRuntime: ['service', t('monitor.config.name.reconciliationRuntime', {}, locale)],
     approvals: ['security', t('monitor.config.name.approvals', {}, locale)], audit: ['security', t('monitor.config.name.audit', {}, locale)],
     enforce_principal_assurance: ['security', t('monitor.config.name.enforce_principal_assurance', {}, locale)],
+    policy: ['security', t('monitor.config.name.policy', {}, locale)], // alpha.56 U5-S2: protected policy availability (MCP opt-in groups)
     layout: ['storage', t('monitor.config.name.layout', {}, locale)], storage: ['storage', t('monitor.config.name.storage', {}, locale)],
     backup: ['storage', t('monitor.config.name.backup', {}, locale)], configFile: ['storage', t('monitor.config.name.configFile', {}, locale)],
     installation: ['storage', t('monitor.config.name.installation', {}, locale)],

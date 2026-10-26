@@ -2,3 +2,19 @@ export { readWorkerImageHeldVersion, readWorkerImageSources, prepareWorkerImageB
 export type { WorkerImageBuildErrorCode, WorkerImageBuildRunner } from './internal/build.js';
 export { buildWorkerImageInHome, observeWorkerImage, readBuiltWorkerLineage, readNewestWorkerReceipt, workerImagePresence, workerImageSetupPorts } from './internal/setup.js';
 export type { WorkerImagePresence, WorkerImageReceiptView } from './internal/setup.js';
+
+export { resolveWorkerBuildPlan } from './internal/resolve.js';
+export type { WorkerResolution } from './internal/resolve.js';
+
+export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from './internal/custody.js';
+
+export { WorkerImageRemovalTarget, workerRemovalGuard } from './internal/removal.js';
+export type { WorkerRemovalResource, WorkerRemovalObservation, WorkerRemovalDriver } from './internal/removal.js';
+export { observeWorkerRemovalReferences, nativeWorkerRemovalDriver, workerImageManualCommand } from './internal/removal-driver.js';
+export { workerLeaseReferences } from './internal/references.js';
+export type { WorkerReferenceOwner, NativeWorkerRemovalInput } from './internal/removal-driver.js';
+export { observeWorkerRemovalInventory } from './internal/removal-inventory.js';
+
+export { readWorkerImageState, writeWorkerImageState, recoverWorkerImageContext, observeWorkerImageProgress, watchWorkerImageRequests } from './internal/state.js';
+
+export { inspectWorkerImageChoices, type WorkerImageChoice } from './internal/choices.js';

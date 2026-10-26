@@ -1,3 +1,4 @@
+import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 import { userInfo } from 'node:os';
 import type { McpCapabilityRequest } from '#domain/index.js';
 import { McpCapabilities, mcpCapabilityRegistry, mcpCapabilityScopeCandidates } from '#engine/index.js';
@@ -18,29 +19,30 @@ export async function listConfiguredMcpCapabilityScopes(root: string, options: C
   const candidates = mcpCapabilityScopeCandidates(document, actor);
   return candidates.length ? resolveConfiguredScopeMembership(config, document, actor, candidates, 'read') : [];
 }
+async function operationIds(root: string, options: ConfigLoadOptions) { return (await describeConfiguredOperationTools(root, options)).filter(row => row.surface !== 'authority').map(row => row.operation.id); }
 async function validateScope(root: string, scopeId: string, options: ConfigLoadOptions) {
   if (!(await listConfiguredMcpCapabilityScopes(root, options)).includes(scopeId)) throw ErrorRegistry.createError('SCOPE_UNKNOWN');
 }
 export async function inspectConfiguredMcpCapabilities(root: string, scopeId: string, options: ConfigLoadOptions = {}) {
   await validateScope(root, scopeId, options);
-  const config = await loadComposedConfig(root, { ...options, heal: false }), target = selectWorkTarget(config.execution)?.id ?? null;
-  return withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target).inspect(scopeId, person));
+  const config = await loadComposedConfig(root, { ...options, heal: false }), target = selectWorkTarget(config.execution)?.id ?? null, operations = await operationIds(root, options);
+  return withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target, config.policy.mcp.optInGroups, operations).inspect(scopeId, person));
 }
 /** Apply is only a reviewed digest selection on an attested terminal. Its subordinate approval and final policy write retain their checks. */
 export async function changeConfiguredMcpCapabilities(root: string, input: McpCapabilityRequest, options: ConfigLoadOptions = {}) {
-  if (!['grant', 'revoke'].includes(input.action) || !['preview', 'apply'].includes(input.mode)) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!['grant', 'revoke', 'narrow'].includes(input.action) || !['preview', 'apply'].includes(input.mode)) throw ErrorRegistry.createError('CLI_USAGE');
   if (!mcpCapabilityRegistry.list().some(group => group.id === input.groupId)) throw ErrorRegistry.createError('CLI_USAGE');
   await validateScope(root, input.scopeId, options);
-  const config = await loadComposedConfig(root, { ...options, heal: false }), target = selectWorkTarget(config.execution)?.id ?? null;
+  const config = await loadComposedConfig(root, { ...options, heal: false }), target = selectWorkTarget(config.execution)?.id ?? null, operations = await operationIds(root, options);
   if (input.mode === 'apply') {
     if (!input.expect) throw ErrorRegistry.createError('CLI_USAGE');
     const peer = localPrincipalPeer();
     if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
   }
   // Compute under a read-only context first: an invalid digest never bootstraps a ledger, identities or a session.
-  const preview = await withPolicyAdministration(root, input.scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target).run({ ...input, mode: 'preview' }, person, ''));
+  const preview = await withPolicyAdministration(root, input.scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target, config.policy.mcp.optInGroups, operations).run({ ...input, mode: 'preview' }, person, ''));
   if (input.mode === 'preview' || preview.status !== 'preview') return preview;
   if (input.expect !== preview.digest) return { ...preview, status: 'conflict' as const };
   if (preview.missing.length) return { ...preview, status: 'refused' as const };
-  return withPolicyAdministration(root, input.scopeId, options, 'write', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target).run(input, person, `MCP ${input.action}: ${input.groupId}, ${input.scopeId}`));
+  return withPolicyAdministration(root, input.scopeId, options, 'write', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target, config.policy.mcp.optInGroups, operations).run(input, person, `MCP ${input.action}: ${input.groupId}, ${input.scopeId}`));
 }

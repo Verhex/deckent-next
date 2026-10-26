@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { probeDockerImageSetAvailability, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
 import bounds from './discovery-bounds.json' with { type: 'json' };
+import { callerEnvironment } from '#platform/index.js';
 const exec = promisify(execFile);
 export interface ConfigDiscoveryLimits { readonly timeoutMs: number; readonly outputBytes: number; readonly maxEntries: number }
 /** A discovery's answer; `partial` names what cut it short: its time limit, or a size bound with entries left unread. The values found are kept as before. */
@@ -30,7 +31,7 @@ export async function discoverConfigExecutables(name: 'docker' | 'git', env: Nod
   return { values: (observed ?? []).filter((path): path is string => path !== null), partial: observed === null ? 'time' : listed.length > paths.length && 'size' };
 }
 export async function discoverConfigBranches(executable: string, root: string, env: NodeJS.ProcessEnv, limits: ConfigDiscoveryLimits): Promise<readonly string[]> {
-  const result = await exec(executable, ['for-each-ref', '--format=%(refname)', 'refs/heads/'], { cwd: root, env, encoding: 'utf8', timeout: limits.timeoutMs, maxBuffer: limits.outputBytes });
+  const result = await exec(executable, ['for-each-ref', '--format=%(refname)', 'refs/heads/'], { cwd: root, env: callerEnvironment(env), encoding: 'utf8', timeout: limits.timeoutMs, maxBuffer: limits.outputBytes });
   return result.stdout.trim().split('\n').filter(value => /^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/u.test(value)).slice(0, limits.maxEntries);
 }
 export async function discoverConfigImages(executable: string, limits: ConfigDiscoveryLimits, runner: DockerCommandRunner = runNodeDockerCommand): Promise<ConfigDiscovery> {

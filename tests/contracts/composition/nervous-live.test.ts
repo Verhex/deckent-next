@@ -68,7 +68,7 @@ async function fixture(input: { status: 'running' | 'missing' | 'created'; retai
   const supervisor = new DockerSupervisor(docker, runner), profile = await supervisor.captureProfile();
   const restore = DockerSupervisor.restoreProfile.bind(DockerSupervisor);
   vi.spyOn(DockerSupervisor, 'restoreProfile').mockImplementation(profileInput => restore(profileInput, runner));
-  await admitRunAttempts(opened.store, [identity], input.recovery ? { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live') } : {});
+  await admitRunAttempts(opened.store, [identity], input.recovery ? { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live', ['t']) } : {});
   const claim = { request, owner: 'original-controller' };
   await opened.store.claimDispatch({ ...claim, profile });
   await opened.store.grantLaunch({ claim, principal: custodyPrincipal, now: 1 });
@@ -204,7 +204,7 @@ it.skipIf(process.platform === 'win32')('S6R-5 (lead on s6r4 Q4): after the lost
   const cases = openSqliteRecoveryStore(f.ledger, options), audit = await openSqliteAuditStore(f.ledger, options);
   try {
     const app = new RecoveryApplication({ store: cases, detections: new AuditApplication(audit, integrity), recorder: target => new AuditApplication(target, integrity),
-      approval: async scopeId => recoveryContinuationApproval(standing, owner, scopeId, 30), hold: async () => { throw new Error('UNEXPECTED_HOLD'); }, policyRevision: 'fixture-policy',
+      approval: async scopeId => recoveryContinuationApproval(standing, owner, scopeId, 30), hold: async () => { throw new Error('UNEXPECTED_HOLD'); }, isolation: async () => ({ schemaVersion: 1, network: 'none', egress: { kind: 'none' } }), policyRevision: 'fixture-policy',
       now: Date.now, timeoutMs: 1000 }, { async verify() { return recoveryPrincipal(owner, ['s']); } });
     const caseId = nervousCaseId('s', 'launcher-dead-orphan', { kind: 'attempt', identity: f.identity });
     const gated = await app.assess({ schemaVersion: 1, scopeId: 's', caseId });

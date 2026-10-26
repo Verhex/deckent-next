@@ -32,9 +32,9 @@ it('constructs fixed protocol command fields and never invents actor, grant, bin
   const target = sink(); const calls: unknown[] = [];
   const code = await main(['models', 'activate', ...common, ...mutation, '--catalog-revision', 'catalog-a', '--json'], {
     root: '/project', initialize() {}, stdout: target.output, stderr: target.output,
-    async admitModelActivation(root, command, options) { calls.push({ root, command, env: options.env }); return admission; },
+    async admitModelActivation(root, command, options) { calls.push({ root, command, callerEnv: options.env === process.env }); return admission; }, // identity, never the env's values in a failure
   });
-  expect(code).toBe(0); expect(calls).toEqual([{ root: '/project', env: process.env, command: {
+  expect(code).toBe(0); expect(calls).toEqual([{ root: '/project', callerEnv: true, command: {
     schemaVersion: 1, action: 'activate', commandId: 'command-a', scopeId: 'scope-a', reference, expectedRevision: 0,
     expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest }, catalogRevision: 'catalog-a',
   } }]);

@@ -26,7 +26,7 @@ export async function memoryWrite(args: Parsed, context: MemoryCommandContext, i
   if (args.action === 'propose') {
     if (!context.proposeMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
     const input = await readJsonInput(resolvePath(io.root, args.input!), io.inputMaxBytes,
-      { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+      { subject: 'cli.input.subject.memory', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
     const parsed = memoryContentSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('MEMORY_ENTRY_INVALID');
     if (await io.ask({ title: t('memory.card.propose.title', {}, locale), body: [...content(parsed.data, locale), '', t('memory.card.propose.body', {}, locale)], options: cardOptions(locale) }) !== 'apply') return cancelled();

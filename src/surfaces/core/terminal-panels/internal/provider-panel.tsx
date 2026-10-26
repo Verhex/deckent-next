@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
+const SiwcWindow = lazy(loadSiwcWindow);
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { EntryWindow } from './entry.js';
@@ -10,10 +12,12 @@ import type { BudgetPanelView, CachePanelView, PanelLabels, PanelNotice, Provide
   ProviderSecretGrantPort } from './contract.js';
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
-export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false): PickerTree {
+export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false, signIn?: string): PickerTree {
   return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.pendingNote ? `${kind.pendingNote} · ${kind.detail}` : kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
-    ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
+    // FIX8b: the ChatGPT sign-in row has no key or catalog: its one action opens the sign-in window.
+    ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.id === signIn ? { childTitle: kind.label, children: [{ id: 'connect', label: labels.actions.signIn }] } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
       : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
+      ...(kind.keyStored && kind.grantRequired ? [{ id: 'grant', label: labels.actions.grant }] : []),
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
       ...(models && (kind.models.length || kind.discoversModels) ? [{ id: 'model', label: labels.actions.model, ...(kind.modelBlocked ? { blocked: { reason: kind.modelBlocked } } : {}) }] : []),
       ...(kind.keyStored ? [{ id: 'disconnect', label: labels.actions.disconnect }] : [])] }) })) };
@@ -32,9 +36,11 @@ export function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPa
 }
 
 /** `forModel` (T4-B): the address is chosen for a model connection, not for storing a key. */
-type Step = Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
-  | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null }
-  | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
+type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | null; workspaces: readonly Readonly<{ id: string; name: string }>[] } | Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
+  | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null; grant?: boolean }
+  | { kind: 'optional-key'; target: ProviderPanelKind; endpoint: string | null }
+  | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('./contract.js').PanelLine[] }
+  | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
   | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
   | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }>;
 /** The typed refusal that opens the first-use card: a main-vault key without a grant in this project (name and project only, never a value). */
@@ -83,12 +89,27 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       } });
     });
   };
+  const beginKey = (target: ProviderPanelKind, endpoint: string | null) => {
+    if (!port.prepareKey) { setStep({ kind: 'key', target, endpoint }); return; }
+    setStep({ kind: 'busy' });
+    port.prepareKey(target.id, endpoint).then(prepared => setStep({ kind: 'key-consent', target, endpoint, ...prepared }), error => { onError(error); back(); });
+  };
+  const withoutKey = (target: ProviderPanelKind, endpoint: string | null) => {
+    setStep({ kind: 'busy' });
+    port.connect({ kind: target.id, endpoint, key: null }).then(outcome => setStep(outcome.workspaces ? { kind: 'workspace', target, endpoint, workspaces: outcome.workspaces } : { kind: 'result', outcome }), error => { onError(error); back(); });
+  };
+  const beginConnection = (target: ProviderPanelKind, endpoint: string | null) => {
+    if (!port.prepareKey || target.keyRequired) { beginKey(target, endpoint); return; }
+    if (target.keyName === null) { withoutKey(target, endpoint); return; }
+    setStep({ kind: 'optional-key', target, endpoint });
+  };
   const chooseModels = (target: ProviderPanelKind, endpoint: string | null) => {
     if (!target.discoversModels || !port.listModels) { setStep({ kind: 'model', target, endpoint }); return; }
     setStep({ kind: 'busy' });
     granting(() => port.listModels!(target.id, endpoint), models => setStep({ kind: 'model', target: { ...target, models }, endpoint }));
   };
   const title = (text: string) => [span(text, { bold: true })];
+  if (step.kind === 'siwc' && port.siwc) return <Suspense fallback={null}><SiwcWindow port={port.siwc} onClose={back} onError={onError} /></Suspense>;
   if (!view || step.kind === 'busy') return <PickerWindow title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} bodyRows={BODY_ROWS} tree={null}
     labels={labels.picker} listHints={words.hints} position={labels.position} onResult={() => undefined} />;
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
@@ -103,6 +124,12 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (step.outcome.approvalId && openApproval) { openApproval(step.outcome.approvalId); onClose(); return; }
     back();
   }} />;
+  if (step.kind === 'workspace') return <PickerWindow title={title(step.target.label)} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position}
+    tree={{ title: step.target.label, items: step.workspaces.map(row => ({ id: row.id, label: row.name, detail: row.id, unscoped: true })) }} onResult={result => {
+      if (result.kind !== 'selected' || !port.connectModel) { back(); return; }
+      const selected = step; setStep({ kind: 'busy' });
+      granting(() => port.connectModel!({ kind: selected.target.id, endpoint: selected.endpoint, model: 'pull:available', workspaceId: result.id }), outcome => setStep({ kind: 'connected', outcome }));
+    }} />;
   if (step.kind === 'model') {
     const { target, endpoint } = step, connectModel = port.connectModel;
     return <PickerWindow title={title(fillTemplate(words.modelTitle, { kind: target.label }))} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position}
@@ -113,6 +140,16 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
         granting(() => connectModel({ kind: target.id, endpoint, model: result.id }), outcome => setStep({ kind: 'connected', outcome }));
       }} />;
   }
+  if (step.kind === 'optional-key') return <QuestionWindow key="optional-key" title={words.optionalKeyQuestion} lines={[]}
+    hints={words.optionalKeyKeys} position={labels.position} onAnswer={answer => {
+      if (answer === null) { back(); return; }
+      if (answer) beginKey(step.target, step.endpoint); else withoutKey(step.target, step.endpoint);
+    }} />;
+  if (step.kind === 'key-consent') return <QuestionWindow key="key-consent" title={fillTemplate(words.keyTitle, { kind: step.target.label })} lines={step.lines}
+    hints={words.previewKeys} position={labels.position} onAnswer={answer => {
+      if (!answer) { back(); return; }
+      setStep({ kind: 'key', target: step.target, endpoint: step.endpoint, grant: step.grant });
+    }} />;
   if (step.kind === 'confirm') return <QuestionWindow title={fillTemplate(words.disconnectTitle, { kind: step.target.label })} lines={[]} hints={words.disconnectKeys} position={labels.position}
     onAnswer={answer => {
       if (!answer) { back(); return; }
@@ -128,8 +165,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
         if (result.kind !== 'selected') { back(); return; }
         const choice = target.endpointChoices.find(item => item.id === result.id);
         if (choice && step.forModel) { chooseModels(target, choice.url); return; }
-        setStep(choice ? { kind: 'key', target, endpoint: choice.url }
-          : { kind: 'address', target, text: '', problem: null, ...(step.forModel ? { forModel: true } : {}) });
+        if (choice) beginConnection(target, choice.url);
+        else setStep({ kind: 'address', target, text: '', problem: null, ...(step.forModel ? { forModel: true } : {}) });
       }} />;
   }
   // Each entry step is its own window instance (key): an accepted entry stays deaf, and the key step never inherits the address's text.
@@ -147,8 +184,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       ...((name => name ? [{ label: words.keyName, text: name }] : [])(port.keyName?.(step.target.id, step.base) ?? null))]}
     onAnswer={answer => {
       if (answer && step.forModel) { chooseModels(step.target, step.base); return; }
-      setStep(answer ? { kind: 'key', target: step.target, endpoint: step.base }
-        : { kind: 'address', target: step.target, text: step.text, problem: null, ...(step.forModel ? { forModel: true } : {}) });
+      if (answer) beginConnection(step.target, step.base);
+      else setStep({ kind: 'address', target: step.target, text: step.text, problem: null, ...(step.forModel ? { forModel: true } : {}) });
     }} />;
   if (step.kind === 'key') {
     const { target, endpoint } = step;
@@ -159,10 +196,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       onSubmit={text => {
         if (target.keyRequired && !text) return words.keyRequired;
         setStep({ kind: 'busy' });
-        port.connect({ kind: target.id, endpoint, key: text === '' ? null : text }).then(outcome => {
+        port.connect({ kind: target.id, endpoint, key: text === '' ? null : text, ...(step.grant !== undefined ? { grant: step.grant } : {}) }).then(outcome => {
+          if (outcome.workspaces) { setStep({ kind: 'workspace', target, endpoint, workspaces: outcome.workspaces }); return; }
           // PRE-8 v2: a key just stored in the main vault is offered to this project right away (the same card); declining keeps the stored key.
           const name = outcome.stored ? outcome.keyName ?? null : null, check = port.secretGrant?.check;
-          if (!name || !check) { setStep({ kind: 'result', outcome }); return; }
+          if (port.prepareKey || !name || !check) { setStep({ kind: 'result', outcome }); return; }
           granting(() => check(name), () => setStep({ kind: 'result', outcome }), error => { onError(error); setStep({ kind: 'result', outcome }); });
         }, error => { onError(error); back(); });
         return null;
@@ -175,19 +213,23 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     const [id, action] = result.path, target = view.kinds.find(kind => kind.id === id);
     if (!target || !action) { setState(at); back(); return; }
     setState({ ...PICKER_INITIAL, pos: at.trail[0]?.pos ?? 0 });
+    if (action === 'grant' && target.keyName && port.secretGrant?.check) {
+      setStep({ kind: 'busy' }); granting(() => port.secretGrant!.check!(target.keyName!), () => back()); return;
+    }
     if (action === 'disconnect') { setStep({ kind: 'confirm', target }); return; }
+    if ((action === 'model' || action === 'connect') && port.siwc?.connection === target.id) { setStep({ kind: 'siwc' }); return; }
     if (action === 'model') {
       if (target.endpointEditable) setStep({ kind: 'endpoint', target, forModel: true }); else chooseModels(target, null);
       return;
     }
-    setStep(target.endpointEditable ? { kind: 'endpoint', target } : { kind: 'key', target, endpoint: null });
+    if (target.endpointEditable) setStep({ kind: 'endpoint', target }); else beginConnection(target, null);
   };
   const body = [...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
   return <PickerWindow title={title(view.title)} body={body} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
-    tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel)), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))}
+    tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel), port.siwc?.connection), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))}
     onResult={result => chosen(result, state)} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */

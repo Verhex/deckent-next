@@ -1,3 +1,4 @@
+import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import { RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
@@ -179,4 +180,21 @@ describe('terminal slash registry', () => {
     expect(composer.slash['terminal.slash.help']).toBe(raw);
     await settle();
   });
+});
+
+it('U4-2: first-task and /setup handoffs traverse ordinary /do once with their original command identities', async () => {
+  const kept = pendingBrainFixture(), completeTurn = vi.fn(async () => 'must not chat');
+  const result = { ...kept, proposal: { ...kept.proposal, status: 'parked' as const, approval: null, reason: 'WORKER_SETUP_PENDING' } };
+  const plan = vi.fn(async () => result), openSetup = vi.fn(async () => ({ commandId: 'second-choice', scopeId: 's', folder: '', intent: 'Inspect the orders' }));
+  const view = mountWorkline({ completeTurn, onboarding: { initial: { commandId: 'first-choice', scopeId: 's', folder: '', intent: 'Inspect the folder' }, open: openSetup },
+    doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST', plan, lines: () => ['DURABLE-WAIT'] } });
+  views.push(view);
+  await until(() => view.stdout.text.includes('DURABLE-WAIT'), 'normal do result');
+  expect(plan).toHaveBeenCalledTimes(1); expect(plan.mock.calls[0]?.[0]).toBe('Inspect the folder'); expect(plan.mock.calls[0]?.[1]).toBe('first-choice');
+  view.stdin.write('\u001b'); await settle(60);
+  await type(view, '/setup \r');
+  await until(() => plan.mock.calls.length === 2, 'setup return to do');
+  expect(openSetup).toHaveBeenCalledTimes(1); expect(plan.mock.calls[1]?.[1]).toBe('second-choice');
+  expect(completeTurn).not.toHaveBeenCalled(); view.stdin.write('\u001b'); await settle(60);
+  await type(view, '/status \r'); await settle(60); expect(plan).toHaveBeenCalledTimes(2);
 });

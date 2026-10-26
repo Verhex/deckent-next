@@ -115,3 +115,20 @@ it('S8-1a: inspect names the standing per bound work class (EN/TR); an agent def
   const legacy = capture(); await agentsCommand(['agents', 'inspect', 'invoice-auditor', '--scope', 'scope', '--lang', 'en'], { ...base, inspectAgent: handlers([], agent).inspectAgent, stdout: legacy.sink });
   expect(legacy.text()).toContain('none recorded');
 });
+
+it('named reads reject missing agents, skills and stats, including JSON; the list exposes the missing aggregator signer', async () => {
+  const f = await project(), base = { root: f.root, env: f.env, ...handlers([]), stdout: capture().sink };
+  const missingStats = { schemaVersion: 1 as const, scopeId: 'scope', status: 'not-found' as const, labels: { relation: 'association-not-causation' as const, rate: 'acceptance-rate-not-accuracy' as const },
+    mode: 'shadow' as const, registry: { revision: 'r', status: 'provisional', digest: d('a') }, asOfMs: 1, rows: { read: 0, truncated: false }, lastPass: null, agents: [], workClasses: [] };
+  for (const action of ['inspect', 'skill', 'stats']) await expect(agentsCommand(['agents', action, 'missing-agent', '--scope', 'scope', '--json'],
+    { ...base, inspectAgentStats: async () => missingStats })).rejects.toMatchObject({ code: 'AGENT_CATALOG_NOT_FOUND' });
+  const out = capture(); await agentsCommand(['agents', '--scope', 'scope', '--lang', 'en'], { ...base, stdout: out.sink, inspectCatalogMonitor: async () => ['catalog-aggregator-unsigned'] });
+  expect(out.text()).toContain('signing key'); expect(out.text()).toContain('deckent agents enrol-signer');
+});
+it('a cancelled scope card reports cancellation, exits 1 and reads no agents', async () => {
+  const f = await project(), read = vi.fn(), err = capture(); card.interactive = true; card.answers = [null];
+  await writeFile(join(f.root, '.deckent', 'config.json'), '{}'); clearConfigCache();
+  expect(await agentsCommand(['agents', '--lang', 'en'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, stderr: err.sink,
+    configChoiceSources: () => ({ list: async () => Object.freeze(Object.assign(['one', 'two'].map(value => ({ value, label: value })), { partial: false })) }), listAgents: read })).toBe(1);
+  expect(err.text()).toContain('Cancelled'); expect(read).not.toHaveBeenCalled();
+});

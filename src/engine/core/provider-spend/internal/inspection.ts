@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { isDeepStrictEqual } from 'node:util';
+import { advanceProviderSpendPeriod, providerSpendPeriodUsedExact, providerSpendPeriodStateSchema } from './period.js';
+import { ceilProviderSpendExactMinorUnits } from './exact.js';
 import { immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_HOLD_PAGE_MAX,
   type ProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -24,13 +27,22 @@ const holdPageSchema = z.object({ entries: z.array(z.object({ invocationId: z.st
   reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).max(PROVIDER_SPEND_HOLD_PAGE_MAX),
   nextAfterInvocationId: z.string().min(1).nullable() }).strict().readonly();
 export type ProviderSpendHoldPage = z.infer<typeof holdPageSchema>;
+const periodViewSchema = z.object({ schemaVersion: z.literal(1), asOfMs: z.number().int().nonnegative().safe(),
+  state: providerSpendPeriodStateSchema, localTimeZone: z.string().min(1).max(128), usedExactMinorUnits: z.string(), remainingMinorUnits: z.number().int().nonnegative().safe() }).strict().readonly();
+export function providerSpendPeriodView(checkpoint: ProviderSpendCheckpoint, asOfMs: number, localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const account = advanceProviderSpendPeriod(checkpoint.account, asOfMs);
+  if (!account.period) return undefined;
+  const used = providerSpendPeriodUsedExact(account);
+  return { schemaVersion: 1 as const, asOfMs, state: account.period, localTimeZone, usedExactMinorUnits: used,
+    remainingMinorUnits: Math.max(0, account.budget.limitMinorUnits - ceilProviderSpendExactMinorUnits(used) - account.reservedMinorUnits) };
+}
 export type ProviderSpendAccountInspection = Readonly<{ schemaVersion: 2 | 3; scopeId: string; budgetId: string;
   budgetRevision: number; checkpoint: ProviderSpendCheckpoint | null; audit: ProviderSpendAuditReceipt | null;
-  spendingHistoryIntegrity: 'not-recorded' | 'consistent' | 'stale'; holds?: ProviderSpendHoldPage | undefined }>;
+  spendingHistoryIntegrity: 'not-recorded' | 'consistent' | 'stale'; period?: z.infer<typeof periodViewSchema> | undefined; holds?: ProviderSpendHoldPage | undefined }>;
 
 const resultSchema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), scopeId: z.string(),
   budgetId: z.string(), budgetRevision: z.number(), checkpoint: z.unknown().nullable(),
-  audit: z.unknown().nullable(), spendingHistoryIntegrity: z.enum(['not-recorded', 'consistent', 'stale']), holds: holdPageSchema.optional() }).strict().readonly());
+  audit: z.unknown().nullable(), spendingHistoryIntegrity: z.enum(['not-recorded', 'consistent', 'stale']), period: periodViewSchema.optional(), holds: holdPageSchema.optional() }).strict().readonly());
 
 export function parseProviderSpendAccountInspectionForQuery(queryInput: unknown, resultInput: unknown): ProviderSpendAccountInspection {
   let query: ProviderSpendAccountQuery;
@@ -56,12 +68,13 @@ export function parseProviderSpendAccountInspectionForQuery(queryInput: unknown,
   if (parsed.data.scopeId !== query.scopeId || parsed.data.budgetId !== query.budgetId
     || parsed.data.budgetRevision !== query.budgetRevision) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   if (parsed.data.checkpoint === null) {
-    if (parsed.data.audit !== null || parsed.data.spendingHistoryIntegrity !== 'not-recorded') {
+    if (parsed.data.period !== undefined || parsed.data.audit !== null || parsed.data.spendingHistoryIntegrity !== 'not-recorded') {
       throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     }
     return Object.freeze({ ...parsed.data, checkpoint: null, audit: null });
   }
   const checkpoint = parseProviderSpendCheckpoint(parsed.data.checkpoint), budget = checkpoint.account.budget;
+  if (parsed.data.period && !isDeepStrictEqual(parsed.data.period, providerSpendPeriodView(checkpoint, parsed.data.period.asOfMs, parsed.data.period.localTimeZone))) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   if (budget.scopeId !== query.scopeId || budget.budgetId !== query.budgetId
     || budget.revision !== query.budgetRevision) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   const audit = parsed.data.audit === null ? null : parseProviderSpendAuditReceipt(parsed.data.audit);
@@ -112,6 +125,7 @@ export class ProviderSpendAccountInspectionApplication {
     const moved = snapshot.checkpoint && (snapshot.checkpoint.account.budget.budgetId !== exact.budgetId || snapshot.checkpoint.account.budget.revision !== exact.budgetRevision);
     if ('current' in query && moved) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
     return parseProviderSpendAccountInspectionForQuery(query, { schemaVersion: query.holds ? 3 : 2, scopeId: exact.scopeId,
-      budgetId: exact.budgetId, budgetRevision: exact.budgetRevision, ...snapshot, spendingHistoryIntegrity });
+      budgetId: exact.budgetId, budgetRevision: exact.budgetRevision, ...snapshot, spendingHistoryIntegrity,
+      ...(snapshot.checkpoint?.account.period ? { period: providerSpendPeriodView(snapshot.checkpoint, Date.now()) } : {}) });
   }
 }

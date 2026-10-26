@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { runCommand } from '#surfaces/core/cli-run/index.js';
 import { main } from '#surfaces/index.js';
 import { resolveProductPaths } from '#platform/index.js';
 
@@ -65,4 +66,17 @@ it.each([['hold'], ['hold', '--reason', ' '], ['resume', '--task', 't'], ['resum
   expect(await main(['run', flags[0]!, '--scope', 's', '--id', 'r', '--command-id', 'command', '--expected-revision', '3', ...flags.slice(1)],
     { stderr: { write() {} }, async applyRunLifecycle() { calls++; return {} as never; } })).toBe(2);
   expect(calls).toBe(0);
+});
+
+it('ISY-22: lifecycle commands name a missing command id before the supplied revision', async () => {
+  for (const action of ['hold', 'resume', 'close']) {
+    let text = '', calls = 0;
+    const code = await main(['run', action, '--scope', 's', '--id', 'r', '--expected-revision', '0', '--lang', 'tr'], {
+      env: { NO_COLOR: '1' }, stderr: { write(value: string) { text += value; } },
+      async applyRunLifecycle() { calls++; return {} as never; },
+    });
+    expect(code).toBe(2); expect(calls).toBe(0);
+    expect(text).toContain('--command-id <id>');
+    await expect(runCommand(['run', action, '--scope', 's', '--id', 'r', '--expected-revision', '0', '--lang', 'tr'], {})).rejects.toMatchObject({ params: { flag: '--command-id' } });
+  }
 });

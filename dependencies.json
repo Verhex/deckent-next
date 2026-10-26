@@ -40,7 +40,8 @@
       "kind": "runtime",
       "reviewedVersion": "2.3.1",
       "owners": [
-        "src/adapters/core/mcp-client"
+        "src/adapters/core/mcp-client",
+        "src/adapters/core/hub-http"
       ],
       "purpose": "MCP client for the runtime service's external MCP tool servers (stdio launch, list/pin, call).",
       "features": [
@@ -123,7 +124,8 @@
       "owners": [
         "src/adapters/core/mcp-transport",
         "src/surfaces/core/mcp",
-        "src/composition/core/mcp"
+        "src/composition/core/mcp",
+        "src/surfaces/core/hub-mcp"
       ],
       "purpose": "deckent-mcp server: the protocol surface external agents use to drive Deckent over stdio.",
       "features": [
@@ -208,7 +210,8 @@
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/cli-human",
-        "src/surfaces/core/config-window"
+        "src/surfaces/core/config-window",
+        "src/surfaces/core/terminal-onboarding"
       ],
       "purpose": "Interactive terminal (TUI) renderer: layout, input and paste handling for the Deckent terminal.",
       "features": [
@@ -260,12 +263,16 @@
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/terminal-delivery",
-        "src/surfaces/core/cli-human"
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/terminal-onboarding",
+        "src/surfaces/core/terminal-hub",
+        "src/surfaces/core/siwc"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [
         "useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext, createElement",
-        "ReactElement, ReactNode types"
+        "ReactElement, ReactNode types",
+        "lazy, Suspense for deferred terminal windows"
       ],
       "criticality": "P1",
       "alternatives": [
@@ -299,7 +306,9 @@
         "src/adapters",
         "src/composition",
         "src/surfaces/core/cli-terminal",
-        "src/surfaces/core/mcp"
+        "src/surfaces/core/mcp",
+        "src/surfaces/core/hub-mcp",
+        "src/adapters/core/terminal-history"
       ],
       "purpose": "Contract language: runtime schemas for domain records, config, ledger rows, provider wire shapes and MCP tool input.",
       "features": [
@@ -352,7 +361,8 @@
       "owners": [
         "src/surfaces/core/mcp",
         "src/engine/core/config",
-        "src/capabilities/core/run-planner"
+        "src/capabilities/core/run-planner",
+        "src/surfaces/core/hub-mcp"
       ],
       "purpose": "Converts existing Zod schemas to JSON Schema (draft-07) for MCP tools/list, config descriptions and the governed Brain proposal prompt; no separately maintained proposal schema.",
       "features": [

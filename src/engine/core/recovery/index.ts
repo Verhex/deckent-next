@@ -8,3 +8,9 @@ export type { RecoveryAudit, RecoveryContinuationWrite, RecoveryStore, RecoveryT
 export { RECOVERY_DECISION_ROLE, recoveryDecisionPrincipal, recoveryDecisionRegistry, recoveryModelReference, recoveryModelRows } from './internal/models.js';
 export { recoveryGrantState, recoveryModeState } from './internal/mode.js';
 export type { RecoveryConfigMode, RecoveryContinuation, RecoveryGrantState, RecoveryModeState } from './internal/mode.js';
+export { readRecoveryRollout, readRecoveryRolloutRecords, recoveryModelDecided, recoveryReportAccepted } from './internal/rollout.js';
+export type { RecoveryRolloutPorts } from './internal/rollout.js';
+export { RecoveryReviewApplication } from './internal/review.js';
+export type { RecoveryReviewItem, RecoveryReviewPorts, RecoveryVerdictOutcome } from './internal/review.js';
+export { RecoveryPolicyCard, recoveryPolicyCommandSchema } from './internal/policy-card.js';
+export type { RecoveryPolicyCommand, RecoveryPolicyPorts, RecoveryPolicyRow, RecoveryPolicyView } from './internal/policy-card.js';

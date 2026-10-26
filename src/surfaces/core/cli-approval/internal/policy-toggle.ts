@@ -11,7 +11,7 @@ type Ask = CardAsk;
 /** Plain on/off words (owner: "kapalı / açık"); a partial or conflicting state says so instead of guessing. */
 const onOff = (state: 'allowed' | 'denied' | 'partial', locale: Locale) => state === 'allowed' ? t('cli.policy.on', {}, locale) : state === 'partial' ? t('cli.policy.partial', {}, locale) : t('cli.policy.off', {}, locale);
 /** The preview card's title: what is switched, and which way. */
-export const toggleTitle = (action: 'grant' | 'revoke', what: string, locale: Locale) => action === 'grant' ? t('cli.policy.toggle.turnOn', { what }, locale) : t('cli.policy.toggle.turnOff', { what }, locale);
+export const toggleTitle = (action: 'grant' | 'revoke' | 'narrow', what: string, locale: Locale) => action === 'narrow' ? t('policy.mcp.narrow', {}, locale) : action === 'grant' ? t('cli.policy.toggle.turnOn', { what }, locale) : t('cli.policy.toggle.turnOff', { what }, locale);
 const applyOptions = (locale: Locale) => [{ id: APPLY, label: t('cli.policy.toggle.apply', {}, locale), key: 'y' }, { id: NO, label: t('cli.policy.toggle.no', {}, locale), key: 'n' }];
 
 /**
@@ -38,12 +38,15 @@ export function mcpTable(view: McpCapabilityView, locale: Locale, style: ReturnT
     view.groups.map(state => [state.group.id, words.label(state.group.labelKey, state.group.id), state.managed === 'conflict' ? t('cli.policy.conflict', {}, locale) : onOff(state.effective, locale)]), style);
 }
 
-async function toggleScope(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, command: string, ask: Ask): Promise<ScopeResolution | null> {
+export async function toggleScope(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, command: string, ask: Ask): Promise<ScopeResolution | null> {
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const configured = ((await loadConfig(root, options)).terminal as { scopeId?: unknown } | undefined)?.scopeId;
-  // A policy change is a change: a person picks the scope (the configured one preselected), it is never a silent default.
-  return resolveCommandScope({ command, locale, explicit, configured: typeof configured === 'string' ? configured : undefined, mutating: true, interactive: true,
-    listScopes: scopeLister(context, root, options), pick: ask });
+  const listScopes = scopeLister(context, root, options);
+  const scopes = !explicit && typeof configured !== 'string' ? await listScopes() : null;
+  if (scopes?.length === 1) return { scopeId: scopes[0]!, source: 'default' };
+  // This phase only reads. The eventual change has its own scope-bound, governed preview card.
+  return resolveCommandScope({ command, locale, explicit, configured: typeof configured === 'string' ? configured : undefined, mutating: false, interactive: true,
+    listScopes: scopes ? async () => scopes : listScopes, pick: ask });
 }
 
 /**
@@ -82,7 +85,7 @@ export async function toggleMcp(context: ApprovalCommandContext, locale: Locale,
   const picked = await ask({ title: t('cli.policy.toggle.groupTitle', { scope: scope.scopeId }, locale), options: [...view.groups.filter(state => state.managed !== 'conflict').map(state => ({
     id: state.group.id, label: `${words.label(state.group.labelKey, state.group.id)} · ${onOff(state.effective, locale)}` })), { id: LEAVE, label: t('cli.policy.toggle.leave', {}, locale), key: 'q' }] });
   const state: McpCapabilityState | undefined = view.groups.find(entry => entry.group.id === picked); if (!state) return;
-  const action = state.managed === 'granted' ? 'revoke' : 'grant', selection = { action, scopeId: scope.scopeId, groupId: state.group.id } as const;
+  const action = state.managed === 'wider-earlier' ? 'narrow' : state.managed === 'granted' ? 'revoke' : 'grant', selection = { action, scopeId: scope.scopeId, groupId: state.group.id } as const;
   const preview = await host.changeMcpCapabilities(root, { ...selection, mode: 'preview' }, options);
   if (preview.status !== 'preview' || preview.missing.length) { print([words.result[preview.missing.length ? 'refused' : preview.status], ...mcpCapabilityPreviewLines(preview, locale)].join('\n')); return; }
   const answer = await ask({ title: toggleTitle(action, words.label(state.group.labelKey, state.group.id), locale),

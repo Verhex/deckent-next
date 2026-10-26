@@ -98,9 +98,11 @@ describe('registry and phases (versioned Core data, provisional)', () => {
     expect(MEMORY_ROLLOUT.phases.filter(row => row.criteria.length).map(row => row.phase)).toEqual([3, 4]);
     expect(MEMORY_INJECTION_CORPUS.items.length).toBeGreaterThanOrEqual(30);
   });
-  it('the phase is the highest switch set and the next is the first not set; only a change that newly sets phase 3 or 4 is gated (a step back never is)', () => {
+  it('the phase is the consecutive prefix and the next is the first missing switch; only a change that newly sets phase 3 or 4 is gated (a step back never is)', () => {
     const off = { extraction: 'off', verification: 'off', context: 'off' } as const;
     expect(memoryRolloutView(off, {})).toMatchObject({ phase: null, next: { phase: 0, criteria: [] } });
+    expect(memoryRolloutView({ ...off, verification: 'shadow' }, {})).toMatchObject({ phase: null, next: { phase: 0 } });
+    expect(memoryRolloutView({ extraction: 'on', verification: 'off', context: 'on' }, {})).toMatchObject({ phase: 0, next: { phase: 1 }, liveUnmet: [3] });
     expect(memoryRolloutView(ALL_ON, {})).toMatchObject({ phase: 2, next: { phase: 3, met: false }, liveUnmet: [] });
     expect(memoryRolloutView({ ...ALL_ON, context: 'on' }, {})).toMatchObject({ phase: 3, next: { phase: 4 }, liveUnmet: [3] });
     expect(memoryRolloutGated(ALL_ON, { ...ALL_ON, context: 'on' })).toEqual([3]);

@@ -1,3 +1,5 @@
+import { hubToolDefinitions } from './hub-tools.js';
+import type { HubOperationHandler } from '#engine/index.js';
 import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList } from '#engine/index.js';
 import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { runProposalSchema, type RunProposal } from '#domain/index.js';
@@ -5,19 +7,21 @@ import { brainPlanCommandSchema, type BrainPlanCommand } from '#domain/index.js'
 import { runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { AuditError, providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult } from '#engine/index.js';
-import { monitorQuerySchema, type MonitorQuery, type MonitorSnapshot } from '#engine/index.js';
+import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
+import { rootObjectSchema } from './input-schema.js';
+import { mcpMonitorQuerySchema, monitorCollectionQuery, projectMonitorForMcp } from './monitor-page.js';
 import { isMcpWithheldTool } from './tool-inventory.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendExactAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult, ModelCatalogInspection, ModelCatalogResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
 import { attemptIdentitySchema, modelConnectCommandSchema, modelReferenceSchema, type ModelConnectCommand, type ModelConnectResult, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
-import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
+import { Server, type Tool, type CallToolResult, type RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, queryErrorClientParams, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
@@ -33,6 +37,7 @@ import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, sk
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
+  executeHub?: HubOperationHandler;
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
   listTargetQueue?(query: QueueList): Promise<unknown>;
   verifyAudit?(query: AuditVerifyQuery): Promise<AuditVerification>;
@@ -113,7 +118,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   // idempotent: true only when engine/adapter code proves a commandId-keyed (or identity-keyed) durable
   // replay returns the prior result without a second effect; evidence is file:line-cited per tool in
   // proof/D03-MCP-IDEMPOTENT-2026-09-27/review.md. No default — every entry states it explicitly.
-  const definitions: { readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; modelDelivery?: boolean; boundedDelivery?: boolean; invoke(input: unknown, delivery?: ModelInvocationDelivery | RuntimeServiceDelivery): Promise<unknown> }[] = [
+  const definitions: { readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; modelDelivery?: boolean; boundedDelivery?: boolean; invoke(input: unknown, delivery?: ModelInvocationDelivery | RuntimeServiceDelivery, signal?: AbortSignal): Promise<unknown> }[] = [
     { readOnly: true, destructive: false, idempotent: true, name: 'inspect_run', description: t('mcp.tool.inspectRun', {}, locale), schema: runQuerySchema,
       invoke: (input: unknown) => applications.inspectRun(runQuerySchema.parse(input)) },
     { readOnly: true, destructive: false, idempotent: true, name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
@@ -121,6 +126,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, idempotent: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  definitions.push(...hubToolDefinitions(applications.executeHub, locale));
   if (applications.inspectTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_delivery_queue', description: t('mcp.tool.inspectTargetQueue', {}, locale), schema: queueQuerySchema,
     invoke: input => applications.inspectTargetQueue!(queueQuerySchema.parse(input)) });
   if (applications.listTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'list_delivery_queue', description: t('mcp.tool.listTargetQueue', {}, locale), schema: queueListSchema,
@@ -132,8 +138,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const renewApproval = applications.renewApproval;
   const inspectMonitor = applications.inspectMonitor;
   if (inspectMonitor) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_monitor',
-    description: t('mcp.tool.inspectMonitor', {}, locale), schema: monitorQuerySchema,
-    invoke: input => inspectMonitor.call(applications, monitorQuerySchema.parse(input)) });
+    description: t('mcp.tool.inspectMonitor', {}, locale), schema: mcpMonitorQuerySchema,
+    invoke: async input => { const query = mcpMonitorQuerySchema.parse(input); return projectMonitorForMcp(await inspectMonitor.call(applications, monitorCollectionQuery(query)), query); } });
   const inspectDecision = applications.inspectDecision;
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
@@ -338,47 +344,54 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   // The SDK's Node default validator is its bundled ajv + fast-uri, which the published package replaces with a throwing stub (FASTURI-OUT);
   // Deckent's own validator is the only JSON Schema validator it ships (MCP-SCHEMA-VALIDATOR; no server path validates today, form elicitation would).
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new DeckentJsonSchemaValidator() }); let active = 0;
-  const failure = (code: string, note?: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code, ...(note ? { note } : {}) }) }] });
+  const coded = (body: Record<string, unknown>): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, ...body }) }] });
+  // Ek A: the localized catalog message rides with the code, like the CLI (installation language; DeckentError text through its own localizer,
+  // redacted; a zod or unexpected failure gets catalog text only, never its own message). An answer that would not fit drops back to the code.
+  const failure = (id: RequestId, code: string, extra: { note?: string; error?: DeckentError; message?: string } = {}): CallToolResult => {
+    const message = extra.message ?? (extra.error ? extra.error.localize?.(locale).message ?? extra.error.message : ErrorRegistry.get(code, locale)?.message);
+    const full = coded({ code, ...(extra.note ? { note: extra.note } : {}), ...(message ? { message: redactSensitive(message) } : {}) });
+    return toolResultFits(id, full, limits.responseMaxBytes) ? full : coded({ code });
+  };
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: await Promise.all(definitions.map(async tool => ({ name: tool.name, ...(tool.description ? { description: tool.description } : {}),
     // MCP requires an object root even when a native command is an object-only discriminated union.
-    inputSchema: await projectModelIngressSchema({ ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' },
+    inputSchema: await projectModelIngressSchema(rootObjectSchema({ ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' }),
       notice => applications.recordModelIngress ? applications.recordModelIngress(notice, {}) : Promise.reject(new AuditError('AUDIT_UNAVAILABLE'))) as Tool['inputSchema'],
     annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: tool.idempotent, openWorldHint: tool.openWorld ?? false },
   }))) }));
   server.setRequestHandler('tools/call', async (request, context) => {
-    const tool = definitions.find(value => value.name === request.params.name);
-    if (!tool) return failure('MCP_TOOL_UNKNOWN');
-    if (active >= limits.maxConcurrentCalls) return failure('MCP_BUSY');
+    const tool = definitions.find(value => value.name === request.params.name), id = context.mcpReq.id;
+    // The same answer for every unknown name (an unadvertised tool such as decide_approval is indistinguishable); the name is never echoed.
+    if (!tool) return failure(id, 'MCP_TOOL_UNKNOWN', { message: t('mcp.error.toolUnknown', {}, locale) });
+    if (active >= limits.maxConcurrentCalls) return failure(id, 'MCP_BUSY');
     active++;
     try {
       const args = request.params.arguments ?? {};
       const ingress = await checkModelIngressArguments(args, notice => applications.recordModelIngress
         ? applications.recordModelIngress(notice, args) : Promise.reject(new AuditError('AUDIT_UNAVAILABLE')));
-      if (!ingress.ok) { const refused = failure('MCP_INPUT_INVALID', ingress.text);
-        return toolResultFits(context.mcpReq.id, refused, limits.responseMaxBytes) ? refused : failure('MCP_INPUT_INVALID'); }
+      if (!ingress.ok) return failure(id, 'MCP_INPUT_INVALID', { note: ingress.text });
       let delivery: ModelInvocationDelivery | RuntimeServiceDelivery | undefined;
       if (tool.modelDelivery) delivery = modelToolDelivery(context.mcpReq.id, limits.responseMaxBytes);
       else if (tool.boundedDelivery) {
         const bounded = boundedToolDelivery(context.mcpReq.id, limits.responseMaxBytes);
-        if (!bounded) return failure('MCP_RESPONSE_LIMIT');
+        if (!bounded) return failure(id, 'MCP_RESPONSE_LIMIT');
         delivery = bounded;
       }
-      const result = jsonToolResult(await tool.invoke(args, delivery));
+      const result = jsonToolResult(await tool.invoke(args, delivery, context.mcpReq.signal));
       if (!toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes)) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
-        ? invocationLimit('MCP_RESPONSE_LIMIT') : failure('MCP_RESPONSE_LIMIT');
+        ? invocationLimit('MCP_RESPONSE_LIMIT') : failure(id, 'MCP_RESPONSE_LIMIT');
       return result;
     } catch (error) {
       if (error instanceof DeckentError && error.code === 'MODEL_INVOCATION_RESULT_LIMIT') return invocationLimit(error.code);
-      if (tool.boundedDelivery && error instanceof DeckentError && error.code === 'RUNTIME_SERVICE_RESPONSE_LIMIT') return failure('MCP_RESPONSE_LIMIT');
-      if (tool.name === 'audit_provider_spending' && error instanceof DeckentError && error.code === 'PROVIDER_SPEND_RESULT_LIMIT') return failure(error.code);
+      if (tool.boundedDelivery && error instanceof DeckentError && error.code === 'RUNTIME_SERVICE_RESPONSE_LIMIT') return failure(id, 'MCP_RESPONSE_LIMIT');
+      if (tool.name === 'audit_provider_spending' && error instanceof DeckentError && error.code === 'PROVIDER_SPEND_RESULT_LIMIT') return failure(id, error.code, { error });
       if (error instanceof DeckentError && error.code === 'QUERY_UNEXPECTED_FAILURE') {
-        const params = queryErrorClientParams(error);
-        const result = completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code: error.code, ...(params ? { params } : {}) }) }] });
-        return toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes) ? result : failure('MCP_RESPONSE_LIMIT');
+        const params = queryErrorClientParams(error), message = redactSensitive(error.localize?.(locale).message ?? error.message);
+        const result = coded({ code: error.code, ...(params ? { params } : {}), message });
+        return toolResultFits(id, result, limits.responseMaxBytes) ? result : failure(id, 'MCP_RESPONSE_LIMIT');
       }
-      return failure(error instanceof DeckentError ? error.code : error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED');
+      return error instanceof DeckentError ? failure(id, error.code, { error }) : failure(id, error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED');
     }
     finally { active--; }
   });

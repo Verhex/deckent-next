@@ -38,7 +38,8 @@ function fixture() {
     let json = null; try { json = JSON.parse(result.stdout); } catch { /* asserted by callers */ }
     return { status: result.status, json, stderr: result.stderr, stdout: result.stdout };
   };
-  const cli = (...args) => spawnSync(process.execPath, [join(repo, '.agents/refactor/next-entry.mjs'), 'cli', ...args], { cwd: base, env, encoding: 'utf8', timeout: 30_000 });
+  // U7 (Q-U7 = A): next-entry starts the product in the caller's folder, so the fixture's person calls it from the project.
+  const cli = (...args) => spawnSync(process.execPath, [join(repo, '.agents/refactor/next-entry.mjs'), 'cli', ...args], { cwd: repo, env, encoding: 'utf8', timeout: 30_000 });
   const describe = () => { const r = cli('runtime', 'describe', '--json'); return r.status === 0 ? JSON.parse(r.stdout) : null; };
   const ledger = join(data, 'state/ledger.db');
   const cleanup = () => {
@@ -163,7 +164,7 @@ releaseTest('stage refuses a mismatched packaged origin and a stale cached ident
 });
 
 async function startFromLauncher(f) {
-  const child = spawn(process.execPath, [join(f.repo, '.agents/refactor/next-entry.mjs'), 'cli', 'runtime', 'serve', '--json'], { cwd: f.base, env: f.env, detached: true, stdio: 'ignore' });
+  const child = spawn(process.execPath, [join(f.repo, '.agents/refactor/next-entry.mjs'), 'cli', 'runtime', 'serve', '--json'], { cwd: f.repo, env: f.env, detached: true, stdio: 'ignore' });
   child.unref();
   for (let i = 0; i < 100; i++) { const d = f.describe(); if (d) return d; await sleep(100); }
   throw new Error('fake service did not start');
@@ -277,7 +278,7 @@ releaseTest('a process started before a switch keeps loading its own version dir
   const f = fixture(); t.after(f.cleanup);
   const ids = ['one', 'two'].map(label => f.tool('stage', f.fake.commit(label)).json.id);
   assert.equal(f.tool('switch', ids[0]).status, 0);
-  const client = spawn(process.execPath, [join(f.repo, '.agents/refactor/next-entry.mjs'), 'mcp'], { cwd: f.base, env: f.env, stdio: 'ignore' });
+  const client = spawn(process.execPath, [join(f.repo, '.agents/refactor/next-entry.mjs'), 'mcp'], { cwd: f.repo, env: f.env, stdio: 'ignore' });
   let pid = null;
   for (let i = 0; i < 100 && !pid; i++) { await sleep(100); pid = readdirSync(join(f.repo, '.deckent')).find(name => name.startsWith('client-'))?.slice(7, -6); }
   assert.ok(pid, 'client started');

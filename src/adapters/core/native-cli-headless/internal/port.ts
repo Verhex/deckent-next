@@ -1,3 +1,4 @@
+import { headlessEgressReasons } from '#domain/index.js';
 import { realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, splitModelInvocationDelta, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
@@ -16,7 +17,7 @@ type Prepared = Readonly<{ profile: ModelInvocationProfile; definition: NativeCl
   effortArgs: readonly string[] }>;
 type Quota = Record<string, { utilizationPermille: number; resetsAtMs: number | null }>;
 type Refusal = Readonly<{ reason: ModelInvocationRejectionReason; status: number | null; body: HeadlessRejectionBody }>;
-const reject = (reason: ModelInvocationRejectionReason, body: Omit<HeadlessRejectionBody, 'schemaVersion'>, status: number | null = null): Refusal =>
+const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extract<HeadlessRejectionBody, { schemaVersion: 1 }>, 'schemaVersion'>, status: number | null = null): Refusal =>
   Object.freeze({ reason, status, body: { schemaVersion: 1 as const, ...body } });
 const list = (value: unknown) => Array.isArray(value) ? value : null;
 const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -57,7 +58,7 @@ function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared:
   const reported = line.modelUsage?.[prepared.model] ?? {};
   return Object.freeze({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: prepared.model, choices: [{ index: 0, message: { role: 'assistant', content: line.result ?? '' },
     finish_reason: line.stopReason !== null && prepared.entry.headless.guards.lengthStopReasons.includes(line.stopReason) ? 'length' : 'stop' }],
-  headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason, egress } },
+  headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason, egress: { ...egress, ...headlessEgressReasons(egress) } } },
   usage: { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output, total_tokens: input + cacheRead + cacheWrite + output, cache_read: cacheRead, cache_write: cacheWrite,
     modelUsage: { [prepared.model]: { inputTokens: count(reported.inputTokens), outputTokens: count(reported.outputTokens), cacheReadInputTokens: count(reported.cacheReadInputTokens),
       cacheCreationInputTokens: count(reported.cacheCreationInputTokens) } }, quota } });

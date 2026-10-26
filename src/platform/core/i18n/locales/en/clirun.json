@@ -31,7 +31,7 @@
   "cli.run.inspect.model": "  Attempt {attempt}: {line}",
   "cli.run.lifecycle.result": "Run {run} | revision {revision} | state: {state} | reason: {reason}",
   "cli.run.lifecycle.outcome": "  Outcome: {outcome}",
-  "cli.run.lifecycle.deadline": "  Waiting since {since}; deadline {deadline} (epoch ms)",
+  "cli.run.lifecycle.deadline": "Waiting since: {since} | deadline: {deadline}",
   "cli.run.lifecycle.reason": "  Reason: {reason}",
   "cli.run.lifecycle.note": "  Hold: {note}",
   "cli.run.list.stateReason": "{state} ({reason})",
@@ -104,5 +104,10 @@
   "cli.run.inventory.col.output": "Output",
   "cli.run.inventory.see": "Runs and their state: deckent run list · live workers (this installation and other configured sources): deckent workers list",
   "cli.run.inventory.limitHint": "At most {max} per page; use --limit {max}.",
-  "cli.run.control.holdDetail": "While it is held no new task starts; work already running continues and is not stopped. deckent run resume lifts the hold."
+  "cli.run.control.holdDetail": "While it is held no new task starts; work already running continues and is not stopped. deckent run resume lifts the hold.",
+  "cli.do.command": "Command id: {command}",
+  "cli.run.inspect.status": "State: {state}",
+  "cli.run.report.channelHeading": "Usage by channel (this Run)",
+  "cli.run.report.channelColumns": "Channel|Attempts|Measured API (USD)|API unmeasured|Measured subscription calls",
+  "cli.run.report.channelEvidence": "Visible attempts only; measured tariff cost is not provider billing. Missing subscription counts stay unknown. No billing period or reset is inferred."
 }

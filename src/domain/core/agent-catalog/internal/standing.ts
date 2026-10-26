@@ -47,12 +47,12 @@ export function standingAgentsChanged(recorded: readonly RecordedTaskAgent[] | u
 /**
  * The standings a new agent revision opens with, one per bound WorkClass: `candidate`, except that a person-authored revision inherits `active` for
  * a WorkClass the previous revision also binds and holds `active` (owner Q-S6 alternative), and only when its skill set is unchanged or every added or
- * changed skill is the person's own local text (`importChanged` false). An AI-authored revision always starts `candidate`. Nothing is read from a
+ * changed skill is the person's own local text (`importChanged` false). An AI-authored local revision starts `candidate`; a Hub client may carry a verified same-key person publisher update. Nothing is read from a
  * `redesign-required` or `retired` row; the previous revision's rows stay as they are.
  */
 export function initialAgentStandings(next: AgentDefinition, previous: { readonly definition: AgentDefinition; readonly standings: readonly AgentStanding[] } | null,
-  importChanged: boolean): AgentStanding[] {
-  const inherits = previous !== null && !next.provenance.author.ai && (next.skillSetDigest === previous.definition.skillSetDigest || !importChanged);
+  importChanged: boolean, verifiedPublisherUpdate = false): AgentStanding[] {
+  const inherits = previous !== null && (!next.provenance.author.ai || verifiedPublisherUpdate) && (next.skillSetDigest === previous.definition.skillSetDigest || !importChanged);
   return next.content.workClasses.map(workClass => {
     const from = inherits && previous.definition.content.workClasses.includes(workClass) && previous.standings.some(row => row.workClass === workClass
       && row.revision === previous.definition.revision && row.standing === 'active') ? previous.definition.revision : undefined;

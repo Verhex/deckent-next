@@ -316,7 +316,7 @@ turn keeps the mode it was admitted with, as a queued `/mode` does). The `--full
 The installation owner opens or closes full-auto/full-access with `deckent init policy --scope <id> --modes <list>|none` under the installer's custody
 (file owner, terminal witness, y/N card on the previewed revision, conditional archived write, `authority-change` audit with `commandId` prefix
 `installer-permission-modes-v1-`). Managed rules `installer-permission-mode-<mode>` name one person in one scope; the plan and result are the effective
-decision per mode, so a rule it does not manage stays and is named. The first-run template stays v13 (no mode open by default). Closing a mode keeps the
+decision per mode, so a rule it does not manage stays and is named. The first-run template is v16 (no mode open by default). Closing a mode keeps the
 person's stored full-auto entry in bindings, but every call re-checks the grant, so it is not in effect.
 
 ## PRE-8 project key vault (alpha.51)
@@ -325,5 +325,18 @@ Main vault = the installation store. Project vault = encrypted-file store under 
 project's anchor (a linked worktree's main working tree), bound to the anchor's data root and git common dir. `.deck` (references only) selects `project`
 per name; a main key is used in a project only with a grant decided on `secret`/`set` and sealed as `authority-decision` before `grants.json`. One resolver
 serves every provider read; one inventory serves `secret list [--all]`. The terminal turn checks the provider credential locally before binding;
-`SECRET_GRANT_REQUIRED` on a solo attested terminal opens one approval-priority card; yes = `secret grant` (source card); the turn restarts once. An agent
-shell's authority commands are the edit-authority floor in every mode. Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).
+`SECRET_GRANT_REQUIRED` on a solo attested terminal opens one approval-priority card; yes = `secret grant` (source card); the turn restarts once. A recognised agent-shell
+authority call keeps the edit-authority card in every mode; the text/argv classifier is defense in depth, so `false` never means safe — the boundary is
+semantic policy/approval for the principal plus enforced sandbox/socket custody (host fallback does not isolate; a TTY witness does not prove a person on the same OS account). Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).
+
+## U5A own-mode opening (alpha.56 candidate)
+
+The CLI host offers the attested authority-file owner one y/N question when `--full-access`, `/mode full-auto|full-access`, or Shift+Tab
+reaches a closed mode. The mode picker can select a closed mode only when the CLI host binds this opening port; SDK/MCP have no new operation.
+The existing PRE-9 writer previews and applies exactly that revision after confirmation, preserving other managed mode grants. Denial,
+cancellation and revision conflict write nothing. Full access then belongs to this session; full-auto uses the existing stored-mode setter.
+The question states W3-SANDBOX: without a sandbox full-access shell calls are refused. Opening a mode does not create a sandbox or relax a hard floor.
+
+MCP group catalog schema v2 uses `availability: default|opt-in`; the reader maps v1 `proposed: true` to opt-in. Views hide opt-in groups unless
+a managed group rule is already held (including partial/conflicting rules) or protected config `policy.mcp.optInGroups` names the group.
+Group cells, group versions and managed rule ids remain unchanged. Listing is not a policy change; an unambiguous read scope needs no change card.

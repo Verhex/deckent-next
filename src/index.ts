@@ -57,6 +57,8 @@ export { previewSuppliedInstallation as previewInstallation } from '#composition
 export { inspectSuppliedInstallation as inspectInstallation } from '#composition/index.js';
 export { applySuppliedInstallation as applyInstallation, resumeInstallation } from '#composition/index.js';
 export type { InstallationApplyChoices } from '#composition/index.js';
+export { previewConfiguredUninstall as previewUninstall, applyConfiguredUninstall as applyUninstall } from '#composition/index.js';
+export type { UninstallPlan, UninstallResult, UninstallInteraction } from '#engine/index.js';
 export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from '#engine/index.js';
 export type { InstallationProfile, InstallationPreview, InstallationEvidencePreview } from '#engine/index.js';
 export { inspectDeclaredModels } from '#composition/index.js';
@@ -121,8 +123,8 @@ export type { BackupCommand, BackupResult } from '#engine/index.js';
 
 export { proposeConfiguredRun as proposeRun, inspectConfiguredRunProposal as inspectRunProposal } from '#composition/index.js';
 export type { RunProposal } from '#domain/index.js';
-export type { RunProposalQuery, RunProposalResult, RunProposalRecord } from '#engine/index.js';
-export { planConfiguredRun as planRun } from '#composition/index.js';
+export type { RunProposalQuery, RunProposalResult, RunProposalRecord, RunIntentRecord, RunIntentResult, RunPlanningResult, SetupIntentFact } from '#engine/index.js';
+export { startConfiguredRunIntent as startRunIntent, transitionConfiguredRunIntent as transitionRunIntent, planConfiguredRun as planRun } from '#composition/index.js';
 export type { BrainPlanCommand, BrainContribution } from '#domain/index.js';
 
 export { releaseConfiguredQuota as releaseQuota } from '#composition/index.js';
@@ -132,3 +134,6 @@ export { inspectConfiguredPolicyAdministration as inspectPolicyAdministration } 
 export type { PolicyAdministrationQuery, PolicyAdministrationStatus } from '#engine/index.js';
 
 export type { DelegationQuery, DecisionDelegationView } from '#domain/index.js';
+
+export { executeConfiguredHub as executeHub } from '#composition/index.js';
+export type { HubOperation, HubOperationName, HubOperationHandler } from '#engine/index.js';

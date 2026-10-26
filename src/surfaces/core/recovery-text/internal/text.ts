@@ -15,7 +15,8 @@ const recoveryReason = (code: RecoveryEscalationCode, l: Locale): string => ({
   'human-chosen': () => t('recovery.hold.recovery.human-chosen', {}, l), 'continuation-not-approved': () => t('recovery.hold.recovery.continuation-not-approved', {}, l),
   'no-eligible-model': () => t('recovery.hold.recovery.no-eligible-model', {}, l), 'consent-required': () => t('recovery.hold.recovery.consent-required', {}, l),
   'model-failed': () => t('recovery.hold.recovery.model-failed', {}, l), 'answer-invalid': () => t('recovery.hold.recovery.answer-invalid', {}, l),
-  'breaker-open': () => t('recovery.hold.recovery.breaker-open', {}, l),
+  'breaker-open': () => t('recovery.hold.recovery.breaker-open', {}, l), 'work-class-not-low-risk': () => t('recovery.hold.recovery.work-class-not-low-risk', {}, l),
+  'isolation-unproven': () => t('recovery.hold.recovery.isolation-unproven', {}, l),
 } satisfies Record<RecoveryEscalationCode, () => string>)[code]();
 const nervousReason = (code: NervousHoldCode, l: Locale): string => ({
   'not-lost': () => t('recovery.hold.nervous.not-lost', {}, l), 'not-granted': () => t('recovery.hold.nervous.not-granted', {}, l),
@@ -62,4 +63,9 @@ const effectText = (continuation: RecoveryContinuation, l: Locale): string => ({
 export function recoveryStateLines(state: RecoveryModeState, locale: Locale): readonly [string, string] {
   return [t('recovery.state.line', { nervous: modeWord(state.nervous, locale), recovery: modeWord(state.recovery, locale), grant: grantWord(state.grant, locale) }, locale),
     effectText(state.continuation, locale)];
+}
+/** alpha.56 G4: the rollout counts in one line (doctor, monitor): measured rules ready, blind-reviewed agreement and decisions waiting for a person. */
+export function recoveryRolloutSummary(counts: Readonly<{ rulesMet: number; rules: number; decided: number; agreements: number; waiting: number; complete: boolean }>, locale: Locale): string {
+  return t('recovery.rollout.summary', { met: counts.rulesMet, rules: counts.rules, agreements: counts.agreements, decided: counts.decided, waiting: counts.waiting }, locale)
+    + (counts.complete ? '' : ` ${t('recovery.rollout.incomplete', {}, locale)}`);
 }

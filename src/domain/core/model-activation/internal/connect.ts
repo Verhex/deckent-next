@@ -25,7 +25,9 @@ export const modelConnectCommandSchema = z.object({
   /** The address, only where the kind takes one (a chosen list row or a validated new address); null = the kind's own. */
   endpoint: z.string().min(1).max(2048).nullable().default(null),
   /** An exact API id from the kind's seed or freshly read endpoint list, or a previously declared exact catalog reference. */
-  model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict()]),
+  model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict(), z.object({ pull: z.literal('available') }).strict()]),
+  subscription: z.object({ newAccount: z.boolean().optional(), connectionId: z.string().uuid().optional(), apiContinuation: modelReferenceSchema.nullable().optional() }).strict().readonly().optional(),
+  workspaceId: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u).optional(),
   /** S3-3, a CLI kind only (additive): the absolute executable and login directory (absent: the first in PATH; s3c the Brain's own login dir). */
   cli: z.object({ executable: absolutePath.optional(), configDir: absolutePath.optional() }).strict().readonly().optional(),
   /** S3-3 delegated-use consent (owner Q-H3), written only by the person: who besides them may spend the login. Absent keeps it; [] withdraws it. */
@@ -38,6 +40,7 @@ export type ModelConnectResult = Readonly<{
   schemaVersion: 1; operation: typeof MODEL_CONNECT_OPERATION_ID; commandId: string; scopeId: string; connection: string;
   status: 'connected' | 'approval-pending';
   reference: z.infer<typeof modelReferenceSchema>;
+  models?: readonly Readonly<{ nativeId: string; reference?: z.infer<typeof modelReferenceSchema>; state: 'connected' | 'unpriced' | 'notOnKey' | 'notInCatalog'; code?: string }>[];
   /** The secret NAME the profile reads (`credentialRef`), never a value; null = no key is sent (a keyless or plain-http local server). */
   credentialRef: string | null;
   /** Whether that name is in the secret store now (null: the store was not listed). */
@@ -52,6 +55,9 @@ export type ModelConnectResult = Readonly<{
   carriedModels: readonly z.infer<typeof modelReferenceSchema>[];
   /** `published`: the profile carries the vendor's published tariff; `unmetered`: the adapter takes only a zero-rate tariff, spend is not metered. */
   tariff: 'published' | 'unmetered';
+  /** İ-12 (owner 2026-10-25), a connected `published` model only (additive): whether the scope has a budget for its priced turns — `present`, `missing`
+   * (Budget: 0 USD; priced turns stay refused until the person sets one) or `unknown` (not readable for this caller, with the typed code). */
+  budget?: Readonly<{ state: 'present' | 'missing' | 'unknown'; code?: string }>;
   /** S3-3, a CLI kind only: the connected login directory (s3c `owned`: the Brain's own) and who besides the person may spend it (empty: nobody). */
   cli?: Readonly<{ configDir: string; owned?: boolean; delegate: readonly ('ai' | 'system')[] }>;
   /** The pending approval that stopped the run (the same command continues after it is allowed). */
@@ -59,3 +65,14 @@ export type ModelConnectResult = Readonly<{
   /** The running service against the configuration on disk (restart-apply sections): `stale` = restart to apply; null = not asked. */
   service: 'current' | 'stale' | 'unknown' | 'stopped' | null;
 }>;
+
+/** Personal subscription lifecycle, composed by the connection adapter; never an authentication credential. */
+export type SubscriptionConnectionRequest = Readonly<{ scopeId: string; operation: 'prepare' | 'connect' | 'login' | 'logout' | 'usage';
+  newAccount?: boolean; connectionId?: string; delegate?: readonly ('ai' | 'system')[]; apiContinuation?: z.infer<typeof modelReferenceSchema> | null }>;
+export type SubscriptionConnectionResult = Readonly<{ connectionId?: string; state?: string; planUse?: boolean; remoteRevocation?: string;
+  usageUrl?: string;
+  usage?: Readonly<{ state: 'complete' | 'unavailable'; completedRequests: number | null; busiestDayRequests: number | null; activeDays: number | null; days: number }>;
+  email?: string | null; models?: ModelConnectResult; apiTargets?: readonly Readonly<{ id: string; reference: z.infer<typeof modelReferenceSchema> }>[] }>;
+
+export type SubscriptionConnectionInspection = Readonly<{ reference: z.infer<typeof modelReferenceSchema>; connection: string;
+  state: string; planUse: boolean; generation?: number; remoteRevocation?: string; code?: string; reason?: string }>;

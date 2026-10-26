@@ -1,5 +1,5 @@
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -17,6 +17,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   // C-DOCTOR: `terminal status|chat-plan|snapshot` get their human text and single errors first; the terminal itself is unchanged (K1–K8).
   terminal: async (argv, context) => (await observe()).terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),
   init: lazyFunction(() => import('#surfaces/core/cli-installation/index.js'), 'initCommand'), monitor: lazyFunction(() => import('#surfaces/core/monitor/index.js'), 'monitorCommand'),
+  uninstall: lazyFunction(() => import('#surfaces/core/cli-installation/index.js'), 'uninstallCommand'),
   workers: lazyFunction(observe, 'workersCommand'), run: runCommand, task: lazyFunction(() => import('#surfaces/core/cli-task/index.js'), 'taskCommand'),
   do: lazyFunction(cliRun, 'doCommand'),
   report: lazyFunction(cliRun, 'reportCommand'),
@@ -27,8 +28,10 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   inventory: lazyFunction(cliRun, 'inventoryCommand'), paths: runKernelCommand, runtime: lazyFunction(admin, 'runtimeCommand'), coding: lazyFunction(admin, 'codingCommand'),
   inference: lazyFunction(models, 'inferenceCommand'), operation: lazyFunction(admin, 'operationCommand'), decide: lazyFunction(() => import('#surfaces/core/cli-decision/index.js'), 'decisionCommand'),
   memory: lazyFunction(() => import('#surfaces/core/cli-memory/index.js'), 'memoryCommand'),
+  recovery: lazyFunction(approval, 'recoveryCommand'),
+  hub: lazyFunction(() => import('#surfaces/core/cli-hub/index.js'), 'hubCommand'),
   agents: lazyFunction(() => import('#surfaces/core/cli-agents/index.js'), 'agentsCommand'),
-  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || argv[1] === 'recovery' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
@@ -40,7 +43,7 @@ export function dispatch(argv: readonly string[], locale?: Locale): { readonly o
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
-      dirty: build.sourceDirty ? t('cli.version.dirty', {}, l) : '', source: build.sourceCommonDir ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }, l) : '';
+      dirty: build.sourceDirty ? t('cli.version.dirty', {}, l) : '', source: build.sourceCommonDir && isSourceCheckout() ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }, l) : '';
     return { output: t('cli.version', common, l) + line, code: 0 };
   }
   return { output: t('cli.unknownCommand', { ...common, command }, l), code: 2 };
@@ -61,21 +64,24 @@ function interactiveTerminal(context: CommandContext): boolean {
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2), context: CommandContext = {}): Promise<ExitCode> {
+  // R34: `--lang <locale>` is a global option (top help); before the command word it means the same as after it.
+  if (argv[0] === '--lang' && argv[1] !== undefined && !argv[1].startsWith('-')) argv = [...argv.slice(2), '--lang', argv[1]];
+  const words = argv.at(-2) === '--lang' ? argv.slice(0, -2) : argv;
   // L-KIT: the host resolved the call's locale once (config language included), so an error before a command reports its own locale
   // renders in the same language as its heading.
   let locale = context.locale ?? resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
-    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
+    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams);
     if (help) {
       locale = help.locale; context.onLocale?.(locale);
       emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
       return 0;
     }
     const terminalFlags = argv[0] === '--scope';
-    const interactive = terminalFlags || (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    const interactive = terminalFlags || (words.length === 0 && interactiveTerminal(context)) || (words.length === 1 && words[0] === '--full-access');
     // `--version`, an unknown command and piped bare `deckent` need no host (COLDSTART): the host's operations load only for a command or the terminal.
-    if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(argv, locale, context);
+    if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(words, locale, context);
     if (context.loadHost) context = { ...context, ...(await context.loadHost()) };
     context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
@@ -89,7 +95,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).
     if (interactive) {
-      const launch = async () => (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      const launch = async (selected = context) => (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...selected, onLocale: value => { locale = value; context.onLocale?.(value); } });
       // I-S5 (owner D8): bare `deckent` with no scope in a folder with no installation offers the guided setup to a person on a terminal.
       await launch().catch(async (error: unknown) => {
         if (argv.length !== 0 || (error as { code?: unknown } | null)?.code !== 'TERMINAL_SCOPE_REQUIRED') throw error;
@@ -103,9 +109,17 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       if (node.status === 'unsupported') emit(t('doctor.nodeUnsupported.init', { version: node.version, floor: node.floor ?? NODE_ENGINE_RANGE }, locale), { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
-    if (command) return (await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
-    return emitDispatch(argv, locale, context);
+    if (command) {
+      locale = context.locale ?? resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
+        await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }).catch(() => undefined));
+      return (await command.run(argv, { ...context, locale, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
+    }
+    return emitDispatch(words, locale, context);
   } catch (error) {
-    return reportFatal(error, { ...context, argv, json: argv.includes('--json'), locale });
+    // Echo only registered command words, never an invalid argument or its potentially sensitive value.
+    const path = CLI_COMMANDS.filter(item => item.path.every((part, index) => argv[index] === part)).sort((a, b) => b.path.length - a.path.length)[0]?.path;
+    const diagnostic = error instanceof DeckentError && error.code === 'CLI_USAGE' && !error.params?.['command'] && path
+      ? ErrorRegistry.createError('CLI_USAGE', { locale, params: { ...error.params, command: `${PACKAGE_NAME} ${path.join(' ')}` } }) : error;
+    return reportFatal(diagnostic, { ...context, argv, json: argv.includes('--json'), locale });
   }
 }

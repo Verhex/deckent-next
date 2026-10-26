@@ -1,8 +1,9 @@
-import type { RunProposalResult } from '#engine/index.js';
+import { isRunIntentResult, type RunPlanningResult, type RunIntentResult, type RunProposalResult } from '#engine/index.js';
 import { advisoryProposalPermissions, deriveProposalPermissions } from '#domain/index.js';
 import { currencyAmountText, terminalSafeText, redactForRecord, t, ErrorRegistry, type Locale } from '#platform/index.js';
 const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => terminalSafeText(rows.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ')) || '-';
-export function brainProposalLines(result: RunProposalResult, locale: Locale): readonly string[] {
+export function brainProposalLines(result: RunPlanningResult, locale: Locale): readonly string[] {
+  if (isRunIntentResult(result)) return runIntentLines(result, locale);
   const record = result.proposal, proposal = record.proposal, unrecognised = result.unrecognisedPermissions ?? [];
   // Unrecognised entries get their own advisory line (accept_mark, owner 2026-10-18); every entry appears once.
   const marked = new Set(unrecognised.map(row => JSON.stringify(row))), advisory = advisoryProposalPermissions(proposal.requiredPermissions, proposal.graph).filter(row => !marked.has(JSON.stringify(row)));
@@ -56,4 +57,13 @@ export function planningSpendingLines(result: RunProposalResult, locale: Locale)
     class: classes[spending?.class ?? 'unknown'],
     cost: spending?.amountMinorUnits != null && spending.currency ? `≈${currencyAmountText(spending.amountMinorUnits, spending.currency, locale)}` : unknown,
     evidence: evidence[spending?.evidence ?? 'unknown'] }, locale)];
+}
+
+/** Intent states never masquerade as a planned graph, a Run, a grant or a settled unknown start. */
+export function runIntentLines(result: RunIntentResult, locale: Locale): readonly string[] {
+  const intent = result.intent, states = { parked: t('onboarding.parked.status.parked', {}, locale), released: t('onboarding.parked.status.released', {}, locale),
+    starting: t('onboarding.parked.status.starting', {}, locale), cancelled: t('onboarding.parked.status.cancelled', {}, locale) };
+  return [t('onboarding.parked.state', { state: states[intent.status], command: intent.command.commandId }, locale),
+    ...(intent.status === 'cancelled' ? [t('onboarding.parked.cancelled', {}, locale)] : intent.status === 'released'
+      ? [t('onboarding.parked.released', {}, locale)] : [ErrorRegistry.createError(intent.fact.reason, { locale, params: intent.fact.params }).message])];
 }

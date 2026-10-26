@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream';
 import { ErrorRegistry, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { detectCliMode } from './mode.js';
+import { lendHeldInput } from './input-hold.js';
 
 /** One answer of a CLI card; `key` is the single letter that answers at once (`y`, `s`, `a`, `n`). */
 export type CliCardOption = Readonly<{ id: string; label: string; key?: string }>;
@@ -45,7 +46,11 @@ export async function askCliCard(request: CliCardRequest, io: CliCardIo): Promis
   const view = await import('./card-view.js');
   // A cancellation that landed while the view loaded fired no event the view could hear (Astra 2661 P2): never draw or wait then.
   if (io.signal?.aborted) return null;
-  return view.mountCliCard(request, { stdin: stdin as NodeJS.ReadStream, stdout: stdout as NodeJS.WriteStream, env, locale: io.locale,
-    ...(io.signal ? { signal: io.signal } : {}), ...(io.known ? { known: io.known } : {}), hints: t('cli.human.card.hints', {}, io.locale) });
+  // A flow that holds the terminal between its cards (init) lends the input to this card and takes it back when the card closes.
+  const giveBack = lendHeldInput(stdin);
+  try {
+    return await view.mountCliCard(request, { stdin: stdin as NodeJS.ReadStream, stdout: stdout as NodeJS.WriteStream, env, locale: io.locale,
+      ...(io.signal ? { signal: io.signal } : {}), ...(io.known ? { known: io.known } : {}), hints: t('cli.human.card.hints', {}, io.locale) });
+  } finally { giveBack(); }
 }
 // Scope picker for resolveCommandScope: `pick: request => askCliCard(request, io)`.

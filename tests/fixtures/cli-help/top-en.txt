@@ -37,6 +37,10 @@ Observe:
       [--scope <id>] [--json]
 
 Execute work:
+  hub         Manage signed Hub packages and sources.
+      sources list|add|remove | search | inspect | install | update |
+      uninstall | verify | export | refresh | cards | publish | yank | revoke
+      [--scope <id>] [--input <file|->]
   do          Plan an intent through Brain and existing approval gates
       --request <text> [--scope <id>]
   run         Create and manage Runs
@@ -62,7 +66,7 @@ Models:
   models      Inspect and manage models
       binding | activation | activate | deactivate | invoke | invocation |
       purge-content | cancel | spending | reconcile-spending | create-budget |
-      revise-budget | audit-spending | connect | login |
+      revise-budget | audit-spending | connect | login | logout |
       catalog list|register|activate|deactivate | roles show|set
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
@@ -70,12 +74,17 @@ Approvals:
   approval    Inspect and decide approval requests (without an action: list)
       list | inspect | decide | renew
       [--scope <id>] [--input <file|->]
+  recovery    Lost-worker recovery: rollout progress and your blind review
+      review
+      [--scope <id>] [--json]
   policy      Inspect policy and standing grants (without an action: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | mcp list|grant|revoke | scopes
+      revoke | upgrade | recovery | mcp list|grant|revoke|narrow | scopes
       [--scope <id>]
 
 Setup / Maintenance:
+  uninstall   Preview or uninstall one installation; keep data by default.
+      [--purge] [--dry-run] [--json]
   audit       Verify audit history and checkpoint evidence
               (without an action: verify)
       verify | rebaseline

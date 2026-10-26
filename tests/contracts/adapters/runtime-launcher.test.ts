@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { launchDetachedRuntimeService } from '#adapters/index.js';
+import { launchDetachedRuntimeService, appendRuntimeProviderDiagnostic } from '#adapters/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -58,4 +58,15 @@ it('Windows detached launch refuses before log creation or process launch (nativ
       .rejects.toMatchObject({ code: 'RUNTIME_LAUNCH_UNSUPPORTED' });
     await expect(stat(join(root, 'log'))).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { Object.defineProperty(process, 'platform', original); }
+});
+
+it.skipIf(process.platform === 'win32')('records only closed provider diagnostics and refuses unsafe log custody', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-provider-log-')); roots.push(root); const path = join(root, 'service.log');
+  const event = { op: 'model-discovery', code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', cause: 'credential-rejected', status: 401 };
+  await appendRuntimeProviderDiagnostic(path, { ...event, key: 'sk-private-canary', url: 'https://example/?key=private' });
+  expect(await readFile(path, 'utf8')).toBe(JSON.stringify(event) + '\n');
+  await expect(appendRuntimeProviderDiagnostic(path, { ...event, cause: 'sk-private-canary' })).rejects.toThrow();
+  const link = join(root, 'link'); await symlink(path, link);
+  await expect(appendRuntimeProviderDiagnostic(link, event)).rejects.toThrow();
+  expect(await readFile(path, 'utf8')).toBe(JSON.stringify(event) + '\n');
 });

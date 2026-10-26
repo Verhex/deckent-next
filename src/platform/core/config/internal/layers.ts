@@ -1,3 +1,4 @@
+import { assertNoUninstallHold } from './uninstall-hold.js';
 import { bindConfigKnownSecrets } from './redaction-context.js';
 import { lstat } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
@@ -42,6 +43,8 @@ export interface ConfigLoadOptions {
   readonly pendingBootstrap?: BootstrapPendingAdmission;
   /** Astra 2471 R1: only the backup restore that completes an interrupted restore passes `admit`; every other reader refuses the hold. */
   readonly restoreHold?: RestoreHoldAdmission;
+  /** Trusted uninstall recovery only, with healing disabled. Every other configured admission honors the durable fence. */
+  readonly uninstallHold?: 'admit';
 }
 /** Resolved configs and effective validators are read-only; freeze once, including children of already-frozen layout objects. */
 function freezeResolved(value: unknown, seen = new WeakSet<object>()): void {
@@ -66,7 +69,11 @@ export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 
     options.onWarning?.({ code: 'CONFIG_GLOBAL_CORRUPT', path, message: t('config.globalCorrupt', {}, resolveLocale(undefined, options.env)) });
     return null;
   }
-  return versionedConfig(result.value, options.onWarning, resolveLocale(undefined, options.env));
+  try { return versionedConfig(result.value, options.onWarning, resolveLocale(undefined, options.env)); }
+  catch (error) {
+    if (error instanceof ConfigValidationError) throw new ConfigValidationError(error.issues, resolveLocale(undefined, options.env), Object.fromEntries(error.issues.map(issue => [issue.path, path])));
+    throw error;
+  }
 }
 /** Presentation-only projection through the same layer readers. No provider registration, secrets, healing or locks.
  * Absent language stays absent so the caller can use the system locale; this is not execution config validation. */
@@ -97,6 +104,8 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const admission = options.pendingBootstrap === 'config-settled' && options.heal === false ? 'config-settled' : 'none', hold = options.restoreHold ?? 'refuse';
   const bootstrap = options.globalOnly ? undefined : await inspectInstallationBootstrap(root, admission, hold);
   const globalPath = await resolveGlobalConfigReadPath(env, platform);
+  const checkHold = async (dataRoot: string) => { if (options.uninstallHold !== 'admit' || options.heal !== false) await assertNoUninstallHold(dataRoot); };
+  await checkHold(dirname(globalPath));
   const layout = resolveProductLayout({ projectRoot: root, platform: platform === 'win32' ? 'win32' : 'posix' });
   const projectPath = productResourcePath(layout, 'config');
   const paths = options.globalOnly ? [globalPath] : [globalPath, projectPath];
@@ -108,6 +117,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     for (const section of configSections().values()) section.options.validateEffective?.(cached.value, env);
     cached.warnings.forEach(w => options.onWarning?.(w));
     if (bootstrap) await assertInstallationBootstrap(root, bootstrap, admission, hold);
+    await checkHold(cached.value.productLayout.root);
     return cached.value; }
   const warnings: ConfigWarning[] = [];
   const global = await loadGlobalConfig({ env, platform, onWarning: w => warnings.push(w) }) ?? {};
@@ -129,7 +139,13 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const layered = mergeConfigLayers(global, normalizedProject);
   const effective = applyConfigEnvironment(layered, env);
   const locale: Locale = resolveLocale(undefined, env, effective.language);
-  const checked = validateConfig(effective, locale);
+  let checked;
+  try { checked = validateConfig(effective, locale); }
+  catch (error) {
+    if (error instanceof ConfigValidationError) throw new ConfigValidationError(error.issues, locale, Object.fromEntries(error.issues.map(issue => [issue.path,
+      Object.hasOwn(normalizedProject, issue.path.split('.')[0]!) ? projectPath : Object.hasOwn(global, issue.path.split('.')[0]!) ? globalPath : projectPath])));
+    throw error;
+  }
   warnings.push(...checked.warnings);
   const recommended = getSystemProfile().recommendedMaxWorkers;
   if (typeof effective.max_workers === 'number' && effective.max_workers > recommended) warnings.push({ code: 'CONFIG_WORKER_PRESSURE', path: 'max_workers', message: t('config.workers', { workers: effective.max_workers, recommended }, locale) });
@@ -145,6 +161,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     if (error instanceof LayoutError) throw new ConfigValidationError([{ path: 'layout', reason: error.code }], locale);
     throw error;
   }
+  await checkHold(productLayout.root);
   const value: ResolvedConfig = { ...secrets.config, projectRoot: root, productLayout, secretPaths: secrets.secretPaths };
   bindConfigKnownSecrets(value, secrets.knownSecrets);
   freezeResolved(value);

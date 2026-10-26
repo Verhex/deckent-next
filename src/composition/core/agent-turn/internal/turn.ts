@@ -4,14 +4,14 @@ export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
+import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, SESSION_STATE_TOOL_SPEC, agentSessionSnapshot, agentSessionStateText, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, MESSAGE_REGISTRY, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, sha256, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellSandboxLayout, sealedRootEntryRefused, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalResponseStyle, effectiveTerminalOutputCap, readTerminalScratchConfig,
-  readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
+  SIWC_INFERENCE, readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
@@ -19,7 +19,7 @@ import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createMcpProposals } from './mcp-propose.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
-import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
+import { invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -200,13 +200,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
-        let result: Awaited<ReturnType<typeof invokePeerConfiguredModel>>;
+        let result: Awaited<ReturnType<typeof invokePeerConfiguredFeatureModel>>;
         try {
           // The round's result stays inside the service (bounded by the profile's response limit); no transport delivery applies.
-          result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, delta => {
+          result = await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, delta => {
             if (delta.kind === 'text') shownText += delta.text; else shownReasoning += delta.text;
             onDelta(delta);
-          }, roundSignal);
+          }, roundSignal, async text => { channel.emit({ kind: 'text', text }); await channel.drained(); }); // Host notice bypasses the provider-prefix accumulator and model history.
         } catch (error) {
           // The closure note names the typed failure (policy, activation, allocation, provider), never a raw cause.
           return { status: 'failed', state: roundSignal.aborted ? 'cancelled' : queryFailure(error).code };
@@ -215,6 +215,16 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (!outcome) return { status: 'failed', state: 'pending' };
         if (outcome.state !== 'responded') {
           const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
+          if (evidence?.adapter.id === SIWC_INFERENCE.adapter.id) {
+            const inspected = await inspectPeerConfiguredModelInvocation(projectRoot, { schemaVersion: 2, scopeId: command.scopeId,
+              invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, peer, options).catch(() => null);
+            const content = inspected?.responseContent;
+            const body = content?.kind === 'response-body' ? readSubscriptionRejection({ adapter: evidence.adapter, body: { data: content.data } }, new Set([SIWC_INFERENCE.adapter.id])) : null;
+            if (body?.refusal === 'quota') return { status: 'failed', state: t('siwc.usage.limit', {}, language) };
+            if (body?.refusal === 'usage-unavailable') return { status: 'failed', state: t('siwc.usageUnavailable', {}, language) };
+            if (body?.refusal === 'service-unavailable') return { status: 'failed', state: t('siwc.serviceUnavailable', {}, language) };
+            if (body?.refusal === 'plan-unavailable') return { status: 'failed', state: t('siwc.notEligible', {}, language) };
+          }
           if (evidence?.adapter.id === 'openai-chat-http' && (evidence.httpStatus === 400 || evidence.httpStatus === 429)) {
             const diagnosis = providerRequestDiagnosis(profile);
             if (evidence.httpStatus === 429) {
@@ -317,13 +327,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: agentCompactionInstruction(language) },
             { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
           ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
-        const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
+        const result = await invokePeerConfiguredFeatureModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
         if (result?.receipt.outcome?.state !== 'responded') return null;
         return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result)) ?? 'unreadable';
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);
-        const counted = await measurePeerConfiguredModel(projectRoot, invocation, peer, options, measureSignal).catch(() => null);
+        const counted = await measurePeerConfiguredModel(projectRoot, invocation, peer, options, measureSignal, 'feature').catch(() => null);
         const windows = [profileWindow, counted?.windowTokens ?? null].filter((value): value is number => value !== null);
         const windowTokens = windows.length ? Math.min(...windows) : null;
         if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };
@@ -354,7 +364,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
     // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery.
     const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, delivery.maxResultBytes - 1024)) ? answer : null;
-    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(mcpNotices, result.note), rounds: result.rounds,
+    const policyRecorded = await flushPolicy?.(); flushPolicy = null;
+    const notices = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), ...mcpNotices] : mcpNotices;
+    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(notices, result.note), rounds: result.rounds,
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
     /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();

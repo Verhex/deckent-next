@@ -8,9 +8,11 @@ const lines = (...extra) => ['# version <id> | <date> | base <image> | supersede
   '# version r2-20260922 | 2026-09-22 | base node:24-trixie-slim | supersedes r1-20260921 | second',
   '# version r1-20260921 | 2026-09-21 | base node:24-trixie-slim | supersedes none | first', 'FROM x'].join('\n');
 
-test('the shipped Dockerfile history agrees with the shipped recipe identity', async () => {
-  const r = validateRecipe(JSON.parse(await readFile(new URL('../../assets/worker-image/recipe.json', import.meta.url), 'utf8')));
-  const history = parseVersionHistory(await readFile(new URL('../../assets/worker-image/Dockerfile', import.meta.url), 'utf8'), r);
+const shipped = async () => JSON.parse(await readFile(new URL('../../assets/worker-image/recipe.json', import.meta.url), 'utf8'));
+// Recipe schema 3 (alpha.56 U6-S1): the history lives in history.log (no Dockerfile is shipped) and the base image under base.image.
+test('the shipped version history agrees with the shipped recipe identity', async () => {
+  const r = validateRecipe(await shipped());
+  const history = parseVersionHistory(await readFile(new URL('../../assets/worker-image/history.log', import.meta.url), 'utf8'), r);
   assert.equal(history[0].id, r.imageVersion); assert.equal(history[0].supersedes, r.previousVersion ?? 'none');
   assert.equal(history.at(-1).supersedes, 'none');
 });
@@ -25,16 +27,19 @@ test('history parsing: template line ignored, newest first, chain must resolve t
   assert.throws(() => parseVersionHistory('# version broken line\nFROM x', recipe()), /WORKER_HISTORY_LINE/);
 });
 
-test('recipe identity mismatches are refused before any Docker call', () => {
+test('recipe identity mismatches are refused before any Docker call', async () => {
   assert.throws(() => parseVersionHistory(lines(), { ...recipe(), imageVersion: 'r3-20260923' }), /WORKER_HISTORY_MISMATCH/);
   assert.throws(() => parseVersionHistory(lines(), { ...recipe(), previousVersion: null }), /WORKER_HISTORY_MISMATCH/);
   assert.throws(() => parseVersionHistory(lines(), { ...recipe(), baseImage: 'node:24-slim' }), /WORKER_HISTORY_MISMATCH/);
-  assert.throws(() => validateRecipe({ ...recipe(), schemaVersion: 1 }), /WORKER_RECIPE_INVALID/);
-  assert.throws(() => validateRecipe({ ...recipe(), imageVersion: 'v2' }), /WORKER_RECIPE_VERSION/);
-  assert.throws(() => validateRecipe({ ...recipe(), previousVersion: 'r2-20260922' }), /WORKER_RECIPE_PREVIOUS/);
-  assert.throws(() => validateRecipe({ ...recipe(), repository: 'Deckent/Worker' }), /WORKER_RECIPE_REPOSITORY/);
-  assert.throws(() => validateRecipe({ ...recipe(), baseImage: '--evil' }), /WORKER_RECIPE_INVALID/);
-  assert.equal(validateRecipe({ ...recipe(), previousVersion: null }).previousVersion, null);
+  const good = await shipped();
+  assert.throws(() => validateRecipe({ ...good, schemaVersion: 2 }), /WORKER_RECIPE_INVALID/);
+  assert.throws(() => validateRecipe({ ...good, repository: 'Deckent/Worker' }), /WORKER_RECIPE_REPOSITORY/);
+  assert.throws(() => validateRecipe({ ...good, baseRepository: good.repository }), /WORKER_RECIPE_REPOSITORY/);
+  assert.throws(() => validateRecipe({ ...good, base: { ...good.base, image: '--evil' } }), /WORKER_RECIPE_INVALID/);
+  assert.throws(() => validateRecipe({ ...good, providers: [...good.providers, good.providers[0]] }), /WORKER_RECIPE_INVALID/); // a duplicate provider id
+  const cursor = good.providers.find(provider => provider.installer.kind === 'vendor-script');
+  assert.throws(() => validateRecipe({ ...good, providers: [{ ...cursor, installer: { ...cursor.installer, url: 'http://cursor.com/install' } }] }), /WORKER_IMAGE_SOURCE_INSECURE/);
+  assert.equal(validateRecipe(good), good);
 });
 
 test('lineage: revision counters strictly decrease newest-first, so a second rN can never enter the history', () => {

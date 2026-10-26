@@ -1,13 +1,13 @@
 import { afterEach, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_DECISION_SEED, RECOVERY_POLICY_SEED, effectRecordSchema, freezeRecoveryPolicy, loadRecoveryPolicy, nervousPrincipalRef, recoveryPrincipal, recoveryPrincipalRef,
+import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_DECISION_SEED, RECOVERY_POLICY_SEED, effectRecordSchema, freezeRecoveryPolicy, loadRecoveryPolicy, mcpPrincipalRef, nervousPrincipalRef, recoveryPrincipal, recoveryPrincipalRef,
   type VerifiedPrincipal } from '#domain/index.js';
-import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, prepareTaskStart, recoveryContinuationApproval, recoveryDecisionCommandId,
+import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, RecoveryReviewApplication, prepareTaskStart, readRecoveryRollout, recoveryContinuationApproval, recoveryDecisionCommandId,
   type RecoveryModelRequest, type RecoveryModelResult, type RecoveryModelRow } from '#engine/index.js';
 import { openSqliteRecoveryStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { LEDGER_OPTIONS, effectIntent, lostIntegrity, owner, releasedLostTask, sealDetection } from '../support/lost-task.js';
+import { LEDGER_OPTIONS, effectIntent, grantedTask, lostIntegrity, owner, releasedLostTask, sealDetection } from '../support/lost-task.js';
 
 // S6R-5 (S6R-DESIGN §6, §7 step 5–6, §8, §9, §10, §11 phase 1; owner Q-R1/Q-R2/Q-R5, Q-H3): the recovery decision. Only after the deterministic gate passed
 // does the `recovery-decision` role model read the sealed evidence and choose ONE typed action; the decision is sealed before its apply, replays
@@ -17,16 +17,16 @@ afterEach(async () => {
   for (const close of closers.splice(0)) close(); for (const store of stores.splice(0)) store.close();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const live = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live'), shadow = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'shadow');
+const live = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live', ['task']), shadow = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'shadow', ['task']);
 const recovery = recoveryPrincipal(owner, ['s']);
 const standing = { schemaVersion: 1, revision: 'owner-policy', restrictions: [], grants: [
   { id: 'recovery-standing', effect: 'allow', actions: ['apply'], scopes: ['s'], principals: [{ issuer: owner.issuer, subject: owner.subject }], resource: { kind: 'recovery-action', ids: ['continue-new-attempt'] } }] };
 const metered: RecoveryModelRow = { channelId: 'channel-a', modelId: 'model-a', invocable: true, billing: 'metered', consent: null };
 type Answer = Record<string, unknown> | ((request: RecoveryModelRequest) => RecoveryModelResult);
 
-async function harness(input: { policy?: unknown; rows?: readonly RecoveryModelRow[]; answer?: Answer; document?: unknown; registry?: unknown } = {}) {
-  const f = await releasedLostTask(roots, stores, input.policy === undefined ? live : input.policy);
-  const caseId = await sealDetection(f.path, f.identity);
+async function harness(input: { policy?: unknown; rows?: readonly RecoveryModelRow[]; answer?: Answer; document?: unknown; registry?: unknown; wouldStop?: boolean } = {}) {
+  const f = await (input.wouldStop ? grantedTask : releasedLostTask)(roots, stores, input.policy === undefined ? live : input.policy);
+  const caseId = await sealDetection(f.path, f.identity, undefined, undefined, input.wouldStop ? 'shadow-only' : 'execute');
   const cases = openSqliteRecoveryStore(f.path, LEDGER_OPTIONS); closers.push(() => cases.close());
   const audit = await openSqliteAuditStore(f.path, LEDGER_OPTIONS); closers.push(() => audit.close());
   const state = { document: input.document === undefined ? standing as unknown : input.document, principal: recovery as VerifiedPrincipal, answer: input.answer ?? {} as Answer,
@@ -35,7 +35,7 @@ async function harness(input: { policy?: unknown; rows?: readonly RecoveryModelR
   const ledger = new AuditApplication(audit, lostIntegrity), verifier = { async verify() { return state.principal; } };
   const approval = async (scopeId: string) => recoveryContinuationApproval(state.document, owner, scopeId, 30);
   const app = new RecoveryApplication({ store: cases, detections: ledger, recorder: target => new AuditApplication(target, lostIntegrity), approval,
-    hold: async command => { holds.push(command); return null; }, policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
+    hold: async command => { holds.push(command); return null; }, isolation: async () => ({ schemaVersion: 1, network: 'none', egress: { kind: 'none' } }), policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
   const make = () => new RecoveryDecisionApplication({ recovery: { prepare: (...args) => app.prepare(...args), escalate: (...args) => app.escalate(...args),
     assess: async (...args) => { if (state.crashAssess) { state.crashAssess = false; throw new Error('CRASH_BEFORE_ASSESS'); } return app.assess(...args); },
     continueLostTask: async (...args) => { if (state.crash) { state.crash = false; throw new Error('CRASH_AFTER_SEAL'); } return app.continueLostTask(...args); } },
@@ -162,7 +162,7 @@ it('shadow-decide (phase 1): a Run frozen in shadow seals what would happen and 
   expect(await decide(h, 'live')).toMatchObject({ kind: 'shadow', action: 'continue-new-attempt' });
   expect(h.calls).toHaveLength(1);
   expect(h.calls[0]!.commandId).not.toBe(recoveryDecisionCommandId(h.caseId, JSON.parse(h.calls[0]!.messages[1]!.content).evidenceDigest, 'live'));
-  expect(h.sealed()).toEqual([expect.objectContaining({ mode: 'shadow', action: 'continue-new-attempt', standingRef: 'recovery-standing' })]);
+  expect(h.sealed()).toEqual([expect.objectContaining({ mode: 'shadow', action: 'continue-new-attempt', standingRef: null })]);
   expect(h.cases()).toEqual([]); expect(h.holds).toEqual([]); expect(await h.store.loadRun('s', 'run')).toEqual(before);
   expect(await decide(h, 'live')).toMatchObject({ kind: 'shadow', replay: true }); expect(h.calls).toHaveLength(1);
   // A live Run under a shadow config is shadow too (the stricter mode wins); a refused gate is sealed in shadow without a model call.
@@ -223,14 +223,16 @@ it('shadow → live: a case its model decided in shadow is not asked again; the 
   expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'continued', case: { state: 'applied', decision: { note: 'previous-attempt-launcher-died' } } });
   expect(h.calls).toHaveLength(1);
   const [shadowSeal, liveSeal] = h.sealed();
-  expect(shadowSeal).toMatchObject({ mode: 'shadow' }); expect(liveSeal).toMatchObject({ mode: 'live', basis: 'shadow', action: 'continue-new-attempt', model: shadowSeal.model });
+  expect(shadowSeal).toMatchObject({ mode: 'shadow', standingRef: null });
+  // The shadow seal names no grant: the adoption re-derives it now (lead decision, R-DESIGN §9).
+  expect(liveSeal).toMatchObject({ mode: 'live', basis: 'shadow', action: 'continue-new-attempt', model: shadowSeal.model, standingRef: 'recovery-standing' });
   expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'continued', replay: true }); expect(h.calls).toHaveLength(1);
 });
 
 it('shadow → live: a shadow seal without a model (a deterministic escalation, nothing spent) is decided afresh once the cause is gone', async () => {
-  const h = await harness({ document: { ...standing, grants: [] } });
-  expect(await decide(h, 'shadow')).toMatchObject({ kind: 'shadow', action: 'escalate-human', code: 'continuation-not-approved' }); expect(h.calls).toEqual([]);
-  h.state.document = standing;
+  const h = await harness({ rows: [] });
+  expect(await decide(h, 'shadow')).toMatchObject({ kind: 'shadow', action: 'escalate-human', code: 'no-eligible-model' }); expect(h.calls).toEqual([]);
+  h.state.rows = [metered];
   expect(await decide(h, 'live')).toMatchObject({ kind: 'continued' }); expect(h.calls).toHaveLength(1);
   expect(h.sealed().at(-1)).toMatchObject({ mode: 'live', action: 'continue-new-attempt' }); expect(h.sealed().at(-1)).not.toHaveProperty('basis');
 });
@@ -251,4 +253,55 @@ it('revoked grant between the sealed decision and its apply: the case ends escal
   expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'escalated', case: { state: 'escalated', decision: { code: 'continuation-not-approved' } } });
   expect(h.cases()).toEqual([{ state: 'escalated', revision: 2 }]); expect(h.holds).toHaveLength(1); expect(h.calls).toHaveLength(1);
   expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'escalated', replay: true }); expect(h.calls).toHaveLength(1);
+});
+
+it('alpha.56 G1: a would-stop case is decided in shadow only — the model is asked without the grant, the seal says would-stop, live never adopts or stores it; the breaker counts it', async () => {
+  const h = await harness({ wouldStop: true, document: { ...standing, grants: [] } }), before = await h.store.loadRun('s', 'run');
+  expect(await decide(h, 'live')).toMatchObject({ kind: 'shadow', action: 'continue-new-attempt', replay: false });
+  expect(h.calls).toHaveLength(1);
+  expect(JSON.parse(h.calls[0]!.messages[1]!.content).evidence.termination).toEqual({ kind: 'supervisor-exit', exitCode: null }); // what a live stop would yield
+  expect(h.sealed()).toEqual([expect.objectContaining({ mode: 'shadow', basis: 'would-stop', terminationReceiptId: null, standingRef: null, action: 'continue-new-attempt' })]);
+  expect(h.cases()).toEqual([]); expect(h.holds).toEqual([]); expect(await h.store.loadRun('s', 'run')).toEqual(before);
+  await expect(h.app.assess({ schemaVersion: 1, scopeId: 's', caseId: h.caseId })).rejects.toMatchObject({ code: 'RECOVERY_OFF' });
+  expect(await decide(h, 'live')).toMatchObject({ kind: 'shadow', replay: true }); expect(h.calls).toHaveLength(1);
+  // A shadow continuation adopted after the switch without a grant is sealed to a person, never applied on the shadow seal's null grant.
+  const adopted = await harness({ document: { ...standing, grants: [] } });
+  expect(await decide(adopted, 'shadow')).toMatchObject({ kind: 'shadow', action: 'continue-new-attempt' }); expect(adopted.calls).toHaveLength(1);
+  expect(await decide(adopted, 'live', adopted.make())).toMatchObject({ kind: 'escalated', case: { decision: { code: 'continuation-not-approved' } } });
+  expect(adopted.calls).toHaveLength(1);
+  // The breaker counts a would-stop shadow call like any other model call.
+  const counted = await harness({ registry: narrow });
+  await priorSeal(counted.path, 'recovery-decision:shadow:prior-would-stop', 35, { mode: 'shadow', basis: 'would-stop', terminationReceiptId: null });
+  expect(await decide(counted, 'live', counted.make())).toMatchObject({ kind: 'escalated', case: { decision: { code: 'breaker-open' } } }); expect(counted.calls).toEqual([]);
+});
+
+it('alpha.56 G4: the blind review lists a model-decided case without its choice, seals one verdict per case as a person, then reveals; AI is refused; the view counts it', async () => {
+  const h = await harness({ wouldStop: true });
+  await decide(h, 'shadow');
+  const audit = await openSqliteAuditStore(h.path, LEDGER_OPTIONS); closers.push(() => audit.close());
+  const ledger = new AuditApplication(audit, lostIntegrity), person = owner as VerifiedPrincipal, authorized: string[] = [];
+  const ports = { listRecentKind: (scopeId: string, kind: 'recovery-detection' | 'recovery-decision' | 'recovery-verdict', since: number, limit: number) => ledger.listRecentKind(scopeId, kind, since, limit),
+    loadRun: (scopeId: string, runId: string) => h.store.loadRun(scopeId, runId), load: (scopeId: string, eventId: string) => ledger.load(scopeId, eventId),
+    record: (event: unknown) => ledger.record(event), authorize: async (_principal: VerifiedPrincipal, scopeId: string) => { authorized.push(scopeId); },
+    interactive: async () => true, policyRevision: 'owner-policy', now: () => 50 };
+  const review = new RecoveryReviewApplication(ports);
+  const [item] = await review.pending({ schemaVersion: 1, scopeId: 's' }, person);
+  expect(item).toMatchObject({ caseId: h.caseId, decisionEventId: `recovery-decision:shadow:${h.caseId}`, rule: { id: 'launcher-dead-orphan', version: 1 }, wouldStop: true, attempts: 1 });
+  expect(JSON.stringify(item)).not.toMatch(/continue-new-attempt|escalate-human/u); // blind
+  const answer = { schemaVersion: 1, scopeId: 's', caseId: h.caseId, detection: 'lost', choice: 'escalate-human' };
+  await expect(review.answer(answer, { ...person, ...mcpPrincipalRef(person), assurance: 'workload-verified' } as VerifiedPrincipal)).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
+  await expect(new RecoveryReviewApplication({ ...ports, interactive: async () => false }).answer(answer, person)).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
+  expect(await review.answer(answer, person)).toEqual({ status: 'recorded', caseId: h.caseId, detection: 'lost', choice: 'escalate-human',
+    model: { action: 'continue-new-attempt', causeClass: 'infra-transient' }, agreed: false });
+  expect(await review.answer(answer, person)).toMatchObject({ status: 'current' });
+  await expect(review.answer({ ...answer, detection: 'not-lost', choice: null }, person)).rejects.toMatchObject({ code: 'RECOVERY_VERDICT_CONFLICT' });
+  expect(await review.pending({ schemaVersion: 1, scopeId: 's' }, person)).toEqual([]);
+  expect(authorized.length).toBeGreaterThan(0);
+  // The audit writer itself refuses a verdict from a workload (MCP) reference, whatever the caller.
+  expect(() => ledger.record({ schemaVersion: 1, eventId: 'recovery-verdict:forged', scopeId: 's', principal: mcpPrincipalRef(person), policyRevision: 'p', atMs: 1,
+    subject: { kind: 'recovery-verdict', caseId: 'f'.repeat(64), decisionEventId: 'x', evidenceDigest: 'f'.repeat(64), detection: 'not-lost', choice: null } })).toThrow('AUDIT_INVALID');
+  // The view measures the reviewed case from the sealed records only: one decided, no agreement.
+  const rollout = await readRecoveryRollout(ports, 's', [{ id: 'launcher-dead-orphan', version: 1 }]);
+  expect(rollout.rules).toEqual([expect.objectContaining({ id: 'launcher-dead-orphan', shadowCases: 1, falsePositives: 0 })]);
+  expect(rollout.decisions).toMatchObject({ decided: 1, agreements: 0, waiting: 0, met: false });
 });

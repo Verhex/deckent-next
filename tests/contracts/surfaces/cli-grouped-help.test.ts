@@ -1,8 +1,10 @@
+import { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
+import { hubOperationSchemas } from '#engine/index.js';
 
 it.each(['en', 'tr'] as const)('renders the detailed %s main help golden through main (owner 2026-10-19: 100–150 lines)', async language => {
   let output = ''; let errors = '';
@@ -44,6 +46,7 @@ it.each(['en', 'tr'] as const)('every registered command has side-effect-free %s
   for (const command of CLI_COMMANDS) {
     let output = ''; let initialized = false;
     const code = await main([...command.path, '--help', '--lang', language], {
+      helpParams: async key => key === 'cli.help.modelsConnect' ? { kinds: providerConnectHelpKinds() } : {},
       env: { DECKENT_LANG: language, NO_COLOR: '1' },
       initialize: () => { initialized = true; throw new Error('help initialized execution'); },
       stdout: { write: text => { output += text; } },
@@ -181,12 +184,15 @@ const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
   models: ['cli-models/internal/models.ts', 'cli-models/internal/model-catalog.ts', 'cli-models/internal/model-roles.ts'], approval: ['cli-approval/internal/approvals.ts'],
   identity: ['cli-identity/internal/command.ts', 'cli-identity/internal/distribution.ts'],
   policy: ['cli/internal/entry.ts', 'cli-approval/internal/policy-grants.ts', 'cli-approval/internal/policy-delegations.ts', 'cli-approval/internal/policy-mcp.ts', 'cli-observe/internal/policy-vocabulary.ts'],
+  recovery: ['cli-approval/internal/recovery.ts#recoveryCommand'],
   config: ['config/internal/command.ts'], mcp: ['cli/internal/mcp.ts#mcpCommand'], secret: ['cli-admin/internal/secret.ts'], toolchains: ['cli-admin/internal/toolchains.ts'],
   runtime: ['cli-admin/internal/runtime.ts'], coding: ['cli-admin/internal/coding.ts', 'cli-admin/internal/worker-instructions.ts'], inference: ['cli-models/internal/inference.ts'], operation: ['cli-admin/internal/operation.ts'],
 };
 /** Action words a handler source dispatches on: `argv[1]|action|verb === 'x'`, `[...].includes(argv[1]|action)` and an `ACTIONS` list.
  * `file#name` reads only that exported function (a file that also holds a terminal slash handler with its own verbs). */
 function handlerActions(family: string): Set<string> {
+  // The hub handler dispatches on the operation schema keys (`hub.sources.add`), not on literal comparisons.
+  if (family === 'hub') return new Set(Object.keys(hubOperationSchemas).flatMap(operation => operation.split('.').slice(1)));
   const words = new Set<string>();
   for (const entry of HANDLER_SOURCES[family]!) {
     const [file, only] = entry.split('#') as [string, string | undefined];
@@ -265,7 +271,7 @@ it.each(['en', 'tr'] as const)('names the missing argument for every family with
   // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
   // C-DOCTOR: bare `workers` reads the default scope (no `--scope` required by the catalog).
   const runnable = new Set([...Object.keys(READ_DEFAULTS), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
-    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'memory', 'agents', 'backup', 'toolchains']);
+    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'memory', 'agents', 'backup', 'toolchains', 'recovery', 'uninstall']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

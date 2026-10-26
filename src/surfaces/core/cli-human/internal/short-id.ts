@@ -29,6 +29,8 @@ export function requireIdPrefix(prefix: string, ids: readonly string[]): string 
 
 /** The id as a person sees it: the registry's display length, longer only when that is needed to tell it apart from the others. */
 export function displayId(id: string, ids: readonly string[], length: number = registry.shortId.display): string {
+  // Human/process names carry meaning; only generated hashes and UUIDs benefit from abbreviation.
+  if (!/^[0-9a-f-]{12,}$/iu.test(id)) return id;
   let size = Math.min(id.length, length);
   while (size < id.length && ids.some(other => other !== id && other.startsWith(id.slice(0, size)))) size++;
   return id.slice(0, size);

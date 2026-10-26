@@ -1,16 +1,16 @@
+import { randomUUID } from 'node:crypto';
+import { startWorkerImageAcquisition } from './acquire.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
-import { registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
+import { workerImageBudget, registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
 /** Typed event of one refresh: `started` when a build was admitted, then exactly one of `current` or `failed` (WORKER-AUTO-REFRESH). */
 export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
   imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>;
 export interface ToolchainRefreshObserver { onToolchainRefresh?(event: ToolchainRefreshEvent): void | Promise<void> }
-/** Grace added to the build timeout before an `updating` marker stops counting as in flight. */
-const MARKER_GRACE_MS = 60_000;
 const holdError = (code: string) => Object.assign(new Error(code), { code });
 const failureCode = (error: unknown) => (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : 'UNKNOWN').slice(0, 128);
 /** The durable refresh marker (null when none was ever written or it is unreadable). Admission, doctor and monitor read it; only the refresh writes it. */
@@ -61,7 +61,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   if (!refreshTriggerAllowed(policy, trigger) || !config.execution?.docker || dependencies.signal?.aborted) return Object.freeze({ outcome: 'skipped', event: null });
   const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const now = dependencies.now ?? (() => new Date().toISOString()); const startedAt = now();
-  const base = { schemaVersion: 1 as const, trigger, startedAt, expiresAt: new Date(Date.parse(startedAt) + policy.buildTimeoutMs + MARKER_GRACE_MS).toISOString() };
+  const base = { schemaVersion: 1 as const, trigger, startedAt, expiresAt: new Date(Date.parse(startedAt) + workerImageBudget(policy.buildTimeoutMs, config.toolchains.image.consents.at(-1)?.providers.length ?? 1)).toISOString() };
   const emit = async (phase: ToolchainRefreshEvent['phase'], extra: Partial<ToolchainRefreshEvent> = {}) => {
     const event: ToolchainRefreshEvent = Object.freeze({ schemaVersion: 1, event: 'toolchain-refresh', phase, trigger, imageVersion: null, imageId: null, appliedProfiles: 0, code: null, ...extra });
     try { await observer.onToolchainRefresh?.(event); } catch { /* an observer never settles or fails a refresh */ }
@@ -72,7 +72,8 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
     // Before any build: a registry a global layer contributes to is never revised automatically (see `registryLayerHold`); no image is built for it.
     if (registryLayerHold(await snapshotConfiguredConfig(projectRoot, options, 'project')) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw holdError('TOOLCHAIN_REGISTRY_LAYER_HOLD');
     // The `updating` marker (what admission and the surfaces read) exists only once a build is certain, never during the currency check itself.
-    result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, { ...dependencies, onBuild: async plan => {
+    result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, { ...dependencies, refreshExisting: true, onBuild: async (plan, expiresAt) => {
+      base.startedAt = now(); base.expiresAt = expiresAt ?? new Date(Date.parse(base.startedAt) + workerImageBudget(policy.buildTimeoutMs, plan.staleProviders.length)).toISOString();
       await writeState(home, { ...base, phase: 'updating', finishedAt: null, imageVersion: plan.next?.imageVersion ?? null, imageId: null, staleProviders: plan.staleProviders, appliedProfiles: 0, reason: null });
       await emit('started', { imageVersion: plan.next?.imageVersion ?? null }); await dependencies.onBuild?.(plan);
     } });
@@ -121,7 +122,8 @@ export interface ToolchainRefreshHandle { readonly done: Promise<void> }
 export function startToolchainRefresh(projectRoot: string, options: ConfigLoadOptions, observer: ToolchainRefreshObserver, signal: AbortSignal,
   dependencies: ToolchainRefreshDependencies = {}): ToolchainRefreshHandle {
   const run = (trigger: ToolchainRefreshTrigger) => refreshConfiguredToolchains(projectRoot, trigger, options, { ...dependencies, signal }, observer).catch(() => undefined);
-  const done = (async () => {
+  const acquisition = startWorkerImageAcquisition(projectRoot, options, signal, { instanceId: randomUUID(), ...(dependencies.runner ? { runner: dependencies.runner } : {}), ...(dependencies.packageRoot ? { packageRoot: dependencies.packageRoot } : {}) });
+  const refreshDone = (async () => {
     let intervalMs: number;
     try { intervalMs = refreshIntervalMs((await loadConfig(projectRoot, options)).toolchains.update); } catch { return; }
     if (!signal.aborted) await run('startup');
@@ -130,6 +132,7 @@ export function startToolchainRefresh(projectRoot: string, options: ConfigLoadOp
       if (!signal.aborted) await run('interval');
     }
   })();
+  const done = Promise.all([refreshDone, acquisition.done]).then(() => undefined);
   void done.catch(() => undefined);
   return Object.freeze({ done });
 }

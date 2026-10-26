@@ -1,4 +1,5 @@
 import type { Environment } from '#platform/index.js';
+import type { PersonalCustodyEvidence, PersonalCustodyOwner } from './personal.js';
 
 /**
  * SecretStore port v1 (SECRET-K1, keyring design option B). A backend keeps named secrets for one installation user; config holds only
@@ -66,6 +67,10 @@ export const isSecretValue = (value: unknown): value is string => typeof value =
  * outside: before publication the old store holds every value, after it the new one does.
  */
 export interface SecretCustody {
+  /** Optional trusted host proof, never config claims: local backing, exclusive personal control, OS identity bound to this
+   * principal/installation/company/scope, current store generation and completed cleanup. Called inside custody on every use.
+   * Missing or rejected proof forbids personal renewable credentials; encryption/mode/UID alone are insufficient. */
+  assertPersonal?: (store: SecretStoreDescriptor, owner: PersonalCustodyOwner) => Promise<PersonalCustodyEvidence>;
   exclusive<T>(work: () => Promise<T>): Promise<T>;
   /** The installation's selected store id, read now (an absent selection is the environment backend); called inside `exclusive`. */
   selected(): Promise<string>;

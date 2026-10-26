@@ -5,7 +5,7 @@ import { open, readFile, realpath, stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { installationBindingCaptureSchema } from '#domain/index.js';
 import { InstallationIdentityError, type InstallationBindingSource } from '#engine/index.js';
-import { getConfigFieldDefault, type ProductLayout } from '#platform/index.js';
+import { getConfigFieldDefault, type ProductLayout, callerEnvironment } from '#platform/index.js';
 
 type InstallationSettings = ReturnType<typeof getConfigFieldDefault<'installation'>>;
 /** The installation config subset the binding reads; omitted parts take the registry defaults. */
@@ -26,7 +26,7 @@ async function platformDigest(limits: ProbeLimits): Promise<string | null> {
       if (!/^[a-f0-9]{32}$/.test(value) || /^0+$/.test(value)) return null;
     } else if (process.platform === 'darwin') {
       const { stdout } = await promisify(execFile)('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'],
-        { timeout: limits.timeoutMs, maxBuffer: limits.outputBytes, encoding: 'utf8' });
+        { timeout: limits.timeoutMs, maxBuffer: limits.outputBytes, encoding: 'utf8', env: callerEnvironment(process.env) });
       const match = /"IOPlatformUUID"\s*=\s*"([a-f0-9-]{36})"/i.exec(stdout);
       if (!match || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(match[1]!) || /^0+$/.test(match[1]!.replaceAll('-', ''))) return null;
       value = match[1]!.toLowerCase();

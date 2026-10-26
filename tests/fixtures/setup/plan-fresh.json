@@ -1,29 +1,13 @@
 {
-  "schemaVersion": 1,
-  "planSchemaVersion": 1,
-  "planDigest": "13164cc87ba40f6ce806c217a49b7d09e6924a6dd44cf521cf25e6485434d88f",
-  "registryDigest": "46e34130c9004cd86c881235d7f9a65a9c73b826312fde65e1d57016b494d15e",
+  "schemaVersion": 2,
+  "planSchemaVersion": 2,
+  "planDigest": "99b8243a344cf3ce7176cc03c4dcfc160db655a664743d9cfe5e95d05faba172",
+  "registryDigest": "cb68a59111d08b0bd05df02a9d98d7a4200d723d2e648529a59c4035d23574d2",
   "stages": [
-    {
-      "id": "core:environment",
-      "namespace": "core",
-      "state": "done",
-      "title": "setup.stage.environment",
-      "reason": {
-        "code": "setup.reason.environmentReady",
-        "params": {
-          "platform": "linux"
-        }
-      },
-      "question": null,
-      "default": null,
-      "cli": null,
-      "operation": null,
-      "autoEligible": false
-    },
     {
       "id": "core:language",
       "namespace": "core",
+      "phase": "install",
       "state": "needs-answer",
       "title": "setup.stage.language",
       "reason": {
@@ -44,8 +28,27 @@
       "autoEligible": true
     },
     {
+      "id": "core:environment",
+      "namespace": "core",
+      "phase": "install",
+      "state": "done",
+      "title": "setup.stage.environment",
+      "reason": {
+        "code": "setup.reason.environmentReady",
+        "params": {
+          "platform": "linux"
+        }
+      },
+      "question": null,
+      "default": null,
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
       "id": "core:folder",
       "namespace": "core",
+      "phase": "install",
       "state": "needs-answer",
       "title": "setup.stage.folder",
       "reason": {
@@ -66,12 +69,13 @@
     {
       "id": "core:profile",
       "namespace": "core",
-      "state": "blocked",
+      "phase": "install",
+      "state": "ready",
       "title": "setup.stage.profile",
       "reason": {
-        "code": "setup.reason.waitsFor",
+        "code": "setup.reason.profileSavedAfterPolicy",
         "params": {
-          "stage": "core:folder"
+          "profile": "core:solo"
         }
       },
       "question": null,
@@ -86,6 +90,7 @@
     {
       "id": "core:policy",
       "namespace": "core",
+      "phase": "install",
       "state": "blocked",
       "title": "setup.stage.policy",
       "reason": {
@@ -103,6 +108,7 @@
     {
       "id": "core:sandbox",
       "namespace": "core",
+      "phase": "install",
       "state": "done",
       "title": "setup.stage.sandbox",
       "reason": {
@@ -118,40 +124,9 @@
       "autoEligible": false
     },
     {
-      "id": "core:model",
-      "namespace": "core",
-      "state": "blocked",
-      "title": "setup.stage.model",
-      "reason": {
-        "code": "setup.reason.waitsFor",
-        "params": {
-          "stage": "core:folder"
-        }
-      },
-      "question": null,
-      "default": null,
-      "cli": null,
-      "operation": null,
-      "autoEligible": false
-    },
-    {
-      "id": "instructions:bridges",
-      "namespace": "instructions",
-      "state": "blocked",
-      "title": "setup.instructions.title",
-      "reason": {
-        "code": "setup.instructions.waits",
-        "params": {}
-      },
-      "question": null,
-      "default": null,
-      "cli": null,
-      "operation": null,
-      "autoEligible": false
-    },
-    {
       "id": "core:final-check",
       "namespace": "core",
+      "phase": "install",
       "state": "ready",
       "title": "setup.stage.finalCheck",
       "reason": {
@@ -175,6 +150,11 @@
       "autoEligible": true
     }
   ],
+  "authority": {
+    "status": "unavailable",
+    "state": null,
+    "nextAction": null
+  },
   "apply": {
     "requested": false,
     "results": []

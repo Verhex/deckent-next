@@ -1,3 +1,5 @@
+import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
+import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
@@ -29,9 +31,6 @@ import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver
 import type { TerminalChatPlanView } from './terminal-chat.js';
 import { providerDisplayName } from './provider-label.js';
 
-type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
-interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; trustDigest?: string; language?: string; scopeId?: string }
-const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot', 'chat-plan'];
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
 const ADMISSION_DEFERRED = {
@@ -42,34 +41,6 @@ const ADMISSION_DEFERRED = {
 } as const;
 const UNADMITTED_CUSTODY_LABEL = 'unadmitted';
 
-function parse(argv: readonly string[]): Parsed {
-  // Bare `deckent terminal` (options only) is the interactive terminal, the same as `deckent` with no arguments on a TTY.
-  const named = argv[1] !== undefined && !argv[1].startsWith('-');
-  const action = (named ? argv[1] : 'workline') as Action;
-  if (argv[0] !== 'terminal' || !ACTIONS.includes(action)) throw ErrorRegistry.createError('CLI_USAGE');
-  const parsed: Parsed = { action, json: false, help: false, fullAccess: false };
-  for (let index = named ? 2 : 1; index < argv.length; index++) {
-    const key = argv[index] === '-h' ? '--help' : argv[index]!;
-    if (key === '--help') parsed.help = true;
-    else if (key === '--full-access') parsed.fullAccess = true;
-    else if (key === '--trust-instructions' && parsed.trustDigest === undefined) {
-      const digest = argv[++index]; if (!digest || !/^[a-f0-9]{64}$/.test(digest)) throw ErrorRegistry.createError('CLI_USAGE'); parsed.trustDigest = digest;
-    }
-    else if (key === '--json') parsed.json = true;
-    else if (key === '--no-color') continue;
-    else if (key === '--lang' || key === '--scope') {
-      const value = argv[++index];
-      if (!value || value.startsWith('-') || (key === '--lang' ? parsed.language : parsed.scopeId) !== undefined) throw ErrorRegistry.createError('CLI_USAGE');
-      if (key === '--lang') parsed.language = value; else parsed.scopeId = value;
-    } else throw ErrorRegistry.createError('CLI_USAGE');
-  }
-  if (parsed.help && parsed.json) throw ErrorRegistry.createError('CLI_USAGE');
-  if (parsed.json && (parsed.action === 'session' || parsed.action === 'workline')) throw ErrorRegistry.createError('CLI_USAGE');
-  // Full access is a launch of the interactive terminal only (MODES-3); no other action runs agent tools.
-  if (parsed.fullAccess && parsed.action !== 'workline') throw ErrorRegistry.createError('CLI_USAGE');
-  if (parsed.trustDigest && parsed.action !== 'session') throw ErrorRegistry.createError('CLI_USAGE');
-  return parsed;
-}
 
 function ttyState(context: TerminalLaunchContext) {
   const stdin = context.stdin ?? process.stdin;
@@ -148,6 +119,7 @@ function slashWindowLabels(locale: Locale): SlashWindowLabels {
       all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
 }
 
+
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   return {
     work: workSurfaceLabels(locale),
@@ -192,11 +164,12 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   };
 }
 
+
 /**
  * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
  * a list (TERM=dumb) there are none and the slash commands stay the text commands.
  */
-function panelProps(root: string, scopeId: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv) {
+function panelProps(root: string, scopeId: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv, config: { cli: { invocationInputMaxBytes: number }; approvals: { sessionTtlMs: number } }) {
   if (pickerNeedsTextFallback(env, true)) return {};
   const providerConnect = context.providerConnect;
   // Stage 1: the scope budget window (create / change) in `/model` and `/provider`, when the host binds the spend read and the governed command.
@@ -211,11 +184,12 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   const openProviderWorkspaces = context.openProviderWorkspaces;
   const workspace = openProviderWorkspaces && context.configApplication && context.resolveConfigPrincipal ? { workspace: workspacePanelPort(root, scopeId, { ...context, openProviderWorkspaces }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
-    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations) } : {}),
+    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
+    ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol, ...workspace } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
     // PRE-8 v2: the same first-use card as the chat turn when a model list, a model connection or a just-stored key needs a grant here.
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
       context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined), ...budget, ...cache } } : {}) } } };
@@ -279,7 +253,7 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
 }
 
 export async function terminalCommand(argv: readonly string[], context: TerminalLaunchContext, ports: TerminalLaunchPorts): Promise<void> {
-  const parsed = parse(argv);
+  const parsed = (await import('#surfaces/core/terminal-onboarding/index.js')).parseTerminalLaunch(argv);
   const root = context.root ?? process.cwd();
   const env = context.env ?? process.env;
   let locale = resolveLocale(parsed.language, env);
@@ -288,11 +262,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.help) { emit(t('cli.help.terminal', {}, locale), sinks); return; }
   const tty = ttyState(context);
   const options: ConfigLoadOptions = { env };
-  const config = await loadConfig(root, options) as Record<string, unknown> & { language?: string; inspection: { workers: { heartbeatMs: number } };
+  let config = await loadConfig(root, options) as Record<string, unknown> & { cli: { invocationInputMaxBytes: number }; language?: string; inspection: { workers: { heartbeatMs: number } };
     approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
-  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+  let chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
   if (parsed.action === 'chat-plan') {
     if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
     emit(chat, { ...sinks, json: true, render: value => formatValue(value) });
@@ -357,7 +331,39 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
+  let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
+  if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
+    const surface = await import('#surfaces/core/terminal-onboarding/index.js');
+    // Onboarding is presentation: an unreadable observation never keeps the Workline closed; every action there keeps its own owner's checks.
+    try {
+      const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
+      const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
+      const run = async (revisit: boolean, signal?: AbortSignal) => {
+        const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
+        return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
+          provider: async () => {
+            if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+            await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
+              context.providerConnect?.kinds.filter(row => row.billing === 'subscription').map(row => row.id) ?? [], io);
+          },
+          instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
+          foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
+        }, { ...io, ...(signal ? { signal } : {}) }, revisit);
+      };
+      onboarding = { initial: await run(false), open: signal => run(true, signal) };
+      const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
+      if (deferred) accessNotices.push({ level: 'info', text: deferred });
+    } catch (error) {
+      if (context.signal?.aborted) throw error;
+      const code = (error as { code?: unknown } | null)?.code;
+      accessNotices.push({ level: 'warning', text: t('onboarding.session.unavailable', { code: typeof code === 'string' ? code : '-' }, locale) });
+    }
+    config = await loadConfig(root, { ...options, force: true }) as typeof config;
+    chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+  }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
+  const modelName = chat?.status === 'ready' && chat.reference && context.inspectModelBinding ? await context.inspectModelBinding(root, chat.reference, options).then(binding => binding.status === 'declared' ? binding.definition.model.nativeId : null, () => null) : null;
+  const chatName = modelName && chat?.reference ? `${modelName} · ${providerDisplayName(chat.reference.providerId, context.providerConnect, locale)}` : chatTarget(chat, locale); // FIX9: names as `deckent models` shows them; the exact reference stays in /model details
   const instructionPort = context.openProjectInstructions ? await context.openProjectInstructions(root, options) : undefined;
   const instructionLabels = projectInstructionLabels(locale);
   let lineSources: readonly string[] = [];
@@ -383,16 +389,23 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
+  const openMode = permissionModeOpener(root, scopeId, options, locale, context, config.approvals.sessionTtlMs);
   const modePort = context.inspectPermissionMode && context.setPermissionMode ? {
+    ...(openMode ? { open: openMode } : {}),
     inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
     set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: { readonly sessionId: string | null }) => context.setPermissionMode!(root,
       { schemaVersion: 1, scopeId, mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
   // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
-  // it again on every turn and call). An explicit flag without the grant is refused; a stored start mode without it opens a standart session.
+  // it again on every turn and call). A closed explicit mode offers the host PRE-9 card; a stored mode without its grant starts standart.
   let fullAccess = false;
   if (parsed.fullAccess && !modePort) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
-  const view = modePort ? await (parsed.fullAccess ? modePort.inspect(context.signal) : modePort.inspect(context.signal).catch(() => null)) : null;
-  if (parsed.fullAccess && !view?.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  let view = modePort ? await (parsed.fullAccess ? modePort.inspect(context.signal) : modePort.inspect(context.signal).catch(() => null)) : null;
+  if (parsed.fullAccess && !view?.fullAccess) {
+    if (!modePort?.open) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+    if (!await modePort.open('full-access')) return;
+    view = await modePort.inspect(context.signal);
+    if (!view.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  }
   if (parsed.fullAccess || (view?.mode === 'full-access' && view.fullAccess)) fullAccess = true;
   else if (view?.mode === 'full-access') accessNotices.push({ level: 'error', text: t('terminal.fullAccess.startDenied', {}, locale) });
   // A mode, stated calmly (owner 2026-10-18): the warning tone, not the error tone; the facts are unchanged.
@@ -422,10 +435,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const ascii = prefersAsciiGlyphs(env);
   const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
   const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
-    ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatTarget(chat, locale) }, ascii) };
+    ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
-  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options).catch(() => null) : null;
+  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
   const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
@@ -435,13 +448,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // K6 = A: a service that stops itself when idle counts this open terminal as a client only through this beat (clients connect per request).
   const beat = idleStops && context.describeRuntimeService ? setInterval(() => { void context.describeRuntimeService!(root, options).catch(() => undefined); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
   try { await runTerminalWorkline({
-    context: { installationId, projectId, scopeId },
+    context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
-    labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
+    labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatName }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
-    target, model: chat?.reference?.modelId ?? chatTarget(chat, locale),
+    target, model: modelName ?? chat?.reference?.modelId ?? chatTarget(chat, locale),
     ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
     systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, maxTrackedRuns: ((config['terminal'] ?? getConfigMetadata().find(row => row.key === 'terminal')?.defaultValue) as { maxTrackedRuns?: number } | undefined)?.maxTrackedRuns, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
@@ -452,10 +465,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale),
+      billingSwitch: t('siwc.switch.notice', { model: '{model}' }, locale),
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
-      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver) =>
-        context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe),
+      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) =>
+        pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal)) : context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe),
       lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),
@@ -482,7 +496,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       doctorReport: sink => ports.runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),
     ...(ports.mcpSlash ? { mcp: (args: string) => ports.mcpSlash!(root, args, options, locale) } : {}),
     ...(context.configApplication ? { config: (args: string) => configTtySlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
-    ...panelProps(root, scopeId, context, ports, options, locale, env),
+    ...panelProps(root, scopeId, context, ports, options, locale, env, config),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     // T3 L5: a bare `/monitor` opens the monitor in a window. The view loads on the first use (like `deckent monitor`); this unit stays free of it until then.
@@ -493,7 +507,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
         ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}) });
     } } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
-      ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
+      ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'warning' as const, text: configLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);

@@ -62,3 +62,16 @@ it('rolls cancellation state back if its durable command receipt cannot be writt
     db.exec('DROP TRIGGER reject_cancel'); expect((await app.execute(command)).snapshot.cancelRequested).toBe(true);
   } finally { db.close(); }
 });
+
+it('ISY-22/24: missing cancellation is RUN_NOT_FOUND only after policy permits the same identity', async () => {
+  const { app, state, store, path } = await fixture();
+  // Delete the trusted fixture Run to exercise its cancellation transaction without changing the authorized resource.
+  const db = new DatabaseSync(path);
+  try { db.prepare('DELETE FROM runs WHERE scope_id=? AND run_id=?').run('s', 'r'); } finally { db.close(); }
+  state.allow = false;
+  await expect(app.execute(command)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(state.accesses).toBe(0);
+  state.allow = true;
+  await expect(app.execute(command)).rejects.toMatchObject({ code: 'RUN_NOT_FOUND' });
+  expect(await store.loadRun('s', 'r')).toBeNull();
+});

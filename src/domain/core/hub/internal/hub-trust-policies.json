@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "addedSourceDefault": "publisher-pinned",
+  "moderatedSourceDefault": "hub-moderated",
+  "policies": [
+    { "id": "publisher-pinned", "publisherPinned": true, "reviewers": "none", "moderation": false },
+    { "id": "hub-attested", "publisherPinned": false, "reviewers": "high-risk", "moderation": false },
+    { "id": "reviewed", "publisherPinned": false, "reviewers": "always", "moderation": false },
+    { "id": "hub-moderated", "publisherPinned": false, "reviewers": "none", "moderation": true }
+  ]
+}

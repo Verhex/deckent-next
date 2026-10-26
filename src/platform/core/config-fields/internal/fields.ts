@@ -1,3 +1,4 @@
+import { workerImageConsentSchema } from './worker-consent.js';
 import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
 import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, WORKER_INSTRUCTION_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS, STALL_RECOVERY_SETTINGS } from './execution.js';
@@ -73,6 +74,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** INIT-D7 (UX only, never a security boundary): exact environment variable names that mark an AI agent caller (no prefix match); any
      * non-empty value other than 0/false makes the CLI plain and never asks a question. Evidence of each default: L-KIT HANDOFF (2026-10-19). */
     agentEnvironment: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/)).max(64).default(['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  policy: field('config.field.policy', { state: 'bound', consumers: ['src/composition/core/approvals'] }, 'live', z.object({
+    mcp: z.object({ optInGroups: z.array(z.string().regex(/^[a-z][a-z0-9.-]{0,47}$/u)).max(64).default([]) }).strict().default({}),
+  }).strict().default({})),
   mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
@@ -108,7 +112,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
    * use (a widening overlay is MEMORY_AUTOMATION_INVALID). S4B-3 (owner S-M3/S-M14): `verification.mode` off (customer default) | shadow (sealed
    * evaluation records, nothing verified) | on (an independent pass verifies). S4B-5 (owner S-M6/S-M8/S-M9): `context.mode` off (customer default:
    * no memory read at Run admission) | shadow (the worker part is computed and sealed, never sent) | on (verified entries reach the worker prompt). */
-  memoryAutomation: field('memory.config.section', { state: 'bound', consumers: ['src/composition/core/memory'] }, 'live', z.object({
+  memoryAutomation: field('memory.config.section', { state: 'bound', consumers: ['src/composition/core/memory'] }, 'restart', z.object({
     extraction: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
     verification: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
     context: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
@@ -123,7 +127,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     stallRecovery: STALL_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
     /** S6R-2/3 Nervous (owner 2026-10-23 Q-R2: shadow first, customer default off): `shadow` seals proposals and executes nothing; `live` executes a
      * measured (`live`) rule's stop step only under the owner's standing policy grant (`recovery-action`); anything else stays a sealed proposal. */
-    nervous: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off') }).strict().default({}),
+    nervous: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off').describe('config.field.runRuntime.nervous.mode') }).strict().default({}),
     /** S6R-5 (owner Q-R2, lead on s6r4 Q1; protected: no AI writes it): `off` (customer default) freezes no recovery bounds at admission (never a
      * continuation); `shadow` freezes them and a decision only seals what it would do; `live` lets the recovery decision continue a lost task under
      * the owner's standing grant. The stricter of a Run's frozen mode and this one applies. */
@@ -167,9 +171,17 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   resourceObservation: field('config.field.resourceObservation', { state: 'bound', consumers: ['src/composition/core/resource-observation'] }, 'restart', RESOURCE_OBSERVATION_SETTINGS),
   toolchains: field('config.field.toolchains', { state: 'bound', consumers: ['src/composition/core/toolchains'] }, 'restart', z.object({ currency: z.object({
     mode: z.enum(['off', 'report']).default('report'),
-    registryEndpoint: z.string().url().default('https://registry.npmjs.org'),
+    registryEndpoint: z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE').default('https://registry.npmjs.org'),
     timeoutMs: z.number().int().positive().max(2_147_483_647).default(5000),
     responseMaxBytes: z.number().int().positive().safe().default(65536),
+  }).strict().default({}), image: z.object({
+    providers: z.array(z.string().regex(/^[a-z0-9]{1,32}$/u)).default([]),
+    consents: z.array(workerImageConsentSchema).max(1024).default([]),
+    baseRefreshMs: z.number().int().positive().max(2_147_483_647).default(604_800_000),
+    sources: z.object({ baseImage: z.string().regex(/^[a-z0-9][\w./:@-]{0,254}$/u).nullable().default(null),
+      proxy: z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED').nullable().default(null),
+      installerUrls: z.record(z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE')).default({}),
+    }).strict().default({}),
   }).strict().default({}), update: z.object({
     mode: z.enum(['off', 'propose', 'auto']).default('auto'),
     buildTimeoutMs: z.number().int().positive().max(2_147_483_647).default(1_800_000),

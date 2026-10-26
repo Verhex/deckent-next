@@ -14,6 +14,7 @@ export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeO
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 export { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
+export { previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 export { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 export { admitConfiguredModelActivation, inspectConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelCatalog, assignConfiguredModelRole,
@@ -40,8 +41,10 @@ export { executeConfiguredBackup } from '#composition/core/backup/index.js';
 
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 export { inspectConfiguredDecisionDelegations } from '#composition/core/approvals/index.js';
-export { planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';
+export { startConfiguredRunIntent, transitionConfiguredRunIntent, planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';
 
 export { releaseConfiguredQuota } from '#composition/core/runs/index.js';
 
 export { inspectConfiguredPolicyAdministration } from '#composition/core/approvals/index.js';
+
+export * from '#composition/core/hub/index.js';

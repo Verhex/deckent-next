@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { clearConfigCache, ErrorRegistry, inspectProductPaths, resolveGlobalConfigPaths } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, inspectProductPaths, resolveGlobalConfigPaths, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { main } from '#surfaces/index.js';
 import { backupCommand, toolchainsCommand, type BackupSetsView } from '#surfaces/core/cli-admin/index.js';
@@ -61,7 +61,7 @@ function poolHandlers(calls: unknown[]) {
 }
 
 it.each([['en', 'Pool admission · open', 'Now: 1 running, 2 being evaluated', 'Capacity: at most 4 jobs at the same time', 'scope: live (default)'],
-  ['tr', 'Havuz admission · açık', 'Şu an: 1 çalışan, 2 değerlendirmede', 'Kapasite: aynı anda en çok 4 iş', 'scope: live (varsayılan)']] as const)(
+  ['tr', 'Havuz admission · açık', 'Şu an: 1 çalışan, 2 değerlendirmede', 'Kapasite: aynı anda en çok 4 iş', 'Kapsam: live (varsayılan)']] as const)(
   'pool status (%s): the configured scope is named, the state is in human words and empty fields are left out', async (language, open, now, capacity, notice) => {
   const f = await project(undefined, language), calls: unknown[] = [], { out, context } = io(f, poolHandlers(calls));
   expect(await main(['pool'], context)).toBe(0);
@@ -327,6 +327,11 @@ it('runtime shutdown: any caller off a terminal names its reason (audited); a pe
   expect(noReason.err.text()).toContain('RUNTIME_SHUTDOWN_REASON_REQUIRED'); expect(calls).toEqual([]);
   expect(await main(['runtime', 'shutdown', '--reason', 'maintenance window'], io(f, runtimeHandlers(calls)).context)).toBe(0);
   expect(calls).toEqual(['maintenance window']);
+  // FIX9: the Workline's stop hint is itself a working command off a terminal (EN and TR).
+  for (const locale of ['en', 'tr'] as const) {
+    const hint = /`deckent (runtime shutdown --reason "([^"]+)")`/u.exec(t('terminal.service.stopHint', {}, locale))!;
+    calls.length = 0; expect(await main(['runtime', 'shutdown', '--reason', hint[2]!], io(f, runtimeHandlers(calls)).context)).toBe(0); expect(calls).toEqual([hint[2]]);
+  }
   card.interactive = true; card.answers = ['cancel']; calls.length = 0;
   expect(await main(['runtime', 'shutdown'], io(f, runtimeHandlers(calls)).context)).toBe(1);
   expect(card.asked[0]!.body![0]).toBe('Affected work now: 1 running, 2 being evaluated (scope live)'); expect(calls).toEqual([]);
@@ -383,4 +388,12 @@ it('paths: grouped tables with exists/missing for a person, the unchanged layout
   const json = io(f);
   expect(await main(['paths', '--json'], json.context)).toBe(0);
   expect(JSON.parse(json.out.text())).toEqual(JSON.parse(JSON.stringify(await inspectProductPaths(f.root, { env: f.env }))));
+});
+
+it('paths shows the composed Brain login root and distinguishes the encryption key file', async () => {
+  const f = await project(), human = io(f);
+  const root = join(f.root, 'headless-logins'), data = join(f.root, 'vault'), key = join(f.root, 'vault-key');
+  expect(await main(['paths'], { ...human.context, inspectAdminPaths: async () => ({ schemaVersion: 1, runtimeSocket: null, mcp: null,
+    headlessLogins: root, secretStore: { store: 'fixture', files: [data, key], keyFile: key } }) })).toBe(0);
+  const text = human.out.text(); expect(text).toContain(root); expect(text).toContain('Brain login root'); expect(text).toContain('Secret store encryption key');
 });

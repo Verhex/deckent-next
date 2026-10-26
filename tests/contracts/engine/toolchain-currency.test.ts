@@ -30,7 +30,7 @@ it('assesses each provider from durable admitted pins and a supplied lookup outc
   expect(assessToolchain('claude', [admitted('claude', '2.1.278 (Claude Code)')], { kind: 'unavailable', reason: 'NPM_REGISTRY_TIMEOUT' })).toMatchObject({ status: 'unknown-offline', reason: 'NPM_REGISTRY_TIMEOUT', latest: null });
   expect(assessToolchain('claude', [admitted('claude', '2.1.278 (Claude Code)')], { kind: 'disabled' }).status).toBe('disabled');
   expect(assessToolchain('claude', [], published('2.1.278')).status).toBe('not-admitted');
-  expect(assessToolchain('cursor', [admitted('cursor', '2026.09.18-9a7762b')], { kind: 'unsupported' })).toMatchObject({ status: 'unsupported', mechanism: 'installer-script', update: 'agent update' });
+  expect(assessToolchain('cursor', [admitted('cursor', '2026.09.18-9a7762b')], { kind: 'unsupported' })).toMatchObject({ status: 'unsupported', reason: 'no-version-feed', mechanism: 'installer-script', update: 'agent update' });
   // Foreign-provider pins are ignored, never mixed into another provider's assessment.
   expect(assessToolchain('codex', [admitted('claude', '2.1.278 (Claude Code)')], published('0.155.1')).status).toBe('not-admitted');
 });

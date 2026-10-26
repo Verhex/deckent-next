@@ -1,3 +1,4 @@
+import { useOnboardingHandoff, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
@@ -5,14 +6,14 @@ import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } f
 import { runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import type { RunProposalResult } from '#engine/index.js';
+import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
@@ -83,11 +84,13 @@ export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal
 export type WorklineErrorText = (error: unknown) => string;
 
 export interface WorklineProps {
+  readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
+    readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
-    readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference, observe?: (progress: BrainPlanProgress) => void) => Promise<RunProposalResult>;
-    readonly lines: (result: RunProposalResult) => readonly string[] };
+    readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference, observe?: (progress: BrainPlanProgress) => void, pending?: import('#engine/index.js').RunIntentRecord) => Promise<RunPlanningResult>;
+    readonly lines: (result: RunPlanningResult) => readonly string[] };
   readonly labels: WorklineLabels;
   /** Trusted persistent identities from CLI composition; session identity is generated once by the local adapter. */
   readonly context: Omit<TerminalLocalContext, 'kind' | 'sessionId'>;
@@ -180,7 +183,6 @@ export interface WorklineProps {
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
   const owner = useFocusOwner();
-  // `elsewhere`: the active work strip holds input (TERMINAL-SABIT slice 2); checked synchronously as well as through `active`.
   return <Composer {...props} active={(props.active ?? true) && owner.composing} acceptsInput={() => owner.inputAllowed() && !elsewhere?.()} />;
 }
 
@@ -190,13 +192,10 @@ function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
 
 function useLedgerBuffer(historyLimit: number) {
   const [buffer, setBuffer] = useState<LedgerBuffer>(EMPTY_LEDGER);
-  // T4: while the editor owns the screen a row `Static` printed would be lost; rows wait in `held` and follow when it is released.
   const held = useRef<WorkLedgerEntry[] | null>(null);
   const push = useCallback((entries: readonly WorkLedgerEntry[]) => { if (held.current) held.current.push(...entries); else setBuffer(current => appendLedger(current, entries, LEDGER_TAIL_LIMIT, historyLimit)); }, [historyLimit]);
   const hold = useCallback(() => { held.current ??= []; return () => { const rows = held.current ?? []; held.current = null; if (rows.length) push(rows); }; }, [push]);
-  // `/clear`: a new epoch is a fresh `Static`, so Ink's replay buffer (used when the terminal is resized) forgets the earlier conversation.
   const reset = useCallback(() => setBuffer(current => Object.freeze({ epoch: current.epoch + 1, nextSeq: current.nextSeq, pending: Object.freeze([]), tail: Object.freeze([]), history: Object.freeze([]) })), []);
-  // Every pending row was printed by `Static` in this commit; compaction keeps rows appended after it.
   useLayoutEffect(() => {
     const printed = buffer.pending.length;
     setBuffer(current => compactLedger(current, printed));
@@ -208,31 +207,23 @@ export function WorklineApp(props: WorklineProps) {
   const { labels, target, systemPrompt, historyMessages, completeTurn, errorText, ledger } = props;
   const palette = useWorklinePalette();
   const { exit } = useApp();
-  // The full window keeps the newest `terminal.viewportRows` rows to scroll back through; the inline layout keeps none (they are in the scrollback).
   const { buffer, push, reset, hold } = useLedgerBuffer(props.fullscreen === true ? props.viewportRows ?? LEDGER_TAIL_LIMIT : 0);
   const stdout = useStdout();
-  // The layout mode is resolved once at mount: a real stream does not change TTY-ness, and flipping it would remount the composer and windows.
   const [pinnedMode] = useState(() => stdout.stdout.isTTY === true && props.clearScreen !== false);
   const size = useWindowSize(), pinned = pinnedMode && size.rows > 0 && size.columns > 0;
-  // TERMINAL-SABIT-DUZEN: the full-window layout is chosen once too (the alternate screen was entered for it before the first frame).
   const [fullscreenMode] = useState(() => pinnedMode && props.fullscreen === true);
-  // Transcript search (Ctrl+F while scrolled back) holds the typed keys while it is open; the composer keeps its draft.
   const [searchOpen, setSearchOpen] = useState(false), searchFocus = useRef(false);
   const onSearch = useCallback((open: boolean) => { searchFocus.current = open; setSearchOpen(open); }, []);
-  // TERM-POLISH mouse selection; after a copy the fixed-height hint row says so for a moment (nothing moves).
   const { selection: pointerSelection, copied } = usePointerCopy(props.pointer, props.copyText);
   const [bannerShown, setBannerShown] = useState(true);
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const handoffs = useDraftHandoffs<TerminalLocalContext, ComposerHistoryEntry>({ controller: panel.controller, say: (level, text) => push([notice(level, text)]), labels: labels.handoff,
     editor: props.externalEditor, handover: props.handover, hold });
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
-  // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
   const [planning, setPlanning] = useState(false);
-  // f3 (owner Q-H4): the /do window's quota-wait texts while planning waits for the reset; null while it plans.
   const [planWait, setPlanWait] = useState<Readonly<{ body: string; hint: string }> | null>(null);
   const [doRunning, setDoRunning] = useState(false);
-  // TERMINAL-SABIT slice 2: the running /do as the strip shows it (title, phase, approval expiry); the panel runs one line at a time.
   const [activeDo, setActiveDo] = useState<ActiveDo | null>(null);
   const [stripFocused, setStripFocused] = useState(false), stripFocus = useRef(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
@@ -256,11 +247,9 @@ export function WorklineApp(props: WorklineProps) {
   const announced = useRef(new Set<string>()), openingTold = useRef(false);
   const [completionRefused, setCompletionRefused] = useState(false);
   const completion = useRunCompletion({ limit: props.maxTrackedRuns, labels: labels.work?.jobs, ledger, pollMs, refused: completionRefused, push, errorText });
-  // TESLIM-PENCERESI: delivery windows over this session's admitted Runs (self-appearing in the background) and `/deliver` (foreground).
   const trackedRuns = useMemo(() => completion.tracked.map(item => item.run), [completion.tracked]);
   const deliveries = useDeliveryWindows({ port: props.delivery?.port, labels: labels.delivery, runs: trackedRuns, summary: (text, level) => push([systemSummaryEntry(text, level)]),
     errorText, position: labels.work?.window.position ?? '{from}-{to}/{total}', known: props.knownSecrets, confirmTimeoutMs: props.delivery?.confirmTimeoutMs ?? 0 });
-  // NATIVE-BAGLAM: what the strip holds now, read when a turn is sent (the note joins only that turn's own message).
   const workNote = useRef({ active: activeDo, runs: completion.tracked, deliveries: deliveries.pending });
   workNote.current = { active: activeDo, runs: completion.tracked, deliveries: deliveries.pending };
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
@@ -310,7 +299,13 @@ export function WorklineApp(props: WorklineProps) {
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
-  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
+  const slot = useWindowSlot(), slotNow = useRef(slot); slotNow.current = slot;
+  // FIX8a R25/R26/R28: the mode port must not change with the window slot; its identity keys the mode refresh and the `/mode`/`/model` reads.
+  const permissionMode = useMemo(() => props.permissionMode ? { ...props.permissionMode,
+    ...(props.permissionMode.open ? { open: (target: Exclude<import('#domain/index.js').PermissionMode, 'standart'>) => props.permissionMode!.open!(target,
+      (question, signal) => askGrantWindow(slotNow.current, labels.work?.window.position ?? '{from}-{to}/{total}', question, signal)) } : {}) } : undefined,
+  [props.permissionMode, labels.work?.window.position]);
+  const mode = useWorklineMode(permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(props.homeDirectory ? { home: props.homeDirectory } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
@@ -320,7 +315,6 @@ export function WorklineApp(props: WorklineProps) {
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
-  const slot = useWindowSlot();
   const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
   // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
   // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
@@ -340,7 +334,7 @@ export function WorklineApp(props: WorklineProps) {
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
-  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+  const settings = useWorklineSettings({ panels: props.panels, permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
@@ -438,30 +432,33 @@ export function WorklineApp(props: WorklineProps) {
     }
   }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
+  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] }), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
+    if (slash.command === 'setup') { if (props.onboarding) await onboarding.open(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
     if (slash.command === 'do') {
       if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
         hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
       const observe = (progress: BrainPlanProgress) => {
+        if (progress.kind === 'billing-switch') { push([notice('info', fillTemplate(props.doPlan!.billingSwitch, { model: progress.reference.modelId }))]); return; }
         if (progress.kind === 'planning' || !props.doPlan!.quotaWait) { setPlanWait(null); setActiveDo(current => current && { ...current, phase: 'planning', untilText: undefined }); return; }
         const shown = props.doPlan!.quotaWait(progress);
         setPlanWait({ body: shown.body, hint: shown.hint }); setActiveDo(current => current && { ...current, phase: 'quota-wait', untilText: shown.untilText });
       };
-      const commandId = globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
-        props.doPlan!.quotaWait ? observe : undefined);
+      const selectedIntent = onboarding.intent(execution.input.inputId), commandId = selectedIntent?.commandId ?? globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
+        props.doPlan!.quotaWait ? observe : undefined, selectedIntent?.pending);
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
         let result = await plan();
         if (result.run) completion.register(result.run);
-        setPlanning(false);
+        setPlanning(false); onboarding.settled(execution.input.inputId);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
-        if (result.proposal.status === 'pending' && result.proposal.approval) {
+        if (!isRunIntentResult(result) && result.proposal.status === 'pending' && result.proposal.approval) {
           const expiresAtMs = result.proposal.approval.expiresAt;
           setActiveDo(current => current && { ...current, phase: 'waiting', expiresAtMs });
           await work.run('approvals', '', execution, result.proposal.approval.approvalId, undefined, props.doPlan.lines(result).join('\n'));
@@ -539,8 +536,8 @@ export function WorklineApp(props: WorklineProps) {
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, usage, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     const showLive = (kind: Parameters<typeof liveWin.show>[0]) => liveWin.show(kind, parseSlashLine(execution.input.text)?.command === 'do' ? 'background' : 'foreground');
     if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: { ...liveWin, show: showLive }, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable, onRunsSeen: completion.dismiss })) return true;
-    // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'policy' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+    // T4: `/provider` and `/hub` are windows only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
+    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'policy' || slash.command === 'hub' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
       try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
@@ -561,8 +558,14 @@ export function WorklineApp(props: WorklineProps) {
         }
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
-          const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
-          if (choice !== null && !execution.signal.aborted) push((await session.run('resume', String(Number(choice) + 1), history, execution)).entries);
+          let picker = result.resumePicker;
+          while (!execution.signal.aborted) {
+            const choice = await panel.pick(execution, { kind: 'resume', rows: picker }, picker.map((_, index) => String(index)));
+            if (choice === null || execution.signal.aborted) break;
+            const item = picker[Number(choice)], resumed = await session.run('resume', item?.sessionId.startsWith('--') ? item.sessionId : String(Number(choice) + 1), history, execution);
+            push(resumed.entries);
+            if (!resumed.resumePicker) break; else picker = resumed.resumePicker;
+          }
         } else push(result.entries);
       }
       catch (error) { push([notice('error', errorText(error))]); }
@@ -597,7 +600,7 @@ export function WorklineApp(props: WorklineProps) {
   const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
   const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
     const slash = parseSlashLine(line), words = labels.windows;
-    if (!slash || slash.command === 'do' || slash.command === 'copy' || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
+    if (!slash || keepsTypedArgument(slash.command) || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
     const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
     setArgumentNote(note);
     try { return await performLine(`/${slash.command}`, mentioned, execution); }
@@ -625,7 +628,8 @@ export function WorklineApp(props: WorklineProps) {
   };
   // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
   // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
-  const bareSlash = (text: string): string => { const slash = parseSlashLine(text); return slash?.command === 'do' ? redactForRecord(text, props.knownSecrets) : labels.windows && slash?.args && slash.command !== 'copy' ? `/${slash.command}` : text; };
+  // A command no window replaces (`/do`, `/copy`, `/rename`; registry `typedArgument`) keeps it, redacted for the record (TRM-40).
+  const bareSlash = (text: string): string => { const slash = parseSlashLine(text); return slash && keepsTypedArgument(slash.command) ? redactForRecord(text, props.knownSecrets) : labels.windows && slash?.args ? `/${slash.command}` : text; };
   const submit = (typed: string, mentions: readonly string[] = [], entry?: ComposerHistoryEntry) => {
     const before = panel.controller.snapshot(), text = bareSlash(typed), inputId = `input-${++inputSequence.current}`;
     if (text !== typed) typedArgumentInputs.current.add(inputId);

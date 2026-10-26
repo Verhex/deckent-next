@@ -22,6 +22,13 @@ export function policyDeclaredScopes(input: unknown): readonly string[] {
   return Object.freeze([...new Set(policy.grants.flatMap(rule => rule.effect === 'allow' && rule.scopes !== 'all' ? rule.scopes : []))]);
 }
 
+/** Every scope any allow, deny or approval rule, restriction or role binding names: a deny or legal hold never needs an allow to be seen. */
+export function policyNamedScopes(input: unknown): readonly string[] {
+  const policy = policySchema.parse(input), named = (scopes: 'all' | readonly string[]) => scopes === 'all' ? [] : scopes;
+  const bound = policy.schemaVersion === 1 ? [] : policy.bindings.entries.flatMap(entry => named(entry.scopes));
+  return Object.freeze([...new Set([...[...policy.grants, ...policy.restrictions].flatMap(rule => named(rule.scopes)), ...bound])]);
+}
+
 /** Grant precondition only: candidates some trusted allow grant of this actor covers, before any registry lookup.
  * It is not membership — an `'all'` grant covers every candidate here, registered or not. */
 export function policyScopeGrants(input: unknown, actor: Actor, candidates: readonly string[]): readonly string[] {

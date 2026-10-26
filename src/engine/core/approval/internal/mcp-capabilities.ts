@@ -1,5 +1,6 @@
-import { authorityDocuments, delegationWithin, encodeCommandProjection, evaluatePolicy, isMcpPrincipal, mcpCapabilityGroupSchema, mcpCapabilityRules, mcpPrincipalRef, planPolicyChange, policyDeclaredScopes, policySchema, principalGrants,
-  RegistryError, sameMcpCapabilityRule, type McpCapabilityGroup, type McpCapabilityPreview, type McpCapabilityRequest, type McpCapabilityView, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
+import { resolvedMcpCapabilityRules, ownedMcpCapabilityRules } from '#engine/core/policy/index.js';
+import { authorityDocuments, delegationWithin, encodeCommandProjection, evaluatePolicy, isMcpPrincipal, mcpCapabilityGroupSchema, mcpPrincipalRef, planPolicyChange, POLICY_CHANGE_MAX, policySchema,
+  RegistryError, sameMcpCapabilityRule, type McpCapabilityGroup, type McpCapabilityGroupInput, type McpCapabilityState, type McpCapabilityPreview, type McpCapabilityRequest, type McpCapabilityView, type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import catalog from './mcp-capabilities.json' with { type: 'json' };
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
@@ -23,31 +24,12 @@ export class McpCapabilityRegistry {
   get(id: string): McpCapabilityGroup { const group = this.groups.get(id); if (!group) throw new Error('MCP_CAPABILITY_GROUP_UNKNOWN'); return group; }
 }
 export const mcpCapabilityRegistry = new McpCapabilityRegistry(catalog.groups);
-export function registerMcpCapabilityGroup(group: McpCapabilityGroup): void { mcpCapabilityRegistry.register(group); }
-export function mcpCapabilityScopeCandidates(document: unknown, actor: { readonly issuer: string; readonly subject: string }): readonly string[] {
-  if (isMcpPrincipal(actor)) throw new Error('MCP_CAPABILITY_OWNER_REQUIRED');
-  return policyDeclaredScopes(document);
-}
+export function registerMcpCapabilityGroup(group: McpCapabilityGroupInput): void { mcpCapabilityRegistry.register(group); }
 
 /** Shared CLI/SDK/terminal application. Only policy.administer owns effects; digest binds the current snapshot, catalog and exact changes. */
 export class McpCapabilities {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>,
-    private readonly registry: McpCapabilityRegistry = mcpCapabilityRegistry, private readonly workTargetId: string | null = null) {}
-  private rules(group: McpCapabilityGroup, scopeId: string, principal: VerifiedPrincipal, policy: ReturnType<typeof policySchema.parse>) {
-    const actor = mcpPrincipalRef(principal);
-    const namespace = sha256(encodeCommandProjection('mcp-capability-id:1', { group: group.id, scopeId, actor })).slice(0, 20);
-    const cells = group.cells.flatMap(cell => {
-      if (cell.source === 'configured-target') return this.workTargetId ? [{ ...cell, resource: { ...cell.resource, ids: [this.workTargetId] } }] : [];
-      if (cell.source !== 'owned-pools') return [cell];
-      const grants = principalGrants(policy, principal).filter(rule => rule.effect === 'allow' && rule.resource.kind === cell.resource.kind
-        && (rule.principals === 'all' || rule.principals.some(person => person.issuer === principal.issuer && person.subject === principal.subject))
-        && (rule.scopes === 'all' || rule.scopes.includes(scopeId)) && cell.actions.every(action => rule.actions === 'all' || rule.actions.includes(action)));
-      const ids = grants.some(rule => rule.resource.ids === 'all') ? 'all' as const : [...new Set(grants.flatMap(rule => rule.resource.ids === 'all' ? [] : rule.resource.ids))].sort();
-      // No held pool authority: keep the required cell visible and let I2 refuse, rather than pretend the group works.
-      return [{ ...cell, resource: { ...cell.resource, ids: ids.length ? ids : 'all' as const } }];
-    });
-    return mcpCapabilityRules({ ...group, cells }, scopeId, actor, namespace);
-  }
+    private readonly registry: McpCapabilityRegistry = mcpCapabilityRegistry, private readonly workTargetId: string | null = null, private readonly optInGroups: readonly string[] = [], private readonly operationIds: readonly string[] = []) {}
   private async snapshot(principal: VerifiedPrincipal, scopeId: string) {
     if (isMcpPrincipal(principal)) throw new Error('MCP_CAPABILITY_OWNER_REQUIRED');
     if (!principal.scopeIds.includes(scopeId)) throw new Error('MCP_CAPABILITY_SCOPE_UNKNOWN');
@@ -57,33 +39,27 @@ export class McpCapabilities {
   }
   async inspect(scopeId: string, principal: VerifiedPrincipal): Promise<McpCapabilityView> {
     const policy = await this.snapshot(principal, scopeId), actor = { ...principal, ...mcpPrincipalRef(principal) };
-    return { schemaVersion: 1, scopeId, revision: policy.revision, principal: mcpPrincipalRef(principal), groups: this.registry.list().map(group => {
-      const rules = this.rules(group, scopeId, principal, policy), held = rules.map(rule => policy.grants.find(grant => grant.id === rule.id));
-      const conflict = held.some((grant, index) => grant !== undefined && !sameMcpCapabilityRule(grant, rules[index]!));
-      const managed = conflict ? 'conflict' : held.every(Boolean) ? 'granted' : held.some(Boolean) ? 'partial' : 'none';
+    return { schemaVersion: 1, scopeId, revision: policy.revision, principal: mcpPrincipalRef(principal), groups: this.registry.list().map<McpCapabilityState>(group => {
+      const rules = resolvedMcpCapabilityRules(group, scopeId, principal, policy, this.workTargetId, this.operationIds), owned = ownedMcpCapabilityRules(group, scopeId, principal, policy, rules);
+      const count = rules.filter(rule => owned.held.some(held => sameMcpCapabilityRule(held, rule))).length;
+      const managed = owned.conflict ? 'conflict' : owned.earlier ? 'wider-earlier' : rules.length && count === rules.length ? 'granted' : count ? 'partial' : 'none';
       const allowed = rules.filter(rule => delegationWithin(policy, actor, [rule]).ok).length;
-      return { group, managed, effective: allowed === rules.length ? 'allowed' : allowed ? 'partial' : 'denied' };
-    }) };
+      return { group, managed, effective: rules.length && allowed === rules.length ? 'allowed' : allowed ? 'partial' : 'denied' };
+    }).filter(state => state.group.availability === 'default' || state.managed !== 'none' || this.optInGroups.includes(state.group.id)) };
   }
   async run(input: McpCapabilityRequest, principal: VerifiedPrincipal, reason: string): Promise<McpCapabilityPreview> {
-    // Choices are validated before an administration or approval is opened.
     const group = this.registry.get(input.groupId), policy = await this.snapshot(principal, input.scopeId);
-    if (!['grant', 'revoke'].includes(input.action) || !['preview', 'apply'].includes(input.mode)) throw new Error('MCP_CAPABILITY_INVALID');
-    const current = this.rules(group, input.scopeId, principal, policy);
-    // Revoke also finds an earlier configured target/pool selection. Its original exact rules are previewed, never reconstructed as new ids.
-    const actor = mcpPrincipalRef(principal), namespace = sha256(encodeCommandProjection('mcp-capability-id:1', { group: group.id, scopeId: input.scopeId, actor })).slice(0, 20);
-    const expected = input.action === 'revoke' ? mcpCapabilityRules(group, input.scopeId, actor, namespace) : current, rules: PolicyGrant[] = [];
-    let conflict = false;
-    const literal = mcpCapabilityRules(group, input.scopeId, actor, namespace);
-    for (const rule of expected) {
-      const held = policy.grants.find(grant => grant.id === rule.id);
-      const cell = group.cells[literal.findIndex(candidate => candidate.id === rule.id)]!;
-      const comparable = input.action === 'revoke' && cell.source !== 'literal' && held ? { ...rule, resource: { ...rule.resource, ids: held.resource.ids } } : rule;
-      if (held && !sameMcpCapabilityRule(held, comparable)) conflict = true;
-      if (input.action === 'grant' ? !held : held) rules.push(input.action === 'grant' ? rule : held!);
-    }
-    const change = rules.length ? { schemaVersion: 1 as const, changes: rules.map(rule => input.action === 'grant'
-      ? { kind: 'grant.add' as const, grant: rule } : { kind: 'grant.remove' as const, id: rule.id }) } : null;
+    if (!['grant', 'revoke', 'narrow'].includes(input.action) || !['preview', 'apply'].includes(input.mode)) throw new Error('MCP_CAPABILITY_INVALID');
+    const current = resolvedMcpCapabilityRules(group, input.scopeId, principal, policy, this.workTargetId, this.operationIds), owned = ownedMcpCapabilityRules(group, input.scopeId, principal, policy, current);
+    const conflict = owned.conflict || (input.action === 'grant' && owned.earlier);
+    const removed = input.action === 'revoke' ? owned.held : input.action === 'narrow'
+      ? owned.held.filter(held => !current.some(want => sameMcpCapabilityRule(held, want))) : [];
+    const added = input.action === 'revoke' ? [] : current.filter(want => !owned.held.some(held => sameMcpCapabilityRule(held, want)));
+    const changes = [...removed.map(rule => ({ kind: 'grant.remove' as const, id: rule.id })), ...added.map(grant => ({ kind: 'grant.add' as const, grant }))];
+    const remaining = Math.max(0, changes.length - POLICY_CHANGE_MAX);
+    const bounded = changes.slice(0, POLICY_CHANGE_MAX);
+    const rules: PolicyGrant[] = bounded.map(change => change.kind === 'grant.add' ? change.grant : removed.find(rule => rule.id === change.id)!);
+    const change = bounded.length ? { schemaVersion: 1 as const, changes: bounded } : null;
     const digest = sha256(encodeCommandProjection('mcp-capability-preview:1', { schemaVersion: 1, revision: policy.revision, scopeId: input.scopeId, action: input.action, group,
       principal: mcpPrincipalRef(principal), rules, change }));
     const missing: string[] = [];
@@ -94,7 +70,7 @@ export class McpCapabilities {
       if (!delegationWithin(policy, principal, touched).ok) missing.push('delegation');
     }
     const result = (status: McpCapabilityPreview['status']): McpCapabilityPreview => ({ schemaVersion: 1, status, revision: policy.revision, digest,
-      scopeId: input.scopeId, groupId: input.groupId, action: input.action, principal: mcpPrincipalRef(principal), rules, change, missing });
+      scopeId: input.scopeId, groupId: input.groupId, action: input.action, principal: mcpPrincipalRef(principal), rules, change, missing, remaining });
     if (conflict || (input.mode === 'apply' && input.expect !== digest)) return result('conflict');
     if (!change) return result('current');
     if (input.mode === 'preview') return result('preview');

@@ -115,9 +115,15 @@ describe('the model cannot reach a config write', () => {
       'src/composition/core/model-activation/internal/model-roles.ts',
       'src/composition/core/model-connect/internal/connect.ts',
       'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
+      // alpha.56 U4E (G2): the install permission carrier saves a missing identity profile through the same governed writer after the
+      // `policyPermissionModes` person witness; reached from init and terminal onboarding only, never from the SDK, MCP or an agent unit.
+      'src/composition/core/setup/internal/permissions.ts',
       // I-S3 (alpha.48): `deckent init` applies the language and the team/enterprise profile selection through the same governed writer;
       // reached only from the human CLI entry (asserted below), never from the SDK, MCP or an agent unit.
       'src/composition/core/setup/internal/wiring.ts',
+      // alpha.56 U6-S3 (714507ada): the worker-image consent record is appended through the same governed writer after the person witness
+      // (`configPersonWitness('workerImage')`); no SDK export, no MCP tool, no agent unit names it.
+      'src/composition/core/toolchains/internal/consent.ts',
       'src/composition/core/toolchains/internal/refresh.ts',
       'src/surfaces/core/cli-terminal/internal/cache-panel.ts', // CACHE-SLICE1 (34270fae): the terminal cache-choice window writes profiles through the same writer
       'src/surfaces/core/cli-terminal/internal/model-panel.ts',
@@ -130,6 +136,9 @@ describe('the model cannot reach a config write', () => {
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.
     expect(files('src').filter(path => /agent-turn|agent-tool/.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /connectConfiguredModel|connectModel|model-connect/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+      .filter(path => /consentConfiguredWorkerImage/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/consentConfiguredWorkerImage/);
     // M2: the tier/role write is composed only by the human CLI host; no MCP, agent or SDK unit names it (the SDK exports the read view only).
     expect(files('src').filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/model-activation/'))
       .filter(path => /assignConfiguredModelRole/.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/')).sort())

@@ -9,7 +9,7 @@ function harness(value: unknown) {
     async inspectRun() { return { schemaVersion: 1 as const, layout, run: value }; } };
   return { out, err, context: context as never };
 }
-it.each([['en', 'No recorded Run found: nope.'], ['tr', 'Kayıtlı Run bulunamadı: nope.']])('fails with RUN_NOT_FOUND for a missing Run (%s)', async (lang, message) => {
+it.each([['en', 'No recorded Run found: nope.'], ['tr', 'Kayıtlı iş bulunamadı: nope.']])('fails with RUN_NOT_FOUND for a missing Run (%s)', async (lang, message) => {
   const h = harness(null);
   expect(await main(['run', 'inspect', '--scope', 's', '--id', 'nope', '--lang', lang], h.context)).toBe(1);
   expect(h.out.join('')).toBe(''); expect(h.err.join('')).toContain(message);
@@ -31,6 +31,7 @@ it.each(['en', 'tr'] as const)('shows the durable progression failure code and d
     env: { NO_COLOR: '1', TERM: 'dumb' }, stdout: { write(text: string) { out.push(text); } }, stderr: { write() {} },
     async inspectRun() { return { schemaVersion: 1, layout, run: { ...run, state } }; },
   } as never)).toBe(0);
-  expect(out.join('')).toContain('SUPERVISOR_OPTIONS_INVALID'); expect(out.join('')).toContain('progression-failed');
+  // alpha.56 F2 (9ab5bc472): the state and its reason are words in the person's language, not the raw enum.
+  expect(out.join('')).toContain('SUPERVISOR_OPTIONS_INVALID'); expect(out.join('')).toContain(locale === 'en' ? 'progression failed' : 'ilerleme başarısız');
   expect(out.join('')).toContain(locale === 'en' ? 'explicitly resume' : 'açıkça devam');
 });

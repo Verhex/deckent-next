@@ -37,6 +37,19 @@ it('seals the event with its scope-local sequence and key, and verification bind
   expect(() => sealAuditRecord(base, 0, integrity)).toThrow(AuditError);
 });
 
+it('U9F siwc-relay v1: bounded relay records seal and verify through the application; counters only on the closing summary, no free text', () => {
+  const rows: ReturnType<typeof sealAuditRecord>[] = [];
+  const audit = new AuditApplication({ append: (event, seal) => { const record = seal(rows.length + 1); rows.push(record); return record; },
+    page: (scopeId, after, limit) => rows.filter(r => r.event.scopeId === scopeId && r.sequence > after).slice(0, limit), increment: () => { throw new Error('unused'); }, counters: () => [] }, integrity);
+  const relay = { kind: 'siwc-relay', schemaVersion: 1, action: 'model-relayed', runId: 'run', taskId: 'task', attemptId: 'attempt', connectionId: '00000000-0000-4000-8000-000000000001',
+    bindingDigest: 'a'.repeat(64), policyDigest: 'b'.repeat(64), requestId: '00000000-0000-4000-8000-000000000002', status: 200, reason: null, bytes: 1024, counters: null } as const;
+  const counters = { peersRefused: 1, capabilityIssued: 1, capabilityRefused: 0, relayed: 1, refused: 0, upstreamSends: 1, suppressed: 0 };
+  const sealed = [audit.record({ ...base, eventId: 'r-1', subject: relay }), audit.record({ ...base, eventId: 'r-2', subject: { ...relay, action: 'closed', requestId: null, status: null, bytes: null, counters } })];
+  expect(audit.list('scope', 0, 10)).toEqual(sealed);
+  for (const subject of [{ ...relay, counters }, { ...relay, action: 'closed' }, { ...relay, reason: 'Bearer x' }, { ...relay, prompt: 'x' }, { ...relay, schemaVersion: 2 }])
+    expect(() => audit.record({ ...base, eventId: 'r-bad', subject })).toThrow(expect.objectContaining({ code: 'AUDIT_INVALID' }));
+});
+
 it('the application seals inside the store append, verifies every listed record and reports a sequence gap as integrity loss', () => {
   const rows: ReturnType<typeof sealAuditRecord>[] = [];
   const store: AuditStore = {

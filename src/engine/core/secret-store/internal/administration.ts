@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
-import { assertSecretStorageProtection } from './protection.js';
+import { assertPublicSecretName, assertSecretStorageProtection } from './protection.js';
 
 /** Who asks to change which secret in which scope. The principal is the verified caller, never an input of the request body. */
 export interface SecretChangeRequest {
@@ -80,6 +80,7 @@ export class SecretStoreAdministration {
   }
 
   private check(request: SecretChangeRequest): void {
+    assertPublicSecretName(request.name);
     if (!isSecretName(request.name)) throw ErrorRegistry.createError('SECRET_NAME_INVALID');
     if (!this.store.descriptor.writable) throw ErrorRegistry.createError('SECRET_STORE_READ_ONLY', { params: { backend: this.store.descriptor.id } });
   }

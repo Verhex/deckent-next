@@ -116,6 +116,8 @@ flowchart LR
 
 ## Get started
 
+For an AI assistant installing on your behalf, use the [AI installation guide](docs/ai-install.md); it names the steps only you can complete.
+
 ### Requirements
 
 - Linux, or Windows through WSL2, on x86_64. Native Windows is not supported, and on macOS the runtime service does not
@@ -515,8 +517,9 @@ OpenRouter settings.
 - **Coding tasks are accepted on the worker's exit code.** The content is not verified independently yet, and the
   window says so.
 - **Subscriptions are partial.** A Claude Code worker runs with your own Claude login, and the Brain (the planner behind
-  `/do`) can use your Claude subscription where Deckent's bubblewrap sandbox works (Linux and WSL). Chatting in the terminal
-  with a Claude subscription and Sign in with ChatGPT are not available yet (see [Roadmap](#roadmap)).
+  `/do`) can use your Claude subscription where Deckent's bubblewrap sandbox works (Linux and WSL). Sign in with ChatGPT
+  serves terminal chat on Linux and WSL from your own private local store; the Codex worker on that plan is not activated yet.
+  Chatting in the terminal with a Claude subscription is not available yet (see [Roadmap](#roadmap)).
 - **Platforms.** Native Windows is not supported. On macOS the local runtime service does not run yet (its socket is
   Linux-only), so chat, jobs and backup cannot be used there. Delivery, adoption, rollback and key grants need a terminal
   witness that exists only on Linux (WSL included) and are refused on other systems. arm64 is not shipped. A Docker

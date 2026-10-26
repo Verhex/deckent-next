@@ -1,7 +1,9 @@
+import type { HubCommandContext } from '#surfaces/core/cli-hub/index.js';
+import type { PermissionMode } from '#domain/index.js';
 import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand, BrainPlanObserver } from '#domain/index.js';
-import type { RunProposalResult } from '#engine/index.js';
+import type { RunPlanningResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
@@ -48,11 +50,14 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   catalogProviderId?: string | null;
   secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
+  pull?: 'available' | 'pick';
   connectFamily?: string | null; seeded?: boolean;
   /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
-  priceRequired?: boolean }>;
+  priceRequired?: boolean;
+  /** İ-12: the registry billing class (kinds arrive no-spend first: subscription, local, then metered). */
+  billing?: 'subscription' | 'local' | 'metered' }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
-export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true }>;
+export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: string }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
 export interface ProviderConnectHost {
   readonly kinds: readonly ProviderConnectKindView[];
@@ -61,6 +66,7 @@ export interface ProviderConnectHost {
   /** T4-B: the key's store name at an address (the generic row derives it from the host); the seed models of a seeded kind (exact ids, names). */
   /** Key names an earlier release stored that no row uses any more, and the row to store the key under instead (registry data). */
   readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
+  workspaces?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions): Promise<readonly Readonly<{ id: string; name: string }>[]>;
   secretName?(kind: string, endpoint: string | null): string | null;
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
   /** Seedless endpoint discovery after address selection; the same configured read used by models.connect. */
@@ -78,6 +84,8 @@ export type TerminalDeliveryHandlers = Readonly<{ assertAvailable(): Promise<voi
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
 export type TerminalSecretChange = Readonly<{ schemaVersion: 1; scopeId: string; name: string; action: 'set' | 'delete'; backend: string; removed: boolean | null }>;
+export type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
+export type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
 export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 
@@ -87,8 +95,11 @@ export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ re
 export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
   detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
-export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
-  | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
+export interface TerminalLaunchContext extends MonitorCommandContext, HubCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
+  | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend' | 'siwc'> {
+  openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;
+  admitModelActivation?: import('#surfaces/core/cli-models/index.js').ModelActivationAdmissionHandler;
+  openOnboarding?: (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-onboarding/index.js').OnboardingPort>;
   deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
   /** TESLIM-KARTI-OZET: each delivery card's summary, read under the person's grants; absent = cards show no summary. */
@@ -97,7 +108,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   readAutonomyShadow?: AutonomyShadowReader;
 
   /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once. */
-  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunProposalResult>;
+  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
@@ -116,6 +127,10 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   }>;
   listSecretNames?: TerminalSecretNamesHandler;
   setSecret?: TerminalSecretSetHandler;
+  /** U1: custody is checked before key entry; the same governed connection keeps partial key/grant results. */
+  prepareMainSecret?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<ProviderCustodyView>;
+  connectProviderSecret?: (root: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean }>, options: ConfigLoadOptions) => Promise<Readonly<{
+    name: string; backend: string | null; custody: ProviderSecretStepView; key: ProviderSecretStepView; grant: ProviderSecretStepView }>>;
   deleteSecret?: TerminalSecretDeleteHandler;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
@@ -126,7 +141,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
-  openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
+  openTerminalSessions?: (root: string, options: ConfigLoadOptions, folder?: string) => Promise<TerminalSessionStoreView | null>;
   /** T4 (Ctrl+G): the person's `$VISUAL`/`$EDITOR` behind the composition's adapter (temporary 0600 file, bounded read-back). */
   externalEditor?: WorklineProps['externalEditor'];
   completeTerminalChat?: TerminalChatTurnHandler;
@@ -135,6 +150,9 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   secretGrantCard?: TerminalSecretGrantHandlers;
   findTerminalMentions?: TerminalMentionFindHandler;
   attachTerminalMentions?: TerminalMentionAttachHandler;
+  /** CLI host custody only; the callback displays the exact PRE-9 preview, no wire authority. */
+  openOwnPermissionMode?: (root: string, input: { scopeId: string; mode: Exclude<PermissionMode, 'standart'>;
+    confirm: (preview: import('#engine/index.js').InstallerPermissionModesResult) => Promise<boolean>; signal?: AbortSignal }, options: ConfigLoadOptions) => Promise<boolean>;
   inspectPermissionMode?: TerminalPermissionModeInspectHandler;
   setPermissionMode?: TerminalPermissionModeSetHandler;
   inspectScratch?: TerminalScratchInspectHandler;
@@ -164,6 +182,7 @@ export type RunCancellationRenderer = (data: Awaited<ReturnType<RunCancellationD
 
 /** The host commands the terminal uses; the CLI binds them to its own command context (this unit never imports the CLI). */
 export interface TerminalLaunchPorts {
+  readonly foregroundSetup?: (root: string, stage: import('#engine/index.js').SetupStage, scopeId: string, locale: Locale) => Promise<Readonly<{ status: string; code?: string }>>;
   /** `/doctor`: the host's kernel command (`doctor --lang <locale>`) over the launch context with the given sinks. */
   readonly runKernelCommand: (argv: readonly string[], overrides: { readonly root: string; readonly env: NodeJS.ProcessEnv; readonly stdout: OutputSink; readonly stderr: OutputSink }) => Promise<void>;
   /** `/mcp`: absent when the host wires no MCP command handler (the slash command is then not offered). */

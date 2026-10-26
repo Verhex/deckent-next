@@ -162,4 +162,14 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     await expect(readFile(join(f.project, 'made.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
   }, 60_000);
+
+  it('C-2 exposes a failed policy-turn audit in the result note while keeping the denied effect denied', async () => {
+    const f = await modeRuntime({ ...HOST, grants: edit('deny', 'allow'), mode: 'ask' });
+    f.exec("CREATE TRIGGER refuse_policy_turn BEFORE INSERT ON audit_events WHEN NEW.kind = 'policy-turn' BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
+    const result = await f.call('write_file', { path: 'src/a.ts', content: 'changed' });
+    expect(result.status).toBe('denied');
+    expect(result.result).toMatchObject({ note: expect.stringContaining('policy-turn') });
+    expect(f.policyTurns()).toEqual([]);
+    expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).not.toBe('changed');
+}, 30_000);
 });

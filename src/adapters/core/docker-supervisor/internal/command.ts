@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { callerEnvironment } from '#platform/index.js';
 export interface DockerCommand {
   readonly executable: string; readonly args: readonly string[]; readonly timeoutMs: number; readonly outputBytes: number;
 }
@@ -28,7 +29,7 @@ export const runNodeDockerCommand: DockerCommandRunner = async (command, signal)
   const deadline = AbortSignal.timeout(command.timeoutMs), bound = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
     return await exec(command.executable, [...command.args], { maxBuffer: command.outputBytes, encoding: 'utf8',
-      env: dockerCommandEnvironment(command, process.env), signal: bound });
+      env: dockerCommandEnvironment(command, callerEnvironment(process.env)), signal: bound });
   } catch (error) {
     const failure = error as { stdout?: unknown; stderr?: unknown; code?: unknown; killed?: unknown };
     const killed = !!failure.killed || typeof failure.code !== 'number', stop = killed && bound.aborted ? bound.reason === deadline.reason ? 'deadline' : 'signal' : null;

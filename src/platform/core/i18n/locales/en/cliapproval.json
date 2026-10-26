@@ -159,5 +159,22 @@
   "cli.policy.toggle.actor": "AI actor {actor} · scope {scope} · resource {resource}",
   "cli.policy.toggle.becomesOn": "Change: {what}: off → on",
   "cli.policy.toggle.becomesOff": "Change: {what}: on → off",
-  "cli.approval.unreadable": "{count} record(s) could not be read by this version; deckent approval list --json shows them"
+  "cli.approval.unreadable": "{count} record(s) could not be read by this version; deckent approval list --json shows them",
+  "cli.policy.recovery.action.fence-attempt": "Block a lost worker's late writes and release its slot",
+  "cli.policy.recovery.action.hold-run": "Hold the work for a person",
+  "cli.policy.recovery.action.stop-orphan": "Stop an orphaned worker and release its slot",
+  "cli.policy.recovery.action.restart-component": "Restart a component",
+  "cli.policy.recovery.action.alert-brain": "Alert the Brain",
+  "cli.policy.recovery.action.hand-to-human": "Hand the work to a person",
+  "cli.policy.recovery.action.continue-new-attempt": "Continue a lost worker's task in a new attempt (low-risk work classes only)",
+  "cli.policy.recovery.rule": "Promote rule {rule} to live",
+  "cli.policy.recovery.unavailable": "no effect in this release",
+  "cli.policy.recovery.column.state": "State",
+  "cli.policy.recovery.column.exits": "Exit criteria",
+  "cli.policy.recovery.pick": "Lost-worker recovery in scope {scope}: pick a row to switch",
+  "cli.policy.recovery.scope": "Scope: {scope}",
+  "cli.policy.recovery.exitsUnmet": "Its measured exit criteria are not met; the change will be refused.",
+  "cli.policy.recovery.applied": "Changed.",
+  "cli.policy.recovery.current": "Already so; nothing changed.",
+  "cli.approval.tableDetails": "Full details: deckent approval inspect --input <file|->; input fields: deckent approval inspect --schema. Use the full id shown above."
 }

@@ -156,6 +156,8 @@ describe('W6: in-process terminal model switch with governed owners', () => {
     if (kind === 'budget') expect(local.blocked).toMatch(new RegExp(`^${locale === 'en' ? 'Required reservation' : 'Gerekli rezervasyon'}: \\d+[.,]\\d{2} USD\\. .+ ${words.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
     else expect(local.blocked).toBe(words);
     await f.press('/model', ENTER); await until(() => f.view.stdout.frame.includes('local'), 'blocked provider'); await f.press('local', ENTER, ENTER);
+    // U2: a money refusal opens the row's fix list (create budget) instead of the model; nothing is switched or sent from it.
+    if (kind !== 'protocol') { await until(() => f.view.stdout.frame.includes(t('tui.model.fix.budget', {}, locale)), 'budget fix'); await f.press(ESC); }
     expect(f.sends).toHaveLength(0); await f.press(ESC, ESC); await f.turn(); expect(f.sends[0]!.provider).toBe('claude');
   });
 

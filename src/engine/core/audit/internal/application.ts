@@ -1,4 +1,4 @@
-import { auditEventSchema, AuditError, isAuditorPrincipal, isNervousPrincipal, isRecoveryPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
+import { auditEventSchema, AuditError, isAuditorPrincipal, isWorkloadPrincipalRef, isNervousPrincipal, isRecoveryPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { sealAuditRecord, verifyAuditRecord } from './integrity.js';
 import type { AuditStore } from './store.js';
@@ -24,7 +24,10 @@ export class AuditApplication {
       || isNervousPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-detection')
       // S6R-4: a lost task's continuation comes only from the recovery principal; S6R-5: so does its decision seal. It records nothing else.
       || isRecoveryPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-decision'
-        || parsed.data.subject.kind === 'run-lifecycle' && parsed.data.subject.action === 'continue-lost-task')) throw new AuditError('AUDIT_INVALID');
+        || parsed.data.subject.kind === 'run-lifecycle' && parsed.data.subject.action === 'continue-lost-task')
+      // alpha.56 G4: a recovery verdict is a person's blind judgment: no workload (MCP, Nervous, recovery, ...) reference writes one; the review
+      // application refuses every other AI principal by its verified assurance before it records.
+      || parsed.data.subject.kind === 'recovery-verdict' && isWorkloadPrincipalRef(parsed.data.principal)) throw new AuditError('AUDIT_INVALID');
     const event: AuditEvent = parsed.data;
     return this.guard(() => verifyAuditRecord(this.store.append(event, sequence => sealAuditRecord(event, sequence, this.integrity)), this.integrity));
   }

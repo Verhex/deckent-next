@@ -149,8 +149,8 @@ describe('delivery queue list table (C-PRIO)', () => {
   for (const [language, expected] of [['en', [
     'Delivery queue · scope s · tickets: 5 (in flight first)',
     'Task         Target           State                    Next step                   Ticket',
-    'task-wait    refs/heads/main  Queued                   Wait for service            q-waitin',
-    'task-adopt   refs/heads/main  Adopted                  Inspect durable receipt     q-adopte',
+    'task-wait    refs/heads/main  Queued                   Wait for service            q-waiting',
+    'task-adopt   refs/heads/main  Adopted                  Inspect durable receipt     q-adopted',
     'task-verify  refs/heads/main  Verification failed      Create a new attempt        q-failed',
     'task-park    refs/heads/main  Parked                   Re-prepare on current base  q-parked',
     `    Reason: ${ErrorRegistry.createError('QUEUE_VERIFICATION_NOT_ADMITTED', { locale: 'en' }).message}`,
@@ -158,8 +158,8 @@ describe('delivery queue list table (C-PRIO)', () => {
   ['tr', [
     'Teslim kuyruğu · kapsam s · bilet: 5 (sürmekte olanlar önce)',
     'Görev        Hedef            Durum                  Sonraki adım                    Bilet',
-    'task-wait    refs/heads/main  Sırada                 Servisi bekle                   q-waitin',
-    'task-adopt   refs/heads/main  Benimsendi             Kalıcı makbuzu incele           q-adopte',
+    'task-wait    refs/heads/main  Sırada                 Servisi bekle                   q-waiting',
+    'task-adopt   refs/heads/main  Benimsendi             Kalıcı makbuzu incele           q-adopted',
     'task-verify  refs/heads/main  Doğrulama başarısız    Yeni deneme oluştur             q-failed',
     'task-park    refs/heads/main  Park edildi            Güncel tabanda yeniden hazırla  q-parked',
     `    Neden: ${ErrorRegistry.createError('QUEUE_VERIFICATION_NOT_ADMITTED', { locale: 'tr' }).message}`,
@@ -282,4 +282,13 @@ describe('delivery queue CLI card summaries (alpha.53 A3)', () => {
     expect(written).not.toMatch(/Rule off|would have/u); expect(p.shadows).toEqual([]);
     expect(p.requests).toMatchObject([{ operation: 'deliver', topPaths: 0 }]);
   });
+});
+
+it('ISY-35: a settled ticket keeps its result summary without asking for consent again', async () => {
+  const p = project('tr');
+  const context = { ...(p.context as object), deliveryQueue: { async inspectTargetQueue() { return { schemaVersion: 1, record: sampleView('q1', { state: 'settled', outcome: 'adopted', nextAction: 'inspect-receipt', position: null }) }; } },
+    async describeDeliverySummaries() { return [deliverySummaryFixture()]; } };
+  await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], context as never);
+  const output = p.output.join('');
+  expect(output).toContain('Değişen:'); expect(output).not.toContain('Evet:'); expect(output).not.toContain('Hayır:');
 });

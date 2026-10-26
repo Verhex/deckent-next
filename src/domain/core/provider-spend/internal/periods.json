@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "defaultPeriod": "calendar-month-local",
+  "periods": [
+    {
+      "schemaVersion": 1,
+      "id": "calendar-month-local",
+      "calendarMonths": 1
+    }
+  ]
+}

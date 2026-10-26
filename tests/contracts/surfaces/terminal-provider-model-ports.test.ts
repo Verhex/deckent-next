@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, t } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -78,7 +78,7 @@ describe('/provider port', () => {
     const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connect }, options, 'en', errorText);
     const view = await port.inspect();
     expect(view.kinds.map(kind => [kind.label, kind.detail, kind.blocked])).toEqual([['Anthropic API', 'not connected', null],
-      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['ChatGPT sign-in', '', 'Not available yet.']]);
+      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['ChatGPT subscription (Sign in with ChatGPT)', '', 'Not available yet.']]);
     const outcome = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY });
     expect(connect.probes).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY }]);
     expect(store.sets).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_ANTHROPIC_KEY', value: CANARY }]);
@@ -91,6 +91,28 @@ describe('/provider port', () => {
     // The custody words `doctor` uses for the backend the key went to (SECRET-AT-REST 1c).
     expect(port.transparency[0]!.text).toBe('Keys are plain text on disk (a 0600 file only you can read). The encrypted store is recommended: deckent secret store moves the keys and removes the plain text.');
     expect((await port.inspect()).kinds[0]!.detail).toBe('key DECKENT_ANTHROPIC_KEY stored · 0 model profile(s) use it');
+  });
+
+  it('a keyless server whose models were pulled reads as connected: no "no model uses the key" line and no "not connected" row (FIX8c)', async () => {
+    const { root, options } = await project({});
+    const local = { ...connectHost('ok').kinds[1]!, pull: 'available' as const, connectFamily: 'openai-chat-completions' };
+    const pulled = { providerId: `local-openai-${'a'.repeat(32)}`, providerVersion: 1, modelId: 'fixture-small', modelVersion: 1 };
+    const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [local] },
+      connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'local-openai', status: 'connected', reference: pulled,
+        models: [{ nativeId: 'fixture-small', state: 'connected', reference: pulled }], credentialRef: null, keyStored: null,
+        steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' }) as never,
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: pulled, label: 'fixture-small', nativeId: 'fixture-small', catalogRevision: 'c',
+        bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText);
+    const outcome = await port.connect({ kind: 'local-openai', endpoint: 'http://127.0.0.1:18777', key: null });
+    expect(outcome.lines.map(line => line.text).join('\n')).not.toContain('No model uses');
+    expect(outcome.lines.at(-1)!.text).toBe(t('tui.provider.model.next', {}, 'en'));
+    expect((await port.inspect()).kinds[0]!.detail).toBe('1 model(s) connected');
+    // Negative: a key-required kind whose key is gone stays "not connected" even when a profile of its provider remains.
+    const keyed = { ...connectHost('ok').kinds[0]!, catalogProviderId: pulled.providerId };
+    const gone = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [keyed] },
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: pulled, label: 'fixture-small', nativeId: 'fixture-small', catalogRevision: 'c',
+        bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText);
+    expect((await gone.inspect()).kinds[0]!.detail).toBe('not connected');
   });
 
   it('every refused check stores nothing and says why in the person\'s language', async () => {
@@ -204,6 +226,9 @@ describe('/provider port: connect a model (T4-B)', () => {
       seedModels: async kind => kind === 'openai-api' ? [{ nativeId: 'gpt-6-luna', displayName: 'GPT-6 Luna' }, { nativeId: 'gpt-6-astra', displayName: 'GPT-6 Astra', priced: false }] : [] };
     return { commands, connect, extra: {
       connectModel: async (_root: string, command: ModelConnectCommand) => { commands.push(command); return results.shift()!; },
+      // U2: "connected" is said only when the invocable-now reading names the model; this host's reading does.
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: { providerId: 'openai-api', providerVersion: 1, modelId: 'gpt-6-luna', modelVersion: 1 },
+        label: 'gpt-6-luna', nativeId: 'gpt-6-luna', catalogRevision: 'c', bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never,
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'c', providers: [
         { id: 'vendor-a', version: 1, models: [{ id: 'a', version: 1, nativeId: 'native-a', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] }] },
         { id: 'claude', version: 1, models: [{ id: 'c', version: 1, nativeId: 'native-c', protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] }] }] } }) as never } };
@@ -286,7 +311,8 @@ describe('/provider port: connect a model (T4-B)', () => {
     expect(commands.map(command => command.commandId)).toEqual([commands[0]!.commandId, commands[0]!.commandId]);
     expect(commands[0]).toMatchObject({ schemaVersion: 1, scopeId: 'scope', connection: 'openai-api', endpoint: null, model: { nativeId: 'gpt-6-luna' } });
     expect(done.title).toBe('Model connected: gpt-6-luna'); expect(done.summary).toBe('gpt-6-luna is connected; choose it with /model.');
-    expect(done.lines.map(line => line.label)).toEqual(['Model', 'Steps', 'Key', 'Spending', 'Service', 'Next']);
+    expect(done.lines.map(line => line.label)).toEqual(['Model', 'Steps', 'Key', 'Spending', 'Service', '']);
+    expect(done.lines.at(-1)).toEqual({ label: '', text: 'Choose it with /model (this session, or also as your default).', tone: 'success' });
     expect(done.lines.find(line => line.label === 'Spending')!.tone).toBe('warning');
     expect(JSON.stringify([pending, done, commands])).not.toContain(CANARY);
     // K5: carried and not-carried models are rows of the window; the summary line only counts them.
@@ -333,7 +359,8 @@ describe('/model source', () => {
     expect(inspected).toBe(1);
     expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual(states.models.map(entry => [entry.reference.modelId,
       entry.reference.modelId === 'chat', entry.availability.invocable ? null : modelInvocabilityText(entry.availability, 'en')]));
-    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => modelInvocabilityText(entry.availability, 'en')));
+    // U2: each row leads with its chat on/off state, then the same shared invocability words.
+    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => `${active.has(entry.reference.modelId) ? 'On' : 'Off'} · ${modelInvocabilityText(entry.availability, 'en')}`));
     expect(view.choices[0]!.exact).toBe('local-openai@1/chat@1 · native native-chat');
     expect(view.choices[1]!.command).toBe('deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> '
       + `--expected-revision 3 --binding-digest ${'d'.repeat(64)} --catalog-revision catalog-1`);
@@ -357,13 +384,13 @@ describe('/model source', () => {
     const source0 = modelPanelSource(root, 'scope', host, options, 'en');
     const view = await source0.inspect();
     expect(view.defaultBlocked).toBeNull();
-    expect(view.notes).toContain("In use: chat (from this project's setting; it wins over your default).");
+    expect(view.notes).toContain("In use: native-chat (from this project's setting; it wins over your default).");
     const outcome = await source0.makeDefault!(view.choices[1]!);
     expect(writes).toEqual([expect.objectContaining({ action: 'set', keyPath: 'terminal.defaultModel', layer: 'global', scopeId: 'scope', value: ref('coder') })]);
     expect(outcome.status).toBe('applied');
     expect(outcome.lines.at(-1)).toBe('This project names its own model, so the project setting still wins here.');
     source = 'user-default';
-    expect((await source0.inspect()).notes).toContain('In use: chat (your default model).');
+    expect((await source0.inspect()).notes).toContain('In use: native-chat (your default model).');
   });
   it('OpenRouter carries the seed models and no next-slice note on its row or connect result', async () => {
     const { root, options } = await project({});
@@ -446,4 +473,25 @@ describe('/model source', () => {
       .inspect();
     expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('buradan eklenmez');
   });
+});
+
+it('U1 provider port blocks unknown/grantless keys and renders custody refusal or retained-key administrator action without the value', async () => {
+  const { root, options } = await project({}), store = secrets(['DECKENT_ANTHROPIC_KEY']);
+  let ready = false;
+  const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connectHost('ok'),
+    prepareMainSecret: async () => ready ? { state: 'ready', backend: 'core.secret-store.encrypted-file@1' }
+      : { state: 'refused', backend: null, code: 'SECRET_STORE_UNSAFE', path: root },
+    connectProviderSecret: async (_root, input) => ({ name: input.name, backend: 'core.secret-store.encrypted-file@1', custody: { state: 'ready' },
+      key: { state: 'stored' }, grant: { state: 'admin', code: 'SECRET_GRANT_REQUIRED' } }),
+  }, options, 'tr', errorText, { offer: async () => false, grant: async () => {}, question: () => ({ title: '', lines: [], prompt: '' }),
+    check: async () => { throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED'); } });
+  expect((await port.inspect()).kinds[0]).toMatchObject({ modelBlocked: 'ERR:SECRET_GRANT_REQUIRED', grantRequired: true });
+  await expect(port.prepareKey!('anthropic-api', null)).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE', params: { path: root } });
+  expect(store.sets).toEqual([]);
+  ready = true;
+  const card = await port.prepareKey!('anthropic-api', null);
+  expect(card.grant).toBe(false); expect(card.lines[0]!.text).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope scope');
+  const connected = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: false });
+  expect(connected.stored).toBe(true); expect(connected.title).toContain('proje izni yok'); expect(connected.lines.at(-1)!.text).toContain('yönetici izni');
+  expect(JSON.stringify(connected)).not.toContain(CANARY); expect(store.sets).toEqual([]);
 });

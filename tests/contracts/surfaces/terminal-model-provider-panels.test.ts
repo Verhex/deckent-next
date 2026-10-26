@@ -2,7 +2,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { t } from '#platform/index.js';
+import { ErrorRegistry, t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
@@ -189,6 +189,9 @@ describe('/provider window', () => {
     const withModels = providerPanelTree(KINDS, terminalPanelLabels('en').provider, true);
     expect(withModels.items.slice(3).map(item => item.children?.map(child => [child.id, child.blocked?.reason ?? null]))).toEqual([
       [['connect', null], ['model', null], ['disconnect', null]], [['connect', null], ['model', 'Store its key first (Connect).']]]);
+    // FIX8b: an open ChatGPT row offers only the sign-in window, never a key entry or a catalog pick.
+    const open = { ...KINDS, kinds: KINDS.kinds.map(kind => kind.id === 'chatgpt-login' ? { ...kind, blocked: null } : kind) };
+    expect(providerPanelTree(open, terminalPanelLabels('en').provider, true, 'chatgpt-login').items[2]!.children).toEqual([{ id: 'connect', label: 'Continue with ChatGPT' }]);
     const { port } = providerPort();
     const { element } = panel('provider', { provider: port }, 'tr');
     const view = mount(element, 80, 40, true);
@@ -734,3 +737,91 @@ describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title
   });
 });
 
+
+it('U1 confirms the named project before masked key entry and carries that consent once to the connection', async () => {
+  const { port, requests } = providerPort();
+  let prepared = 0;
+  const provider = { ...port, prepareKey: async () => { prepared++; return { grant: true, lines: [{ label: 'Project', text: 'This key will be used in project ERP-DEMO.' }] }; } };
+  const { element, calls } = panel('provider', { provider });
+  const view = mount(element, 100, 40);
+  await settle(80);
+  await view.press(`${ENTER}${ENTER}`, 80);
+  expect(prepared).toBe(1); expect(requests).toEqual([]);
+  expect(view.frame()).toContain('This key will be used in project ERP-DEMO.');
+  expect(view.frame()).not.toContain('TRANSPARENCY-NOTE');
+  await armed(view.frame, 'y use it'); await view.press('y', 80);
+  expect(view.frame()).toContain('TRANSPARENCY-NOTE');
+  await view.press(CANARY, 40); await view.press(ENTER, 120);
+  expect(requests).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: true }]);
+  expect(view.all()).not.toContain(CANARY); expect(calls.errors).toEqual([]);
+});
+
+it('U1 optional-key local connections can skip custody and key entry explicitly', async () => {
+  const { port, requests } = providerPort();
+  let prepared = 0;
+  const provider = { ...port, prepareKey: async () => { prepared++; throw new Error('custody must not run without a key'); } };
+  const { element, calls } = panel('provider', { provider });
+  const view = mount(element, 100, 40);
+  await settle(80);
+  await view.press(`${DOWN}${ENTER}${ENTER}`, 80); // local kind, Connect, address list
+  await view.press(ENTER, 80); // existing local address
+  expect(view.frame()).toContain('Use an API key?');
+  await armed(view.frame, 'n without key'); await view.press('n', 100);
+  expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null }]);
+  expect(prepared).toBe(0); expect(calls.errors).toEqual([]);
+});
+
+it('U1 a stored main key opens the existing first-use card without re-entry; only its answer unlocks model binding', async () => {
+  const { port, requests } = providerPort();
+  let granted = false, grants = 0;
+  const provider: ProviderPanelPort = { ...port,
+    inspect: async () => ({ ...KINDS, kinds: [{ ...KINDS.kinds[0]!, keyStored: true, grantRequired: !granted,
+      modelBlocked: granted ? null : 'SECRET_GRANT_REQUIRED', models: [{ id: 'seed:fixture', label: 'Fixture', detail: '' }] }] }),
+    secretGrant: { offer: async () => true, question: name => ({ title: `Grant ${name} to ERP-DEMO?`, lines: [], prompt: 'y/n' }),
+      check: async name => { if (!granted) throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED', { params: { name, project: 'ERP-DEMO' } }); },
+      grant: async () => { grants++; granted = true; } },
+  };
+  const { element, calls } = panel('provider', { provider });
+  const view = mount(element, 100, 40);
+  await settle(80); await view.press(ENTER, 60);
+  expect(view.frame()).toContain('Use the stored key in this project');
+  await view.press(`${DOWN}${ENTER}`, 80);
+  expect(view.frame()).toContain('Grant DECKENT_ANTHROPIC_KEY to ERP-DEMO?');
+  expect(grants).toBe(0); expect(requests).toEqual([]);
+  await armed(view.frame, 'y/n'); await view.press('y', 100);
+  expect(grants).toBe(1); expect(granted).toBe(true); expect(requests).toEqual([]); expect(calls.errors).toEqual([]);
+  expect(view.all()).not.toContain(CANARY);
+});
+
+it('a blocked model offers its governed repair, writes only after the card, and never pins the model during repair', async () => {
+  const fixed: string[] = [];
+  const model: ModelPanelView = { ...MODELS, fixApply: 'Apply state change', fixKeep: 'Keep records', choices: [{ ...MODELS.choices[1]!, fixes: [{ id: 'activate', label: 'Turn on' }] }] };
+  const { port, pins } = modelPort(model);
+  const { element } = panel('model', { model: { ...port, fix: async (choice, action) => { fixed.push(`${choice.reference.modelId}:${action}`); } } });
+  const view = mount(element, 80, 35, true);
+  await settle(80); await view.press(ENTER); await view.press(ENTER);
+  expect(view.frame()).toContain('Apply state change'); expect(fixed).toEqual([]);
+  await view.press(ENTER); await settle(80);
+  expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
+});
+
+it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and doctor do), and Enter or Esc closes the card', async () => {
+  const { loadSiwcWindow } = await import('#surfaces/core/siwc/index.js'), { default: SiwcWindow } = await loadSiwcWindow();
+  for (const key of [ENTER, ESC]) {
+    let closed = 0; const errors: unknown[] = [];
+    const port = { locale: 'en' as const, connection: 'chatgpt-login', execute: async (request: { operation: string }) => {
+      if (request.operation === 'prepare') return { apiTargets: [{ id: 'metered', reference: ref('metered') }] };
+      throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } });
+    } };
+    const view = mount(createElement(SiwcWindow, { port: port as never, onClose: () => { closed++; }, onError: error => { errors.push(error); } }), 100, 40);
+    const keys = t('siwc.card.keys', {}, 'en');
+    await armed(view.frame, keys); await view.press(ENTER, 80);
+    // The API step: the person moves to the metered target, so the selection points past the refusal card's one choice.
+    await armed(view.frame, keys); await view.press(`${DOWN}${ENTER}`, 120);
+    expect(view.frame()).toContain('/tmp (mode 1777) can be changed by other users');
+    expect(view.frame()).not.toContain('Use your own local store');
+    expect((errors[0] as { message?: string }).message).toContain('/tmp (mode 1777)');
+    await armed(view.frame, keys); await view.press(key, 80);
+    expect(closed).toBe(1);
+  }
+});

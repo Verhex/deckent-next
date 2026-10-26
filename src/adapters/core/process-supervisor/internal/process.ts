@@ -4,6 +4,7 @@ import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { supervisorCommandSchema, validateSupervisorReply, SupervisorError,
   type SupervisorCommand, type SupervisorReply, type SandboxRequest, type ExecutionSupervisor } from '#engine/index.js';
+import { callerEnvironment } from '#platform/index.js';
 const processString = z.string().refine(value => !value.includes('\0'));
 const optionsSchema = z.object({ executable: processString.pipe(z.string().min(1)), args: z.array(processString).readonly(),
   cwd: processString.pipe(z.string().min(1)), timeoutMs: z.number().int().positive().max(2_147_483_647),
@@ -27,7 +28,7 @@ export class ProcessSupervisor implements ExecutionSupervisor {
     if (signal?.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
     const options = this.options;
     return new Promise((resolve, reject) => {
-      const child = spawn(options.executable, [...options.args], { cwd: options.cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(options.executable, [...options.args], { cwd: options.cwd, env: callerEnvironment(process.env), shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
       const chunks: Buffer[] = []; let bytes = 0; let failed = false;
       // Kill the control process only. The durable application must reconcile its worker separately.
       const stop = () => {

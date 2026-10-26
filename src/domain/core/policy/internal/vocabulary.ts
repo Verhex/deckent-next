@@ -14,6 +14,7 @@ export const policyResources = Object.freeze({
   // S7 agent/skill catalog core: the resource id is the scope. `inspect` reads agents and skills; `define` creates or revises an agent or a person's
   // own skill; `import` brings a skill from elsewhere (always also behind the pinned + signed floor, which no grant relaxes). S8-3/S8-4: the standing cards
   // (promote/demote/restore/retire: resource id `<scopeId>/<workClass>`), `dismiss` of a suggestion; `suggest`/`narrow` are the aggregator's only (AI floor).
+  hub: Object.freeze({ kind: 'hub' as const, actions: Object.freeze(['inspect', 'sources.add', 'sources.remove', 'install', 'update', 'uninstall', 'export', 'refresh', 'search', 'publish', 'yank', 'revoke'] as const) }),
   agentCatalog: Object.freeze({ kind: 'agent-catalog' as const, actions: Object.freeze(['inspect', 'define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow'] as const) }),
   // S8-5 signer keys: the resource id is the scope. `inspect` lists public rows; enrol/add/revoke/repair are a person's terminal cards (AI floor).
   skillSigner: Object.freeze({ kind: 'skill-signer' as const, actions: Object.freeze(['inspect', 'enrol', 'add', 'revoke', 'repair'] as const) }),
@@ -55,7 +56,7 @@ export const policyResources = Object.freeze({
   // `docker`). Installation-wide; the consumer offers it only to a person at a real terminal, never to the MCP actor or an agent.
   executionEnvironment: Object.freeze({ kind: 'execution-environment' as const, actions: Object.freeze(['install'] as const) }),
   // v13 (owner A48-D3b, C-DOCTOR C2): a doctor repair of the installation itself (e.g. making its folder private); the resource id is the repair id.
-  installation: Object.freeze({ kind: 'installation' as const, actions: Object.freeze(['repair'] as const) }),
+  installation: Object.freeze({ kind: 'installation' as const, actions: Object.freeze(['repair', 'inspect', 'uninstall', 'purge'] as const) }),
   // v13 (owner 2026-10-19, MON-NAMES): the monitor names refused and failed scopes (id and reason) to a viewer holding this; others see counts.
   monitor: Object.freeze({ kind: 'monitor' as const, actions: Object.freeze(['inspect-scope-diagnostics'] as const) }),
   // v13 (owner 2026-10-19, CA-1): reading every principal's standing approvals (`deckent policy grants --all`); a person's own need no action.
@@ -63,6 +64,9 @@ export const policyResources = Object.freeze({
   // S6R-3 (owner K-B 2026-10-23; lead on s6 Q3): the owner's standing approval of one Nervous stop-list action (the resource id is the action);
   // the recovery broker applies a sealed proposal only under it. A person's grant only: the AI floor refuses it for every AI principal.
   recoveryAction: Object.freeze({ kind: 'recovery-action' as const, actions: Object.freeze(['apply'] as const) }),
+  // alpha.56 G2 (owner Q-A1): a person's promotion of one measured Nervous rule (the resource id is `<ruleId>@<version>`): the broker treats only that
+  // exact rule and version as `live`. A person's grant only: the AI floor refuses it for every AI principal; the shipped seed never changes.
+  nervousRule: Object.freeze({ kind: 'nervous-rule' as const, actions: Object.freeze(['promote'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

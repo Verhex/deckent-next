@@ -1,14 +1,26 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "repository": "deckent/worker",
-  "imageVersion": "r4-20260930",
-  "previousVersion": "r3-20260922",
-  "baseImage": "node:24-trixie-slim",
-  "npmProviders": [
+  "baseRepository": "deckent/worker-base",
+  "base": {
+    "image": "node:24-trixie-slim",
+    "apt": [
+      "git",
+      "curl",
+      "ca-certificates",
+      "ripgrep",
+      "python3",
+      "make",
+      "g++"
+    ]
+  },
+  "providers": [
     {
       "id": "codex",
-      "package": "@openai/codex",
-      "channel": "latest",
+      "installer": {
+        "kind": "npm",
+        "package": "@openai/codex"
+      },
       "command": "codex",
       "helpArgs": [
         "exec",
@@ -23,8 +35,10 @@
     },
     {
       "id": "claude",
-      "package": "@anthropic-ai/claude-code",
-      "channel": "latest",
+      "installer": {
+        "kind": "npm",
+        "package": "@anthropic-ai/claude-code"
+      },
       "command": "claude",
       "helpArgs": [
         "--help"
@@ -36,20 +50,31 @@
         "--safe-mode",
         "--settings"
       ]
+    },
+    {
+      "id": "cursor",
+      "installer": {
+        "kind": "vendor-script",
+        "url": "https://cursor.com/install",
+        "home": "/opt/cursor-agent",
+        "bin": [
+          "cursor-agent",
+          "agent"
+        ]
+      },
+      "command": "cursor-agent",
+      "helpArgs": [
+        "--help"
+      ],
+      "requiredFlags": [
+        "--output-format",
+        "--model",
+        "--force",
+        "--trust"
+      ]
     }
   ],
-  "cursor": {
-    "id": "cursor",
-    "installer": "https://cursor.com/install",
-    "command": "cursor-agent",
-    "helpArgs": [
-      "--help"
-    ],
-    "requiredFlags": [
-      "--output-format",
-      "--model",
-      "--force",
-      "--trust"
-    ]
-  }
+  "imageVersion": "r4-20260930",
+  "previousVersion": "r3-20260922",
+  "npmRegistry": "https://registry.npmjs.org"
 }

@@ -30,11 +30,14 @@ export const nativeCliIdSchema = providerIdSchema(nativeCliIds);
  */
 export const INSTRUCTION_SURFACE_PATHS: WorkspaceHiddenPaths = vocabularyEnvelope.parse(registry).instructionSurface.hiddenPaths;
 const frozenCheckoutSchema = z.object({ nativeSubscription: z.object({ checkout: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).passthrough() }).passthrough() }).passthrough();
-/** The instruction surface a Run's frozen profile was bound to: its pinned checkout set (per-template override, replay-exact), else the registry list. */
-export function instructionSurfacePaths(profileParameters: unknown): WorkspaceHiddenPaths {
-  const frozen = frozenCheckoutSchema.safeParse(profileParameters);
-  return frozen.success ? frozen.data.nativeSubscription.checkout.hiddenPaths : INSTRUCTION_SURFACE_PATHS;
+/** The one reader of a frozen profile's checkout shaping (the C2 checkout the native compiler froze for its discovery mode; a U9-7 relay worker
+ * keeps its native profile's, so it hides exactly what the native worker would); null = full checkout. Checkout shaping (allocation,
+ * predecessor patches) and the delivery floor both read it, so they can never use different lists. */
+export function frozenHiddenPaths(profileParameters: unknown): WorkspaceHiddenPaths | null {
+  const frozen = frozenCheckoutSchema.safeParse(profileParameters); return frozen.success ? frozen.data.nativeSubscription.checkout.hiddenPaths : null;
 }
+/** The instruction surface a Run's frozen profile was bound to: its pinned hidden set (per-template override, replay-exact), else the registry list. */
+export const instructionSurfacePaths = (profileParameters: unknown): WorkspaceHiddenPaths => frozenHiddenPaths(profileParameters) ?? INSTRUCTION_SURFACE_PATHS;
 /** How a native CLI reports the model it ran: `session-events` = start model plus per-model usage (verifiable); `session-start-name` = only the
  * model's display name at session start, compared with the catalog's recorded reported names (never `verified`); `client-reported` = the model
  * the client resolved, read from the client's own session log, which the worker can rewrite (owner Q4 2026-10-23: never `verified`, a differing

@@ -1,5 +1,7 @@
 {
   "formats": { "json": "json", "agent": "json", "ci": "json", "dumb": "plain", "pipe": "plain", "tty": "interactive" },
   "windowOptionRows": 5,
-  "foreground": ["execution-environment.install", "execution.worker-image", "work.registry", "work.pool", "project-instructions.initialize", "model.connect", "installation.policy-upgrade", "doctor.inspect"]
+  "windowTextRows": { "reason": 3, "question": 2 },
+  "foreground": ["execution-environment.install", "execution.worker-image", "work.registry", "work.pool", "installation.policy-upgrade", "doctor.inspect"],
+  "readOnly": ["doctor.inspect", "shell-realm.inspect"]
 }

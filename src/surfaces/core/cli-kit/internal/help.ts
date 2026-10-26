@@ -1,4 +1,4 @@
-import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, ErrorRegistry, DeckentError, type ExitCode, type Locale, type MessageKey } from '#platform/index.js';
+import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, ErrorRegistry, DeckentError, type ExitCode, type Locale, type MessageKey, type Params } from '#platform/index.js';
 import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec, type CliInstallationContract } from './command-catalog.js';
 
 interface CliHelpSpec extends CliCommandSpec {
@@ -173,7 +173,7 @@ export function renderTopHelp(locale: Locale = resolveLocale(), catalog: readonl
     }), '', message('cli.help.top.options', locale), '', message('cli.help.top.footer', locale)].join('\n');
 }
 
-export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string {
+export function renderCommandHelp(command: CliHelpSpec, locale: Locale, params: Params = {}): string {
   const examples = MESSAGE_REGISTRY.catalogs[locale][`${command.detail}.examples`];
   const family = command.parent, children = live(command);
   // `picks: true` = a person on a terminal picks everything listed; a list = only those (the rest is required on a terminal too).
@@ -187,13 +187,13 @@ export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string 
   const bare = !family && command.bare && command.bare !== 'handler' && command.bare.read
     ? [t('cli.help.family.withoutAction', { command: `${CLI_NAME} ${command.name} ${command.bare.read}` }, locale)] : [];
   const rows = children.flatMap(child => hanging(`  ${child.name.padEnd(childColumn(children))}`, message(child.summary, locale)));
-  return [wrapHelp([...overview, message(command.detail, locale).replace(/ ?\[--(?:json|no-color|lang (?:en\|tr|<locale>))\]/g, '').replace(/\n +(?=\n)/g, ''), ...(family ? [] : ['', message(command.summary, locale)])].join('\n')),
+  return [wrapHelp([...overview, (command.detail === 'cli.help.modelsConnect' ? t('cli.help.modelsConnect', { kinds: t('cli.help.modelsConnect.kindsFromProvider', {}, locale), ...params }, locale) : message(command.detail, locale)).replace(/ ?\[--(?:json|no-color|lang (?:en\|tr|<locale>))\]/g, '').replace(/\n +(?=\n)/g, ''), ...(family ? [] : ['', message(command.summary, locale)])].join('\n')),
     ...(children.length ? [t('cli.help.heading.commands', {}, locale), ...rows] : []), ...bare,
     wrapHelp(['', t('cli.help.common', {}, locale), t('cli.help.output', {}, locale), ...(examples ? [examples] : [])].join('\n'))].join('\n');
 }
 
 /** Recognize only a help request. Extra execution flags still reach the unchanged parser. */
-export async function cliHelpRequest<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[], env: NodeJS.ProcessEnv = process.env, readLanguage?: () => Promise<Locale | undefined>): Promise<{ output: string; locale: Locale } | null> {
+export async function cliHelpRequest<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[], env: NodeJS.ProcessEnv = process.env, readLanguage?: () => Promise<Locale | undefined>, helpParams?: (key: MessageKey) => Promise<Params>): Promise<{ output: string; locale: Locale } | null> {
   const helpAt = argv.findIndex(value => value === '--help' || value === '-h');
   if (helpAt < 0) return null;
   const path = argv.slice(0, helpAt), tail = argv.slice(helpAt + 1);
@@ -213,5 +213,5 @@ export async function cliHelpRequest<C>(argv: readonly string[], commands: reado
     .some(value => LOCALES.some(locale => locale === value?.slice(0, 2).toLowerCase()));
   const configLanguage = overridden ? undefined : await readLanguage?.().catch(() => undefined);
   const locale = resolveLocale(language, env, configLanguage);
-  return { output: command ? renderCommandHelp(command, locale) : renderTopHelp(locale), locale };
+  return { output: command ? renderCommandHelp(command, locale, await helpParams?.(command.detail) ?? {}) : renderTopHelp(locale), locale };
 }

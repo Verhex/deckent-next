@@ -11,10 +11,10 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
 });
 it('publishes the versioned policy action/resource matrix through the SDK', () => {
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['backup', 'config', 'decision', 'memory', 'agent-catalog', 'skill-signer', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'task-decision', 'run-decision', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'mcp-server', 'permission-mode', 'agent-tool-call', 'secret', 'work-target', 'execution-environment', 'installation', 'monitor', 'policy', 'recovery-action']);
+  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['backup', 'config', 'decision', 'memory', 'hub', 'agent-catalog', 'skill-signer', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'task-decision', 'run-decision', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'mcp-server', 'permission-mode', 'agent-tool-call', 'secret', 'work-target', 'execution-environment', 'installation', 'monitor', 'policy', 'recovery-action', 'nervous-rule']);
   // I-POL v13 (owner A48-D3, MON-NAMES, CA-1): Docker install, installation repair, monitor scope names and everyone's standing approvals.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'execution-environment')!.actions).toEqual(['install']);
-  expect(getPolicyVocabulary().resources.find(r => r.kind === 'installation')!.actions).toEqual(['repair']);
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'installation')!.actions).toEqual(['repair', 'inspect', 'uninstall', 'purge']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'monitor')!.actions).toEqual(['inspect-scope-diagnostics']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'policy')!.actions).toEqual(['inspect-standing-grants']);
   // BACKUP-COMMAND (owner 2026-10-08): installation recovery sets.

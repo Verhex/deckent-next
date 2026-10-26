@@ -1,5 +1,7 @@
+import { registerProviderSpendPeriod, ProviderSpendPeriodRegistry } from '#engine/index.js';
+import { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from '#engine/core/provider-spend/index.js';
 import { checkModelInvocationCapacity } from '#engine/index.js';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { createProviderSpendAccount, parseProviderSpendAccount, reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendEvidenceDigest, providerSpendQuoteDigest, providerSpendLocalZeroTariff } from '#engine/core/provider-spend/index.js';
 
 const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'shared', revision: 1, currency: 'USD', limitMinorUnits: 100 };
@@ -115,4 +117,58 @@ it('exempts only a literal zero tariff whose every declared endpoint is a litera
   expect(providerSpendLocalZeroTariff(profile({ origin: 'http://127.0.0.1:8000' }), zero)).toBe(false);
   // A numeric zero without a literal zero tariff is not local-free either.
   expect(providerSpendLocalZeroTariff(profile({ endpoint: 'http://127.0.0.1:8000/chat' }), descriptor('paid', 0).quote)).toBe(false);
+});
+
+// Q-BP: calendar boundary with independent UTC instants, rather than recomputing the implementation's date formula.
+it('retains a legacy cap until local midnight, then resets usage once while carrying holds and freezes', () => {
+  vi.stubEnv('TZ', 'Europe/Istanbul');
+  try {
+    const old = parseProviderSpendAccount({ ...createProviderSpendAccount(budget), reservedMinorUnits: 20, settledMinorUnits: 80, settledExactMinorUnits: '80' });
+    const period = initializeProviderSpendPeriod(old, Date.parse('2026-10-15T12:00:00Z'), true);
+    expect(period.period).toMatchObject({ nextResetAtMs: Date.parse('2026-10-31T21:00:00Z'), legacyTransition: true });
+    expect(() => assertProviderSpendCapacity(period, descriptor('blocked', 1).quote, Date.parse('2026-10-31T20:59:59.999Z'))).toThrow('PROVIDER_SPEND_EXHAUSTED');
+    const next = reserveProviderSpend(period, budget, descriptor('new-month', 80), Date.parse('2026-10-31T21:00:00Z'));
+    expect(next.account).toMatchObject({ reservedMinorUnits: 100, settledMinorUnits: 80, settledExactMinorUnits: '80', period: { legacyTransition: false, settledBaselineExactMinorUnits: '80' } });
+    expect(providerSpendPeriodUsedExact(next.account)).toBe('0');
+    expect(() => reserveProviderSpend(next.account, budget, descriptor('double', 1), Date.parse('2026-10-31T21:00:00Z'))).toThrow('PROVIDER_SPEND_EXHAUSTED');
+    expect(() => assertProviderSpendCapacity({ ...next.account, frozen: true }, descriptor('frozen', 0).quote, Date.parse('2026-12-01T00:00:00Z'))).toThrow('PROVIDER_SPEND_FROZEN');
+    expect(advanceProviderSpendPeriod(next.account, Date.parse('2026-10-01T00:00:00Z'))).toEqual(next.account);
+  } finally { vi.unstubAllEnvs(); }
+});
+it('pins the active reset through a timezone change and computes leap-year, DST and missed-month boundaries in local time', () => {
+  vi.stubEnv('TZ', 'America/New_York');
+  try {
+    const current = initializeProviderSpendPeriod(createProviderSpendAccount(budget), Date.parse('2028-02-29T12:00:00Z'));
+    expect(current.period?.nextResetAtMs).toBe(Date.parse('2028-03-01T05:00:00Z'));
+    const march = advanceProviderSpendPeriod(current, Date.parse('2028-03-01T05:00:00Z'));
+    expect(march.period?.nextResetAtMs).toBe(Date.parse('2028-04-01T04:00:00Z'));
+    vi.stubEnv('TZ', 'Europe/Istanbul');
+    expect(advanceProviderSpendPeriod(march, Date.parse('2028-03-31T21:00:00Z'))).toEqual(march);
+    const after = advanceProviderSpendPeriod(march, Date.parse('2029-01-04T00:00:00Z'));
+    expect(after.period?.nextResetAtMs).toBe(Date.parse('2029-01-31T21:00:00Z'));
+    expect(() => advanceProviderSpendPeriod(after, NaN)).toThrow('PROVIDER_SPEND_INVALID');
+  } finally { vi.unstubAllEnvs(); }
+});
+it('charges a reservation settled across the month boundary to the new period without erasing lifetime money', () => {
+  vi.stubEnv('TZ', 'Etc/UTC');
+  try {
+    const current = initializeProviderSpendPeriod(createProviderSpendAccount(budget), Date.parse('2026-10-31T23:00:00Z'));
+    const claim = reserveProviderSpend(current, budget, descriptor('late', 60), Date.parse('2026-10-31T23:59:00Z'));
+    const settled = settleProviderSpend(claim.account, claim.reservation, { kind: 'measured-local', amountMinorUnits: 17, evidenceDigest }, Date.parse('2026-11-01T00:00:00Z'));
+    expect(providerSpendPeriodUsedExact(settled.account)).toBe('17');
+    expect(settled.account.settledExactMinorUnits).toBe('17');
+    expect(settled.account.reservedMinorUnits).toBe(0);
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('lets a distribution add a namespaced calendar period as data while Core keeps one immutable seed', () => {
+  const registry = new ProviderSpendPeriodRegistry([]);
+  expect(() => registry.register({ schemaVersion: 1, id: 'calendar-month-local', calendarMonths: 1 })).toThrow('REGISTRY_NAMESPACE_RESERVED');
+  registerProviderSpendPeriod({ schemaVersion: 1, id: 'overlay.quarter-local', calendarMonths: 3 });
+  const quarter = { ...budget, schemaVersion: 2, period: 'overlay.quarter-local' };
+  const account = initializeProviderSpendPeriod(createProviderSpendAccount(quarter), Date.parse('2026-01-15T12:00:00Z'));
+  expect(account.period?.nextResetAtMs).toBe(Date.parse('2026-04-01T00:00:00Z'));
+  expect(() => parseProviderSpendAccount({ ...account, period: { ...account.period, calendarMonths: 6 } })).toThrow('PROVIDER_SPEND_CONFLICT');
+  expect(() => registerProviderSpendPeriod({ schemaVersion: 1, id: 'overlay.quarter-local', calendarMonths: 6 })).toThrow('REGISTRY_ADAPTER_DUPLICATE');
+  expect(() => createProviderSpendAccount({ ...quarter, period: 'overlay.unknown' })).toThrow('PROVIDER_SPEND_INVALID');
 });

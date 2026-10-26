@@ -123,7 +123,7 @@ describe('person cards', () => {
     expect((await run(f, ['promote', 'auditor', '--work-class', 'feature', '--lang', 'tr'], calls)).code).not.toBe(0);
     expect(calls).toEqual([]);
     const body = card.asked[0]!.body.join('\n');
-    for (const phrase of ['auditor sürüm 1 · feature: aday → terfili', 'ilişki, nedensellik değil', 'zayıf bir süzgeç', 'Bu sürümü bir AI yazdı (local-os/mcp:uid:1)', 'Run kartı olmadan seçebilir'])
+    for (const phrase of ['auditor sürüm 1 · feature: aday → terfili', 'ilişki, nedensellik değil', 'zayıf bir süzgeç', 'Bu sürümü bir AI yazdı (local-os/mcp:uid:1)', 'iş kartı olmadan seçebilir'])
       expect(body, phrase).toContain(phrase);
     card.answers = ['apply'];
     const done = await run(f, ['promote', 'auditor', '--work-class', 'feature', '--lang', 'en'], calls);
@@ -156,7 +156,9 @@ it('the monitor names the catalog lines in the person\'s language', () => {
   expect(describeDiagnostic('catalog-suggestions-open:3', 'tr')).toMatchObject({ text: 'Ajan önerisi bekliyor (3)', action: 'Karar için: deckent agents suggestions' });
   expect(describeDiagnostic('catalog-signer-revoked:1', 'tr').text).toContain('İmzalayan iptal edildi');
   expect(describeDiagnostic('catalog-aggregator-unsigned', 'tr').text).toContain('imza anahtarı yok');
-  expect(describeDiagnostic('catalog-aggregator-unsigned', 'en').action).toContain('catalog-aggregator');
+  // alpha.56 F1 (61b1bdb1b): the action names the aggregator identity the observation carries; without one it points to the signer list.
+  expect(describeDiagnostic('catalog-aggregator-unsigned:["s","local/catalog-aggregator","alp"]', 'en').action).toContain("--scope 's' --principal 'local/catalog-aggregator:alp'");
+  expect(describeDiagnostic('catalog-aggregator-unsigned', 'en').action).toContain('deckent agents signers');
 });
 
 describe('define from a file naming a suggestion (REVISE 2742 R1)', () => {
@@ -177,4 +179,11 @@ describe('define from a file naming a suggestion (REVISE 2742 R1)', () => {
     expect(card.asked).toHaveLength(1);
     expect(calls).toMatchObject([['defineAgent', { agentId: 'auditor', expectedRevision: 1, fromSuggestion: d('a') }]]);
   });
+});
+
+it('a suggestion digest shorter than the displayed twelve characters reports the short prefix, before listing', async () => {
+  const f = await project(), listing = vi.fn();
+  await expect(agentsCommand(['agents', 'suggestions', 'show', 'abc', '--scope', 'scope'], { root: f.root, env: f.env, stdout: capture().sink,
+    listSuggestions: listing })).rejects.toMatchObject({ code: 'CLI_ID_TOO_SHORT', params: { prefix: 'abc', min: 12 } });
+  expect(listing).not.toHaveBeenCalled();
 });

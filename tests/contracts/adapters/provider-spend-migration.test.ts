@@ -1,10 +1,12 @@
+import { createProviderSpendAccount, createProviderSpendCheckpoint, parseProviderSpendCheckpoint, providerSpendPeriodUsedExact } from '#engine/index.js';
+import { DOWNGRADE_TO_V71_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { DOWNGRADE_TO_V51_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { CURRENT_LEDGER_VERSION, MODEL_ALLOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION,
   migrateLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
@@ -125,7 +127,7 @@ async function seedLedger20(file: string) {
   try {
     const accountRow = db.prepare('SELECT revision,reservation_count,record FROM provider_spend_accounts').get() as { revision: number; reservation_count: number; record: string };
     const currentAccount = JSON.parse(accountRow.record) as Record<string, unknown>;
-    const { settledExactMinorUnits: _exact, ...withoutExact } = currentAccount; void _exact;
+    const { settledExactMinorUnits: _exact, period: _period, ...withoutExact } = currentAccount; void _exact; void _period;
     const account = { ...withoutExact, schemaVersion: 1 };
     const accountDigest = historicalHash('deckent.provider-spend-checkpoint.v1',
       { revision: accountRow.revision, reservationCount: accountRow.reservation_count, account });
@@ -246,7 +248,7 @@ it('validates and translates a genuine ledger20 reservation without inferring a 
   const before = inventory(file); expect(before.version).toBe(20);
   const store = await openSqliteModelInvocationStore(file, options, 'allow'); store.close();
   const after = inventory(file); expect(after.version).toBe(CURRENT_LEDGER_VERSION);
-  expect(JSON.parse(String(after.accounts[0]!.record))).toMatchObject({ schemaVersion: 2, settledMinorUnits: 0,
+  expect(JSON.parse(String(after.accounts[0]!.record))).toMatchObject({ schemaVersion: 3, settledMinorUnits: 0,
     settledExactMinorUnits: '0', reservedMinorUnits: 4 });
   // SPEND-SETTLEMENT v49: proven v2 reservations are rewritten as reservation v3 (same disposition and evidence, no fabricated measurement).
   expect(JSON.parse(String(after.reservations[0]!.record))).toMatchObject({ schemaVersion: 3, measurement: null,
@@ -270,7 +272,7 @@ it.each(['settled-local', 'released-not-sent', 'held-unknown', 'held-overrun'] a
         disposition: { state: 'held', reason: 'overrun', observedMinorUnits: 5 } },
     }[state];
     expect(after.version).toBe(CURRENT_LEDGER_VERSION);
-    expect(account).toMatchObject({ schemaVersion: 2, ...expected.account });
+    expect(account).toMatchObject({ schemaVersion: 3, ...expected.account });
     expect(reservation).toMatchObject({ schemaVersion: 3, measurement: null, disposition: expected.disposition });
   });
 
@@ -298,7 +300,7 @@ it('rolls back an earlier translated account when a later account update fails',
   const retry = new DatabaseSync(file); retry.exec('DROP TRIGGER reject_second_account'); retry.close();
   const migrated = await openSqliteModelInvocationStore(file, options, 'allow'); migrated.close();
   const completed = inventory(file); expect(completed.version).toBe(CURRENT_LEDGER_VERSION);
-  expect(completed.accounts.map(row => JSON.parse(String(row.record)).schemaVersion)).toEqual([2, 2]);
+  expect(completed.accounts.map(row => JSON.parse(String(row.record)).schemaVersion)).toEqual([3, 3]);
 });
 
 it('rolls ledger21 migration back when a ledger20 reservation checksum is invalid', async () => {
@@ -336,4 +338,29 @@ it('creates current spend metadata empty on a fresh writer', async () => {
   expect(state.version).toBe(CURRENT_LEDGER_VERSION);
   expect(state.tables).toEqual([{ name: 'model_invocation_spend_reservations' }, { name: 'provider_spend_accounts' }]);
   expect(state.accounts).toEqual([]); expect(state.reservations).toEqual([]);
+});
+
+it('upgrades a period-less account once, retaining totals and the original checkpoint across reopen', async () => {
+  const file = await path(), db = new DatabaseSync(file);
+  vi.stubEnv('TZ', 'Europe/Istanbul'); vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
+  try {
+    db.exec('BEGIN'); migrateLedger(db); db.exec('COMMIT');
+    db.exec(DOWNGRADE_TO_V71_LEDGER_SQL);
+    const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'legacy', revision: 1, currency: 'USD', limitMinorUnits: 100 };
+    const before = createProviderSpendCheckpoint({ ...createProviderSpendAccount(budget), settledExactMinorUnits: '100', settledMinorUnits: 100 }, 1, 0);
+    db.prepare('INSERT INTO provider_spend_accounts(scope_id,record,revision,reservation_count,digest) VALUES(?,?,?,?,?)')
+      .run('scope', JSON.stringify(before.account), before.revision, before.reservationCount, before.digest);
+    db.exec('BEGIN'); migrateLedger(db); db.exec('COMMIT');
+    const row = db.prepare('SELECT * FROM provider_spend_accounts').get()!;
+    const after = parseProviderSpendCheckpoint({ schemaVersion: 2, account: JSON.parse(String(row.record)), revision: row.revision, reservationCount: row.reservation_count, digest: row.digest });
+    expect(after.account).toMatchObject({ budget: before.account.budget, settledMinorUnits: 100, period: { legacyTransition: true, nextResetAtMs: Date.parse('2026-10-31T21:00:00Z') } });
+    expect(providerSpendPeriodUsedExact(after.account)).toBe('100');
+    expect(JSON.parse(String(db.prepare('SELECT record FROM provider_spend_period_history').get()!.record))).toEqual(before);
+    db.exec('BEGIN'); migrateLedger(db); db.exec('COMMIT');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM provider_spend_period_history').get()!.n).toBe(1);
+    expect(() => db.exec('DELETE FROM provider_spend_period_history')).toThrow('append-only');
+  } finally { db.close(); vi.useRealTimers(); vi.unstubAllEnvs(); }
+  const reopened = new DatabaseSync(file, { readOnly: true });
+  try { expect(JSON.parse(String(reopened.prepare('SELECT record FROM provider_spend_accounts').get()!.record)).period.nextResetAtMs).toBe(Date.parse('2026-10-31T21:00:00Z')); }
+  finally { reopened.close(); }
 });

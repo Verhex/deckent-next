@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "contributions": [
+    {
+      "id": "service",
+      "owner": "installation",
+      "kind": "service",
+      "disposable": true,
+      "operation": "installation.remove-service",
+      "after": [],
+      "targetKind": "installation-service"
+    },
+    {
+      "id": "worker-image",
+      "owner": "worker-image",
+      "kind": "image",
+      "disposable": true,
+      "operation": "installation.remove-image",
+      "after": [
+        "service"
+      ],
+      "targetKind": "installation-image"
+    },
+    {
+      "id": "scratch",
+      "owner": "installation",
+      "kind": "path",
+      "disposable": true,
+      "operation": "installation.remove-cache",
+      "after": [
+        "service",
+        "worker-image"
+      ],
+      "targetKind": "installation-cache"
+    },
+    {
+      "id": "treeScanCache",
+      "owner": "installation",
+      "kind": "path",
+      "disposable": true,
+      "operation": "installation.remove-cache",
+      "after": [
+        "service",
+        "worker-image"
+      ],
+      "targetKind": "installation-cache"
+    },
+    {
+      "id": "bwrap-realm",
+      "owner": "installation",
+      "kind": "path",
+      "disposable": true,
+      "operation": "installation.remove-cache",
+      "after": [
+        "service",
+        "worker-image"
+      ],
+      "targetKind": "installation-cache"
+    },
+    {
+      "id": "build-cache",
+      "owner": "worker-image",
+      "kind": "path",
+      "disposable": true,
+      "operation": "installation.remove-cache",
+      "after": [
+        "service",
+        "worker-image"
+      ],
+      "targetKind": "installation-cache"
+    },
+    {
+      "id": "durable",
+      "owner": "installation",
+      "kind": "path",
+      "disposable": false,
+      "operation": "installation.remove-data",
+      "after": [
+        "service",
+        "worker-image",
+        "scratch",
+        "treeScanCache",
+        "bwrap-realm",
+        "build-cache"
+      ],
+      "targetKind": "installation-data"
+    }
+  ],
+  "inputMaxBytes": 4096
+}

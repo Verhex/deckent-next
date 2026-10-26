@@ -27,7 +27,7 @@ describe('candidate pin resolution', () => {
     const resolved = closure(); resolved['sysroot-aarch64'] = resolved['sysroot-aarch64']!.map(pin => pin.replace('linux-headers-7.0.0-r1', 'linux-headers-7.0.0-r2'));
     expect(() => refreshedLock(lock, resolved)).toThrow('direct pin missing or differs across architectures: linux-headers');
     const changed = closure();
-    for (const key of Object.keys(changed)) changed[key] = changed[key]!.map(pin => pin.replace('musl-1.2.6-r2', 'musl-1.2.6-r3'));
+    for (const key of Object.keys(changed)) changed[key] = changed[key]!.map(pin => pin.replace('musl-1.2.6-r3', 'musl-1.2.6-r4'));
     expect(() => refreshedLock(lock, changed)).toThrow('BWRAP_LICENSE_REFRESH_REQUIRED');
   });
   it('rejects a build whose resolved closure differs from the proposed one for either architecture', () => {

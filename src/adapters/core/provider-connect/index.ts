@@ -6,5 +6,8 @@ export { ProviderConnectError, connectionAdapter, providerConnectFamily, provide
 export { providerProfileCacheOffer, type ProviderProfileCacheOffer } from './internal/cache.js';
 export { providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from './internal/protocol.js';
 export { providerRequestDiagnosis } from './internal/diagnosis.js';
-export { listProviderWorkspaces, providerProfileWorkspaceOffer, type ProviderWorkspace } from './internal/workspaces.js';
+export { listProviderWorkspaces, listKindProviderWorkspaces, providerProfileWorkspaceOffer, type ProviderWorkspace } from './internal/workspaces.js';
 export { discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, ProviderModelListError } from './internal/discovery.js';
+
+export type { ProviderDiscoveryCause } from './internal/failure.js';
+export { providerConnectHelpKinds } from './help.js';

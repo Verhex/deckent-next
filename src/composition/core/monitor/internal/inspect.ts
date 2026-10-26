@@ -88,6 +88,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
       // S8-4: the catalog lines, summed across scopes ("öneri bekliyor (N)", "imzalayan iptal edildi", "imza anahtarı yok"); a scope that cannot read adds nothing.
       const catalog = new Map<string, number>();
       for (const scopeId of modelScopes) for (const line of await (await recall(target.path))(`catalog\0${scopeId}`, () => inspectConfiguredCatalogMonitor(target.path, scopeId, options)).catch(() => [] as readonly string[])) {
+        if (line.startsWith('catalog-aggregator-unsigned:')) { modelDiagnostics.push(line); continue; }
         const [code, count] = line.split(':') as [string, string | undefined]; catalog.set(code, (catalog.get(code) ?? 0) + (count === undefined ? 0 : Number(count)));
       }
       for (const [code, count] of catalog) modelDiagnostics.push(count ? `${code}:${count}` : code);

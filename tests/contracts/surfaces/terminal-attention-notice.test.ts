@@ -90,6 +90,18 @@ describe('the terminal host', () => {
     await unknownRun.finish();
   });
 
+  it('holds a process warning while the view is mounted and emits it after the view (FIX8a R27: never drawn over the view)', async () => {
+    const heard: string[] = [], listener = (warning: Error) => heard.push(warning.message);
+    process.on('warning', listener);
+    try {
+      const { finish } = await run(false, true);
+      process.emitWarning('HELD-WARNING'); await settle(30);
+      expect(heard).toEqual([]);
+      await finish(); await settle(10);
+      expect(heard).toEqual(['HELD-WARNING']);
+    } finally { process.off('warning', listener); }
+  });
+
   it('with the setting off asks for nothing and never rings', async () => {
     const { stdout, stdin, finish } = await run(false, false);
     expect(stdout.text).not.toContain('?1004');

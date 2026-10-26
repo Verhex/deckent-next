@@ -80,7 +80,7 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
   const ask = cardIo(context, locale, config.approvals.sessionTtlMs).ask;
   const scope = await resolveCommandScope({ command: 'deckent memory', locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: writing, interactive, listScopes: scopeLister(context, root, options), pick: ask });
-  if (!scope) return writing ? 1 : undefined;
+  if (!scope) { emit(t('memory.cancelled', {}, locale), { ...sinks, level: 'warning' }); return 1; }
   const io = { root, options, locale, scope, ask, inputMaxBytes: config.cli.invocationInputMaxBytes, resolve: (id: string) => resolveEntry(context, root, scope.scopeId, id, options) };
   if (args.action === 'review') return memoryReview(args, context, io);
   if (args.action === 'purge') return memoryPurge(args, context, io);

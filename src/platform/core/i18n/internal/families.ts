@@ -1,3 +1,7 @@
+import onboardingen from '../locales/en/onboarding-session.json' with { type: 'json' };
+import onboardingtr from '../locales/tr/onboarding-session.json' with { type: 'json' };
+import huben from '../locales/en/hub.json' with { type: 'json' };
+import hubtr from '../locales/tr/hub.json' with { type: 'json' };
 import configen from '../locales/en/config.json' with { type: 'json' };
 import configtr from '../locales/tr/config.json' with { type: 'json' };
 import clien from '../locales/en/cli.json' with { type: 'json' };
@@ -87,7 +91,12 @@ import agentstatstr from '../locales/tr/agentstats.json' with { type: 'json' };
 import agentsevoen from '../locales/en/agentsevo.json' with { type: 'json' };
 import agentsevotr from '../locales/tr/agentsevo.json' with { type: 'json' };
 
+import siwcen from '../locales/en/siwc.json' with { type: 'json' };
+import siwctr from '../locales/tr/siwc.json' with { type: 'json' };
+
 export const families = [
+  { en: siwcen, tr: siwctr },
+  { en: huben, tr: hubtr },
   { en: configen, tr: configtr },
   { en: clien, tr: clitr },
   { en: tuien, tr: tuitr },
@@ -132,6 +141,7 @@ export const families = [
   { en: tuisessionen, tr: tuisessiontr },
   { en: recoveryen, tr: recoverytr },
   { en: brainwaiten, tr: brainwaittr },
+  { en: onboardingen, tr: onboardingtr },
 ] as const;
 
 // Derived from `families` (distributive over the tuple), not from the JSON imports: the emitted declaration then names no JSON module, which a

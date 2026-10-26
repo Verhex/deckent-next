@@ -1,7 +1,12 @@
+import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
+import history from '../../fixtures/policy/first-run-history.json' with { type: 'json' };
 import { describe, expect, it } from 'vitest';
-import { POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,
-  namedPersonPolicyAdditions, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX, bindingsFileSchema, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,
+  namedPersonPolicyAdditions, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, firstRunTemplateRollback, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
+
+// Historical fixtures before v16 exclude both later additive deltas.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS];
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
 // a fresh, terminal-only installation gets from `deckent init policy`.
@@ -16,7 +21,7 @@ const EDIT_SHELL_TOOLS = ['edit_file', 'write_file', 'run_shell'];
 const input = { scopeId: 'installation', principal: me, readToolNames: READ_TOOLS, scratchToolNames: SCRATCH_TOOLS,
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: EDIT_SHELL_TOOLS,
   writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer',
-  executionEnvironmentIds: ['docker'] };
+  firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: ['docker'] };
 const decide = (policy: unknown, tool: string, cell: AgentToolCallCell, operation: string | null, extra: { mcpServer?: string; fullAccess?: boolean } = {}) =>
   decideAgentToolCall(policy, { principal, scopeId: 'installation', tool: { name: tool }, operation: operation ? { id: operation } : null, cell, ...extra });
 
@@ -29,8 +34,8 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     expect(template.id).toBe(FIRST_RUN_POLICY_TEMPLATE_ID); expect(template.version).toBe(FIRST_RUN_POLICY_TEMPLATE_VERSION);
     expect(policyFileSchema.safeParse(template.policy).success).toBe(true);
     expect(bindingsFileSchema.safeParse(template.bindings).success).toBe(true);
-    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v15' });
-    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v15-bindings', bindings: [] });
+    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v18' });
+    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v18-bindings', bindings: [] });
   });
   it('grants read tools and the given scratch tool names silently, asks for edit/shell tools, and grants pool use without pool/service management', () => {
     const policy = resolvePolicyBindings(firstRunPolicyTemplate(input).policy, firstRunPolicyTemplate(input).bindings);
@@ -69,7 +74,7 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
   });
   it('v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of their installation in its scope, nobody else', () => {
     const template = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(template.policy, template.bindings);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(15);
+    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(18);
     // v8 (BACKUP-COMMAND): installation-wide backup for the installing owner alone.
     expect(template.policy.grants.find(grant => grant.id === 'first-run-backup')).toEqual({ id: 'first-run-backup', effect: 'allow',
       actions: ['create', 'verify', 'restore'], scopes: 'all', principals: [me], resource: { kind: 'backup', ids: 'all' } });
@@ -120,7 +125,9 @@ describe('matchFirstRunPolicyTemplate (doctor recognition, never authority)', ()
     expect(matchFirstRunPolicyTemplate('first-run-template-v13')).toEqual({ id: 'first-run-template', version: 13 });
     expect(matchFirstRunPolicyTemplate('first-run-template-v14')).toEqual({ id: 'first-run-template', version: 14 });
     expect(matchFirstRunPolicyTemplate('first-run-template-v15')).toEqual({ id: 'first-run-template', version: 15 });
-    expect(matchFirstRunPolicyTemplate('first-run-template-v16')).toBeNull();
+    expect(matchFirstRunPolicyTemplate('first-run-template-v16')).toEqual({ id: 'first-run-template', version: 16 });
+    expect(matchFirstRunPolicyTemplate('first-run-template-v18')).toEqual({ id: 'first-run-template', version: 18 });
+    expect(matchFirstRunPolicyTemplate('first-run-template-v19')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v0')).toBeNull();
     expect(matchFirstRunPolicyTemplate('')).toBeNull();
   });
@@ -177,16 +184,20 @@ describe('first-run v5: MCP server authority, trust grant and the proposal tool'
 describe('first-run v4 → v5 migration (pure)', () => {
   const v4 = () => { const { proposeMcpToolName: _p, mcpCallOperationId: _o, ...rest } = input; void _p; void _o;
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id))
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !POST_V15_RULE_IDS.includes(grant.id) && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: rest.readToolNames } } : grant) }; };
-  it('exactly this installation\'s v4, v5, v6 or v7 template upgrades to exactly the current (v15) template; v15 is current', () => {
+  it('exactly this installation\'s v4, v5, v6 or v7 template upgrades to exactly the current (v16) template; v16 is current', () => {
     expect(upgradeFirstRunPolicy(v4(), input)).toEqual({ status: 'upgrade', from: 4, policy: firstRunPolicyTemplate(input).policy });
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string }[] };
     // v8 = BACKUP-COMMAND (installation-wide backup); v7 = T4-B K3 (model activation + invocation) and SPEND-SETTLEMENT (provider spend accounts) in one template version.
-    const v9 = { ...current, revision: 'first-run-template-v9', grants: current.grants.filter(grant => !['first-run-mcp-observe-pool', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id)) };
+    const v9 = { ...current, revision: 'first-run-template-v9', grants: current.grants.filter(grant => !POST_V15_RULE_IDS.includes(grant.id) && !['first-run-mcp-observe-pool', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v9, input)).toEqual({ status: 'upgrade', from: 9, policy: firstRunPolicyTemplate(input).policy });
-    // v14 = the current template without the v15 delta (S4B-1 + S7 + S4B-3); v13 = v14 without the v14 memory delta (S4); v12 = v13 without the v13 delta (I-POL).
-    const v14 = { ...current, revision: 'first-run-template-v14', grants: current.grants.filter(grant => !['first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id)) };
+    // v15 = the current template without the v16 recovery cells (alpha.56 D1); v14 = v15 without the v15 delta (S4B-1 + S7 + S4B-3); v13 = v14 without the v14 memory delta (S4); v12 = v13 without the v13 delta (I-POL).
+    const v16 = { ...current, revision: 'first-run-template-v16', grants: current.grants.filter(grant => !['first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS].includes(grant.id)) };
+    expect(upgradeFirstRunPolicy(v16, input)).toEqual({ status: 'upgrade', from: 16, policy: firstRunPolicyTemplate(input).policy });
+    const v15 = { ...current, revision: 'first-run-template-v15', grants: current.grants.filter(grant => !POST_V15_RULE_IDS.includes(grant.id)) };
+    expect(upgradeFirstRunPolicy(v15, input)).toEqual({ status: 'upgrade', from: 15, policy: firstRunPolicyTemplate(input).policy });
+    const v14 = { ...v15, revision: 'first-run-template-v14', grants: v15.grants.filter(grant => !['first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v14, input)).toEqual({ status: 'upgrade', from: 14, policy: firstRunPolicyTemplate(input).policy });
     const v13 = { ...v14, revision: 'first-run-template-v13', grants: v14.grants.filter(grant => !['first-run-memory-inspect', 'first-run-mcp-observe-memory'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v13, input)).toEqual({ status: 'upgrade', from: 13, policy: firstRunPolicyTemplate(input).policy });
@@ -214,9 +225,9 @@ describe('first-run v4 → v5 migration (pure)', () => {
 
 describe('first-run v4 → v5 governed additions (deckent policy upgrade --template v5, pure plan)', () => {
   const v4 = () => { const current = firstRunPolicyTemplate(input).policy as unknown as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id))
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !POST_V15_RULE_IDS.includes(grant.id) && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', 'first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-memory-inspect', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: READ_TOOLS } } : grant) }; };
-  const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'] };
+  const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: ['docker'] };
   it('adds exactly the three missing rules and never replaces or removes one: hand-added rules and an edited read rule stay', () => {
     const extra = { id: 'hand-added', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [me], resource: { kind: 'agent-tool', ids: ['fetch_url'] } };
     const edited = v4(); edited.grants = [...edited.grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: ['read_file'] } } : grant), extra as never];
@@ -246,10 +257,11 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
     expect(plan.conflicts).toEqual([]);
     // v14 (S4) and v15 (S4B-1 + S7 + S4B-3 + S4B-4 + S6R-5) make 46 missing rules, above one policy change (POLICY_CHANGE_MAX 32): the first batch names
     // fourteen remaining (the v14 memory reads and the v15 delta), a second run adds them, a third is current.
-    expect(plan.rules).toHaveLength(POLICY_CHANGE_MAX); expect(plan.remaining).toBe(19); // S8-5 signers + import, S8-3 aggregator (3)
+    expect(plan.rules).toHaveLength(POLICY_CHANGE_MAX); expect(plan.remaining).toBe(29); // S8-5 signers + import, S8-3 aggregator (3), v16's seven action cells (no rule versions in this input)
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] }, rest = firstRunTemplateAdditions(applied, names);
     expect(rest.status === 'plan' ? [rest.rules.map(rule => rule.id), rest.remaining] : rest).toEqual([['first-run-memory-inspect', 'first-run-mcp-observe-memory', 'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
-      'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory'], undefined]);
+      'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory',
+      ...POST_V15_RULE_IDS.filter(id => id.startsWith('first-run-recovery-action-')), 'first-run-first-commit', 'first-run-uninstall', 'first-run-uninstall-operations'], undefined]);
     expect(firstRunTemplateAdditions({ ...applied, grants: [...applied.grants, ...(rest.status === 'plan' ? rest.rules : [])] }, names)).toEqual({ status: 'current', conflicts: [] });
   });
   it('a hand-added rule under a v5 id with other content is kept and named as a conflict; another person\'s first-run policy is not theirs to upgrade', () => {
@@ -379,4 +391,56 @@ describe('v10 named execution authority', () => {
     const anchoredMcp = { ...old, grants: old.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, principals: [mcpPrincipalRef(me)] } : rule) };
     expect(firstRunTemplateAdditions(anchoredMcp, { ...names, person: mcpPrincipalRef(me) })).toEqual({ status: 'unavailable', reason: 'not-this-person' });
   });
+});
+
+it('U4E G1: historical policies upgrade exactly; first-commit remains scoped and survives the newer rollback delta', () => {
+  // Frozen from c1e5f8fab's private historical generator, before the v17 edit; no current production formula builds the oracle.
+  const source = { ...history.input, firstCommitOperationId: 'coding.first-commit' }, current = firstRunPolicyTemplate(source);
+  const rules = new Map<string, unknown>();
+  for (const row of history.versions) {
+    for (const rule of row.changed) rules.set(rule.id, rule);
+    const old = { ...history.policy, revision: `first-run-template-v${row.version}`, grants: [...rules.values()] };
+    expect(upgradeFirstRunPolicy(old, source), `v${row.version}`).toEqual({ status: 'upgrade', from: row.version, policy: current.policy });
+  }
+  const added = current.policy.grants.filter(rule => rule.id === 'first-run-first-commit');
+  expect(added).toEqual([{ id: 'first-run-first-commit', effect: 'allow', actions: ['execute'], scopes: ['installation'],
+    principals: [{ issuer: 'os', subject: '1000' }], resource: { kind: 'operation', ids: ['coding.first-commit'] } }]);
+  const resolved = resolvePolicyBindings(current.policy, current.bindings);
+  const ask = { principal: { ...history.input.principal, id: 'person', assurance: 'os-user' as const, scopeIds: ['installation', 'other'] },
+    scopeId: 'installation', action: 'execute', resource: { kind: 'operation', id: 'coding.first-commit' } };
+  expect(evaluatePolicy(resolved, ask).decision).toBe('allow');
+  expect(evaluatePolicy(resolved, { ...ask, scopeId: 'other' }).decision).toBe('deny');
+  expect(evaluatePolicy(resolved, { ...ask, action: 'compensate' }).decision).toBe('deny');
+  expect(evaluatePolicy(resolved, { ...ask, principal: { ...ask.principal, ...mcpPrincipalRef(history.input.principal) } }).decision).toBe('deny');
+  expect(firstRunPolicyTemplate({ ...source, principal: mcpPrincipalRef(history.input.principal) }).policy.grants.some(rule => rule.id === 'first-run-first-commit')).toBe(false);
+  const broadened = { ...current.policy, grants: current.policy.grants.filter(rule => rule.id !== 'first-run-first-commit')
+    .map(rule => rule.id === 'first-run-read-tools' ? { ...rule, scopes: ['installation', 'other'] } : rule) };
+  const scopedUpgrade = firstRunTemplateAdditions(broadened, { ...source, person: history.input.principal });
+  expect(scopedUpgrade.status === 'plan' ? scopedUpgrade.rules.filter(rule => rule.id === 'first-run-first-commit') : null).toEqual(added);
+  const rollback = firstRunTemplateRollback(current.policy, history.input.principal, 'installation', undefined, source.firstCommitOperationId);
+  expect(rollback.rules).toEqual([]); expect(rollback.conflicts).toEqual([]);
+  const customized = { ...current.policy, grants: current.policy.grants.map(rule => rule.id === added[0]!.id ? { ...rule, actions: ['inspect'] } : rule) };
+  expect(firstRunTemplateRollback(customized, history.input.principal, 'installation', undefined, source.firstCommitOperationId)).toMatchObject({ rules: [], conflicts: [] });
+});
+
+it('U10C v18: named-person lifecycle and exact operation grants upgrade add-only, retain enterprise/legal-hold denies and roll back only their own unmodified rules', () => {
+  const operations = ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'];
+  const source = { ...input, uninstallOperationIds: operations }, current = firstRunPolicyTemplate(source);
+  const wanted = [
+    { id: 'first-run-uninstall', effect: 'allow', actions: ['inspect', 'uninstall', 'purge'], scopes: 'all', principals: [me], resource: { kind: 'installation', ids: 'all' } },
+    { id: 'first-run-uninstall-operations', effect: 'allow', actions: ['execute'], scopes: 'all', principals: [me], resource: { kind: 'operation', ids: operations } },
+  ];
+  const previous = { ...current.policy, revision: 'first-run-template-v17', grants: current.policy.grants.filter(rule => !rule.id.startsWith('first-run-uninstall')) };
+  expect(upgradeFirstRunPolicy(previous, source)).toEqual({ status: 'upgrade', from: 17, policy: current.policy });
+  expect(current.policy.grants.filter(rule => rule.id.startsWith('first-run-uninstall'))).toEqual(wanted);
+  const principal = { id: 'person', ...me, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
+  const request = { principal, scopeId: 'other', action: 'purge', resource: { kind: 'installation', id: 'temporary' } };
+  expect(evaluatePolicy(resolvePolicyBindings(current.policy, current.bindings), request).decision).toBe('allow');
+  const denied = { ...current.policy, restrictions: [{ id: 'legal-hold-admin', actions: ['purge'], principals: [me], scopes: 'all', resource: { kind: 'installation', ids: 'all' } }] };
+  expect(evaluatePolicy(resolvePolicyBindings(denied, current.bindings), request)).toMatchObject({ decision: 'deny', ruleId: 'legal-hold-admin' });
+  expect(evaluatePolicy(resolvePolicyBindings(current.policy, current.bindings), { ...request, principal: { ...principal, ...mcpPrincipalRef(me) } }).decision).toBe('deny');
+  expect(firstRunTemplateRollback(current.policy, me, 'installation', undefined, undefined, operations).rules).toEqual(wanted);
+  const changed = { ...current.policy, grants: current.policy.grants.map(rule => rule.id === wanted[0]!.id ? { ...rule, scopes: ['installation'] } : rule) };
+  const rollback = firstRunTemplateRollback(changed, me, 'installation', undefined, undefined, operations);
+  expect(rollback.rules).toEqual([wanted[1]]); expect(rollback.conflicts).toEqual(['first-run-uninstall']);
 });

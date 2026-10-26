@@ -34,10 +34,16 @@
     "memoryPurges": "state/memory-purges",
     "signers": "signers",
     "brainWaits": "state/brain-waits",
-    "headlessLogins": "headless/logins"
+    "headlessLogins": "headless/logins",
+    "workerImageBuilders": "state/worker-image-builders",
+    "onboarding": "state/onboarding.json"
   },
   "bootstrapResource": "config",
-  "fixedResources": ["config", "installationJournal", "projectIdentity"],
+  "fixedResources": [
+    "config",
+    "installationJournal",
+    "projectIdentity"
+  ],
   "rootEnvironmentKey": "DECKENT_HOME",
   "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME"
 }

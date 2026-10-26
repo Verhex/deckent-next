@@ -81,7 +81,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     expect(body).toMatchObject({ refusal: 'model-mismatch', egress: { connected: 0, refused: 1, hosts: { 'example.invalid': 1 }, other: 0 } });
     // Doctor's record is cumulative over the connection's spawns and holds no target text beyond host names.
     const record = await readFile(join(c.root, 'state', 'egress.json'), 'utf8');
-    expect(JSON.parse(record)).toMatchObject({ schemaVersion: 1, refused: 5, hosts: { 'example.invalid': 3, 'api.anthropic.com': 1 }, other: 1 });
+    expect(JSON.parse(record)).toMatchObject({ schemaVersion: 2, refused: 5, hosts: { 'example.invalid': 3, 'api.anthropic.com': 1 }, other: 1 });
     expect(record).not.toMatch(/Not_A_Host|:443|:80/u);
     const [login] = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
     expect(login?.egress).toMatchObject({ refused: 5, hosts: ['example.invalid', 'api.anthropic.com'], other: 1 });

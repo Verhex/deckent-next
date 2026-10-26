@@ -221,3 +221,23 @@ describe('Shift+Tab permission-mode cycle (T2 T-MODE-CYCLE)', () => {
     expect(row('full-access', 'full-access', '!!')).toMatchObject({ text: '!! tam erişim', role: 'warning', bold: true, droppable: false });
   });
 });
+
+it('U5-S5: a closed mode needs the host opening card before the existing setter; decline writes nothing and yes refreshes its revision', async () => {
+  let view = { schemaVersion: 1 as const, scopeId: 'scope', supported: true, mode: 'standart' as 'standart' | 'full-auto' | 'full-access', askEdits: true,
+    revision: 'closed', eligible: true, fullAuto: false, fullAccess: false };
+  const calls: unknown[] = []; let yes = false;
+  const port = {
+    inspect: async () => view,
+    open: async (mode: 'full-auto' | 'full-access') => { calls.push(['card', mode]); if (yes) view = { ...view, revision: `opened-${mode}`, fullAuto: mode === 'full-auto' || view.fullAuto, fullAccess: mode === 'full-access' || view.fullAccess }; return yes; },
+    set: async (mode: 'standart' | 'full-auto' | 'full-access', expected: string, askEdits?: boolean, session?: { sessionId: string | null }) => {
+      calls.push(['set', mode, expected, session]); const previous = view.mode; view = { ...view, mode, askEdits: askEdits ?? view.askEdits };
+      return { ...view, changed: true, previous };
+    },
+  };
+  expect(permissionModeCycle(view, true)).toEqual(['standart', 'ask-edits', 'full-auto', 'full-access']);
+  expect((await cyclePermissionMode(port, view)).entries).toEqual([]); expect(calls).toEqual([['card', 'full-auto']]);
+  yes = true; await cyclePermissionMode(port, view);
+  expect(calls.at(-1)).toEqual(['set', 'full-auto', 'opened-full-auto', undefined]);
+  await runModeCommand('full-access', port, view, undefined, false, { sessionId: 'conversation' });
+  expect(calls.slice(-2)).toEqual([['card', 'full-access'], ['set', 'full-access', 'opened-full-access', { sessionId: 'conversation' }]]);
+});

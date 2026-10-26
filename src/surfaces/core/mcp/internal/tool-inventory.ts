@@ -9,6 +9,9 @@ export const MCP_WITHHELD_TOOLS = Object.freeze({
 
 /** Advertised write tools no capability group lists. Policy still decides each call; listing here grants nothing. */
 export const MCP_UNGROUPED_WRITE_TOOLS = Object.freeze({
+  connect_model: 'person-activation-preflight-or-separate-scoped-grant',
+  manage_provider_spending: 'separate-budget-grant-ai-reconcile-non-delegable',
+  purge_model_invocation_content: 'separate-person-content-purge-grant',
   // Only the ordinary operator control is advertised: hold, and resume of an operator hold, under the existing run cancel/reserve
   // policy. The human step (close, resume of any other park) stays unadvertised until the post-beta delegation slice.
   control_run: 'human-step-withheld-until-delegation-slice',
@@ -21,6 +24,9 @@ export const MCP_UNGROUPED_WRITE_TOOLS = Object.freeze({
   // capability cell with `ids: all` offers them; each call needs the MCP actor's own active key and is verified at commit.
   define_agent: 'signed-catalog-action-scoped-grant', define_skill: 'signed-catalog-action-scoped-grant', import_skill: 'signed-catalog-action-scoped-grant',
   change_agent_standing: 'signed-catalog-action-scoped-grant', dismiss_agent_suggestion: 'signed-catalog-action-scoped-grant',
+  // H7 Hub writes: a person grants each tool by name; no delegation group gains Hub authority. Hub policy (hub scope grant) still decides each call.
+  hub_install: 'per-tool-person-hub-grant', hub_update: 'per-tool-person-hub-grant', hub_uninstall: 'per-tool-person-hub-grant', hub_refresh: 'per-tool-person-hub-grant',
+  hub_publish: 'per-tool-person-hub-grant', hub_yank: 'per-tool-person-hub-grant', hub_revoke: 'per-tool-person-hub-grant',
 } as const);
 
 export type McpWithheldTool = keyof typeof MCP_WITHHELD_TOOLS;

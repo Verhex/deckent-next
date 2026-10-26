@@ -13,7 +13,7 @@ export function createConfigFileDocuments(projectRoot: string, options: ConfigLo
   const pathFor = (layer: ConfigLayer) => layer === 'global' ? globalPath : projectPath;
   async function snapshot(layer: ConfigLayer): Promise<ConfigSnapshot> {
     const [globalRead, projectRead, effective] = await Promise.all([
-      readJsonFile(globalPath), readJsonFile(projectPath), loadConfig(projectRoot, { ...options, force: true, heal: false }),
+      readJsonFile(globalPath), options.globalOnly ? Promise.resolve({ kind: 'absent' as const }) : readJsonFile(projectPath), loadConfig(projectRoot, { ...options, force: true, heal: false }),
     ]);
     for (const read of [globalRead, projectRead]) if (read.kind === 'io' || read.kind === 'corrupt' || read.kind === 'ready' && !isRecord(read.value)) throw new ConfigApplicationError('CONFIG_READ_IO_HOLD');
     const global = globalRead.kind === 'ready' && isRecord(globalRead.value) ? versionedConfig(globalRead.value) : {};

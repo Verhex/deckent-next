@@ -1,4 +1,5 @@
 import type { ShellReadOnlyVerdict } from './classify.js';
+import { registeredDestructiveReason } from './destructive-commands.js';
 
 export type ShellRisk = 'safe-read' | 'modify' | 'destructive';
 export interface ShellRiskClassification { readonly risk: ShellRisk; readonly reason: string }
@@ -262,8 +263,7 @@ function destructiveReason(words: string[]): string | null {
     const systemIndex = args.indexOf('system');
     if (systemIndex >= 0 && args[systemIndex + 1] === 'prune') return 'shell.destructive.docker-system-prune';
   }
-  if (binary === 'deckent' && args.some((arg) => arg === 'kill' || arg === 'cleanup' || arg === 'recover')) return 'shell.destructive.deckent-lifecycle';
-  return null;
+  return registeredDestructiveReason(binary, args);
 }
 
 function isReadOnlyGitBranch(args: string[]): boolean {

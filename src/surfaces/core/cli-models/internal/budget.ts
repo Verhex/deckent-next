@@ -1,14 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { PROVIDER_SPEND_SCOPE_BUDGET_ID, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
+import { PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_PERIOD_REGISTRY, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
 import type { ProviderSpendAccountInspection, ProviderSpendManagementResult } from '#engine/index.js';
 import { ErrorRegistry, t, type Locale } from '#platform/index.js';
 import choices from './budget-choices.json' with { type: 'json' };
 
 /**
  * Stage 1 scope budget choices (owner 2026-10-08): one shared USD limit per scope across every API provider, chosen from presets or stepped
- * within bounds — never typed. Mutable data (`budget-choices.json`); the CLI `--usd` takes the same bounds.
+ * within bounds — never typed. Mutable data (`budget-choices.json`); the CLI `--usd` takes the same bounds. `defaultPresetUsd` (owner İ-12,
+ * 2026-10-25): the preset a first budget card offers highlighted; the person confirms or changes it.
  */
-export const SCOPE_BUDGET_CHOICES: Readonly<{ presetsUsd: readonly number[]; minUsd: number; maxUsd: number; stepUsd: number; minorUnitsPerUsd: number }> = Object.freeze(choices);
+export const SCOPE_BUDGET_CHOICES: Readonly<{ presetsUsd: readonly number[]; defaultPresetUsd: number; minUsd: number; maxUsd: number; stepUsd: number; minorUnitsPerUsd: number }> = Object.freeze(choices);
 export type ScopeBudgetSurface = 'cli' | 'terminal';
 
 /** Whole dollars within the bounds, or null. */
@@ -18,7 +19,7 @@ export function scopeBudgetUsd(value: unknown): number | null {
 }
 /** The evidence of an interactive choice is the choice itself (who chose where is in the receipt's actor and authorization). */
 const choiceDigest = (input: Readonly<Record<string, unknown>>) => createHash('sha256').update(JSON.stringify({ schemaVersion: 1, kind: 'operator-budget-choice', ...input })).digest('hex');
-const budgetOf = (scopeId: string, budgetId: string, revision: number, usd: number) => ({ schemaVersion: 1, scopeId, budgetId, revision, currency: 'USD', limitMinorUnits: usd * SCOPE_BUDGET_CHOICES.minorUnitsPerUsd });
+const budgetOf = (scopeId: string, budgetId: string, revision: number, usd: number, period = PROVIDER_SPEND_PERIOD_REGISTRY.defaultPeriod) => ({ schemaVersion: 2, period, scopeId, budgetId, revision, currency: 'USD', limitMinorUnits: usd * SCOPE_BUDGET_CHOICES.minorUnitsPerUsd });
 
 /** `budget-create`: the scope's first account (revision 1) under the shared budget id. */
 export function scopeBudgetCreateCommand(scopeId: string, usd: number, surface: ScopeBudgetSurface, commandId: string = `budget-${randomUUID()}`): ProviderSpendManagementCommand {
@@ -32,7 +33,7 @@ export function scopeBudgetRevisionCommand(current: ProviderSpendAccountInspecti
   const budget = current.checkpoint.account.budget;
   if (budget.currency !== 'USD') throw ErrorRegistry.createError('PROVIDER_SPEND_CONFLICT');
   return parseProviderSpendManagementCommand({ schemaVersion: 1, kind: 'budget-revision', scopeId: current.scopeId, commandId, budgetId: budget.budgetId,
-    budgetRevision: budget.revision, expectedCheckpointDigest: current.checkpoint.digest, budget: budgetOf(current.scopeId, budget.budgetId, budget.revision + 1, usd),
+    budgetRevision: budget.revision, expectedCheckpointDigest: current.checkpoint.digest, budget: budgetOf(current.scopeId, budget.budgetId, budget.revision + 1, usd, budget.period ?? PROVIDER_SPEND_PERIOD_REGISTRY.defaultPeriod),
     unfreeze, evidenceDigest: choiceDigest({ surface, scopeId: current.scopeId, limitUsd: usd, unfreeze }) });
 }
 /** The one summary line of a recorded budget change (CLI text output and the terminal's system line). */

@@ -23,3 +23,9 @@ export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-huma
 export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
 export const doctorVerdict = lazyFunction(() => import('#surfaces/core/cli-observe/index.js'), 'doctorVerdict');
 export type { KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
+export type { HubHttpAuth, HubMcpOptions } from '#surfaces/core/hub-mcp/index.js';
+export function loadHubHttpSurface(): Promise<typeof import('#surfaces/core/hub-mcp/index.js')> { return import('#surfaces/core/hub-mcp/index.js'); }
+
+// U4B onboarding budget choices: loaded on use, so help/--version never reach the models surface (and through it the engine barrel; COLDSTART).
+export function loadModelsSurface(): Promise<typeof import('#surfaces/core/cli-models/index.js')> { return import('#surfaces/core/cli-models/index.js'); }
+export type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';

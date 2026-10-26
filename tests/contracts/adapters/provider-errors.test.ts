@@ -99,3 +99,16 @@ it.each([['1113', 'spend-limit'], ['1302', 'rate-limit']])('maps connection reje
   expect(providerProbeRejection(429, body, providerConnectKind('zai-api')!.connect!.rejectionCodes)).toBe(outcome);
   expect(providerProbeRejection(429, body)).toBe('limit-reached');
 });
+
+it('retains typed workspace refusal causes and cancellation without leaking transport text', async () => {
+  const value = await profile('anthropic-api');
+  await expect(listProviderWorkspaces(value, 'fixture-canary', { fetch: async () => new Response('fixture-canary', { status: 401 }) }))
+    .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', cause: 'credential-rejected', status: 401 });
+  await expect(listProviderWorkspaces(value, 'fixture-canary', { fetch: async () => { throw new Error('fixture-canary'); } }))
+    .rejects.toMatchObject({ cause: 'network' });
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('{')); } });
+  await expect(listProviderWorkspaces(value, 'fixture-canary', { timeoutMs: 20, fetch: async () => new Response(stream) })).rejects.toMatchObject({ cause: 'timeout' });
+  const stop = new AbortController(), reason = new Error('cancelled'); stop.abort(reason); let sent = false;
+  await expect(listProviderWorkspaces(value, 'fixture-canary', { signal: stop.signal, fetch: async () => { sent = true; return new Response(); } })).rejects.toBe(reason);
+  expect(sent).toBe(false);
+});

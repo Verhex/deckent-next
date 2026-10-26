@@ -44,6 +44,17 @@ const toolsEnglish = [
 afterEach(() => vi.unstubAllEnvs());
 
 describe('MCP trust card i18n', () => {
+  it('F5: generated launch and actual launch facts are localized without changing canonical approval text', () => {
+    const card = { ...launch, posture: 'sandbox with network: the project is read-only, .git included; the server gets its own persistent HOME (for npx/uvx caches) and the network; your HOME, project secrets and Deckent state are hidden; no sandbox, no start; a server that must write the project needs `realm: host` in its registry entry (it then runs unsandboxed)' };
+    const canonical = describeMcpTrustCard(card, 'en');
+    const translated = describeMcpTrustCard(card, 'tr');
+    expect(translated).toContain('proje ve .git salt okunur');
+    expect(translated).toContain('Yalıtım yoksa başlatılmaz');
+    expect(translated).not.toContain('the server gets');
+    const actual = { ...card, phase: 'tools' as const, execution: { sandboxed: false, projectReadOnly: false } };
+    expect(describeMcpTrustCard(actual, 'tr')).toContain('Yalıtım yok: sizin kullanıcınızla çalışır');
+    expect(describeMcpTrustCard({ ...card, execution: actual.execution }, 'en')).toBe(canonical);
+  });
   it.each([{ card: launch, english: launchEnglish }, { card: tools, english: toolsEnglish }])('preserves default and explicit English bytes for $card.phase', ({ card, english }) => {
     vi.stubEnv('DECKENT_LANGUAGE', 'tr');
     expect(describeMcpTrustCard(card)).toBe(english);

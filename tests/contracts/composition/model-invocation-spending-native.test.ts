@@ -266,7 +266,7 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   expect(JSON.stringify(inspected.spending)).not.toContain('upstream_inference_cost');
   const account = await inspectAccount(f);
   expect(account).toMatchObject({ reservationCount: 2, reservedMinorUnits: 0, settledMinorUnits: 1,
-    checkpoint: { account: { schemaVersion: 2, settledExactMinorUnits: '0.04', settledMinorUnits: 1, frozen: false } } });
+    checkpoint: { account: { schemaVersion: 3, settledExactMinorUnits: '0.04', settledMinorUnits: 1, frozen: false } } }); // v3: budget periods (alpha.56 BP)
   const accountQuery = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 };
   await expect(inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env }))
     .rejects.toMatchObject({ code: 'POLICY_DENIED' });
@@ -289,7 +289,9 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   expect(after).toMatchObject({ contentStatus: 'purged', responseContent: null, spending: inspected.spending });
   expect(JSON.stringify(after)).not.toContain('sensitive-usage-payload');
   expect(await inspectAccount(f)).toEqual(account);
-  expect(await inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env })).toEqual(accountView);
+  // alpha.56 BP: the period view carries its own read time; the account itself is unchanged by the purge.
+  const reread = await inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env });
+  expect({ ...reread, period: reread.period && { ...reread.period, asOfMs: 0 } }).toEqual({ ...accountView, period: accountView.period && { ...accountView.period, asOfMs: 0 } });
   const replay = await invokeConfiguredModel(f.project, f.command, { env: f.env });
   expect(replay).toMatchObject({ replayed: true, response: null, contentStatus: 'purged' });
   expect([f.metadataGets, f.posts]).toEqual([1, 2]); expect(await inspectAccount(f)).toEqual(account);

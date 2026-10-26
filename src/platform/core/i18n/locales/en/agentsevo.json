@@ -81,7 +81,7 @@
   "agentsevo.monitor.signerRevoked": "Signer revoked: {count} promotion(s) it signed still in effect",
   "agentsevo.monitor.signerRevokedAction": "To demote: deckent agents demote <agent-id> --work-class <id>",
   "agentsevo.monitor.unsigned": "Catalog aggregator has no signing key: it writes nothing",
-  "agentsevo.monitor.unsignedAction": "To enrol: deckent agents enrol-signer --principal <issuer>/catalog-aggregator:<subject> --label aggregator",
+  "agentsevo.monitor.unsignedAction": "To enrol: deckent agents enrol-signer --scope {scope} --principal {principal} --label aggregator",
   "agentsevo.monitor.registry": "Catalog evolution registry unavailable: no suggestion and no narrowing (Runs unaffected)",
   "mcp.tool.listAgentSuggestions": "List the catalog's sealed suggestions (promote, redesign, revise, new agent, new skill) with the numbers they were sealed with: refs, digests and counts only; lessons you may not read are only counted. Associations, not causes (read-only).",
   "mcp.tool.inspectAgentSuggestion": "Show one sealed suggestion, its state history and the standing it is about: refs, digests and counts only, never draft or lesson text (read-only).",
@@ -96,5 +96,6 @@
   "agentsevo.help.action.restore": "restore a narrowed agent to candidate (a person's card)",
   "agentsevo.help.action.retire": "retire an agent revision in one work class (a person's card)",
   "agentsevo.help.action.dismiss": "dismiss an open suggestion (a person's card)",
-  "agentsevo.help.action.standing": "reset a work class: all its agents back to candidate (a person's card)"
+  "agentsevo.help.action.standing": "reset a work class: all its agents back to candidate (a person's card)",
+  "agentsevo.monitor.unsignedUnknownAction": "Inspect signer identities: deckent agents signers"
 }

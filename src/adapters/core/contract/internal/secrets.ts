@@ -1,13 +1,14 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import { RegistryError } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, DeckentError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
   registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, withConfigWriteLock, writeConfig, type Environment } from '#platform/index.js';
-import { CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
-  type SecretGrantStoreFactory, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
+import { assertPublicSecretName, CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
+  type SecretGrantStoreFactory, type SecretStore, type PersonalCustodyOwner, type SecretStoreDescriptor, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory,
-  fileSecretGrantStoreFactory } from '#adapters/core/secret-store/index.js';
+  fileSecretGrantStoreFactory, personalStoreAssertion, rememberPersonalStoreInstance, type PersonalStoreContext } from '#adapters/core/secret-store/index.js';
 
 /**
  * The `secrets` section v1 (SECRET-K1): which registered backend resolves `$DECK:NAME` references. An absent section is the environment
@@ -38,8 +39,8 @@ export function registerSecretGrantStore(factory: SecretGrantStoreFactory): void
 export const installationSecretRoot = (env: Environment, platform: string = process.platform) => installationRoot(env, platform);
 /** A project vault: the encrypted-file backend in the vault's own directory, opened with the vault context (port v1, additive field). */
 export function openProjectVaultStore(directory: string, anchor: ProjectVaultAnchor, env: Environment, platform: string = process.platform): SecretStore {
-  return registry.open(ENCRYPTED_FILE_SECRET_STORE_ID, { env, platform, root: directory,
-    vault: { key: projectVaultKey(anchor), installationId: anchor.installationId, projectId: anchor.projectId } });
+  const context = { env, platform, root: directory, vault: { key: projectVaultKey(anchor), installationId: anchor.installationId, projectId: anchor.projectId } };
+  return rememberPersonalStoreInstance(registry.open(ENCRYPTED_FILE_SECRET_STORE_ID, context), context);
 }
 /** The project's grant store: the registered Enterprise store when there is one, else Core's file. */
 export function openSecretGrantStore(root: string, anchor: ProjectVaultAnchor, lockTimeoutMs: number): SecretGrantStore {
@@ -51,7 +52,8 @@ export function isRegisteredSecretStore(id: string): boolean { return registry.h
 export function registeredSecretStores(): readonly string[] { return registry.ids(); }
 /** Opens one registered backend by id in the caller's environment (the store switch's source and target). */
 export function openRegisteredSecretStore(id: string, env: Environment, platform: string = process.platform): SecretStore {
-  return registry.open(id, { env, platform, root: installationRoot(env, platform) });
+  const context = { env, platform, root: installationRoot(env, platform) };
+  return rememberPersonalStoreInstance(registry.open(id, context), context);
 }
 /**
  * SECRET-STORE-SWITCH (owner 2026-10-08): the installation's store selection, `secrets.store` of the installation (global) config. Only the
@@ -91,15 +93,21 @@ export const SECRET_CUSTODY_WAIT_MS = 5_000;
  * selection publish); nothing takes them the other way and the paths differ, so the non-reentrant lock never nests on itself. Only a wait
  * for the section itself becomes `SECRET_STORE_BUSY`; a lock refusal inside the work keeps its own code.
  */
-export function createInstallationSecretCustody(env: Environment, platform: string = process.platform, waitMs = SECRET_CUSTODY_WAIT_MS): SecretCustody {
+export function createInstallationSecretCustody(env: Environment, platform: string = process.platform, waitMs = SECRET_CUSTODY_WAIT_MS, personal?: PersonalStoreContext): SecretCustody {
   const path = `${resolveGlobalConfigPaths(env, platform).platformPath}.secret-custody`, selection = createInstallationSecretStoreSelection(env, platform);
+  const held = new AsyncLocalStorage<boolean>();
+  const assertion = personal ? personalStoreAssertion(installationRoot(env, platform), personal, () => selection.read()) : undefined;
   return Object.freeze({
+    ...(assertion ? { assertPersonal: (descriptor: SecretStoreDescriptor, owner: PersonalCustodyOwner) => {
+      if (!held.getStore()) throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL');
+      return assertion(descriptor, owner);
+    } } : {}),
     async exclusive<T>(work: () => Promise<T>): Promise<T> {
       let entered = false;
       // The installation directory is also the private store root: created owner-only here (the config lock alone would create it with the
       // process umask, which the file-backed stores then refuse as not private). An existing directory is left as it is.
       try { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); } catch { throw ErrorRegistry.createError('SECRET_STORE_UNAVAILABLE', { params: { backend: dirname(path) } }); }
-      try { return await withConfigWriteLock(path, () => { entered = true; return work(); }, waitMs); }
+      try { return await withConfigWriteLock(path, () => { entered = true; return held.run(true, work); }, waitMs); }
       catch (error) {
         if (!entered && error instanceof DeckentError && error.code === 'CONFIG_WRITE_LOCKED') throw ErrorRegistry.createError('SECRET_STORE_BUSY');
         throw error;
@@ -110,7 +118,7 @@ export function createInstallationSecretCustody(env: Environment, platform: stri
 }
 /** Opens the backend the (validated, unresolved) configuration selects; opening reads nothing yet. */
 export function openConfiguredSecretStore(config: Readonly<Record<string, unknown>>, env: Environment, platform: string = process.platform): SecretStore {
-  return registry.open(readSecretsConfig(config).store, { env, platform, root: installationRoot(env, platform) });
+  return openRegisteredSecretStore(readSecretsConfig(config).store, env, platform);
 }
 
 let registered = false;
@@ -137,7 +145,7 @@ export function registerSecretStoreConfig(): void {
   // The one production resolver: each call opens the selected backend and reads per reference (no value cache).
   installSecretResolverFactory(context => {
     const store = openConfiguredSecretStore(context.config, context.env, context.platform);
-    return name => store.get(name);
+    return async name => { assertPublicSecretName(name); return store.get(name); };
   });
   registered = true;
 }

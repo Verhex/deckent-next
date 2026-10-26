@@ -5,8 +5,8 @@ const human: VerifiedPrincipal = { id: 'owner', issuer: 'host', subject: '1000',
 const mcp: VerifiedPrincipal = { ...human, id: 'mcp', issuer: 'host/mcp', assurance: 'workload-verified' };
 const legacyMcp: VerifiedPrincipal = { ...mcp, assurance: 'os-user' };
 const workload: VerifiedPrincipal = { ...human, id: 'script', issuer: 'ci', assurance: 'workload-verified' };
-/** Every route that can widen an AI actor's own (or a controlled principal's) authority, against the vocabulary and administration commands. */
-const WIDENING: readonly (readonly [string, string, string, string])[] = [
+/** Non-delegable routes, including authority widening and the owner's explicit code floors. */
+const FLOORED: readonly (readonly [string, string, string, string])[] = [
   ['grants, role bindings, delegation cells, restrictions, SoD, standing grants', 'operation', 'policy.administer', 'execute'],
   ['policy administration compensation', 'operation', 'policy.administer', 'compensate'],
   ['authority document write', 'authority-document', 'policy', 'write'],
@@ -18,6 +18,11 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   // Owner 2026-10-19 (I-POL v13): host changes outside the sandbox stay a person's at a terminal.
   ['execution environment install (Docker group is root-equivalent)', 'execution-environment', 'docker', 'install'],
   ['installation repair (doctor fix of the installation itself)', 'installation', 'installation-directory-private', 'repair'],
+  // alpha.56 U10B: removing the installation or purging its data is a person's act at their own terminal.
+  ['installation uninstall', 'installation', 'installation', 'uninstall'],
+  ['installation purge', 'installation', 'installation', 'purge'],
+  // Owner Q-SPEND (b), 2026-10-26: held-spend reconciliation stays a person's even under an older grant.
+  ['provider spend reconciliation (settle, release, write-off)', 'provider-spend-account', 'ordinary-target', 'reconcile'],
   ['secret write', 'secret', 'OPENAI_API_KEY', 'set'],
   ['secret delete', 'secret', 'OPENAI_API_KEY', 'delete'],
   ['secret store switch', 'secret', 'all', 'switch'],
@@ -37,6 +42,7 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['memory contest', 'memory', 'scope', 'contest'],
   // S6R-3 (lead on s6 Q3): the owner's standing approval of a Nervous stop action is never an AI's.
   ['Nervous standing approval', 'recovery-action', 'stop-orphan', 'apply'],
+  ['Nervous rule promotion (alpha.56 G2)', 'nervous-rule', 'container-gone@1', 'promote'],
   ['secret-gate acknowledged deny paths', 'config', 'global:execution.secretGate.acknowledgedDenyPaths', 'write'],
   ['secret-gate section', 'config', 'project:execution.secretGate', 'write'],
   ['approval assurance producers', 'config', 'project:approvals.assuranceProducers', 'write'],
@@ -67,9 +73,9 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
 const grantAll = (kind: string, principal: VerifiedPrincipal) => ({ id: `all-${kind}`, effect: 'allow' as const, actions: 'all' as const, scopes: 'all' as const,
   principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind, ids: 'all' as const } });
 const policyFor = (principal: VerifiedPrincipal) => ({ schemaVersion: 1, revision: 'p', restrictions: [],
-  grants: [...new Set(WIDENING.map(row => row[1]))].map(kind => grantAll(kind, principal)) });
+  grants: [...new Set(FLOORED.map(row => row[1]))].map(kind => grantAll(kind, principal)) });
 
-it.each(WIDENING)('%s is refused for every AI actor even when a policy cell grants it (%s %s %s)', (_label, kind, id, action) => {
+it.each(FLOORED)('%s is refused for every AI actor even when a policy cell grants it (%s %s %s)', (_label, kind, id, action) => {
   for (const ai of [mcp, legacyMcp, workload]) {
     expect(aiAuthorityFloor(ai, { kind, id }, action), ai.id).toBe(true);
     expect(evaluatePolicy(policyFor(ai), { principal: ai, scopeId: 's', action, resource: { kind, id } }), ai.id).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
@@ -78,10 +84,10 @@ it.each(WIDENING)('%s is refused for every AI actor even when a policy cell gran
   expect(evaluatePolicy(policyFor(human), { principal: human, scopeId: 's', action, resource: { kind, id } }).decision).toBe('allow');
 });
 
-it('every vocabulary action that is not authority-widening stays policy-governed for AI', () => {
-  const widening = new Set(WIDENING.map(([, kind, , action]) => `${kind}:${action}`));
+it('every vocabulary action outside the explicit code floors stays policy-governed for AI', () => {
+  const floored = new Set(FLOORED.map(([, kind, , action]) => `${kind}:${action}`));
   const governed = getPolicyVocabulary().resources.flatMap(resource => resource.actions.map(action => `${resource.kind}:${action}`))
-    .filter(cell => !widening.has(cell) && !['backup:restore', 'permission-mode:set'].includes(cell) && !cell.startsWith('secret:'));
+    .filter(cell => !floored.has(cell) && !['backup:restore', 'permission-mode:set'].includes(cell) && !cell.startsWith('secret:'));
   for (const cell of governed) {
     const [kind, action] = cell.split(':') as [string, string];
     expect(aiAuthorityFloor(mcp, { kind, id: 'ordinary-target' }, action), cell).toBe(false);

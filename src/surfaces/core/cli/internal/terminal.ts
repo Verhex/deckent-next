@@ -13,6 +13,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     runKernelCommand: (args, overrides) => runKernelCommand(args, { ...context, ...overrides }),
     ...(context.runMcpCommand ? { mcpSlash: (root: string, args: string, options: Parameters<typeof mcpSlash>[3], locale: Locale) => mcpSlash(root, args, context, options, locale),
       runMcp: context.runMcpCommand } : {}),
+    foregroundSetup: async (root, stage, scopeId, locale) => (await import('#surfaces/core/setup/index.js')).runForegroundStage(context, root, stage, scopeId, locale),
     renderRunCancellation,
   });
 }

@@ -5,3 +5,8 @@ export { WorkerImageSetupApplication, planFirstWorkerImage } from './internal/wo
 export type { WorkerImageBuildInput, WorkerImageCard, WorkerImagePorts, WorkerImageStatus } from './internal/worker-image.js';
 export { RUNTIME_STAGE_ID, SETTINGS_STAGE_ID, WORKER_STAGE_ID, workerFactsSchema, workerSetupStages } from './internal/worker-stages.js';
 export { WORK_SETUP_FAMILY, WORK_DEFAULTS, WORK_PROVIDERS, WORK_KIND_STAGE_ID, WORK_POOL_STAGE_ID, workFactsSchema } from './internal/work-family.js';
+
+export { workerImageBudget, workerConsentBinding, matchingWorkerConsent, interruptedWorkerImage, workerImageStateSchema, consentProviders } from './internal/acquisition.js';
+export type { WorkerImageState, WorkerConsentBinding } from './internal/acquisition.js';
+
+export { hasWorkerKind } from './internal/worker-stages.js';

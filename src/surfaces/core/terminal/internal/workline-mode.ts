@@ -1,3 +1,4 @@
+import type { SecretGrantAsk } from '#surfaces/core/terminal-kit/index.js';
 import { useCallback, useRef, useState } from 'react';
 import { useInput } from 'ink';
 import { fullAutoNotInEffect, PERMISSION_MODES, type PermissionMode, type PermissionModeChange, type PermissionModeView } from '#domain/index.js';
@@ -12,6 +13,8 @@ import { systemSummaryEntry } from '#surfaces/core/terminal-work/index.js';
  * conflict. `askEdits` absent keeps the person's "ask for edits too" preference.
  */
 export interface WorklinePermissionModePort {
+  /** Trusted host only; optional presenter lets the mounted workline reuse its existing y/N window. */
+  open?(mode: Exclude<PermissionMode, 'standart'>, ask?: SecretGrantAsk): Promise<boolean>;
   inspect(signal?: AbortSignal): Promise<PermissionModeView>;
   /** `session` (v21 FA-SESSION): full access for this terminal session only — decided and audited by the service, never stored. */
   set(mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: WorklineModeSession): Promise<PermissionModeChange>;
@@ -50,11 +53,11 @@ const SWITCHABLE: readonly PermissionMode[] = PERMISSION_MODES;
 /**
  * T2 T-MODE-CYCLE (owner 2026-10-07, corrected): the stops Shift+Tab walks — every mode the person may take here. `ask-edits` is `standart` with
  * the person's "ask for edits too" preference (not a policy mode). Full-auto is in the cycle unless the company's set grant leaves it out (an
- * older service that does not say keeps it in and answers the set itself); full access only on the company grant. A v1 policy has no cycle.
+ * older service that does not say keeps it in and answers the set itself). A CLI host opening port also visits closed modes through a card. A v1 policy has no cycle.
  */
-export function permissionModeCycle(view: PermissionModeView): readonly PermissionModeStop[] {
+export function permissionModeCycle(view: PermissionModeView, canOpen = false): readonly PermissionModeStop[] {
   if (!view.supported) return [];
-  return ['standart', 'ask-edits', ...(view.fullAuto === false ? [] : ['full-auto' as const]), ...(view.fullAccess ? ['full-access' as const] : [])];
+  return ['standart', 'ask-edits', ...(view.fullAuto === false && !canOpen ? [] : ['full-auto' as const]), ...(view.fullAccess || canOpen ? ['full-access' as const] : [])];
 }
 export function permissionModeStop(view: PermissionModeView, fullAccess: boolean): PermissionModeStop {
   const mode = sessionMode(view, fullAccess);
@@ -111,10 +114,11 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
   const start = words.length === 2 && words[0] === 'start' && words[1] === 'full-access';
   const mode = words.length === 1 ? SWITCHABLE.find(value => value === words[0]) : undefined;
   if (!mode && askEdits === undefined && !start) return done([notice('error', labels.usage)], known);
-  const base = known ?? await port.inspect();
+  let base = known ?? await port.inspect();
   // A v1 policy has no modes: there is nothing to set, so the service is not asked (it would only refuse, and the person needs the way forward).
   if (!base.supported) return done([notice('error', line(base, labels, fullAccess))], base);
   const target = start ? 'full-access' : mode ?? base.mode;
+  if (closedMode(target, base) && port.open) { if (!await port.open(target as Exclude<PermissionMode, 'standart'>)) return done([], base); base = await port.inspect(); }
   const changed = mode === 'full-access' ? await port.set(target, base.revision, undefined, terminal) : await port.set(target, base.revision, askEdits);
   const { previous, changed: wrote, ...view } = changed;
   if (start) return done([notice('info', labels.startSaved ?? line(view, labels, fullAccess))], view);
@@ -135,7 +139,7 @@ export async function cyclePermissionMode(port: WorklinePermissionModePort, know
   const base = known ?? await port.inspect();
   if (!base.supported) return { entries: [notice('error', line(base, labels, fullAccess))], view: base, fullAccess };
   const current = permissionModeStop(base, fullAccess);
-  return stepPermissionMode(port, base, labels, current, nextPermissionModeStop(permissionModeCycle(base), current) ?? 'standart', session);
+  return stepPermissionMode(port, base, labels, current, nextPermissionModeStop(permissionModeCycle(base, Boolean(port.open)), current) ?? 'standart', session);
 }
 
 /**
@@ -149,9 +153,12 @@ export async function selectPermissionModeStop(port: WorklinePermissionModePort,
   return stepPermissionMode(port, base, labels, permissionModeStop(base, fullAccess), target, session);
 }
 
+const closedMode = (mode: PermissionMode, view: PermissionModeView) => mode === 'full-access' ? !view.fullAccess : mode === 'full-auto' && view.fullAuto === false;
+
 async function stepPermissionMode(port: WorklinePermissionModePort, base: PermissionModeView, labels: WorklineModeLabels, current: PermissionModeStop, next: PermissionModeStop,
   session: WorklineModeSession): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const target = STOP_TARGET[next];
+  if (closedMode(target.mode, base) && port.open) { if (!await port.open(target.mode as Exclude<PermissionMode, 'standart'>)) return { entries: [], view: base, fullAccess: current === 'full-access' }; base = await port.inspect(); }
   // FA-SESSION: the full-access stop is this session's only; every other stop is stored (the next launch's mode).
   const changed = next === 'full-access' ? await port.set('full-access', base.revision, undefined, session) : await port.set(target.mode, base.revision, target.askEdits);
   const view: PermissionModeView = Object.freeze({ schemaVersion: changed.schemaVersion, scopeId: changed.scopeId, supported: changed.supported, mode: changed.mode,

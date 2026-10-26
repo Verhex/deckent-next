@@ -1,8 +1,25 @@
 {
-  "$comment": "BR1 worker-image setup reads: receipt names listed and receipts parsed (newest first), bytes per receipt, and the read-only image inspect probe's own deadline and output bound when no execution settings give them.",
+  "$comment": "BR1 worker-image setup reads: receipt names listed and receipts parsed (newest first), bytes per receipt, and the read-only image inspect probe's own deadline and output bound when no execution settings give them. removalCommand: the one image removal argv after the pinned --host, used by the driver and the manual uninstall step.",
+  "dockerRedetectMs": 5000,
+  "candidateImages": 8,
   "receiptScan": 1024,
   "receipts": 64,
   "receiptBytes": 1048576,
   "probeTimeoutMs": 5000,
-  "probeOutputBytes": 65536
+  "probeOutputBytes": 65536,
+  "custody": {
+    "lock": "builder.lock",
+    "owner": "builder-owner.json",
+    "counter": "counter.json",
+    "receipts": "receipts",
+    "waitMs": 25,
+    "leases": "leases",
+    "participation": "participation.json"
+  },
+  "removalCommand": [
+    "image",
+    "rm",
+    "--no-prune",
+    "--"
+  ]
 }

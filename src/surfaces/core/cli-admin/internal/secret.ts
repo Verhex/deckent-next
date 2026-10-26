@@ -200,6 +200,11 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
     notice(); emit(removed, { ...sinks, render });
     return;
   }
+  if (vault === 'main' && context.prepareMainSecret) {
+    const custody = await context.prepareMainSecret(root, resolved.scopeId, options);
+    if (custody.state !== 'ready') throw ErrorRegistry.createError(custody.code ?? 'SECRET_STORE_UNAVAILABLE', {
+      params: { backend: custody.backend ?? '-', path: custody.path ?? '' } });
+  }
   const stdin = (context.stdin ?? process.stdin) as Input;
   const value = stdin.isTTY ? await readHidden(stdin, context.stderr ?? process.stderr, name!) : await readPiped(stdin);
   if (!value || Buffer.byteLength(value, 'utf8') > VALUE_MAX_BYTES) throw ErrorRegistry.createError('SECRET_VALUE_INVALID');

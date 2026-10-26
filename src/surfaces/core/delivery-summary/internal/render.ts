@@ -11,8 +11,8 @@ import limits from './limits.json' with { type: 'json' };
  * function on purpose: it never belongs on the y/N consent prompt (alpha.53 law-audit fold 3).
  */
 export const DELIVERY_RENDER_LIMITS = Object.freeze(limits);
-/** `omit`: sections a card already shows in its own exact words (the delivery window's title and file stats); never acceptance, risk or actions. */
-export type DeliveryRenderOptions = Readonly<{ maxLineChars?: number; omit?: readonly ('title' | 'operation' | 'change')[] }>;
+/** `omit`: sections a card already shows in its own exact words (the delivery window's title and file stats); never acceptance or risk. Settled ticket views omit the consent actions. */
+export type DeliveryRenderOptions = Readonly<{ maxLineChars?: number; omit?: readonly ('title' | 'operation' | 'change' | 'actions')[] }>;
 
 const safe = (value: string) => redactSensitive(terminalSafeText(value));
 function bound(line: string, max: number): string {
@@ -54,7 +54,7 @@ export function renderDeliverySummary(summary: DeliverySummary, locale: Locale, 
   const parts = [risk.class === 'small' ? t('delivery.risk.small', {}, locale) : t('delivery.risk.other', {}, locale), ...(risk.protectedTarget === true ? [t('delivery.risk.protected', {}, locale)] : []),
     ...(risk.sizeBucket ? [t('delivery.risk.size', { size: safe(risk.sizeBucket) }, locale)] : []), ...risk.flags.map(flag => flagLabels(locale)[flag])];
   lines.push(t('delivery.risk', { parts: parts.join(' · ') }, locale));
-  lines.push(t('delivery.actions', { yes: actionLabels(locale)[summary.actions.yes], no: actionLabels(locale)[summary.actions.no] }, locale));
+  if (!omit.has('actions')) lines.push(t('delivery.actions', { yes: actionLabels(locale)[summary.actions.yes], no: actionLabels(locale)[summary.actions.no] }, locale));
   return Object.freeze(lines.map(line => bound(line, max)));
 }
 

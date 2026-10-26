@@ -1,3 +1,4 @@
+import { modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BudgetPanelPort, ConfigPanelOutcome, ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -94,4 +95,56 @@ describe('/model in the workline carries the host budget and shadow ports', () =
     await until(() => applied.length === 1, 'governed workspace write');
     expect(applied).toEqual([{ id: 'profile', workspaceId: 'wrkspc_Selected' }]);
   });
+});
+
+it('a model repair binds the displayed catalog digest and refuses a changed binding before admission', async () => {
+  let revision = 'catalog-1', digest = 'a'.repeat(64); const admitted: unknown[] = [];
+  const reference = ref('chat');
+  const source = modelPanelSource('/fixture', 'scope', {
+    inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision,
+      providers: [{ id: 'local-openai', version: 1, models: [{ id: 'chat', version: 1, nativeId: 'chat', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] }] }] } }),
+    inspectModelActivation: async () => ({ schemaVersion: 1, scopeId: 'scope', reference, activation: null, availability: 'not-observed' }),
+    inspectModelBinding: async () => ({ schemaVersion: 1, status: 'declared', reference, catalogRevision: revision,
+      definition: { provider: { id: 'local-openai', version: 1 }, model: { id: 'chat', version: 1, nativeId: 'chat', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] } },
+      binding: { encodingVersion: 1, algorithm: 'sha256', digest } }),
+    admitModelActivation: async (_root, command) => { admitted.push(command); return {} as never; },
+  }, {}, 'en');
+  const shown = (await source.inspect()).choices[0]!;
+  revision = 'catalog-2'; digest = 'b'.repeat(64);
+  await expect(source.fix!(shown, 'activate')).rejects.toMatchObject({ code: 'MODEL_ACTIVATION_REVISION_CONFLICT' });
+  expect(admitted).toEqual([]);
+  await source.fix!((await source.inspect()).choices[0]!, 'activate');
+  expect(admitted).toEqual([expect.objectContaining({ action: 'activate', catalogRevision: 'catalog-2', expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest } })]);
+});
+
+it('shows preview, plan billing and the registry management URL only for the selected SIWC channel', async () => {
+  let invocable = true;
+  const reference = ref('chat'), usageUrl = 'https://example.test/plan-settings';
+  const source = modelPanelSource('/fixture', 'scope', {
+    siwc: { connection: 'chatgpt-fixture', usageUrl, execute: async () => ({}) },
+    providerConnect: { kinds: [{ id: 'chatgpt-fixture', catalogProviderId: reference.providerId, labelKey: 'tui.provider.kind.chatgptLogin' }] } as never,
+    inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'catalog',
+      providers: [{ id: reference.providerId, version: 1, models: [{ id: 'chat', version: 1, nativeId: 'chat', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] }] }] } }),
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference, label: 'chat', nativeId: 'chat', catalogRevision: 'catalog',
+      bindingDigest: 'a'.repeat(64), availability: invocable ? { invocable: true, reason: null } : { invocable: false, reason: { kind: 'no-credential', code: 'MODEL_INVOCATION_CREDENTIAL_UNAVAILABLE' } } }] }),
+  }, {}, 'tr');
+  const shown = (await source.inspect()).choices[0]!;
+  expect(shown.detail).toContain('önizleme'); expect(shown.detail).toContain('ChatGPT planı kullanılıyor'); expect(shown.command).toContain(usageUrl);
+  invocable = false;
+  expect((await source.inspect()).choices[0]!.detail).not.toContain('ChatGPT planı kullanılıyor');
+});
+
+it('N2: a discovered model reads as its own name and its connection kind, never the hash ids (the exact reference stays in details)', async () => {
+  const provider = `local-openai-${'29a0c9bc'.repeat(4)}`, model = `model-${'6cfaea59'.repeat(4)}`;
+  const reference = { providerId: provider, providerVersion: 1, modelId: model, modelVersion: 1 };
+  const source = modelPanelSource('/fixture', 'scope', {
+    providerConnect: { kinds: [{ id: 'local-openai', labelKey: 'tui.provider.kind.localOpenai' }] } as never,
+    inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'catalog',
+      providers: [{ id: provider, version: 1, models: [{ id: model, version: 1, nativeId: 'fixture-small', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] }] }] } }),
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference, label: model, nativeId: 'fixture-small', catalogRevision: 'catalog',
+      bindingDigest: 'a'.repeat(64), availability: { invocable: true, reason: null } }] }),
+  }, {}, 'en');
+  const shown = (await source.inspect()).choices[0]!;
+  expect(shown.label).toBe('fixture-small'); expect(shown.providerLabel).not.toMatch(/[0-9a-f]{32}/u); expect(shown.providerLabel).toBeTruthy();
+  expect(shown.exact).toContain(model);
 });

@@ -250,6 +250,7 @@
   "monitor.config.name.cancellationRuntime": "Automatic cancellation recovery",
   "monitor.config.name.reconciliationRuntime": "Automatic reconciliation",
   "monitor.config.name.approvals": "Approvals and live sessions",
+  "monitor.config.name.policy": "Policy options",
   "monitor.config.name.audit": "Audit checkpoints",
   "monitor.config.name.enforce_principal_assurance": "Require verified actor",
   "monitor.config.name.layout": "Data folders",

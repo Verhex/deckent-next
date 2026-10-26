@@ -47,7 +47,7 @@ export async function signersCommand(action: SignerAction, args: { readonly id?:
     options: [{ id: 'apply', label: t('agents.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), key: 'n' }] }) === 'apply';
   const cancelled = () => { emit(t('agents.cancelled', {}, locale), { level: 'warning', ...sinks }); return EXIT_CODES.error; };
   const input = async () => readJsonInput(resolvePath(io.root, args.input!), io.inputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.agent', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   if (action === 'enrol-signer') {
     const at = args.principal!.indexOf(':'), principal = { issuer: args.principal!.slice(0, at), subject: args.principal!.slice(at + 1) };
     if (at < 1 || !principal.subject) throw ErrorRegistry.createError('CLI_USAGE');
@@ -66,7 +66,9 @@ export async function signersCommand(action: SignerAction, args: { readonly id?:
   }
   if (action === 'revoke-signer') {
     // A full key id, or a unique prefix of at least the shown 12 characters.
-    const wanted = args.id!.toLowerCase(), rows = (await listing()).items.filter(row => wanted.length >= 12 && row.keyId.startsWith(wanted));
+    const wanted = args.id!.toLowerCase();
+    if (wanted.length < 12) throw ErrorRegistry.createError('CLI_ID_TOO_SHORT', { params: { prefix: safeCell(args.id!), min: 12 } });
+    const rows = (await listing()).items.filter(row => row.keyId.startsWith(wanted));
     if (rows.length !== 1) throw ErrorRegistry.createError('AGENT_CATALOG_NOT_FOUND');
     const row = rows[0]!;
     if (!await card(t('agentsign.card.revoke.title', {}, locale), t('agentsign.card.revoke.body', { ...fields(row, locale), count: row.signedRows }, locale).split('\n'))) return cancelled();

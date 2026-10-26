@@ -1,5 +1,5 @@
 import { ErrorRegistry, type CoreConfig } from '#platform/index.js';
-import { RECOVERY_POLICY_SEED, freezeRecoveryPolicy, loadRecoveryPolicy, type TaskAgentSelection, type TaskGraph } from '#domain/index.js';
+import { RECOVERY_POLICY_SEED, executionRegistrySchema, freezeRecoveryPolicy, loadRecoveryPolicy, lowRiskTaskIds, type TaskAgentSelection, type TaskGraph } from '#domain/index.js';
 import { admitWorkerModels, composeModelRolePolicy, type ModelCatalogReader, type WorkerAdmissionWarning } from '#engine/core/model-activation/index.js';
 import { resolveWorkerEffortExecution, type WorkerEffortCompiler } from './worker-effort.js';
 import type { ExecutionRegistryValidation } from './registry.js';
@@ -33,7 +33,7 @@ export function createRunAdmissionContext(config: Pick<CoreConfig, 'admission' |
       execution = await resolveWorkerEffortExecution(admitted.graph, profile.registry, catalog, validation, ports.compiler,
         { scopeId: admitted.scopeId, nowMs, imageRefreshInProgress, roles: composeModelRolePolicy(config.model_roles), ...(agents ? { agents } : {}) });
       ports.warnings(await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, nowMs, admitted.graph.tasks, { imageRefreshInProgress }));
-      const recovery = config.runRuntime?.recovery?.mode ?? 'off'; if (recovery !== 'off') execution = { ...execution, recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), recovery) }; // S6R-5: registry bounds + protected mode; off freezes none
+      const recovery = config.runRuntime?.recovery?.mode ?? 'off'; if (recovery !== 'off') execution = { ...execution, recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), recovery, lowRiskTaskIds(admitted.graph.tasks, executionRegistrySchema.safeParse(profile.registry).data?.workClasses)) }; // S6R-5 + alpha.56 G6: registry bounds, protected mode, low-risk tasks; off freezes none
     } finally { catalog.close(); }
     return { execution, layoutRevision, now: ports.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
       capacity: { executionSlots: Math.min(profile.executionSlots, typeof config.max_workers === 'number' ? config.max_workers : Infinity),

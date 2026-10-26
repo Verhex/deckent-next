@@ -44,7 +44,8 @@ const read = (call: TerminalAdminCall, afterInvocationId: string | null = null) 
 function message(call: TerminalAdminCall, text: string): InfoView { return { model: { title: words(call, 'title'), sections: [{ notes: [text] }], summary: text } }; }
 function summary(call: TerminalAdminCall, current: ProviderSpendAccountInspection): string {
   const account = current.checkpoint!.account, money = (minor: number | string) => spendMoney(minor, account.budget.currency, call);
-  return words(call, 'totals', { settled: money(account.settledExactMinorUnits), held: money(account.reservedMinorUnits), limit: money(account.budget.limitMinorUnits) });
+  // A period budget is exhausted on the current period's use (as the refusal and /usage report it), not the account's lifetime total.
+  return words(call, 'totals', { settled: money(current.period?.usedExactMinorUnits ?? account.settledExactMinorUnits), held: money(account.reservedMinorUnits), limit: money(account.budget.limitMinorUnits) });
 }
 /** No history or provider body reaches the terminal. Each selection carries one exact checkpoint to the existing governed writer. */
 export async function spendRecoveryView(call: TerminalAdminCall): Promise<InfoView> {

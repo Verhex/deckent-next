@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { RECOVERY_ACTIONS, type AttemptIdentity, type AuditEvent, type DispatchLossDecision } from '#domain/index.js';
-import { AuditApplication, NERVOUS_RULES_SEED, NervousApplication, nervousExecutors, nervousStandingApproval, type NervousAttemptSignal, type NervousRecoveryPorts } from '#engine/index.js';
+import { AuditApplication, NERVOUS_RULES_SEED, NervousApplication, nervousExecutors, nervousRulePromoted, nervousStandingApproval, type NervousAttemptSignal, type NervousRecoveryPorts } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
@@ -180,4 +180,26 @@ it('one case\'s failed step never blocks the other cases of the page; the failur
   await expect(h.app.observeAttempts('s', [signal(), signal({ identity: identity(2), activity: 'missing' })], h.context)).rejects.toThrow('ledger busy');
   expect(fake.calls).toEqual([['recover', 'a2', 'fence']]);
   expect(h.rows().map(row => row.target?.attemptId)).toEqual(['a1', 'a2']);
+});
+
+it('alpha.56 G2: a person\'s promotion of the exact rule id and version makes the seeded provisional rule live; another version stays provisional, and the seal says so', async () => {
+  const exact = await harness({ rules: NERVOUS_RULES_SEED });
+  const promoted = { ...exact.context, promoted: (ruleId: string, version: number) => ruleId === 'launcher-dead-orphan' && version === 1 };
+  expect(await exact.app.observeAttempts('s', [signal()], promoted)).toEqual([expect.objectContaining({ disposition: 'execute', executed: true })]);
+  expect(exact.rows()[0]).toMatchObject({ rule: { id: 'launcher-dead-orphan', version: 1, status: 'live' }, disposition: 'execute' });
+  // A seed version bump (or a promotion of another version) demotes: the proposal stays provisional and nothing executes.
+  const other = await harness({ rules: NERVOUS_RULES_SEED });
+  const stale = { ...other.context, promoted: (ruleId: string, version: number) => ruleId === 'launcher-dead-orphan' && version === 2 };
+  expect(await other.app.observeAttempts('s', [signal()], stale)).toEqual([expect.objectContaining({ disposition: 'proposal-only', executed: false })]);
+  expect(other.rows()[0]).toMatchObject({ rule: { status: 'provisional' } }); expect(other.calls).toEqual([]);
+});
+
+it('alpha.56 G2: a promotion is the owner\'s policy grant on nervous-rule/<id>@<version>; another version, an unmeasured rule or an AI principal is none', () => {
+  const promote = (ids: readonly string[]) => ({ schemaVersion: 1, revision: 'owner-policy', restrictions: [], grants: [
+    { id: 'promotion', effect: 'allow', actions: ['promote'], scopes: ['s'], principals: [{ issuer: 'host', subject: '1000' }], resource: { kind: 'nervous-rule', ids } }] });
+  expect(nervousRulePromoted(promote(['container-gone@1']), owner, 's', 'container-gone', 1)).toBe(true);
+  expect(nervousRulePromoted(promote(['container-gone@1']), owner, 's', 'container-gone', 2)).toBe(false);
+  expect(nervousRulePromoted(promote(['crash-loop@1']), owner, 's', 'crash-loop', 1)).toBe(false); // not measured in this release (owner Q-A4)
+  expect(nervousRulePromoted(promote(['container-gone@1']), { ...owner, issuer: 'host/mcp', assurance: 'workload-verified' as never }, 's', 'container-gone', 1)).toBe(false);
+  expect(nervousRulePromoted({ schemaVersion: 7 }, owner, 's', 'container-gone', 1)).toBe(false);
 });

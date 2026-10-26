@@ -8,7 +8,7 @@ import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ModelCommandContext } from './context.js';
 import { askModelsCard, explainActivationDenial, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
-import { channelLabel } from './models-table.js';
+import { catalogToday, channelLabel, modelRetired } from './models-table.js';
 
 export type ModelCatalogInspectionHandler = (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
 export type ModelCatalogApplyHandler = (root: string, command: ModelCatalogCommand, options: ConfigLoadOptions) => Promise<ModelCatalogResult>;
@@ -48,6 +48,7 @@ function requireFlags(action: Action, values: ReadonlyMap<string, string>): void
 }
 const activation = (value: { state: string } | null, locale: Locale) => value?.state === 'active' ? t('models.catalog.active', {}, locale) : t('models.catalog.inactive', {}, locale);
 function renderList(value: ModelCatalogInspection, locale: Locale): string {
+  const today = catalogToday(Date.now());
   const lines = [t('models.catalog.heading', { scope: value.scopeId, count: value.channels.length }, locale)];
   for (const channel of value.channels) {
     if (channel.access === 'denied') { lines.push(t('models.catalog.channelDenied', { channel: channel.channelId }, locale)); continue; }
@@ -56,7 +57,9 @@ function renderList(value: ModelCatalogInspection, locale: Locale): string {
     for (const entry of channel.models) {
       const { lifecycle } = entry.model;
       const metadata = 'vendorId' in entry.model ? entry.model : null;
-      lines.push(t('models.catalog.model', { model: entry.modelId, lifecycle: lifecycle.state, retire: lifecycle.retiredOn ?? lifecycle.retireNotBefore ?? '—',
+      const state = modelRetired(entry.model, today) ? t('models.catalog.lifecycle.retired', {}, locale)
+        : lifecycle.state === 'deprecated' ? t('models.catalog.lifecycle.deprecated', {}, locale) : t('models.catalog.lifecycle.active', {}, locale);
+      lines.push(t('models.catalog.model', { model: entry.modelId, lifecycle: state, retire: lifecycle.retiredOn ?? lifecycle.retireNotBefore ?? '—',
         vendor: metadata?.vendorId ?? '—', canonical: metadata?.canonicalModelId ?? '—',
         billing: 'billing' in channel.channel ? channel.channel.billing : '—', context: metadata?.contextWindow ?? '—',
         cli: entry.model.minCliVersion ?? '—', efforts: entry.model.efforts.join(',') || '—', aliases: entry.model.aliases.join(',') || '—',
@@ -151,7 +154,8 @@ async function catalogByChoice(action: 'activate' | 'deactivate', picked: { scop
   const target = entry ? terminalSafeText(entry.modelId) : channelLabel(channel, locale), revision = (entry ? entry.activation : channel.activation)?.revision ?? 0;
   const answer = await askModelsCard(context, locale, { title: action === 'activate' ? t('climodels.models.card.activate', { model: target }, locale) : t('climodels.models.card.deactivate', { model: target }, locale),
     body: [t('climodels.models.card.whereCatalog', { scope: terminalSafeText(scope.scopeId), channel: channelLabel(channel, locale) }, locale),
-      t('climodels.models.card.now', { state: activation(entry ? entry.activation : channel.activation, locale) }, locale), t('climodels.models.card.system', {}, locale)],
+      t('climodels.models.card.now', { state: activation(entry ? entry.activation : channel.activation, locale) }, locale),
+      ...(!entry && action === 'activate' ? [t('climodels.models.card.channelCascade', { models: channel.models.filter(row => row.activation?.state === 'active' || !row.activation && row.model.lifecycle.state === 'active').map(row => terminalSafeText(row.modelId)).join(', ') }, locale)] : []), t('climodels.models.card.system', {}, locale)],
     options: modelsConfirmOptions(locale) });
   if (answer !== 'apply') return cancelled();
   const command = modelCatalogCommandSchema.parse({ schemaVersion: 1, commandId: `models-${randomUUID()}`, scopeId: scope.scopeId, action, channelId: channel.channelId,

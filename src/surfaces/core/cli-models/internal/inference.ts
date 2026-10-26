@@ -123,10 +123,7 @@ export async function inferenceCommand(argv: readonly string[], context: ModelCo
       render: value => value.plan ? [renderPlan(value.plan, locale), t('clisetup.inference.next', {}, locale)].join('\n') : renderAbsent(value.localModels, locale) });
     return;
   }
-  if (!profile) {
-    emit(t('inference.notConfigured', {}, locale), { ...sinks, level: 'warning' });
-    return;
-  }
+  if (!profile) throw ErrorRegistry.createError('INFERENCE_NOT_CONFIGURED', { locale });
   if (parsed.action === 'metrics') {
     if (!context.readInferenceMetrics) throw ErrorRegistry.createError('CLI_USAGE');
     const reading = await context.readInferenceMetrics(root, parsed.profileId === undefined ? {} : { profileId: parsed.profileId }, options);

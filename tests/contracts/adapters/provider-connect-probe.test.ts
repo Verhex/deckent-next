@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { endpointMayCarryKey } from '#domain/index.js';
 import { createServer, type Server } from 'node:http';
-import { PROVIDER_CONNECT_KINDS, ProviderProbeError, probeProviderConnection, providerConnectKind, providerConnectSecretName, providerEndpoint, providerProbeRejection,
+import { PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry, ProviderProbeError, probeProviderConnection, providerConnectKind, providerConnectSecretName, providerEndpoint, providerProbeRejection,
   connectionAdapter, providerConnectModelPriced, readProviderConnectSeed, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
 
 // T4 PROVIDER-CONNECT: the connection check is one free request that needs the key, mapped to the secret lane's rejection kinds. The key is a
@@ -28,19 +28,19 @@ describe('provider connection check', () => {
     expect(providerEndpoint(`http://${host}:8000/v1`)).toEqual({ ok: true, base: `http://${host}:8000` });
   });
 
-  it('lists the vendor rows, the generic and local rows and ChatGPT login as not available yet, each with its own store name (T4-B, Jev da5312fb)', () => {
-    expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
-      ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true], ['local-openai', true], ['claude-cli-subscription', true], ['chatgpt-login', false]]);
+  it('lists the vendor rows, the generic and local rows and ChatGPT sign-in open for chat (FIX8b), each with its own store name (T4-B, Jev da5312fb)', () => {
+    expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['claude-cli-subscription', true], ['chatgpt-login', true], ['codex-cli-subscription', true], ['cursor-cli-subscription', true], ['local-openai', true], ['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
+      ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true]]);
     const fixed = PROVIDER_CONNECT_KINDS.filter(item => item.available && item.key?.secretName).map(kind => kind.key!.secretName!);
     // Every vendor keeps its own key: connecting one never overwrites another's.
     expect(new Set(fixed).size).toBe(fixed.length);
     for (const name of fixed) expect(name).toMatch(/^DECKENT_[A-Z_]+$/u);
     // Z.ai documents no free read (no models list): its rows have no probe; the subscription CLI row has no key to check (its preflight proves the
     // login without a model call); every other available row has one.
-    expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['zai-api', 'zai-cn-api', 'claude-cli-subscription']);
+    expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['claude-cli-subscription', 'chatgpt-login', 'codex-cli-subscription', 'cursor-cli-subscription', 'zai-api', 'zai-cn-api']);
     for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.available && item.probe)) expect(kind.probe!.path).toMatch(/^\/(v1\/models|models|api\/v1\/key)/u);
     expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.connect?.seed).map(kind => [kind.id, kind.connect!.seed]))
-      .toEqual([['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api'], ['zai-cn-api', 'zai-cn-api'], ['openrouter', 'openrouter-api'], ['claude-cli-subscription', 'claude-cli-subscription']]);
+      .toEqual([['claude-cli-subscription', 'claude-cli-subscription'], ['codex-cli-subscription', 'codex-cli-subscription'], ['cursor-cli-subscription', 'cursor-cli-subscription'], ['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api'], ['zai-cn-api', 'zai-cn-api'], ['openrouter', 'openrouter-api']]);
   });
 
   it('the generic row derives one key name per endpoint host, shown before saving; vendor rows keep their fixed name', () => {
@@ -110,20 +110,20 @@ describe('provider connection check', () => {
       [302, '', 'unexpected'], [404, '', 'unexpected'], [503, '', 'unreachable']];
     for (const [status, body, outcome] of cases) {
       const result = await probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY }, { fetch: fakeFetch(status, body) });
-      expect(result).toEqual({ outcome, httpStatus: status, key: 'unverified' });
+      expect(result).toEqual({ outcome, httpStatus: status, key: 'unverified', cause: status === 302 ? 'redirect' : outcome === 'unexpected' || outcome === 'unreachable' ? 'http-status' : outcome });
       expect(JSON.stringify(result)).not.toContain(CANARY);
     }
     expect(providerProbeRejection(429, null)).toBe('limit-reached');
     // A body that echoes the key is read for its error code only; nothing of it comes back.
     const echoed = await probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY },
       { fetch: fakeFetch(429, `{"error":{"type":"rate_limit_error","message":"key ${CANARY} is rate limited"}}`) });
-    expect(echoed).toEqual({ outcome: 'rate-limit', httpStatus: 429, key: 'unverified' }); expect(JSON.stringify(echoed)).not.toContain(CANARY);
+    expect(echoed).toEqual({ outcome: 'rate-limit', httpStatus: 429, key: 'unverified', cause: 'rate-limit' }); expect(JSON.stringify(echoed)).not.toContain(CANARY);
   });
 
   it('a network failure or a timeout is unreachable without any detail; a caller abort is the caller\'s', async () => {
     const failing: ProviderProbeFetch = async () => { throw new Error(`connect ECONNREFUSED with ${CANARY}`); };
     const result = await probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY }, { fetch: failing });
-    expect(result).toEqual({ outcome: 'unreachable', httpStatus: null, key: 'unverified' }); expect(JSON.stringify(result)).not.toContain(CANARY);
+    expect(result).toEqual({ outcome: 'unreachable', httpStatus: null, key: 'unverified', cause: 'network' }); expect(JSON.stringify(result)).not.toContain(CANARY);
     const abort = new AbortController(); abort.abort();
     await expect(probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY }, { fetch: failing, signal: abort.signal })).rejects.toThrow();
   });
@@ -174,4 +174,14 @@ describe('provider connection check', () => {
     await new Promise<void>(resolve => server.close(() => resolve())); servers.splice(0);
     expect(await probeProviderConnection({ kind: 'local-openai', endpoint, key: null }, { timeoutMs: 2000 })).toMatchObject({ outcome: 'unreachable', httpStatus: null });
   });
+});
+
+it('reads v2 overlays as v4 and orders billing classes from registry data with a conservative missing class', () => {
+  const registry = JSON.parse(JSON.stringify(PROVIDER_CONNECT_REGISTRY)); registry.schemaVersion = 2;
+  delete registry.billingOrder;
+  for (const kind of registry.kinds) delete kind.billing;
+  const legacy = parseProviderConnectRegistry(registry);
+  expect(legacy.schemaVersion).toBe(4); expect(legacy.kinds.every(kind => kind.billing === 'metered')).toBe(true);
+  const swapped = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, billingOrder: ['metered', 'local', 'subscription'] });
+  expect(swapped.kinds[0]!.id).toBe('anthropic-api');
 });

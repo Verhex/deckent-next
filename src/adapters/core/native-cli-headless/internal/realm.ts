@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { access, opendir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { headlessEgressSchema, nativeCliIdSchema, type HeadlessEgress } from '#domain/index.js';
+import { headlessEgressSchema, headlessEgressReasons, nativeCliIdSchema, type HeadlessEgress } from '#domain/index.js';
 import type { BubblewrapCapability } from '#adapters/core/host-shell/index.js';
 import { nativeEgressLimits, openNativeEgressGateway } from '#adapters/core/native-connection/index.js';
 import { runNodeProcess, type ProcessCommand, type ProcessEvidence, type ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
@@ -118,12 +118,22 @@ async function recordEgress(stateDir: string, egress: HeadlessEgress, now: () =>
   if (egress.refused === 0) return;
   const target = join(stateDir, HEADLESS_EGRESS_RECORD), raw = await readFile(target, 'utf8').then(text => JSON.parse(text) as unknown, () => null);
   const { schemaVersion, lastRefusedAtMs, ...summary } = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
-  const kept = schemaVersion === 1 && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : { success: false as const };
+  const kept = (schemaVersion === 1 || schemaVersion === 2) && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : { success: false as const };
   const hosts: Record<string, number> = { ...(kept.success ? kept.data.hosts : {}) };
+  const prior = kept.success ? headlessEgressReasons(kept.data) : { reasons: {}, otherReasons: {} }, incoming = headlessEgressReasons(egress);
+  const reasons: Record<string, Record<string, number>> = structuredClone(prior.reasons), otherReasons = { ...prior.otherReasons };
+  const add = (target: NonNullable<HeadlessEgress['otherReasons']>, source: NonNullable<HeadlessEgress['otherReasons']>) => {
+    for (const [reason, count] of Object.entries(source)) { const key = reason as keyof typeof target; target[key] = (target[key] ?? 0) + count!; }
+  };
+  add(otherReasons, incoming.otherReasons);
   let other = (kept.success ? kept.data.other : 0) + egress.other;
-  for (const [host, count] of Object.entries(egress.hosts)) if (Object.hasOwn(hosts, host) || Object.keys(hosts).length < hostsMax) hosts[host] = (hosts[host] ?? 0) + count; else other += count;
-  const record = { schemaVersion: 1, connected: (kept.success ? kept.data.connected : 0) + egress.connected, refused: (kept.success ? kept.data.refused : 0) + egress.refused,
-    hosts, other, lastRefusedAtMs: now() }, temporary = `${target}.${randomUUID()}.tmp`;
+  for (const [host, count] of Object.entries(egress.hosts)) {
+    if (Object.hasOwn(hosts, host) || Object.keys(hosts).length < hostsMax) {
+      hosts[host] = (hosts[host] ?? 0) + count; add(Object.hasOwn(reasons, host) ? reasons[host]! : (reasons[host] = {}), incoming.reasons[host] ?? {});
+    } else { other += count; add(otherReasons, incoming.reasons[host] ?? {}); }
+  }
+  const record = { schemaVersion: 2, connected: (kept.success ? kept.data.connected : 0) + egress.connected, refused: (kept.success ? kept.data.refused : 0) + egress.refused,
+    hosts, other, reasons, otherReasons, lastRefusedAtMs: now() }, temporary = `${target}.${randomUUID()}.tmp`;
   await writeFile(temporary, JSON.stringify(record), { mode: 0o600, flag: 'wx' }); await rename(temporary, target);
 }
 type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 'executable' | 'args' | 'cwd' | 'env' | 'schemaVersion'>;

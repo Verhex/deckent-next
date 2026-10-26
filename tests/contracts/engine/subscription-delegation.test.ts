@@ -2,9 +2,9 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { delegationOwner, delegationPrincipalClass, encodeModelBindingDefinition, mcpPrincipalRef, memoryEvaluatorPrincipal, recoveryPrincipal,
+import { subscriptionConsent, subscriptionRawUseRefusal, delegationOwner, delegationPrincipalClass, encodeModelBindingDefinition, mcpPrincipalRef, memoryEvaluatorPrincipal, recoveryPrincipal,
   type VerifiedPrincipal } from '#domain/index.js';
-import { ModelInvocationApplication } from '#engine/core/model-invocation/index.js';
+import { ModelInvocationApplication, createModelInvocationClaimReceipt, modelInvocationRequestDigest, modelInvocationProfileDigest } from '#engine/core/model-invocation/index.js';
 import { memoryCatalogKey, memoryEvaluatorRows } from '#engine/core/memory/index.js';
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
 import { openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
@@ -27,7 +27,7 @@ const consent = (classes: readonly ('ai' | 'system')[], by = owner) => ({ consen
 const authorization = { revision: 'policy', ruleId: 'invoke' };
 const steps = [uiLine(), initLine(), assistantLine('{"ok":true}'), rateLimitLine(), resultLine('{"ok":true}')].map(line => ({ line }));
 
-async function invokeAs(principal: VerifiedPrincipal, delegatedUse: unknown) {
+async function invokeAs(principal: VerifiedPrincipal, delegatedUse: unknown, rawUse?: 'person') {
   const c = await connection({ steps }, { delegatedUse }, expectedBinding.digest), path = join(c.root, 'ledger.db');
   const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance };
   const activations = await openSqliteModelActivationStore(path, sqlite);
@@ -36,7 +36,7 @@ async function invokeAs(principal: VerifiedPrincipal, delegatedUse: unknown) {
   (await openSqliteModelInvocationStore(path, sqlite, 'forbid')).close();
   const app = new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return authorization; } },
     { async inspect() { return { schemaVersion: 1, reference, status: 'declared', catalogRevision: 'catalog', definition, binding: expectedBinding, availability: 'not-observed' }; } },
-    async () => ({ async loadRecord() { return admitted.receipt.record; }, close() {} }), { async resolve() { return c.profile; } },
+    async () => ({ async loadRecord() { return admitted.receipt.record; }, close() {} }), { async resolve() { return rawUse ? { ...c.profile, adapter: { ...c.profile.adapter, definition: { ...c.profile.adapter.definition, rawUse } } } : c.profile; } },
     { resolve() { return c.port; }, async admit(profile, signal) { await c.port.preflight(profile, signal); } },
     async () => openSqliteModelInvocationStore(path, sqlite, 'forbid'), { invocationId: () => 'invocation', ownerId: () => 'owner', now: () => 10 });
   const command = { schemaVersion: 1, commandId: 'plan-1', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding, nativeRequest: request() };
@@ -87,4 +87,42 @@ describe('S3-3 the memory evaluator path (S4B-3) applies the same consent rule w
     const [row] = await memoryEvaluatorRows(sources, profiles(delegatedUse), 'scope', facts, Date.UTC(2026, 9, 23), owner);
     expect(row).toMatchObject({ channelId: CHANNEL, modelId: MODEL, billing: 'subscription', invocable });
   });
+});
+
+
+it('keeps connected-app raw use separate from revocable background consent', () => {
+  const owner = { issuer: 'fixture-host', subject: '1000' };
+  const consent = subscriptionConsent(null, ['ai', 'system'], owner, 42);
+  expect(consent).toEqual({ consentedBy: owner, atMs: 42, classes: ['ai', 'system'] });
+  expect(subscriptionConsent({ delegatedUse: consent }, [], owner, 43)).toBeNull();
+  expect(subscriptionConsent({ delegatedUse: consent }, undefined, owner, 43)).toEqual(consent);
+  for (const principalClass of ['ai', 'system'] as const) {
+    expect(subscriptionRawUseRefusal({ entry: 'raw', principalClass, rawUse: 'person' })).toBe('SUBSCRIPTION_RAW_USE_REFUSED');
+    expect(subscriptionRawUseRefusal({ entry: 'feature', principalClass, rawUse: 'person' })).toBeNull();
+  }
+  expect(subscriptionRawUseRefusal({ entry: 'raw', principalClass: 'person', rawUse: 'person' })).toBeNull();
+});
+
+it('refuses a raw MCP invocation despite ai consent before native admission, claim or spawn', async () => {
+  const result = await invokeAs(mcp, consent(['ai', 'system']), 'person');
+  expect(result).toEqual({ outcome: { code: 'SUBSCRIPTION_RAW_USE_REFUSED' }, spawns: 0 });
+});
+
+it('refuses the raw operation even when the same AI caller replays its prior feature invocation', async () => {
+  const command = { schemaVersion: 1 as const, commandId: 'feature-call', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding, nativeRequest: request() };
+  const profile = { schemaVersion: 2 as const, billingAxis: 'subscription' as const, id: 'plan', version: 1, scopeId: 'scope', reference,
+    bindingDigest: expectedBinding.digest, protocol: { family: definition.model.protocols[0]!.family, version: definition.model.protocols[0]!.version }, adapter: { id: 'siwc-responses', version: 1,
+      definition: { rawUse: 'person', delegatedUse: consent(['ai']) } }, allocation: { id: 'plan', maxCalls: null, maxInFlight: 1 },
+    limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000 } };
+  const actor = { id: mcp.id, issuer: mcp.issuer, subject: mcp.subject, assurance: mcp.assurance };
+  const receipt = createModelInvocationClaimReceipt({ command, requestDigest: modelInvocationRequestDigest(command), actor, authorization, definition,
+    activation: { schemaVersion: 1, scopeId: 'scope', reference, revision: 1, state: 'active', catalogRevision: 'catalog', definition, binding: expectedBinding },
+    profile, profileDigest: modelInvocationProfileDigest(profile), invocationId: 'prior-feature', claimedAtMs: 1 });
+  let closed = false;
+  const app = new ModelInvocationApplication({ verify: async () => mcp }, { authorize: async () => authorization }, {} as never,
+    async () => { throw new Error('no target lookup for replay'); }, {} as never, {} as never,
+    async () => ({ loadReceipt: async () => ({ receipt, content: null, purge: null }), close() { closed = true; } }) as never,
+    { invocationId: () => 'unused', ownerId: () => 'unused', now: () => 2 });
+  await expect(app.invoke(command)).rejects.toMatchObject({ code: 'SUBSCRIPTION_RAW_USE_REFUSED' });
+  expect(closed).toBe(true);
 });

@@ -1,6 +1,10 @@
 // Independent expected outcomes, transcribed from the owner-accepted floor, never from aiAuthorityFloor's answer.
 // Security/protocol fixtures only; this inventory grants no runtime authority.
 export const floorFamilies = [
+  { id: 'spend-reconcile', en: 'Provider spend reconciliation (settle, release, write-off)', tr: 'Sağlayıcı harcama uzlaştırması (settle, release, write-off)',
+    whyEn: 'Owner Q-SPEND (b), 2026-10-26: no AI may reconcile held spend, even with an earlier grant. Normal call settlement remains available.',
+    whyTr: 'Owner Q-SPEND (b), 2026-10-26: eski izin olsa da hiçbir AI bekleyen harcamayı uzlaştıramaz. Olağan çağrı hesaplaşması devam eder.',
+    routes: [['provider-spend-account', 'fixture-target', 'reconcile']] },
   { id: 'administration', en: 'Policy administration execute/compensate', tr: 'Politika yönetimi execute/compensate',
     whyEn: 'Grants, bindings, delegation, restrictions, duties and standing grants must not let an AI enlarge its own authority.',
     whyTr: 'Grant, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli.',
@@ -16,6 +20,10 @@ export const floorFamilies = [
     whyEn: 'Both change the host outside the sandbox (Docker group membership is root-equivalent); only a person at a terminal runs them (owner 2026-10-19).',
     whyTr: 'İkisi de sandbox dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19).',
     routes: [['execution-environment', 'fixture-target', 'install'], ['installation', 'fixture-target', 'repair']] },
+  { id: 'uninstall', en: 'Installation uninstall and purge', tr: 'Kurulumu kaldırma ve verisini silme',
+    whyEn: 'Removing the installation or purging its data cannot be undone by Deckent; only the person at their own terminal confirms it (alpha.56 U10B).',
+    whyTr: 'Kurulumu kaldırmayı ya da verisini silmeyi Deckent geri alamaz; yalnız kendi terminalindeki kişi onaylar (alpha.56 U10B).',
+    routes: [['installation', 'fixture-target', 'uninstall'], ['installation', 'fixture-target', 'purge']] },
   { id: 'mode', en: 'Permission mode set, including full access', tr: 'Full access dahil izin kipi değiştirme',
     whyEn: 'An AI must not choose a weaker permission mode for itself.', whyTr: 'AI kendi izin kipini gevşetemez.',
     routes: ['standart', 'full-auto', 'full-access'].map(id => ['permission-mode', id, 'set']) },
@@ -25,7 +33,7 @@ export const floorFamilies = [
     routes: ['set', 'delete', 'switch', 'read', 'resolve', 'inspect', 'list', 'future-action'].map(action => ['secret', 'FIXTURE_SECRET', action]) },
   { id: 'cards', en: 'Authority approval cards', tr: 'Yetki onay kartları', whyEn: 'Deciding an authority card is another authority-changing route.',
     whyTr: 'Yetki kartını karara bağlamak da yetki değiştiren bir yoldur.',
-    routes: ['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline'].map(id => ['approval', id, 'decide']) },
+    routes: ['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline', 'policy-recovery'].map(id => ['approval', id, 'decide']) },
   { id: 'audit', en: 'Audit actions except inspect/verify', tr: 'Inspect/verify dışındaki audit işlemleri',
     whyEn: 'An AI must not rewrite the baseline that detects authority drift.', whyTr: 'AI yetki kaymasını saptayan referans kaydını yeniden yazamaz.',
     routes: ['rebaseline', 'write', 'delete', 'future-action'].map(action => ['audit', 'fixture-scope', action]) },
@@ -40,6 +48,10 @@ export const floorFamilies = [
     whyEn: 'The recovery broker applies a sealed Nervous proposal, and the recovery system continues a lost task in a new Attempt, only under the owner\'s standing grant (K-B, S6R-3/S6R-4); no AI holds it, Nervous itself only proposes.',
     whyTr: 'Kurtarma aracısı mühürlü Nervous önerisini uygular, kurtarma sistemi kayıp görevi yeni Attempt ile sürdürür; ikisi de yalnız sahibin kalıcı izniyle (K-B, S6R-3/S6R-4); bu izni hiçbir AI taşımaz, Nervous yalnız önerir.',
     routes: ['fixture-target', 'fence-attempt', 'stop-orphan', 'hand-to-human', 'continue-new-attempt'].flatMap(id => ['apply', 'future-action'].map(action => ['recovery-action', id, action])) },
+  { id: 'nervous-rule', en: 'Promoting a Nervous rule to live', tr: 'Bir Nervous kuralını canlıya alma',
+    whyEn: 'Only a person promotes an exact measured rule and version (alpha.56 G2, owner Q-A1); an AI holding this would let its own detections stop and release workers.',
+    whyTr: 'Ölçülmüş bir kuralı ve sürümünü yalnız bir kişi canlıya alır (alpha.56 G2, owner Q-A1); bunu taşıyan bir AI kendi tespitleriyle işçileri durdurup bırakabilirdi.',
+    routes: ['container-gone@1', 'fixture-target'].flatMap(id => ['promote', 'future-action'].map(action => ['nervous-rule', id, action])) },
   { id: 'signers', en: 'Signer key enrol, add, revoke and log repair', tr: 'İmza anahtarı ekleme, kaydetme, iptal ve kayıt onarımı',
     whyEn: 'Only a person adds or revokes the keys AI and system principals sign catalog actions with (S8-5, owner 2026-10-23); an AI holding this would grant itself signing authority.',
     whyTr: 'AI ve sistem kimliklerinin katalog eylemlerini imzaladığı anahtarları yalnız bir kişi ekler ya da iptal eder (S8-5, owner 2026-10-23); bunu taşıyan bir AI kendine imza yetkisi verirdi.',
@@ -50,7 +62,7 @@ export const floorFamilies = [
     routes: ['suggest', 'narrow'].map(action => ['agent-catalog', 'fixture-target', action]) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
-  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless', 'catalogEvolution',
+  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless', 'toolchains.image', 'toolchains.currency.registryEndpoint', 'catalogEvolution',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts'];
 floorFamilies.push({ id: 'configuration', en: 'Protected configuration subtrees, descendants and whole-object ancestors',
   tr: 'Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları',
@@ -72,7 +84,7 @@ export function inventory(vocabulary) {
   const add = (route, floor, family) => { const [kind, id, action] = route; routes.set(JSON.stringify(route), { kind, id, action, floor, family }); };
   for (const { kind, actions } of vocabulary.resources) for (const action of actions)
     add([kind, kind === 'config' ? 'project:language' : 'fixture-target', action], kind === 'secret' || kind === 'backup' && action === 'restore'
-      || kind === 'permission-mode' && action === 'set' || kind === 'execution-environment' && action === 'install' || kind === 'installation' && action === 'repair', 'vocabulary');
+      || kind === 'permission-mode' && action === 'set' || kind === 'execution-environment' && action === 'install' || kind === 'installation' && ['repair', 'uninstall', 'purge'].includes(action), 'vocabulary');
   nonFloorRoutes.forEach(route => add(route, false, 'boundary-control'));
   floorFamilies.forEach(family => family.routes.forEach(route => add(route, true, family.id)));
   return [...routes.values()].sort((a, b) => { const x = JSON.stringify(a), y = JSON.stringify(b); return x < y ? -1 : x > y ? 1 : 0; });

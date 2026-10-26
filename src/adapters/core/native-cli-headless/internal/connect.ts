@@ -1,6 +1,7 @@
+import { prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import { delegatedUseConsentSchema, headlessEgressSchema, type DelegatedUseConsent, type JsonObject } from '#domain/index.js';
+import {  headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
@@ -37,15 +38,7 @@ export async function prepareHeadlessConnection(input: HeadlessConnectInput): Pr
   return base;
 }
 /** The person's consent choice (`classes` undefined: keep the existing one; empty: withdrawn). An unchanged choice keeps its record byte for byte. */
-export function headlessConsent(existing: JsonObject | null | undefined, classes: readonly ('ai' | 'system')[] | undefined, by: Readonly<{ issuer: string; subject: string }>,
-  atMs: number): DelegatedUseConsent | null {
-  const kept = delegatedUseConsentSchema.safeParse(existing?.['delegatedUse']), current = kept.success ? kept.data : null;
-  if (classes === undefined) return current;
-  const wanted = [...new Set(classes)].sort();
-  if (!wanted.length) return null;
-  return current && current.consentedBy.issuer === by.issuer && current.consentedBy.subject === by.subject && JSON.stringify([...current.classes].sort()) === JSON.stringify(wanted)
-    ? current : { consentedBy: { issuer: by.issuer, subject: by.subject }, atMs, classes: wanted };
-}
+export function headlessConsent(...args: Parameters<typeof prepareSubscriptionConsent>) { return prepareSubscriptionConsent(...args); }
 /** The adapter part of a subscription profile (profile v2, `billingAxis: subscription`, no tariff, no key). */
 export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinition, protocol: Readonly<{ family: string; version: string }>) => Object.freeze({
   // One run dir per connection that `send` empties: calls on one connection never overlap (registry bound).
@@ -56,9 +49,9 @@ export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinitio
 async function readEgress(stateDir: string) {
   const raw = await readFile(join(stateDir, HEADLESS_EGRESS_RECORD), 'utf8').then(text => JSON.parse(text) as unknown, () => null);
   const { schemaVersion, lastRefusedAtMs, ...summary } = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
-  const parsed = schemaVersion === 1 && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
+  const parsed = (schemaVersion === 1 || schemaVersion === 2) && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
   return parsed?.success && parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
-    hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
+    ...headlessEgressReasons(parsed.data), hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
 }
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
  * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet), f5 its gateway refusals and s3c whether

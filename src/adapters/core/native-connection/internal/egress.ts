@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import catalog from './providers.json' with { type: 'json' };
 import { NativeConnectionError, nativeProviderSpec, type NativeSubscription } from './credential.js';
 import { readNativeClientHello } from './tls-hello.js';
-import { HEADLESS_EGRESS_HOST, type HeadlessEgress } from '#domain/index.js';
+import { HEADLESS_EGRESS_HOST, type HeadlessEgress, type HeadlessEgressReason } from '#domain/index.js';
 
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -33,7 +33,7 @@ export interface NativeTunnelContext {
   readonly count: (bytes: number) => boolean;
   readonly connected: () => void;
   /** A refused request; `target` is the CONNECT target as asked (`host:port`), absent for a request that is not a CONNECT. */
-  readonly rejected: (target?: string) => void;
+  readonly rejected: (target?: string, reason?: HeadlessEgressReason) => void;
 }
 /**
  * One CONNECT request (workers' gateway and the isolated headless CLI alike): only `<allowlisted host>:443`, resolved once to public IPv4
@@ -42,38 +42,45 @@ export interface NativeTunnelContext {
  */
 export function tunnelNativeConnect(request: IncomingMessage, client: Socket, head: Buffer, context: NativeTunnelContext): void {
   const limits = catalog.limits;
+  let reason: HeadlessEgressReason = 'gateway-closed', rejected = false;
+  const reject = () => { if (!rejected) { rejected = true; context.rejected(request.url ?? '', reason); } };
   void (async () => {
     const target = request.url ?? ''; const host = target.slice(0, -4);
-    if (context.closed() || !target.endsWith(':443') || !context.destinations.includes(host)) throw new Error();
-    const addresses = await lookup(host, { family: 4, all: true });
-    if (context.closed() || client.destroyed || !addresses.length || addresses.some(row => !isPublicNativeAddress(row.address))) throw new Error();
+    if (context.closed()) throw new Error();
+    reason = 'allowlist'; if (!target.endsWith(':443') || !context.destinations.includes(host)) throw new Error();
+    reason = 'dns'; const addresses = await lookup(host, { family: 4, all: true });
+    reason = 'gateway-closed'; if (context.closed() || client.destroyed) throw new Error();
+    reason = 'unknown'; const publicAddresses = addresses.length > 0 && addresses.every(row => isPublicNativeAddress(row.address));
+    reason = 'non-public'; if (!publicAddresses) throw new Error();
     client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-    const hello = await readNativeClientHello(client, head, host, limits.headerBytes);
-    if (context.closed() || client.destroyed) throw new Error();
+    reason = 'client-hello'; const hello = await readNativeClientHello(client, head, host, limits.headerBytes);
+    reason = 'gateway-closed'; if (context.closed() || client.destroyed) throw new Error();
     // Use the checked numeric address directly. DNS cannot change between validation and connect.
-    const upstream = connect({ host: addresses[0]!.address, port: 443 }); context.sockets.add(upstream);
+    reason = 'upstream'; const upstream = connect({ host: addresses[0]!.address, port: 443 }); context.sockets.add(upstream);
     const close = () => { upstream.destroy(); client.destroy(); };
-    upstream.on('error', close); client.on('error', close);
+    upstream.on('error', () => { reason = 'upstream'; reject(); close(); }); client.on('error', close);
     upstream.on('close', () => { context.sockets.delete(upstream); client.destroy(); }); client.on('close', () => upstream.destroy());
     upstream.setTimeout(limits.idleMs, close);
-    const count = (chunk: Buffer) => { if (!context.count(chunk.length)) close(); };
+    const count = (chunk: Buffer) => { if (!context.count(chunk.length)) { reason = 'byte-budget'; reject(); close(); } };
     upstream.on('data', count); client.on('data', count);
     upstream.once('connect', () => {
-      if (context.closed()) { close(); return; }
-      context.connected(); count(hello); upstream.write(hello);
+      if (context.closed()) { reason = 'gateway-closed'; reject(); close(); return; }
+      context.connected(); count(hello); if (upstream.destroyed) return; upstream.write(hello);
       client.pipe(upstream); upstream.pipe(client); client.resume();
     });
-  })().catch(() => { context.rejected(request.url ?? ''); client.destroy(); });
+  })().catch(() => { reject(); client.destroy(); });
 }
 
 /** f5: the gateway's refusals by host name for doctor and the invocation record: a CONNECT target's host part when it is a valid lower-case DNS name,
  * up to `refusedHostsMax` distinct names (`providers.json`); anything else (no host, a bracketed or malformed one, past the bound) counts as `other`. */
 function refusedHosts(max: number) {
-  const hosts: Record<string, number> = Object.create(null) as Record<string, number>; let other = 0;
-  return { add(target: string | undefined) {
+  const hosts: Record<string, number> = Object.create(null) as Record<string, number>, reasons: NonNullable<HeadlessEgress['reasons']> = {}, otherReasons: NonNullable<HeadlessEgress['otherReasons']> = {}; let other = 0;
+  return { add(target: string | undefined, reason: HeadlessEgressReason) {
     const host = target === undefined ? '' : target.slice(0, Math.max(0, target.lastIndexOf(':'))).toLowerCase();
-    if (HEADLESS_EGRESS_HOST.test(host) && (Object.hasOwn(hosts, host) || Object.keys(hosts).length < max)) hosts[host] = (hosts[host] ?? 0) + 1; else other++;
-  }, view: () => Object.freeze({ hosts: Object.freeze({ ...hosts }), other }) };
+    if (HEADLESS_EGRESS_HOST.test(host) && (Object.hasOwn(hosts, host) || Object.keys(hosts).length < max)) {
+      hosts[host] = (hosts[host] ?? 0) + 1; const row = Object.hasOwn(reasons, host) ? reasons[host]! : (reasons[host] = {}); row[reason] = (row[reason] ?? 0) + 1;
+    } else { other++; otherReasons[reason] = (otherReasons[reason] ?? 0) + 1; }
+  }, view: () => Object.freeze({ hosts: Object.freeze({ ...hosts }), other, reasons: Object.fromEntries(Object.entries(reasons).map(([host, row]) => [host, { ...row }])), otherReasons: { ...otherReasons } }) };
 }
 /** The gateway limits a connection's server applies (`providers.json`), shared with the in-realm relay that feeds it. */
 export const nativeEgressLimits = () => Object.freeze({ connections: catalog.limits.connections, idleMs: catalog.limits.idleMs, headerBytes: catalog.limits.headerBytes,
@@ -89,7 +96,7 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
   const socketPath = join(directory, 'gateway.sock');
   let closed = false, transferred = 0;
   const sockets = new Set<Socket>(), statistics = { connected: 0, rejected: 0, bytes: 0 }, refused = refusedHosts(limits.refusedHostsMax);
-  const reject = (target?: string) => { statistics.rejected++; refused.add(target); };
+  const reject = (target?: string, reason: HeadlessEgressReason = 'unknown') => { statistics.rejected++; refused.add(target, reason); };
   const server = createServer({ maxHeaderSize: limits.headerBytes }, (_request, response) => { reject(); response.writeHead(403).end(); });
   server.maxConnections = limits.connections;
   server.headersTimeout = limits.idleMs; server.requestTimeout = limits.idleMs; server.keepAliveTimeout = 1;

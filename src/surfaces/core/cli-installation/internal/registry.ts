@@ -23,7 +23,15 @@ export async function initRegistryCommand(argv: readonly string[], context: Inst
   const input = { schemaVersion: 1 as const, scopeId: values.get('--scope')!, provider: values.get('--provider')!, kind: values.get('--kind')!,
     poolId: values.get('--pool')!, executionSlots: Number(values.get('--execution-slots')), inFlightSlots: Number(values.get('--in-flight-slots')),
     ...(values.has('--discovery') ? { discovery: values.get('--discovery') as InitialRegistryRequest['discovery'] } : {}), apply: flags.has('--apply') };
-  const result = await context.initializeNativeCodingRegistry(root, input, { env, heal: false });
+  let result;
+  try { result = await context.initializeNativeCodingRegistry(root, input, { env, heal: false }); }
+  catch (error) {
+    if (!input.apply && (error as { code?: string }).code === 'INITIAL_REGISTRY_EXISTS') {
+      emit({ schemaVersion: 1, status: 'exists' }, { json: flags.has('--json'), ...(context.stdout ? { stdout: context.stdout } : {}),
+        render: () => t('cli.init.registry.exists', {}, locale) }); return;
+    }
+    throw error;
+  }
   emit({ schemaVersion: result.schemaVersion, status: result.status, profile: result.profile, kind: result.kind,
     registry: result.registry, expect: result.expect, write: result.write }, { json: flags.has('--json'),
     ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}),

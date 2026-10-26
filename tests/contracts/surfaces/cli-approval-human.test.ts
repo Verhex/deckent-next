@@ -46,6 +46,16 @@ function approval(id: string, input: { status?: 'pending' | 'decided' | 'expired
 }
 const lines = (text: string) => text.split('\n');
 
+it('F5: approval list keeps inspectable full ids and bounds a long description without repeating the summary', async () => {
+  const root = await project(), id = '1234567890abcdef'.repeat(4), record = approval(id, { summary: 'unbounded-summary '.repeat(50) });
+  const result = await run(['approval', 'list', '--lang', 'tr'], { listApprovals: async () => [record] }, root);
+  expect(result.code).toBe(0); expect(result.text).toContain(id);
+  expect(result.text).not.toContain('unbounded-summary');
+  const table = result.text.slice(result.text.indexOf('Kimlik'), result.text.indexOf('Tam ayrıntı:'));
+  expect(lines(table).every(line => [...line].length <= 120)).toBe(true);
+  expect(result.text).toContain('deckent approval inspect --schema');
+});
+
 it('AI path: a wrong approval input names the field (not INVENTORY_QUERY_INVALID) and sends nothing; --schema prints the contract', async () => {
   const root = await project(), seen: unknown[] = [];
   const handlers = { listApprovals: async (input: unknown) => { seen.push(input); return []; }, decideApproval: async (input: unknown) => { seen.push(input); return null; },

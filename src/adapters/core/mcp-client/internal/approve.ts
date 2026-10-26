@@ -39,6 +39,8 @@ export interface McpTrustCard {
   /** Where it runs and what it may write (C5: a sandboxed server sees the project read-only): the realm's meaning on the launch card, the view
    * it started in on the tools card. */
   readonly posture?: string; readonly era?: string; readonly protocolVersion?: string | null;
+  /** Actual launch facts for a localized preview; the canonical English posture remains the approval digest input. */
+  readonly execution?: Readonly<{ sandboxed: boolean; projectReadOnly: boolean }>;
   readonly tools?: readonly { readonly name: string; readonly digest: string; readonly description: string | null; readonly annotations: unknown; readonly alwaysAsk: boolean }[];
 }
 /** The owner's answer to one card: yes, no, or null when no answer came (a card that expired or a turn that ended): nothing is recorded then. */
@@ -144,7 +146,7 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     // F28: a server's tool description is one bounded line on every card renderer (the terminal window shows this field as given).
     const tools = live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ? modelTextPrefix(mcpCardLine(tool.description), 160) : null, annotations: tool.annotations ?? null,
       alwaysAsk: locked.has(tool.name) }));
-    const pinned = await ask({ ...launchCard, phase: 'tools', posture: state.posture, era: state.era, protocolVersion: state.protocolVersion, tools });
+    const pinned = await ask({ ...launchCard, phase: 'tools', posture: state.posture, execution: { sandboxed: state.sandboxed, projectReadOnly: state.projectReadOnly }, era: state.era, protocolVersion: state.protocolVersion, tools });
     if (pinned === null) return { decision: 'unanswered', pinned: 0 };
     if (!pinned) return decline();
     const pins = tools.map(tool => ({ name: tool.name, digest: tool.digest, alwaysAsk: tool.alwaysAsk }));
@@ -172,6 +174,21 @@ export function mcpTrustAuditWriter(input: { readonly layout: ProductLayout; rea
 
 /** The card as text (approval preview and CLI): what runs, where, with which variables (set or not) and, in the tools phase, what gets pinned.
  * F28: one field per line, each through `mcpCardLine` (no escape, no line break of its own); every argument on its own line. */
+function postureText(card: McpTrustCard, locale: Locale): string {
+  if (locale === 'en' || !card.posture) return card.posture ?? '';
+  if (card.transport === 'http' && card.posture === MCP_HTTP_POSTURE) return t('mcp.trustCard.posture.remote', {}, locale);
+  if (card.execution) return card.execution.sandboxed
+    ? t('mcp.trustCard.posture.startedSandbox', { project: card.execution.projectReadOnly ? t('mcp.trustCard.posture.readOnly', {}, locale) : t('mcp.trustCard.posture.writable', {}, locale) }, locale)
+    : t('mcp.trustCard.posture.host', {}, locale);
+  const realm = card.realm;
+  if (['host', 'sandbox-net', 'prefer-sandbox', 'require-sandbox'].includes(realm) && card.posture === mcpRealmPosture(realm as Parameters<typeof mcpRealmPosture>[0])) {
+    if (realm === 'host') return t('mcp.trustCard.posture.host', {}, locale);
+    if (realm === 'sandbox-net') return t('mcp.trustCard.posture.network', {}, locale);
+    return realm === 'prefer-sandbox' ? t('mcp.trustCard.posture.preferred', {}, locale) : t('mcp.trustCard.posture.required', {}, locale);
+  }
+  return card.posture;
+}
+
 export function describeMcpTrustCard(card: McpTrustCard, locale?: Locale): string {
   // Existing callers retain English output regardless of the host's language.
   locale ??= 'en';
@@ -186,7 +203,7 @@ export function describeMcpTrustCard(card: McpTrustCard, locale?: Locale): strin
       variable.set ? '' : ` ${t('mcp.trustCard.unset', {}, locale)}`}`).join(', ') || none }, locale),
     card.transport === 'http' ? t('mcp.trustCard.headers', { headers: card.headerNames.join(', ') || none }, locale)
       : t('mcp.trustCard.env', { env: card.envNames.join(', ') || none }, locale),
-    t('mcp.trustCard.realm', { realm: `${card.realm}${card.posture ? ` — ${card.posture}` : ''}` }, locale),
+    t('mcp.trustCard.realm', { realm: `${card.realm}${card.posture ? ` — ${postureText(card, locale)}` : ''}` }, locale),
     t('mcp.trustCard.definition', { digest: card.definitionDigest }, locale),
     ...(note ? [t('mcp.trustCard.note', { note: line(note) }, locale)] : []),
     ...(card.tools ? [t('mcp.trustCard.tools', { count: card.tools.length, era: card.era ?? '', protocolVersion: card.protocolVersion ?? '' }, locale),

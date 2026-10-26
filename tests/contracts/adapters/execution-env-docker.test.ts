@@ -262,13 +262,13 @@ describe('the setup seam (cond. 1)', () => {
     expect(dockerInstallOffer(true)(executionFacts('absent'))).toEqual({ operation: { id: 'execution-environment.install', version: 1, input: { environment: 'docker' } },
       question: { key: 'setup.execution.install', params: { runtime: 'Docker' } }, cli: null });
     const registry = new SetupStageRegistry([executionSetupFamily({ install: dockerInstallOffer(true) })]);
-    const observation = { schemaVersion: 1 as const, environment: { platform: 'linux' as const, node: 'supported' as const }, language: { configured: 'en' as const, requested: null, system: null },
+    const observation = { schemaVersion: 2 as const, environment: { platform: 'linux' as const, node: 'supported' as const }, language: { configured: 'en' as const, requested: null, system: null },
       folder: { installation: 'present' as const, homeRoot: false, configuredScope: 'installation', suggestedScope: null }, profile: { available: [] }, policy: { state: 'current' as const },
       sandbox: { realm: 'bubblewrap' as const, selfTest: 'ok' as const, usernsRestricted: false }, model: { connections: 1 }, check: { state: 'ok' as const },
       families: { execution: executionFacts('absent') } };
-    const stage = planSetup(observation, { schemaVersion: 1, values: {} }, registry).stages.find(item => item.id === 'execution:runtime')!;
+    const stage = planSetup(observation, { schemaVersion: 2, values: {} }, registry).stages.find(item => item.id === 'execution:runtime')!;
     expect(stage).toMatchObject({ state: 'needs-answer', default: false, autoEligible: false, operation: { id: 'execution-environment.install' } });
-    const answered = planSetup(observation, { schemaVersion: 1, values: { 'execution:runtime': true } }, registry).stages.find(item => item.id === 'execution:runtime')!;
+    const answered = planSetup(observation, { schemaVersion: 2, values: { 'execution:runtime': true } }, registry).stages.find(item => item.id === 'execution:runtime')!;
     expect(answered).toMatchObject({ state: 'ready', autoEligible: false });
   });
 });

@@ -64,7 +64,7 @@ it('run list reads the /runs query, lists waiting Runs first with short ids and 
     state: { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2 } };
   const s = store([view([{ taskBrief: brief(`Post the invoice\nsecond line`), phase: 'accepted' }, {}]), parked]);
   for (const [locale, words] of [['en', ['a1b2c3', 'a1b2ff', 'parked (needs your input)', 'running', '1/2', 'Post the invoice', 'scope: s (default)']],
-    ['tr', ['bekletildi: sizden bilgi bekliyor', 'çalışıyor', 'scope: s (varsayılan)', 'gösterildi']]] as const) {
+    ['tr', ['bekletildi: sizden bilgi bekliyor', 'çalışıyor', 'Kapsam: s (varsayılan)', 'gösterildi']]] as const) {
     const out = sinks();
     await runList(new Map(), false, { ...s.context, root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, locale, stdin: { isTTY: false }, stdout: out.stdout } as never, locale);
     const text = out.out.join('');
@@ -96,7 +96,7 @@ it('a short id resolves on inspect and on the AI control path; an ambiguous pref
   const ambiguous = await run(['run', 'inspect', '--scope', 's', '--id', 'a1b2', '--json'], s.context, root);
   expect(ambiguous.code).toBe(2); expect(JSON.parse(ambiguous.err).code).toBe('CLI_ID_AMBIGUOUS'); expect(s.calls).toEqual(['ids:s']);
   const missing = await run(['run', 'inspect', '--scope', 's', '--id', 'ffff0000', '--lang', 'tr'], s.context, root);
-  expect(missing.code).toBe(1); expect(missing.err).toContain('Kayıtlı Run bulunamadı: ffff0000.');
+  expect(missing.code).toBe(1); expect(missing.err).toContain('Kayıtlı iş bulunamadı: ffff0000.');
   s.calls.length = 0;
   const cancelled = await run(['run', 'cancel', '--scope', 's', '--id', 'a1b2ff', '--command-id', 'c-1', '--expected-revision', '7', '--json'], s.context, root);
   expect(cancelled.code).toBe(0); expect(s.calls.find(call => call.startsWith('cancel:'))).toContain(`"runId":"${OTHER}"`);
@@ -154,7 +154,7 @@ it('TTY hold: the revision is read just before the card, the card names scope an
   expect(cards.asked[0]!.body!.join('\n')).toContain('Kapsam: s'); expect(cards.asked[0]!.body!.join('\n')).toContain('revizyon 7');
   expect(cards.asked[1]!.body!.join('\n')).toContain('revizyon 9');
   expect(cards.asked[0]!.body!.join('\n')).toContain('Bekletmeyi deckent run resume kaldırır'); // no window key on a CLI card
-  expect(cards.asked[1]!.body!.join('\n')).toContain('Run bu arada değişti');
+  expect(cards.asked[1]!.body!.join('\n')).toContain('İş bu arada değişti');
   const write = s.calls.find(call => call.startsWith('apply:'))!;
   expect(JSON.parse(write.slice(6))).toMatchObject({ action: 'hold', runId: LONG, scopeId: 's', expectedRevision: 9, holdReason: 'Kişi Deckent terminalinde bekletti.' });
   expect(JSON.parse(write.slice(6)).commandId).toMatch(/^cli-run-hold-/u);
@@ -272,7 +272,7 @@ it('inventory: default scope, short ids in a table, terminal-safe cells, the pag
   await inventoryCommand(['inventory', '--lang', 'tr'], { ...context, stdout: human.stdout } as never);
   const text = human.out.join('');
   expect(queries).toEqual([{ schemaVersion: 1, scopeId: 's', after: null }]);
-  expect(text).toContain('scope: s (varsayılan)'); expect(text).toContain('a1b2c3d4'); expect(text).toContain('0e1f2a3b');
+  expect(text).toContain('Kapsam: s (varsayılan)'); expect(text).toContain('a1b2c3d4'); expect(text).toContain('0e1f2a3b');
   expect(text).toContain(`--after ${identity.attemptId}`); expect(text).toContain('deckent run list');
   expect(text).not.toContain(ESC); expect(text).not.toContain('evil'); expect(text).not.toContain(LONG);
   await expect(inventoryCommand(['inventory', '--scope', 's', '--limit', '3', '--lang', 'tr'], { ...context, stdout: sinks().stdout } as never))
@@ -296,4 +296,20 @@ it('D4: run cancel/hold/resume/close/reserve/create off a terminal without --sco
     expect(JSON.parse(result.err), argv.join(' ')).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', params: { scopes: 's, live' } });
   }
   expect(calls).toEqual([]);
+});
+
+it('report groups visible attempt usage by channel and leaves missing API or subscription measurements unknown', () => {
+  const attempt = { schemaVersion: 1, identity: { scopeId: 's', runId: LONG, taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 },
+    profile: { id: 'coding', version: 1 }, model: { channelId: 'channel-one', modelId: 'model', evidence: 'requested' }, effort: null,
+    acceptance: { workClass: null, policyRevision: null, profileVersion: null, evaluationId: null, criteria: [], outcome: 'accepted', score: null, ceilingReasons: [] },
+    axes: { cpuSeconds: null, sampledPeakBytes: null, kernelPeakBytes: null, wallMs: null, apiMoney: { basis: 'measured-tariff', amountUsdNanos: '1250000000', tariffDigest: 'a'.repeat(64) }, subscription: null, localModel: null, humanInterventions: null },
+    quality: { reworkCount: null, rollbackCount: null, interventionCount: null, followup: 'unknown' }, coverage: 'partial', sampleCount: 0, gapCount: 1 };
+  const second = { ...attempt, identity: { ...attempt.identity, taskId: 't2', attemptId: 'a2' }, axes: { ...attempt.axes, apiMoney: null, subscription: { calls: null, durationMs: null, limit: null } } };
+  const third = { ...second, identity: { ...attempt.identity, taskId: 't3', attemptId: 'a3' }, model: null };
+  const report = summarizeWorkCosts({ scopeId: 's', runId: LONG, runRevision: 1, observedAtMs: 1, withheld: 1, attempts: [attempt, second, third] as never });
+  const text = renderHumanReport(report, view() as never, { env: {} } as never, 'en', false);
+  expect(text).toContain('Usage by channel (this Run)');
+  expect(text).toMatch(/channel-one\s+2\s+1.25\s+1\s+unknown/u);
+  expect(text).toMatch(/unknown\s+1\s+unknown\s+1\s+unknown/u);
+  expect(text).toContain('No billing period or reset is inferred'); expect(report.attempts).toHaveLength(3);
 });

@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { DeckentError, ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { formatDecimal, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { spendPeriodLines } from './spend-period.js';
 import { modelsInteractive } from './io.js';
 import { parseProviderSpendManagementCommand, type ProviderSpendManagementCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult, ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
@@ -51,7 +52,7 @@ function render(result: ProviderSpendAccountInspection, locale: Locale): string 
   if (result.checkpoint === null) return [t('models.spending.absent', { scope: result.scopeId, budget: result.budgetId,
     revision: result.budgetRevision }, locale), t('models.spending.historyNotRecorded', {}, locale)].join('\n');
   const { account } = result.checkpoint;
-  return [t('models.spending.account', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision,
+  return [...spendPeriodLines(result, locale), t('models.spending.account', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision,
     currency: account.budget.currency, limit: account.budget.limitMinorUnits, checkpoint: result.checkpoint.revision,
     reservations: result.checkpoint.reservationCount }, locale),
   t('models.spending.reserved', { amount: account.reservedMinorUnits, currency: account.budget.currency }, locale),
@@ -80,22 +81,22 @@ export async function modelSpendingCommand(argv: readonly string[], context: Mod
   if (args.action === 'audit-spending' && !context.auditProviderSpendAccount) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env, heal: false }, config = await loadConfig(root, options);
   const source = args.source!, input = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.spending', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   if (args.action === 'reconcile-spending' || args.action === 'revise-budget') {
     if (!context.manageProviderSpend) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
     let command: ProviderSpendManagementCommand;
-    try { command = parseProviderSpendManagementCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
-    if ((args.action === 'reconcile-spending') !== (command.kind === 'reconcile')) throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID');
+    try { command = parseProviderSpendManagementCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } }); }
+    if ((args.action === 'reconcile-spending') !== (command.kind === 'reconcile')) throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } });
     const result = await context.manageProviderSpend(root, command, options);
     emit(result, { ...sinks, json: args.json, render: value => t('models.spending.managementRecorded', { command: value.receipt.command.commandId }, locale) });
   } else if (args.action === 'spending') {
     let query: ProviderSpendAccountQuery;
-    try { query = parseProviderSpendAccountQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
+    try { query = parseProviderSpendAccountQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } }); }
     const result = await context.inspectProviderSpendAccount!(root, query, options);
     emit(result, { ...sinks, json: args.json, render: value => render(value, locale) });
   } else {
     let command: ProviderSpendAuditCommand;
-    try { command = parseProviderSpendAuditCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
+    try { command = parseProviderSpendAuditCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } }); }
     const result = await context.auditProviderSpendAccount!(root, command, options);
     emit(result, { ...sinks, json: args.json, render: value => renderAudit(value, locale) });
   }
@@ -129,10 +130,10 @@ async function spendingSummary(args: Parsed, context: ModelCommandContext, local
   emit(result, { ...sinks, json: args.json, render: value => {
     if (!value.checkpoint) return t('climodels.spending.none', { scope: terminalSafeText(value.scopeId) }, locale);
     const account = value.checkpoint.account, currency = terminalSafeText(account.budget.currency), digits = minorDigits(account.budget.currency);
-    const money = (minor: number) => `${formatDecimal(minor / 10 ** digits, locale, digits)} ${currency}`, used = Number(account.settledExactMinorUnits);
-    return [t('climodels.spending.limit', { amount: money(account.budget.limitMinorUnits) }, locale), t('climodels.spending.used', { amount: money(used) }, locale),
+    const money = (minor: number) => `${formatDecimal(minor / 10 ** digits, locale, digits)} ${currency}`, used = Number(value.period?.usedExactMinorUnits ?? account.settledExactMinorUnits);
+    return [...spendPeriodLines(value, locale), t('climodels.spending.limit', { amount: money(account.budget.limitMinorUnits) }, locale), t('climodels.spending.used', { amount: money(used) }, locale),
       t('climodels.spending.held', { amount: money(account.reservedMinorUnits) }, locale),
-      t('climodels.spending.left', { amount: money(Math.max(0, account.budget.limitMinorUnits - used - account.reservedMinorUnits)) }, locale),
+      t('climodels.spending.left', { amount: money(value.period?.remainingMinorUnits ?? Math.max(0, account.budget.limitMinorUnits - used - account.reservedMinorUnits)) }, locale),
       ...(account.frozen ? [t('climodels.spending.frozen', {}, locale)] : [])].join('\n');
   } });
 }

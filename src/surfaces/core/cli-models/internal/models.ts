@@ -1,3 +1,4 @@
+import { siwcCliCommand } from '#surfaces/core/siwc/index.js';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { parseModelReference } from '#domain/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -86,6 +87,7 @@ export async function modelsCommand(argv: readonly string[], context: ModelComma
   if (argv[1] === 'activation' || argv[1] === 'activate' || argv[1] === 'deactivate') return modelActivationCommand(argv, context);
   // WORKER-CURRENCY-2: the ledger model catalog; `models catalog activate` never reaches the chat activation command above.
   if (argv[1] === 'catalog') return modelCatalogCommand(argv, context);
+  if (context.siwc && ['connect', 'login', 'logout'].includes(argv[1] ?? '') && argv[argv.indexOf('--connection') + 1] === context.siwc.connection) return siwcCliCommand(argv, context, context.siwc.execute);
   if (argv[1] === 'connect') return modelConnectCommand(argv, context);
   if (argv[1] === 'login') return modelLoginCommand(argv, context);
   // M2: which exact catalog model serves which role; `set` is a person's card.

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
+import { migrateProviderSpendPeriods, migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
@@ -15,7 +15,12 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 70;
+export const CURRENT_LEDGER_VERSION = 73;
+// alpha.56 BP budget periods: each period-less spend checkpoint is archived once (append-only history) and gets its first local month boundary.
+// Older binaries refuse v72; rollback restores the pre-switch backup (the rewritten account records carry the period).
+export const PROVIDER_SPEND_PERIOD_LEDGER_VERSION = 72;
+// H2 additive client metadata and v2 skill reader. Older binaries refuse v71; rollback restores the pre-switch backup, never drops installed rows.
+export const HUB_CLIENT_LEDGER_VERSION = 71;
 // S8-3/S8-4 catalog suggestions (lane v70 after s82's v69; the lead renumbers at landing): sealed suggestion rows whose state moves once from `open`
 // (one revision, CAS) with append-only state history, and the aggregator's rebuildable per-key window cache. Additive; older code ignores the tables.
 // Downgrade = restore the pre-switch backup (an older build refuses v70).
@@ -67,6 +72,8 @@ export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
 // ONAY-GUVENCE D2: chained audit checkpoints (additive; lane v55, renumbered to v56 at the pre-beta wave integration).
 export const AUDIT_CHECKPOINT_LEDGER_VERSION = 56;
 export const RUN_PROPOSAL_LEDGER_VERSION = 53;
+// v2 intent/planned envelopes; no existing record changes. Down step requires restoring the v72 backup.
+export const RUN_INTENT_LEDGER_VERSION = 73;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
@@ -88,6 +95,26 @@ export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [RUN_INTENT_LEDGER_VERSION]: 'PRAGMA user_version=73;',
+  [HUB_CLIENT_LEDGER_VERSION]: `CREATE TABLE hub_sources(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('active','removed')),
+    revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id));
+    CREATE TABLE hub_installs(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,package_id TEXT NOT NULL,version TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN('installed','retired')),revision INTEGER NOT NULL CHECK(revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,hub_id,package_id,version));
+    CREATE INDEX hub_installs_current ON hub_installs(scope_id,hub_id,package_id,seq DESC);
+    CREATE TABLE hub_revocation_snapshots(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id,sequence));
+    CREATE TABLE hub_revocation_entries(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id,kind,id));
+    CREATE TABLE hub_client_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    CREATE TRIGGER hub_sources_no_delete BEFORE DELETE ON hub_sources BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_sources_forward BEFORE UPDATE ON hub_sources WHEN NEW.scope_id!=OLD.scope_id OR NEW.hub_id!=OLD.hub_id OR NEW.revision!=OLD.revision+1 BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_installs_no_delete BEFORE DELETE ON hub_installs BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_installs_forward BEFORE UPDATE ON hub_installs WHEN NEW.scope_id!=OLD.scope_id OR NEW.hub_id!=OLD.hub_id OR NEW.package_id!=OLD.package_id OR NEW.version!=OLD.version OR NEW.revision!=OLD.revision+1 BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_feed_no_delete BEFORE DELETE ON hub_revocation_snapshots BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_feed_forward BEFORE UPDATE ON hub_revocation_snapshots BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_revocation_no_delete BEFORE DELETE ON hub_revocation_entries BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_receipts_no_delete BEFORE DELETE ON hub_client_receipts BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_receipts_no_update BEFORE UPDATE ON hub_client_receipts BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    PRAGMA user_version=71;`,
   [CATALOG_SUGGESTION_LEDGER_VERSION]: `CREATE TABLE catalog_suggestions(scope_id TEXT NOT NULL,suggestion_id TEXT NOT NULL,kind TEXT NOT NULL,key_digest TEXT NOT NULL,
     state TEXT NOT NULL CHECK(state IN('open','decided','dismissed','superseded')),state_revision INTEGER NOT NULL CHECK(state_revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,
     state_record TEXT NOT NULL,PRIMARY KEY(scope_id,suggestion_id)); CREATE INDEX catalog_suggestions_key ON catalog_suggestions(scope_id,key_digest,state);
@@ -380,7 +407,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
   // Older custody validators inspect the current Run shape. Prove and convert old eligibility
   // before those validators, inside the same transaction; never skip their independent checks.
   if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
-  const codeSteps: Readonly<Record<number, () => void>> = { 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
+  const codeSteps: Readonly<Record<number, () => void>> = { [PROVIDER_SPEND_PERIOD_LEDGER_VERSION]: () => migrateProviderSpendPeriods(db), 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
     8: () => requireLedgerV8ExecutionRegistry(db), 15: () => migrateModelInvocationEvidence(db), 16: () => migrateModelInvocationContents(db),
     17: () => migrateModelInvocationPurge(db), 18: () => migrateModelInvocationControl(db), 19: () => migrateModelAllocationCheckpoints(db),
     20: () => migrateProviderSpend(db), 21: () => migrateProviderReportedSpend(db), [SCOPE_REGISTRY_LEDGER_VERSION]: () => migrateScopeRegistry(db, companyId),
@@ -399,7 +426,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
     if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION || next === AGENT_STANDING_LEDGER_VERSION || next === SIGNER_KEY_LEDGER_VERSION || next === CATALOG_EVOLUTION_LEDGER_VERSION
-      || next === CATALOG_SUGGESTION_LEDGER_VERSION) {
+      || next === CATALOG_SUGGESTION_LEDGER_VERSION || next === HUB_CLIENT_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

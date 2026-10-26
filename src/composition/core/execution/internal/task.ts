@@ -3,16 +3,17 @@ import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
-import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
-  gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
-import { authenticate, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, dispatchNeedsObservation, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
+import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
+  gitQueueCandidateSource, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerTurn, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
+import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, dispatchNeedsObservation, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredResourceCollector } from '#composition/core/resource-observation/index.js';
+import { openConfiguredSiwcWorker } from '#composition/core/siwc/index.js';
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
  */
@@ -43,20 +44,32 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (identity.layoutRevision !== layout.revision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const run = await store.loadRun(identity.scopeId, identity.runId);
       const selected = selectReservedTaskProfile(run, await store.load(identity.scopeId, identity.attemptId), identity);
-      const profile = resolveDockerTaskProfile(selected);
+      const profile = resolveDockerTaskProfile(selected), relayed = profile.siwcWorker && profile.nativeSubscription;
+      // U9-7: a relay worker passes the launch gate before any workspace, probe, connection or container; held/unprovable is a typed refusal, never another route.
+      if (profile.siwcWorker) assertSiwcWorkerLaunchable({ platform: process.platform, imageCodexVersion: relayed ? relayed.preflight?.cliVersion ?? null : null });
       if (profile.options.outputFiles && profile.options.outputFiles.maxBytes > config.artifacts.maxBytes) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED'); if (os.uid <= 0 || os.gid < 0) throw ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
       await preparation.begin(run!); const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
       const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
         ...Object.values(layout.resources)]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes }), start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
+      const agent = run?.execution.tasks.find(task => task.taskId === identity.taskId)?.agent;
+      if (agent?.skills.length) {
+        const catalog = openSqliteHubClientStore(await path(), config.storage.sqlite, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, false), 'read');
+        try {
+          const root = await prepareProductDirectory(layout, 'artifacts');
+          const files = await selectedHubSkillFiles(catalog, new HubArtifactCache(HubArtifactCache.path(root), config.artifacts.maxBytes), identity.scopeId, agent);
+          // H6 HOLD: Docker's readonly bind remount may clear source noexec. Do not silently omit supporting files or launch with a weaker floor.
+          if (files.some(file => !file.entry)) throw ErrorRegistry.createError('HUB_SKILL_FILES_UNAVAILABLE');
+        } catch (cause) { throw ErrorRegistry.createError('HUB_SKILL_FILES_UNAVAILABLE', { cause }); } finally { catalog.close(); }
+      }
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
       const queue = await store.loadTargetQueueVerification(identity.scopeId, identity.runId);
       if (queue) await authorization.authorizeIdentity('read-output', queue.request.identity, principal);
       const privateSource = queue ? await gitQueueCandidateSource(queue, store, artifacts, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }) : undefined;
       const broker = new GitWorkspaceBroker(git, privateSource); await preparation.enter('workspace');
       // C2: the pinned checkout shaping hides the instruction surface from a worker's clone; a queue verification Run keeps the full tree.
-      const hidden = queue ? undefined : profile.nativeSubscription?.checkout?.hiddenPaths;
+      const hidden = queue ? undefined : dockerTaskHiddenPaths(selected) ?? undefined;
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker, hidden)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches, hidden); await preparation.enter('secret-gate');
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
@@ -85,23 +98,29 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       custody = false; if (ended) throw ended.error;
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
-      const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
-      // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt.
-      const connection = profile.nativeSubscription ? await openNativeConnection({ binding: profile.nativeSubscription,
+      const events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
+      // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
+      const connection = profile.nativeSubscription && !relayed ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
         deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
       let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome;
+      let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
       try { await preparation.enter('dispatch');
-      const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
-        ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
+      relay = relayed ? await openConfiguredSiwcWorker(projectRoot, options, { identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: profile.options.imageId,
+        codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext), finalReport: !!relayed.finalReport },
+        deadlineMs: profile.options.deadlineMs, directory: workspaceRoot, policyRevision: document.revision, audit,
+        fence: async () => { const current = await store.loadRun(identity.scopeId, identity.runId); return current?.state.kind === 'running' && !current.cancelRequested; } }) : undefined;
+      const dockerOptions = { ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
+        ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) };
+      const supervisor = relay ? new SiwcWorkerSupervisor(dockerOptions, relay) : new DockerSupervisor(dockerOptions);
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts, Date.now, configuredResourceCollector(config, layout));
       for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       // R3: the frozen silence policy stops a worker whose gateway saw no event or model traffic; the existing kill path follows.
       const stall = run!.execution.tasks.find(row => row.taskId === identity.taskId)?.stall, silence = new AbortController();
-      const watch = stall && connection ? inactivityWatch(stall, Date.now()) : undefined;
+      const gateway = connection ?? relay, watch = stall && gateway ? inactivityWatch(stall, Date.now()) : undefined;
       const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
         config.inspection.workers.maxFileBytes, async () => {
-          if (watch?.(Date.now(), connection!.statistics()) === 'stop') silence.abort('inactivity');
+          if (watch?.(Date.now(), gateway!.statistics()) === 'stop') silence.abort('inactivity');
           let record = await store.loadBoundDispatch(identity); if (!record) return null;
           const activity = await supervisor.inspectActivity(request).catch(() => ({ handle: null, state: 'unknown' as const }));
           // Supervisor observation must also settle a missed exit while the execute controller is
@@ -119,7 +138,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       try { result = await app.execute(request, undefined, silence.signal); } finally { await observation.close(); }
       outcome = { status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output };
       } finally {
-        await connection?.close();
+        await connection?.close(); await relay?.close();
         // Seal the event log once the gateway is closed; a sealing failure never changes the execution outcome and is returned typed.
         const closedSink = await events?.close();
         // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).

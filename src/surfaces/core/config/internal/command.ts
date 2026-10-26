@@ -67,7 +67,12 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     try { value = keyPath === undefined ? display : getConfigValue(display, keyPath); }
     catch (error) {
       // An optional section (inference_serving, operations, ...) the registry declares but this installation leaves out is "not defined", not unknown.
-      if (keyPath === undefined || !await declared(context, root, options, keyPath)) throw error;
+      if (keyPath === undefined || !context.configApplication) throw error;
+      let field: ConfigFieldView;
+      try { field = await context.configApplication(root, { ...options, globalOnly: parsed.global }).explain({ keyPath }); } catch { throw error; }
+      if (field.defaultValue !== undefined) {
+        emit(field.defaultValue, { ...sinks, mode: config.output_mode, render: data => t('config.surface.effectiveDefault', { key: keyPath, value: formatValue(data), source: sourceWord('default', locale) }, locale) }); return;
+      }
       emit(null, { ...sinks, mode: config.output_mode, render: () => t('clisetup.config.undefined', { key: keyPath }, locale) }); return;
     }
     // A person reads a group as rows (one per leaf, cut to the width); JSON and a single value keep the compatible output.
@@ -76,7 +81,7 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   }
   await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
   if (!context.configApplication) throw ErrorRegistry.createError('CLI_USAGE', { params: { usage: t('config.surface.unavailable', {}, locale) } });
-  const app = context.configApplication(root, options), layer = parsed.global ? 'global' as const : 'project' as const;
+  const app = context.configApplication(root, { ...options, globalOnly: parsed.global && !isWrite }), layer = parsed.global ? 'global' as const : 'project' as const;
   if (action === undefined && parsed.args.length === 0) {
     // A person on a terminal gets the terminal's own `/config` window (one implementation); everyone else the overrides summary.
     if (!parsed.json && !parsed.global && context.openConfigPanel && person()) { await openPanel(context, root, options, locale, null, sinks); return; }
@@ -123,11 +128,6 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
  */
 function assertConfigPerson(context: ConfigCommandContext, action: 'set' | 'unset', keyPath: string, json = false) {
   if (isProtectedConfigWrite(keyPath) && cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: configWriteOperation(action, keyPath) } });
-}
-/** The registry declares `keyPath` (its explain resolves) although this installation's configuration leaves the section out. */
-async function declared(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, keyPath: string): Promise<boolean> {
-  if (!context.configApplication) return false;
-  try { return (await context.configApplication(root, options).explain({ keyPath })).key === keyPath; } catch { return false; }
 }
 const describe = (field: ConfigFieldView, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
 /**

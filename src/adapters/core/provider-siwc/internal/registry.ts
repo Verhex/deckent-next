@@ -1,14 +1,52 @@
 import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
 import type { OAuthConnectionProtocol } from '#engine/index.js';
+import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js';
 const positive = z.number().int().positive().safe(), url = z.string().url().startsWith('https://');
-const parsed = z.object({ schemaVersion: z.literal(1), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
+const sourced = { source: url, observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) };
+const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
   authorizationEndpoint: url, tokenEndpoint: url, discoveryEndpoint: url, resource: url, appName: z.string().min(1),
   identityScopes: z.array(z.string()), usageScopes: z.array(z.string()), usagePermission: z.string(), callbackPath: z.string().startsWith('/'),
   hostSecretName: z.string(), connectionSecretPrefix: z.string(), encryptedStoreId: z.string(), timeoutMs: positive, maxPending: positive, maxConnections: positive,
   limits: z.object({ loginWindowMs: positive, httpTimeoutMs: positive, responseMaxBytes: positive, jwtMaxBytes: positive, maxKeys: positive, callbackMaxBytes: positive, callbackMaxConnections: positive }).strict(),
-  terminalRefreshErrors: z.array(z.string()).min(1) }).strict().parse(asset);
+  refreshMarginMs: positive, refreshLockWaitMs: positive,
+  refreshPolicySource: z.object({ ...sourced, kind: z.literal('deckent-policy') }).strict(),
+  usageSummary: z.object({ ...sourced, days: positive, maxEntries: positive, timeoutMs: positive, manageUrl: url }).strict(),
+  inference: z.object({ ...sourced, adapter: z.object({ id: z.string().min(1), version: positive }).strict(), endpoint: url, modelsEndpoint: url,
+    modelsMaxEntries: positive, modelsMaxBytes: positive, modelFieldMaxChars: positive, visibility: z.string().min(1), namespace: z.object({ name: z.string().min(1), description: z.string() }).strict() }).strict(),
+  requestRules: z.object({ ...sourced, allowedFields: z.array(z.string()).min(1), unverifiedFields: z.array(z.string()), forbiddenFields: z.array(z.string()).min(1),
+    store: z.literal(false), stream: z.literal(true) }).strict().refine(r => [...r.allowedFields, ...r.unverifiedFields].every(f => !r.forbiddenFields.includes(f))
+      && r.allowedFields.every(f => !r.unverifiedFields.includes(f))),
+  usageErrors: z.object({ ...sourced, codes: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u), z.object({
+    refusal: z.enum(['quota', 'plan-unavailable', 'login-required', 'usage-unavailable', 'service-unavailable']),
+    status: z.number().int().min(400).max(599) }).strict()) }).strict(),
+  terminalRefreshErrors: z.array(z.string()).min(1),
+  /** U9-6/7: the worker-embedded app-server relay. `activation` stays `hold` until the operator's real-binary proof; bounds are required data. */
+  workerRelay: z.object({ ...sourced, activation: z.enum(['hold', 'open']), appServer: z.object({
+    control: z.array(z.string().min(1)).min(1), controlSource: url,
+    native: z.object({ note: z.string(), vendorRoots: z.record(z.string(), z.string().min(1)), fallbackVendorRoot: z.string().min(1), triples: z.record(z.string(), z.string().min(1)),
+      binary: z.string().min(1), pathDir: z.string().min(1), managedEnv: z.string().min(1) }).strict() }).strict(), approvalPolicy: z.literal('untrusted'), sandbox: z.literal('danger-full-access'), wireApi: z.literal('responses'),
+    requestFields: z.array(z.string().min(1)).min(1), toolTypes: z.array(z.string().min(1)).min(1),
+    methods: z.object({ client: z.array(z.string().min(1)).min(1), approvals: z.array(z.string().min(1)).min(1) }).strict(),
+    limits: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, headerBytes: positive, inFlight: positive, connections: positive, idleMs: positive,
+      capabilityMaxTtlMs: positive, capabilityBytes: positive, approvalCommandBytes: positive, approvalDiffBytes: positive, approvalChanges: positive, approvalItems: positive, controlConnectMs: positive, controlPollMs: positive, helperTimeoutMs: positive, drainMs: positive, controlLineBytes: positive, controlLines: positive, auditRecords: positive }).strict() }).strict() })
+  .strict().refine(r => r.workerRelay.requestFields.every(field => !r.requestRules.forbiddenFields.includes(field))).parse(asset);
 export const SIWC_PROTOCOL: OAuthConnectionProtocol = Object.freeze({ ...parsed, identityScopes: Object.freeze(parsed.identityScopes), usageScopes: Object.freeze(parsed.usageScopes) });
 export const SIWC_LIMITS = Object.freeze(parsed.limits);
 export const SIWC_DISCOVERY_ENDPOINT = parsed.discoveryEndpoint;
 export const SIWC_TERMINAL_REFRESH_ERRORS = Object.freeze(parsed.terminalRefreshErrors);
+
+export const SIWC_INFERENCE = Object.freeze({ ...parsed.inference, adapter: Object.freeze(parsed.inference.adapter), namespace: Object.freeze(parsed.inference.namespace) });
+export const SIWC_REQUEST_RULES = Object.freeze({ ...parsed.requestRules, allowedFields: Object.freeze(parsed.requestRules.allowedFields),
+  unverifiedFields: Object.freeze(parsed.requestRules.unverifiedFields), forbiddenFields: Object.freeze(parsed.requestRules.forbiddenFields) });
+export const SIWC_USAGE_SUMMARY = Object.freeze(parsed.usageSummary);
+export const SIWC_USAGE_ERRORS = Object.freeze(parsed.usageErrors.codes);
+export const SIWC_REFRESH_LOCK_WAIT_MS = parsed.refreshLockWaitMs;
+
+const quotaRules = Object.values(parsed.usageErrors.codes).filter(rule => rule.refusal === 'quota');
+export const SIWC_USAGE_LIMIT_STATUS = positive.parse(quotaRules.length === 1 ? quotaRules[0]!.status : undefined);
+/** U9-6/7 worker relay policy (registry data; `activation: hold` keeps every SIWC worker launch refused). */
+/** The app-server command itself is the worker command catalog's (U6 `commands.json`, one source); the relay keeps only its transport data. */
+const { id: appServerCli, ...appServerCommand } = nativeCliAppServer();
+export const SIWC_WORKER_RELAY = Object.freeze({ ...parsed.workerRelay, appServer: Object.freeze({ ...parsed.workerRelay.appServer, ...appServerCommand }), appServerCli,
+  appName: parsed.appName, endpoint: parsed.inference.endpoint });

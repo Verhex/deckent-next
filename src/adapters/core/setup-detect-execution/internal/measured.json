@@ -1,0 +1,22 @@
+{
+  "$comment": "IMGOPT 2026-10-26: measured worker-image size and first-build time per part of this package's recipe (assets/worker-image), shown on the image card for exactly the selected CLIs; data, never a limit. diskGigabytes (decimal GB) = unpacked layers + stored compressed content (what `docker image ls` reports on the containerd image store; the classic overlay2 store keeps only the unpacked part). base = node:24-trixie-slim + the apt layer + the installer; a provider row is its own image minus the shared base. coldMs = a build with no cached layer of this recipe (node:24-trixie-slim already local; about 83 MB compressed more without it) on the reference machine: 16 CPUs, WSL2, Docker 29.1.3 legacy builder. The base row is the slower observed case: its apt download (106 MB) took 2 s from a fast Debian mirror (base 43 s) and 3 min at 0.6 MB/s (base 222 s); CLI layers came from npm/vendor CDNs in 16-23 s. Re-measure when the recipe or a CLI's size changes materially.",
+  "measuredAt": "2026-10-26",
+  "base": {
+    "diskGigabytes": 0.897,
+    "coldMs": 221612
+  },
+  "providers": {
+    "codex": {
+      "diskGigabytes": 0.611,
+      "coldMs": 22356
+    },
+    "claude": {
+      "diskGigabytes": 0.425,
+      "coldMs": 16113
+    },
+    "cursor": {
+      "diskGigabytes": 0.775,
+      "coldMs": 23028
+    }
+  }
+}

@@ -131,7 +131,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const events = answer.events as AgentTurnStreamEvent[];
     const finished = events.find(event => event.kind === 'tool.finished');
     const text = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
-    return { events, card: events.some(event => event.kind === 'approval.requested'), status: finished?.kind === 'tool.finished' ? finished.status : null, text, turnId };
+    return { result: answer.response.result, events, card: events.some(event => event.kind === 'approval.requested'), status: finished?.kind === 'tool.finished' ? finished.status : null, text, turnId };
   };
   /** Per-call decision audit events; `inventory` adds the D1 producer-inventory events that precede each composed decision (documented). The
    * turn-level `policy-turn` record (S5 D1: every refusal and plain allow of a turn, one row per turn) is read with `policyTurns`. */

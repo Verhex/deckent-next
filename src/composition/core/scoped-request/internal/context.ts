@@ -1,9 +1,9 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
-import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
+import { openSqliteAuditStore, openLocalIntegrityAuthority, FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { policySchema, type InstallationIdentityChoice } from '#domain/index.js';
-import { InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
+import { AuditApplication, InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 /** Membership precedes identity bootstrap; only write admission pins scopes. Authentication/policy precede the ledger locator. */
@@ -26,6 +26,12 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   const installationId = installation.status === 'available' ? installation.value.installationId : null; const projectId = project.status === 'available' ? project.value.projectId : null;
   return Object.freeze({ config, layout, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
+}
+/** One use of this scope's sealed audit ledger; `createKey` creates the integrity key on first use (producers), false needs an existing key. */
+export async function withScopeAudit<T>(context: { path(): Promise<string>; readonly layout: ProductLayout; readonly config: Pick<ResolvedConfig, 'storage' | 'approvals'> },
+  work: (audit: AuditApplication) => T | Promise<T>, createKey = true): Promise<T> {
+  const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
+  try { return await work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, createKey))); } finally { store.close(); }
 }
 async function accessIdentity<T extends { readonly status: string; readonly reason?: string; readonly pendingWrite?: true }>(store: { read(): Promise<T>; loadOrCreate(): Promise<unknown> }, access: ScopeAccess) {
   return readIdentity(async () => {

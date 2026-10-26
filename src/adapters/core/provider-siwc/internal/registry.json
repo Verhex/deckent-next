@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "source": "https://developers.openai.com/siwc/token-sharing-open-source/sign-in",
-  "observedOn": "2026-10-14",
+  "observedOn": "2026-10-25",
   "issuer": "https://auth.openai.com",
   "dynamicClientId": "dynamic_agent_client",
   "authorizationEndpoint": "https://auth.openai.com/api/accounts/authorize",
@@ -9,8 +9,16 @@
   "discoveryEndpoint": "https://auth.openai.com/.well-known/openid-configuration",
   "resource": "https://api.openai.com/v1",
   "appName": "Deckent",
-  "identityScopes": ["openid", "profile", "email"],
-  "usageScopes": ["offline_access", "resource.invoke", "chatgpt.tokens.use.direct"],
+  "identityScopes": [
+    "openid",
+    "profile",
+    "email"
+  ],
+  "usageScopes": [
+    "offline_access",
+    "resource.invoke",
+    "chatgpt.tokens.use.direct"
+  ],
   "usagePermission": "chatgpt.tokens.use.direct",
   "callbackPath": "/auth/callback",
   "hostSecretName": "SIWC_HOST_ID",
@@ -19,6 +27,204 @@
   "timeoutMs": 120000,
   "maxPending": 4,
   "maxConnections": 64,
-  "limits": {"loginWindowMs": 120000, "httpTimeoutMs": 15000, "responseMaxBytes": 65536, "jwtMaxBytes": 32768, "maxKeys": 64, "callbackMaxBytes": 8192, "callbackMaxConnections": 32},
-  "terminalRefreshErrors": ["invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_invalidated", "refresh_token_reused"]
+  "limits": {
+    "loginWindowMs": 120000,
+    "httpTimeoutMs": 15000,
+    "responseMaxBytes": 65536,
+    "jwtMaxBytes": 32768,
+    "maxKeys": 64,
+    "callbackMaxBytes": 8192,
+    "callbackMaxConnections": 32
+  },
+  "terminalRefreshErrors": [
+    "invalid_grant",
+    "invalid_refresh_token",
+    "token_expired",
+    "refresh_token_expired",
+    "refresh_token_invalidated",
+    "refresh_token_reused"
+  ],
+  "refreshMarginMs": 60000,
+  "refreshLockWaitMs": 60000,
+  "refreshPolicySource": {
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions",
+    "observedOn": "2026-10-25",
+    "kind": "deckent-policy"
+  },
+  "usageSummary": {
+    "days": 30,
+    "source": "https://developers.openai.com/siwc/ui-ux-guidelines",
+    "observedOn": "2026-10-25",
+    "maxEntries": 100000,
+    "manageUrl": "https://chatgpt.com/settings/usage",
+    "timeoutMs": 5000
+  },
+  "inference": {
+    "adapter": {
+      "id": "siwc-responses",
+      "version": 1
+    },
+    "endpoint": "https://api.openai.com/v1/responses",
+    "modelsEndpoint": "https://api.openai.com/v1/models",
+    "modelsMaxEntries": 128,
+    "modelsMaxBytes": 262144,
+    "visibility": "list",
+    "namespace": {
+      "name": "deckent",
+      "description": "Tools provided by the connected application."
+    },
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference",
+    "observedOn": "2026-10-25",
+    "modelFieldMaxChars": 1024
+  },
+  "requestRules": {
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations",
+    "observedOn": "2026-10-25",
+    "allowedFields": [
+      "model",
+      "input",
+      "instructions",
+      "tools",
+      "store",
+      "stream"
+    ],
+    "unverifiedFields": [
+      "reasoning",
+      "tool_choice",
+      "include"
+    ],
+    "forbiddenFields": [
+      "background",
+      "conversation",
+      "max_output_tokens",
+      "max_tool_calls",
+      "metadata",
+      "moderation",
+      "multi_agent",
+      "prompt",
+      "prompt_cache_retention",
+      "safety_identifier",
+      "temperature",
+      "top_logprobs",
+      "top_p",
+      "truncation",
+      "user",
+      "previous_response_id",
+      "service_tier"
+    ],
+    "store": false,
+    "stream": true
+  },
+  "usageErrors": {
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery",
+    "observedOn": "2026-10-26",
+    "codes": {
+      "subscription_sharing_usage_limit_exceeded": {
+        "refusal": "quota",
+        "status": 429
+      },
+      "subscription_sharing_usage_unavailable": {
+        "refusal": "usage-unavailable",
+        "status": 503
+      },
+      "subscription_sharing_user_unavailable": {
+        "refusal": "service-unavailable",
+        "status": 503
+      },
+      "subscription_sharing_user_not_eligible": {
+        "refusal": "plan-unavailable",
+        "status": 403
+      },
+      "subscription_sharing_invalid_user": {
+        "refusal": "login-required",
+        "status": 401
+      }
+    }
+  },
+  "workerRelay": {
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server",
+    "observedOn": "2026-10-26",
+    "activation": "hold",
+    "appServer": {
+      "control": [
+        "--listen",
+        "ws://127.0.0.1:{ctlPort}",
+        "--ws-auth",
+        "capability-token",
+        "--ws-token-sha256",
+        "{ctlTokenSha256}"
+      ],
+      "controlSource": "https://learn.chatgpt.com/docs/app-server",
+      "native": {
+        "note": "npm launcher resolution (bin/codex.js): the bootstrap starts the vendored native binary itself so the app-server is its direct child",
+        "vendorRoots": {
+          "x64": "node_modules/@openai/codex-linux-x64/vendor",
+          "arm64": "node_modules/@openai/codex-linux-arm64/vendor"
+        },
+        "fallbackVendorRoot": "vendor",
+        "triples": {
+          "x64": "x86_64-unknown-linux-musl",
+          "arm64": "aarch64-unknown-linux-musl"
+        },
+        "binary": "bin/codex",
+        "pathDir": "codex-path",
+        "managedEnv": "CODEX_MANAGED_BY_NPM"
+      }
+    },
+    "approvalPolicy": "untrusted",
+    "sandbox": "danger-full-access",
+    "wireApi": "responses",
+    "requestFields": [
+      "model",
+      "input",
+      "instructions",
+      "tools",
+      "store",
+      "stream",
+      "reasoning",
+      "tool_choice",
+      "include",
+      "parallel_tool_calls",
+      "prompt_cache_key",
+      "text"
+    ],
+    "toolTypes": [
+      "function",
+      "custom",
+      "namespace"
+    ],
+    "methods": {
+      "client": [
+        "initialize",
+        "thread/start",
+        "turn/start",
+        "turn/interrupt"
+      ],
+      "approvals": [
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval"
+      ]
+    },
+    "limits": {
+      "requestMaxBytes": 8388608,
+      "responseMaxBytes": 67108864,
+      "headerBytes": 16384,
+      "inFlight": 2,
+      "connections": 8,
+      "idleMs": 300000,
+      "capabilityMaxTtlMs": 7200000,
+      "helperTimeoutMs": 5000,
+      "drainMs": 5000,
+      "controlLineBytes": 4194304,
+      "controlLines": 100000,
+      "capabilityBytes": 32,
+      "approvalCommandBytes": 65536,
+      "approvalDiffBytes": 1048576,
+      "approvalChanges": 256,
+      "controlConnectMs": 30000,
+      "approvalItems": 4096,
+      "controlPollMs": 50,
+      "auditRecords": 4096
+    }
+  }
 }

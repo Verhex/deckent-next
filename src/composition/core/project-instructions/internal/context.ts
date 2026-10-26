@@ -1,17 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
-import { prepareProductDirectory, getConfigKnownSecrets, redactForRecord, SystemTrustedClock,
-  type ConfigLoadOptions } from '#platform/index.js';
+import { prepareProductDirectory, getConfigKnownSecrets, redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { configuredApproval } from '#composition/core/approvals/index.js';
+import { applyConfirmedEffects } from '#composition/core/approvals/index.js';
 import { openHostProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY } from '#adapters/index.js';
 import { createWorkspaceScope } from '#adapters/index.js';
 import { WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
-import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteApprovalStore } from '#adapters/index.js';
-import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type ProjectInstructionPort, type InstructionInitPreview } from '#engine/index.js';
-import { PRINCIPAL_EFFECT_PRODUCER, type EffectCommand } from '#domain/index.js';
+import type { ProjectInstructionPort, InstructionInitPreview } from '#engine/index.js';
+import type { EffectCommand } from '#domain/index.js';
 
 /** Same local OS principal, scoped policy, broker, file target and C11 settlement as other human/AI writes. */
 async function initialize(root: string, preview: InstructionInitPreview, scopeId: string, options: ConfigLoadOptions) {
@@ -19,36 +15,15 @@ async function initialize(root: string, preview: InstructionInitPreview, scopeId
   if (preview.schemaVersion !== 1 || instructionDigest(JSON.stringify(preview.changes)) !== preview.digest) throw new Error('unsafe');
   const allowed = new Set([PROJECT_INSTRUCTION_REGISTRY.files[0], ...PROJECT_INSTRUCTION_REGISTRY.bridges.map(row => row.path)]);
   if (new Set(preview.changes.map(change => change.path)).size !== preview.changes.length || preview.changes.some(change => !allowed.has(change.path))) throw new Error('unsafe');
-  const context = await loadConfiguredScopeContext(root, scopeId, options, 'write'), { config, layout, principal } = context;
+  const context = await loadConfiguredScopeContext(root, scopeId, options, 'write'), { layout } = context;
   const scope = await createWorkspaceScope(root);
   const target = new WorkspaceFileTarget(scope, await prepareProductDirectory(layout, 'fileEffects'));
   const descriptor = { ...WORKSPACE_FILE_WRITE_OPERATION, approval: 'required' as const };
   const commands: EffectCommand[] = preview.changes.map(change => ({ schemaVersion: 1, commandId: randomUUID(), scopeId,
     operation: descriptor.operation, target: { kind: target.kind, id: change.path }, idempotencyKey: randomUUID(), expectedVersion: change.beforeDigest, input: { content: change.after } }));
   for (const command of commands) if ((await target.observe(command.target)).version !== command.expectedVersion) throw new Error('unsafe');
-  const clock = new SystemTrustedClock(), policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
-  const sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
-  const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), path = await context.path();
-  const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
-  const approvals = openSqliteApprovalStore(path, config.storage.sqlite);
-  try {
-    const broker = new OperationApprovalBroker(approvals.store, integrity, policy, clock,
-      { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
-    const app = new EffectApplication({ resolve: async ref => ref.id === descriptor.operation.id && ref.version === descriptor.operation.version ? descriptor : null },
-      { resolve: kind => kind === target.kind ? target : null }, store, broker, sessions, new OperationPolicyAuthorization(policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER });
-    const result = [];
-    for (const command of commands) {
-      let outcome = await app.submit('execute', command);
-      if (outcome.status === 'approval-pending') {
-        // The init window just confirmed this complete preview; its decision remains subject to normal approval authority.
-        await configuredApproval(root, 'decide', { schemaVersion: 1, commandId: randomUUID(), scopeId, approvalId: outcome.approval.approvalId,
-          expectedRevision: outcome.approval.revision, decision: 'allow', reason: preview.digest, channel: 'local-terminal-card' }, options);
-        outcome = await app.submit('execute', command);
-      }
-      result.push({ path: command.target.id, status: outcome.status });
-    }
-    return result;
-  } finally { approvals.close(); store.close(); }
+  const outcomes = await applyConfirmedEffects(root, context, descriptor, target, commands, preview.digest, options);
+  return commands.map((command, index) => ({ path: command.target.id, status: outcomes[index]!.status }));
 }
 
 export async function configuredProjectInstructions(root: string, options: ConfigLoadOptions = {}): Promise<ProjectInstructionPort> {

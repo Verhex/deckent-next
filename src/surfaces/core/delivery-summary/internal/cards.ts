@@ -43,9 +43,9 @@ export function consentSummaryLines(summaries: readonly (DeliverySummary | null)
   return [t('delivery.card.above', {}, locale), ...summaries.flatMap(summary => summary ? renderDeliverySummary(summary, locale, options) : [t('delivery.summary.unavailable', {}, locale)])];
 }
 /** The summary block of one ticket view (inspect, enqueue, rollback); `shadow` is passed by inspect only. Undefined summary = not requested. */
-export function ticketSummaryBlock(summary: DeliverySummary | null | undefined, shadow: AutonomyShadowView | null | undefined, locale: Locale): readonly string[] {
+export function ticketSummaryBlock(summary: DeliverySummary | null | undefined, shadow: AutonomyShadowView | null | undefined, locale: Locale, settled = false): readonly string[] {
   if (summary === undefined) return [];
-  return [...summary ? renderDeliverySummary(summary, locale) : [t('delivery.summary.unavailable', {}, locale)], ...shadow ? [renderAutonomyShadow(shadow, locale)] : []];
+  return [...summary ? renderDeliverySummary(summary, locale, { omit: settled ? ['actions'] : [] }) : [t('delivery.summary.unavailable', {}, locale)], ...shadow ? [renderAutonomyShadow(shadow, locale)] : []];
 }
 /** Short list cells: the bounded title, one risk word and the shadow word (list only). */
 export function summaryListCells(summary: DeliverySummary | null | undefined, shadow: AutonomyShadowView | null | undefined, locale: Locale) {

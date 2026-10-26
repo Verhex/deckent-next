@@ -7,12 +7,12 @@ export type { ModelActivationAuthorizer, ModelActivationInvocationDelivery, Mode
   ModelActivationDeliveryTarget } from './internal/application.js';
 export { ModelActivationInspectionApplication } from './internal/inspection.js';
 export type { ModelActivationInspection, ModelActivationReader } from './internal/inspection.js';
-export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId } from './internal/catalog.js';
+export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId, planCatalogStateCascade, refuseRetiredModelActivation } from './internal/catalog.js';
 export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer, ModelCatalogInspection, ModelCatalogChannelView } from './internal/catalog.js';
 export { admitWorkerModels, inspectAdmissibleWorkerModels, workerRoleKeys, WorkerModelAdmissionError } from './internal/worker-admission.js';
 export type { WorkerPlanningTemplate } from './internal/worker-admission.js';
 export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail, WorkerAdmissionWarning, WorkerAdmissionOptions } from './internal/worker-admission.js';
-export { ModelConnectApplication, ModelConnectError, declareConnectedModel } from './internal/connect.js';
+export { ModelConnectApplication, ModelConnectError, workerConnectionModelIds, declareConnectedModel } from './internal/connect.js';
 export type { ModelConnectBinding, ModelConnectDefaults, ModelConnectKind, ModelConnectLayer, ModelConnectPorts, ConnectedAdapter } from './internal/connect.js';
 export { planProfileCache, type ProfileCacheOffer, type ProfileCachePlan } from './internal/profile-cache.js';
 export { planProfileChanges, type ProfileChange, type ProfileChangePlan } from './internal/profile-changes.js';

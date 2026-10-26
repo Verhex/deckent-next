@@ -1,11 +1,14 @@
-import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
+import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
-import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
-import type { RecoveryModeState } from '#engine/index.js';
-import { recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
+import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
+import type { RecoveryRolloutView } from '#domain/index.js';
+import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
 export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
@@ -17,6 +20,9 @@ export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: Doct
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly providerSpending?: ProviderSpendAccountInspection | null;
+  readonly budgetPeriodText?: string | null;
+  readonly catalogDiagnostics?: readonly string[] | null;
   readonly scopeId: string | null;
   readonly toolchainsRequested: boolean;
   /** `missing` when the configuration selects no identity profile (solo / team / enterprise / custom). */
@@ -29,6 +35,7 @@ export interface DoctorCheckFacts {
   readonly pendingRoleModels?: readonly Readonly<{ modelId: string; channelId: string }>[] | null;
   /** S3-3: each subscription Brain connection of the scope (from its profile and last preflight record; no spawn): login kind, plan, directory,
    * channel state and consent; `state: unknown` when no check ran yet. Absent or null when not read. */
+  readonly siwcConnections?: readonly import('#domain/index.js').SubscriptionConnectionInspection[] | null;
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
     owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
@@ -47,6 +54,8 @@ export interface DoctorCheckFacts {
   readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
   /** S6R-6: lost-worker recovery modes and the owner's standing continuation grant in this scope; null or absent when not read. */
   readonly recoveryMode?: RecoveryModeState | null;
+  /** alpha.56 G4: the scope's rollout view when recovery is not off (null: not read). */
+  readonly recoveryRollout?: RecoveryRolloutView | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
@@ -54,9 +63,10 @@ export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-pr
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
+const ENCRYPTED_STORE = 'core.secret-store.encrypted-file@1';
 /** Core secret store backends in plain words; another backend shows its id. */
 function secretBackendWord(backend: string, l: Locale): string {
-  if (backend === 'core.secret-store.encrypted-file@1') return t('doctor.check.secretStore.backend.encryptedFile', {}, l);
+  if (backend === ENCRYPTED_STORE) return t('doctor.check.secretStore.backend.encryptedFile', {}, l);
   if (backend === 'core.secret-store.file@1') return t('doctor.check.secretStore.backend.file', {}, l);
   return backend === 'core.secret-store.env@1' ? t('doctor.check.secretStore.backend.env', {}, l) : backend;
 }
@@ -78,8 +88,8 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
   else if (r.serviceConfig === 'current') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.current', {}, l)));
   else if (r.serviceConfig === 'stopped') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.stopped', {}, l)));
   else if (r.serviceConfig === 'unknown') rows.push(row('setup', 'setup.service', 'untested', t('doctor.check.service.unknown', {}, l)));
-  if (f.identityProfile) rows.push(f.identityProfile.state === 'selected' ? row('setup', 'setup.identity', 'ok', t('doctor.check.identity.ok', { profile: f.identityProfile.id }, l))
-    : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent config set identity.profile --global'));
+  if (f.identityProfile) rows.push(f.identityProfile.state === 'selected' ? row('setup', 'setup.identity', 'ok', t('doctor.check.identity.ok', { profile: profileName(f.identityProfile.id, l) }, l))
+    : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent config'));
   const admin = r.policyAdministration;
   if (admin) rows.push(admin.recoveryRequired ? row('setup', 'setup.policy', 'error', t('doctor.check.policy.recovery', {}, l), scoped('deckent policy status', f))
     : admin.bootstrapRequired ? row('setup', 'setup.policy', 'warning', t('doctor.check.policy.bootstrap', {}, l), 'deckent init')
@@ -96,6 +106,9 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
 
 function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = (check: string) => registry.fixes.find(entry => entry.checks.includes(check))?.id;
+  for (const diagnostic of describeDiagnostics(f.catalogDiagnostics ?? [], l).filter(item => item.code === 'catalog-aggregator-unsigned')) rows.push(row('security', 'security.catalogSigner', 'warning', diagnostic.text, diagnostic.action));
+  // HAF-37 (F4): an unreadable catalog monitor is "not tested", never a silent absence of the signer row.
+  if (f.catalogDiagnostics === null) rows.push(row('security', 'security.catalogSigner', 'untested', t('agentstats.signer.unavailable', {}, l)));
   const audit = r.auditIntegrity;
   if (audit) rows.push(audit.status === 'match' ? row('security', 'security.audit', 'ok', t('doctor.check.audit.ok', {}, l))
     // A new installation has no checkpoint to compare with yet: nothing to fix, nothing verified.
@@ -112,6 +125,17 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
       : row('security', 'security.secrets', 'error', t('doctor.check.secretStore.problem', { backend, code: store.code ?? store.status }, l), 'deckent secret store'));
     const missing = Object.values(store.envGuard ?? {}).some(guard => guard.code || guard.names.length);
     if (missing || store.leftover?.entries || store.leftover?.unverified?.length) rows.push(row('security', 'security.secretsLeftover', 'warning', t('doctor.check.secretStore.leftover', {}, l), 'deckent secret store'));
+    // E01 (ssh-style): an open installation secret folder is named with its mode and the exact fix; Deckent never changes it.
+    const open = store.globalRoot && (parseInt(store.globalRoot.mode, 8) & 0o077) ? store.globalRoot : null;
+    if (open) rows.push(row('security', 'security.secretsRoot', 'warning', t('doctor.secretStore.globalRootUnsafe', { path: open.path, mode: open.mode }, l), `chmod 700 ${open.path}`));
+    const custody = store.personalCustody;
+    if (custody?.status === 'ready') rows.push(row('security', 'security.siwcCustody', 'ok', t('siwc.doctor.custodyReady', {}, l)));
+    else if (custody?.status === 'store') rows.push(row('security', 'security.siwcCustody', 'warning', t('siwc.doctor.custodyStore', { backend }, l), `deckent secret store --to ${ENCRYPTED_STORE}`));
+    else if (custody?.status === 'untested') rows.push(row('security', 'security.siwcCustody', 'untested', t('siwc.doctor.custodyUntested', { reason: custody.reason ?? '-' }, l)));
+    else if (custody?.status === 'refused' && !(open && custody.folder === 'root')) rows.push(row('security', 'security.siwcCustody', 'warning',
+      ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: Object.fromEntries(Object.entries({ reason: custody.reason, path: custody.path, mode: custody.mode, folder: custody.folder })
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }).localize?.(l).message ?? custody.reason ?? '',
+      custody.folder === 'root' && custody.path ? `chmod 700 ${custody.path}` : undefined));
   }
   // PRE-8 v2: one row per key a profile uses that this project cannot read now, with the exact next command (names only).
   for (const use of f.secretUse ?? []) {
@@ -132,11 +156,12 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
-  // Not set up yet (no registry, or no ledger row): a warning naming the first missing first-job step, the same ordered list `deckent init` shows.
-  const first = firstJobSteps({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId)[0];
+  if (f.budgetPeriodText) rows.push(row('work', 'work.budgetPeriod', f.providerSpending?.checkpoint ? 'ok' : 'warning', f.budgetPeriodText));
+  // Not set up yet (no registry, or no ledger row): a warning naming the first onboarding stage the first job still needs, set up on the first open.
+  const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
-      f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), t('doctor.firstJob.next', { step: firstJobTitle(first, l), command: firstJobCommand(first) }, l))
+      f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
@@ -146,20 +171,26 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   rows.push(executionRow(f, l));
   const worker = f.workerImage && f.imageId ? { image: shortImageId(f.imageId) ?? '-' } : null;
   if (worker) rows.push(f.workerImage === 'present' ? row('work', 'work.workerImage', 'ok', t('doctor.check.workerImage.ok', worker, l))
-    : f.workerImage === 'missing' ? row('work', 'work.workerImage', 'error', t('doctor.check.workerImage.missing', worker, l), 'deckent init')
+    : f.workerImage === 'missing' ? row('work', 'work.workerImage', 'error', t('doctor.check.workerImage.missing', worker, l), onboardingNext(t('setup.execution.workerTitle', {}, l), l))
       : row('work', 'work.workerImage', 'untested', t('doctor.check.workerImage.unknown', worker, l)));
   for (const finding of r.modelInvocationDelivery ?? []) rows.push(row('work', 'work.delivery', 'warning', t('doctor.check.delivery', { profile: finding.profileId, model: finding.reference.modelId }, l),
     finding.surface === 'mcp' ? 'deckent config set mcp.responseMaxBytes' : 'deckent config set service.responseMaxBytes'));
   if (f.retiringModels === null) rows.push(row('work', 'work.models', 'untested', t('doctor.check.models.unknown', {}, l)));
   else if (!f.retiringModels.length) rows.push(row('work', 'work.models', 'ok', t('doctor.check.models.ok', {}, l)));
   else for (const model of f.retiringModels) rows.push(row('work', 'work.models', 'warning', t('doctor.check.models.retiring', { model: model.modelId, channel: model.channelId, state: model.state === 'retired' ? t('doctor.check.models.state.retired', {}, l) : t('doctor.check.models.state.deprecated', {}, l), date: model.date ?? '-' }, l),
-    scoped('deckent models list', f)));
+    scoped('deckent models', f)));
   // M2: a new catalog model fails closed until a person gives it a tier and roles; shown up to the registry bound, then counted.
   const pending = f.pendingRoleModels ?? [], shown = pending.slice(0, registry.pendingRoleRowsShown);
   for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
     scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
   if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
   // S3-3 doctor line "Brain girişi: hesap türü, dizin": which login the subscription Brain uses and whether its channel is open.
+  for (const connection of f.siwcConnections ?? []) {
+    const state = connection.code ? ErrorRegistry.get(connection.code, l, { reason: connection.reason ?? '' })?.message ?? connection.code
+      : connection.planUse ? t('siwc.status.usingPlan', {}, l) : t('siwc.doctor.disabled', {}, l);
+    rows.push(row('work', 'work.chatgptConnection', connection.planUse ? 'ok' : 'warning',
+      t('siwc.doctor.connection', { model: terminalSafeText(connection.reference.modelId), state }, l), scoped(`deckent models connect --connection ${connection.connection}`, f)));
+  }
   for (const login of f.headlessLogins ?? []) {
     const dir = terminalSafeText(login.configDir), consent = login.consent.length ? login.consent.join(', ') : t('doctor.headless.none', {}, l);
     // S3-5: the realm the last passing check ran in, or that the realm itself closed the channel.
@@ -171,7 +202,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
       more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
     // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
     const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? t('doctor.headless.notOwned', {}, l) : '';
-    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect --connection claude-cli-subscription', f);
+    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect', f);
     rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own, login.owned === false ? next : undefined)
       : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
         plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused,
@@ -180,9 +211,12 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
   const recovery = f.recoveryMode;
   if (recovery) {
-    const text = recoveryStateLines(recovery, l).join(' ');
-    rows.push(recovery.recovery !== 'live' || recovery.continuation === 'automatic' ? row('work', 'work.recovery', 'ok', text)
-      : recovery.continuation === 'unknown' ? row('work', 'work.recovery', 'untested', text) : row('work', 'work.recovery', 'warning', text, scoped('deckent policy grants', f)));
+    // alpha.56 G4: the exit progress in one line (blind counts) and the next step: the person's review first, else the recovery policy card (F-e).
+    const view = f.recoveryRollout, text = [...recoveryStateLines(recovery, l), ...(view ? [recoveryRolloutSummary({ rulesMet: view.rules.filter(rule => rule.met).length,
+      rules: view.rules.length, decided: view.decisions.decided, agreements: view.decisions.agreements, waiting: view.decisions.waiting, complete: view.complete }, l)] : [])].join(' ');
+    const next = view && view.decisions.waiting > 0 ? scoped('deckent recovery review', f) : scoped('deckent policy recovery', f);
+    rows.push(recovery.recovery !== 'live' || recovery.continuation === 'automatic' ? row('work', 'work.recovery', 'ok', text, view?.decisions.waiting ? next : undefined)
+      : recovery.continuation === 'unknown' ? row('work', 'work.recovery', 'untested', text) : row('work', 'work.recovery', 'warning', text, next));
   }
   return rows;
 }
@@ -200,7 +234,8 @@ function executionRow(f: DoctorCheckFacts, l: Locale): DoctorCheck {
   const text = setupReasonText(view.reason.code, view.reason.params, l);
   if (view.state === 'done') return row('work', 'work.docker', 'ok', text);
   if (view.reason.code === 'setup.execution.unknown' || view.reason.code === 'setup.execution.unavailable') return row('work', 'work.docker', 'untested', text);
-  return row('work', 'work.docker', f.firstJob?.execution ? 'error' : 'warning', text, 'deckent init');
+  // The execution environment is an onboarding stage (U3-1a): it is set up on the first open, never by `deckent init`.
+  return row('work', 'work.docker', f.firstJob?.execution ? 'error' : 'warning', text, onboardingNext(t('setup.execution.title', {}, l), l));
 }
 
 function toolChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {

@@ -20,7 +20,7 @@ const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, act
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
  * upgrade/rollback (each also needs `policy.administer`, floored below; deciding the card is a second, independent route).
  */
-const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline']);
+const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline', 'policy-recovery']);
 /**
  * Y4 v1: security invariants, never policy-grant data. Read-only metadata stays available. Every route that can widen an AI actor's own
  * (or a controlled principal's) authority is here: policy administration (grants, role bindings, delegation cells, restrictions, SoD,
@@ -43,8 +43,10 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'agent-catalog' && ['suggest', 'narrow'].includes(action) && !isCatalogAggregatorPrincipal(actor)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
+  if (resource.kind === 'provider-spend-account' && action === 'reconcile') return true;
   if (resource.kind === 'backup' && action === 'restore') return true;
   if (resource.kind === 'execution-environment' && action === 'install' || resource.kind === 'installation' && action === 'repair') return true;
+  if (resource.kind === 'installation' && (action === 'uninstall' || action === 'purge')) return true;
   if (resource.kind === 'permission-mode' && action === 'set') return true;
   // S4 (law-audit fold 6, lead 2026-10-23): verified memory needs a human or an independent evaluation record, never the AI itself; retiring is the
   // same knowledge change. S4B-1 (A11): purging content is a person's act. S4B-3 (A5 amendment, verbatim): `memory`/`verify` stays refused for every
@@ -57,6 +59,8 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'secret') return true;
   // S6R-3: a standing approval of a Nervous stop action is the owner's; no AI holds it (Nervous itself proposes, the broker applies).
   if (resource.kind === 'recovery-action') return true;
+  // alpha.56 G2: promoting a Nervous rule to live is the owner's measured decision; no AI holds it.
+  if (resource.kind === 'nervous-rule') return true;
   // S8-5 (S8-DESIGN §9, N22): signer rows are a person's — enrol, add, revoke and log repair are refused for every AI principal.
   if (resource.kind === 'skill-signer' && action !== 'inspect') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
@@ -81,7 +85,7 @@ const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity',
   // broker fence, stop and release a worker (protected the same way: no AI switches either on or off).
   'runRuntime.recovery', 'runRuntime.nervous',
   // S3-3 (design §10, MINOR 4): the owner-only switch that makes the subscription Brain connect kind available on this installation.
-  'models.headless',
+  'models.headless', 'toolchains.image', 'toolchains.currency.registryEndpoint',
   // S8-2 (S8-DESIGN §9): the catalog aggregator switch and the `catalog-evolution` registry overlay (thresholds, calibration) — no AI changes either.
   'catalogEvolution',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);

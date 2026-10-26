@@ -1,12 +1,13 @@
-import { t, type Locale } from '#platform/index.js';
-import { WORK_KIND_STAGE_ID, WORK_PROVIDERS, type SetupObservation, type SetupPlan, type SetupStage, type SetupStageRegistry } from '#engine/index.js';
+import { LOCALES, t, type Locale } from '#platform/index.js';
+import { IdentityProfileRegistry, WORK_KIND_STAGE_ID, WORK_PROVIDERS, type IdentityProfileListing, type SetupObservation, type SetupPlan, type SetupStage, SetupStageRegistry } from '#engine/index.js';
+import { orderedProfiles, profileLabel } from '#surfaces/core/cli-identity/index.js';
 import type { SetupWindowModel } from '#surfaces/core/project-instructions/index.js';
-import { firstJobCommand, firstJobSteps, firstJobTitle, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
+import { type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { planFor, unattendedAnswers, type SetupFlags } from './command.js';
 import { observeSetup } from './observe.js';
 import { isForegroundStage, runForegroundStage } from './foreground.js';
-import { languageName, setupScope, stageCommand, stageText, stageTitle, stateLabel } from './render.js';
+import { applyLine, languageName, stageCommand, stageStateLabel, stageText, stageTitle } from './render.js';
 import registry from './modes.json' with { type: 'json' };
 
 type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;
@@ -16,26 +17,31 @@ type Choice = Readonly<{ id: string; label: string; answer?: unknown; action: 'a
 export const activeStage = (plan: SetupPlan, later: ReadonlySet<string>) =>
   plan.stages.find(stage => !later.has(stage.id) && (stage.state === 'needs-answer' || (stage.state === 'ready' && stage.operation !== null))) ?? null;
 
-/** The answers offered for one stage, at most `windowOptionRows`. Nothing is preselected (the window starts with no highlighted answer). */
-export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale): readonly Choice[] {
+/** The answers offered for one stage, at most `windowOptionRows`; the window highlights `initialChoice` (owner 2026-10-26: Enter accepts it). */
+export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale, stageRegistry: SetupStageRegistry = new SetupStageRegistry(), profiles: IdentityProfileListing['profiles'] = new IdentityProfileRegistry().list()): readonly Choice[] {
   const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' };
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
-  if (stage.state === 'ready') return [{ id: 'apply', label: t('setup.window.apply', {}, locale), action: 'apply' }, later];
+  if (stage.id === 'permissions:start-mode' && stage.state === 'ready') return [{ id: 'apply', label: t('setup.permissions.confirm', {}, locale), action: 'apply' }, later];
+  if (stage.state === 'ready') return [{ id: 'apply', label: (registry.readOnly.includes(stage.operation?.id ?? '') ? t('setup.window.run', {}, locale) : t('setup.window.apply', {}, locale)), action: 'apply' }, later];
   // A model is connected by `models connect` itself (its own connection and model picker), so the window offers to start it.
   if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply' }, later];
   // BR1 1b: the first work kind's coding CLI, from the native CLI registry (the card shows the kind, pool and slots before anything is written).
   if (stage.id === WORK_KIND_STAGE_ID) return [...WORK_PROVIDERS.slice(0, registry.windowOptionRows - 1).map((id): Choice => ({ id, label: id, answer: id, action: 'answer' })), later];
-  if (stage.id === 'core:language') return [...['en', 'tr'].map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
-  // The default (solo, INIT-D4) comes first; the other registered profiles follow in registry order.
-  if (stage.id === 'core:profile') return [...[...observation.profile.available].sort((a, b) => Number(b.id === 'core:solo') - Number(a.id === 'core:solo'))
+  if (stage.id === 'core:language') return [...LOCALES.map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
+  // The stage registry default comes first; other registered profiles follow in registry order.
+  if (stage.id === 'core:profile') return [...orderedProfiles(observation.profile.available, entry => entry.id).sort((a, b) => Number(b.id === stageRegistry.unattendedProfile) - Number(a.id === stageRegistry.unattendedProfile))
     .slice(0, registry.windowOptionRows - 1)
-    .map((entry): Choice => ({ id: entry.id, label: entry.id, answer: { id: entry.id, version: entry.version }, action: 'answer' })), later];
+    .map((entry): Choice => { const profile = profiles.find(row => row.definition.id === entry.id && row.definition.version === entry.version);
+      return { id: entry.id, label: profile ? profileLabel(profile, locale) : entry.id, answer: { id: entry.id, version: entry.version }, action: 'answer' }; }), later];
   const yes = (answer: unknown): Choice => ({ id: 'yes', label: t('setup.window.yes', {}, locale), answer, action: 'answer' });
   if (stage.id === 'core:folder') return typeof stage.default === 'string' && stage.default ? [yes(stage.default), later] : [later];
   if (typeof stage.default === 'boolean') return [yes(true), { id: 'no', label: t('setup.window.no', {}, locale), answer: false, action: 'answer' }, later];
   return [later];
 }
 
+/** The recommended answer: the one the stage's default names (the detected language, the preset profile, a yes/no default), else the first. */
+export const initialChoice = (stage: SetupStage | null, choices: readonly Choice[]) =>
+  Math.max(0, stage?.default == null ? 0 : choices.findIndex(choice => choice.answer !== undefined && JSON.stringify(choice.answer) === JSON.stringify(stage.default)));
 /** The stage an apply runs: its own operation, or for the model stage the `models connect` flow in the installation's scope. */
 const applied = (stage: SetupStage, scopeId: string | null): SetupStage | null => stage.operation ? stage
   : stage.id === 'core:model' && scopeId ? { ...stage, operation: { id: 'model.connect', version: 1, input: { scopeId } } } : null;
@@ -49,37 +55,43 @@ const errorCode = (error: unknown) => { const value = (error as { code?: unknown
  * loop). Every model has the same number of rows, so the window never changes height.
  */
 export function createSetupController(input: Readonly<{ context: SetupCommandContext; root: string; locale: Locale; observed: Observed; flags: SetupFlags }>) {
-  const { context, root, locale, flags } = input, later = new Set<string>(), results: SetupApplyResult[] = [];
-  let observed = input.observed, values = unattendedAnswers(observed.observation, flags, true), note = '', pending: SetupStage | null = null;
+  const { context, root, flags } = input, later = new Set<string>(), results: SetupApplyResult[] = [];
+  let locale = input.locale, observed = input.observed, values = unattendedAnswers(observed.observation, flags, true, observed.registry), note = '', pending: SetupStage | null = null;
   const plan = () => planFor(observed, values);
   const scopeId = () => typeof values['core:folder'] === 'string' ? values['core:folder'] : observed.observation.folder.configuredScope ?? null;
+  const choices = (stage: SetupStage | null) => stageChoices(stage, observed.observation, locale, observed.registry, context.listIdentityProfiles?.([]).profiles);
   const model = (): SetupWindowModel => {
     const current = plan(), stage = activeStage(current, later), at = stage ? current.stages.indexOf(stage) : -1;
-    // Nothing left to answer: the same rows name the first step the first job still needs (I-S7), or that it is ready; the height never changes.
-    const first = !stage && observed.firstJob ? firstJobSteps(observed.firstJob, setupScope(current))[0] ?? null : null;
-    const next = !stage && observed.firstJob ? first ? t('setup.firstJob.window', { step: firstJobTitle(first, locale) }, locale) : t('doctor.firstJob.ready', {}, locale) : '';
-    const rows = [...current.stages.map((item, index) => `${index === at ? '>' : ' '} ${index + 1}. ${stageTitle(item, locale)} · ${stateLabel(item.state, locale)}`), '',
-      stage ? stageText(current, stage.reason.code, stage.reason.params, locale) : t('setup.window.finished', {}, locale),
-      stage?.question ? stageText(current, stage.question.key, stage.question.params, locale) : next,
-      note || (stage && stageCommand(stage) ? `$ ${stageCommand(stage)}` : first ? `$ ${firstJobCommand(first)}` : '')];
-    return { title: t('setup.window.title', {}, locale), rows, options: stageChoices(stage, observed.observation, locale).map(({ id, label }) => ({ id, label })),
+    const waiting = current.stages.filter(item => item.state !== 'done' && item.state !== 'skipped');
+    const finished = !stage && waiting.length ? t('setup.window.deferred', { count: waiting.length, titles: waiting.map(item => stageTitle(item, locale)).join(', ') }, locale)
+      : t('setup.window.finished', {}, locale);
+    const rows = [...current.stages.map((item, index) => `${index === at ? '>' : ' '} ${index + 1}. ${stageTitle(item, locale)} · ${stageStateLabel(item, locale)}`), '',
+      stage ? stageText(current, stage.reason.code, stage.reason.params, locale) : finished,
+      stage?.question ? stageText(current, stage.question.key, stage.question.params, locale) : '',
+      note || (stage && stageCommand(stage) ? `$ ${stageCommand(stage)}` : '')];
+    // R05: the reason and the question wrap (not cut) inside a fixed row count each; the stage rows and the command keep one row.
+    const heights = rows.map((_row, index) => index === rows.length - 3 ? registry.windowTextRows.reason : index === rows.length - 2 ? registry.windowTextRows.question : 1);
+    const offered = choices(stage);
+    return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label }) => ({ id, label })), initial: initialChoice(stage, offered),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */
   const settle = async (stage: SetupStage, result: SetupApplyResult) => {
     results.push(result);
-    const title = stageTitle(stage, locale);
-    note = result.status === 'applied' ? t('setup.apply.applied', { stage: title }, locale) : result.status === 'not-wired'
-      ? t('setup.apply.notWired', { stage: title }, locale) : t('setup.apply.refused', { stage: title, code: result.code ?? '-' }, locale);
-    if (result.status === 'applied') observed = await observeSetup(context, root, flags.lang, true);
-    if (result.status !== 'applied' || activeStage(plan(), later)?.id === stage.id) later.add(stage.id);
+    if (result.status === 'applied') observed = await observeSetup(context, root, locale, true);
+    const current = plan();
+    note = applyLine(current, result, locale);
+    if (result.status !== 'applied' || current.stages.find(item => item.id === stage.id)?.state !== 'done') later.add(stage.id);
   };
   const step = async (id: string): Promise<SetupWindowModel | null> => {
-    const stage = activeStage(plan(), later), picked = stageChoices(stage, observed.observation, locale).find(choice => choice.id === id);
+    const stage = activeStage(plan(), later), picked = choices(stage).find(choice => choice.id === id);
     if (!picked || picked.action === 'close' || !stage) return null;
     note = '';
     if (picked.action === 'later') later.add(stage.id);
-    else if (picked.action === 'answer') values = { ...values, [stage.id]: picked.answer };
+    else if (picked.action === 'answer') {
+      values = { ...values, [stage.id]: picked.answer };
+      if (stage.id === 'core:language' && (LOCALES as readonly unknown[]).includes(picked.answer)) locale = picked.answer as Locale;
+    }
     else {
       const target = applied(stage, scopeId());
       if (!target) { later.add(stage.id); return model(); }
@@ -99,5 +111,5 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     await settle(stage, await runForegroundStage(context, root, stage, scopeId(), locale));
     return true;
   };
-  return { model, step, runPending, outcome: () => ({ plan: plan(), results: [...results], ...(observed.firstJob ? { firstJob: observed.firstJob } : {}) }) };
+  return { model, step, runPending, locale: () => locale, outcome: () => ({ plan: plan(), results: [...results], ...(observed.firstJob ? { firstJob: observed.firstJob } : {}) }) };
 }

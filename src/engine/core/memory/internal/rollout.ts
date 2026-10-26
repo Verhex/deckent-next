@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import rolloutSeed from '../../../../../assets/memory/rollout.json' with { type: 'json' };
 import corpusSeed from '../../../../../assets/memory/injection-corpus.json' with { type: 'json' };
-import { assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation,
+import { assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation,
   type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
 import { MEMORY_AUTOMATION_MODES } from '#platform/index.js';
 import { MemoryJournalError, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
@@ -48,16 +48,11 @@ export interface MemoryRolloutMeasure { readonly count: number; readonly sample:
 /** null: the source could not be read (the criterion is then unmet — never assumed). */
 export type MemoryRolloutMeasures = Readonly<Partial<Record<MemoryRolloutMetric, MemoryRolloutMeasure | null>>>;
 const measure = (value: number, sample: number, complete: boolean, of: number | null = null): MemoryRolloutMeasure => Object.freeze({ count: value, sample, of, complete });
-export function memoryRolloutCriterionMet(criterion: MemoryRolloutCriterion, value: MemoryRolloutMeasure | null | undefined): boolean {
-  if (!value || value.sample < (criterion.minSample ?? 0) || (value.of !== null && value.sample < value.of)) return false;
-  if (criterion.maxCount !== undefined && value.count > criterion.maxCount) return false;
-  if (criterion.minPerMille !== undefined && value.count * PER_MILLE < criterion.minPerMille * value.sample) return false;
-  return criterion.maxPerMille === undefined || value.count * PER_MILLE <= criterion.maxPerMille * value.sample;
-}
+export const memoryRolloutCriterionMet: (criterion: MemoryRolloutCriterion, value: MemoryRolloutMeasure | null | undefined) => boolean = rolloutCriterionMet;
 export interface MemoryRolloutCriterionView { readonly criterion: MemoryRolloutCriterion; readonly measure: MemoryRolloutMeasure | null; readonly met: boolean }
 export interface MemoryRolloutPhaseView { readonly phase: number; readonly section: MemoryRolloutSection; readonly set: typeof MEMORY_AUTOMATION_MODES[number]; readonly reached: boolean; readonly met: boolean;
   readonly criteria: readonly MemoryRolloutCriterionView[] }
-/** `phase`: the highest phase whose switch is set (null: none); `next`: the first phase not yet set; `liveUnmet`: phases set whose criteria do not hold now. */
+/** `phase`: the highest consecutive phase whose switch is set (null: the first is missing); `next`: the first phase not yet set; `liveUnmet`: phases set whose criteria do not hold now. */
 export interface MemoryRolloutView { readonly phase: number | null; readonly next: MemoryRolloutPhaseView | null; readonly phases: readonly MemoryRolloutPhaseView[]; readonly liveUnmet: readonly number[] }
 const reachedIn = (phase: MemoryRolloutRegistry['phases'][number], modes: MemoryRolloutModes) => phase.reached.includes(modes[phase.section]);
 export function memoryRolloutView(modes: MemoryRolloutModes, measures: MemoryRolloutMeasures, registry: MemoryRolloutRegistry = MEMORY_ROLLOUT): MemoryRolloutView {
@@ -66,8 +61,8 @@ export function memoryRolloutView(modes: MemoryRolloutModes, measures: MemoryRol
       return Object.freeze({ criterion, measure: value, met: memoryRolloutCriterionMet(criterion, value) }); });
     return Object.freeze({ phase: phase.phase, section: phase.section, set: phase.set, reached: reachedIn(phase, modes), met: criteria.every(row => row.met), criteria: Object.freeze(criteria) });
   });
-  const reached = phases.filter(phase => phase.reached);
-  return Object.freeze({ phase: reached.at(-1)?.phase ?? null, next: phases.find(phase => !phase.reached) ?? null, phases: Object.freeze(phases),
+  const reached = phases.filter(phase => phase.reached), missing = phases.findIndex(phase => !phase.reached);
+  return Object.freeze({ phase: (missing < 0 ? phases.at(-1) : phases[missing - 1])?.phase ?? null, next: missing < 0 ? null : phases[missing]!, phases: Object.freeze(phases),
     liveUnmet: Object.freeze(reached.filter(phase => !phase.met).map(phase => phase.phase)) });
 }
 /** The gated phases (those with criteria) a change from `before` to `after` newly sets; empty: nothing to measure. A step back is never gated. */

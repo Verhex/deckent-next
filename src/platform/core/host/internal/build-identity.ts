@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 /** Identity of the compiled tree written by the build (`dist/build-identity.json`); null when running from source or when the file is
  * absent or malformed. Lets an operator see exactly which source tree and commit a running binary came from. */
 export interface BuildIdentity { readonly sourceTreeSha256: string; readonly sourceCommit: string | null; readonly sourceDirty: boolean | null;
@@ -15,3 +15,6 @@ export function readBuildIdentity(): BuildIdentity | null {
       ...(commonDir ? { sourceCommonDir: commonDir } : {}) };
   } catch { return null; }
 }
+/** A developer checkout (a `.git` beside the built package), not an installed package: only there does `--version` name the source repository
+ * folder (FIX9: a packaged binary never prints developer paths; the identity file itself keeps it for the self-source floor). */
+export const isSourceCheckout = (): boolean => existsSync(new URL('../../../../../.git', import.meta.url));

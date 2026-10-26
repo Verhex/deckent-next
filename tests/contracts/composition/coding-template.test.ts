@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { applyModelCatalog, createRun } from '../../../src/index.js';
+import { applyModelCatalog, createRun, inspectModelCatalog } from '../../../src/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingTemplateBase } from '#adapters/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { encodeExecutionProfileDefinition } from '#domain/index.js';
@@ -197,7 +197,9 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     expect((JSON.parse(await readFile(f.path, 'utf8')) as { admission: { registry: { kinds: { kind: string }[] } } }).admission.registry.kinds.map(entry => entry.kind)).toContain('feature');
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'catalog', scopeId: 's', action: 'register', catalog: await seedCatalog() }, f.options);
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'activate-channel', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }, f.options);
-    await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'activate-model', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', expectedRevision: 0 }, f.options);
+    // Law 6 (owner Q-L6): activating the channel already activates its fresh priced models, so Sonnet needs no second activation.
+    const channel = (await inspectModelCatalog(f.root, { schemaVersion: 1, scopeId: 's', channelId: SEED_CHANNEL }, f.options)).channels.find(row => row.access === 'allowed');
+    expect(channel?.access === 'allowed' ? channel.models.find(row => row.modelId === 'claude-sonnet-5-5')?.activation?.state : null).toBe('active');
     const result = await createRun(f.root, { schemaVersion: 1, commandId: 'run', scopeId: 's', runId: 'typed-input', graph: { schemaVersion: 3, revision: 1,
       tasks: [{ id: 't', kind: 'feature', dependencies: [], acceptanceCriteria: ['exit'], workInput: { schemaVersion: 1, task: 'Edit note.txt', scope: { paths: ['note.txt'] }, acceptance: 'note.txt updated',
         model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] } } }],

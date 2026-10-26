@@ -170,7 +170,10 @@
         "src/adapters/core/native-connection",
         "src/capabilities/core/artifacts",
         "src/engine/core/resource-observation",
-        "src/domain/core/attempt"
+        "src/domain/core/attempt",
+        "src/adapters/core/native-cli-registry",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -194,7 +197,8 @@
         "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/workspaces",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -227,7 +231,8 @@
     },
     "src/adapters/core/process-supervisor": {
       "dependencies": [
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -258,7 +263,10 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/local-principal",
         "src/adapters/core/agent-workspace-floor",
+        "src/adapters/core/setup-detect-coding",
+        "src/platform/core/crash-reporting",
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
@@ -313,7 +321,9 @@
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/config-window",
         "src/surfaces/core/effect-confirmation",
-        "src/composition/core/memory-rollout"
+        "src/composition/core/memory-rollout",
+        "src/composition/core/hub",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "SURFACES"
     },
@@ -349,7 +359,12 @@
         "src/platform/core/utils",
         "src/composition/core/runs",
         "src/adapters/core/native-coding",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/adapters/core/hub-cache",
+        "src/adapters/core/hub-client-store",
+        "src/engine/core/hub-client",
+        "src/adapters/core/siwc-worker",
+        "src/composition/core/siwc"
       ],
       "plan": "EXECUTION"
     },
@@ -371,6 +386,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/adapters/core/setup-detect-coding",
         "src/composition/core/approvals",
         "src/composition/core/monitor",
         "src/adapters/core/local-principal",
@@ -393,16 +409,14 @@
         "src/composition/core/model-connect",
         "src/composition/core/secrets",
         "src/engine/core/agent-turn",
-        "src/engine/core/audit",
-        "src/adapters/core/audit-store",
-        "src/adapters/core/local-keyring",
         "src/domain/core/audit",
         "src/platform/core/clock",
         "src/composition/core/run-planner",
         "src/composition/core/audit",
         "src/platform/core/crash-reporting",
         "src/composition/core/memory",
-        "src/composition/core/agent-catalog"
+        "src/composition/core/agent-catalog",
+        "src/composition/core/hub"
       ],
       "plan": "SURFACES"
     },
@@ -469,7 +483,8 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/agent-catalog",
         "src/domain/core/agent-catalog",
-        "src/domain/core/catalog-evolution"
+        "src/domain/core/catalog-evolution",
+        "src/platform/core/output"
       ],
       "plan": "FOUNDATION"
     },
@@ -574,7 +589,12 @@
         "src/engine/core/recovery",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/recovery-case-store",
-        "src/composition/core/terminal-chat"
+        "src/composition/core/terminal-chat",
+        "src/composition/core/approvals",
+        "src/domain/core/recovery",
+        "src/capabilities/core/run-planner",
+        "src/composition/core/siwc",
+        "src/adapters/core/siwc-worker"
       ],
       "plan": "EXECUTION"
     },
@@ -692,7 +712,9 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/principal",
-        "src/domain/core/approval"
+        "src/domain/core/approval",
+        "src/domain/core/audit",
+        "src/domain/core/recovery"
       ],
       "plan": "CONTRACT"
     },
@@ -789,7 +811,10 @@
         "src/engine/core/provider-spend",
         "src/domain/core/primitives",
         "src/domain/core/audit",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/platform/core/integrity",
+        "src/domain/core/approval",
+        "src/domain/core/command"
       ],
       "plan": "SECURITY"
     },
@@ -1044,7 +1069,8 @@
         "src/platform/core/config",
         "src/surfaces/core/terminal-delivery",
         "src/surfaces/core/effect-confirmation",
-        "src/surfaces/core/delivery-summary"
+        "src/surfaces/core/delivery-summary",
+        "src/domain/core/model-activation"
       ],
       "plan": "SURFACES"
     },
@@ -1131,7 +1157,8 @@
         "src/domain/core/policy",
         "src/platform/core/redaction",
         "src/platform/core/config-fields",
-        "src/surfaces/core/config"
+        "src/surfaces/core/config",
+        "src/surfaces/core/siwc"
       ],
       "plan": "SURFACES"
     },
@@ -1200,7 +1227,8 @@
         "src/engine/core/run-proposal",
         "src/surfaces/core/terminal-conversation",
         "src/surfaces/core/terminal-host",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/surfaces/core/terminal-onboarding"
       ],
       "plan": "SURFACES"
     },
@@ -1250,19 +1278,26 @@
         "src/engine/core/provider-spend",
         "src/domain/core/provider-spend",
         "src/surfaces/core/cli-human",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/siwc"
       ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/doctor": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/engine/core/toolchain-currency",
+        "src/engine/core/setup",
+        "src/engine/core/worker-setup",
         "src/platform/core/i18n",
         "src/domain/core/audit",
-        "src/domain/core/provider-catalog",
         "src/platform/core/output",
         "src/engine/core/recovery",
-        "src/surfaces/core/recovery-text"
+        "src/surfaces/core/recovery-text",
+        "src/domain/core/recovery",
+        "src/surfaces/core/monitor-view",
+        "src/platform/core/errors",
+        "src/surfaces/core/cli-identity"
       ],
       "plan": "SURFACES"
     },
@@ -1278,7 +1313,10 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/project-instructions",
-        "src/surfaces/core/setup"
+        "src/surfaces/core/setup",
+        "src/surfaces/core/cli-kit",
+        "src/platform/core/config-fields",
+        "src/surfaces/core/cli-admin"
       ],
       "plan": "SURFACES"
     },
@@ -1309,7 +1347,9 @@
         "src/surfaces/core/monitor",
         "src/surfaces/core/config",
         "src/surfaces/core/cli-memory",
-        "src/surfaces/core/cli-agents"
+        "src/surfaces/core/cli-agents",
+        "src/surfaces/core/setup",
+        "src/surfaces/core/cli-hub"
       ],
       "plan": "SURFACES"
     },
@@ -1361,7 +1401,11 @@
         "src/surfaces/core/terminal-delivery",
         "src/engine/core/run-proposal",
         "src/surfaces/core/delivery-summary",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/terminal-onboarding",
+        "src/surfaces/core/cli-hub",
+        "src/surfaces/core/terminal-hub"
       ],
       "plan": "SURFACES"
     },
@@ -1398,7 +1442,8 @@
         "src/engine/core/run-proposal",
         "src/engine/core/memory",
         "src/engine/core/agent-catalog",
-        "src/engine/core/catalog-evolution"
+        "src/engine/core/catalog-evolution",
+        "src/engine/core/hub-operations"
       ],
       "plan": "SURFACES"
     },
@@ -1432,7 +1477,13 @@
         "src/engine/core/runs",
         "src/platform/core/bootstrap-state",
         "src/domain/core/audit",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/domain/core/recovery",
+        "src/engine/core/nervous",
+        "src/domain/core/effect",
+        "src/engine/core/runtime",
+        "src/engine/core/effect",
+        "src/engine/core/approval"
       ],
       "plan": "INSTALLATION"
     },
@@ -1468,7 +1519,18 @@
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
         "src/composition/core/secrets",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/domain/core/policy",
+        "src/platform/core/errors",
+        "src/composition/core/operations",
+        "src/engine/core/approval",
+        "src/adapters/core/installation-removal",
+        "src/adapters/core/file-effect-store",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/approval-store",
+        "src/engine/core/effect",
+        "src/domain/core/effect",
+        "src/domain/core/principal"
       ],
       "plan": "INSTALLATION"
     },
@@ -1533,7 +1595,10 @@
         "src/composition/core/config",
         "src/composition/core/scoped-request",
         "src/engine/core/model-invocation",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/platform/core/errors",
+        "src/adapters/core/runtime-launcher",
+        "src/platform/core/managed-files"
       ],
       "plan": "PROVIDERS"
     },
@@ -1609,7 +1674,11 @@
         "src/adapters/core/installation-files",
         "src/engine/core/installation",
         "src/platform/core/errors",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/platform/core/host",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/audit"
       ],
       "plan": "PROVIDERS"
     },
@@ -1627,15 +1696,19 @@
         "src/engine/core/provider-catalog",
         "src/platform/core/config",
         "src/engine/core/model-invocation",
-        "src/composition/core/model-invocation"
+        "src/composition/core/model-invocation",
+        "src/composition/core/provider-catalog",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/provider-connect"
       ],
       "plan": "PROVIDERS"
     },
     "src/composition/core/model-connect": {
       "dependencies": [
-        "src/adapters/core/audit-store",
+        "src/composition/core/installation",
+        "src/composition/core/terminal-chat",
+        "src/composition/core/runtime-service",
         "src/adapters/core/contract",
-        "src/adapters/core/local-keyring",
         "src/adapters/core/local-principal",
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/provider-anthropic-messages",
@@ -1653,7 +1726,6 @@
         "src/composition/core/secrets",
         "src/domain/core/model-activation",
         "src/domain/core/provider-catalog",
-        "src/engine/core/audit",
         "src/engine/core/config",
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
@@ -1662,7 +1734,16 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/provider-spend",
+        "src/composition/core/siwc",
+        "src/adapters/core/provider-siwc",
+        "src/domain/core/model-invocation",
+        "src/engine/core/oauth-connection",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/adapters/core/secret-store",
+        "src/engine/core/secret-store"
       ],
       "plan": "PROVIDERS"
     },
@@ -1703,7 +1784,8 @@
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
         "src/engine/core/model-allocation",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"
     },
@@ -1774,7 +1856,8 @@
         "src/adapters/core/provider-connect",
         "src/engine/core/workspaces",
         "src/platform/core/integrity",
-        "src/engine/core/runtime"
+        "src/engine/core/runtime",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "SURFACES"
     },
@@ -1811,7 +1894,15 @@
         "src/composition/core/secrets",
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/shell-sandbox-bwrap",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/composition/core/siwc",
+        "src/adapters/core/provider-siwc",
+        "src/domain/core/audit",
+        "src/platform/core/i18n",
+        "src/domain/core/policy",
+        "src/platform/core/integrity",
+        "src/platform/core/errors",
+        "src/engine/core/oauth-connection"
       ],
       "plan": "PROVIDERS"
     },
@@ -1866,7 +1957,8 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/primitives",
         "src/adapters/core/provider-openai-chat",
-        "src/adapters/core/provider-anthropic-messages"
+        "src/adapters/core/provider-anthropic-messages",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "PROVIDERS"
     },
@@ -2283,12 +2375,16 @@
         "src/composition/core/policy",
         "src/domain/core/policy",
         "src/composition/core/root",
-        "src/adapters/core/git-workspace"
+        "src/adapters/core/git-workspace",
+        "src/composition/core/operations",
+        "src/engine/core/effect",
+        "src/domain/core/effect"
       ],
       "plan": "SECURITY"
     },
     "src/engine/core/toolchain-currency": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/domain/core/primitives",
         "src/domain/core/run"
       ],
@@ -2313,11 +2409,15 @@
       "plan": "SURFACES"
     },
     "src/adapters/core/terminal-editor": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/host"
+      ],
       "plan": "SURFACES"
     },
     "src/adapters/core/runtime-launcher": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/host"
+      ],
       "plan": "SURFACES"
     },
     "src/composition/core/inference-metrics": {
@@ -2339,17 +2439,27 @@
         "src/composition/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/engine/core/worker-setup",
+        "src/adapters/core/process-runner",
+        "src/engine/core/runtime",
+        "src/platform/core/config-fields",
+        "src/adapters/core/installation-files"
       ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/worker-image": {
       "dependencies": [
+        "src/platform/core/config-fields",
         "src/platform/core/errors",
         "src/adapters/core/process-runner",
         "src/engine/core/toolchain-currency",
         "src/adapters/core/docker-supervisor",
-        "src/engine/core/worker-setup"
+        "src/engine/core/worker-setup",
+        "src/adapters/core/npm-registry",
+        "src/platform/core/utils",
+        "src/adapters/core/local-runtime-socket",
+        "src/engine/core/effect"
       ],
       "plan": "PROVIDERS"
     },
@@ -2580,7 +2690,9 @@
         "src/platform/core/errors",
         "src/platform/core/config",
         "src/platform/core/utils",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/domain/core/model-invocation",
+        "src/domain/core/principal"
       ],
       "plan": "SECURITY"
     },
@@ -2658,7 +2770,13 @@
         "src/platform/core/output",
         "src/engine/core/workspace-patch",
         "src/domain/core/principal",
-        "src/engine/core/recovery"
+        "src/engine/core/recovery",
+        "src/engine/core/audit",
+        "src/engine/core/nervous",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/recovery-case-store",
+        "src/domain/core/recovery"
       ],
       "plan": "MONITOR"
     },
@@ -3011,21 +3129,13 @@
       "dependencies": [
         "src/platform/core/config",
         "src/platform/core/managed-files",
-        "src/platform/core/clock",
         "src/composition/core/root",
         "src/composition/core/scoped-request",
-        "src/composition/core/policy",
         "src/composition/core/approvals",
         "src/adapters/core/project-instructions",
         "src/adapters/core/workspace-read",
         "src/adapters/core/workspace-write",
-        "src/adapters/core/local-principal",
-        "src/adapters/core/local-keyring",
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/approval-store",
         "src/engine/core/project-instructions",
-        "src/engine/core/effect",
-        "src/engine/core/approval",
         "src/domain/core/effect",
         "src/platform/core/redaction"
       ],
@@ -3102,7 +3212,8 @@
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/contract",
         "src/platform/core/managed-files",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/adapters/core/installation-removal"
       ],
       "plan": "INSTALLATION"
     },
@@ -3180,7 +3291,18 @@
         "src/composition/core/toolchains",
         "src/composition/core/memory",
         "src/platform/core/managed-files",
-        "src/adapters/core/brain-wait-store"
+        "src/adapters/core/brain-wait-store",
+        "src/platform/core/integrity",
+        "src/engine/core/toolchain-currency",
+        "src/engine/core/run-proposal",
+        "src/engine/core/policy",
+        "src/platform/core/clock",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/run-proposal-store",
+        "src/composition/core/policy",
+        "src/engine/core/runtime",
+        "src/adapters/core/worker-image",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3258,13 +3380,22 @@
     "src/engine/core/oauth-connection": {
       "dependencies": [
         "src/domain/core/audit",
+        "src/domain/core/model-invocation",
         "src/engine/core/secret-store"
       ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/provider-siwc": {
       "dependencies": [
-        "src/engine/core/oauth-connection"
+        "src/engine/core/oauth-connection",
+        "src/engine/core/model-invocation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-http-json",
+        "src/platform/core/config",
+        "src/adapters/core/native-cli-registry",
+        "src/platform/core/host"
       ],
       "plan": "PROVIDERS"
     },
@@ -3378,7 +3509,9 @@
         "src/engine/core/approval",
         "src/engine/core/config",
         "src/domain/core/approval",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/domain/core/recovery",
+        "src/engine/core/recovery"
       ],
       "plan": "SURFACES"
     },
@@ -3498,24 +3631,36 @@
         "src/engine/core/setup",
         "src/engine/core/toolchain-currency",
         "src/platform/core/errors",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/platform/core/config-fields",
+        "src/platform/core/integrity"
       ],
       "plan": "INSTALLATION"
     },
     "src/adapters/core/setup-detect-execution": {
       "dependencies": [
         "src/engine/core/setup",
-        "src/engine/core/worker-setup"
+        "src/engine/core/worker-setup",
+        "src/platform/core/host"
       ],
       "plan": "INSTALLATION"
     },
     "src/adapters/core/setup-detect-coding": {
       "dependencies": [
         "src/engine/core/setup",
+        "src/engine/core/workspaces",
         "src/domain/core/provider-catalog",
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/agent-workspace-floor",
-        "src/adapters/core/setup-detect-execution"
+        "src/adapters/core/setup-detect-execution",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/worker-tree-gate",
+        "src/engine/core/effect",
+        "src/platform/core/integrity",
+        "src/platform/core/host"
       ],
       "plan": "INSTALLATION"
     },
@@ -3555,12 +3700,28 @@
         "src/composition/core/agent-turn",
         "src/adapters/core/worker-image",
         "src/platform/core/host",
-        "src/engine/core/worker-setup"
+        "src/engine/core/worker-setup",
+        "src/engine/core/policy",
+        "src/engine/core/run-proposal",
+        "src/adapters/core/terminal-history",
+        "src/adapters/core/run-proposal-store",
+        "src/surfaces/core/cli-terminal",
+        "src/composition/core/scoped-request",
+        "src/composition/core/toolchains",
+        "src/composition/core/run-planner",
+        "src/platform/core/integrity",
+        "src/engine/core/toolchain-currency",
+        "src/domain/core/run",
+        "src/platform/core/clock",
+        "src/composition/core/approvals",
+        "src/engine/core/identity-profile",
+        "src/adapters/core/contract"
       ],
       "plan": "INSTALLATION"
     },
     "src/surfaces/core/setup": {
       "dependencies": [
+        "src/surfaces/core/cli-identity",
         "src/platform/core/errors",
         "src/platform/core/output",
         "src/platform/core/i18n",
@@ -3576,7 +3737,6 @@
         "src/surfaces/core/project-instructions",
         "src/domain/core/model-activation",
         "src/engine/core/model-activation",
-        "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-observe",
         "src/surfaces/core/doctor",
         "src/surfaces/core/cli-admin",
@@ -3781,7 +3941,9 @@
         "src/platform/core/integrity",
         "src/engine/core/authentication",
         "src/domain/core/policy",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/domain/core/hub",
+        "src/engine/core/hub"
       ],
       "plan": "LEARNING"
     },
@@ -3793,7 +3955,10 @@
         "src/engine/core/agent-catalog",
         "src/adapters/core/audit-store",
         "src/adapters/core/sqlite-ledger",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/hub",
+        "src/engine/core/hub",
+        "src/engine/core/hub-client"
       ],
       "plan": "LEARNING"
     },
@@ -3843,7 +4008,8 @@
         "src/surfaces/core/cli-approval",
         "src/surfaces/core/cli-terminal",
         "src/engine/core/catalog-evolution",
-        "src/domain/core/catalog-evolution"
+        "src/domain/core/catalog-evolution",
+        "src/domain/core/hub"
       ],
       "plan": "LEARNING"
     },
@@ -3891,7 +4057,10 @@
         "src/platform/core/integrity",
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/platform/core/errors",
+        "src/engine/core/approval",
+        "src/engine/core/policy"
       ],
       "plan": "EXECUTION"
     },
@@ -3975,6 +4144,314 @@
         "src/platform/core/integrity"
       ],
       "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/domain/core/hub": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/command"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/hub": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/command",
+        "src/domain/core/agent-catalog",
+        "src/platform/core/integrity"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/hub-server": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/platform/core/integrity",
+        "src/platform/core/redaction",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/hub",
+        "src/platform/core/errors"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-store": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/platform/core/integrity",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/hub",
+        "src/engine/core/hub-server",
+        "src/adapters/core/file-artifacts"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/hub-mcp": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/platform/core/integrity",
+        "src/platform/core/common",
+        "src/platform/core/validate",
+        "src/engine/core/hub-server",
+        "src/engine/core/hub-client",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/domain/core/primitives"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/hub-client": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/agent-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/hub",
+        "src/platform/core/integrity",
+        "src/platform/core/i18n"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-client-store": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/engine/core/hub",
+        "src/engine/core/hub-client",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/agent-catalog-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/integrity",
+        "src/domain/core/audit"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-package-file": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/engine/core/hub-client"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/composition/core/hub": {
+      "dependencies": [
+        "src/engine/core/hub-client",
+        "src/adapters/core/hub-client-store",
+        "src/adapters/core/local-keyring",
+        "src/platform/core/managed-files",
+        "src/composition/core/agent-catalog",
+        "src/adapters/core/hub-cache",
+        "src/adapters/core/hub-http",
+        "src/surfaces/core/hub-mcp",
+        "src/engine/core/hub-server",
+        "src/surfaces",
+        "src/engine/core/hub-operations",
+        "src/engine/core/runtime",
+        "src/domain/core/hub",
+        "src/adapters/core/local-principal",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-cache": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/capabilities/core/artifacts",
+        "src/platform/core/config",
+        "src/platform/core/integrity",
+        "src/adapters/core/file-artifacts"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-http": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/engine/core/effect",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/adapters/core/native-connection",
+        "src/engine/core/hub-client",
+        "src/engine/core/authentication",
+        "src/domain/core/effect",
+        "src/platform/core/clock",
+        "src/engine/core/hub-operations",
+        "src/engine/core/hub-server",
+        "src/platform/core/validate",
+        "src/platform/core/common"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/terminal-onboarding": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/engine/core/setup",
+        "src/engine/core/worker-setup",
+        "src/engine/core/run-proposal",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/cli-identity"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/engine/core/hub-operations": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/platform/core/errors",
+        "src/engine/core/hub-client",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/agent-catalog",
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/cli-hub": {
+      "dependencies": [
+        "src/engine/core/hub-operations",
+        "src/engine/core/hub-client",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/platform/core/integrity",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/config",
+        "src/platform/core/redaction",
+        "src/surfaces/core/config"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/terminal-hub": {
+      "dependencies": [
+        "src/engine/core/hub-operations",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-hub",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/redaction"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/installation-removal": {
+      "dependencies": [
+        "src/engine/core/effect",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/platform/core/config",
+        "src/engine/core/installation",
+        "src/domain/core/principal",
+        "src/platform/core/host",
+        "src/adapters/core/backup-store",
+        "src/engine/core/backup",
+        "src/platform/core/common",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/worker-image",
+        "src/engine/core/toolchain-currency",
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/utils",
+        "src/adapters/core/attempt-store",
+        "src/domain/core/policy",
+        "src/adapters/core/local-runtime-socket",
+        "src/engine/core/audit"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/file-effect-store": {
+      "dependencies": [
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/platform/core/integrity",
+        "src/adapters/core/local-runtime-socket"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/siwc": {
+      "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/domain/core/identity-profile",
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/engine/core/identity-profile",
+        "src/engine/core/oauth-connection",
+        "src/engine/core/secret-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/provider-openai-chat",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/engine/core/runtime",
+        "src/engine/core/model-activation",
+        "src/composition/core/root",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend",
+        "src/domain/core/principal",
+        "src/domain/core/attempt",
+        "src/adapters/core/siwc-worker",
+        "src/platform/core/common",
+        "src/platform/core/errors"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/surfaces/core/siwc": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/platform/core/output"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/siwc-worker": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/domain/core/attempt",
+        "src/engine/core/oauth-connection",
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/native-connection",
+        "src/domain/core/run",
+        "src/domain/core/audit",
+        "src/domain/core/model-invocation",
+        "src/engine/core/supervisor",
+        "src/adapters/core/docker-supervisor"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {
@@ -4006,12 +4483,12 @@
     "maxLinesPerFile": 1500,
     "packageLines": {
       "platform": 25000,
-      "domain": 10000,
+      "domain": 10800,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 33500,
+      "adapters": 38000,
       "surfaces": 45000,
-      "composition": 9800
+      "composition": 11000
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -4091,6 +4568,7 @@
       "assignment",
       "agents",
       "agentsign",
+      "hub",
       "tuicopy",
       "tuinotify",
       "tuiqueue",
@@ -4099,10 +4577,12 @@
       "termanswer",
       "quotaask",
       "headless",
+      "siwc",
       "recovery",
       "brainwait",
       "agentstats",
-      "agentsevo"
+      "agentsevo",
+      "onboarding-session"
     ]
   },
   "literals": {
@@ -4148,7 +4628,10 @@
       "docs/policy-and-ai.md",
       "docs/policy-and-ai.tr.md",
       "docs/reports/ai-floor-compliance.md",
-      ".deckent/worker-instructions.md"
+      ".deckent/worker-instructions.md",
+      "docs/ai-install.md",
+      "docs/ai-install.tr.md",
+      "site/llms.txt"
     ],
     "pointerFiles": {
       "CLAUDE.md": 70,
@@ -4257,6 +4740,23 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/surfaces/core/hub-mcp/internal/server.ts",
+        "symbol": "listParams/cursor",
+        "values": [
+          "cursor"
+        ],
+        "reason": "MCP paginated request wire field cursor, stable ext-skills 2026-07-28; unrelated to the Cursor provider."
+      },
+      {
+        "file": "src/engine/core/hub-server/internal/application.ts",
+        "symbol": "HubServerApplication/requirePublication",
+        "values": [
+          60,
+          1000
+        ],
+        "reason": "Exact hour to milliseconds conversion for hub-limits publishesPerHour (60 minutes/hour, 60 seconds/minute, 1000 milliseconds/second); not a mutable rate policy."
+      },
       {
         "file": "src/adapters/core/native-connection/internal/egress.ts",
         "symbol": "tunnelNativeConnect",
@@ -4371,6 +4871,14 @@
           80
         ],
         "reason": "NATIVE-BAGLAM active-work note v1 format bound: a /do or Run title is cut at eighty characters in the model note; a model-facing format invariant, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/domain/core/hub/internal/registry.ts",
+        "symbol": "HUB_REVOCATION_REFRESH_MS",
+        "values": [
+          60000
+        ],
+        "reason": "Exact minutes-to-milliseconds unit conversion only; the refresh cadence remains hub-limits registry data."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

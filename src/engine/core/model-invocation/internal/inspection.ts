@@ -89,3 +89,5 @@ export function verifyModelInvocationInspectionControl(receipt: ModelInvocationR
     return control;
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 }
+
+export type SubscriptionUsageSummary = Readonly<{ state: 'complete' | 'unavailable'; completedRequests: number | null; busiestDayRequests: number | null; activeDays: number | null }>;

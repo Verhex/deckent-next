@@ -6,7 +6,7 @@ import {
 import { configServiceState } from '#engine/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_RETIREMENT_STATES, doctorChecks, renderDoctorChecks, renderDoctorReport, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { assessPoolReadiness, poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
-import { modelRetirementWarnings } from '#surfaces/core/cli-models/index.js';
+import { modelRetirementWarnings, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { KernelCommandContext } from './context.js';
 import type { KernelCall } from './kernel.js';
 import { offerDoctorFixes } from './doctor-fix.js';
@@ -15,12 +15,18 @@ type DoctorConfig = Awaited<ReturnType<typeof loadConfig>>;
 
 /** Facts only the grouped view needs: each is read-soft (a failed read is "not tested"), secret names only, never a value. */
 async function checkFacts(root: string, config: DoctorConfig, context: KernelCommandContext, options: ConfigLoadOptions, toolchainsRequested: boolean,
-  poolStatus: DoctorCheckFacts['poolStatus']): Promise<DoctorCheckFacts> {
+  poolStatus: DoctorCheckFacts['poolStatus'], locale: import('#platform/index.js').Locale): Promise<DoctorCheckFacts> {
   const scopeId = (config.terminal as { scopeId?: string } | undefined)?.scopeId ?? null;
+  const providerSpending = context.inspectProviderSpendAccount && scopeId ? await context.inspectProviderSpendAccount(root,
+    { schemaVersion: 1, scopeId, current: true }, options).catch(() => null) : null;
+  const budgetPeriodText = providerSpending ? providerSpending.checkpoint ? spendPeriodLines(providerSpending, locale).join(' ')
+    : t('climodels.spending.none', { scope: scopeId! }, locale) : null;
   const identity = (config as Record<string, unknown>)['identity'] as { profile?: { id?: unknown } } | undefined;
   const names = context.listSecretNames ? await context.listSecretNames(root, options).then(view => view.names, () => null) : null;
   const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const recoveryMode = context.inspectRecoveryMode && scopeId ? await context.inspectRecoveryMode(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
+  const recoveryRollout = context.inspectRecoveryRollout && scopeId && recoveryMode && recoveryMode.recovery !== 'off'
+    ? await context.inspectRecoveryRollout(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const roles = context.inspectModelRoles && scopeId ? await context.inspectModelRoles(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const executionEnvironment = context.inspectExecutionEnvironment ? await context.inspectExecutionEnvironment(options.env ?? process.env).catch(() => null) : null;
   const docker = config.execution?.docker, workerImage = docker && executionEnvironment?.state === 'done' && context.inspectWorkerImage
@@ -30,14 +36,17 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
+    providerSpending, budgetPeriodText,
+    catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry }, // I-S7: the first-job steps doctor names
     imageId: docker?.imageId ?? null, executionEnvironment, workerImage,
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays), secretUse,
-    recoveryMode,
+    recoveryMode, recoveryRollout,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
+    siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
   };
 }
@@ -75,6 +84,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const policyAdministration = context.inspectPolicyAdministration && policyScope
     ? await context.inspectPolicyAdministration(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => null) : null;
   const auditIntegrity = context.verifyAudit && policyScope ? await context.verifyAudit(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => ({ schemaVersion: 1 as const, scopeId: policyScope, status: 'unknown' as const, reason: 'unavailable' as const, head: null, checkpoint: null })) : null;
+  const ownerBaseline = policyScope && context.inspectOwnerBaseline ? await context.inspectOwnerBaseline(root, policyScope, options).catch(() => null) : null;
   const policyTemplate = context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
   // SESSION-RESULT-LIMIT-2026-09-28: unconditional like policyTemplate (nobody was looking at the line-mode/MCP path
   // before this); [] when unwired or every declared profile fits. Read-only, network-free, never blocks doctor.
@@ -94,10 +104,12 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const node = assessNodeSupport(process.version, NODE_ENGINE_RANGE);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
-  const checks = doctorChecks(data, await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status), locale);
-  return { data, checks, config, options };
+  const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
+  const checks = [...doctorChecks(data, facts, locale)];
+  if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push({ group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: ownerBaseline.missing }, locale) });
+  return { data: { ...data, providerSpending: facts.providerSpending ?? null }, checks, config, options };
 }
 
 /** I-S3: `deckent init`'s final check reads the same measurement as the grouped view (read-only, heal:false), never printing or offering a fix:

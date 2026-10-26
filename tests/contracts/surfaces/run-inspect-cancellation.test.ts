@@ -20,7 +20,7 @@ it('a Run cancelled before its only attempt was dispatched says no worker was st
   expect(prevented.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
   const en = inspect(prevented), tr = inspect(prevented, 'tr');
   expect(en).not.toContain(NOT_CONFIRMED); expect(en).toContain('Cancellation: request recorded; no worker was started');
-  expect(tr).not.toContain('worker sonlanması doğrulanmadı'); expect(tr).toContain('hiçbir worker başlatılmadı');
+  expect(tr).not.toContain('işçi sonlanması doğrulanmadı'); expect(tr).toContain('hiçbir işçi başlatılmadı');
 });
 it('negative: a worker in flight or one that ran under the cancellation keeps the unconfirmed-termination line', () => {
   // A dispatched, running worker (started observation) with cancellation requested.
@@ -33,4 +33,13 @@ it('negative: a worker in flight or one that ran under the cancellation keeps th
   expect(settled.progress[0]!.phase).toBe('cancelled'); expect(inspect(settled)).toContain(NOT_CONFIRMED);
   // No cancellation: unchanged.
   expect(inspect(reserved())).toContain('Cancellation: no request recorded.');
+});
+
+it('ISY-14/16: Run status and park deadlines use human local words and dates without altering JSON state', () => {
+  const run = projectRunView(createRun(identity, graph, 1, fixtureExecution(graph)));
+  const parked = { ...run, state: { kind: 'parked' as const, reason: 'operator-hold' as const, since: 1_760_000_000_000, deadline: 1_760_000_060_000 } };
+  const text = renderRunInspect({ run: parked, models: [] }, 'tr', false);
+  expect(text).toContain('Durum:'); expect(text).not.toContain('operator-hold'); expect(text).not.toContain('parked');
+  expect(text).not.toContain('epoch'); expect(text).not.toContain('1760000060000'); expect(text).toContain('2025');
+  expect(parked.state.deadline).toBe(1_760_000_060_000);
 });

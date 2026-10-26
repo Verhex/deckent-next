@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "workerReady": { "id": "onboarding:worker-ready", "after": "execution:worker", "members": ["execution:worker-settings", "work:kind", "work:pool"] },
+  "guideAfter": "core:model",
+  "observationOnly": ["coding:hosts"],
+  "firstTask": "onboarding:first-task"
+}

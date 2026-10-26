@@ -8,6 +8,8 @@ const MEMORY_EVALUATION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const
 const MEMORY_CONTEXT_RECORD_MODES = Object.freeze(['shadow', 'on'] as const);
 /** S6R-5: the recovery decision modes that seal (the recovery domain's frozen Run modes; `off` decides nothing, so it is never recorded). */
 const RECOVERY_DECISION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
+/** S6R-6 / alpha.56 G1: what a decision seal stands on besides its own call — a live adoption of a shadow decision, or a would-stop shadow input. */
+const RECOVERY_DECISION_BASES = Object.freeze(['shadow', 'would-stop'] as const);
 const digest = z.string().regex(/^[a-f0-9]{64}$/), signedRef = z.object({ keyId: digest, signatureDigest: digest }).strict().optional();
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
@@ -185,6 +187,9 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * T4-B `models.connect`: one connection of a model to a scope — the registry kind, the exact reference, the secret NAME the profile reads (never
    * a value) and what each governed step did (each step also wrote its own record: config change, catalog receipt, activation receipt).
    */
+  z.object({ kind: z.literal('subscription-api-continuation'), schemaVersion: z.literal(1), actor: auditPrincipalSchema, sourceInvocationId: identitySchema,
+    connectionId: z.string().uuid(), profileDigest: digest, reference: z.object({ providerId: identitySchema, providerVersion: counterSchema,
+      modelId: identitySchema, modelVersion: counterSchema }).strict(), commandId: identitySchema, phase: z.literal('intent') }).strict(),
   z.object({ kind: z.literal('model-connect'), commandId: identitySchema, connection: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
     reference: z.object({ providerId: identitySchema, providerVersion: counterSchema, modelId: identitySchema, modelVersion: counterSchema }).strict(),
     credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/).nullable(),
@@ -340,14 +345,43 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('recovery-decision'), caseId: digest, mode: z.enum(RECOVERY_DECISION_RECORD_MODES), evidenceDigest: digest,
     target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive() }).strict(),
     gate: z.object({ result: z.enum(['clear', 'reconciled', 'open']), settled: z.enum(['none', 'task-idempotent', 'not-declared', 'over-bound']), intents: counterSchema }).strict(),
-    terminationReceiptId: identitySchema,
+    /** alpha.56 G1: null only for a `would-stop` shadow decision (no stop ran, so there is no release receipt). */
+    terminationReceiptId: identitySchema.nullable(),
     model: z.object({ channelId: identitySchema, modelId: identitySchema, template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(),
       registryRevision: identitySchema, inputDigest: digest, outputDigest: digest.nullable(), invocationId: identitySchema.nullable() }).strict().nullable(),
     action: z.enum(['continue-new-attempt', 'escalate-human']), causeClass: z.enum(['infra-transient', 'infra-persistent', 'task-induced', 'unknown']).nullable(),
     note: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(), code: identitySchema.nullable(), failure: identitySchema.nullable(), standingRef: identitySchema.nullable(),
-    /** S6R-6: `shadow` — this live decision adopts the sealed shadow decision of the same evidence (its model block is that call's; no second call). */
-    basis: z.literal('shadow').optional() }).strict(),
-]);
+    /** S6R-6: `shadow` — this live decision adopts the sealed shadow decision of the same evidence (its model block is that call's; no second call).
+     * alpha.56 G1: `would-stop` — a shadow decision of a detection whose stop step did not run, decided as if it had (never adopted by live). */
+    basis: z.enum(RECOVERY_DECISION_BASES).optional() }).strict(),
+  /**
+   * alpha.56 G4 (owner Q-A5): a person's blind verdict on one shadow-decided recovery case, written only by a person (the audit writer refuses
+   * every AI principal). `detection`: whether the worker really was lost; `choice` (only when lost) what the person would have done. It measures
+   * agreement and false positives; it changes no Run. One per case (`recovery-verdict:<caseId>`).
+   */
+  z.object({ kind: z.literal('recovery-verdict'), caseId: digest, decisionEventId: identitySchema, evidenceDigest: digest, detection: z.enum(['lost', 'not-lost']),
+    choice: z.enum(['continue-new-attempt', 'escalate-human']).nullable() }).strict(),
+  z.object({ kind: z.literal('hub-client'), action: identitySchema, hubId: digest, commandId: identitySchema, inputDigest: digest }).strict(),
+  /**
+   * U9-7 (design rev 6 §11.4, v1): one SIWC worker relay record of one Attempt — a refused peer, the relay capability issued/refused, a relayed or
+   * refused model exchange, a native-effect approval decision, the revocation, and the closing summary (`counters`, only on `closed`; `suppressed`
+   * counts records past the registry bound). Opaque ids, digests, status, a bounded reason token and a byte count only: never a token, header,
+   * prompt, body, command, path or email.
+   */
+  z.object({ kind: z.literal('siwc-relay'), schemaVersion: z.literal(1),
+    action: z.enum(['peer-refused', 'capability-issued', 'capability-refused', 'model-relayed', 'model-refused', 'approval', 'revoked', 'closed']),
+    runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, connectionId: z.string().uuid(), bindingDigest: digest, policyDigest: digest,
+    requestId: z.string().uuid().nullable(), status: z.number().int().min(100).max(599).nullable(), reason: z.string().regex(/^[a-z][a-z0-9:-]{0,63}$/u).nullable(),
+    bytes: counterSchema.nullable(), counters: z.object({ peersRefused: counterSchema, capabilityIssued: counterSchema, capabilityRefused: counterSchema, relayed: counterSchema,
+      refused: counterSchema, upstreamSends: counterSchema, suppressed: counterSchema }).strict().nullable() }).strict(),
+]).superRefine((subject, context) => {
+  // A null termination only with a would-stop shadow seal; a would-stop seal is shadow with no termination; a choice exactly when lost;
+  // relay counters exactly on the closing summary.
+  if (subject.kind === 'recovery-decision' && (subject.terminationReceiptId === null) !== (subject.basis === 'would-stop')
+    || subject.kind === 'recovery-decision' && subject.basis === 'would-stop' && subject.mode !== 'shadow'
+    || subject.kind === 'recovery-verdict' && (subject.choice === null) !== (subject.detection === 'not-lost')
+    || subject.kind === 'siwc-relay' && (subject.counters === null) === (subject.action === 'closed')) context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
+});
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   authorityDecisionSubjectSchema,

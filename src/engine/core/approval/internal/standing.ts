@@ -1,6 +1,6 @@
-import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
+import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, POLICY_RECOVERY_CHANGE_KIND, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
   planPolicyChange, policySchema, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
-  type VerifiedPrincipal } from '#domain/index.js';
+  type DelegationOptions, type VerifiedPrincipal } from '#domain/index.js';
 import { hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import type { AgentToolCallDecision, PolicySource } from '#engine/core/policy/index.js';
 import type { EffectOutcome } from '#engine/core/effect/index.js';
@@ -110,7 +110,7 @@ export type StandingOffer = { readonly available: true } | { readonly available:
 
 export interface PersistentStandingDependencies {
   /** The authority producer of `policy.administer@1` (`PolicyAdministrationApplication.submit`). */
-  readonly administration: { submit(input: EffectCommand, credential?: unknown): Promise<EffectOutcome> };
+  readonly administration: { submit(input: EffectCommand, credential?: unknown, options?: DelegationOptions): Promise<EffectOutcome> };
   /** Decides one pending operation approval `allow` as the person the card belongs to (the same session and channel as the card's decision). */
   readonly approve: (approval: { readonly approvalId: string; readonly revision: number }, commandId: string, reason: string) => Promise<unknown>;
   readonly policy: PolicySource;
@@ -200,13 +200,14 @@ export class PersistentStanding {
 export async function administerOwnPolicyChange(deps: Pick<PersistentStandingDependencies, 'administration' | 'approve'>, input: { readonly scopeId: string;
   readonly principal: { readonly issuer: string; readonly subject: string }; readonly change: PolicyChange; readonly tag: string; readonly reason: string; readonly revision: string;
   readonly kind: string }): Promise<void> {
+  const options: DelegationOptions = input.kind === POLICY_RECOVERY_CHANGE_KIND ? { changeKind: POLICY_RECOVERY_CHANGE_KIND } : {}; // only the card's kind may raise (I2)
   const commandId = sha256(`${input.kind}:1\0${input.scopeId}\0${input.principal.issuer}\0${input.principal.subject}\0${input.tag}\0${input.revision}`);
   const command: EffectCommand = { schemaVersion: 1, commandId, scopeId: input.scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: input.change, expectedVersion: input.revision };
-  let outcome = await deps.administration.submit(command);
+  let outcome = await deps.administration.submit(command, undefined, options);
   if (outcome.status === 'approval-pending') {
     await deps.approve({ approvalId: outcome.approval.approvalId, revision: outcome.approval.revision }, `${commandId}-approve`, input.reason);
-    outcome = await deps.administration.submit(command);
+    outcome = await deps.administration.submit(command, undefined, options);
   }
   if (outcome.status !== 'settled') throw new Error('NOT_SETTLED');
 }

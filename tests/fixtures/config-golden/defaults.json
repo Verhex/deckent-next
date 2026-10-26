@@ -176,6 +176,11 @@
     "targets": []
   },
   "output_mode": "standard",
+  "policy": {
+    "mcp": {
+      "optInGroups": []
+    }
+  },
   "projectName": "deckent-project",
   "reconciliationRuntime": null,
   "resourceObservation": {
@@ -306,6 +311,16 @@
       "registryEndpoint": "https://registry.npmjs.org",
       "responseMaxBytes": 65536,
       "timeoutMs": 5000
+    },
+    "image": {
+      "baseRefreshMs": 604800000,
+      "consents": [],
+      "providers": [],
+      "sources": {
+        "baseImage": null,
+        "installerUrls": {},
+        "proxy": null
+      }
     },
     "update": {
       "atStartup": true,

@@ -30,6 +30,24 @@ const write = (principal: typeof person | typeof mcp, value: unknown) => ({ keyP
 const consented = profile({ adapter: { ...profile().adapter, definition: { ...profile().adapter.definition, delegatedUse: { consentedBy: owner, atMs: 1, classes: ['ai'] } } } });
 
 describe('S3-3 a subscription profile is written by a person only', () => {
+  it('protects SIWC consent from AI parent and child replacements', async () => {
+    const siwc = profile({ adapter: { id: 'siwc-responses', version: 1, definition: { schemaVersion: 2,
+      connectionId: '00000000-0000-4000-8000-000000000001', owner, rawUse: 'person', delegatedUse: null, apiContinuation: null } },
+      protocol: { family: 'openai-chat-completions', version: 'v1' } });
+    const changed = { ...siwc, adapter: { ...siwc.adapter, definition: { ...siwc.adapter.definition,
+      delegatedUse: { consentedBy: owner, atMs: 1, classes: ['ai'] } } } };
+    for (const [keyPath, value] of [
+      ['provider_invocation_profiles', { schemaVersion: 1, profiles: [changed] }],
+      ['provider_invocation_profiles.profiles', [changed]],
+      ['provider_invocation_profiles.profiles.0.adapter.definition', changed.adapter.definition],
+    ] as const) {
+      const f = fixture({ provider_invocation_profiles: { schemaVersion: 1, profiles: [siwc] } });
+      const input = { ...write(mcp, value), keyPath };
+      await expect(f.app.preview('set', input)).rejects.toMatchObject({ code: 'HEADLESS_PERSON_REQUIRED' });
+      await expect(f.app.set(input)).rejects.toMatchObject({ code: 'HEADLESS_PERSON_REQUIRED' });
+      expect(f.published()).toBeUndefined();
+    }
+  });
   it.each([
     ['grant itself consent', { schemaVersion: 1, profiles: [consented] }],
     ['remove the profile', { schemaVersion: 1, profiles: [] }],

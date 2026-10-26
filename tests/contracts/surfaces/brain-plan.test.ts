@@ -19,11 +19,15 @@ it('CLI do passes one intent contract and returns pending JSON or human TR/EN pr
   const args = ['do', '--request', command.intent, '--scope', 's', '--command-id', 'brain'];
   expect(await main([...args, '--json'], context)).toBe(0); expect(JSON.parse(output.pop()!)).toEqual(result); expect(calls.pop()).toEqual(command);
   expect(await main([...args, '--lang', 'tr'], context)).toBe(0); const tr = output.pop()!;
-  expect(tr).toContain('Durable business evidence'); expect(tr).toContain('Onay'); expect(tr).toContain('toplam Run harcaması henüz sınırlanmıyor');
+  expect(tr).toContain('Komut kimliği: brain'); expect(tr).toContain('Durable business evidence'); expect(tr).toContain('Onay'); expect(tr).toContain('toplam iş harcaması henüz sınırlanmıyor');
   expect(await main([...args, '--lang', 'en'], context)).toBe(0); expect(output.pop()).toContain('no total Run spending limit is enforced');
   const before = calls.length;
   for (const flag of ['--approve', '--yes']) { expect(await main([...args, flag, '--json'], context)).not.toBe(0); expect(output.pop()).toContain('CLI_USAGE'); }
   expect(calls).toHaveLength(before);
+  expect(await main(['do', '--request', command.intent, '--lang', 'tr'], context)).toBe(2);
+  expect(output.pop()).toContain('CLI_SCOPE_REQUIRED'); expect(calls).toHaveLength(before);
+  expect(await main(['do', '--request', '--lang', 'tr'], context)).toBe(2);
+  const missingValue = output.pop()!; expect(missingValue).toContain('geçersiz'); expect(missingValue).not.toContain('Usage:');
 });
 it('MCP plan_run shares the contract, rejects decision fields and has no approval mutator', async () => {
   const calls: unknown[] = [], result = pendingBrainFixture();

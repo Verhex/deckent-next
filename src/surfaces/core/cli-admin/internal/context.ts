@@ -16,7 +16,7 @@ import type { WorkerInstructionStatusHandler, WorkerInstructionTrustHandler } fr
 
 /** The host operations the administration commands use (pool, backup, secret, audit, runtime, toolchains, operation, coding);
  * the CLI's full command context satisfies it. */
-export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'configChoiceSources'> {
+export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'configChoiceSources' | 'prepareMainSecret'> {
   verifyAudit?: AuditVerifyHandler;
   rebaselineAudit?: AuditRebaselineHandler;
   executeBackup?: BackupHandler;

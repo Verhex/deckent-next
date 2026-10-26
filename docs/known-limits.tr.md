@@ -9,6 +9,8 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
+Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını veya canlı/N1 kabulü iddiası değildir.
+
 ## Platformlar: denenenler ve denenmeyenler
 
 - **Denenen:** Linux ve WSL2 üzerinden Windows (desteklenen yürütme yolu). Barındırılan (hosted) kontroller Ubuntu'da Node 24 ve
@@ -18,6 +20,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   İşletim sistemi kullanıcı kimliği okunamaz ve özel ledger dosyaları açılamaz; bu yüzden yedekleme, izleme ekranı, model
   çağrıları, Brain ve iş kabulü de native Windows'ta çalışmaz. Platform testleri bunları `[unsupported on Windows: …]`
   etiketiyle atlar; Windows kontrolünün yeşil olması bu parçaların çalıştığı anlamına gelmez. *Yol:* WSL2 kullanın.
+- **Konuşma kökeni yalnız sürdürme listesini süzer.** `/resume` geçerli işletim sistemi kullanıcısının başlangıç klasörünü gösterir; “Tüm klasörler” proje içindeki listeyi genişletir. Eski kayıtlar dosya sahibine proje kökünde görünür. Bu bilgiler yetki vermez.
+- **Native Windows bir projeyi alt klasörlerinden açmaz.** Diğer platformlarda bir alt klasörde başlatılan `deckent` ve
+  `deckent-mcp` üstteki kurulumu kullanır (ev klasörünün üstündekini asla); native Windows'ta bu yürüyüş için sahip ve kip denetimi olmadığından
+  `INSTALLATION_ROOT_WALK_UNSUPPORTED` ile durur. *Yol:* projenin kendi klasöründe çalıştırın ya da `deckent-mcp --project` verin.
 - **macOS'un doğrulaması ayrı ve eksiktir.** Zorunlu kontrollerin parçası değildir. *Etki:* orada yürütme ve güvenlik davranışı
   kanıtsızdır; gerçek iş için buna güvenmeyin. Yerel runtime soketi yalnız Linux'tadır; bu yüzden servis taşıması, yedekleme ve
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
@@ -35,22 +41,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
-- **`deckent init` ilk işi yalnız terminaldeki bir kişi için hazırlar** (alpha.54 BR1; alpha.48 I-S3). İlk kurulum izinlerini,
-  dili, sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
-  kontrolü, her birini kendi mevcut komutuyla uygular. alpha.54'ten beri ayrıca, boyutu ve süre sınırını söyleyen bir karttan sonra
-  worker imajını kurulu paketten derler (ya da `deckent init --image-id sha256:<kimlik>` ile verdiğiniz imajı benimser), bulduğu
-  Docker ve Git yollarından yürütme ayarlarını yazar, seçtiğiniz kodlama CLI'ı üzerinde `coding` ilk iş türünü `workers` havuzu ve
-  bir çalışma yuvasıyla tanımlar ve o havuzu kurar; her biri kendi kartından sonra. *Etki:* bu adımların her biri bir kişinin
-  kartını bekler ve `--yes` hiçbir zaman derlemez, benimsemez ya da tanımlamaz: özet (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla
-  listeler (`deckent init`, `deckent init registry`, `deckent init pool`), doctor ilkini gösterir. Başka bir iş türü, havuz adı ya da
-  kapasite hâlâ kendi bayraklarıyla `deckent init registry` ister. İmaj derlemesi Docker ve ağ ister; çalışan servis yeni `execution`
-  ayarlarını ve havuz kapasitesini ancak `deckent runtime restart` sonrasında okur (kabul kaydı her istekte okunur). `deckent doctor` yapılandırılan imajın bu Docker'da
-  olduğunu salt okunur denetler (`docker image inspect`, konteyner yok). Teslim klonu kurulum aşaması değildir.
-  Seçtiğiniz profil (tek kullanıcı, ekip, kurum ya da özel) kullanıcınızın genel yapılandırmasına kaydedilir
-  (`identity.profile`; dağıtım `deckent identity distribute` olarak kalır); sonraki `deckent init` onu geri okur ve aşamayı tamam
-  gösterir, doctor da artık profil istemez. Gözetimsiz `--yes` profili kaydetmez. Son kontrol
-  doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur. Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
-- **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; I-S3'ten beri `deckent init` penceresinde, yalnız gerçek bir
+- **`deckent init` yalnız kurar.** İlk adım dildir; profil izinlerden önce cevaplanır ve kurulum oluştuktan sonra mevcut
+  yapılandırma yolu üzerinden kaydedilir. Model, çalıştırma, iş ve talimat aşamaları ilk açılışa (`onboarding`) aittir; init bunları sormaz
+  ve uygulamaz. `init --json` şema v2 kullanır: `phase` vardır, `firstJob` yoktur; `init --json --phase onboarding` yalnız okur.
+  Etkileşimli ilk açılış ayrı bir entegrasyondur; faz belgesi tek başına o yolculuğun çalıştığını kanıtlamaz.
+  `--yes --scope <kimlik>` yalnız yeni izinleri ve dili uygular; salt okunur kontrolleri veya kişi isteyen aşamaları uygulamaz, profili kaydetmez.
+  Son kontrol yalnız kurulum aşamalarını bekler; ölçülmüş uyarılar görünür kalırken tamam sayılabilir. Tekrar `--yes`, bitmiş işi uygulamaz.
+  Doctor iş yönlendirmesini kurulum aşamalarının değerlendiricilerinden türetir; ilk iş için `deckent` / `/setup` yolunu gösterir.
+- **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; ilk açılış aşamasıdır, `deckent init` dışında, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
   Windows/macOS, WSL'de Docker Desktop, Linux Mint gibi türevler, çakışan `docker.io`/`containerd`/`runc` paketleri, eski bir
@@ -189,18 +187,35 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Yalnız Deckent'in bubblewrap
   korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar). Claude aboneliğiyle terminal
   sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
-- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam
-  bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` ile API anahtarı bağlayın, bütçe koyun, `/model` seçin.
+- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Aboneliklerden yalnız ChatGPT ile giriş terminal
+  sohbetine hizmet eder (aşağıda); kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde ChatGPT ile giriş
+  yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
 - **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
   yalnız geçerli erişim token'ını (Codex'te kimlik token'ını da) kopyalar ve süresinin dolmadığını denetler; yenileme
   token'ları, API anahtarları ve giriş dosyasının geri kalanı makinede kalır. *Etki:* işçinin CLI'ı, o token'ın süresi
   dolana kadar abonelik hesabınız adına işlem yapabilir. *Yol:* yok; sınır, token'ın kendi süresidir.
-- **ChatGPT ile giriş henüz yok.** `/provider` bunu kullanılamıyor olarak listeler; görünür giriş beta sürecinde ele alınır. *Yol:* bir OpenAI API anahtarı ya da kendi
-  girişiyle bir Codex işçisi.
+- **ChatGPT ile giriş sohbete açıktır; plandaki Codex işçisi hâlâ bekletilir.** Alpha.56 terminal sohbeti ve Deckent'in kendi
+  özellikleri için kişi girişini açar (`/provider` → ChatGPT ya da kendi terminalinizden `deckent models connect --connection
+  chatgpt-login`). Oturum yalnız sizin yerel şifreli deponuzda durur: Linux ya da WSL, bu bilgisayarın yerel diskinde yalnız sizin
+  açabildiğiniz (0700) bir klasör. Paylaşılan ekip sunucusu, ağ paylaşımında ya da `/mnt/c` üzerinde bir depo veya başka
+  kullanıcıların açabildiği bir klasör tarayıcı açılmadan reddedilir; `deckent doctor` klasörü ve düzeltmeyi (örneğin
+  `chmod 700 <klasör>`) gösterir, Deckent izinleri kendisi değiştirmez. macOS ve yerel Windows henüz desteklenmiyor. Her proje
+  için bir giriş; OpenAI plan sınırını sorgulama yolu sunmadığı için Deckent yalnız kendi 30 günlük kullanımını gösterir. MCP ile
+  bağlanan araçlar planı ham API olarak kullanamaz. Codex app-server yalıtılmış işçide çalışır; host app-server yolu reddedilmiştir.
+  Gerçek binary ile N1 kanıtına kadar işçi etkinleştirmesi HOLD'dur (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, neden `activation-hold`);
+  eksik yalıtım tipli rettir, host/token dosyası alternatifi yoktur. Bekletme sürerken hiçbir Run bu yola atanmaz ve Codex
+  işçisi mevcut bağlantısıyla çalışır; bu yola dondurulmuş bir Run çalışma alanı veya konteynerden önce `launch-refused` ile kapanır.
+  OpenAI belgeleri Codex app-server komutunu ve WebSocket taşımasını deneysel olarak işaretler; Deckent'in sabitlenmiş binary
+  ve taşıma için sınır kanıtı sağlayıcının üretim desteği veya bu birleşime özel uygunluk onayı değildir ve desteklenmeyen
+  birleşim kimlik doğrulamalı işten önce tipli retle durur. *Yol:* desteklenen mevcut bağlantıyı kullanın; girişin
+  başarılı olması Codex işçisinin kullanılabildiğini kanıtlamaz.
+
 - **Aboneliklerden API modeline otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli bir API'ye
-  geçmez. alpha.55'ten beri abonelik kotası yüzünden bekleyen bir işçi Run'ı en çok 5 saat bekler (`runRuntime.quotaRecovery.maxWaitMs`),
+  geçmez. İstisna: bağlanırken devamı açıkça etkinleştirip bir API modeli seçtiğiniz ChatGPT girişi, doğrulanmış plan sınırında o
+  modelde bütçenizden devam edebilir; her geçiş gösterilir ve kaydedilir, izin geri alınabilir. Geçici hatalar ödeme yolunu asla
+  değiştirmez. Claude aboneliği asla geçmez. alpha.55'ten beri abonelik kotası yüzünden bekleyen bir işçi Run'ı en çok 5 saat bekler (`runRuntime.quotaRecovery.maxWaitMs`),
   sonra size bir kartta beklemeye devam mı edileceğini yoksa WorkClass listesindeki sıradaki adayın mı kullanılacağını sorar; hiçbir şey
   kendiliğinden iptal edilmez ve hiçbir AI cevap veremez. Yükseltmeden önce bekletilmiş bir Run o zaman mühürlediği süreyi korur (eski
   varsayılan 7 gündü). *Yol:* `deckent run resume --quota wait` ya da `deckent run resume --quota next-candidate` ile cevaplayın ya da
@@ -456,12 +471,30 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
   gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
   da günlük yerine yükseltme öncesini seçin.
-- **Kaybolan bir işçi slotunu tutabilir; otomatik kurtarma kuruldu ama henüz devrede değil.** Verilmiş bir deneme, saklama çözülene
-  kadar etkin kalıp bir yürütme slotunu tutabilir. alpha.55 deterministik tespiti (Nervous) ve görevi yeni bir denemede sürdürebilen bir
-  kurtarma kararını ekler; ikisi de `off` başlar ve `live` kipte bile Nervous, owner ölçülmüş bir kuralı yükseltene kadar hiçbir şey
-  yürütmez: Core tohumundaki her kural hâlâ geçicidir ve kurtarma yalnız Nervous'un durdurma adımını gerçekten çalıştırdığı vakalara karar
-  verir. `deckent run inspect` Run'ın dondurduğu kurtarma kipini ve anlamını söyler. *Yol:* `deckent monitor` ile izleyin; slot yalnız
-  tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
+- **Kaybolan işçi saklama çözülene kadar slotunu tutabilir.** Nervous ve kurtarma `off` başlar; başlangıç kuralları
+  kişi ölçülmüş kuralı yükseltip kurtarma eylemini verene kadar geçicidir. Alpha.56 adayı
+  `deckent policy recovery` ve `deckent recovery review` üzerinden kör vaka incelemesini ekler; kurtarma gölgesi
+  işçiyi durdurmadan mühürlü would-stop (durduracaktı) kayıtlarını da tüketir. Gölge kararları yapılandırılmış modeli
+  çağırıp harcama yapabilir; kurtarma etkisi uygulamaz. *Yol:* Run'ın sabitlediği kipe bakıp `deckent monitor` ile izleyin;
+  serbest bırakmak gereken çit ve bitiş kanıtını ister. N1 senaryo/owner kabulü açıktır.
+
+- **Bir işçinin kendi ağ yolu yoktur ve kurtarma buna dayanır.** Her işçi konteyneri ağsız çalışır; tek çıkışı yalnız işçinin model
+  sağlayıcısının host'larına ulaşan host geçididir. Dış sistemlerdeki (ERP, CRM, bir HTTP hedefi) değişiklikleri bir kişinin ya da
+  onaylı bir ajanın yönetilen işlemleri yapar. alpha.56'dan itibaren her işçinin gönderim kaydı bunu bildirir, işçi yalnız Docker o ağ
+  kipini bildirdiğinde başlar ve otomatik kurtarma kaybolan bir işçiyi yalnız bu kayıtla sürdürür; alpha.56'dan önce başlamış kaybolan
+  bir işçinin böyle bir kaydı yoktur ve bir kişiye gider (`isolation-unproven`). Bu yalnız ağı kapsar: işçiye salt okunur bağlanan bir
+  klasördeki unix soketi denetlenmez. *Yol:* başka bir servisin soketini tutan klasörleri bağlamayın. İşçilerin dış sistemlerde
+  kendilerinin işlem yapması henüz sunulmuyor.
+- **Kurtarma yalnız kendi kesin politika hücrelerinizle açılır.** V16 şablonu kişinin onay gerektiren kurtarma
+  eylemi ve Nervous yükseltme hücrelerini getirdi; güncel v18 bunları korur, v17'nin ilk commit hakkını ve v18'in kaldırma
+  haklarını ekler. Rol, geniş/paylaşılan veya çakışan onay gerektiren hücrede kurtarma kartı `RECOVERY_CELL_NOT_OWN` verir.
+  Eski kurulum yalnız açık yükseltmeyle değişir; yönetilen `deckent policy upgrade` yolu kişide olmayan yetkiyi ekleyemiyorsa
+  tanıklı `deckent init policy --upgrade` yolunu kullanın. Güncel geri alma yalnız içeriği eşit v18 farkını kaldırır;
+  tarihsel v16 kurtarma haklarını kaldırmaz, değiştirilmiş satırları koruyup bildirir. Yeni Nervous/kurtarma kuralı veya
+  sürümü hâlâ şablon sürümü ve politika yükseltmesi ister: v17/v18 sonrasında da AÇIK owner sorusudur. Ölçülmüş çıkış denetimi
+  politika revizyonuna bağlıdır, sonra mühürlenen ölçümlere değil. Alpha.56 öncesi kaybolan işçinin yalıtım kaydı yoktur;
+  vaka kişiye gider ve gölge ölçümü yeniden başlar.
+
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
   havuza ulaştı. Model bağlantısı, `/do`, boş bir Docker daemon'unda işçi imajı derlemesi ve temiz daemon'da başlangıç
   araç zinciri tazelemesi orada denenmedi. *Yol:* README'deki ilk iş yolunu izleyin ve farkı bildirin.
@@ -521,11 +554,10 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, sonra `--apply` ile yükseltilir (`--person`
   olmadan hiçbir şeyi değiştirmez ve kapsamın kişilerini adlandırır). Bir katmanı önce gölgeye alın, örneğin
   `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
-- **Sayılar ölçüm değil, başlangıç değeridir.** Nervous kuralları, kurtarma sınırları (kaybolan görev başına bir otomatik devam, görev
-  başına üç deneme), hafıza sınırları ve açılış eşikleri ile ajan istatistiği eşikleri N1 ölçene kadar geçici işaretlidir. Her Nervous
-  başlangıç kuralı geçicidir ve alpha.55'te bir kuralı yükselten ya da `recovery-action/apply` hakkını veren komut yoktur; `live` hiçbir
-  şey yürütmez ve otomatik kurtarma henüz başlayamaz. Kurtarma yalnız Nervous'un gerçekten yürüttüğü durdurma adımlarını okur; bu
-  yüzden Nervous gölgedeyken kurtarma gölgesi veri üretmez. Yükseltme kartı alpha.56 için planlandı.
+- **Sayılar ölçüm değil, başlangıç değeridir.** Nervous/kurtarma sınırları, hafıza/saklama varsayılanları ve ajan
+  istatistik eşikleri N1'de ölçülene kadar geçicidir. Alpha.56 kurtarma yükseltme/izin kartlarını ve would-stop gölge
+  girdisini sağlar; sayısal çıkışları doğrulamaz, kurtarmayı etkinleştirmez ve üretim güvenliği kanıtlamaz.
+
 - **Hafıza yalnız bir iş türünden dolar.** Core registry yalnız `small` WorkClass'ının (geçici 90 günlük saklama, kişisel veri yok) hafıza
   adayı üretmesine izin verir; başka türlerin kabul edilen işi, saklama süresi tanımlanana kadar hiçbir şey eklemez.
 - **Otomatik hafıza doğrulaması ikinci bir model üreticisi ister.** Değerlendiricinin modeli, kaynak işi yapan her modelden farklı bir
@@ -572,6 +604,27 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   aktarılır; Deckent Hub alpha.56 ile gelir.
 - **Auditor'ın henüz canlı okuyucusu ve sınıflandırıcısı yok.** Politika turu kayıtları mühürlenir, ama izleme okuyucusunun çalışma zamanı
   işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner ayrıntısını bekler).
+
+## Hub paketleri ve kaldırma
+
+- **Hub ağı dağıtım bağlantılarını bekler.** Alpha.56 adayı imzalı paketleri, yerel kaynak/güven kartlarını,
+  çevrimdışı önbellek doğrulamasını ve yönetilen taşıma portlarını sağlar. İlk kullanım, kimlik doğrulama ve güven
+  hizmetleri bağlanmadan arama, uzak inceleme ve yayın `HUB_CONNECTION_UNAVAILABLE` verir. Varsayılan açık Hub/kaynak
+  yoktur; halka açılma ayrı owner kapısıdır. *Yol:* doğrulanmış çevrimdışı paketleri ve
+  [imzalı Hub rehberini](architecture-overview.tr.md#imzali-hub-paketleri) kullanın; paket kurmak araç/politika izni vermez.
+- **Destek dosyalı skill'ler owner kararıyla reddedilir (2026-10-26, H6).** Yalnız SKILL.md içeren skill kullanılabilir;
+  ek dosya isteyen skill çalışamaz. *Etki:* paketin doğrulanması/kurulması skill'in çalışabildiğini kanıtlamaz.
+  *Yol:* yalnız SKILL.md kullanan alternatif seçin; destek dosyalarını açmak yeni owner kararı ister.
+- **Kaldırma imajları ve korunan veriyi tutar.** `deckent uninstall --dry-run --json` önizler; uygulamak kişinin gerçek
+  terminaldeki kartını ister. Defter, denetim/kimlik anahtarları, sırlar ve proje verisi varsayılan kalır. Tam kullanım-referansı
+  sözleşmesi gelene kadar imajlar korunur; kart kesin elle kaldırma adımını verir. macOS/Windows servis kaldırması elledir.
+  *Yol:* planın adım talimatlarını, ardından yazdırdığı paket kaldırma komutunu izleyin;
+  [AI kurulum rehberine](ai-install.tr.md#kaldırma) bakın.
+- **Purge sahiplik, yedek ve silme yetkisiyle sınırlıdır.** `deckent uninstall --purge` yalnız kapsanan dosyaları yönetilen
+  yedek ve kişi onayından sonra siler. Şirket saklama kayıtları ve hazır olmayan klasörler yollarıyla gösterilip korunur.
+  Taşınmış/güvensiz yetki dosyası purge'ü başlamadan durdurur. Yarım son purge yalnız kalan baytlar ve silme yetkisi yeniden
+  doğrulanınca sürer; yoksa dosyalar kalır, yönetilen yedekten geri yükleme kullanılabilir. Bilinmeyen adım bilinmiyor kalır.
+  *Yol:* veriyi koruyan kaldırmayı seçin ya da bildirilen engeli çözün; tahmin edilen yolları silmeyin.
 
 ## Masaüstü ve diğer yüzeyler
 
@@ -674,3 +727,11 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*
   komutu yeniden çalıştırın; yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini
   beklemez ve çalışan servis defterin yan dosyalarını yerinde tutar; bu, filo ölçeğinde değil, yüklü tek bir çekirdekte ölçüldü.
+
+Yönetilen `decision-steps` tabanını açıkça kabul eden kurucu, pipe/SDK üzerinden
+tanıksız olarak operator beklemesini sürdürebilir, kapatabilir veya yanıtlayabilir.
+Bu kararlar şimdilik kişinin kimliği ve kural id'siyle `ai-policy` denetim etiketini
+korur; beta.1 öncesi ayrı sürümlü karar kanıtı geçişi gereklidir. Güvenlik beklemeleri,
+kota yanıtları ve script ile kabul/ret mevcut kişi/kart tabanını korur. Ajan kabuğunun
+yetki komutları her kipte kişinin kartını ister; Deckent dışında aynı kullanıcıyla
+başlatılan süreç işletim sistemi güven sınırındadır.

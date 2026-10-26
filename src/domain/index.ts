@@ -27,3 +27,4 @@ export * from '#domain/core/catalog-evolution/index.js';
 export * from '#domain/core/text/index.js';
 export * from '#domain/core/identity-profile/index.js';
 export * from '#domain/core/work-cost/index.js';
+export * from '#domain/core/hub/index.js';

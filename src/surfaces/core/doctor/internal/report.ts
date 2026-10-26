@@ -16,7 +16,10 @@ export interface InstallationBindingReport { readonly capability: 'supported' | 
 /** The installation's secret store as doctor shows it (SECRET-K1): backend id, status and typed code only; never a value. */
 export interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
   readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
-  readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] } }
+  readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] };
+  readonly globalRoot?: { readonly path: string; readonly mode: string } | null;
+  /** FIX8b: ChatGPT sign-in custody preflight (Linux); `refused` carries the reason and, for an open folder, its path and mode. */
+  readonly personalCustody?: Readonly<{ status: 'ready' | 'store' | 'untested' | 'refused'; reason?: string; path?: string; mode?: string; folder?: 'root' | 'parent' }> }
 
 /** Recovery files an interrupted backup restore left behind (S1 D4); absolute paths of this user's own installation. */
 export interface RecoveryFilesDoctorView { readonly leftovers: readonly string[]; readonly installationDirectory?: { readonly path: string; readonly mode: string } | null }
@@ -57,10 +60,10 @@ const installationBindingLines = (r: InstallationBindingReport, platform: string
   : r.capability === 'unsupported' ? t('doctor.installationBinding.unsupported', { platform }, locale) : r.strength === 'weak' ? t('doctor.installationBinding.weak', {}, locale)
     : t('doctor.installationBinding.machine', { source: r.source === 'configured' ? t('doctor.installationBinding.source.configured', {}, locale) : t('doctor.installationBinding.source.platform', {}, locale) }, locale), ...(r.required && r.strength !== 'machine' ? [t('doctor.installationBinding.required', {}, locale)] : [])];
 /** The realm lines in the product's own sandbox words (the result marker, then the notice the live stream shows); no catalog text. */
-function shellRealmLines(report: ShellRealmDoctorView): string[] {
-  const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
+function shellRealmLines(report: ShellRealmDoctorView, locale: Locale): string[] {
+  const lines = (view: ShellRealmSelection, label: string) => [`${view.selected === 'host' ? t('doctor.sandbox.host', {}, locale) : view.selected ? t('doctor.sandbox.selected', { realm: view.selected }, locale) : t('doctor.sandbox.refused', { code: view.code ?? '-' }, locale)} [${label}]`,
     ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];
-  return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'sandbox-net (MCP default: network, own HOME)') : [])];
+  return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, t('doctor.sandbox.mcp', {}, locale)) : [])];
 }
 
 /** SANDBOX-SPAWN (2026-10-18): the sandbox self-test in the owner's words — a failure names its reason once, here, instead of every call failing silently. */
@@ -115,5 +118,5 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
     model: `${finding.reference.providerId}@${finding.reference.providerVersion}/${finding.reference.modelId}@${finding.reference.modelVersion}`,
     scope: finding.scopeId, surface: finding.surface, required: finding.requiredBytes, available: finding.availableBytes,
     setting: finding.surface === 'mcp' ? t('doctor.modelInvocationDelivery.config.mcp', {}, locale) : t('doctor.modelInvocationDelivery.config.runtime-service', {}, locale) }, locale)),
-  ...(result.shellRealm ? shellRealmLines(result.shellRealm) : []), ...(result.shellRealm ? shellSelfTestLines(result.shellRealm, locale) : [])].join('\n');
+  ...(result.shellRealm ? shellRealmLines(result.shellRealm, locale) : []), ...(result.shellRealm ? shellSelfTestLines(result.shellRealm, locale) : [])].join('\n');
 }

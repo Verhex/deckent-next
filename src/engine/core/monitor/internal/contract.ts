@@ -23,9 +23,10 @@ export interface MonitorService {
   readonly build: MonitorBuild | null;
 }
 /** Why a non-terminal Run is not progressing; `none` only when it is progressing normally. */
-export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'waiting-execution-slot' | 'pool-held' | 'waiting-dependency' | 'waiting-scope-conflict' | 'awaiting-approval'
-  | 'worker-running' | 'worker-silent' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
-  | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
+export const MONITOR_BLOCKER_CODES = Object.freeze(['parked', 'awaiting-decision', 'none', 'waiting-pool-slot', 'waiting-execution-slot', 'pool-held', 'waiting-dependency',
+  'waiting-scope-conflict', 'awaiting-approval', 'worker-running', 'worker-silent', 'worker-stale-heartbeat', 'worker-exited-unevaluated', 'evaluation-not-ready',
+  'evaluation-unknown', 'unresolved-effect', 'cancellation-pending', 'not-admitted', 'unknown'] as const);
+export type MonitorBlockerCode = (typeof MONITOR_BLOCKER_CODES)[number];
 export interface MonitorBlocker {
   readonly pool?: import('#engine/core/runs/index.js').PoolWait;
   readonly code: MonitorBlockerCode; readonly taskId: string | null;
@@ -160,7 +161,11 @@ export interface MonitorMap {
   readonly memory: { readonly available: boolean };
   /** S6R-6 (additive): lost-worker recovery — the protected Nervous and recovery modes and the owner's standing continuation grant. Absent: not read. */
   readonly recovery?: import('#engine/core/recovery/index.js').RecoveryModeState;
+  /** alpha.56 G4 (additive): the rollout counts over the installation's scopes (blind: counts only). Absent: recovery off, or not read. */
+  readonly recoveryRollout?: MonitorRecoveryRollout;
 }
+/** Measured rules ready / measured rules, model decisions a person reviewed and agreed with, decisions waiting for a person; `complete` false at a scan bound. */
+export type MonitorRecoveryRollout = Readonly<{ rulesMet: number; rules: number; decided: number; agreements: number; waiting: number; complete: boolean }>;
 export interface MonitorSnapshot {
   readonly schemaVersion: 1; readonly observedAt: number; readonly installs: readonly MonitorInstall[]; readonly control: 'observe-only';
   /** Collection targets attempted, in order (including denied/unavailable targets); no unlisted source is collected.

@@ -96,7 +96,8 @@ describe.skipIf(process.platform !== 'linux')('MCP permissions on the real Workl
       expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
       const text = stripVTControlCharacters(value.output).replace(/\r/gu, '');
       expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
-      expect(text).toContain('provider-spend-account'); expect(text).toContain('budget-revision');
+      // U2-S6b: `spend` v2 previews only inspect and audit; budget revision and reconcile stay with the person (U1U2 §3, Q-SPEND).
+      expect(text).toContain('provider-spend-account'); expect(text).toContain('inspect, audit'); expect(text).not.toMatch(/\b(?:budget-revision|reconcile)\b/u);
       expect(text).toContain('> ' + w.group);
       const lines = text.split('\n'), borders: string[] = [];
       for (let index = 1; index < lines.length; index++) {
@@ -132,8 +133,9 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     const title = locale === 'tr' ? 'Yapay zekâya devir' : 'AI delegation', keys = locale === 'tr' ? 'y: onayla' : 'y: confirm', grantAction = locale === 'tr' ? 'Bu adımı devret' : 'Delegate this step';
     const steps = [
       ['READY', [...'/policy', ENTER], 'start'], ['> scope', [ENTER], '+scopes'],
-      // Ten capability groups (S4 added `memory`, S7 `agents`) sit above the AI delegation entry.
-      [w.groups, [...Array.from({ length: 10 }, () => DOWN), ENTER], '+groups'],
+      // Nine capability groups (S4 added `memory`, S7 `agents`) sit above the AI delegation entry; the opt-in `dogfood-worker` group is not
+      // listed unless held or named in policy.mcp.optInGroups (alpha.56 U5-S2, d3fca0899).
+      [w.groups, [...Array.from({ length: 9 }, () => DOWN), ENTER], '+groups'],
       [title, [ENTER], '+delegation list'], [grantAction, [ENTER], '+grant action'],
       [keys, [ENTER], '+default cancel'], [title, [ENTER], '+cancelled list'],
       [grantAction, [ENTER], '+grant again'], [keys, ['y'], '+grant card'],

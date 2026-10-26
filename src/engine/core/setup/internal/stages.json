@@ -1,0 +1,45 @@
+{
+  "$comment": "Setup phase and order registry; prior answers follow this order. No execution or authority is granted by a stage.",
+  "schemaVersion": 1,
+  "unattendedProfile": "core:solo",
+  "unattendedFamilyStages": [
+    "permissions:start-mode"
+  ],
+  "phases": {
+    "core:environment": "install",
+    "core:language": "install",
+    "core:folder": "install",
+    "core:profile": "install",
+    "core:policy": "install",
+    "core:sandbox": "install",
+    "core:model": "onboarding",
+    "core:final-check": "install",
+    "execution:runtime": "onboarding",
+    "execution:worker": "onboarding",
+    "execution:worker-settings": "onboarding",
+    "permissions:start-mode": "install",
+    "work:kind": "onboarding",
+    "work:pool": "onboarding",
+    "coding:first-commit": "onboarding",
+    "instructions:bridges": "onboarding"
+  },
+  "order": [
+    "core:language",
+    "core:environment",
+    "core:folder",
+    "core:profile",
+    "core:policy",
+    "permissions:start-mode",
+    "core:sandbox",
+    "core:final-check",
+    "core:model",
+    "coding:hosts",
+    "work:kind",
+    "execution:runtime",
+    "execution:worker",
+    "execution:worker-settings",
+    "work:pool",
+    "coding:first-commit",
+    "instructions:bridges"
+  ]
+}

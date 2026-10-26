@@ -1,9 +1,9 @@
-import type { VerifiedPrincipal } from '#domain/index.js';
+import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
 import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
   recoveryGrantState, recoveryModeState, recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModeState, type RecoveryModelPorts,
   type RoleModelSources } from '#engine/index.js';
-import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteModelActivationReader, openSqliteModelCatalogReader, openSqliteModelInvocationReader,
-  openSqliteRecoveryStore } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader, openSqliteModelActivationReader, openSqliteModelCatalogReader,
+  openSqliteModelInvocationReader, openSqliteRecoveryStore, recordedWorkerIsolation } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -12,7 +12,8 @@ import { invokeConfiguredModelAs } from '#composition/core/model-invocation/inde
 import { holdConfiguredRunForNervous } from './lifecycle.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-/** The Nervous stop steps whose execution ends in a slot release with proof: only their cases can be decided. */
+/** The Nervous stop steps whose execution ends in a slot release with proof: only their cases can be decided — released when the step ran, as
+ * would-stop shadow input (alpha.56 G1, every other disposition) when it did not; the engine derives the basis from the sealed detection. */
 const RELEASING = new Set(['fence-attempt', 'stop-orphan']);
 const errorCode = (error: unknown, fallback: string) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : fallback; };
 
@@ -44,6 +45,11 @@ function recoveryModelPorts(projectRoot: string, options: ConfigLoadOptions, c: 
       }
     } };
 }
+/** alpha.56 D2: the isolation block the lost Attempt's dispatch record carries (null: no record, or none recorded — the engine holds then). */
+async function recordedIsolation(c: Context, path: string, identity: AttemptIdentity) {
+  const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
+  try { const record = await reader.loadBoundDispatch(identity); return record ? recordedWorkerIsolation(record.profile) : null; } finally { reader.close(); }
+}
 /** The catalog facts (billing) and the S2 role sources of one read, closed after `work`. */
 async function withRoleSources<T>(c: Context, path: string, work: (facts: ReadonlyMap<string, MemoryCatalogFact>, roles: RoleModelSources) => Promise<T>): Promise<T> {
   const busyTimeoutMs = c.config.storage.sqlite.busyTimeoutMs, catalog = await openSqliteModelCatalogReader(path, { busyTimeoutMs });
@@ -56,7 +62,7 @@ async function withRoleSources<T>(c: Context, path: string, work: (facts: Readon
 
 /**
  * S6R-5 recovery decision pass over the reconciliation loop (owner Q-R2: shadow first; `runRuntime.recovery.mode`, protected, default off: nothing
- * loads). Per scope pass it reads the next page of sealed Nervous `recovery-detection` records whose stop step was executed (fence / stop-orphan) and
+ * loads). Per scope pass it reads the next page of sealed Nervous `recovery-detection` records of a releasing stop step (fence / stop-orphan; executed or would-stop) and
  * decides each case under the composition-root recovery principal; a case whose slot is not released yet waits (bounded) for a later pass.
  * `shadow` seals what each decision would do and changes nothing; `live` applies a sealed decision (continuation under the owner's standing
  * grant, or a hold for a person). Memory (cursor, waiting cases) is per process: a restart re-reads the detections and every sealed case replays
@@ -74,11 +80,11 @@ export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLo
     try {
       const ledger = new AuditApplication(audit, integrity), approval = async (id: string) => recoveryContinuationApproval(c.document, c.principal, id, Date.now());
       const recovery = new RecoveryApplication({ store: cases, detections: ledger, recorder: target => new AuditApplication(target, integrity), approval,
-        hold: command => holdConfiguredRunForNervous(projectRoot, command, options), policyRevision: c.document.revision, now: Date.now,
+        hold: command => holdConfiguredRunForNervous(projectRoot, command, options), isolation: identity => recordedIsolation(c, path, identity), policyRevision: c.document.revision, now: Date.now,
         timeoutMs: c.config.runRuntime.parking.timeoutMs }, verifier);
       const page = ledger.listKind(scopeId, 'recovery-detection', cursors.get(scopeId) ?? 0, registry.pass.pageSize);
       const fresh = page.flatMap(record => { const subject = record.event.subject;
-        return subject.kind === 'recovery-detection' && subject.disposition === 'execute' && subject.target && RELEASING.has(subject.action) ? [subject.caseId] : []; });
+        return subject.kind === 'recovery-detection' && subject.target && RELEASING.has(subject.action) ? [subject.caseId] : []; });
       const queue = [...new Set([...waiting.get(scopeId) ?? [], ...fresh])], still: string[] = [], outcomes: RecoveryDecisionOutcome[] = [], failures: unknown[] = [];
       await withRoleSources(c, path, async (facts, roles) => {
         const decider = new RecoveryDecisionApplication({ recovery, store: cases, seals: ledger, approval, owner, policyRevision: c.document.revision, registry, now: Date.now,

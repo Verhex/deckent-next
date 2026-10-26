@@ -1,3 +1,4 @@
+import { advanceProviderSpendPeriod, providerSpendPeriodUsedExact, providerSpendPeriodStateSchema, PROVIDER_SPEND_PERIOD_ACCOUNT_VERSION } from './period.js';
 import { providerSpendHasZeroTariff } from './no-charge.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -9,7 +10,7 @@ import { parseProviderSpendMeasurement, type ProviderSpendMeasurement } from './
 
 const amount = counterSchema, digest = z.string().regex(/^[a-f0-9]{64}$/);
 const holdReason = z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']);
-const accountSchema = z.object({ schemaVersion: z.literal(2), budget: providerSpendBudgetSchema,
+const accountSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), period: providerSpendPeriodStateSchema.optional(), budget: providerSpendBudgetSchema,
   reservedMinorUnits: amount, settledMinorUnits: amount, settledExactMinorUnits: z.string(), frozen: z.boolean(), budgetRevisionDigest: digest.optional(), budgetRevisionCommandId: identitySchema.optional(), unfrozenAtBudgetRevision: counterSchema.positive().optional() }).strict().readonly();
 const settlementSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('not-sent'), evidenceDigest: digest }).strict(),
@@ -58,10 +59,12 @@ function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): 
   return parsed.data;
 }
 export function parseProviderSpendAccount(input: unknown): ProviderSpendAccount {
-  const value = parse(accountSchema, input), exact = canonicalProviderSpendExactMinorUnits(value.settledExactMinorUnits);
+  const value = parse(accountSchema, input);
+  if ((value.schemaVersion === PROVIDER_SPEND_PERIOD_ACCOUNT_VERSION) !== (value.period !== undefined) || (value.period && value.period.nextResetAtMs <= value.period.startedAtMs)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  const used = ceilProviderSpendExactMinorUnits(providerSpendPeriodUsedExact(value)), exact = canonicalProviderSpendExactMinorUnits(value.settledExactMinorUnits);
   if ((value.budgetRevisionDigest === undefined) !== (value.budgetRevisionCommandId === undefined)
     || ceilProviderSpendExactMinorUnits(exact) !== value.settledMinorUnits
-    || (value.budgetRevisionDigest === undefined && !value.frozen && BigInt(value.reservedMinorUnits) + BigInt(value.settledMinorUnits) > BigInt(value.budget.limitMinorUnits))
+    || (value.budgetRevisionDigest === undefined && !value.frozen && BigInt(value.reservedMinorUnits) + BigInt(used) > BigInt(value.budget.limitMinorUnits))
     || (value.unfrozenAtBudgetRevision !== undefined && value.unfrozenAtBudgetRevision > value.budget.revision)) {
     throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   }
@@ -115,31 +118,31 @@ function matches(budget: ProviderSpendBudget, descriptor: ProviderSpendReservati
   if (budget.scopeId !== descriptor.scopeId || budget.budgetId !== descriptor.budgetId
     || budget.revision < descriptor.budgetRevision || budget.currency !== descriptor.currency) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
 }
-export function reserveProviderSpend(accountInput: unknown, configuredBudgetInput: unknown, descriptorInput: unknown) {
-  const account = parseProviderSpendAccount(accountInput), configured = parseProviderSpendBudget(configuredBudgetInput);
+export function reserveProviderSpend(accountInput: unknown, configuredBudgetInput: unknown, descriptorInput: unknown, nowMs = Date.now()) {
+  const account = advanceProviderSpendPeriod(parseProviderSpendAccount(accountInput), nowMs), configured = parseProviderSpendBudget(configuredBudgetInput);
   const descriptor = parseProviderSpendReservationDescriptor(descriptorInput);
   if (providerSpendQuoteDigest(descriptor.quote) !== descriptor.quoteDigest) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   if (JSON.stringify(account.budget) !== JSON.stringify(configured)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   matches(account.budget, descriptor);
   if (descriptor.budgetRevision !== account.budget.revision) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-  assertProviderSpendCapacity(account, descriptor.quote);
+  assertProviderSpendCapacity(account, descriptor.quote, nowMs);
   const reserved = BigInt(account.reservedMinorUnits) + BigInt(descriptor.quote.maxChargeMinorUnits);
   return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: Number(reserved) }),
     reservation: parseProviderSpendReservation({ schemaVersion: 3, descriptor, disposition: { state: 'reserved' }, measurement: null }) });
 }
 /** Same capacity rule for an atomic reservation and a read-only preview; preview is never a reservation. */
-export function assertProviderSpendCapacity(accountInput: unknown, quoteInput: unknown): void {
-  const account = parseProviderSpendAccount(accountInput), quote = parseProviderSpendQuote(quoteInput);
+export function assertProviderSpendCapacity(accountInput: unknown, quoteInput: unknown, nowMs = Date.now()): void {
+  const account = advanceProviderSpendPeriod(parseProviderSpendAccount(accountInput), nowMs), quote = parseProviderSpendQuote(quoteInput);
   if (account.budget.scopeId !== quote.scopeId || account.budget.currency !== quote.currency) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   // An integrity freeze blocks every call first; only then may a literal zero quote skip the exhaustion arithmetic.
   if (account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
   if (providerSpendHasZeroTariff(quote)) return;
-  if (BigInt(account.reservedMinorUnits) + BigInt(quote.maxChargeMinorUnits) + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits))
-    throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED', { settled: account.settledExactMinorUnits, held: account.reservedMinorUnits,
+  if (BigInt(account.reservedMinorUnits) + BigInt(quote.maxChargeMinorUnits) + BigInt(ceilProviderSpendExactMinorUnits(providerSpendPeriodUsedExact(account))) > BigInt(account.budget.limitMinorUnits))
+    throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED', { settled: providerSpendPeriodUsedExact(account), held: account.reservedMinorUnits,
       requested: quote.maxChargeMinorUnits, limit: account.budget.limitMinorUnits, currency: account.budget.currency });
 }
-export function settleProviderSpend(accountInput: unknown, reservationInput: unknown, settlementInput: unknown) {
-  const account = parseProviderSpendAccount(accountInput), reservation = parseProviderSpendReservation(reservationInput);
+export function settleProviderSpend(accountInput: unknown, reservationInput: unknown, settlementInput: unknown, nowMs = Date.now()) {
+  const account = advanceProviderSpendPeriod(parseProviderSpendAccount(accountInput), nowMs), reservation = parseProviderSpendReservation(reservationInput);
   const settlement = parse(settlementSchema, settlementInput), descriptor = reservation.descriptor, maximum = descriptor.quote.maxChargeMinorUnits;
   matches(account.budget, descriptor);
   if (reservation.disposition.state !== 'reserved' || account.reservedMinorUnits < maximum) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');

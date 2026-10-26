@@ -14,7 +14,7 @@ export { AuthorityDocumentTarget, DelegationBoundGate, PolicyAdministrationAppli
 export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './internal/policy-admin.js';
 export { McpToolGrants, type McpToolGrantOutcome, type McpToolGrantTarget } from './internal/mcp-grant.js';
 export { PolicyTemplateUpgrade, type TemplateUpgradeMissing, type TemplateUpgradeResult } from './internal/template-upgrade.js';
-export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
+export { administerOwnPolicyChange, isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
 export type { SessionStandingBinding } from './internal/standing.js';
 export { STANDING_GRANTS_LIST, StandingGrantsInspection, standingGrantsQuerySchema, type AuthorityChangeHistory, type StandingGrantEntry, type StandingGrantsPage } from './internal/standing-inspection.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';
@@ -24,7 +24,7 @@ export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceReg
 export type { ApprovalAssuranceOptions } from './internal/application.js';
 export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';
 export { approvalCommandFingerprint } from './internal/application.js';
-export { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry, mcpCapabilityScopeCandidates, registerMcpCapabilityGroup } from './internal/mcp-capabilities.js';
+export { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry, registerMcpCapabilityGroup } from './internal/mcp-capabilities.js';
 export { DecisionDelegations } from './internal/delegations.js';
 export { sessionStandingResultSchema, sessionApprovalResultSchema, parseApprovalAnswer, clearSessionStandingSchema, sessionStandingClearanceSchema, acceptSessionStandingClearance } from './internal/session-contract.js';
 export type { SessionStandingResult, SessionApprovalResult, ClearSessionStanding, SessionStandingClearance } from './internal/session-contract.js';
@@ -33,3 +33,4 @@ export { RunCreateApprovalBroker, RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './
 export type { RunCreateApprovalInput } from './internal/run-create.js';
 export { ApprovalAssuranceProducerRegistry, approvalAssuranceProducerRegistry, registerApprovalAssuranceProducer, approvalAssuranceRegistrationEvent, resolveAuditedApprovalAssurance, approvalAssuranceProducerInventory } from './internal/producer-registry.js';
 export type { ApprovalAssuranceAttester, ApprovalAssuranceProducerManifest, ApprovalAssuranceProducerRegistration } from './internal/producer-registry.js';
+export { mcpCapabilityScopeCandidates } from '#engine/core/policy/index.js';

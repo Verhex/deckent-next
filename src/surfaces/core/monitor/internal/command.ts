@@ -78,14 +78,17 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
   const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, configOptions, query, memo);
   const filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
-  if (parsed.json) { emit(filterSnapshot(await inspect(root, options), filters), { ...sinks, json: true }); return; }
+  let initial = parsed.scope ? await inspect(root, options) : undefined;
+  if (initial) filterSnapshot(initial, filters); // Refuse unknown scope before opening the fullscreen view too.
+  const load = async (memo?: MonitorSourceMemo) => { const snapshot = initial ?? await inspect(root, options, memo); initial = undefined; return snapshot; };
+  if (parsed.json) { emit(filterSnapshot(await load(), filters), { ...sinks, json: true }); return; }
   if (parsed.once || !interactive(context)) {
-    emit(await inspect(root, options), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters, verbose: parsed.verbose }) });
+    emit(await load(), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters, verbose: parsed.verbose }) });
     return;
   }
   // The command already selected the interactive TTY lane; do not let Ink infer a different lane from ambient CI.
   const palette = resolveWorklinePalette(colorTier({ env, isTTY: true, noColor: parsed.noColor }));
-  const instance = render(createElement(MonitorApp, { load: memo => inspect(root, options, memo), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters, verbose: parsed.verbose,
+  const instance = render(createElement(MonitorApp, { load, intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters, verbose: parsed.verbose,
     ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
     errorText: (error: unknown) => monitorFailureText(error, locale) }), { interactive: true, alternateScreen: true, patchConsole: false,
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}) });

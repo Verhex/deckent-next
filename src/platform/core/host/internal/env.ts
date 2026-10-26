@@ -18,3 +18,21 @@ export function envValue(env: Environment, name: string): string | undefined {
 }
 
 export function productRootOverride(env: Environment): string | undefined { return envValue(env, PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey); }
+
+/** NODE_ENV as the caller started this process, kept by `adoptProductionReact` (`value` undefined: unset); null until adopted. */
+let callerNodeEnv: { readonly value: string | undefined } | null = null;
+/** FIX8a R27: the CLI entry runs production React (React picks its build from NODE_ENV on first load); a mode the caller set is kept. */
+export function adoptProductionReact(env: NodeJS.ProcessEnv = process.env): void {
+  if (callerNodeEnv) return;
+  callerNodeEnv = { value: env.NODE_ENV }; env.NODE_ENV ||= 'production';
+}
+/** The environment a process Deckent starts INHERITS from its own: the caller's NODE_ENV comes back (unset stays unset), never the production
+ * mode chosen for this process's React — a worker's `npm ci` must not silently skip devDependencies. Other values pass unchanged. Only for an
+ * inherited environment (process.env or a pass-through of it): an explicit child environment (ProcessCommand.env, an explicit runner profile)
+ * runs as given and never goes through here, because a value set on purpose cannot be told apart from the inherited one. */
+export function callerEnvironment<T extends Environment>(env: T): T {
+  if (!callerNodeEnv || env.NODE_ENV !== process.env.NODE_ENV || env.NODE_ENV === callerNodeEnv.value) return env;
+  const own: Record<string, string | undefined> = { ...env };
+  if (callerNodeEnv.value === undefined) delete own.NODE_ENV; else own.NODE_ENV = callerNodeEnv.value;
+  return own as T;
+}

@@ -108,7 +108,7 @@
   "terminal.session.banner": "Deckent terminal session (line mode). Commands: /status, /exit.",
   "terminal.service.started": "Runtime service started in the background (pid {pid}, log {log}); it keeps running after the terminal closes. {stop}",
   "terminal.service.connected": "Runtime service connected ({instance}). {stop}",
-  "terminal.service.stopHint": "Stop it with `deckent runtime shutdown`.",
+  "terminal.service.stopHint": "Stop it with `deckent runtime shutdown --reason \"manual stop\"`.",
   "terminal.service.stopUnavailable": "It has no configured identity, so `deckent runtime shutdown` cannot stop it (set `service.identity` and a shutdown grant).",
   "terminal.service.configStale": "The runtime service started before a restart-apply configuration change and still uses the old values. Use /service-restart to restart it.",
   "terminal.service.buildSkew": "The runtime service runs a different build ({service}) than this terminal ({terminal}); answers come from that build. Use /service-restart to restart it onto this build.",
@@ -423,5 +423,7 @@
   "terminal.info.usage.cacheHitPartial": "{percent}% in measured reports ({measured}/{reports}); full session unknown",
   "terminal.slash.policy": "MCP permissions by selection",
   "terminal.mode.fullAutoRevoked": "Full-auto is no longer granted in this scope, so your stored full-auto choice is not in effect: this session runs as standart and every call is decided as standart. The installation owner can open it again with deckent init policy --scope <scope> --modes full-auto.",
-  "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)"
+  "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)",
+  "terminal.session.folders.all": "All folders",
+  "terminal.session.folders.current": "This folder"
 }

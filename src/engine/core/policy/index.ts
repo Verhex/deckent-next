@@ -18,9 +18,10 @@ export { admitFullAccessTurn, agentCallPermissionMode, agentCallAuditEvent, appr
 export type { AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, FullAccessDecision, PermissionModeRelaxation, StandingApproval } from './internal/permission-mode.js';
 export { PermissionModeApplication, PermissionModeError, inspectPermissionMode } from './internal/permission-mode-admin.js';
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from './internal/permission-mode-admin.js';
-export { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, validateAuthorityWrite } from './internal/authority.js';
+export { AuthorityChangeError, delegationExceeded, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, validateAuthorityWrite } from './internal/authority.js';
 export type { AuthorityDocumentStore, AuthorityLookup, AuthorityWrite } from './internal/authority.js';
 
 export { PolicyAdministrationInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from './internal/administration-status.js';
 
 export type { AuthorityHistorySource, AuthorityRevision } from './internal/authority-history.js';
+export { mcpCapabilityNamespace, resolvedMcpCapabilityRules, ownedMcpCapabilityRules, mcpCapabilityScopeCandidates } from './internal/mcp-capabilities.js';

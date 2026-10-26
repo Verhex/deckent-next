@@ -51,7 +51,7 @@ describe('f4 monitor: Brain quota waits before a Run exists', () => {
     const en = await renderMonitorText(snapshot, { locale: 'en', width: 200, ascii: true }), tr = await renderMonitorText(snapshot, { locale: 'tr', width: 200, ascii: true });
     expect(en).toContain('Brain waiting for the subscription quota (1) — no Run exists yet');
     expect(en).toMatch(/s · plan plan-a · plans again at .+ \(attempt 2 of 2\) · waiting since /u);
-    expect(tr).toContain('Abonelik kotasını bekleyen Brain (1) — henüz Run yok');
+    expect(tr).toContain('Abonelik kotasını bekleyen Brain (1) — henüz iş yok');
     expect(tr).toMatch(/s · plan plan-a · .+ saatinde yeniden planlar \(deneme 2\/2\)/u);
     const none = await app(async () => ({ records: [], truncated: false })).inspect([{ id: 'current', path: '/c' }]);
     expect(await renderMonitorText(none, { locale: 'en', width: 200, ascii: true })).not.toContain('Brain waiting');
@@ -59,7 +59,7 @@ describe('f4 monitor: Brain quota waits before a Run exists', () => {
   it('diagnostic words: hidden count, truncation and an unreadable store in EN and TR', async () => {
     const snapshot = await app(async () => ({ records: [wait('other', 'x')], truncated: true })).inspect([{ id: 'current', path: '/c' }]);
     expect(await renderMonitorText(snapshot, { locale: 'en', width: 200, ascii: true })).toContain('1 Brain quota wait(s) in scopes you may not read are not shown');
-    expect(await renderMonitorText(snapshot, { locale: 'tr', width: 200, ascii: true })).toContain("Okuyamadığınız scope'lardaki 1 Brain kota beklemesi gösterilmiyor");
+    expect(await renderMonitorText(snapshot, { locale: 'tr', width: 200, ascii: true })).toContain("Okuyamadığınız kapsamlardaki 1 Brain kota beklemesi gösterilmiyor");
     const failed = await app(async () => { throw failure('MANAGED_FILE_UNSAFE'); }).inspect([{ id: 'current', path: '/c' }]);
     expect(await renderMonitorText(failed, { locale: 'en', width: 200, ascii: true })).toContain('Brain quota waits could not be read (MANAGED_FILE_UNSAFE)');
   });

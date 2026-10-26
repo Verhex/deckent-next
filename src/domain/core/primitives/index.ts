@@ -10,3 +10,5 @@ export type { ProjectId, ProjectIdentity } from './internal/project-identity.js'
 export { clientCommandIdSchema, CommandIdError, SYSTEM_COMMAND_PREFIXES } from './internal/command-id.js';
 export { workspaceHiddenPathSchema, workspaceHiddenPathsSchema, workspacePathHidden, instructionSurfaceWrites } from './internal/hidden-paths.js';
 export type { WorkspaceHiddenPaths } from './internal/hidden-paths.js';
+export { rolloutCriterionMet } from './internal/rollout.js';
+export type { RolloutBounds, RolloutMeasure } from './internal/rollout.js';

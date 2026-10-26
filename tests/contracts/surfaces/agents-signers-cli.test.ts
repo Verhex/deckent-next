@@ -87,7 +87,7 @@ it('add, revoke (unique 12-character prefix, the card says committed rows stay m
   expect(JSON.stringify(card.asked[3])).toContain('hub:verhex/invoice-match');
   expect(calls).toMatchObject([['add', { purpose: 'import', principal: null, label: 'Verhex hub' }], ['revoke', { keyId: 'c'.repeat(64) }], ['repair', { scopeId: 'scope' }],
     ['import', { skillId: 'invoice-match', expectedRevision: null, content: { name: 'Fatura' }, pin: 'a'.repeat(64), signature: { keyId: vendorId } }]]);
-  await expect(run(['revoke-signer', 'c'.repeat(8)])).rejects.toMatchObject({ code: 'AGENT_CATALOG_NOT_FOUND' });
+  await expect(run(['revoke-signer', 'c'.repeat(8)])).rejects.toMatchObject({ code: 'CLI_ID_TOO_SHORT' });
 });
 
 it('the list shows public facts in EN/TR and as JSON; a broken log is stated; nothing private is printed', async () => {
@@ -97,4 +97,11 @@ it('the list shows public facts in EN/TR and as JSON; a broken log is stated; no
   const json = capture(); await agentsCommand(['agents', 'signers', '--scope', 'scope', '--json'], { ...base, ...handlers([]), stdout: json.sink });
   expect(JSON.parse(json.text())).toMatchObject({ log: 'ok', items: [{ purpose: 'action', signedRows: 2 }, { purpose: 'import' }] });
   expect(json.text()).not.toMatch(/pkcs8|PRIVATE/i);
+});
+
+it('a signer prefix shorter than twelve characters says too short after the human witness gate', async () => {
+  const f = await project(); card.interactive = true;
+  await expect(agentsCommand(['agents', 'revoke-signer', 'abc', '--scope', 'scope'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink,
+    listSigners: async () => ({ schemaVersion: 1, scopeId: 'scope', items: [] }) })).rejects.toMatchObject({ code: 'CLI_ID_TOO_SHORT', params: { min: 12 } });
+  expect(card.asked).toHaveLength(0);
 });

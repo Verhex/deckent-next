@@ -1,4 +1,4 @@
-export { invokeConfiguredModel, invokeConfiguredModelAs, previewConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel, measureConfiguredModel } from './internal/invoke.js';
+export { invokeConfiguredModel, invokeConfiguredFeatureModel, prepareConfiguredFeatureContinuation, invokePeerConfiguredFeatureModel, invokeConfiguredModelAs, previewConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel, measureConfiguredModel } from './internal/invoke.js';
 export { inspectConfiguredModelInvocation, inspectConfiguredModelInvocationCommand, inspectPeerConfiguredModelInvocation } from './internal/inspect.js';
 export { purgePeerConfiguredModelInvocationContent } from './internal/purge.js';
 export { cancelPeerConfiguredModelInvocation } from './internal/cancel.js';
@@ -9,3 +9,4 @@ export { assessConfiguredModelInvocationDelivery, configuredModelInvocationDeliv
 export type { ModelInvocationDeliveryFinding, ModelInvocationDeliverySurface } from './internal/delivery-audit.js';
 export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';
 export { createCatalogTariffLookup } from './internal/catalog-tariff.js';
+export { prepareConfiguredSiwcContinuation, siwcLimitContinuation, configuredContinuationPin } from './internal/continuation.js';

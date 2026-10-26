@@ -1,13 +1,12 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "groups": [
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "work",
       "version": 1,
       "labelKey": "policy.mcp.group.work",
       "noteKey": "policy.mcp.note.work",
-      "proposed": false,
       "cells": [
         {
           "id": "run",
@@ -125,15 +124,15 @@
           "scope": "selected",
           "source": "configured-target"
         }
-      ]
+      ],
+      "availability": "default"
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "operations",
-      "version": 1,
+      "version": 2,
       "labelKey": "policy.mcp.group.operations",
       "noteKey": "policy.mcp.note.operations",
-      "proposed": false,
       "cells": [
         {
           "id": "operation",
@@ -157,26 +156,55 @@
             "kind": "operation",
             "ids": "all"
           },
-          "scope": "selected"
+          "scope": "selected",
+          "source": "registered-operations"
+        }
+      ],
+      "availability": "default",
+      "supersedes": [
+        {
+          "version": 1,
+          "cells": [
+            {
+              "id": "operation",
+              "tools": {
+                "execute_operation": [
+                  "execute"
+                ],
+                "compensate_operation": [
+                  "compensate"
+                ],
+                "inspect_operation": [
+                  "inspect"
+                ]
+              },
+              "actions": [
+                "execute",
+                "compensate",
+                "inspect"
+              ],
+              "resource": {
+                "kind": "operation",
+                "ids": "all"
+              },
+              "scope": "selected"
+            }
+          ]
         }
       ]
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "models",
-      "version": 1,
+      "version": 2,
       "labelKey": "policy.mcp.group.models",
       "noteKey": "policy.mcp.note.models",
-      "proposed": false,
       "cells": [
         {
           "id": "invocation",
           "tools": {
             "invoke_model": [
               "invoke"
-            ],
-            "purge_model_invocation_content": [
-              "purge-content"
             ],
             "cancel_model_invocation": [
               "cancel-invocation"
@@ -190,7 +218,6 @@
             "invoke",
             "inspect",
             "inspect-content",
-            "purge-content",
             "cancel-invocation"
           ],
           "resource": {
@@ -203,20 +230,14 @@
           "id": "activation",
           "tools": {
             "admit_model_activation": [
-              "activate",
               "deactivate"
             ],
             "apply_model_catalog": [
-              "activate",
-              "deactivate"
-            ],
-            "connect_model": [
-              "activate",
+              "deactivate",
               "inspect"
             ]
           },
           "actions": [
-            "activate",
             "deactivate",
             "inspect"
           ],
@@ -225,73 +246,137 @@
             "ids": "all"
           },
           "scope": "selected"
-        },
+        }
+      ],
+      "availability": "default",
+      "supersedes": [
         {
-          "id": "catalog",
-          "tools": {
-            "apply_model_catalog": [
-              "activate"
-            ],
-            "connect_model": [
-              "activate"
-            ]
-          },
-          "actions": [
-            "activate"
-          ],
-          "resource": {
-            "kind": "model-activation",
-            "ids": "all"
-          },
-          "scope": "installation"
-        },
-        {
-          "id": "config-project",
-          "tools": {
-            "connect_model": [
-              "write"
-            ]
-          },
-          "actions": [
-            "write"
-          ],
-          "resource": {
-            "kind": "config",
-            "ids": [
-              "project:provider_catalog",
-              "project:provider_invocation_profiles"
-            ]
-          },
-          "scope": "selected"
-        },
-        {
-          "id": "config-global",
-          "tools": {
-            "connect_model": [
-              "write"
-            ]
-          },
-          "actions": [
-            "write"
-          ],
-          "resource": {
-            "kind": "config",
-            "ids": [
-              "global:provider_catalog",
-              "global:provider_invocation_profiles"
-            ]
-          },
-          "scope": "installation"
+          "version": 1,
+          "cells": [
+            {
+              "id": "invocation",
+              "tools": {
+                "invoke_model": [
+                  "invoke"
+                ],
+                "purge_model_invocation_content": [
+                  "purge-content"
+                ],
+                "cancel_model_invocation": [
+                  "cancel-invocation"
+                ],
+                "inspect_model_invocation": [
+                  "inspect",
+                  "inspect-content"
+                ]
+              },
+              "actions": [
+                "invoke",
+                "inspect",
+                "inspect-content",
+                "purge-content",
+                "cancel-invocation"
+              ],
+              "resource": {
+                "kind": "model-invocation",
+                "ids": "all"
+              },
+              "scope": "selected"
+            },
+            {
+              "id": "activation",
+              "tools": {
+                "admit_model_activation": [
+                  "activate",
+                  "deactivate"
+                ],
+                "apply_model_catalog": [
+                  "activate",
+                  "deactivate"
+                ],
+                "connect_model": [
+                  "activate",
+                  "inspect"
+                ]
+              },
+              "actions": [
+                "activate",
+                "deactivate",
+                "inspect"
+              ],
+              "resource": {
+                "kind": "model-activation",
+                "ids": "all"
+              },
+              "scope": "selected"
+            },
+            {
+              "id": "catalog",
+              "tools": {
+                "apply_model_catalog": [
+                  "activate"
+                ],
+                "connect_model": [
+                  "activate"
+                ]
+              },
+              "actions": [
+                "activate"
+              ],
+              "resource": {
+                "kind": "model-activation",
+                "ids": "all"
+              },
+              "scope": "installation"
+            },
+            {
+              "id": "config-project",
+              "tools": {
+                "connect_model": [
+                  "write"
+                ]
+              },
+              "actions": [
+                "write"
+              ],
+              "resource": {
+                "kind": "config",
+                "ids": [
+                  "project:provider_catalog",
+                  "project:provider_invocation_profiles"
+                ]
+              },
+              "scope": "selected"
+            },
+            {
+              "id": "config-global",
+              "tools": {
+                "connect_model": [
+                  "write"
+                ]
+              },
+              "actions": [
+                "write"
+              ],
+              "resource": {
+                "kind": "config",
+                "ids": [
+                  "global:provider_catalog",
+                  "global:provider_invocation_profiles"
+                ]
+              },
+              "scope": "installation"
+            }
+          ]
         }
       ]
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "pools",
       "version": 1,
       "labelKey": "policy.mcp.group.pools",
       "noteKey": "policy.mcp.note.pools",
-      "proposed": false,
       "cells": [
         {
           "id": "inspect",
@@ -334,31 +419,25 @@
           },
           "scope": "installation"
         }
-      ]
+      ],
+      "availability": "default"
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "spend",
-      "version": 1,
+      "version": 2,
       "labelKey": "policy.mcp.group.spend",
       "noteKey": "policy.mcp.note.spend",
-      "proposed": false,
       "cells": [
         {
           "id": "spend",
           "tools": {
-            "manage_provider_spending": [
-              "budget-revision",
-              "reconcile"
-            ],
             "audit_provider_spending": [
               "inspect",
               "audit"
             ]
           },
           "actions": [
-            "budget-revision",
-            "reconcile",
             "inspect",
             "audit"
           ],
@@ -368,15 +447,46 @@
           },
           "scope": "selected"
         }
+      ],
+      "availability": "default",
+      "supersedes": [
+        {
+          "version": 1,
+          "cells": [
+            {
+              "id": "spend",
+              "tools": {
+                "manage_provider_spending": [
+                  "budget-revision",
+                  "reconcile"
+                ],
+                "audit_provider_spending": [
+                  "inspect",
+                  "audit"
+                ]
+              },
+              "actions": [
+                "budget-revision",
+                "reconcile",
+                "inspect",
+                "audit"
+              ],
+              "resource": {
+                "kind": "provider-spend-account",
+                "ids": "all"
+              },
+              "scope": "selected"
+            }
+          ]
+        }
       ]
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "approvals",
       "version": 1,
       "labelKey": "policy.mcp.group.approvals",
       "noteKey": "policy.mcp.note.approvals",
-      "proposed": false,
       "cells": [
         {
           "id": "renew",
@@ -410,15 +520,15 @@
           },
           "scope": "selected"
         }
-      ]
+      ],
+      "availability": "default"
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "memory",
       "version": 1,
       "labelKey": "policy.mcp.group.memory",
       "noteKey": "policy.mcp.note.memory",
-      "proposed": false,
       "cells": [
         {
           "id": "inspect",
@@ -442,15 +552,15 @@
           },
           "scope": "selected"
         }
-      ]
+      ],
+      "availability": "default"
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "agents",
       "version": 1,
       "labelKey": "policy.mcp.group.agents",
       "noteKey": "policy.mcp.note.agents",
-      "proposed": false,
       "cells": [
         {
           "id": "inspect",
@@ -486,15 +596,15 @@
           },
           "scope": "selected"
         }
-      ]
+      ],
+      "availability": "default"
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "service",
       "version": 1,
       "labelKey": "policy.mcp.group.service",
       "noteKey": "policy.mcp.note.service",
-      "proposed": false,
       "cells": [
         {
           "id": "shutdown",
@@ -512,15 +622,15 @@
           },
           "scope": "selected"
         }
-      ]
+      ],
+      "availability": "default"
     },
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "id": "dogfood-worker",
       "version": 1,
       "labelKey": "policy.mcp.group.dogfood-worker",
       "noteKey": "policy.mcp.note.dogfood-worker",
-      "proposed": true,
       "cells": [
         {
           "id": "run",
@@ -623,7 +733,8 @@
           "scope": "selected",
           "source": "configured-target"
         }
-      ]
+      ],
+      "availability": "opt-in"
     }
   ]
 }

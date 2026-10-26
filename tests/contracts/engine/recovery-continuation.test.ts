@@ -17,7 +17,7 @@ afterEach(async () => {
   for (const close of closers.splice(0)) close(); for (const store of stores.splice(0)) store.close();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live');
+const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live', ['task']);
 const recovery = recoveryPrincipal(owner, ['s']);
 const grant = (ids: readonly string[] | 'all' = ['continue-new-attempt']) => ({ schemaVersion: 1, revision: 'owner-policy', restrictions: [], grants: [
   { id: 'recovery-standing', effect: 'allow', actions: ['apply'], scopes: ['s'], principals: [{ issuer: owner.issuer, subject: owner.subject }], resource: { kind: 'recovery-action', ids } }] });
@@ -27,17 +27,19 @@ async function harness(input: { recovery?: unknown } = {}) {
   const caseId = await sealDetection(f.path, f.identity);
   const cases = openSqliteRecoveryStore(f.path, LEDGER_OPTIONS); closers.push(() => cases.close());
   const audit = await openSqliteAuditStore(f.path, LEDGER_OPTIONS); closers.push(() => audit.close());
-  const state = { document: grant() as unknown, principal: recovery as VerifiedPrincipal };
+  const state = { document: grant() as unknown, principal: recovery as VerifiedPrincipal, isolation: ISOLATED as unknown };
   const holds: unknown[] = [];
   const app = new RecoveryApplication({ store: cases, detections: new AuditApplication(audit, lostIntegrity), recorder: target => new AuditApplication(target, lostIntegrity),
     approval: async scopeId => recoveryContinuationApproval(state.document, owner, scopeId, 30), hold: async command => { holds.push(command); return null; },
-    policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, { async verify() { return state.principal; } });
+    isolation: async () => { if (state.isolation instanceof Error) throw state.isolation; return state.isolation; }, policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, { async verify() { return state.principal; } });
   const rows = (sql: string) => { const db = new DatabaseSync(f.path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const events = () => rows("SELECT record FROM audit_events WHERE kind='run-lifecycle' ORDER BY sequence").map(row => JSON.parse(String(row['record'])).event.subject);
   const caseRows = () => rows('SELECT state,revision FROM recovery_cases ORDER BY case_id');
   const claim = (commandId: string, extra: Parameters<typeof effectIntent>[1] = {}) => f.store.claimEffect(effectIntent(commandId, { producer: { kind: 'attempt', identity: f.identity }, ...extra }));
   return { ...f, caseId, app, state, holds, events, cases: caseRows, claim, rows };
 }
+/** Today's Docker worker as its dispatch record proves it: no network, only the provider gateway. */
+const ISOLATED = { schemaVersion: 1, network: 'none', egress: { kind: 'provider-gateway', provider: 'claude' } };
 const command = (caseId: string, extra: Record<string, unknown> = {}) => ({ schemaVersion: 1, scopeId: 's', caseId, ...extra });
 
 it('assess → continue: one gated case, then the task returns to pending with one sealed system event; the next generation takes the slot', async () => {
@@ -93,6 +95,20 @@ it('S6R-6: a direct continuation without the standing grant ends the case consis
   const off = await harness({ recovery: null });
   await expect(off.app.assess(command(off.caseId))).rejects.toMatchObject({ code: 'RECOVERY_OFF' });
   expect(off.cases()).toEqual([]);
+});
+
+it('alpha.56 D2: a lost worker whose dispatch record does not prove isolation (no block, a network route, unreadable) is held for a person; never continued', async () => {
+  for (const isolation of [null, { ...ISOLATED, network: 'bridge' }, new Error('SQLITE_BUSY')]) {
+    const h = await harness(); h.state.isolation = isolation;
+    expect(await h.app.assess(command(h.caseId))).toMatchObject({ state: 'escalated', gate: { result: 'clear' }, decision: { action: 'escalate-human', code: 'isolation-unproven' } });
+    expect(h.holds).toEqual([expect.objectContaining({ holdReason: `recovery:isolation-unproven:${h.caseId.slice(0, 12)}` })]);
+    expect((await h.store.loadRun('s', 'run'))!.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  }
+  // A case gated while the record proved isolation is re-checked at the continuation: unproven by then, it closes escalated with no new Attempt.
+  const h = await harness(), gated = await h.app.assess(command(h.caseId)); h.state.isolation = null;
+  expect(await h.app.continueLostTask(command(h.caseId, { evidenceDigest: gated.evidenceDigest, causeClass: 'infra-transient' })))
+    .toMatchObject({ kind: 'escalated', case: { state: 'escalated', decision: { code: 'isolation-unproven' } } });
+  expect(h.events().filter(event => event.action === 'continue-lost-task')).toEqual([]);
 });
 
 it('stale case: a decision that does not echo the sealed evidence digest is refused; an unknown case is not found', async () => {

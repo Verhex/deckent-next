@@ -40,6 +40,13 @@ export interface PrivateSecretDocumentSpec {
 }
 const FILE_DOCUMENT: PrivateSecretDocumentSpec = Object.freeze({ id: FILE_SECRET_STORE_ID, fileName: FILE_SECRET_STORE_NAME });
 const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+const initializers = new WeakMap<SecretStore, () => Promise<void>>();
+/** The same bounded document writer, including read-back custody, initializes an absent envelope without inventing a secret. */
+export async function initializePrivateSecretDocument(store: SecretStore): Promise<void> {
+  const initialize = initializers.get(store);
+  if (!initialize) throw ErrorRegistry.createError('SECRET_STORE_UNSAFE');
+  await initialize();
+}
 
 /**
  * `core.secret-store.file@1` (SECRET-K1): `<global root>/secrets.json`, owner-only. Custody (the local-keyring and managed-file rules):
@@ -130,7 +137,7 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
       return outcome.result;
     }, options.lockTimeoutMs ?? 2_000);
   }
-  return Object.freeze({
+  const store: SecretStore = Object.freeze({
     descriptor,
     async get(name: string) {
       const owner = uid();
@@ -161,6 +168,8 @@ export function createFileSecretStore(options: FileSecretStoreOptions, spec: Pri
       }
     },
   });
+  initializers.set(store, async () => { await write(() => ({ write: true, result: undefined })); });
+  return store;
 }
 /** The registered factory: the store lives in the installation root the caller's environment resolves (null → unavailable). */
 export const fileSecretStoreFactory: SecretStoreFactory = Object.freeze({ id: FILE_SECRET_STORE_ID,

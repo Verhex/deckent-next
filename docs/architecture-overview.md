@@ -183,3 +183,59 @@ The version-1 export is `{schemaVersion: 1, kind: "deckent-audit-checkpoint", ch
 Results distinguish `match`, `truncated`, `possible-wipe`, `policy-changed`, `producers-changed`, `chain-broken` and `unknown`; `deckent audit verify` exits 1 for anything but `match`. A missing original key, foreign witness or configured verification limit remains unknown; old ledgers say `no-checkpoint-yet`. Each checkpoint is announced by a sealed `audit-checkpoint` audit event written in the same transaction, and that event is the checkpoint's head. A marker whose checkpoint is gone (deleted rows, a removed tail) reports `possible-wipe` / `checkpoints-missing`; a dropped checkpoint table on a current ledger is `chain-broken`. Neither is ever replaced by a fresh baseline; only a scope with no checkpoint and no marker gets its first one. `deckent audit rebaseline --scope <id> --reason <text>` is the one explicit way back: it needs the scoped approval `decide` grant on `audit-rebaseline` (refused for AI actors), a witnessed interactive terminal and a y/N on the shown state; it accepts only a policy/producer drift or a possible wipe, and seals the reason in the new marker. Witnesses exported earlier no longer match. Deleting the markers too means truncating the audit log back past them; that removal of both local histories, or a complete wipe, requires a retained external witness to detect. The time between checkpoints is an unanchored tail; complete rollback/removal of local evidence cannot be ruled out by local evidence alone. Policy changes are detected even when the revision label stays the same; a governed policy change (`policy.administer`, `/mode`, the installer template upgrade) seals the digests of the policy it changed and of the policy it produced in its audit event; verification accepts only an unbroken chain of such writes from the last checkpoint, so it stays `match` and the next checkpoint adopts it, while an out-of-band file edit — even one followed by a governed change — reads `policy-changed` until a person re-baselines. The re-baseline card shows the audit head and digests, and the write is refused and asked again if any of them changed after the answer.
 
 The service owns checkpoint publication on startup and its configured interval. Scans are bounded by `audit.pageSize`, `audit.maxRecords` (events and checkpoints) and `audit.maxScopes`; they do not report a complete verification after reaching a limit. Readers do not write, migrate, heal or create missing keys/identities. The separate pull-device application is post-beta, as is the FIDO2-signed policy bundle (first post-beta item). Source tests do not establish live or independent acceptance.
+
+## Signed Hub packages
+
+Hub sources and signed packages share one operation contract across CLI, terminal,
+MCP and the SDK. Installing a package grants no tools, policy or standing.
+
+Run `deckent hub` to list the scope's sources. The terminal's `/hub` window lists
+operations and security notices. Mutations open a person card with the exact scope,
+source, trust settings, manifest, signature envelope and decoded package text.
+Cancelling before confirmation applies nothing. Closing after submission does not undo a committed change. Security notices include withdrawal,
+restoration, revocation and yank. A yank blocks new installs while existing use
+continues; revocation excludes the content from new agent selection.
+
+Inspect an operation's JSON input contract before preparing its file:
+
+```sh
+deckent hub sources add --schema
+deckent hub install --schema
+deckent hub cards --scope company-scope --json
+```
+
+For commands needing input, use `--input <file>` with that schema. `--scope` must
+match any scope in the file. Package bundles are base64 of canonical `.deckentpkg`
+bytes. Install and update take the exact dependency bundles, signed revocation feed
+and local WorkClass mapping. `hub refresh` applies a supplied signed feed;
+`hub verify` rechecks installed cached bytes offline. `hub inspect` defaults to
+installed state; `location: "source"` requests the source's package. The latter
+requires an exact version. `hub export` returns an object with `encoding: "base64"`
+and `bundle`, suitable for air-gapped transfer. It does not write a host file.
+A source pins the hub's root key. A hub signature or feed made by one of the hub's
+online keys counts only with the root-signed delegation of that key for that purpose,
+inside its validity window and not revoked; the bundle or feed carries it.
+
+Person writes require an interactive terminal; `--json`, pipes and AI environments
+cannot approve their cards. The SDK exports `executeHub(root, request, options)`;
+`request` contains `operation` (for example `hub.verify`) and its typed `input`.
+An explicit scope policy grant for resource kind `hub` is required. No grant is
+created by using a surface. An AI write also requires its own active signing key;
+the Hub server independently checks the publisher signature and authority.
+MCP omits source trust changes and person security cards. Publisher-key management
+continues to use the existing person-only signer cards.
+
+No source, host or connection is seeded. Adding a source does not approve its first
+network connection. Search, source inspection and publication require the configured
+Hub connection: registry extension identity, durable first-use person decision,
+source-scoped authentication and the governed network effect path. Missing wiring
+returns `HUB_CONNECTION_UNAVAILABLE`; it never falls back to raw HTTP. Before
+publication the local application scans the manifest and every decoded file for
+known secrets. AI publication of lesson-derived material is refused.
+
+The current author slice supplies the connection port and governed transport bridge.
+The installing composition must bind its first-use, authentication and signed trust
+evidence services before network operations are available. Binary, multi-installation
+and native-platform acceptance remain separate from source or unit-test verification.
+
+The Hub public opening is a separate release gate. No default source or production connection is shipped by this composition.

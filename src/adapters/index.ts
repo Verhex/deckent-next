@@ -6,7 +6,7 @@ export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions 
 export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, indexMonitorInstall, stampMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
-export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
+export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, recordedWorkerIsolation, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
   resolveDockerReadOnlyMounts, dockerProfileObservesWorker } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal, captureLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
@@ -109,11 +109,22 @@ export { sampleDockerResources } from '#adapters/core/docker-supervisor/index.js
 
 export { openInstallationPoolStore } from '#adapters/core/installation-pool-store/index.js';
 export * from '#adapters/core/provider-siwc/index.js';
+export * from '#adapters/core/siwc-worker/index.js';
 
 export { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 
 export { GIT_QUEUE_DISPLAY, GitQueueTarget, gitQueueCandidateSource } from '#adapters/core/git-patch/index.js';
 export { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-export { detectCodingFacts, codingSetupFamily } from '#adapters/core/setup-detect-coding/index.js';
+export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, workerImageEstimate, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
+export { detectCodingFacts, codingSetupFamily, gitTracksPaths, previewFirstCommit, observeFirstCommitRecovery, firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
+export { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
+export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from '#adapters/core/worker-image/index.js';
+
+export * from '#adapters/core/hub-client-store/index.js';
+export * from '#adapters/core/hub-package-file/index.js';
+export * from '#adapters/core/hub-cache/index.js';
+export * from '#adapters/core/hub-http/index.js';
+
+export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInventory, quiescentInstallationScopes, uninstallRecoveryDirectory, prepareUninstallBackup, writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease } from '#adapters/core/installation-removal/index.js';
+export { FileEffectStore } from '#adapters/core/file-effect-store/index.js';

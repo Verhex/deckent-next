@@ -40,6 +40,17 @@ describe('Shift+Tab / Alt+M ownership (T2 T-MODE-CYCLE)', () => {
     expect(calls).toEqual([['standart', 'r0', true], ['full-auto', 'r1', false]]);
   });
 
+  it('reads the mode once while idle: a re-render never re-reads it (FIX8a R28, a render ↔ service-read loop)', async () => {
+    const { port: permissionMode } = port();
+    let reads = 0;
+    const mountedView = mountWorkline({ permissionMode: { ...permissionMode, inspect: () => { reads += 1; return permissionMode.inspect(); } } });
+    mounted.push(mountedView.instance);
+    await settle(60);
+    mountedView.stdin.write('abc');
+    await settle(120);
+    expect(reads).toBe(1);
+  });
+
   it('does nothing while a turn runs; the mode changes only after the turn', async () => {
     const { calls, port: permissionMode } = port();
     let release!: (value: string) => void;

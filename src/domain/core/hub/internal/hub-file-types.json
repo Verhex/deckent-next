@@ -1,0 +1,4 @@
+{
+  "schemaVersion": 1,
+  "mediaTypes": ["text/markdown", "text/plain", "application/json", "text/csv", "image/png", "image/jpeg"]
+}

@@ -8,7 +8,9 @@ import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/ind
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
 /** The invocation adapters a connection can be bound to (adapter ids, not vendors): Anthropic Messages and OpenAI chat completions. */
-export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless'] as const;
+export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless', 'native-cli-worker', 'siwc-responses'] as const;
+/** İ-12: the order kinds are offered in — no-spend paths first (subscriptions, then local servers), then metered APIs; file order within a class. */
+const PROVIDER_CONNECT_BILLING = ['subscription', 'local', 'metered'] as const;
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
 const secretNameSchema = z.string().regex(SECRET_NAME);
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
@@ -29,13 +31,16 @@ const kindSchema = z.object({
   /** The catalog key of the kind's name (a surface resolves it in the person's language). */
   labelKey: z.string().regex(/^tui\.provider\.kind\.[A-Za-z]+$/u),
   available: z.boolean(),
+  /** İ-12 (owner 2026-10-25, v3): what using the kind costs — a subscription, a local server, or metered API money. Surfaces list the no-spend
+   * classes first (`PROVIDER_CONNECT_BILLING` order). A row that names none is treated as metered (the class that needs a budget). */
+  billing: z.enum(PROVIDER_CONNECT_BILLING).default('metered'),
   /** `choices`: known addresses offered as a list (owner 2026-10-08: values are chosen; a typed address is the last row's narrow exception). */
   endpoint: z.object({ default: z.string().url().startsWith('https://').nullable(), editable: z.boolean(),
     choices: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u), labelKey: z.string().regex(/^tui\.provider\.endpoint\.choice\.[A-Za-z]+$/u),
       // Every listed address passes the same rule as a typed one (https, or plain http only to this machine).
       url: z.string().url().refine(url => providerEndpoint(url).ok) }).strict().readonly()).readonly().default([]) }).strict(),
   probe: z.object({ path: z.string().startsWith('/').max(128), auth: z.discriminatedUnion('type', [z.object({ type: z.literal('bearer') }).strict(),
-    z.object({ type: z.literal('header'), name: header }).strict()]), headers: z.record(header, z.string().max(128)), listsModels: z.boolean() }).strict().nullable(),
+    z.object({ type: z.literal('header'), name: header }).strict()]), headers: z.record(header, z.string().max(128)), listsModels: z.boolean(), page: z.object({ limitParam: z.string().regex(/^[a-z_]+$/u), max: positiveLimit() }).strict().optional() }).strict().nullable(),
   /** The secret-store name of the key: fixed per vendor row, or (the generic row, Jev da5312fb) derived per connection from the endpoint's host. */
   key: z.object({ required: z.boolean(), secretName: secretNameSchema.nullable(),
     derive: z.object({ from: z.literal('endpoint-host'), prefix: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}_$/u) }).strict().optional() }).strict()
@@ -45,7 +50,9 @@ const kindSchema = z.object({
   connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
     /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
      * adapter connects only where its isolation realm is usable, on every installation alike. */
-    protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
+    catalogOnly: z.boolean().default(false), protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
+    rawUse: z.literal('person').optional(), preview: z.boolean().default(false),
+    pull: z.enum(['available', 'pick']).default('available'),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
     tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),
@@ -68,14 +75,19 @@ const kindSchema = z.object({
       routes: z.array(providerMetadataRouteSchema).min(1)
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
-    .refine(connect => (connect.adapter === 'native-cli-headless') === (connect.chatPath === null) && (connect.chatPath === null) === (connect.protocolFamily !== undefined))
+    .refine(connect => ['native-cli-headless', 'native-cli-worker'].includes(connect.adapter)
+      ? connect.chatPath === null && connect.protocolFamily !== undefined
+      : connect.adapter === 'siwc-responses' ? connect.chatPath === null && connect.protocolFamily === undefined
+        && connect.personOnly && connect.rawUse === 'person' && connect.preview === true && connect.seed === null
+        : connect.chatPath !== null && connect.protocolFamily === undefined)
+    .refine(connect => connect.catalogOnly === (connect.adapter === 'native-cli-worker'))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
     .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),
 }).strict().readonly();
 function positiveLimit() { return z.number().int().positive().safe(); }
 const positive = z.number().int().positive().safe();
-const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
+const registrySchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).transform(() => 4 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive,
     modelListBytes: positive.default(asset.limits.modelListBytes), modelListCount: positive.default(asset.limits.modelListCount) }).strict(),
   /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
@@ -83,12 +95,15 @@ const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.st
   /** What a connected model's invocation profile starts with (data; the person can change the written profile on the governed config path). */
   profileDefaults: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
     maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u), deliveryHeadroomBytes: positive }).strict(),
+  billingOrder: z.array(z.enum(PROVIDER_CONNECT_BILLING)).length(PROVIDER_CONNECT_BILLING.length).refine(rows => new Set(rows).size === rows.length).default(asset.billingOrder as (typeof PROVIDER_CONNECT_BILLING[number])[]),
   kinds: z.array(kindSchema).min(1).readonly() }).strict().readonly();
 export type ProviderConnectKind = z.infer<typeof kindSchema>;
 export type ProviderConnectRegistry = z.infer<typeof registrySchema>;
-export const PROVIDER_CONNECT_REGISTRY_VERSION = 2;
+export const PROVIDER_CONNECT_REGISTRY_VERSION = 4;
+const billingFirst = (input: ProviderConnectRegistry): ProviderConnectRegistry => Object.freeze({ ...input,
+  kinds: Object.freeze([...input.kinds].sort((a, b) => input.billingOrder.indexOf(a.billing) - input.billingOrder.indexOf(b.billing))) });
 /** Parsed once at load: a malformed data file fails the import, never a later connect. */
-const registry = registrySchema.parse(asset);
+const registry = billingFirst(registrySchema.parse(asset));
 export const PROVIDER_CONNECT_KINDS: readonly ProviderConnectKind[] = Object.freeze(registry.kinds);
 /** The check's time bound and how much of a refusal body is read to classify it (data, not code). */
 export const PROVIDER_CONNECT_LIMITS = Object.freeze({ ...registry.limits });
@@ -96,7 +111,7 @@ export const PROVIDER_CONNECT_LEGACY_KEYS = registry.legacyKeys;
 /** The shipped registry (T4-B `models connect` reads kinds and profile defaults from it; a test may hand its own through the composition port). */
 export const PROVIDER_CONNECT_REGISTRY: ProviderConnectRegistry = registry;
 /** A registry document parsed by the same schema (test and Enterprise overlays use it; a malformed one throws). */
-export function parseProviderConnectRegistry(input: unknown): ProviderConnectRegistry { return registrySchema.parse(input); }
+export function parseProviderConnectRegistry(input: unknown): ProviderConnectRegistry { return billingFirst(registrySchema.parse(input)); }
 export function providerConnectKind(id: string): ProviderConnectKind | null {
   return PROVIDER_CONNECT_KINDS.find(kind => kind.id === id) ?? null;
 }

@@ -48,6 +48,11 @@ const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revis
  * Children inherit the family handler; existing handlers retain argument validation and execution. Handler actions and catalog
  * actions are kept equal by `cli-grouped-help.test.ts` (both directions). */
 export const CLI_CATALOG = [
+  { name: 'uninstall', group: 'setup', summary: 'cli.uninstall.help.summary', detail: 'cli.uninstall.help', installation: 'owned', args: '[--purge] [--dry-run] [--json]', bare: 'handler' },
+  { name: 'hub', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', args: '[--scope <id>] [--input <file|->]', children: [
+    { name: 'sources', group: 'work', summary: 'hub.help.action.sources', detail: 'hub.help', bare: 'handler', children: ['list', 'add', 'remove'].map(name => action(name, 'work', `hub.help.action.sources.${name}` as MessageKey, 'hub.help')) },
+    ...['search', 'inspect', 'install', 'update', 'uninstall', 'verify', 'export', 'refresh', 'cards', 'publish', 'yank', 'revoke'].map(name => action(name, 'work', `hub.help.action.${name}` as MessageKey, 'hub.help')),
+  ] },
   { name: 'report' , group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help', args: '[--scope <id>] [--run <id>] [--verbose]',
     bare: 'handler' },
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do', args: '--request <text> [--scope <id>]', bare: { requires: ['--request <text>'] } },
@@ -184,6 +189,7 @@ export const CLI_CATALOG = [
     action('audit-spending', 'models', 'cli.help.action.audit-spending', 'cli.help.modelsAuditSpending', { requires: ['--input <file|->'] }),
     action('connect', 'models', 'cli.help.action.models.connect', 'cli.help.modelsConnect', { requires: ['--connection <id>', '--command-id <id>', '--model <id> | --reference <ref>'] }),
     action('login', 'models', 'headless.help.action.login', 'headless.help.login', { requires: ['--connection <id>'] }),
+    action('logout', 'models', 'siwc.help.action.logout', 'siwc.help', { requires: ['--connection <id>'] }),
     { name: 'catalog', group: 'models', summary: 'cli.help.action.catalog', detail: 'cli.help.modelsCatalog', children: [
       action('list', 'models', 'cli.help.action.models.catalog.list', 'cli.help.modelsCatalog'),
       action('register', 'models', 'cli.help.action.register', 'cli.help.modelsCatalog', { requires: ['--command-id <id>', '--seed <name> | --file <path>'] }),
@@ -208,6 +214,10 @@ export const CLI_CATALOG = [
     action('choices', 'setup', 'identity.choicesSummary', 'identity.distributionHelp'),
     action('distribute', 'setup', 'identity.distributeSummary', 'identity.distributionHelp'),
   ] },
+  // alpha.56 G4: the read-only rollout view of lost-worker recovery and the person's blind review card.
+  { name: 'recovery', group: 'approvals', summary: 'cli.help.summary.recovery', detail: 'cli.help.recovery', args: '[--scope <id>] [--json]', bare: 'handler', children: [
+    action('review', 'approvals', 'cli.help.action.recoveryReview', 'cli.help.recovery'),
+  ] },
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', args: '[--scope <id>]', bare: { read: 'status' }, children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', { installation: 'independent' }),
     action('status', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
@@ -217,10 +227,13 @@ export const CLI_CATALOG = [
     action('grants', 'approvals', 'cli.help.action.grants', 'cli.help.policy'),
     action('revoke', 'approvals', 'cli.help.action.revoke', 'cli.help.policy', { requires: ['<id>'] }),
     action('upgrade', 'approvals', 'cli.help.action.policyUpgrade', 'cli.help.policy', { requires: ['--template current'] }),
+    // alpha.56 G2 + G3: lost-worker recovery grants and rule promotions (a person's card; off a terminal it only reads).
+    action('recovery', 'approvals', 'cli.help.action.policyRecovery', 'cli.help.policy'),
     { name: 'mcp', group: 'approvals', summary: 'cli.help.action.policy.mcp', detail: 'cli.help.policy', children: [
       action('list', 'approvals', 'cli.help.action.policy.mcp.list', 'cli.help.policy'),
       action('grant', 'approvals', 'cli.help.action.policy.mcp.grant', 'cli.help.policy', { requires: ['--group <id>'] }),
       action('revoke', 'approvals', 'cli.help.action.policy.mcp.revoke', 'cli.help.policy', { requires: ['--group <id>'] }),
+      action('narrow', 'approvals', 'cli.help.action.policy.mcp.narrow', 'cli.help.policy', { requires: ['--group <id>'] }),
     ] },
     action('scopes', 'observe', 'cli.help.action.policy.scopes', 'cli.help.policy'),
   ] },

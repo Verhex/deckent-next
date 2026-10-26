@@ -41,7 +41,7 @@ export async function identityCommand(argv: readonly string[], context: Identity
   const locale = commandLocale(context, values.get('--lang')), root = context.root ?? process.cwd(), options = { env };
   const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (bare) return identityStatus(context, locale, values.get('--scope'), json);
-  const errors = { limit: 'IDENTITY_PREVIEW_LIMIT', invalid: 'IDENTITY_PREVIEW_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'IDENTITY_PREVIEW_UNAVAILABLE' };
+  const errors = { subject: 'cli.input.subject.identity', limit: 'IDENTITY_PREVIEW_LIMIT', invalid: 'IDENTITY_PREVIEW_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'IDENTITY_PREVIEW_UNAVAILABLE' };
   const read = (source: string) => readJsonInput(source, IDENTITY_PROFILE_LIMITS.maxInputBytes, errors, context.stdin);
   const registryPath = values.get('--registry');
   if (registryPath === '-' && values.get('--input') === '-') throw usage();

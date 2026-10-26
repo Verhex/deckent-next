@@ -3,12 +3,15 @@ import { identitySchema, type JsonValue } from '#domain/index.js';
 import { LOCALES } from '#platform/index.js';
 
 /** Versioned setup-plan contract (alpha.48 I-S1). The plan is pure and locale-free: titles, questions and reasons are message keys. */
-export const SETUP_PLAN_SCHEMA_VERSION = 1 as const;
+export const SETUP_PLAN_SCHEMA_VERSION = 2 as const;
 export const SETUP_STAGE_STATES = ['done', 'ready', 'needs-answer', 'blocked', 'skipped', 'unsupported'] as const;
 export type SetupStageState = typeof SETUP_STAGE_STATES[number];
 /** Generic Core stages only. Execution-environment, source-control and business-system stages are family registrations. */
 export const CORE_SETUP_STAGES = ['core:environment', 'core:language', 'core:folder', 'core:profile', 'core:policy', 'core:sandbox', 'core:model', 'core:final-check'] as const;
 export type CoreSetupStageId = typeof CORE_SETUP_STAGES[number];
+/** alpha.56 U3-1a: `install` stages are what `deckent init` plans and applies; `onboarding` stages are offered on the first open (terminal, Desktop). */
+export const SETUP_PHASES = ['install', 'onboarding'] as const;
+export type SetupPhase = typeof SETUP_PHASES[number];
 
 const locale = z.enum(LOCALES);
 const scope = identitySchema.nullable();
@@ -49,7 +52,7 @@ export const setupDecisionSchema = z.object({ state: z.enum(SETUP_STAGE_STATES),
   operation: setupOperationSchema.nullable().default(null), question: z.object({ key, params }).strict().nullable().default(null),
   default: json.nullable().default(null), cli: z.array(z.string().min(1).max(512).regex(/^\S+$/)).max(32).nullable().default(null) }).strict();
 export type SetupDecision = z.input<typeof setupDecisionSchema>;
-export type SetupStage = Readonly<{ id: string; namespace: string; title: string; state: SetupStageState;
+export type SetupStage = Readonly<{ id: string; namespace: string; title: string; phase: SetupPhase; state: SetupStageState;
   reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }>; operation: SetupOperation | null;
   question: Readonly<{ key: string; params: Readonly<Record<string, string | number>> }> | null; default: JsonValue | null;
   /** The exact long command for AI and scripts, one argv token per entry. */
@@ -57,12 +60,12 @@ export type SetupStage = Readonly<{ id: string; namespace: string; title: string
 export type SetupPlan = Readonly<{ schemaVersion: typeof SETUP_PLAN_SCHEMA_VERSION; registryDigest: string; stages: readonly SetupStage[]; planDigest: string }>;
 
 /** What a family evaluator sees: its own validated facts, its answer, the scope and the states of every earlier stage. */
-export type SetupStageContext = Readonly<{ facts: unknown; answer: unknown; scopeId: string | null; states: ReadonlyMap<string, SetupStageState> }>;
+export type SetupStageContext = Readonly<{ facts: unknown; answer: unknown; scopeId: string | null; states: ReadonlyMap<string, SetupStageState>; prior?: ReadonlyMap<string, unknown> }>;
 const stageId = z.string().regex(/^[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9-]{0,63}$/);
 /** A family package: namespaced like identity-profile packages; Core is never shadowed. Stages carry pure evaluators, so the
  * package digest covers the descriptor data (namespace, source, ids, anchors, titles), not the function bodies. */
 export const setupFamilyPackageSchema = z.object({ namespace: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), source: identitySchema,
   facts: z.custom<z.ZodTypeAny>(value => value instanceof z.ZodType),
-  stages: z.array(z.object({ id: stageId, after: z.enum(CORE_SETUP_STAGES).refine(stage => stage !== 'core:final-check'), title: key,
+  stages: z.array(z.object({ id: stageId, after: z.enum(CORE_SETUP_STAGES).refine(stage => stage !== 'core:final-check'), title: key, phase: z.enum(SETUP_PHASES).optional(),
     evaluate: z.custom<(context: SetupStageContext) => SetupDecision>(value => typeof value === 'function') }).strict()).min(1).max(32) }).strict();
 export type SetupFamilyPackage = z.input<typeof setupFamilyPackageSchema>;

@@ -7,11 +7,11 @@ import { mcpTable, toggleMcp } from './policy-toggle.js';
 
 /**
  * `deckent policy mcp` without an action: on a person's terminal the groups with on/off → pick → preview card → apply (the same governed change as
- * `grant|revoke --apply --expect`); anywhere else the read-only `list`. `list|grant|revoke` keep their explicit flags unchanged.
+ * `grant|revoke|narrow --apply --expect`); anywhere else the read-only `list`. `list|grant|revoke|narrow` keep their explicit flags.
  */
 export async function policyMcpCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
   const bare = argv[2] === undefined || argv[2].startsWith('-'), action = bare ? 'list' : argv[2];
-  if (!['list', 'grant', 'revoke'].includes(action ?? '') || !context.mcpCapabilities) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!['list', 'grant', 'revoke', 'narrow'].includes(action ?? '') || !context.mcpCapabilities) throw ErrorRegistry.createError('CLI_USAGE');
   let scope: string | undefined, group: string | undefined, expect: string | undefined, language: string | undefined, json = false;
   let mode: 'preview' | 'apply' = 'preview', chosenMode = false;
   for (let i = bare ? 2 : 3; i < argv.length; i++) {
@@ -39,7 +39,7 @@ export async function policyMcpCommand(argv: readonly string[], context: Approva
   }
   const view = await host.inspectMcpCapabilities(root, scope!, options);
   if (!view.groups.some(state => state.group.id === group)) throw ErrorRegistry.createError('CLI_USAGE');
-  const result = await host.changeMcpCapabilities(root, { action: action as 'grant' | 'revoke', scopeId: scope!, groupId: group!, mode, ...(expect ? { expect } : {}) }, options);
+  const result = await host.changeMcpCapabilities(root, { action: action as 'grant' | 'revoke' | 'narrow', scopeId: scope!, groupId: group!, mode, ...(expect ? { expect } : {}) }, options);
   emit(result, { ...sinks, render: value => [words.result[value.status], ...mcpCapabilityPreviewLines(value, locale)].join('\n') });
   if (result.status === 'conflict' || result.status === 'refused') throw ErrorRegistry.createError('POLICY_DENIED');
 }

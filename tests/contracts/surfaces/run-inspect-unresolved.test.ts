@@ -28,9 +28,9 @@ it('a lost worker says the task is held and nothing is accepted on its word; rec
   expect(en).toContain('could not confirm whether the worker stopped');
   expect(en).toContain('nothing is accepted or released on its word');
   expect(en).not.toContain('reconciliation required');
-  expect(tr).toContain('worker\'ın durup durmadığını');
+  expect(tr).toContain('işçinin durup durmadığını');
   expect(en).toContain('Automatic recovery was off when this Run was admitted'); expect(en).toContain('nothing is retried and no new attempt starts on its own');
-  expect(tr).toContain('Bu Run kabul edildiğinde otomatik kurtarma kapalıydı');
+  expect(tr).toContain('Bu iş kabul edildiğinde otomatik kurtarma kapalıydı');
   // Never the old release-wide claim: the mode decides.
   expect(en).not.toContain('in this release'); expect(tr).not.toContain('bu sürümde');
 });

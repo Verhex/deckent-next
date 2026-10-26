@@ -1,7 +1,7 @@
 import { loadConfig, t } from '#platform/index.js';
 import { type InfoSection, type InfoView } from '#surfaces/core/terminal-window/index.js';
 import { parseProviderSpendAccountQuery } from '#domain/index.js';
-import { SCOPE_BUDGET_CHOICES } from '#surfaces/core/cli-models/index.js';
+import { SCOPE_BUDGET_CHOICES, spendPeriodLines } from '#surfaces/core/cli-models/index.js';
 import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import { queryFailureText } from './failure.js';
 import { count } from './human.js';
@@ -69,7 +69,7 @@ export async function usageLines(call: TerminalAdminCall, args: string, usage: S
     const result = await context.inspectProviderSpendAccount(root, query, options);
     if (result.checkpoint === null) return [t('models.spending.absent', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision }, locale), t('models.spending.historyNotRecorded', {}, locale)];
     const { account } = result.checkpoint;
-    return [t('models.spending.account', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision, currency: account.budget.currency,
+    return [...spendPeriodLines(result, locale), t('models.spending.account', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision, currency: account.budget.currency,
       limit: count(account.budget.limitMinorUnits, locale), checkpoint: result.checkpoint.revision, reservations: count(result.checkpoint.reservationCount, locale) }, locale),
     t('models.spending.reserved', { amount: count(account.reservedMinorUnits, locale), currency: account.budget.currency }, locale),
     t('models.spending.settledExact', { amount: count(account.settledExactMinorUnits, locale), currency: account.budget.currency }, locale),
@@ -116,11 +116,11 @@ async function accountSection(call: TerminalAdminCall, budget: Budget | null): P
       { key: t('terminal.info.usage.key.revision', {}, locale), value: String(account.budget.revision) },
       { key: t('terminal.info.usage.key.limit', {}, locale), value: minor(account.budget.limitMinorUnits) },
       { key: t('terminal.info.usage.key.reserved', {}, locale), value: minor(account.reservedMinorUnits) },
-      { key: t('terminal.info.usage.key.settled', {}, locale), value: minor(account.settledExactMinorUnits) },
-      { key: t('terminal.info.usage.key.remaining', {}, locale), value: minor(Math.max(0, account.budget.limitMinorUnits - account.settledMinorUnits - account.reservedMinorUnits)) },
+      { key: t('terminal.info.usage.key.settled', {}, locale), value: minor(result.period?.usedExactMinorUnits ?? account.settledExactMinorUnits) },
+      { key: t('terminal.info.usage.key.remaining', {}, locale), value: minor(result.period?.remainingMinorUnits ?? Math.max(0, account.budget.limitMinorUnits - account.settledMinorUnits - account.reservedMinorUnits)) },
       { key: t('terminal.info.usage.key.frozen', {}, locale), value: account.frozen ? t('models.spending.frozenYes', {}, locale) : t('models.spending.frozenNo', {}, locale) },
       { key: t('terminal.info.usage.key.reservations', {}, locale), value: count(result.checkpoint.reservationCount, locale) },
-      { key: t('terminal.info.usage.key.checkpoint', {}, locale), value: String(result.checkpoint.revision) }], notes: [t('terminal.admin.usage.notBilling', {}, locale)] };
+      { key: t('terminal.info.usage.key.checkpoint', {}, locale), value: String(result.checkpoint.revision) }], notes: [...spendPeriodLines(result, locale), t('terminal.admin.usage.notBilling', {}, locale)] };
   } catch (error) {
     return { title, chip: { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) }, notes: [t('terminal.admin.partFailed', { part: t('terminal.admin.usage.partSpend', {}, locale), reason: queryFailureText(error, locale) }, locale)] };
   }

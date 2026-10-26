@@ -51,7 +51,7 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
       `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
     if (expectedError) {
       expect(result.isError).toBe(true);
-      expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: expectedError });
+      expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: expectedError , message: expect.any(String) });
     } else expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
     return result.structuredContent;
   } finally {
@@ -128,8 +128,9 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
     { cwd: project, env, timeout: 10_000 })).stdout;
   const humanTr = (await execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1), '--lang', 'tr'],
     { cwd: project, env, timeout: 10_000 })).stdout;
-  expect(humanEn).toContain('persisted active activation'); expect(humanEn).toContain('availability');
-  expect(humanTr).toContain('kayıtlı aktif aktivasyonu'); expect(humanTr).toContain('kullanılabilirliği');
+  // U2-S4: the state reads On/Off and the notice names what writes activation records (read-only views never reconcile them).
+  expect(humanEn).toContain('saved activation state: On'); expect(humanEn).toContain('read-only views never reconcile them');
+  expect(humanTr).toContain('kayıtlı etkinlik durumu: Açık'); expect(humanTr).toContain('salt okunur görünümler bunları eşitlemez');
   await expect(execute(process.execPath, [cli, 'models', 'activation', '--scope', 'scope-a', '--provider', 'provider'],
     { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_ARGUMENT_MISSING') });
   await expect(execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1).map(value => value === 'scope-a' ? 'wrong-scope' : value)],

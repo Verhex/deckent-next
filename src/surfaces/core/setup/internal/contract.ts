@@ -8,18 +8,22 @@ import type { PoolCapacityInspectHandler } from '#surfaces/core/cli-admin/index.
 import type { FirstJobFacts } from '#surfaces/core/doctor/index.js';
 
 /** What applying one stage did. `not-wired`: this build has no apply owner for the stage yet (I-S3 wires each operation to its existing
- * owner); nothing was written. A surface never reports a stage as done from an apply result, only from the next observation. */
-export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused'; code?: string }>;
+ * owner); nothing was written. `declined`: the person said no on the owner's card. A surface never reports a stage as done from an apply
+ * result, only from the next observation. */
+export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused' | 'declined'; code?: string; secretStore?: SetupSecretStoreDetail }>;
+/** U1 S1 (additive): what the fresh installation's secret store default did, on the policy stage's result (store ids, a typed code and the refused
+ * directory only; never a name or value). `not-set` keeps the stage `applied`: the installation stands, the default was refused. */
+export type SetupSecretStoreDetail = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string }>;
 /** `scopeId`: the folder stage's answer, else the configured scope. `foreground`: the person's terminal is free (no window holds it), so an
  * owner that takes the terminal itself (a card, a picker, sudo's own prompt) may run; without it such a stage is refused, never half-run. */
 export type SetupApplyOptions = ConfigLoadOptions & Readonly<{ scopeId?: string; foreground?: boolean }>;
 /** One stage's operation through its existing owner, after that owner's own preview (I-S3). */
 export type SetupApplyHandler = (root: string, stage: SetupStage, options: SetupApplyOptions) => Promise<SetupApplyResult>;
 /** `person`: a person on a real terminal answers this plan (the window); only then may a family offer a host install (I-D2). */
-export type SetupObserveOptions = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string }>;
+export type SetupObserveOptions = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; answers?: Readonly<Record<string, unknown>> }>;
 /** Read-only observation and the stage registry for one root (I-S2/I-S3 detection). */
 export type SetupObserveHandler = (root: string, options: SetupObserveOptions) => Promise<Readonly<{ observation: SetupObservation; registry: SetupStageRegistry;
-  /** I-S7: what the first job still needs after setup (configuration and pool ledger reads only). */
+  /** I-S7: what the first job still needs after setup (configuration and pool ledger reads only); the `work` family's facts. */
   firstJob?: FirstJobFacts }>>;
 
 /** The shell realm doctor reports (structural: only the fields setup reads). */
@@ -34,6 +38,8 @@ export interface SetupCommandContext extends CliBaseContext {
   observeSetup?: SetupObserveHandler;
   applySetupStage?: SetupApplyHandler;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
+  /** A first-run policy whose revision a governed edit rewrote (U4E full-auto): its anchor keeps it installed; `null` reads as hand-built. */
+  inspectAnchoredPolicyTemplate?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<'current' | 'upgradable' | null>;
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<SetupShellRealmView>;
   listIdentityProfiles?: (packages: readonly unknown[]) => IdentityProfileListing;
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;

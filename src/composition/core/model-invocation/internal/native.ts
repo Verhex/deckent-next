@@ -1,7 +1,9 @@
+import { createSiwcResponsesPort, SIWC_INFERENCE, siwcResponsesDefinitionSchema } from '#adapters/index.js';
+import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CONNECT_REGISTRY, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
-import { ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
+import { subscriptionActor, OAuthConnectionError, ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import { createNativeCliHeadlessPort, isNativeCliHeadlessAdapter, shellSandboxCapabilities } from '#adapters/index.js';
 import { globalStateRoot, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
@@ -44,6 +46,12 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
   const natives = Object.freeze({
     resolve(profileInput: ModelInvocationProfile): ModelInvocationNativePort | null {
       const profile = modelInvocationProfileSchema.parse(profileInput);
+      if (profile.adapter.id === SIWC_INFERENCE.adapter.id && profile.adapter.version === SIWC_INFERENCE.adapter.version) {
+        const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
+        if (!isDeepStrictEqual(definition.owner, subscriptionActor(context.principal).owner)) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
+        return createSiwcResponsesPort({ now, lease: (id, signal) => withConfiguredSiwc(context.config.projectRoot, profile.scopeId, options, 'lease',
+          (app, caller) => app.lease(id, caller, signal), {}, context.principal) });
+      }
       // S3-2: the person's own CLI login as one tool-less turn; an older release resolves this adapter id to null (MODEL_INVOCATION_UNAVAILABLE).
       if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation });
       if(profile.adapter.id===decisionHttpAdapter.id&&profile.adapter.version===decisionHttpAdapter.version){
@@ -75,8 +83,14 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     },
     // PRE-8 v2 credential-source decision: for the headless CLI it is the preflight (version, flags, login kind; no model call), typed and before
     // any claim; read-only views never spawn it.
-    admit: async (profile: ModelInvocationProfile, signal?: AbortSignal) => isNativeCliHeadlessAdapter(profile.adapter)
-      ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options),
+    admit: async (profile: ModelInvocationProfile, signal?: AbortSignal) => {
+      if (profile.adapter.id === SIWC_INFERENCE.adapter.id) {
+        const definition = siwcResponsesDefinitionSchema.parse(profile.adapter.definition);
+        return withConfiguredSiwc(context.config.projectRoot, profile.scopeId, options, 'inspect', async (app, caller) => { await app.inspectForLease(definition.connectionId, caller); }, {}, context.principal);
+      }
+      return isNativeCliHeadlessAdapter(profile.adapter)
+        ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options);
+    },
     async acquire(input: { readonly profile: ModelInvocationProfile; readonly definition: ModelBindingDefinition; readonly native: ModelInvocationNativePort }, signal?: AbortSignal): Promise<void> {
       const openaiDefinition = isOpenAiChatHttpAdapter(input.profile.adapter) ? parseOpenAiChatHttpDefinition(input.profile.adapter.definition) : null;
       const metadataTariff = openaiDefinition?.tariff.kind === 'openrouter-endpoint' ? openaiDefinition.tariff : null;

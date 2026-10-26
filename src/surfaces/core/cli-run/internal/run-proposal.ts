@@ -1,21 +1,23 @@
-import { planningSpendingLines } from '#surfaces/core/run-planning/index.js';
+import { runIntentLines, planningSpendingLines } from '#surfaces/core/run-planning/index.js';
 import { resolve } from 'node:path';
 import { currencyAmountText, t, emit, loadConfig, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult } from '#engine/index.js';
+import { isRunIntentResult, parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult, type RunPlanningResult } from '#engine/index.js';
 import type { RunProposal } from '#domain/index.js';
 import { cliUsage, commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { readGraphInput } from './graph-input.js';
 import type { RunCommandContext } from './context.js';
 export type RunProposalHandler = (root: string, command: RunProposal, options: ConfigLoadOptions) => Promise<RunProposalResult>;
-export type RunProposalInspectHandler = (root: string, query: RunProposalQuery, options: ConfigLoadOptions) => Promise<RunProposalResult | null>;
-export function renderRunProposal(data: RunProposalResult, locale: Locale): string {
+export type RunProposalInspectHandler = (root: string, query: RunProposalQuery, options: ConfigLoadOptions) => Promise<RunPlanningResult | null>;
+export function renderRunProposal(data: RunPlanningResult, locale: Locale): string {
+  if (isRunIntentResult(data)) return runIntentLines(data, locale).join('\n');
   const r = data.proposal;
   const states = { recorded: t('proposal.status.recorded', {}, locale), pending: t('proposal.status.pending', {}, locale), accepted: t('proposal.status.accepted', {}, locale), rejected: t('proposal.status.rejected', {}, locale), parked: t('proposal.status.parked', {}, locale) } as const;
   const nextParams = { scope: r.proposal.scopeId, run: r.proposal.runId, command: r.proposal.commandId };
   const next = { recorded: t('proposal.next.recorded', nextParams, locale), pending: t('proposal.next.pending', nextParams, locale), accepted: t('proposal.next.accepted', nextParams, locale), rejected: t('proposal.next.rejected', nextParams, locale), parked: t('proposal.next.parked', nextParams, locale) } as const;
   return [t('proposal.summary', { proposal: r.proposal.proposalId, run: r.proposal.runId, status: states[r.status], revision: r.revision }, locale),
     t('proposal.attribution', { actor: r.proposal.proposer.id, scope: r.proposal.scopeId, source: r.proposal.source.kind }, locale),
-    ...(r.reason ? [ErrorRegistry.createError(r.reason, { locale, ...(data.reasonParams ? { params: data.reasonParams } : {}) }).message] : []),
+    // A pending approval's reason names the approval it waits for; the record carries its id.
+    ...(r.reason ? [ErrorRegistry.createError(r.reason, { locale, ...(data.reasonParams ? { params: data.reasonParams } : r.approval ? { params: { approvalId: r.approval.approvalId } } : {}) }).message] : []),
     ...(r.approval ? [t('proposal.approval', { id: r.approval.approvalId, expiry: r.approval.expiresAt }, locale)] : []),
     ...(data.budgetSemantics === 'not-metered' ? [t('proposal.budget.notMetered', {}, locale)] : [
       t('proposal.budget', { amount: currencyAmountText(r.proposal.budgetCeiling.limitMinorUnits, r.proposal.budgetCeiling.currency, locale),
@@ -38,7 +40,7 @@ export async function runProposalCommand(argv: readonly string[], context: RunCo
   }
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const locale = commandLocale(context, values.get('--lang'));
-  let data: RunProposalResult | null;
+  let data: RunPlanningResult | null;
   if (action === 'propose') {
     const source = values.get('--proposal'); if (!source) throw cliUsage('run', action, locale, '--proposal');
     if (!context.proposeRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

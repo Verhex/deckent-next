@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import { governedPolicyDigest, type AuthorityDocumentStore } from '#engine/core/policy/index.js';
-import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
+import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
+import { uninstallOperationDescriptors } from './uninstall-plan.js';
 import environmentRegistry from './execution-environments.json' with { type: 'json' };
+import { NERVOUS_RULES_SEED, loadNervousRules } from '#engine/core/nervous/index.js';
 import { installerAuthorityChangeEvent } from './authority-audit.js';
 import type { AuditEvent } from '#domain/index.js';
 
@@ -22,15 +24,21 @@ export const FIRST_RUN_EDIT_SHELL_TOOL_NAMES = Object.freeze(['edit_file', 'writ
 export const FIRST_RUN_SCRATCH_WRITE_OPERATION_ID = 'workspace.scratch.write';
 export const FIRST_RUN_WRITE_OPERATION_ID = 'workspace.file.write';
 export const FIRST_RUN_SHELL_OPERATION_ID = 'host.shell.run';
+/** v17: catalog identity only; the descriptor stays local to the coding onboarding adapter. */
+export const FIRST_RUN_FIRST_COMMIT_OPERATION_ID = 'coding.first-commit';
 /** v13 (owner A48-D3a, INIT D2): the execution environments the installing person may install — the execution-environment registry seed
  * (`execution-environments.json`, one entry today), which I-D2's adapter registry pins by test. A new entry changes the template's install rule,
  * so it comes with a template bump, never with a wider (`all`) grant. */
 export const FIRST_RUN_EXECUTION_ENVIRONMENT_IDS: readonly string[] = Object.freeze(environmentRegistry.environments.map(entry => identitySchema.parse(entry.id)));
+/** v16 (alpha.56 D1): the measured lost-worker rules at their Core seed version, the promotion cells the template names (a new rule version comes with
+ * a template bump: the promotion is of an exact version, re-measured). */
+export const FIRST_RUN_RECOVERY_RULES: readonly Readonly<{ id: string; version: number }>[] = Object.freeze(loadNervousRules(NERVOUS_RULES_SEED).rules
+  .filter(rule => RECOVERY_ROLLOUT.rules.includes(rule.id)).map(rule => Object.freeze({ id: rule.id, version: rule.version })));
 /** The concrete Core tool/operation template contract, shared by installer composition and external catalog pin tests. */
 export const FIRST_RUN_TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
   scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
   shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS });
+  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, recoveryRules: FIRST_RUN_RECOVERY_RULES, firstCommitOperationId: FIRST_RUN_FIRST_COMMIT_OPERATION_ID, uninstallOperationIds: uninstallOperationDescriptors().map(item => item.operation.id) });
 export interface PolicyTemplateSource { load(): Promise<unknown> }
 /** Doctor's read-soft recognition: the application service the domain decision (`matchFirstRunPolicyTemplate`) is
  * invoked through (composition-purity), never called from composition directly. `source.load()` is the raw
@@ -115,7 +123,7 @@ export interface PreparePolicyTemplateInput {
   readonly firstSessionTargets?: readonly PolicyTemplatePublishTarget[];
 }
 export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
-  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId' | 'executionEnvironmentIds'>;
+  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId' | 'executionEnvironmentIds' | 'recoveryRules' | 'firstCommitOperationId' | 'uninstallOperationIds'>;
 /**
  * Pure preparation (SCR-B, owner 2026-09-28 option B): no I/O, deterministic in `(scopeId, principal)`, so
  * `init policy --preview` and a later `init policy --apply` for the same scope always agree on exactly what
@@ -237,6 +245,23 @@ export interface PolicyTemplateUpgradeResult {
   readonly wireRules: readonly string[];
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
+/** The add-only plan's names (the `--upgrade` path below and setup's anchored read share one construction). */
+const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId,
+  proposeMcpToolName: toolNames.proposeMcpToolName, mcpCallOperationId: toolNames.mcpCallOperationId, policyAdministerOperationId: toolNames.policyAdministerOperationId,
+  ...(toolNames.uninstallOperationIds === undefined ? {} : { uninstallOperationIds: toolNames.uninstallOperationIds }),
+  ...(toolNames.firstCommitOperationId === undefined ? {} : { firstCommitOperationId: toolNames.firstCommitOperationId }), executionEnvironmentIds: toolNames.executionEnvironmentIds,
+  ...(toolNames.recoveryRules === undefined ? {} : { recoveryRules: toolNames.recoveryRules }), ...(serviceId === undefined ? {} : { serviceId }) });
+/** Setup's read of an installed first-run policy whose revision a governed edit rewrote (the U4E carrier's PRE-9 full-auto grant): the
+ * `first-run-read-tools` anchor naming this person keeps it installed, and the same add-only plan `--upgrade` applies decides current vs
+ * upgradable. Read-only and grants nothing; no anchor, another person or an unreadable document is `null` (setup: hand-built). */
+export async function inspectAnchoredFirstRunPolicy(source: PolicyTemplateSource, input: { readonly scopeId: string; readonly person: Person;
+  readonly toolNames: FirstRunToolNames }): Promise<'current' | 'upgradable' | null> {
+  try {
+    const additions = firstRunTemplateAdditions(await source.load(), additionNames({ issuer: identitySchema.parse(input.person.issuer),
+      subject: identitySchema.parse(input.person.subject) }, identitySchema.parse(input.scopeId), input.toolNames));
+    return additions.status === 'current' ? 'current' : additions.status === 'plan' ? 'upgradable' : null;
+  } catch { return null; }
+}
 /**
  * The first-run older-template → current migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
  * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install the
@@ -266,9 +291,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
   const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
-  const names = { person: principal, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
-    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, executionEnvironmentIds: input.toolNames.executionEnvironmentIds,
-    ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
+  const names = additionNames(principal, scopeId, input.toolNames, input.serviceId);
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
     status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
     exact: false, people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });

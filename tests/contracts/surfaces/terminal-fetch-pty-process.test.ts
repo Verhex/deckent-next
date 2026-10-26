@@ -13,6 +13,7 @@ import { ModelActivationApplication, modelInvocationTargetId } from '#engine/ind
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
 
 // FETCH S7 at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process (no test transport: the product's
 // own resolver and public-address check), a real policy file. `terminal.fetch` egress `approval`: the model asks for a host outside the
@@ -158,6 +159,7 @@ async function fetchProject() {
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+  await settleOnboarding(resolveProductLayout({ projectRoot, root: data }));
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const me = { issuer: principal.issuer, subject: principal.subject };
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
