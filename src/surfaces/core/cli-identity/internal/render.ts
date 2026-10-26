@@ -1,4 +1,4 @@
-import type { IdentityProfileListing, IdentityProfilePreview } from '#engine/index.js';
+import { IdentityProfileRegistry, type IdentityProfileListing, type IdentityProfilePreview } from '#engine/index.js';
 import { coreIdentityProfileData } from '#domain/index.js';
 import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 // Catalog data chooses labels; extension labels are package data, never commands or authority.
@@ -13,6 +13,11 @@ export function orderedProfiles<T>(entries: readonly T[], id: (entry: T) => stri
 /** A profile's name in the person's language (package labels first, then the catalog label, else its key). */
 export const profileLabel = (entry: ProfileEntry, locale: Locale): string =>
   safe(entry.labels?.[locale] ?? catalog(locale)[entry.definition.labelKey] ?? entry.definition.labelKey);
+/** A profile id in the person's words (its registry label, e.g. "Solo"), never the raw `core:solo`; an unregistered id stays as itself. */
+export const profileName = (id: string, locale: Locale): string => {
+  const entry = new IdentityProfileRegistry().list().find(row => row.definition.id === id);
+  return entry ? profileLabel(entry, locale) : safe(id);
+};
 /** What a profile means, one line: the catalog's description of its label (`<labelKey>.description`), else its role templates (package data). */
 export function profileMeaning(entry: ProfileEntry, locale: Locale): string {
   const described = catalog(locale)[`${entry.definition.labelKey}.description`];

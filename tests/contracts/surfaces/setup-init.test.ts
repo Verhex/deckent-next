@@ -6,7 +6,7 @@ import * as cards from '#surfaces/core/cli-human/index.js';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
-import { createSetupController, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { createSetupController, renderSetupLines, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 
 // I-S4: bare `deckent init` renders the I-S1 plan as JSON, plain lines or the window, and applies only what INIT-D5 allows.
@@ -256,12 +256,17 @@ describe('I-S4 setup window controller (no Ink)', () => {
     const controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
     const first = controller.model();
     expect(first.options.map(option => option.id)).toEqual(['en', 'tr', 'later']);
+    // Owner 2026-10-26: the recommended answer is highlighted (the detected Turkish), so Enter accepts it; reason and question wrap in fixed rows.
+    expect(first.initial).toBe(1); expect(first.heights?.slice(-3)).toEqual([3, 2, 1]);
     expect(first.rows[0]).toMatch(/^> 1\. Language/u);
     const sizes = [first.rows.length];
     let model = (await controller.step('en'))!; sizes.push(model.rows.length);
-    expect(model.rows[2]).toMatch(/^> 3\. Folder and scope/u); expect(model.options.map(option => option.id)).toEqual(['yes', 'later']);
+    expect(model.rows[2]).toMatch(/^> 3\. Folder and scope/u); expect(model.options.map(option => option.id)).toEqual(['yes', 'later']); expect(model.initial).toBe(0);
     model = (await controller.step('yes'))!; sizes.push(model.rows.length);
     model = (await controller.step('core:solo'))!; sizes.push(model.rows.length);
+    // A profile reads as its label, never the raw `core:solo`.
+    const lines = renderSetupLines(controller.outcome().plan, 'en', { requested: false, results: [] });
+    expect(lines).toMatch(/4\. Who uses this installation · [^\n]* · Solo · /u); expect(lines).not.toContain('core:solo');
     expect(model.rows[4]).toMatch(/^> 5\. Permissions · needs your answer/u);
     model = (await controller.step('yes'))!; sizes.push(model.rows.length);
     expect(model.options.map(option => option.id)).toEqual(['apply', 'later']);
@@ -273,6 +278,9 @@ describe('I-S4 setup window controller (no Ink)', () => {
     expect(model.optionRows).toBe(first.optionRows);
     expect(await controller.step('not-an-option')).toBeNull();
     expect(controller.outcome().results).toEqual([{ stage: 'core:policy', operation: 'installation.policy-template', status: 'not-wired' }]);
+    // The single "Close" answer is highlighted too, so Enter closes the finished window (REALSURF: Enter was ignored there).
+    for (let turn = 0; turn < 20 && model.options[0]?.id !== 'close'; turn++) model = (await controller.step(model.options.at(-1)!.id))!;
+    expect(model.options.map(option => option.id)).toEqual(['close']); expect(model.initial).toBe(0);
   });
 });
 

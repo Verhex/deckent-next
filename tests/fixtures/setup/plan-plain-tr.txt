@@ -3,7 +3,7 @@ Deckent kurulum planı acfec5ac8069
    ? Türkçe ile devam edilsin mi?
 2. Ortam · tamam · Ortam destekleniyor (linux).
 3. Klasör ve kapsam · tamam · "my-erp" kapsamı seçildi.
-4. Kurulumu kim kullanacak · yanıtlandı; izinlerden sonra kaydedilecek · core:solo · kurulum izinleri yazınca kaydedilecek.
+4. Kurulumu kim kullanacak · yanıtlandı; izinlerden sonra kaydedilecek · Bireysel · kurulum izinleri yazınca kaydedilecek.
 5. İzinler · engelli · Önce Dil aşamasının bitmesini bekliyor.
 6. Komut korumalı alanı · tamam · Komut korumalı alanı çalışıyor (bubblewrap).
 7. Son kontrol · uygulanmaya hazır · Son kontrole hazır.

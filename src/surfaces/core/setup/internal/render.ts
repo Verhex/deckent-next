@@ -1,5 +1,6 @@
 import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupPlan, SetupStage, SetupStageState } from '#engine/index.js';
+import { profileName } from '#surfaces/core/cli-identity/index.js';
 import type { SetupApplyResult } from './contract.js';
 
 /** The versioned `deckent init --json` document (I-S4): locale-free (message keys and their parameters), so an AI or script reads the same
@@ -43,7 +44,7 @@ export const languageName = (code: string, locale: Locale) => LANGUAGE_NAMES[cod
 export function stageText(plan: SetupPlan, key: string, params: Readonly<Record<string, string | number>>, locale: Locale): string {
   const shown = Object.fromEntries(Object.entries(params).map(([name, value]) => {
     const stage = name === 'stage' ? plan.stages.find(item => item.id === value) : undefined;
-    return [name, stage ? stageTitle(stage, locale) : name === 'language' ? languageName(String(value), locale) : name === 'mode' || name === 'effective' ? terminalSafeText(setupMessage(`terminal.mode.stop.${value}`, {}, locale)) : terminalSafeText(String(value))];
+    return [name, stage ? stageTitle(stage, locale) : name === 'language' ? languageName(String(value), locale) : name === 'profile' ? profileName(String(value), locale) : name === 'mode' || name === 'effective' ? terminalSafeText(setupMessage(`terminal.mode.stop.${value}`, {}, locale)) : terminalSafeText(String(value))];
   }));
   return setupMessage(key, shown, locale);
 }

@@ -1293,7 +1293,8 @@
         "src/surfaces/core/recovery-text",
         "src/domain/core/recovery",
         "src/surfaces/core/monitor-view",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/surfaces/core/cli-identity"
       ],
       "plan": "SURFACES"
     },
@@ -4292,7 +4293,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-window",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/cli-identity"
       ],
       "plan": "SURFACES"
     },

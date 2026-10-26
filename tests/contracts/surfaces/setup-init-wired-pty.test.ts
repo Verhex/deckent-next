@@ -131,13 +131,16 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     for (const title of ['Model connection', 'Worker image', 'Execution environment', 'Project instructions', 'First work kind', 'Worker pool']) expect(summary).not.toContain(title);
     expect(summary).not.toContain('Final check: applied'); // KUR-14: the observed warnings settle; no read-only apply loop.
     expect(summary).toContain('Setup is complete.');
+    // R05: the start-permission preview wraps inside the window (its last words are on screen), never cut with "…"; the profile reads as its label.
+    const confirm = run.output.indexOf('Confirm the previewed permissions'), preview = screen(run.output.slice(0, confirm)); expect(preview).toMatch(/keep their approval rules\./u);
+    expect(run.output).toContain('Profile Solo will start');
     expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:solo', version: 1 } } });
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
     expect(await f.plan()).toMatchObject({ 'core:language': 'done:setup.reason.languageConfigured', 'core:folder': 'done:setup.reason.scopeConfigured',
       'core:policy': 'done:setup.reason.policyCurrent', 'core:profile': 'done:setup.reason.profileConfigured' });
     const checked = await f.deckent(['doctor']);
     expect(checked.code).toBe(0);
-    expect(checked.stdout).toMatch(/ok\s+Identity profile: core:solo/u);
+    expect(checked.stdout).toMatch(/ok\s+Identity profile: Solo/u);
     expect(checked.stdout).not.toContain('No identity profile is chosen');
     const repeat = await f.deckent(['init', '--yes', '--scope', 'erp-demo', '--json']);
     expect(repeat.code, repeat.stderr).toBe(0);
@@ -145,7 +148,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['Deckent setup', '\u001b']]);
     expect(rerun.timeout, rerun.output?.slice(-3000)).toBeUndefined();
     expect(rerun.status).toBe(0);
-    expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile core:solo is already saved in your user's configuration.");
+    expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile Solo is already saved in your user's configuration.");
     expect(rerun.output).not.toContain('Will only you use this installation?');
     // The carrier's full-auto grant rewrote the policy revision (PRE-9 chain); the first-run anchor keeps it installed (above: policyCurrent).
     const path = join(f.root, '.deckent', 'policy.json'), chained = JSON.parse(await readFile(path, 'utf8')) as { revision: string; grants: { id: string }[] };
@@ -208,7 +211,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(run.status).toBe(0);
     expect(screen(run.output)).toContain('Who uses this installation: applied');
     expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:team', version: 1 } } });
-    expect((await f.deckent(['doctor'])).stdout).toMatch(/ok\s+Identity profile: core:team/u);
+    expect((await f.deckent(['doctor'])).stdout).toMatch(/ok\s+Identity profile: Team/u);
   }, 240_000);
 
   it('an older first-run policy: the window closes for the upgrade card (each added rule), the witnessed apply upgrades, the window reopens', async () => {
