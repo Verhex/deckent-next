@@ -156,7 +156,9 @@ it('the monitor names the catalog lines in the person\'s language', () => {
   expect(describeDiagnostic('catalog-suggestions-open:3', 'tr')).toMatchObject({ text: 'Ajan önerisi bekliyor (3)', action: 'Karar için: deckent agents suggestions' });
   expect(describeDiagnostic('catalog-signer-revoked:1', 'tr').text).toContain('İmzalayan iptal edildi');
   expect(describeDiagnostic('catalog-aggregator-unsigned', 'tr').text).toContain('imza anahtarı yok');
-  expect(describeDiagnostic('catalog-aggregator-unsigned', 'en').action).toContain('catalog-aggregator');
+  // alpha.56 F1 (61b1bdb1b): the action names the aggregator identity the observation carries; without one it points to the signer list.
+  expect(describeDiagnostic('catalog-aggregator-unsigned:["s","local/catalog-aggregator","alp"]', 'en').action).toContain("--scope 's' --principal 'local/catalog-aggregator:alp'");
+  expect(describeDiagnostic('catalog-aggregator-unsigned', 'en').action).toContain('deckent agents signers');
 });
 
 describe('define from a file naming a suggestion (REVISE 2742 R1)', () => {
