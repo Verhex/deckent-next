@@ -33,7 +33,8 @@ export interface HubTrustClock { readonly nowMs: number; readonly stored?: boole
 /**
  * The key allowed to make a hub signature of `purpose` signed at `atMs` (S8 §9A trust chain): the pinned root itself, or an online key the root
  * delegated for that purpose with `atMs` inside the delegation window. For content arriving now the window is also checked against the trusted
- * clock (now before notAfter, `atMs` not past now beyond the registry clock skew), so a holder of an ended delegation cannot backdate a signature.
+ * clock (notBefore ≤ now < notAfter, `atMs` not past now beyond the registry clock skew), so a holder of an ended delegation cannot backdate a
+ * signature and a not-yet-started one cannot sign early by putting its own `atMs` at notBefore; the skew never widens the window itself.
  * An undelegated, foreign-root, wrong-purpose or out-of-window key is HUB_SIGNER_UNTRUSTED. Revocation stays with `hubKeyRevoked` at the caller.
  */
 export function delegatedHubKey(root: HubRoot, signerKeyId: string, input: unknown, purpose: 'attestation' | 'feed', atMs: number, clock: HubTrustClock): HubVerificationKey {
@@ -44,7 +45,8 @@ export function delegatedHubKey(root: HubRoot, signerKeyId: string, input: unkno
   const { signature, ...delegation } = parsed.data;
   if (delegation.hubId !== root.hubId || delegation.keyId !== signerKeyId || !delegation.purposes.includes(purpose)
     || !Number.isSafeInteger(atMs) || atMs < delegation.notBefore || atMs >= delegation.notAfter
-    || !clock.stored && (!Number.isSafeInteger(clock.nowMs) || clock.nowMs >= delegation.notAfter || atMs > clock.nowMs + HUB_LIMITS.clockSkewMs)) throw new HubError('HUB_SIGNER_UNTRUSTED');
+    || !clock.stored && (!Number.isSafeInteger(clock.nowMs) || clock.nowMs < delegation.notBefore || clock.nowMs >= delegation.notAfter
+      || atMs > clock.nowMs + HUB_LIMITS.clockSkewMs)) throw new HubError('HUB_SIGNER_UNTRUSTED');
   requireHubSignature(rootKey, signature.keyId, hubKeyDelegationMessage(delegation), signature.value);
   return { keyId: delegation.keyId, publicKey: delegation.publicKey, role: 'hub', active: true };
 }
