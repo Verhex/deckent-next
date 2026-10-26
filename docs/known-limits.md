@@ -9,7 +9,7 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-The alpha.56 items below describe candidate code and owner decisions; they do not claim a release or live/N1 acceptance.
+Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 ## Platforms: tried and not tried
 
@@ -210,6 +210,10 @@ The alpha.56 items below describe candidate code and owner decisions; they do no
   proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination,
   and an unsupported combination stops with a typed refusal before any authenticated work. *Workaround:* use an already
   supported connection; do not treat successful sign-in as proof that a Codex worker is available.
+
+- **ChatGPT sign-in over SSH needs callback forwarding.** The CLI and terminal show the login URL, but the callback
+  still returns to loopback on the machine running Deckent; no device-code flow is provided. *Workaround:* forward that
+  callback port from your browser's machine, or sign in locally on the Deckent host.
 
 - **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
   window is used up. Exception: a ChatGPT sign-in where you explicitly enabled continuation and chose an API model at connect may
@@ -470,8 +474,12 @@ The alpha.56 items below describe candidate code and owner decisions; they do no
   before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
   before-upgrade instead of daily.
+- **Downgrading from alpha.56 requires the pre-switch backup.** Alpha.55.1 refuses the v73 installation ledger before
+  writing (`ATTEMPT_STORE_VERSION`); it cannot open the upgraded database. The separate Hub v3 store also has its own
+  pre-upgrade backup. A policy rollback removes only the content-equal v18 delta, leaving earlier v16/v17 grants and
+  customized rows. *Workaround:* restore the matching pre-switch data and policy; switching a binary alone is insufficient.
 - **A lost worker can keep its slot until custody is resolved.** Nervous and recovery start `off`; seed rules stay
-  provisional until a person promotes a measured rule and grants its recovery action. The alpha.56 candidate adds
+  provisional until a person promotes a measured rule and grants its recovery action. Alpha.56 supplies
   `deckent policy recovery` and blind case review through `deckent recovery review`; its recovery shadow also consumes
   sealed would-stop records without actually stopping a worker. Shadow decisions can call the configured model and spend
   money; they apply no recovery effect. *Workaround:* inspect the Run's frozen mode and watch with `deckent monitor`;
@@ -494,9 +502,11 @@ The alpha.56 items below describe candidate code and owner decisions; they do no
   an OPEN owner issue, also after v17/v18. Measured-exit rechecks bind the policy revision, not later sealed measurements.
   Lost workers dispatched before alpha.56 have no isolation record; they go to a person and shadow measurement restarts.
 
-- **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
-  registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
-  toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.
+- **Full clean-machine acceptance remains open.** The 2026-10-15/16 rehearsal stopped before the model/first-job chain.
+  Alpha.56 later exercised packaged setup and chat surfaces with controlled inputs, but that does not prove a cold Docker
+  image build, a real first commit and the whole `init` → `/do` → delivery journey without assistance.
+  *Workaround:* follow the README first-job path and report what differs.
+
 - **Restart recovery has not had an independent review** with a real container kill and service restart.
 - **After an upgrade that sets `service.identity`, a running service needs one manual stop** (Ctrl+C on `deckent runtime serve`,
   or its idle stop) before `runtime restart` works: a service reads its identity only when it starts.
@@ -598,19 +608,24 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   its card.
 - **Signer keys need the host key store.** AI and system catalog writes need a signer key that a person enrolled; on native Windows
   the host key store is not available and these writes are refused. Revoking a key stops its new and pending actions, but promotions it
-  already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added; the
-  Deckent Hub comes with alpha.56.
+  already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added.
+  Alpha.56 supplies signed Hub packages; public network use remains bounded below.
 - **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
   (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
   owner's detail).
 
 ## Hub packages and uninstall
 
-- **Hub networking needs distribution wiring.** The alpha.56 candidate supplies signed packages, local source/trust cards,
+- **Hub networking needs distribution wiring.** Alpha.56 supplies signed packages, local source/trust cards,
   cached offline verification and governed transport ports. Search, remote inspection and publication refuse
   `HUB_CONNECTION_UNAVAILABLE` without the bound first-use, authentication and trust services. No public Hub/source is
   enabled by default; public opening remains a separate owner gate. *Workaround:* use verified offline bundles and the
   [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
+- **Hub online keys need a root-signed delegation.** Bundles and revocation feeds carry `hub-key-delegation:1`, scoped
+  to attestation/feed purpose and a validity window (registry defaults: at most 90 days and 5 min clock skew). New content
+  needs the trusted clock inside that window; skew does not extend it, and a yanked/revoked key cannot sign new content.
+  Stored packages retain their historical validation rules; an expired or untrusted feed withdraws selection.
+  *Workaround:* obtain fresh delegated feed evidence from the trusted source; never replace the pinned root to bypass refusal.
 - **Skills with support files are refused by owner decision (2026-10-26, H6).** SKILL.md-only skills may be used; a skill
   requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
   *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
