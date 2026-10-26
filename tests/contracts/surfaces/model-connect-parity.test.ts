@@ -30,9 +30,11 @@ describe('models.connect surface parity', () => {
       '--command-id', 'c-2', '--json'], { root: '/project', env: {}, stdout: { write: () => true } as never, connectModel: async (_root, input) => { seen.push(input); return result; } });
     expect(seen).toEqual([{ schemaVersion: 1, commandId: 'c-2', scopeId: 'scope', connection: 'local-openai', endpoint: 'http://127.0.0.1:8000',
       model: { reference: { providerId: 'local', providerVersion: 1, modelId: 'qwen', modelVersion: 2 } } }]);
-    // Exactly one of --model / --reference.
-    await expect(modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'openai-api', '--command-id', 'c-3'], { root: '/p', env: {},
-      connectModel: async () => result })).rejects.toMatchObject({ code: 'CLI_USAGE' });
+    // Both model forms together remain invalid; omission requests a pull.
+    await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'anthropic-api', '--command-id', 'pull'], {
+      env: {}, connectModel: async (_root, input) => { expect(input.model).toEqual({ pull: 'available' }); return result; }, stdout: { write: () => true } as never });
+    await expect(modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'anthropic-api', '--command-id', 'bad', '--model', 'x', '--reference', 'p@1/m@1'], {
+      env: {}, connectModel: async () => result })).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
 
   it('S3-3: the CLI kind takes the executable, the login dir and the consent choice into the same command; the result names the login and the consent', async () => {

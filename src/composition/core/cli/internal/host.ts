@@ -25,14 +25,14 @@ import { readConfiguredInferenceMetrics } from '#composition/core/inference-metr
 import { interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConfiguredModelRole, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
-import { connectProvider, prepareProviderSecret, connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
+import { connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
   changeConfiguredRecoveryPolicy, configuredRecoveryReview } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
-import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
+import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -96,13 +96,13 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     /* T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed; the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it. */ providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
       endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? null, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
-      priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing })),
+      priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing, ...(kind.connect ? { pull: kind.connect.pull } : {}) })),
     endpoint: providerEndpoint, probe: async (input, signal) => { const result = await probeProviderConnection(input, signal ? { signal } : {});
       if (result.cause) await recordConfiguredProviderFailure(base.root, 'provider-probe', { code: 'PROVIDER_PROBE_REFUSED', cause: result.cause, status: result.httpStatus }); return result; },
     legacyKeys: PROVIDER_CONNECT_LEGACY_KEYS,
     /* T4-B: the per-connection key name (the generic row derives it from the host) and a seeded kind's models (exact ids from its packaged seed). */ secretName: (id, endpoint) => { const kind = providerConnectKind(id); if (!kind) return null; const base = endpoint === null ? null : providerEndpoint(endpoint);
       return providerConnectSecretName(kind, base?.ok ? base.base : null); },
-    discoverModels: listConfiguredConnectionModels,
+    discoverModels: listConfiguredConnectionModels, workspaces: listConfiguredConnectionWorkspaces,
     seedModels: async id => { const kind = providerConnectKind(id), seed = kind?.connect?.seed; if (!kind || !seed) return [];
       return (await readProviderConnectSeed(seed)).providers.flatMap(provider => provider.models.map(model => ({ nativeId: model.nativeId,
         displayName: (model as { displayName?: string }).displayName ?? model.nativeId, priced: providerConnectModelPriced(kind, model.nativeId) }))); } },
@@ -180,10 +180,12 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     },
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
+    openOwnerBaselineInstallation: (projectRoot, scopeId, input) => openOwnerBaselineInstallation(projectRoot, scopeId, input),
     openPermissionModesInstallation: (projectRoot, scopeId, input) => openPermissionModesInstallation(projectRoot, scopeId, input),
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)
       .catch(error => { throw queryFailure(error); }),
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => installConfiguredExecutionPool(projectRoot, scopeId, apply).catch(error => { throw queryFailure(error); }),
+    inspectOwnerBaseline: inspectOwnerBaselineInstallation,
     inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options),
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,

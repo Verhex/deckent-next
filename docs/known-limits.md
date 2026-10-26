@@ -683,3 +683,11 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
   retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
   lock and the running service keeps the ledger's side files in place; this was measured on one loaded core, not at fleet scale.
+
+A founder who explicitly accepts the managed `decision-steps` baseline can make
+unwitnessed pipe/SDK decisions for an operator hold, close or answer. These currently
+retain the `ai-policy` audit label with the person's principal and rule id; a separate
+versioned decision-evidence migration remains required before beta.1. Safety holds,
+quota answers and scripted accept/reject keep their existing person/card floors.
+Agent shell authority commands keep the person's card in every mode; a same-user
+process launched outside Deckent remains part of the operating-system trust boundary.

@@ -1,3 +1,4 @@
+import { modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BudgetPanelPort, ConfigPanelOutcome, ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -94,4 +95,24 @@ describe('/model in the workline carries the host budget and shadow ports', () =
     await until(() => applied.length === 1, 'governed workspace write');
     expect(applied).toEqual([{ id: 'profile', workspaceId: 'wrkspc_Selected' }]);
   });
+});
+
+it('a model repair binds the displayed catalog digest and refuses a changed binding before admission', async () => {
+  let revision = 'catalog-1', digest = 'a'.repeat(64); const admitted: unknown[] = [];
+  const reference = ref('chat');
+  const source = modelPanelSource('/fixture', 'scope', {
+    inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision,
+      providers: [{ id: 'local-openai', version: 1, models: [{ id: 'chat', version: 1, nativeId: 'chat', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] }] }] } }),
+    inspectModelActivation: async () => ({ schemaVersion: 1, scopeId: 'scope', reference, activation: null, availability: 'not-observed' }),
+    inspectModelBinding: async () => ({ schemaVersion: 1, status: 'declared', reference, catalogRevision: revision,
+      definition: { provider: { id: 'local-openai', version: 1 }, model: { id: 'chat', version: 1, nativeId: 'chat', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] } },
+      binding: { encodingVersion: 1, algorithm: 'sha256', digest } }),
+    admitModelActivation: async (_root, command) => { admitted.push(command); return {} as never; },
+  }, {}, 'en');
+  const shown = (await source.inspect()).choices[0]!;
+  revision = 'catalog-2'; digest = 'b'.repeat(64);
+  await expect(source.fix!(shown, 'activate')).rejects.toMatchObject({ code: 'MODEL_ACTIVATION_REVISION_CONFLICT' });
+  expect(admitted).toEqual([]);
+  await source.fix!((await source.inspect()).choices[0]!, 'activate');
+  expect(admitted).toEqual([expect.objectContaining({ action: 'activate', catalogRevision: 'catalog-2', expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest } })]);
 });

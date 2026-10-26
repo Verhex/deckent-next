@@ -24,4 +24,4 @@ export type { AuthorityDocumentStore, AuthorityLookup, AuthorityWrite } from './
 export { PolicyAdministrationInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from './internal/administration-status.js';
 
 export type { AuthorityHistorySource, AuthorityRevision } from './internal/authority-history.js';
-export { mcpCapabilityNamespace, mcpCapabilityScopeCandidates } from './internal/mcp-capabilities.js';
+export { mcpCapabilityNamespace, resolvedMcpCapabilityRules, ownedMcpCapabilityRules, mcpCapabilityScopeCandidates } from './internal/mcp-capabilities.js';

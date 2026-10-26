@@ -43,6 +43,7 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'agent-catalog' && ['suggest', 'narrow'].includes(action) && !isCatalogAggregatorPrincipal(actor)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
+  if (resource.kind === 'provider-spend-account' && action === 'reconcile') return true;
   if (resource.kind === 'backup' && action === 'restore') return true;
   if (resource.kind === 'execution-environment' && action === 'install' || resource.kind === 'installation' && action === 'repair') return true;
   if (resource.kind === 'permission-mode' && action === 'set') return true;

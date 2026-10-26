@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkAwkProgram, checkSedScript, classifyReadOnlyShellCommand, classifyShellRisk, type ShellPathContext, type ShellReasonCode,
+import { classifyShellAuthority, checkAwkProgram, checkSedScript, classifyReadOnlyShellCommand, classifyShellRisk, type ShellPathContext, type ShellReasonCode,
   type ShellRisk } from '#engine/index.js';
 
 // Legacy parity (deckent-dev tests/core/shell-readonly-classifier.test.ts and tests/agent/shell-risk.test.ts @a4ed4ea47^): grammar and
@@ -128,4 +128,12 @@ describe('shell risk tiers (legacy parity)', () => {
     ['ls >&2', 'safe-read'], ['ls 2>&1 | head', 'safe-read'], ['ls > x.txt', 'destructive'], ['ls &> out.txt', 'destructive'], ['ls >& out.txt', 'destructive'], ['ls 2> err.log', 'destructive'],
     ['ls 2>&1 >> log', 'modify'], ['rm deneme.md && ls deneme.md 2>&1 || true', 'modify'], ['rm -f x 2>/dev/null', 'destructive'],
   ])('%s → %s', async (command, expected) => { expect(await risk(command), command).toBe(expected); });
+});
+
+it('founder decision commands stay authority-bound on argv paths; ordinary npm tasks stay outside this floor', () => {
+  for (const command of ['deckent run resume r', 'deckent task accept t', '/opt/bin/deckent run close r', 'node /opt/app/entry.js run resume r',
+    'npx deckent task reject t', 'pnpm exec deckent run close r', 'bunx deckent run resume r', 'yarn deckent task accept t', 'deckent-mcp run resume r',
+    'deckent init --yes', 'deckent init apply --yes', 'deckent init resume --yes', 'deckent init policy --owner-baseline none --apply',
+    'deckent secret set key', 'node /tmp/entry.js approval decide a']) expect(classifyShellAuthority(command), command).toBe(true);
+  for (const command of ['npm run close', 'npm run resume', 'npm run accept', 'echo deckent run close r']) expect(classifyShellAuthority(command), command).toBe(false);
 });

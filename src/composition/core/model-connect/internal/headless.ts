@@ -25,8 +25,10 @@ const isolation = (env: Env) => async () => (await shellSandboxCapabilities(glob
  */
 export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>) {
   const env = options.env ?? process.env;
-  let prepared: Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>> | undefined;
-  const prepare = (kind: ProviderConnectKind, nativeId: string) => prepared ??= (async () => {
+  const prepared = new Map<string, Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }>; owned: string }>>>();
+  const prepare = (kind: ProviderConnectKind, nativeId: string) => {
+    const held = prepared.get(nativeId); if (held) return held;
+    const next = (async () => {
     const seed = await readProviderConnectSeed(kind.connect!.seed!), model = seed.providers.flatMap(provider => provider.models).find(row => row.nativeId === nativeId);
     const protocol = model?.protocols.find(row => row.family === kind.connect!.protocolFamily), minCliVersion = (model as { minCliVersion?: string | null } | undefined)?.minCliVersion;
     if (!protocol || !minCliVersion) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
@@ -34,7 +36,8 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
     const owned = await ownedLoginDir(protocol.family, env);
     return { protocol, owned, base: await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir,
       ownedConfigDir: owned, env, now: Date.now, isolation: isolation(env) }) };
-  })();
+    })(); prepared.set(nativeId, next); return next;
+  };
   return {
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
       const { base, protocol, owned } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, await person(), Date.now());

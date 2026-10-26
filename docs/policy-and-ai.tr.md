@@ -38,6 +38,7 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 <!-- ai-floor:start -->
 | Devredilemeyen sınır | Kaynaktaki hücreler | Neden |
 |---|---|---|
+| Sağlayıcı harcama uzlaştırması (settle, release, write-off) | `provider-spend-account/fixture-target/reconcile` | Owner Q-SPEND (b), 2026-10-26: eski izin olsa da hiçbir AI bekleyen harcamayı uzlaştıramaz. Olağan çağrı hesaplaşması devam eder. |
 | Politika yönetimi execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | Grant, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli. |
 | Yetki belgeleri, authenticator ve onay güvencesi: tüm değişimler | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | Aktör kendisini sınırlayan kimliği veya onay doğrulayıcısını değiştiremez; inspect/list politika kapsamındadır. |
 | Yedeği geri yükleme | `backup/fixture-backup/restore` | Geri yükleme yetki verisini değiştirebilir. |
@@ -78,7 +79,8 @@ hücreyi sınar; onay gereğini koşulsuz allow'a çeviremez, yöneticinin kendi
 | Görev sorusunu yanıtlama | Açık `task-decision` / Task kimliği / `answer`; ayrıca attempt `evaluate`. Bekleyen soru, yanıt ve revision doğrulanır. |
 | Sıradan onay | Açık `approval` / onay kimliği / `decide`; güncel politika, oturum, istek özeti, süre, görev ayrılığı ve güvence. Korunan/riski bilinmeyen kartlar tabanda kalır. |
 | Operator hold durdurma / sürdürme | Sıradan operatör kontrolü `run/cancel` veya `run/reserve` kullanır; başarısızlıktan devam ayrı karar adımıdır. |
-| Admission, operasyon, havuz, model, harcama, iş hedefi | `deckent policy vocabulary --json` sözlüğündeki sıradan hücreler. Tabanda olmamak, her taşımanın eylemi sunduğunu veya uygulamanın izin verdiğini garanti etmez. |
+| Tutulan sağlayıcı harcamasını uzlaştırma (settle, release, write-off) | `provider-spend-account/reconcile`, eski v1 harcama izinleri dahil bütün AI aktörleri için kod tabanıdır (owner Q-SPEND (b), 2026-10-26). Kişi yönetilen uzlaştırma yolunu kullanır; olağan çağrı hesaplaşması içeride devam eder. |
+| Admission, operasyon, havuz, model, diğer harcama eylemleri, iş hedefi | `deckent policy vocabulary --json` sözlüğündeki sıradan hücreler. Tabanda olmamak, her taşımanın eylemi sunduğunu veya uygulamanın izin verdiğini garanti etmez. |
 
 Karar adımında allow, aktörü ve eylemi açıkça adlandırmalıdır: `principals: "all"` veya
 `actions: "all"` adım devretmez. Kaynak kimliği/kapsam seçilebilir; en dar kümeyi kullanın.
@@ -267,3 +269,32 @@ Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli-appro
 [kart yetkisi](../src/engine/core/approval/internal/application.ts).
 
 Devir kaynakları: [CLI](../src/surfaces/core/cli-approval/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
+
+## Yönetilen kurucu tabanı ve önceki MCP izinleri
+
+Kurulum sahibi eksik kurucu hücrelerini
+`deckent init policy --scope <scope> --owner-baseline mcp-delegable,decision-steps --preview`
+ile görür. `--apply` gerçek kişinin tanıklı terminalinde tam hücreleri gösterir;
+politika revizyonunu ve katalogdan türetilen planı bağlar. Mevcut kurulum yalnız bu
+karttan sonra değişir. `--owner-baseline none --apply` bu kişinin yönetilen taban
+kurallarını kaldırır; özel izinleri korur. Her parti politika değişikliği sınırına
+uyar; `remaining` sonraki karta kalan hücreleri gösterir. Paylaşılan havuz ve model
+kataloğu gibi kurulum hücreleri bütün kapsamları içerir.
+
+Taban, araç çağrısı izinlerini, izin kiplerini veya karar değerlendiricisini değiştirmez.
+İşlemler erişilebilir kayıtlı katalogdan gelir; `surface: authority` tanımları dışarıda
+kalır. Sonradan eklenen işlem yeni kart ister. Model çağrısı içeriğini silme varsayılan
+model grubunda değildir; kişi ayrıca devredebilir. Varsayılan harcama/model MCP
+grupları bütçe değişikliği veya model etkinleştirme izni vermez; ayrı yönetilen politika
+bunları devredebilir. AI harcama **uzlaştırması** (settle, release, write-off) eski v1
+harcama izni olsa da kod tabanıyla kapalıdır. Model çağrısının olağan hesaplaşması
+mevcut iç yolundan devam eder. Enterprise AI finans ajanına Core değişmeden uzlaştırma
+devredilemez; bütçe oluşturma/revizyonu ayrı politika kararıdır.
+
+Önceki geniş MCP izinleri, kaldırılan katalog ve config hücreleriyle birlikte
+`wider-earlier` görünür. Kişi karttan güncel gruba daraltabilir veya geri alabilir.
+Dinamik işlem seçimleri içerik özetiyle kimliklenir ve sınırlı kurallara bölünür;
+yeni işlem eski izni sessizce genişletmez. Bilinmeyen biçimde özel düzenlenmiş kural
+çatışma kalır. Alpha.55'e dönmeden önce daraltılmış model/harcama/işlem grup kurallarını
+yeni sürümde geri alın: eski okuyucu kuralları değerlendirebilir fakat grup düzenleyici
+çatışma gösterebilir.

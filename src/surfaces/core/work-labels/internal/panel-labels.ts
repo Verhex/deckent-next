@@ -54,7 +54,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       hints: t('tui.panel.budget.hints', {}, locale), confirmTitle: t('tui.panel.budget.confirmTitle', {}, locale), confirm: t('tui.panel.budget.confirm', {}, locale),
       confirmUnfreeze: t('tui.panel.budget.confirmUnfreeze', {}, locale), cancel: t('tui.panel.budget.cancel', {}, locale), belowSettled: t('tui.panel.budget.belowSettled', {}, locale) },
     policy: { delegateGrant: t('policy.delegate.grant', {}, locale), delegateRevoke: t('policy.delegate.revoke', {}, locale), delegations: t('policy.delegate.title', {}, locale), delegationConfirm: t('policy.delegate.keys', {}, locale), title: t('policy.mcp.title', {}, locale), scope: t('policy.mcp.scope', {}, locale), groups: t('policy.mcp.groups', {}, locale), preview: t('policy.mcp.preview', {}, locale),
-      grant: t('policy.mcp.grant', {}, locale), revoke: t('policy.mcp.revoke', {}, locale), confirm: t('policy.mcp.confirm', {}, locale), back: t('policy.mcp.back', {}, locale),
+      completeBaseline: t('policy.mcp.completeBaseline', {}, locale), narrow: t('policy.mcp.narrow', {}, locale), grant: t('policy.mcp.grant', {}, locale), revoke: t('policy.mcp.revoke', {}, locale), confirm: t('policy.mcp.confirm', {}, locale), back: t('policy.mcp.back', {}, locale),
       hints: t('policy.mcp.hints', {}, locale), empty: t('policy.mcp.empty', {}, locale) },
     cache: { entry: t('tui.panel.cache.entry', {}, locale), title: t('tui.panel.cache.title', {}, locale), confirm: t('tui.panel.cache.confirm', {}, locale),
       cancel: t('tui.panel.cache.cancel', {}, locale), hints: t('tui.panel.cache.hints', {}, locale) },

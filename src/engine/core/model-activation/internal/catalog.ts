@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
-  parseModelCatalogCommand, parseModelCatalogReceipt, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
+  parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 
@@ -78,7 +78,7 @@ export type ModelCatalogChannelView = Readonly<{ channelId: string; access: 'den
   revision: number; providerVersion: number; catalogRevision: string; channel: ModelCatalogChannelRecord['channel'];
   activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null;
   models: readonly Readonly<{ modelId: string; revision: number; model: ModelCatalogModelRecord['model'];
-    activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null }>[] }>;
+    activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null; chatState?: 'active' | 'inactive' | null; activationConflict?: boolean }>[] }>;
 export interface ModelCatalogInspection { readonly schemaVersion: 1; readonly scopeId: string; readonly channels: readonly ModelCatalogChannelView[] }
 /** Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
 export class ModelCatalogInspectionApplication {
@@ -108,4 +108,19 @@ export class ModelCatalogInspectionApplication {
       return Object.freeze({ schemaVersion: 1, scopeId: query.scopeId, channels: Object.freeze(channels) });
     } finally { reader.close(); }
   }
+}
+
+/** Write-time channel cascade. Explicit inactive rows always win; catalog observation never calls this planner. */
+export function planCatalogStateCascade(command: Exclude<ModelCatalogCommand, { action: 'register' }>, channel: Extract<ModelCatalogChannelView, { access: 'allowed' }>,
+  declared: ProviderCatalog['providers'][number] | undefined, priced: readonly string[]) {
+  return channel.models.flatMap(entry => {
+    if (command.modelId !== null && command.modelId !== entry.modelId) return [];
+    const named = command.modelId !== null;
+    const fresh = entry.activation === null && entry.model.lifecycle.state === 'active' && priced.includes(entry.modelId);
+    const enabled = command.action === 'activate' && (named || entry.activation?.state === 'active' || fresh);
+    if (command.action === 'activate' && !enabled) return [];
+    const model = declared?.models.find(model => model.nativeId === entry.modelId);
+    return [{ entry, enabled, activateWorker: !named && fresh && enabled,
+      reference: model ? { providerId: declared!.id, providerVersion: declared!.version, modelId: model.id, modelVersion: model.version } : null }];
+  });
 }

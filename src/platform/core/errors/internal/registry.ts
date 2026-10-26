@@ -216,6 +216,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CONNECT_DISCOVERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_INVALID', p, l) }) },
   MODEL_CONNECT_DISCOVERY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_LIMIT', p, l) }) },
   MODEL_CONNECT_PRICE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_PRICE_REQUIRED', p, l) }) },
+  MODEL_CONNECT_NO_AVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NO_AVAILABLE', p, l) }) },
   MODEL_CONNECT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_INVALID', p, l) }) },
   MODEL_CONNECT_NOT_CONNECTABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NOT_CONNECTABLE', p, l) }) },
   MODEL_CONNECT_ENDPOINT_FIXED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_FIXED', p, l) }) },

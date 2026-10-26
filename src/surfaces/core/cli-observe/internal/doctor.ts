@@ -78,6 +78,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const policyAdministration = context.inspectPolicyAdministration && policyScope
     ? await context.inspectPolicyAdministration(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => null) : null;
   const auditIntegrity = context.verifyAudit && policyScope ? await context.verifyAudit(root, { schemaVersion: 1, scopeId: policyScope }, options).catch(() => ({ schemaVersion: 1 as const, scopeId: policyScope, status: 'unknown' as const, reason: 'unavailable' as const, head: null, checkpoint: null })) : null;
+  const ownerBaseline = policyScope && context.inspectOwnerBaseline ? await context.inspectOwnerBaseline(root, policyScope, options).catch(() => null) : null;
   const policyTemplate = context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
   // SESSION-RESULT-LIMIT-2026-09-28: unconditional like policyTemplate (nobody was looking at the line-mode/MCP path
   // before this); [] when unwired or every declared profile fits. Read-only, network-free, never blocks doctor.
@@ -97,9 +98,10 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const node = assessNodeSupport(process.version, NODE_ENGINE_RANGE);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
+    company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
-  const checks = doctorChecks(data, await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status), locale);
+  const checks = [...doctorChecks(data, await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status), locale)];
+  if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push({ group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: ownerBaseline.missing }, locale) });
   return { data, checks, config, options };
 }
 

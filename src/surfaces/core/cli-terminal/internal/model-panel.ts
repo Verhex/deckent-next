@@ -1,4 +1,5 @@
 import { ErrorRegistry, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { randomUUID } from 'node:crypto';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
@@ -10,7 +11,7 @@ import { modelInvocabilityText, reservationAmountText } from '#surfaces/core/mod
 const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/core/config/index.js').terminalConfigWrite>) =>
   (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
-type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
+type Host = Pick<TerminalLaunchContext, 'admitModelActivation' | 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
   | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
@@ -46,6 +47,21 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       try { await host.prepareModelSwitch!(root, scopeId, choice.reference, options, reasoning); }
       catch (error) { throw ErrorRegistry.createError('TERMINAL_MODEL_SWITCH_REFUSED', { params: { reason: readinessReason(error, locale) } }); }
     } } : {}),
+    ...(host.admitModelActivation && host.inspectModelBinding && host.inspectModelActivation ? { async fix(choice: ModelPanelChoice, action: 'activate' | 'deactivate' | 'reconcile') {
+      const binding = await host.inspectModelBinding!(root, choice.reference, options);
+      if (binding.status !== 'declared') throw ErrorRegistry.createError('MODEL_ACTIVATION_NOT_FOUND');
+      const current = await host.inspectModelActivation!(root, { schemaVersion: 1, scopeId, reference: choice.reference }, options);
+      const workers = await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId, channelId: choice.reference.providerId }, options);
+      const channel = workers?.channels.find(row => row.access === 'allowed');
+      const row = channel?.access === 'allowed' ? channel.models.find(row => row.model.id === choice.reference.modelId && row.model.version === choice.reference.modelVersion) : null;
+      const token = JSON.stringify([current.activation?.revision ?? 0, channel?.access === 'allowed' ? channel.activation : null, row?.activation ?? null, binding.catalogRevision, binding.binding.digest]);
+      if (choice.stateToken !== token) throw ErrorRegistry.createError('MODEL_ACTIVATION_REVISION_CONFLICT');
+      const desired = action === 'reconcile' ? current.activation?.state === 'active' ? 'activate' : 'deactivate' : action;
+      if (desired === 'deactivate' && !current.activation) throw ErrorRegistry.createError('MODEL_ACTIVATION_NOT_FOUND');
+      await host.admitModelActivation!(root, { schemaVersion: 1, commandId: `model-state-${randomUUID()}`, scopeId, reference: choice.reference,
+        action: desired, expectedRevision: current.activation?.revision ?? 0, expectedBinding: binding.binding,
+        ...(desired === 'activate' ? { catalogRevision: binding.catalogRevision } : {}) } as never, options);
+    } } : {}),
     async reasoningOffSupported(reference) {
       const declared = await host.inspectDeclaredModels?.(root, options);
       const plan = reference ? null : await host.describeTerminalChatPlan?.(root, options);
@@ -64,12 +80,14 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
       // Display names from the ledger catalog when it knows the model (best effort; the exact reference is always shown).
-      const display = new Map<string, string>();
+      const display = new Map<string, string>(), workers = new Map<string, boolean>(), workerTokens = new Map<string, readonly unknown[]>();
       if (host.inspectModelCatalog) {
         try {
           for (const channel of (await host.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options)).channels) {
             if (channel.access === 'denied') continue;
             for (const entry of channel.models) {
+              workerTokens.set(`${channel.channelId}@${channel.providerVersion}/${entry.model.id}@${entry.model.version}`, [channel.activation, entry.activation]);
+              workers.set(`${channel.channelId}@${channel.providerVersion}/${entry.model.id}@${entry.model.version}`, channel.activation?.state === 'active' && entry.activation?.state === 'active');
               const name = (entry.model as { displayName?: string }).displayName;
               if (name) display.set(`${channel.channelId}@${channel.providerVersion}/${entry.model.id}@${entry.model.version}`, name);
             }
@@ -83,12 +101,18 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const entry = reading?.models.find(entry => sameReference(entry.reference, reference));
         const state = entry?.availability
           ?? { invocable: false as const, reason: { kind: 'unavailable' as const, code: 'MODEL_INVOCATION_UNAVAILABLE' } };
+        const binding = await host.inspectModelBinding?.(root, reference, options);
+        const chat = await host.inspectModelActivation?.(root, { schemaVersion: 1, scopeId, reference }, options);
+        const on = chat?.activation?.state === 'active', conflict = workers.has(exact) && workers.get(exact) !== on;
+        const fixes: NonNullable<ModelPanelChoice['fixes']>[number][] = host.admitModelActivation ? [{ id: on ? 'deactivate' : 'activate', label: on ? t('tui.model.fix.deactivate', {}, locale) : t('tui.model.fix.activate', {}, locale) }, ...(conflict ? [{ id: 'reconcile' as const, label: t('tui.model.reconcile.align', {}, locale) }] : [])] : [];
+        if (!state.invocable && state.reason.code.startsWith('PROVIDER_SPEND')) fixes.push({ id: 'budget', label: t('tui.model.fix.budget', {}, locale) });
+        if (!state.invocable && !state.reason.code.startsWith('PROVIDER_SPEND') && host.providerConnect) fixes.push({ id: 'provider', label: t('tui.model.fix.provider', {}, locale) });
         const blocked = state.invocable ? null : modelInvocabilityText(state, locale);
         if (!state.invocable && state.reason.code === 'PROVIDER_SPEND_EXHAUSTED') reservationBlocked.add(exact);
         const command = entry && !state.invocable && (state.reason.kind === 'not-carried' || state.reason.kind === 'stale-activation')
           ? t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
             revision: state.reason.activationRevision ?? 0, digest: entry.bindingDigest, catalog: entry.catalogRevision }, locale) : null;
-        return { reference, label: display.get(exact) ?? model.id, detail: modelInvocabilityText(state, locale),
+        return { reference, label: display.get(exact) ?? model.id, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : modelInvocabilityText(state, locale)}`,
           providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
@@ -103,7 +127,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       }
       const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
       const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
-      return { title, choices, notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };
+      choices.sort((left, right) => Number(left.blocked !== null) - Number(right.blocked !== null));
+      return { title, choices, fixTitle: t('tui.model.reconcile.title', {}, locale), fixApply: t('cli.init.policyModes.cardApply', {}, locale), fixKeep: t('tui.model.reconcile.keep', {}, locale), notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };
     },
     // "Also make default" (T4-B D1, Jev d84b248d): the user's `terminal.defaultModel` through the governed `/config` writer on the user (global)
     // layer — policy-checked, approval-aware, audited; the file is created when the person has none yet. Never the project file.

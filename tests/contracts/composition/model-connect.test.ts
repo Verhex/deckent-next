@@ -1,8 +1,11 @@
+import { DatabaseSync } from 'node:sqlite';
 import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { describe, expect, it } from 'vitest';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, parseProviderConnectRegistry } from '#adapters/index.js';
+import { inspectConfiguredModelCatalog, inspectConfiguredModelActivation, admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { modelActivationTargetId } from '#engine/index.js';
@@ -195,20 +198,25 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
       tariff: { kind: 'openrouter-endpoint', currency: 'USD' } } });
   }, 60_000);
 
-  it('a require-approval config rule stops the run with the pending card; after allow the same command finishes', async () => {
-    const f = await harness([{ id: 'ask-profiles', effect: 'require-approval', actions: ['write'], scopes: 'all', principals: me,
-      resource: { kind: 'config', ids: ['project:provider_invocation_profiles'] } }]);
-    const command = { schemaVersion: 1, commandId: 'connect-ask', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base, model: { nativeId: 'gpt-6-sol' } };
-    // An id the seed does not list is refused typed before anything is written.
-    await expect(connectConfiguredModel(f.project, command, f.options, { registry: localRegistry })).rejects.toMatchObject({ code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
-    const asked = { ...command, model: { nativeId: 'gpt-6.1-sol' } };
-    const pending = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
-    expect(pending).toMatchObject({ status: 'approval-pending', approval: { keyPath: 'provider_invocation_profiles', layer: 'project' },
-      steps: { declaration: 'written', profile: 'present', activation: 'present' } });
-    await terminalApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 'scope', approvalId: pending.approval!.approvalId, commandId: 'decide-connect', expectedRevision: 0,
-      decision: 'allow', reason: 'Allowed in the terminal', channel: 'local-terminal-card' }, f.options);
-    const done = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
-    expect(done).toMatchObject({ status: 'connected', steps: { declaration: 'present', profile: 'written', activation: 'written' } });
+  it('a require-approval config rule stops explicit and pulled connections; after allow the same command finishes', async () => {
+    for (const model of [{ nativeId: 'gpt-6.1-sol' }, { pull: 'available' }]) {
+      const f = await harness([{ id: 'ask-profiles', effect: 'require-approval', actions: ['write'], scopes: 'all', principals: me,
+        resource: { kind: 'config', ids: ['project:provider_invocation_profiles'] } }], true);
+      const command = { schemaVersion: 1, commandId: 'connect-ask', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base, model: { nativeId: 'gpt-6-sol' } };
+      // An id the seed does not list is refused typed before anything is written.
+      await expect(connectConfiguredModel(f.project, command, f.options, { registry: localRegistry })).rejects.toMatchObject({ code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
+      const asked = { ...command, model };
+      const pending = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
+      expect(pending).toMatchObject({ status: 'approval-pending', approval: { keyPath: 'provider_invocation_profiles', layer: 'project' },
+        steps: { declaration: 'written', profile: 'present', activation: 'present' } });
+      expect((await f.config()).provider_invocation_profiles.profiles.filter(profile => (profile.reference as { providerId: string }).providerId === 'openai-api')).toEqual([]);
+      expect((await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference: pending.reference }, f.options)).activation).toBeNull();
+      await terminalApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 'scope', approvalId: pending.approval!.approvalId, commandId: 'decide-connect', expectedRevision: 0,
+        decision: 'allow', reason: 'Allowed in the terminal', channel: 'local-terminal-card' }, f.options);
+      const done = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
+      expect(done).toMatchObject({ status: 'connected', steps: { declaration: 'present', profile: 'written', activation: 'written' } });
+      if ('pull' in model) expect(done.models).toEqual(expect.arrayContaining([expect.objectContaining({ nativeId: 'gpt-6.1-sol', state: 'connected' })]));
+    }
   }, 60_000);
 });
 
@@ -229,3 +237,29 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   await connectConfiguredModel(f.project, { ...command, commandId: 'billing-stable' }, f.options, { registry: localRegistry });
   expect((await f.config()).provider_invocation_profiles.profiles.find(row => row['id'] === current['id'])).toEqual(kept);
 });
+
+it.skipIf(process.platform !== 'linux')('explicit model state writes both owners; conflicting legacy rows remain byte-identical through read-only inspection', async () => {
+  const f = await harness([], true);
+  const command = { schemaVersion: 1, commandId: 'both-connect', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base, model: { nativeId: 'gpt-6-luna' } };
+  const connected = await connectConfiguredModel(f.project, command, f.options, { registry: localRegistry });
+  const binding = await inspectModelBinding(f.project, connected.reference, f.options);
+  if (binding.status !== 'declared') throw Error('binding');
+  let chat = await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference: connected.reference }, f.options);
+  await admitConfiguredModelActivation(f.project, { schemaVersion: 1, commandId: 'both-off', scopeId: 'scope', reference: connected.reference, action: 'deactivate', expectedRevision: chat.activation!.revision, expectedBinding: binding.binding }, f.options);
+  chat = await inspectConfiguredModelActivation(f.project, { schemaVersion: 1, scopeId: 'scope', reference: connected.reference }, f.options);
+  expect(chat.activation?.state).toBe('inactive');
+  const catalog = await inspectConfiguredModelCatalog(f.project, { schemaVersion: 1, scopeId: 'scope', channelId: connected.reference.providerId }, f.options);
+  expect(catalog.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: 'gpt-6-luna', activation: { state: 'inactive', revision: 2 } })]) });
+  await admitConfiguredModelActivation(f.project, { schemaVersion: 1, commandId: 'both-on', scopeId: 'scope', reference: connected.reference, action: 'activate', catalogRevision: binding.catalogRevision, expectedRevision: chat.activation!.revision, expectedBinding: binding.binding }, f.options);
+  // A retained pre-upgrade worker-off row is a fixture, not an implicit migration or a person command.
+  const fixtureDb = new DatabaseSync(f.ledger);
+  try {
+    const row = fixtureDb.prepare("SELECT record FROM model_catalog_activations WHERE model_id='gpt-6-luna'").get()!;
+    const record = { ...JSON.parse(String(row['record'])), state: 'inactive' };
+    fixtureDb.prepare("UPDATE model_catalog_activations SET state='inactive',record=? WHERE model_id='gpt-6-luna'").run(JSON.stringify(record));
+  } finally { fixtureDb.close(); }
+  const before = JSON.stringify(f.rows('SELECT * FROM model_catalog_activations'));
+  const listed = await inspectConfiguredModelCatalog(f.project, { schemaVersion: 1, scopeId: 'scope', channelId: connected.reference.providerId }, f.options);
+  expect(listed.channels[0]).toMatchObject({ models: expect.arrayContaining([expect.objectContaining({ modelId: 'gpt-6-luna', chatState: 'active', activationConflict: true })]) });
+  expect(JSON.stringify(f.rows('SELECT * FROM model_catalog_activations'))).toBe(before);
+}, 40_000);

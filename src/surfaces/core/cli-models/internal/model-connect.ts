@@ -25,7 +25,7 @@ function parse(argv: readonly string[]) {
   }
   if (help) return { help, json, values };
   for (const flag of ['--scope', '--connection', '--command-id']) if (!values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
-  if (values.has('--model') === values.has('--reference')) throw ErrorRegistry.createError('CLI_USAGE');
+  if (values.has('--model') && values.has('--reference')) throw ErrorRegistry.createError('CLI_USAGE');
   return { help, json, values };
 }
 const stepWord = (state: string, locale: Locale) => state === 'written' ? t('models.connect.step.written', {}, locale)
@@ -39,6 +39,11 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
     profile: stepWord(result.steps.profile, locale), activation: stepWord(result.steps.activation, locale), carried: result.steps.carried }, locale),
   result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false ? t('models.connect.keyMissing', { name: result.credentialRef }, locale)
     : t('models.connect.key', { name: result.credentialRef }, locale)];
+  for (const model of result.models ?? []) {
+    const params = { model: terminalSafeText(model.nativeId) };
+    lines.push(model.state === 'connected' ? t('models.connect.pull.connected', params, locale) : model.state === 'unpriced' ? t('models.connect.pull.unpriced', params, locale)
+      : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale) : t('models.connect.pull.notInCatalog', params, locale));
+  }
   if (result.notCarried.length) lines.push(t('models.connect.notCarried', { models: result.notCarried.map(item => `${item.reference.providerId}@${item.reference.providerVersion}/`
     + `${item.reference.modelId}@${item.reference.modelVersion} (${item.code})`).join(', ') }, locale));
   if (result.tariff === 'unmetered') lines.push(t('models.connect.unmetered', {}, locale));
@@ -66,13 +71,13 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
   const command = modelConnectCommandSchema.safeParse({ schemaVersion: 1, commandId: value('--command-id'), scopeId: value('--scope'), connection: value('--connection'),
     ...(Object.keys(cli).length ? { cli } : {}), ...(delegate === undefined ? {} : { delegate: delegate === 'none' ? [] : delegate.split(',') }),
     endpoint: value('--endpoint') ?? null, model: exact ? { reference: { providerId: exact[1], providerVersion: Number(exact[2]), modelId: exact[3], modelVersion: Number(exact[4]) } }
-      : { nativeId: value('--model') } });
+      : value('--model') ? { nativeId: value('--model') } : { pull: 'available' } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');
   emit(await context.connectModel(context.root ?? process.cwd(), command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale) });
 }
 
 /** The connection kinds and their seeded models the host binds for the terminal's `/provider` window (registry data, exact ids). */
-type ConnectKinds = Readonly<{ kinds: readonly Readonly<{ id: string; labelKey: string; available: boolean; seeded?: boolean; connectFamily?: string | null }>[];
+type ConnectKinds = Readonly<{ kinds: readonly Readonly<{ id: string; labelKey: string; available: boolean; seeded?: boolean; pull?: 'available' | 'pick'; connectFamily?: string | null }>[];
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string }>[]> }>;
 function connectPickOnly(argv: readonly string[]): { scope?: string; language?: string } | null {
   const picked: { scope?: string; language?: string } = {};
@@ -107,15 +112,16 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
   if (!kind) return cancelled();
   const models = await host.seedModels(kind.id);
   if (!models.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const nativeId = await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: catalog[kind.labelKey] ?? kind.id }, locale),
+  const pull = kind.pull === 'available';
+  const nativeId = pull ? '' : await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: catalog[kind.labelKey] ?? kind.id }, locale),
     options: models.map(model => ({ id: model.nativeId, label: model.displayName && model.displayName !== model.nativeId
       ? `${terminalSafeText(model.nativeId)} · ${terminalSafeText(model.displayName)}` : terminalSafeText(model.nativeId) })) });
-  if (nativeId === null || !models.some(model => model.nativeId === nativeId)) return cancelled();
-  const answer = await askModelsCard(context, locale, { title: t('climodels.models.card.connect', { model: terminalSafeText(nativeId) }, locale),
+  if (nativeId === null || !pull && !models.some(model => model.nativeId === nativeId)) return cancelled();
+  const answer = await askModelsCard(context, locale, { title: t('climodels.models.card.connect', { model: pull ? t('tui.provider.pull', {}, locale) : terminalSafeText(nativeId) }, locale),
     body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: catalog[kind.labelKey] ?? kind.id }, locale), t('climodels.models.card.connectWhat', {}, locale)],
     options: modelsConfirmOptions(locale) });
   if (answer !== 'apply') return cancelled();
-  const command = modelConnectCommandSchema.parse({ schemaVersion: 1, commandId: `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: kind.id, endpoint: null, model: { nativeId } });
+  const command = modelConnectCommandSchema.parse({ schemaVersion: 1, commandId: `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: kind.id, endpoint: null, model: pull ? { pull: 'available' } : { nativeId } });
   emit(scopeNotice(scope, locale), modelsSinks(context));
   const result = await context.connectModel(root, command, options);
   emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale),

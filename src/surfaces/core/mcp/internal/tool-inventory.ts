@@ -9,6 +9,9 @@ export const MCP_WITHHELD_TOOLS = Object.freeze({
 
 /** Advertised write tools no capability group lists. Policy still decides each call; listing here grants nothing. */
 export const MCP_UNGROUPED_WRITE_TOOLS = Object.freeze({
+  connect_model: 'person-activation-preflight-or-separate-scoped-grant',
+  manage_provider_spending: 'separate-budget-grant-ai-reconcile-non-delegable',
+  purge_model_invocation_content: 'separate-person-content-purge-grant',
   // Only the ordinary operator control is advertised: hold, and resume of an operator hold, under the existing run cancel/reserve
   // policy. The human step (close, resume of any other park) stays unadvertised until the post-beta delegation slice.
   control_run: 'human-step-withheld-until-delegation-slice',

@@ -1,15 +1,15 @@
 import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { AuditApplication, ModelConnectApplication, ModelConnectError, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
+import { AuditApplication, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
-import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
-import { discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
+import { activateConfiguredWorkerModel, carryConfiguredModelActivation, admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { listConfiguredConnectionWorkspaces, listConfiguredConnectionModels, discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
 import { headlessConnectPorts } from './headless.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -27,14 +27,42 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
     let effective: Record<string, unknown> = {};
     const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal) : null;
+    if (parsed.success && parsed.data.workspaceId) {
+      const rows = await listConfiguredConnectionWorkspaces(projectRoot, String(scopeId), parsed.data.connection, parsed.data.endpoint, options, host);
+      if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+      host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: parsed.data.workspaceId } };
+    }
+    const pulled = new Map<string, readonly string[]>();
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
       defaults: registry.profileDefaults,
+      async available(id, base) {
+        const kind = kindOf(id)!;
+        if (kind.connect?.catalogOnly) return workerConnectionModelIds(await readProviderConnectSeed(kind.connect.seed!), effective as never);
+        if (!kind.probe?.listsModels) return null;
+        const ids = (await listConfiguredConnectionModels(projectRoot, String(scopeId), id, base, options, host)).map(row => row.nativeId);
+        pulled.set(id, ids); return ids;
+      },
+      priced: (id, nativeId, base) => providerConnectModelPriced(kindOf(id)!, nativeId, base),
+      async preflight(scopeId, principal, target) {
+        const kind = parsed.success ? kindOf(parsed.data.connection) : null;
+        const channelId = target?.reference.providerId ?? kind?.connect?.seed ?? (kind ? providerDiscoveryChannel(kind, parsed.success ? parsed.data.endpoint : null) : 'unknown');
+        const source = { load: async () => (await scope()).document };
+        await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: null }, principal, 'scope');
+        if (target) {
+          await new ModelCatalogPolicyAuthorization(source).authorize('activate', scopeId, { channelId, modelId: target.nativeId }, principal, 'scope');
+          await new ModelActivationPolicyAuthorization(source).authorize('activate', { scopeId, reference: target.reference }, principal);
+        }
+      },
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
       seed: readProviderConnectSeed,
-      discover: (id, base, nativeId) => discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host),
+      discover: async (id, base, nativeId) => pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host),
       adapter: (id, value) => kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
+      async workerActivate(reference, commandId) {
+        return kindOf(parsed.success ? parsed.data.connection : '')?.connect?.catalogOnly
+          ? activateConfiguredWorkerModel(projectRoot, String(scopeId), reference, commandId, options) : false;
+      },
       principal,
       async layers() {
         const snapshot = await snapshotConfiguredConfig(projectRoot, options); effective = snapshot.effective as never;
@@ -63,6 +91,10 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async activate(value) {
         await admitConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
           expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options); },
+      async carryActivate(value) {
+        await carryConfiguredModelActivation(projectRoot, { schemaVersion: 1, action: 'activate', commandId: value.commandId, scopeId: String(scopeId), reference: value.reference,
+          expectedRevision: value.expectedRevision, catalogRevision: value.catalogRevision, expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: value.digest } }, options);
+      },
       delivers: (profile, binding, spare) => assessModelInvocationProfileDeliveries([{ profile: profile as never, definition: binding.definition, catalogRevision: binding.catalogRevision }],
         configuredModelInvocationDeliverySurfaces(effective as never).map(([surface, frame]) => [surface, { maxResultBytes: frame.maxResultBytes - spare }] as const)).length === 0,
       async audit(event) {
@@ -76,7 +108,8 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const result = await app.connect(input);
     return result.status === 'connected' && result.tariff === 'published' ? Object.freeze({ ...result, budget: await connectBudget(projectRoot, result.scopeId, options) }) : result;
   } catch (error) {
-    if (error instanceof ModelConnectError || error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
+    if (error instanceof ModelConnectError) throw ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId).join(', ') } });
+    if (error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
     throw error instanceof DeckentError ? error : queryFailure(error);
   }
 }

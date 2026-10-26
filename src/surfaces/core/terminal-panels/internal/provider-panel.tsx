@@ -33,7 +33,7 @@ export function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPa
 }
 
 /** `forModel` (T4-B): the address is chosen for a model connection, not for storing a key. */
-type Step = Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
+type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | null; workspaces: readonly Readonly<{ id: string; name: string }>[] } | Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
   | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null; grant?: boolean }
   | { kind: 'optional-key'; target: ProviderPanelKind; endpoint: string | null }
   | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('./contract.js').PanelLine[] }
@@ -93,7 +93,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   };
   const withoutKey = (target: ProviderPanelKind, endpoint: string | null) => {
     setStep({ kind: 'busy' });
-    port.connect({ kind: target.id, endpoint, key: null }).then(outcome => setStep({ kind: 'result', outcome }), error => { onError(error); back(); });
+    port.connect({ kind: target.id, endpoint, key: null }).then(outcome => setStep(outcome.workspaces ? { kind: 'workspace', target, endpoint, workspaces: outcome.workspaces } : { kind: 'result', outcome }), error => { onError(error); back(); });
   };
   const beginConnection = (target: ProviderPanelKind, endpoint: string | null) => {
     if (!port.prepareKey || target.keyRequired) { beginKey(target, endpoint); return; }
@@ -120,6 +120,12 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (step.outcome.approvalId && openApproval) { openApproval(step.outcome.approvalId); onClose(); return; }
     back();
   }} />;
+  if (step.kind === 'workspace') return <PickerWindow title={title(step.target.label)} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position}
+    tree={{ title: step.target.label, items: step.workspaces.map(row => ({ id: row.id, label: row.name, detail: row.id, unscoped: true })) }} onResult={result => {
+      if (result.kind !== 'selected' || !port.connectModel) { back(); return; }
+      const selected = step; setStep({ kind: 'busy' });
+      granting(() => port.connectModel!({ kind: selected.target.id, endpoint: selected.endpoint, model: 'pull:available', workspaceId: result.id }), outcome => setStep({ kind: 'connected', outcome }));
+    }} />;
   if (step.kind === 'model') {
     const { target, endpoint } = step, connectModel = port.connectModel;
     return <PickerWindow title={title(fillTemplate(words.modelTitle, { kind: target.label }))} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position}
@@ -187,6 +193,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
         if (target.keyRequired && !text) return words.keyRequired;
         setStep({ kind: 'busy' });
         port.connect({ kind: target.id, endpoint, key: text === '' ? null : text, ...(step.grant !== undefined ? { grant: step.grant } : {}) }).then(outcome => {
+          if (outcome.workspaces) { setStep({ kind: 'workspace', target, endpoint, workspaces: outcome.workspaces }); return; }
           // PRE-8 v2: a key just stored in the main vault is offered to this project right away (the same card); declining keeps the stored key.
           const name = outcome.stored ? outcome.keyName ?? null : null, check = port.secretGrant?.check;
           if (port.prepareKey || !name || !check) { setStep({ kind: 'result', outcome }); return; }

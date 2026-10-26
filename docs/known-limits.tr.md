@@ -685,3 +685,11 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*
   komutu yeniden çalıştırın; yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini
   beklemez ve çalışan servis defterin yan dosyalarını yerinde tutar; bu, filo ölçeğinde değil, yüklü tek bir çekirdekte ölçüldü.
+
+Yönetilen `decision-steps` tabanını açıkça kabul eden kurucu, pipe/SDK üzerinden
+tanıksız olarak operator beklemesini sürdürebilir, kapatabilir veya yanıtlayabilir.
+Bu kararlar şimdilik kişinin kimliği ve kural id'siyle `ai-policy` denetim etiketini
+korur; beta.1 öncesi ayrı sürümlü karar kanıtı geçişi gereklidir. Güvenlik beklemeleri,
+kota yanıtları ve script ile kabul/ret mevcut kişi/kart tabanını korur. Ajan kabuğunun
+yetki komutları her kipte kişinin kartını ister; Deckent dışında aynı kullanıcıyla
+başlatılan süreç işletim sistemi güven sınırındadır.

@@ -212,11 +212,11 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   const openProviderWorkspaces = context.openProviderWorkspaces;
   const workspace = openProviderWorkspaces && context.configApplication && context.resolveConfigPrincipal ? { workspace: workspacePanelPort(root, scopeId, { ...context, openProviderWorkspaces }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
-    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations) } : {}),
+    ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
-    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol, ...workspace } } : {}),
+    ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
     // PRE-8 v2: the same first-use card as the chat turn when a model list, a model connection or a just-stored key needs a grant here.
     ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
       context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined), ...budget, ...cache } } : {}) } } };
