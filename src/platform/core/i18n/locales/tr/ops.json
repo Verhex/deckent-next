@@ -538,5 +538,6 @@
   "models.spending.period.monthly": "Aylık bütçe (kurulumun yerel takvim ayı). Sonraki sıfırlama: {date} ({zone}).",
   "models.spending.period.legacy": "Önceki sınır bu sıfırlamaya kadar korunur; harcama geçmişi ve tutulan tutarlar saklanır.",
   "models.spending.period.pending": "Önceki sınır: aylık geçiş kayıt yükseltmesini bekliyor; kullanım silinmedi.",
-  "models.spending.period.calendar": "Bütçe dönemi: {months} takvim ayı (kurulumun yerel saati). Sonraki sıfırlama: {date} ({zone})."
+  "models.spending.period.calendar": "Bütçe dönemi: {months} takvim ayı (kurulumun yerel saati). Sonraki sıfırlama: {date} ({zone}).",
+  "error.BACKUP_COVERAGE_INCOMPLETE": "Doğrulanmış yedek kaldırılacak bütün kaynakları kapsamıyor. Korunan oturumları saklayın veya mevcut çıkış/iptal yolunu kullanın. Hiçbir veri silinmedi."
 }

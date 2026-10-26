@@ -538,5 +538,6 @@
   "models.spending.period.monthly": "Monthly budget (installation local calendar month). Next reset: {date} ({zone}).",
   "models.spending.period.legacy": "Previous cap retained until this reset; spending history and outstanding holds are preserved.",
   "models.spending.period.pending": "Previous cap: monthly transition awaits the ledger upgrade; no usage has been cleared.",
-  "models.spending.period.calendar": "Budget period: {months} calendar months (installation local time). Next reset: {date} ({zone})."
+  "models.spending.period.calendar": "Budget period: {months} calendar months (installation local time). Next reset: {date} ({zone}).",
+  "error.BACKUP_COVERAGE_INCOMPLETE": "The verified backup does not cover every removal resource. Keep protected sessions or use their existing logout/revoke path. No data was deleted."
 }

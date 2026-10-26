@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "commands": [
+    { "binary": "deckent", "arguments": ["kill", "cleanup", "recover", "uninstall"], "reason": "shell.destructive.deckent-lifecycle" }
+  ]
+}

@@ -145,3 +145,10 @@ it('alpha.56 FIX2: option words between the product program and its group/action
   for (const command of ['deckent --lang en run status r', 'deckent --json doctor', 'deckent models list --scope run', 'npx --yes deckent --lang en run list', 'npx deckent@latest run list', './dist/entry.js --json doctor'])
     expect(classifyShellAuthority(command), command).toBe(false);
 });
+
+it('keeps registry lifecycle names including flagged/compound uninstall at the destructive floor', () => {
+  for (const command of ['deckent uninstall', 'deckent --root /fixture uninstall --dry-run --json',
+    'echo inspect && deckent uninstall --purge', 'deckent kill', 'deckent cleanup', 'deckent recover']) {
+    expect(classifyShellRisk(command)).toEqual({ risk: 'destructive', reason: 'shell.destructive.deckent-lifecycle' });
+  }
+});
