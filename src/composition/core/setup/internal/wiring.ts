@@ -12,12 +12,13 @@ import { inspectConfiguredShellRealm } from '#composition/core/agent-turn/index.
 import { inspectConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
 import { configuredOnboarding } from './onboarding.js';
 import { executionRegistrySchema } from '#domain/index.js';
-import { addNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { installExecutionEnvironment } from './install.js';
 
 type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }> }>;
 const reachableDocker = (facts: ExecutionFacts) => facts.runtimes.find(row => row.support === 'supported' && row.daemon === 'reachable')?.path ?? null;
 const toolchainsHome = (config: Awaited<ReturnType<typeof loadConfig>>) => join(productResourcePath(config.productLayout, 'workspaces'), 'toolchains');
+/** Second-provider profile add: the CLI host supplies the registry owner, so setup never reaches the coding template composition itself. */
+export type AddCodingProfile = (root: string, input: unknown, options: ConfigLoadOptions, dependencies?: { readonly witness?: { attest(): Promise<boolean> } }) => Promise<{ readonly status: string; readonly digest: string; readonly expect: string; readonly profile: { readonly id: string; readonly version: number | string } }>;
 type Status = 'applied' | 'refused' | 'not-wired';
 const failure = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : 'SETUP_STAGE_FAILED'; };
 
@@ -77,7 +78,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       }
       if (op === 'config.set') { await config(String(input['keyPath']), input['value'], input['layer'] === 'global' ? 'global' : 'project'); return result('applied'); }
       if (op === 'work.profile-add') {
-        const added = await addNativeCodingProfile(root, { provider: input['provider'], kind: input['kind'], image: input['image'],
+        const added = await (host as { addCodingProfile?: AddCodingProfile }).addCodingProfile!(root, { provider: input['provider'], kind: input['kind'], image: input['image'],
           expect: input['expect'], digest: input['digest'], apply: true }, options, { witness });
         return result(added.status === 'applied' || added.status === 'unchanged' ? 'applied' : 'refused');
       }

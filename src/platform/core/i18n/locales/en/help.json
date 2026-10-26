@@ -220,6 +220,7 @@
   "cli.help.action.policy.mcp.list": "List MCP group permissions per scope",
   "cli.help.action.policy.mcp.grant": "Grant an MCP capability group in a scope",
   "cli.help.action.policy.mcp.revoke": "Revoke an MCP capability group in a scope",
+  "cli.help.action.policy.mcp.narrow": "Narrow an MCP capability group to its current version in a scope",
   "cli.help.action.run.list": "List recent Runs, waiting first",
   "cli.help.action.policy.scopes": "List the scopes you can read",
   "cli.help.action.coding.instructions": "Show or trust the worker instruction file",

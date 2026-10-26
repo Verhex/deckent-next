@@ -37,6 +37,10 @@ Başlarken:
       [--scope <id>] [--json]
 
 İş yürütme:
+  hub         İmzalı Hub paketlerini ve kaynaklarını yönetin.
+      sources list|add|remove | search | inspect | install | update |
+      uninstall | verify | export | refresh | cards | publish | yank | revoke
+      [--scope <id>] [--input <dosya|->]
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
       --request <metin> [--scope <id>]
   run         Run oluştur ve yönet
@@ -75,7 +79,7 @@ Onaylar:
       [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | recovery | mcp list|grant|revoke | scopes
+      revoke | upgrade | recovery | mcp list|grant|revoke|narrow | scopes
       [--scope <id>]
 
 Kurulum/Bakım:

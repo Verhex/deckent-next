@@ -48,9 +48,9 @@ const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revis
  * Children inherit the family handler; existing handlers retain argument validation and execution. Handler actions and catalog
  * actions are kept equal by `cli-grouped-help.test.ts` (both directions). */
 export const CLI_CATALOG = [
-  { name: 'hub', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', bare: 'handler', children: [
-    { name: 'sources', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', bare: 'handler', children: ['list', 'add', 'remove'].map(name => action(name, 'work', 'hub.help.summary', 'hub.help')) },
-    ...['search', 'inspect', 'install', 'update', 'uninstall', 'verify', 'export', 'refresh', 'cards', 'publish', 'yank', 'revoke'].map(name => action(name, 'work', 'hub.help.summary', 'hub.help')),
+  { name: 'hub', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', args: '[--scope <id>] [--input <file|->]', children: [
+    { name: 'sources', group: 'work', summary: 'hub.help.action.sources', detail: 'hub.help', bare: 'handler', children: ['list', 'add', 'remove'].map(name => action(name, 'work', `hub.help.action.sources.${name}` as MessageKey, 'hub.help')) },
+    ...['search', 'inspect', 'install', 'update', 'uninstall', 'verify', 'export', 'refresh', 'cards', 'publish', 'yank', 'revoke'].map(name => action(name, 'work', `hub.help.action.${name}` as MessageKey, 'hub.help')),
   ] },
   { name: 'report' , group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help', args: '[--scope <id>] [--run <id>] [--verbose]',
     bare: 'handler' },
@@ -231,6 +231,7 @@ export const CLI_CATALOG = [
       action('list', 'approvals', 'cli.help.action.policy.mcp.list', 'cli.help.policy'),
       action('grant', 'approvals', 'cli.help.action.policy.mcp.grant', 'cli.help.policy', { requires: ['--group <id>'] }),
       action('revoke', 'approvals', 'cli.help.action.policy.mcp.revoke', 'cli.help.policy', { requires: ['--group <id>'] }),
+      action('narrow', 'approvals', 'cli.help.action.policy.mcp.narrow', 'cli.help.policy', { requires: ['--group <id>'] }),
     ] },
     action('scopes', 'observe', 'cli.help.action.policy.scopes', 'cli.help.policy'),
   ] },

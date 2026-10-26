@@ -220,6 +220,7 @@
   "cli.help.action.policy.mcp.list": "Scope başına MCP grup izinlerini listele",
   "cli.help.action.policy.mcp.grant": "Bir scope’ta MCP yetenek grubuna izin ver",
   "cli.help.action.policy.mcp.revoke": "Bir scope’ta MCP yetenek grubu iznini geri al",
+  "cli.help.action.policy.mcp.narrow": "Bir scope’ta MCP yetenek grubunu güncel sürüme daralt",
   "cli.help.action.run.list": "Son Run’ları listele, bekleyenler önce",
   "cli.help.action.policy.scopes": "Okuyabildiğiniz scope'ları listeler",
   "cli.help.action.coding.instructions": "Worker talimat dosyasını göster ya da ona güven",

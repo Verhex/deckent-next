@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
+import { hubOperationSchemas } from '#engine/index.js';
 
 it.each(['en', 'tr'] as const)('renders the detailed %s main help golden through main (owner 2026-10-19: 100–150 lines)', async language => {
   let output = ''; let errors = '';
@@ -190,6 +191,8 @@ const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
 /** Action words a handler source dispatches on: `argv[1]|action|verb === 'x'`, `[...].includes(argv[1]|action)` and an `ACTIONS` list.
  * `file#name` reads only that exported function (a file that also holds a terminal slash handler with its own verbs). */
 function handlerActions(family: string): Set<string> {
+  // The hub handler dispatches on the operation schema keys (`hub.sources.add`), not on literal comparisons.
+  if (family === 'hub') return new Set(Object.keys(hubOperationSchemas).flatMap(operation => operation.split('.').slice(1)));
   const words = new Set<string>();
   for (const entry of HANDLER_SOURCES[family]!) {
     const [file, only] = entry.split('#') as [string, string | undefined];
