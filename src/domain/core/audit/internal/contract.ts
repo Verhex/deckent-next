@@ -362,11 +362,25 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('recovery-verdict'), caseId: digest, decisionEventId: identitySchema, evidenceDigest: digest, detection: z.enum(['lost', 'not-lost']),
     choice: z.enum(['continue-new-attempt', 'escalate-human']).nullable() }).strict(),
   z.object({ kind: z.literal('hub-client'), action: identitySchema, hubId: digest, commandId: identitySchema, inputDigest: digest }).strict(),
+  /**
+   * U9-7 (design rev 6 §11.4, v1): one SIWC worker relay record of one Attempt — a refused peer, the relay capability issued/refused, a relayed or
+   * refused model exchange, a native-effect approval decision, the revocation, and the closing summary (`counters`, only on `closed`; `suppressed`
+   * counts records past the registry bound). Opaque ids, digests, status, a bounded reason token and a byte count only: never a token, header,
+   * prompt, body, command, path or email.
+   */
+  z.object({ kind: z.literal('siwc-relay'), schemaVersion: z.literal(1),
+    action: z.enum(['peer-refused', 'capability-issued', 'capability-refused', 'model-relayed', 'model-refused', 'approval', 'revoked', 'closed']),
+    runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, connectionId: z.string().uuid(), bindingDigest: digest, policyDigest: digest,
+    requestId: z.string().uuid().nullable(), status: z.number().int().min(100).max(599).nullable(), reason: z.string().regex(/^[a-z][a-z0-9:-]{0,63}$/u).nullable(),
+    bytes: counterSchema.nullable(), counters: z.object({ peersRefused: counterSchema, capabilityIssued: counterSchema, capabilityRefused: counterSchema, relayed: counterSchema,
+      refused: counterSchema, upstreamSends: counterSchema, suppressed: counterSchema }).strict().nullable() }).strict(),
 ]).superRefine((subject, context) => {
-  // A null termination only with a would-stop shadow seal; a would-stop seal is shadow with no termination; a choice exactly when lost.
+  // A null termination only with a would-stop shadow seal; a would-stop seal is shadow with no termination; a choice exactly when lost;
+  // relay counters exactly on the closing summary.
   if (subject.kind === 'recovery-decision' && (subject.terminationReceiptId === null) !== (subject.basis === 'would-stop')
     || subject.kind === 'recovery-decision' && subject.basis === 'would-stop' && subject.mode !== 'shadow'
-    || subject.kind === 'recovery-verdict' && (subject.choice === null) !== (subject.detection === 'not-lost')) context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
+    || subject.kind === 'recovery-verdict' && (subject.choice === null) !== (subject.detection === 'not-lost')
+    || subject.kind === 'siwc-relay' && (subject.counters === null) === (subject.action === 'closed')) context.addIssue({ code: z.ZodIssueCode.custom, message: 'AUDIT_SUBJECT_INCONSISTENT' });
 });
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

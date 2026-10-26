@@ -96,19 +96,17 @@ describe.skipIf(process.platform !== 'linux')('worker checkout shaping (C2): spa
     expect(() => assertPatchScope(classifyPatchScope(patch, ['src/**', 'CLAUDE.md'], 'warn', HIDDEN))).not.toThrow();
   });
 
-  it('U9-7: a SIWC relay profile\'s frozen hidden set is the one list for its checkout and for the delivery floor', async () => {
+  it('U9-7/U9F: a SIWC relay profile keeps its native profile\'s instruction discovery — full checkout like native Codex, the same delivery floor', async () => {
     const template = { id: 't', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456,
       pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } };
     const compiled = compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' },
       permissionMode: 'unattended', model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit', scope: 'src/code.ts', acceptance: 'Zero exit' } });
-    // A set narrower than the registry list proves both consumers read the frozen relay set, not the registry default.
-    const own = ['CLAUDE.md', '.codex'], profile = { ...compiled, parameters: { ...compiled.parameters,
-      siwcWorker: { schemaVersion: 1, connectionId: '00000000-0000-4000-8000-000000000001', owner: { issuer: 'local', subject: 'p' }, hiddenPaths: own } } };
-    expect(dockerTaskHiddenPaths(profile)).toEqual(own); expect(instructionSurfacePaths(profile.parameters)).toEqual(own);
-    const f = await fixture(), lease = await f.allocate('relay', dockerTaskHiddenPaths(profile)!);
-    await expect(readFile(join(lease.workspace, 'CLAUDE.md'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(lease.workspace, 'AGENTS.md'), 'utf8')).toBe(BASE['AGENTS.md']);
-    await writeFile(join(lease.workspace, 'CLAUDE.md'), 'overwritten blind\n');
-    const scope = classifyPatchScope(await capture(f, lease, dockerTaskHiddenPaths(profile)), ['src/**'], 'warn', instructionSurfacePaths(profile.parameters));
+    const profile = { ...compiled, parameters: { ...compiled.parameters, siwcWorker: { schemaVersion: 1, connectionId: '00000000-0000-4000-8000-000000000001', owner: { issuer: 'local', subject: 'p' } } } };
+    expect(dockerTaskHiddenPaths(profile)).toBeNull(); expect(instructionSurfacePaths(profile.parameters)).toEqual(instructionSurfacePaths(compiled.parameters));
+    const f = await fixture(), lease = await f.allocate('relay');
+    expect(await readFile(join(lease.workspace, 'AGENTS.md'), 'utf8')).toBe(BASE['AGENTS.md']);
+    await writeFile(join(lease.workspace, 'CLAUDE.md'), 'overwritten\n');
+    const scope = classifyPatchScope(await capture(f, lease, null), ['src/**'], 'warn', instructionSurfacePaths(profile.parameters));
     expect(scope.instructionSurface).toEqual(['CLAUDE.md']); expect(() => assertPatchScope(scope)).toThrow(expect.objectContaining({ code: 'PATCH_INSTRUCTION_SURFACE_WRITE' }));
   });
 

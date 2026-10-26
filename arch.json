@@ -4432,7 +4432,7 @@
         "src/adapters/core/local-runtime-socket",
         "src/adapters/core/native-connection",
         "src/domain/core/run",
-        "src/domain/core/provider-catalog",
+        "src/domain/core/audit",
         "src/domain/core/model-invocation",
         "src/engine/core/supervisor",
         "src/adapters/core/docker-supervisor"

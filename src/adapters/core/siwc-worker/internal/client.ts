@@ -21,8 +21,10 @@ const text = (value: unknown) => typeof value === 'string' && value.length > 0 &
  * elicitation). Never `thread/shellCommand`, process or account methods.
  */
 export function createAppServerTurn(input: { readonly send: (message: Message) => void; readonly prompt: string; readonly model: string; readonly version: string;
-  readonly approve: (request: SiwcNativeApproval) => Promise<boolean> }) {
-  let next = 0, threadId: string | null = null, turnId: string | null = null, settled = false, interruptRequested = false;
+  readonly approve: (request: SiwcNativeApproval) => Promise<boolean>;
+  /** The structured final-report schema (the native `--output-schema` channel), sent as the turn's `outputSchema`; absent = no report asked. */
+  readonly outputSchema?: Readonly<Record<string, unknown>> }) {
+  let next = 0, threadId: string | null = null, turnId: string | null = null, settled = false, interruptRequested = false, finalMessage: string | null = null;
   const approvals = { accepted: 0, declined: 0 }; let refusedRequests = 0;
   const pending = new Map<number, (message: Message) => void>();
   let settle!: (outcome: SiwcTurnOutcome) => void;
@@ -45,7 +47,7 @@ export function createAppServerTurn(input: { readonly send: (message: Message) =
       if (failed(started)) return;
       threadId = text(object(object(started.result)['thread'])['id']);
       if (!threadId) { finish('failed', 'protocol'); return; }
-      call('turn/start', { threadId, input: [{ type: 'text', text: input.prompt }] }, turned => { if (failed(turned)) return; turnId ??= text(object(object(turned.result)['turn'])['id']); });
+      call('turn/start', { threadId, input: [{ type: 'text', text: input.prompt }], ...(input.outputSchema ? { outputSchema: input.outputSchema } : {}) }, turned => { if (failed(turned)) return; turnId ??= text(object(object(turned.result)['turn'])['id']); });
     });
   });
   const items = new Map<string, Record<string, unknown>>();
@@ -97,6 +99,10 @@ export function createAppServerTurn(input: { readonly send: (message: Message) =
       else if (message.method === 'item/started' && (params['threadId'] ?? threadId) === threadId && (params['turnId'] ?? turnId) === turnId && items.size < R.limits.approvalItems) {
         const item = object(params['item']), id = text(item['id']); if (id && !items.has(id)) items.set(id, item);
       }
+      // The turn's last completed agent message is its final answer (the native Codex reader's rule); only its text is kept, for the report.
+      else if (message.method === 'item/completed' && !settled && (params['threadId'] ?? threadId) === threadId && (params['turnId'] ?? turnId) === turnId) {
+        const item = object(params['item']); if (item['type'] === 'agentMessage' && typeof item['text'] === 'string') finalMessage = item['text'];
+      }
       else if (message.method === 'turn/completed') {
         const turn = object(params['turn']), status = turn['status'];
         if (status === 'completed') finish('completed', null);
@@ -107,6 +113,8 @@ export function createAppServerTurn(input: { readonly send: (message: Message) =
     /** Revocation path: ask for `turn/interrupt` once (when a turn is known); the caller bounds the drain and then kills the worker. */
     interrupt() { if (settled || interruptRequested) return; interruptRequested = true;
       if (threadId && turnId) call('turn/interrupt', { threadId, turnId }, () => undefined); },
+    /** The text of the turn's last completed agent message (null: none); read only for a completed turn's report. */
+    finalMessage: () => finalMessage,
     /** The control channel ended: an unsettled turn is lost (never success). */
     lost() { finish('lost', interruptRequested ? 'cancelled' : 'protocol'); },
   });

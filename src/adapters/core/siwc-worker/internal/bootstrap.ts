@@ -1,13 +1,13 @@
 // Standalone SIWC worker bootstrap, mounted read-only as the container's init process. No host package imports at runtime.
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readFileSync, readdirSync, readlinkSync, mkdirSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, readlinkSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const RELAY = '/run/deckent-relay.sock', HELPER = '/run/deckent-siwc-helper.mjs', HARDENING = '/run/deckent-hardening.node';
-type Launch = { schemaVersion: 1; executable: string; args: string[]; native: { vendorRoots: Record<string, string>; fallbackVendorRoot: string; triples: Record<string, string>; binary: string; pathDir: string; managedEnv: string };
+type Launch = { schemaVersion: 1; executable: string; args: string[]; instructions: { path: string; text: string } | null; native: { vendorRoots: Record<string, string>; fallbackVendorRoot: string; triples: Record<string, string>; binary: string; pathDir: string; managedEnv: string };
   limits: { requestMaxBytes: number; controlLineBytes: number; connections: number; idleMs: number; helperTimeoutMs: number; drainMs: number; controlConnectMs: number; controlPollMs: number } };
 
 /** Socket inode of the client end of one loopback TCP connection (container network namespace). */
@@ -92,6 +92,8 @@ async function main() {
   const spec = await fetchText('GET', '/launch'); if (spec.status !== 200) throw new Error();
   const launch = JSON.parse(spec.body) as Launch; if (launch.schemaVersion !== 1) throw new Error();
   const home = '/tmp/deckent-home'; mkdirSync(`${home}/.codex`, { recursive: true, mode: 0o700 });
+  // The compiled core prompt goes where the frozen `model_instructions_file` config names it, as the native Codex worker writes it.
+  if (launch.instructions) { mkdirSync(dirname(launch.instructions.path), { recursive: true, mode: 0o700 }); writeFileSync(launch.instructions.path, launch.instructions.text, { mode: 0o600, flag: 'wx' }); }
   let child: ChildProcess | undefined = undefined;
   let appServer: { pid: number; start: string } | null = null, issued = false, sequence = 0;
   const helperServer = createServer((incoming, response) => {
