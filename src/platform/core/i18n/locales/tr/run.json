@@ -393,7 +393,7 @@
   "proposal.status.accepted": "İş başlatıldı; görev sonuçları henüz kabul edilmedi",
   "proposal.status.rejected": "Reddedildi",
   "proposal.status.parked": "Park edildi; yeni iş kabulü yok",
-  "proposal.approval": "Onay {id}; bitiş {expiry}. Bu iş oluşturma kartını etkileşimli terminalnde inceleyin. MCP onay kararı veremez.",
+  "proposal.approval": "Onay {id}; bitiş {expiry}. Bu iş oluşturma kartını etkileşimli terminalde inceleyin. MCP onay kararı veremez.",
   "proposal.budget": "Beyan tavanı: {amount}; {status}.",
   "proposal.budget.checked": "kabul anında kontrol edildi",
   "proposal.budget.unchecked": "kontrol edilmedi",

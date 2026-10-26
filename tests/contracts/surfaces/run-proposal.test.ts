@@ -30,7 +30,7 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: CLI JSON file 
   await runCommand(['run', 'propose', '--proposal', file, '--json'], context);
   expect(JSON.parse(output.pop()!)).toEqual(receipt); expect(calls.pop()).toEqual(proposal);
   await runCommand(['run', 'propose', '--proposal', '-', '--lang', 'tr'], { ...context, stdin: Readable.from([JSON.stringify(proposal)]) });
-  const tr = output.pop()!; expect(tr).toContain('Onay bekliyor'); expect(tr).toContain('toplam Run harcaması henüz sınırlanmıyor'); expect(tr).toContain('MCP onay kararı veremez');
+  const tr = output.pop()!; expect(tr).toContain('Onay bekliyor'); expect(tr).toContain('toplam iş harcaması henüz sınırlanmıyor'); expect(tr).toContain('MCP onay kararı veremez'); expect(tr).not.toContain('{approvalId}');
   await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', 'en'], context);
   expect(calls.pop()).toEqual({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' });
   expect(output.pop()).toContain('no total Run spending limit is enforced');
@@ -58,7 +58,7 @@ it('MCP wire submits and inspects the same contract, rejects forged fields and e
   const tools = (await client.listTools()).tools;
   expect(tools.find(t => t.name === 'propose_run')!.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true });
   expect(tools.find(t => t.name === 'inspect_run_proposal')!.annotations).toMatchObject({ readOnlyHint: true });
-  expect(tools.find(t => t.name === 'propose_run')!.description).toContain('yürütmede toplam Run harcaması sınırlanmaz');
+  expect(tools.find(t => t.name === 'propose_run')!.description).toContain('yürütmede toplam iş harcaması sınırlanmaz');
   expect((await client.callTool({ name: 'propose_run', arguments: proposal })).structuredContent).toEqual(receipt); expect(calls.pop()).toEqual(proposal);
   const query = { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' };
   expect((await client.callTool({ name: 'inspect_run_proposal', arguments: query })).structuredContent).toEqual(receipt); expect(calls.pop()).toEqual(query);
@@ -77,7 +77,7 @@ it('MCP wire submits and inspects the same contract, rejects forged fields and e
 it.each(['en', 'tr'] as const)('non-metered proposal and /do preview explicitly waive only money checks (%s)', async locale => {
   const value: RunProposalResult = { ...receipt, budgetSemantics: 'not-metered', proposal: { ...receipt.proposal, binding: { ...receipt.proposal.binding,
     admission: { ...receipt.proposal.binding.admission!, budgetSemantics: 'not-metered', budget: null } } } };
-  const expected = locale === 'tr' ? 'Worker’lar: abonelik/ücretsiz model — bütçe kontrolü uygulanmaz' : 'Workers: subscription/free model — budget check does not apply';
+  const expected = locale === 'tr' ? 'İşçiler: abonelik veya ek ücret gerektirmeyen model — API bütçesi uygulanmaz' : 'Workers: subscription/free model — budget check does not apply';
   const output: string[] = [];
   await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', locale], {
     inspectRunProposal: async () => value, stdout: { write(text: string) { output.push(text); } } });
@@ -93,7 +93,7 @@ it.each(['en', 'tr'] as const)('paid Brain cost stays distinct from non-metered 
   const expected = locale === 'tr' ? '0,02 $' : '$0.02';
   const lines = brainProposalLines(value, locale).join('\n');
   expect(lines).toContain('fixture-api/fixture-model'); expect(lines).toContain(expected);
-  expect(lines).toContain(locale === 'tr' ? 'ücretli API' : 'paid API'); expect(lines).toContain(locale === 'tr' ? 'Worker’lar:' : 'Workers:');
+  expect(lines).toContain(locale === 'tr' ? 'ücretli API' : 'paid API'); expect(lines).toContain(locale === 'tr' ? 'İşçiler:' : 'Workers:');
   const out: string[] = [];
   await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', locale], {
     root: '/unused', inspectRunProposal: async () => value, stdout: { write(text: string) { out.push(text); } } });
@@ -115,7 +115,7 @@ it.each(['en', 'tr'] as const)('returned durable Run identity leads the summary 
       reference: { providerId: 'fixture-api', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 }, responseDigest: 'a'.repeat(64) } } } },
     planningSpending: { class: 'metered', currency: 'USD', amountMinorUnits: 2, evidence: 'measured-tariff' } };
   const lines = brainProposalLines(accepted, locale);
-  expect(lines[0]).toBe(locale === 'en' ? 'Run r admitted. Follow /tasks or /monitor.' : 'Run r başlatıldı. /tasks veya /monitor ile izleyin.');
+  expect(lines[0]).toBe(locale === 'en' ? 'Run r admitted. Follow /tasks or /monitor.' : 'İş r başlatıldı. /tasks veya /monitor ile izleyin.');
   expect(lines.join('\n')).toContain('fixture-api/fixture-model');
   expect(brainProposalLines(pending, locale)[0]).not.toBe(lines[0]);
 });

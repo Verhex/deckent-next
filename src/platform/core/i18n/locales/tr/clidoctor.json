@@ -199,7 +199,7 @@
   "installation.fileUnsafe.size": "dosya boyutu izin verilen sınırın dışında",
   "cli.paths.secretStoreKey": "Gizli depo şifreleme anahtarı",
   "doctor.sandbox.host": "yalıtım: yok (bu makinede çalışır)",
-  "doctor.sandbox.refused": "yalıtım reddedildi ({code})",
+  "doctor.sandbox.refused": "yalıtım: reddedildi ({code})",
   "doctor.sandbox.mcp": "sandbox-net (MCP varsayılanı: ağ erişimi, kendine ait HOME)",
   "doctor.sandbox.selected": "yalıtım: {realm}"
 }
