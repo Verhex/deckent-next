@@ -286,6 +286,8 @@ describe.skipIf(!imageId || process.platform !== 'linux')('SIWC worker relay wit
     const silence = new AbortController(); let revokedAtAbort: string | null = 'unset';
     const running = h.supervisor.execute(h.request, silence.signal);
     silence.signal.addEventListener('abort', () => { revokedAtAbort = h.relay.statistics().revoked; });
+    // The watch starts once the worker is up (hold mode writes app.json right after its one model exchange), so Docker latency cannot stop it early.
+    for (let i = 0; i < 200 && !(await h.read('app.json')); i++) await new Promise(resolve => setTimeout(resolve, 100));
     const watch = inactivityWatch({ warnAfterMs: 200, stopAfterMs: 2500 }, Date.now()), seen = { events: 0, bytes: 0 };
     for (let i = 0; i < 300 && !silence.signal.aborted; i++) {
       const counters = h.relay.statistics(); seen.events = counters.events; seen.bytes = counters.bytes;
