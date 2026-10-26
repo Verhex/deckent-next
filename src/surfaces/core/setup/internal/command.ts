@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { planSetup, SETUP_PHASES, SETUP_PLAN_SCHEMA_VERSION, type SetupPhase, type SetupObservation, type SetupPlan, SetupStageRegistry } from '#engine/index.js';
-import { cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister } from '#surfaces/core/cli-human/index.js';
+import { cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { observeSetup } from './observe.js';
@@ -57,15 +57,19 @@ export const planFor = (observed: Readonly<{ observation: SetupObservation; regi
  * without that port says so with SETUP_APPLY_UNAVAILABLE. A person on a real terminal gets the window instead.
  */
 export async function setupInitCommand(argv: readonly string[], context: SetupCommandContext): Promise<void> {
-  const flags = parseSetupFlags(argv), locale: Locale = commandLocale(context, flags.lang);
+  let flags = parseSetupFlags(argv); const locale: Locale = commandLocale(context, flags.lang);
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, format = setupFormat(context, flags.json);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (!flags.here && context.rootResolution?.found && context.rootResolution.folder) {
     (context.stderr ?? process.stderr).write(`${t('setup.enclosing', { path: terminalSafeText(root) }, locale)}\n`);
   }
-  // INIT-D5: `--yes` names its scope; it is refused before anything is observed, with the valid scopes listed.
-  if (flags.yes) await resolveCommandScope({ command: 'deckent init --yes', locale, explicit: flags.scope, mutating: true, interactive: false,
-    listScopes: () => scopeLister(context, root, { env })().catch(() => []) });
+  // INIT-D5: `--yes` names its scope; it is refused before anything is observed, with the valid scopes listed. Amended (owner, REALSURF2 2026-10-26):
+  // a folder whose installation has exactly one scope re-runs in that scope (named in the output); a new folder or several scopes still need --scope.
+  if (flags.yes) {
+    const scopes = flags.scope ? [] : await scopeLister(context, root, { env })().catch(() => []);
+    if (scopes.length === 1) { flags = { ...flags, scope: scopes[0]! }; if (format !== 'json') emit(scopeNotice({ scopeId: scopes[0]!, source: 'default' }, locale), sinks); }
+    await resolveCommandScope({ command: 'deckent init --yes', locale, explicit: flags.scope, mutating: true, interactive: false, listScopes: async () => scopes });
+  }
   const person = format === 'interactive' && !flags.yes;
   let observed = await observeSetup(context, root, flags.lang, person);
   if (person) {
