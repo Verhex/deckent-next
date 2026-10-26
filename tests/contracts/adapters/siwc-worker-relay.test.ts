@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { transform } from 'esbuild';
-import { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
+import { DockerSupervisor, dockerTaskHiddenPaths } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile } from '#adapters/core/native-coding/index.js';
-import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, siwcWorkerConnections, bindSiwcWorker, type SiwcUpstream, type SiwcRelayRecord, type SiwcNativeApproval } from '#adapters/core/siwc-worker/index.js';
-import type { SandboxRequest } from '#engine/index.js';
+import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, siwcWorkerConnections, bindSiwcWorker, siwcWorkerTurn, SiwcWorkerSupervisor,
+  type SiwcUpstream, type SiwcRelayRecord, type SiwcNativeApproval, type SiwcRelayAuditSubject } from '#adapters/core/siwc-worker/index.js';
+import { auditEventSchema, instructionSurfacePaths, readWorkerFinalReport } from '#domain/index.js';
+import { inactivityWatch, type SandboxRequest } from '#engine/index.js';
 
 // Source integration: the relay hashes its own standalone programs; tests mount esbuild transpilations of the exact candidate sources.
 vi.mock('node:fs/promises', async importOriginal => {
@@ -51,11 +53,12 @@ const post = (path, token, body) => new Promise(resolve => { const url = new URL
     response => { let text = ''; response.on('data', part => { text += part; }); response.on('end', () => resolve({ status: response.statusCode, body: text })); });
   call.on('error', error => resolve({ status: 0, body: String(error.code) })); call.end(data); });
 const body = (extra = {}) => ({ model: config.model, input: [{ role: 'user', content: 'hi' }], instructions: 'x', tools: [{ type: 'function', name: 'shell', parameters: {} }], store: false, stream: true, ...extra });
-const pending = new Map(); let next = 100, token = null;
+const pending = new Map(); let next = 100, token = null, outputSchema = null;
 const ask = (method, params) => new Promise(resolve => { const id = next++; pending.set(id, resolve); send({ id, method, params }); });
 const item = item => send({ method: 'item/started', params: { threadId: 'thr_1', turnId: 'turn_1', item } });
 async function turn(early) {
-  const report = { mode, early: early.error ? 'refused' : early.result?.decision ?? null };
+  const report = { mode, early: early.error ? 'refused' : early.result?.decision ?? null, config, outputSchema: outputSchema !== null };
+  try { report.core = readFileSync('/tmp/deckent-prompt/core.txt', 'utf8'); } catch { report.core = null; }
   // Wrong helper processes first: a grandchild (via sh) and a direct child with another cmdline get nothing and consume nothing.
   report.grandchild = auth(['sh', ['-c', 'node ' + helper[1].join(' ') + '; exit $?']]) !== null;
   report.otherCmdline = auth(['node', ['-e', "require('http').request({ host: '127.0.0.1', port: process.argv[1], method: 'POST', path: '/capability', headers: { 'content-length': '0' } }, r => { let b = ''; r.on('data', d => { b += d; }); r.on('end', () => { if (r.statusCode === 200) process.stdout.write(b); else process.exitCode = 1; }); }).end()", helper[1][1]]]) !== null;
@@ -80,6 +83,9 @@ async function turn(early) {
   if (report.decision === 'accept') report.tool = await new Promise(resolve => spawn('node', ['/workspace/tool.mjs', JSON.stringify({ helper: helper[1], base, parent: process.pid, ctl: listen.port })], { stdio: 'ignore' }).on('exit', resolve));
   writeFileSync('/workspace/app.json', JSON.stringify(report));
   const failed = report.first.status !== 200 || (report.second && report.second.status !== 200);
+  // A strict-schema final answer (transport nulls included), as the real binary returns it under the turn's outputSchema.
+  if (outputSchema && !failed) send({ method: 'item/completed', params: { threadId: 'thr_1', turnId: 'turn_1', item: { id: 'msg_1', type: 'agentMessage', text: JSON.stringify({ schemaVersion: 1,
+    summary: 'done', changedFiles: ['src/a.txt'], checks: [{ command: 'true', outcome: 'passed', checkId: null, role: null }], openIssues: [], handoff: null, exit: null, lessons: null }) } } });
   send({ method: 'turn/completed', params: { threadId: 'thr_1', turn: { id: 'turn_1', status: failed ? 'failed' : 'completed', error: failed ? { message: 'x', codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 401 } } } : null } } });
 }
 async function onLine(line) { const message = JSON.parse(line);
@@ -87,6 +93,7 @@ async function onLine(line) { const message = JSON.parse(line);
   if (message.method === 'initialize') send({ id: message.id, result: { userAgent: 'synthetic' } });
   else if (message.method === 'thread/start') send({ id: message.id, result: { thread: { id: 'thr_1' } } });
   else if (message.method === 'turn/start') {
+    outputSchema = message.params.outputSchema ?? null;
     // An approval before the turn id is known is refused (never matched to "any turn").
     const early = await ask('item/commandExecution/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_0', cwd: '/workspace', command: 'true' });
     send({ id: message.id, result: { turn: { id: 'turn_1', status: 'inProgress' } } }); void turn(early); }
@@ -118,9 +125,15 @@ const pipes = pid => { try { return readdirSync('/proc/' + pid + '/fd').map(fd =
 const ownPipes = new Set(pipes(parent)); out.sharedPipes = pipes(1).filter(link => ownPipes.has(link));
 writeFileSync('/workspace/effect.txt', 'native effect'); writeFileSync('/workspace/tool.json', JSON.stringify(out));
 `;
+const TEMPLATE = { id: 't', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456,
+  pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } };
+const INVOCATION = { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
+  model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } };
 const capabilityIn = (text: string, cHash: string | null) => !!cHash && [...text.matchAll(/(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/gu)].some(match => hash(match[0]) === cHash);
 
-async function harness(mode: string, options: { approve?: boolean; upstream?: SiwcUpstream; leases?: string[]; workspaceFiles?: Record<string, string> } = {}) {
+async function harness(mode: string, options: { approve?: boolean; upstream?: SiwcUpstream; leases?: string[]; workspaceFiles?: Record<string, string>;
+  /** U9F: the production supervisor class, the durable audit sink and the frozen native turn shape. */
+  production?: boolean; audit?: (subject: SiwcRelayAuditSubject) => Promise<void>; turn?: { config: readonly string[]; instructions: string; finalReport: boolean } } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-siwc-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
   const workspace = join(root, 'work'); await mkdir(workspace);
   await writeFile(join(workspace, 'fake-app-server.mjs'), FAKE_APP_SERVER); await writeFile(join(workspace, 'tool.mjs'), TOOL);
@@ -141,12 +154,14 @@ async function harness(mode: string, options: { approve?: boolean; upstream?: Si
       model: 'fixture-model', imageId: imageId!, codexVersion: 'synthetic', generations: { connection: 1, custody: 1, consent: 1 } },
     lease: async () => ({ accessToken: leases[Math.min(leaseCount++, leases.length - 1)]!, expiresAtMs: Date.now() + 3_600_000 }),
     approve: async request => { approveCalls++; asked.push(request); return options.approve ?? true; }, live: () => true, onRecord: record => records.push(record),
-    appServer: { executable: 'node', args: ['/workspace/fake-app-server.mjs', mode] } });
+    appServer: { executable: 'node', args: ['/workspace/fake-app-server.mjs', mode] }, ...options.turn, ...(options.audit ? { audit: options.audit } : {}) });
   cleanups.push(relay.close);
-  const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
-    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1, tmpBytes: 67108864, deadlineMs: 60000, controlTimeoutMs: 10000, outputBytes: 65536,
-    relay: { ...relay.descriptor, bootstrapPath: artifacts['bootstrap']!.path, bootstrapSha256: artifacts['bootstrap']!.sha256, helperPath: artifacts['helper']!.path, helperSha256: artifacts['helper']!.sha256 } },
-  undefined, { created: id => relay.bindContainer(id) });
+  const mounted = { ...relay, descriptor: { ...relay.descriptor, bootstrapPath: artifacts['bootstrap']!.path, bootstrapSha256: artifacts['bootstrap']!.sha256,
+    helperPath: artifacts['helper']!.path, helperSha256: artifacts['helper']!.sha256 } };
+  const docker = { executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1, tmpBytes: 67108864, deadlineMs: 60000, controlTimeoutMs: 10000, outputBytes: 65536 };
+  const supervisor = options.production ? new SiwcWorkerSupervisor(docker, mounted)
+    : new DockerSupervisor({ ...docker, relay: mounted.descriptor }, undefined, { created: id => relay.bindContainer(id) });
   const request: SandboxRequest = { protocolVersion: 1, identity, workspace, argv: ['unused'] };
   cleanups.push(async () => { await supervisor.cancel(request); await supervisor.release(request); });
   const read = async (name: string) => readFile(join(workspace, name), 'utf8').catch(() => null);
@@ -237,6 +252,54 @@ describe.skipIf(!imageId || process.platform !== 'linux')('SIWC worker relay wit
     expect(siwcWorkerResultError(stop.outcome, stop)).toBeNull();
     expect(siwcWorkerResultError({ ...stop.outcome!, status: 'lost', approvals: { accepted: 1, declined: 0 } }, stop)?.code).toBe('SIWC_APP_SERVER_EFFECT_UNKNOWN');
   }, 60000);
+
+  it('U9F audit + delivery: relay records are sealed audit subjects without A/C; a completed relayed turn exits 0 with the native report line; an unrecorded capability is never issued', async () => {
+    const native = compileNativeCodingDockerProfile(TEMPLATE, { ...INVOCATION, discovery: { schemaVersion: 1, mode: 'disabled' } });
+    const delivery = (native.parameters['nativeSubscription'] as { promptDelivery: { core: string; task: string } }).promptDelivery;
+    const audited: SiwcRelayAuditSubject[] = [], event = (subject: SiwcRelayAuditSubject) => auditEventSchema.parse({ schemaVersion: 1, eventId: randomUUID(), scopeId: 'test',
+      principal: { issuer: 'local', subject: 'runtime' }, policyRevision: 'r1', atMs: Date.now(), subject });
+    const h = await harness('normal', { production: true, audit: async subject => { event(subject); audited.push(subject); },
+      turn: { ...siwcWorkerTurn(native.parameters['argv'] as string[], delivery), finalReport: true } });
+    const result = await h.supervisor.execute(h.request);
+    expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
+    // Delivery reads exactly what it reads from a native Codex worker: one `native-worker-report` line, transport nulls dropped.
+    expect(readWorkerFinalReport(result.stdout)).toEqual({ schemaVersion: 1, kind: 'native-worker-report', status: 'reported',
+      report: { schemaVersion: 1, summary: 'done', changedFiles: ['src/a.txt'], checks: [{ command: 'true', outcome: 'passed' }], openIssues: [] } });
+    // The worker ran with the native profile's own discovery/instructions config and core prompt file, and the turn asked for the report schema.
+    const app = JSON.parse((await h.read('app.json'))!);
+    expect(app).toMatchObject({ outputSchema: true, core: delivery.core, config: { 'skills.include_instructions': false, 'skills.bundled.enabled': false, project_doc_max_bytes: 0 } });
+    await h.relay.close();
+    expect(audited.map(row => row.action)).toEqual(expect.arrayContaining(['capability-issued', 'approval', 'model-relayed', 'revoked', 'closed']));
+    expect(audited.at(-1)).toMatchObject({ action: 'closed', counters: { capabilityIssued: 1, relayed: 1, suppressed: 0 } });
+    // Every asked decision is sealed before its answer (expansion and out-of-workspace requests are declined without asking).
+    expect(audited.filter(row => row.action === 'approval').map(row => row.reason)).toEqual(['command:accept', 'file-change:accept']);
+    expect(JSON.stringify(audited)).not.toContain(h.leases[0]!); expect(capabilityIn(JSON.stringify(audited), app.cHash)).toBe(false);
+    expect(JSON.stringify(audited)).not.toContain('tool.mjs');
+    // No audit, no capability: a failing audit sink spends the single issue, hands out no C and nothing reaches upstream.
+    const refused = await harness('normal', { production: true, audit: async () => { throw new Error('ledger unavailable'); } });
+    expect((await refused.supervisor.execute(refused.request)).result).not.toEqual({ kind: 'exited', exitCode: 0 });
+    expect(refused.upstreamSeen).toHaveLength(0); expect(await refused.read('effect.txt')).toBeNull(); expect(refused.relay.statistics()).toMatchObject({ capabilityIssued: 0, upstreamSends: 0, revoked: 'audit' });
+  }, 90000);
+
+  it('U9F silence: the R3 watch on the relay counters stops a quiet relay worker, C is revoked before the kill, and the Attempt never settles as success', async () => {
+    const h = await harness('hold', { production: true });
+    const silence = new AbortController(); let revokedAtAbort: string | null = 'unset';
+    const running = h.supervisor.execute(h.request, silence.signal);
+    silence.signal.addEventListener('abort', () => { revokedAtAbort = h.relay.statistics().revoked; });
+    // The watch starts once the worker is up (hold mode writes app.json right after its one model exchange), so Docker latency cannot stop it early.
+    for (let i = 0; i < 200 && !(await h.read('app.json')); i++) await new Promise(resolve => setTimeout(resolve, 100));
+    const watch = inactivityWatch({ warnAfterMs: 200, stopAfterMs: 2500 }, Date.now()), seen = { events: 0, bytes: 0 };
+    for (let i = 0; i < 300 && !silence.signal.aborted; i++) {
+      const counters = h.relay.statistics(); seen.events = counters.events; seen.bytes = counters.bytes;
+      if (watch(Date.now(), counters) === 'stop') silence.abort('inactivity'); else await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    const result = await running;
+    // Activity was counted (control lines, model bytes) before the silence; the abort revoked C synchronously, before the supervisor's kill.
+    expect(seen.events).toBeGreaterThan(0); expect(seen.bytes).toBeGreaterThan(0); expect(revokedAtAbort).toBe('inactivity');
+    expect(result.interruptCause).toBe('inactivity'); expect(result.result).not.toEqual({ kind: 'exited', exitCode: 0 });
+    expect(readWorkerFinalReport(result.stdout).status).toBe('unavailable');
+    await expect(lstat(h.relay.descriptor.socketPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 60000);
 });
 
 it('launch gate: activation hold, missing Yama scope, foreign platform or a Codex-less image refuse typed with no fallback launch (U9-6a)', () => {
@@ -269,4 +332,20 @@ it('producer: only a consented, personally custodied connection of the same pers
   expect(bindSiwcWorker(worker('m'), rows, 's').parameters['siwcWorker']).toMatchObject({ schemaVersion: 1, connectionId: id, owner: person });
   // Another model, another scope or no consented connection keeps the profile exactly as compiled (its existing route).
   for (const [profile, scope, given] of [[worker('m-ai'), 's', rows], [worker('m'), 'b', rows], [worker('m'), 's', []]] as const) expect(bindSiwcWorker(profile, given, scope)).toEqual(profile);
+});
+
+it('U9F discovery: a relay worker keeps its native profile\'s instruction discovery — same checkout shaping, same delivery floor, same `-c` config, core prompt as instructions', () => {
+  const rows = [{ scopeId: 's', connectionId: randomUUID(), owner: { issuer: 'local', subject: 'person' }, modelId: 'm', consentAtMs: 1 }];
+  for (const mode of ['repository', 'disabled'] as const) {
+    const native = compileNativeCodingDockerProfile(TEMPLATE, { ...INVOCATION, discovery: { schemaVersion: 1, mode } }), relay = bindSiwcWorker(native, rows, 's');
+    expect(relay.parameters['siwcWorker']).toBeDefined();
+    expect(dockerTaskHiddenPaths(relay)).toEqual(dockerTaskHiddenPaths(native)); expect(instructionSurfacePaths(relay.parameters)).toEqual(instructionSurfacePaths(native.parameters));
+    const argv = native.parameters['argv'] as string[], delivery = (native.parameters['nativeSubscription'] as { promptDelivery: { core: string; task: string } }).promptDelivery;
+    const turn = siwcWorkerTurn(argv, delivery, { text: 'context' });
+    expect(turn.config).toEqual(argv.slice(0, argv.indexOf('--')).filter((_, at, all) => all[at - 1] === '-c'));
+    // Native Codex never auto-loads AGENTS.md with a compiled prompt; `disabled` alone also turns its skills off.
+    expect(turn.config).toContain('project_doc_max_bytes=0');
+    expect(turn.config.includes('skills.include_instructions=false')).toBe(mode === 'disabled');
+    expect(turn).toMatchObject({ instructions: delivery.core, prompt: `${delivery.task}\n\ncontext` });
+  }
 });

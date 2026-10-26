@@ -55,11 +55,12 @@ it('siwcWorker v1 is strict and only rides a pinned, prompt-delivered worker of 
   const invocation = { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
     model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } };
   const pinned = compileNativeCodingDockerProfile({ ...profile(), parameters: { ...parameters(), argv: ['unused'] } }, invocation);
-  const worker = { schemaVersion: 1, connectionId: '00000000-0000-4000-8000-000000000001', owner: { issuer: 'local', subject: 'person' }, hiddenPaths: ['AGENTS.md'] };
+  const worker = { schemaVersion: 1, connectionId: '00000000-0000-4000-8000-000000000001', owner: { issuer: 'local', subject: 'person' } };
   const relay = (parameters: Record<string, unknown>, siwcWorker: unknown = worker) => ({ ...pinned, parameters: { ...parameters, siwcWorker } });
   expect(resolveDockerTaskProfile(relay(pinned.parameters)).siwcWorker).toEqual(worker);
-  expect(dockerTaskHiddenPaths(relay(pinned.parameters))).toEqual(['AGENTS.md']);
-  for (const value of [{ ...worker, schemaVersion: 2 }, { ...worker, token: 'x' }, { ...worker, connectionId: 'not-a-uuid' }, { ...worker, hiddenPaths: undefined }])
+  // U9F: no relay-specific hidden set — the relay keeps the native profile's own checkout shaping (none for this CLI).
+  expect(dockerTaskHiddenPaths(relay(pinned.parameters))).toBe(dockerTaskHiddenPaths(pinned));
+  for (const value of [{ ...worker, schemaVersion: 2 }, { ...worker, token: 'x' }, { ...worker, connectionId: 'not-a-uuid' }, { ...worker, hiddenPaths: ['AGENTS.md'] }])
     expect(() => validateDockerTaskProfile(relay(pinned.parameters, value))).toThrow('DOCKER_TASK_PROFILE_INVALID');
   // No native pin / prompt delivery (a plain task, an inline-prompt CLI run) or another CLI: the relay route is refused, not reinterpreted.
   const inline = compileNativeCodingDockerProfile({ ...profile(), parameters: { ...parameters(), argv: ['unused'] } }, { ...invocation, composition: undefined, prompt: 'Edit note.txt.' });

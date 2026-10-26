@@ -7,11 +7,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { attemptIdentitySchema } from '#domain/index.js';
+import { attemptIdentitySchema, type AuditSubject } from '#domain/index.js';
 import type { OAuthAccessTokenLease } from '#engine/index.js';
 import { SIWC_WORKER_RELAY as R } from '#adapters/core/provider-siwc/index.js';
 import { listenForContainerPeer, localPeerNativePath } from '#adapters/core/local-runtime-socket/index.js';
-import { isPublicNativeAddress } from '#adapters/core/native-connection/index.js';
+import { finalReportJsonSchema, isPublicNativeAddress, readFinalReportText } from '#adapters/core/native-connection/index.js';
 import { containerInitPeer } from './proc.js';
 import { siwcWorkerRequestBody, secretScrubber, type SiwcRelayRefusal } from './request.js';
 import { createAppServerTurn, type SiwcNativeApproval } from './client.js';
@@ -25,12 +25,39 @@ export const siwcWorkerBindingSchema = z.object({ schemaVersion: z.literal(1), c
   generations: z.object({ connection: generation, custody: generation, consent: generation }).strict().readonly() }).strict().readonly();
 export type SiwcWorkerBinding = z.infer<typeof siwcWorkerBindingSchema>;
 /** Container mount points of the relay channel and its pinned standalone programs (no credential path). */
-export const SIWC_WORKER_PATHS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs', hardening: '/run/deckent-hardening.node' });
+export const SIWC_WORKER_PATHS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs', hardening: '/run/deckent-hardening.node',
+  /** The native Codex worker's core prompt file (its frozen `model_instructions_file` config names it). */
+  instructions: '/tmp/deckent-prompt/core.txt' });
 export type SiwcUpstream = (input: Readonly<{ body: string; headers: Readonly<Record<string, string>>; signal: AbortSignal }>) =>
   Promise<Readonly<{ status: number; contentType: string; body: AsyncIterable<Buffer> }>>;
-export type SiwcRelayRecord = Readonly<{ kind: 'peer-refused' | 'capability-issued' | 'capability-refused' | 'model-relayed' | 'model-refused' | 'approval' | 'revoked';
+export type SiwcRelayAuditSubject = Extract<AuditSubject, { kind: 'siwc-relay' }>;
+export type SiwcRelayRecord = Readonly<{ kind: 'peer-refused' | 'capability-issued' | 'capability-refused' | 'model-relayed' | 'model-refused' | 'approval' | 'revoked' | 'closed';
   requestId?: string; status?: number; reason?: SiwcRelayRefusal | string; bytes?: number }>;
 
+/**
+ * U9-7 relay records: observed, then sealed in order through the caller's audit write. `record` resolves false when a record is not durable (the
+ * write failed — which also revokes the relay — or it is past the registry bound, then only counted into the closing summary's `suppressed`).
+ */
+function relayRecorder(input: Readonly<{ onRecord?: (record: SiwcRelayRecord) => void; audit?: (subject: SiwcRelayAuditSubject) => Promise<void> }>, binding: SiwcWorkerBinding,
+  digests: Readonly<{ bindingDigest: string; policyDigest: string }>, statistics: Readonly<Record<'peersRefused' | 'capabilityIssued' | 'capabilityRefused' | 'relayed' | 'refused' | 'upstreamSends', number>>,
+  failed: () => void) {
+  let audits: Promise<unknown> = Promise.resolve(), audited = 0, suppressed = 0;
+  const record = (entry: SiwcRelayRecord, summary = false): Promise<boolean> => {
+    try { input.onRecord?.(Object.freeze(entry)); } catch { /* observation never changes the relay */ }
+    if (!input.audit) return Promise.resolve(true);
+    if (!summary && audited >= R.limits.auditRecords) { suppressed++; return Promise.resolve(false); }
+    audited++;
+    const s = statistics, counters = summary ? { peersRefused: s.peersRefused, capabilityIssued: s.capabilityIssued, capabilityRefused: s.capabilityRefused, relayed: s.relayed,
+      refused: s.refused, upstreamSends: s.upstreamSends, suppressed } : null;
+    const subject: SiwcRelayAuditSubject = { kind: 'siwc-relay', schemaVersion: 1, action: entry.kind, runId: binding.attempt.runId, taskId: binding.attempt.taskId,
+      attemptId: binding.attempt.attemptId, connectionId: binding.connectionId, ...digests, requestId: entry.requestId ?? null, status: entry.status ?? null, bytes: entry.bytes ?? null,
+      counters, reason: entry.reason === undefined ? null : /^[a-z][a-z0-9:-]{0,63}$/u.test(entry.reason) ? entry.reason : 'other' };
+    const written = audits.then(() => input.audit!(subject)).then(() => true, () => false);
+    audits = written.then(durable => { if (!durable) failed(); });
+    return written;
+  };
+  return { record, settled: () => audits };
+}
 /** Registry endpoint only, fresh TLS (certificate + host name validated by Node), resolved to public addresses only. */
 const httpsUpstream: SiwcUpstream = input => new Promise((resolve, reject) => {
   const url = new URL(R.endpoint);
@@ -43,14 +70,8 @@ const httpsUpstream: SiwcUpstream = input => new Promise((resolve, reject) => {
   request.on('timeout', () => request.destroy(new Error('SIWC_RELAY_TIMEOUT'))); request.on('error', reject); request.end(input.body);
 });
 
-/**
- * U9-6a/6b/6c host side of one SIWC worker launch. A fresh 0700 directory holds one 0600 UNIX socket that is bind-mounted into exactly one
- * container; only that container's init process (the pinned bootstrap, kernel-verified by SO_PEERCRED pid → cgroup + NSpid + start time)
- * is served. It hands out the nonsecret launch spec, issues the relay capability C ONCE (the app-server's first auth-helper call, before any
- * tool can run), bridges the app-server control RPC and relays only the bound Responses request: C is checked and consumed here, the
- * host-only OAuth access A is leased per send and never crosses into the worker; responses are masked for A and C.
- */
-export async function openSiwcWorkerRelay(input: {
+/** One relay launch's input (U9-6/7). */
+export type SiwcWorkerRelayInput = {
   readonly directory: string; readonly binding: SiwcWorkerBinding; readonly prompt: string; readonly deadlineMs: number; readonly version: string;
   readonly lease: (connectionId: string, signal: AbortSignal) => Promise<OAuthAccessTokenLease>;
   /** Current Deckent decision for one native effect (fence/consent/policy re-read by the caller), asked before the effect. */
@@ -58,7 +79,23 @@ export async function openSiwcWorkerRelay(input: {
   /** Fence, consent, custody and connection generations are still current (re-checked before every upstream send). */
   readonly live: () => boolean | Promise<boolean>;
   readonly onRecord?: (record: SiwcRelayRecord) => void; readonly upstream?: SiwcUpstream; readonly appServer?: Readonly<{ executable: string; args: readonly string[] }>;
-  readonly now?: () => number }) {
+  /** The durable audit write of one relay record (U9-7): awaited before C is handed out and before an approval is answered (no audit, no
+   * effect); every other record is written in order and a failed write revokes the relay. */
+  readonly audit?: (subject: SiwcRelayAuditSubject) => Promise<void>;
+  /** The frozen native worker's own `-c` config (discovery, core prompt file, effort), applied before the relay's: the same CLI configuration
+   * the native Codex worker of this profile runs with. `instructions`: the compiled core prompt for that file. */
+  readonly config?: readonly string[]; readonly instructions?: string | null;
+  /** The profile asks for the structured final report (native `finalReport`): the turn carries the report schema and the host reads its answer. */
+  readonly finalReport?: boolean;
+  readonly now?: () => number };
+/**
+ * U9-6a/6b/6c host side of one SIWC worker launch. A fresh 0700 directory holds one 0600 UNIX socket that is bind-mounted into exactly one
+ * container; only that container's init process (the pinned bootstrap, kernel-verified by SO_PEERCRED pid → cgroup + NSpid + start time)
+ * is served. It hands out the nonsecret launch spec, issues the relay capability C ONCE (the app-server's first auth-helper call, before any
+ * tool can run), bridges the app-server control RPC and relays only the bound Responses request: C is checked and consumed here, the
+ * host-only OAuth access A is leased per send and never crosses into the worker; responses are masked for A and C.
+ */
+export async function openSiwcWorkerRelay(input: SiwcWorkerRelayInput) {
   const binding = siwcWorkerBindingSchema.parse(input.binding), L = R.limits, now = input.now ?? Date.now, upstream = input.upstream ?? httpsUpstream;
   if (!Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0 || !input.prompt) throw new Error('SIWC_WORKER_ISOLATION_UNAVAILABLE');
   const file = async (name: string) => { const path = fileURLToPath(new URL(`./${name}.js`, import.meta.url)); return { path, sha256: createHash('sha256').update(await readFile(path)).digest('hex') }; };
@@ -70,16 +107,20 @@ export async function openSiwcWorkerRelay(input: {
   const policySha256 = createHash('sha256').update(JSON.stringify(R)).digest('hex'), bindingSha256 = createHash('sha256').update(JSON.stringify(binding)).digest('hex');
   let containerId: string | null = null, init: Readonly<{ pid: number; startTime: string }> | null = null, capability: string | undefined, issued = false;
   let revoked: string | null = null, sequence = 0, inFlight = 0, launched = false, control: ServerResponse | null = null;
+  const secrets: string[] = []; // C, for report redaction only (A never reaches the worker or its answer)
   const capabilityDeadline = now() + Math.min(input.deadlineMs, L.capabilityMaxTtlMs), aborts = new Set<AbortController>(), streams = new Set<ServerResponse>();
-  const statistics = { peersRefused: 0, capabilityIssued: 0, capabilityRefused: 0, relayed: 0, refused: 0, upstreamSends: 0 };
-  const record = (entry: SiwcRelayRecord) => { try { input.onRecord?.(Object.freeze(entry)); } catch { /* observation never changes the relay */ } };
+  // `events`/`bytes`: host-observed activity (app-server control lines received, model bytes relayed) — the R3 silence watch's gateway counters.
+  const statistics = { peersRefused: 0, capabilityIssued: 0, capabilityRefused: 0, relayed: 0, refused: 0, upstreamSends: 0, events: 0, bytes: 0 };
+  const recorder = relayRecorder(input, binding, { bindingDigest: bindingSha256, policyDigest: policySha256 }, statistics, () => revoke('audit')), record = recorder.record;
   const refuse = (response: ServerResponse, status: number, reason: SiwcRelayRefusal, requestId?: string) => {
-    statistics.refused++; record({ kind: 'model-refused', reason, status, ...(requestId ? { requestId } : {}) });
+    statistics.refused++; void record({ kind: 'model-refused', reason, status, ...(requestId ? { requestId } : {}) });
     if (!response.headersSent) response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     response.end(JSON.stringify({ error: { type: 'deckent_relay_refused', code: reason } }));
   };
-  const turn = createAppServerTurn({ prompt: input.prompt, model: binding.model, version: input.version, approve: async request => {
-    const accepted = !revoked && await input.live() && await input.approve(request); record({ kind: 'approval', reason: `${request.kind}:${accepted ? 'accept' : 'decline'}` }); return accepted;
+  const turn = createAppServerTurn({ prompt: input.prompt, model: binding.model, version: input.version, ...(input.finalReport ? { outputSchema: finalReportJsonSchema() } : {}), approve: async request => {
+    const accepted = !revoked && await input.live() && await input.approve(request);
+    // The decision is durable before the app-server hears it: an unrecorded accept is answered as a decline.
+    return await record({ kind: 'approval', reason: `${request.kind}:${accepted ? 'accept' : 'decline'}` }) && accepted && !revoked;
   }, send: message => { if (control && !control.writableEnded) control.write(JSON.stringify(message) + '\n'); } });
   // A settled turn ends the control channel: the bootstrap closes app-server stdin and the worker exits (no second turn on this launch).
   void turn.outcome.then(() => { if (control && !control.writableEnded) control.end(); });
@@ -98,13 +139,17 @@ export async function openSiwcWorkerRelay(input: {
       check_for_update_on_startup: false, web_search: 'disabled' };
     const app = input.appServer ?? R.appServer;
     response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ schemaVersion: 1, executable: app.executable, native: R.appServer.native, args: [...app.args, ...R.appServer.control, ...Object.entries(overrides).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`])],
+    response.end(JSON.stringify({ schemaVersion: 1, executable: app.executable, native: R.appServer.native, instructions: input.instructions ? { path: SIWC_WORKER_PATHS.instructions, text: input.instructions } : null,
+      args: [...app.args, ...R.appServer.control, ...(input.config ?? []).flatMap(pair => ['-c', pair]), ...Object.entries(overrides).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`])],
       limits: { requestMaxBytes: L.requestMaxBytes, controlLineBytes: L.controlLineBytes, connections: L.connections, idleMs: L.idleMs, helperTimeoutMs: L.helperTimeoutMs, drainMs: L.drainMs, controlConnectMs: L.controlConnectMs, controlPollMs: L.controlPollMs } }));
   };
   const issue = async (response: ServerResponse) => {
     const current = !issued && !revoked && now() < capabilityDeadline && await Promise.resolve(input.live()).catch(() => false);
-    if (!current || issued || revoked) { statistics.capabilityRefused++; record({ kind: 'capability-refused', reason: issued ? 'replay' : 'closed' }); response.writeHead(403).end(); return; }
-    issued = true; capability = randomBytes(L.capabilityBytes).toString('base64url'); statistics.capabilityIssued++; record({ kind: 'capability-issued' });
+    if (!current || issued || revoked) { statistics.capabilityRefused++; void record({ kind: 'capability-refused', reason: issued ? 'replay' : 'closed' }); response.writeHead(403).end(); return; }
+    // C exists only after its issue is durable (no audit, no capability); the single issue is spent either way.
+    issued = true;
+    if (!await record({ kind: 'capability-issued' }) || revoked) { statistics.capabilityRefused++; response.writeHead(403).end(); return; }
+    capability = randomBytes(L.capabilityBytes).toString('base64url'); secrets.push(capability); statistics.capabilityIssued++;
     response.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); response.end(capability);
   };
   const bridge = (request: IncomingMessage, response: ServerResponse) => {
@@ -117,6 +162,7 @@ export async function openSiwcWorkerRelay(input: {
       for (let at = buffer.indexOf('\n'); at >= 0; at = buffer.indexOf('\n')) {
         const line = buffer.slice(0, at); buffer = buffer.slice(at + 1);
         if (++lines > L.controlLines) { request.destroy(); return; }
+        statistics.events++;
         try { const message = JSON.parse(line) as unknown; if (message && typeof message === 'object' && !Array.isArray(message)) turn.receive(message as Record<string, unknown>); } catch { /* not JSON-RPC */ }
       }
       if (Buffer.byteLength(buffer) > L.controlLineBytes) request.destroy();
@@ -137,6 +183,7 @@ export async function openSiwcWorkerRelay(input: {
     try {
       const raw = await body(request, L.requestMaxBytes);
       if (raw === null) { refuse(response, 413, 'bound', requestId); return; }
+      statistics.bytes += Buffer.byteLength(raw);
       const built = siwcWorkerRequestBody(raw, binding.model);
       if ('refusal' in built) { refuse(response, 400, built.refusal, requestId); return; }
       if (revoked || !await input.live()) { refuse(response, 403, 'authority', requestId); return; }
@@ -149,11 +196,11 @@ export async function openSiwcWorkerRelay(input: {
       streams.add(response);
       response.writeHead(answer.status, { 'content-type': /^(text\/event-stream|application\/json)\b/u.test(answer.contentType) ? answer.contentType : 'application/octet-stream', 'cache-control': 'no-store' });
       for await (const chunk of answer.body) {
-        bytes += chunk.length;
-        if (bytes > L.responseMaxBytes || revoked) { abort.abort(); response.destroy(); record({ kind: 'model-refused', requestId, reason: revoked ? 'closed' : 'bound' }); return; }
+        bytes += chunk.length; statistics.bytes += chunk.length;
+        if (bytes > L.responseMaxBytes || revoked) { abort.abort(); response.destroy(); void record({ kind: 'model-refused', requestId, reason: revoked ? 'closed' : 'bound' }); return; }
         response.write(scrub.push(chunk));
       }
-      response.end(scrub.end()); statistics.relayed++; record({ kind: 'model-relayed', requestId, status: answer.status, bytes });
+      response.end(scrub.end()); statistics.relayed++; void record({ kind: 'model-relayed', requestId, status: answer.status, bytes });
     } catch { if (!response.headersSent) refuse(response, 502, 'upstream', requestId); else response.destroy(); }
     finally { inFlight--; aborts.delete(abort); streams.delete(response); }
   };
@@ -167,17 +214,17 @@ export async function openSiwcWorkerRelay(input: {
   });
   server.headersTimeout = L.idleMs; server.requestTimeout = 0; server.keepAliveTimeout = L.idleMs;
   server.on('clientError', (_error, socket) => socket.destroy());
-  server.on('connect', (_request, socket: Socket) => { statistics.refused++; record({ kind: 'model-refused', reason: 'endpoint' }); socket.destroy(); });
+  server.on('connect', (_request, socket: Socket) => { statistics.refused++; void record({ kind: 'model-refused', reason: 'endpoint' }); socket.destroy(); });
   const listener = listenForContainerPeer(socketPath, L.connections, peer => {
     const observed = containerId ? containerInitPeer(peer.pid, containerId) : null;
     const admitted = !revoked && observed !== null && (init === null || init.pid === observed.pid && init.startTime === observed.startTime);
-    if (admitted) init ??= observed; else { statistics.peersRefused++; record({ kind: 'peer-refused', reason: 'peer' }); }
+    if (admitted) init ??= observed; else { statistics.peersRefused++; void record({ kind: 'peer-refused', reason: 'peer' }); }
     return admitted;
   }, socket => { socket.setTimeout(L.idleMs, () => socket.destroy()); server.emit('connection', socket); });
   await chmod(socketPath, 0o600).catch(() => undefined);
   let closing: Promise<void> | null = null;
   const revoke = (reason: string) => {
-    if (revoked) return; revoked = reason; capability = undefined; record({ kind: 'revoked', reason });
+    if (revoked) return; revoked = reason; capability = undefined; void record({ kind: 'revoked', reason });
     for (const abort of aborts) abort.abort(); for (const stream of streams) stream.destroy();
     turn.interrupt();
   };
@@ -185,6 +232,8 @@ export async function openSiwcWorkerRelay(input: {
     revoke('closed'); listener.close(); control?.end();
     await new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections(); });
     await rm(directory, { recursive: true, force: true });
+    // The closing summary (counts, including records past the bound) is always written; close waits for every pending write.
+    await record({ kind: 'closed' }, true); await recorder.settled();
   })();
   const timer = setTimeout(() => revoke('deadline'), input.deadlineMs); timer.unref();
   return Object.freeze({
@@ -196,6 +245,8 @@ export async function openSiwcWorkerRelay(input: {
     revoke, close: async () => { clearTimeout(timer); await close(); },
     /** `turn/completed` alone is never success: a completed turn also needs host-side evidence of a relayed model exchange. */
     outcome: turn.outcome.then(outcome => outcome.status === 'completed' && statistics.relayed === 0 ? Object.freeze({ ...outcome, status: 'failed' as const, reason: 'protocol' as const }) : outcome),
-    statistics: () => Object.freeze({ ...statistics, revoked, issued, peer: init ? Object.freeze({ ...init }) : null, containerId }),
+    /** U9-7 final report of a completed turn, read from its last agent message as the native Codex reader reads it (null: not asked). */
+    finalReport: () => input.finalReport ? readFinalReportText(turn.finalMessage(), secrets) : null,
+    statistics: () => Object.freeze({ ...statistics, eventsDropped: 0, eventsUnreported: 0, revoked, issued, peer: init ? Object.freeze({ ...init }) : null, containerId }),
   });
 }

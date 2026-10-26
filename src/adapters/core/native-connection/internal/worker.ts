@@ -241,7 +241,7 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
   return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report, ...(lessonsBad ? { lessons: 'invalid' as const } : {}) };
 }
 /** Strict-schema transport nulls (OpenAI strict schemas require every property) become absence before validation. */
-function dropTransportNulls(value: unknown): void {
+export function dropTransportNulls(value: unknown): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const report = value as Record<string, unknown>;
   if (report.exit === null) delete report.exit;

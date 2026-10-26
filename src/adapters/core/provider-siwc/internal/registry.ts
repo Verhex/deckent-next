@@ -29,7 +29,7 @@ const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: 
     requestFields: z.array(z.string().min(1)).min(1), toolTypes: z.array(z.string().min(1)).min(1),
     methods: z.object({ client: z.array(z.string().min(1)).min(1), approvals: z.array(z.string().min(1)).min(1) }).strict(),
     limits: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, headerBytes: positive, inFlight: positive, connections: positive, idleMs: positive,
-      capabilityMaxTtlMs: positive, capabilityBytes: positive, approvalCommandBytes: positive, approvalDiffBytes: positive, approvalChanges: positive, approvalItems: positive, controlConnectMs: positive, controlPollMs: positive, helperTimeoutMs: positive, drainMs: positive, controlLineBytes: positive, controlLines: positive }).strict() }).strict() })
+      capabilityMaxTtlMs: positive, capabilityBytes: positive, approvalCommandBytes: positive, approvalDiffBytes: positive, approvalChanges: positive, approvalItems: positive, controlConnectMs: positive, controlPollMs: positive, helperTimeoutMs: positive, drainMs: positive, controlLineBytes: positive, controlLines: positive, auditRecords: positive }).strict() }).strict() })
   .strict().refine(r => r.workerRelay.requestFields.every(field => !r.requestRules.forbiddenFields.includes(field))).parse(asset);
 export const SIWC_PROTOCOL: OAuthConnectionProtocol = Object.freeze({ ...parsed, identityScopes: Object.freeze(parsed.identityScopes), usageScopes: Object.freeze(parsed.usageScopes) });
 export const SIWC_LIMITS = Object.freeze(parsed.limits);

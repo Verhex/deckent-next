@@ -223,7 +223,8 @@
       "approvalChanges": 256,
       "controlConnectMs": 30000,
       "approvalItems": 4096,
-      "controlPollMs": 50
+      "controlPollMs": 50,
+      "auditRecords": 4096
     }
   }
 }
