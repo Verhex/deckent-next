@@ -20,9 +20,9 @@ export function workerConsentBinding(input: { recipe: unknown; providers: readon
     recipeDigest: sha256(JSON.stringify(input.recipe, null, 2) + '\n'), baseRef: input.sources.baseImage ?? recipe.base.image };
 }
 const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index]);
-export function matchingWorkerConsent(records: readonly unknown[], binding: WorkerConsentBinding): WorkerImageConsent {
+export function matchingWorkerConsent(records: readonly unknown[], binding: WorkerConsentBinding, imageId?: string): WorkerImageConsent {
   const eligible = records.map(raw => workerImageConsentSchema.safeParse(raw)).flatMap(record => record.success
-    && record.data.recipeDigest === binding.recipeDigest && record.data.baseRef === binding.baseRef && record.data.proxy === binding.proxy
+    && record.data.imageId === imageId && record.data.recipeDigest === binding.recipeDigest && record.data.baseRef === binding.baseRef && record.data.proxy === binding.proxy
     && record.data.providers.every(provider => binding.providers.includes(provider)) && record.data.sources.every(source => binding.sources.includes(source)) ? [record.data] : []);
   if (eligible.length && same([...new Set(eligible.flatMap(record => record.providers))], binding.providers)
     && same([...new Set(eligible.flatMap(record => record.sources))], binding.sources)) return eligible.at(-1)!;

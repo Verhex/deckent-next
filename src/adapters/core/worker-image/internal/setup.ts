@@ -16,7 +16,7 @@ const receiptSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal
   images: z.array(imagePin).nonempty().optional(), manifest: z.object({ providers: z.array(z.object({ id: z.string().regex(/^[a-z0-9]{1,32}$/u) }).passthrough()).nonempty() }).passthrough().optional(), measuredAt: z.string().datetime() }).passthrough()
   .refine(value => value.schemaVersion === 2 || value.images?.[0]?.imageId === value.imageId);
 export type WorkerImagePresence = 'present' | 'missing' | 'unknown';
-export type WorkerImageReceiptView = Readonly<{ imageId: string; imageVersion: string; images?: readonly Readonly<{ imageId: string; providers: readonly string[] }>[] }>;
+export type WorkerImageReceiptView = Readonly<{ imageId: string; imageVersion: string; durationMs?: number; images?: readonly Readonly<{ imageId: string; providers: readonly string[] }>[] }>;
 
 /** Exact image presence; daemon uncertainty never means missing. */
 export async function workerImagePresence(input: Readonly<{ executable: string; imageId: string; timeoutMs?: number; outputBytes?: number }>): Promise<WorkerImagePresence> {
@@ -35,7 +35,9 @@ export async function readNewestWorkerReceipt(home: string, imageId?: string): P
     if (parsed.success && (!imageId || (parsed.data.schemaVersion === 3 ? parsed.data.images?.some(image => image.imageId === imageId) : parsed.data.imageId === imageId))
       && (!newest || parsed.data.measuredAt > newest.measuredAt)) newest = parsed.data;
   }
-  return newest && { imageId: newest.imageId, imageVersion: newest.imageVersion, ...(newest.schemaVersion === 3 ? { images: newest.images! } : imageId && newest.manifest ? { images: [{ imageId: newest.imageId, providers: newest.manifest.providers.map(provider => provider.id) }] } : {}) };
+  const duration = z.object({ totalMs: z.number().nonnegative().finite() }).safeParse(newest?.['timings']);
+  if (!newest) return null;
+  return { imageId: newest.imageId, imageVersion: newest.imageVersion, ...(duration.success ? { durationMs: duration.data.totalMs } : {}), ...(newest.schemaVersion === 3 ? { images: newest.images! } : imageId && newest.manifest ? { images: [{ imageId: newest.imageId, providers: newest.manifest.providers.map(provider => provider.id) }] } : {}) };
 }
 /** Observed fallback image and receipt, without effects. */
 export async function observeWorkerImage(input: Readonly<{ home: string; executable: string | null; configured: string | null; git: string | null }>) {

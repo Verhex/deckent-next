@@ -1,6 +1,8 @@
+import { workerImageQuestion, workerImageProgress } from './worker-image.js';
+import type { WorkerImageState } from '#engine/index.js';
 import { onboardingMessage } from './message.js';
 import { t, ErrorRegistry } from '#platform/index.js';
-import { formatDuration, formatDecimal, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { FirstTaskIntent, OnboardingPort, OnboardingUi } from './contract.js';
 import { createOnboardingSession, firstSignedInHost } from './session.js';
 import { askOnboardingQuestion, type QuestionAnswer } from './question.js';
@@ -66,8 +68,36 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
       if (rows.some(row => row.id === choice.id && row.cli === 'found' && row.login === 'found')) {
         await session.answer('work:kind', choice.id); await session.finish(step); continue;
       }
-    } else choice = await askOnboardingQuestion({ ...question,
-      ...(stage?.state === 'blocked' && !(stage.id === 'execution:worker' && stage.reason.code === 'setup.execution.workerConsentRequired') ? { choices: [] } : {}) }, io);
+    } else if (stage?.id === 'execution:worker') {
+      const worker = (model.snapshot.observation.families?.['execution'] as { worker?: { acquisition?: WorkerImageState | null; image?: string; configured?: string | null } } | undefined)?.worker;
+      if (worker?.acquisition && ['requested', 'waiting-docker', 'acquiring'].includes(worker.acquisition.phase)) {
+        const progress = await askOnboardingQuestion({ ...question, title: t('setup.workerImage.card.progress', {}, locale),
+          body: workerImageProgress(worker.acquisition, locale), choices: [{ id: 'continue', label: t('onboarding.session.continue', {}, locale) }] }, io);
+        if (progress.id === 'exit') return null;
+        await session.finish(step); continue;
+      }
+      if (worker?.configured && worker.image !== 'missing' && worker.image !== 'present') {
+        choice = await askOnboardingQuestion({ ...question, choices: [] }, io);
+      } else {
+        const provider = model.snapshot.answers['work:kind'];
+        if (typeof provider !== 'string') { await session.defer(step); continue; }
+        try {
+          const preview = await port.previewConsent(provider);
+          choice = await askOnboardingQuestion({ ...question, ...workerImageQuestion(preview, locale, worker?.image === 'missing' ? worker.configured ?? undefined : undefined) }, io);
+          if (choice.id === 'exit') return null;
+          if (choice.id === 'later') { await session.defer(step); continue; }
+          const selected = preview.images?.find(image => image.imageId === choice.id && image.ready);
+          if (choice.id !== 'consent' && !selected) continue;
+          await port.consent(provider, preview.digest, selected?.imageId);
+          await session.finish(step); continue;
+        } catch (error) {
+          const feedback = await askOnboardingQuestion({ ...question, title: t('onboarding.session.blocked', {}, locale),
+            body: [error instanceof Error ? error.message : t('onboarding.session.waiting', {}, locale)], choices: [] }, io);
+          if (feedback.id === 'exit') return null;
+          await session.defer(step); continue;
+        }
+      }
+    } else choice = await askOnboardingQuestion({ ...question, ...(stage?.state === 'blocked' ? { choices: [] } : {}) }, io);
     if (choice.id === 'exit') return null;
     if (choice.id === 'later') { await session.defer(step); continue; }
     try {
@@ -80,18 +110,7 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
       }
       else if (stage?.id === 'core:model') await ui.provider();
       else if (stage?.id === 'instructions:bridges') await ui.instructions();
-      else if (stage?.id === 'execution:worker') {
-        const provider = model.snapshot.answers['work:kind'];
-        if (typeof provider !== 'string') throw ErrorRegistry.createError('WORKER_IMAGE_CONSENT_MISSING');
-        const preview = await port.previewConsent(provider);
-        const consent = await askOnboardingQuestion({ ...question, title: t('onboarding.imageConsent.title', { provider }, locale),
-          body: [t('onboarding.imageConsent.body', { size: formatDecimal(preview.sizeGigabytes, locale, 1), timeout: formatDuration(preview.buildTimeoutMs, locale) }, locale),
-            ...preview.sources, preview.baseRef, t('onboarding.imageConsent.limits', {}, locale)],
-          choices: [{ id: 'consent', label: t('onboarding.imageConsent.yes', {}, locale) }] }, io);
-        if (consent.id === 'exit') return null;
-        if (consent.id !== 'consent') { await session.defer(step); continue; }
-        await port.consent(provider, preview.digest);
-      } else if (step.kind === 'ready') {
+      else if (step.kind === 'ready') {
         const settled = await settleOnboardingReady(port, ui, session.refresh, async preview =>
           (await askOnboardingQuestion({ ...question, title: t('onboarding.profile.title', {}, locale),
             body: [t('onboarding.profile.body', { profile: preview.profile, image: preview.image, provider: preview.provider, kind: preview.kind }, locale)], choices: [{ id: 'apply', label: t('onboarding.session.continue', {}, locale) }] }, io)).id === 'apply');

@@ -10,3 +10,7 @@ export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from './
 
 export { WorkerImageRemovalTarget, workerRemovalGuard } from './internal/removal.js';
 export type { WorkerRemovalResource, WorkerRemovalObservation, WorkerRemovalDriver } from './internal/removal.js';
+
+export { readWorkerImageState, writeWorkerImageState, recoverWorkerImageContext, observeWorkerImageProgress, watchWorkerImageRequests } from './internal/state.js';
+
+export { inspectWorkerImageChoices, type WorkerImageChoice } from './internal/choices.js';
