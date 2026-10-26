@@ -105,7 +105,7 @@ it('a Run frozen on the SIWC relay route while activation is held closes launch-
     const worker = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe'), allocate = vi.spyOn(GitWorkspaceBroker.prototype, 'allocate');
     const held = process.platform === 'linux' && (yamaPtraceScope() ?? 0) >= 1;
     const refused = await executeConfiguredTask(f.project, identity, f.options).then(() => null, (error: { code: string }) => error);
-    expect(refused).toMatchObject(held ? { code: 'SIWC_APP_SERVER_AUTH_UNAVAILABLE' } : { code: 'SIWC_WORKER_ISOLATION_UNAVAILABLE' });
+    expect(refused).toMatchObject(held ? { code: 'SIWC_APP_SERVER_AUTH_UNAVAILABLE', params: { reason: 'activation-hold' } } : { code: 'SIWC_WORKER_ISOLATION_UNAVAILABLE' });
     // No container, probe or workspace for any route: not the relay, not the host, not the native Codex credential route.
     expect(worker).not.toHaveBeenCalled(); expect(probe).not.toHaveBeenCalled(); expect(allocate).not.toHaveBeenCalled();
     const receipt = await f.store.receipt('s', 'launch-refused-' + createHash('sha256').update(JSON.stringify(identity)).digest('hex'));

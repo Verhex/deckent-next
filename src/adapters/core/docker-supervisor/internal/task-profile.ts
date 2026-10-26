@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
 import { dockerReadOnlyMountsSchema } from './mounts.js';
-import { environmentRequirementsSchema, executionProfileDefinitionSchema, workspaceHiddenPathsSchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { environmentRequirementsSchema, executionProfileDefinitionSchema, frozenHiddenPaths, workspaceHiddenPathsSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
 import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js';
@@ -63,5 +63,5 @@ export function dockerTaskSilenceDeadline(profile: ExecutionProfileDefinition): 
 }
 /** C2: a frozen profile's pinned checkout shaping (instruction-surface paths its worker checkout leaves out); null when it has none. */
 export function dockerTaskHiddenPaths(profile: ExecutionProfileDefinition): readonly string[] | null {
-  try { const resolved = resolveDockerTaskProfile(profile); return resolved.siwcWorker?.hiddenPaths ?? resolved.nativeSubscription?.checkout?.hiddenPaths ?? null; } catch { return null; }
+  try { resolveDockerTaskProfile(profile); return frozenHiddenPaths(profile.parameters); } catch { return null; }
 }

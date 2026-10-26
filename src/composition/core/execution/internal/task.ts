@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'; import { constants } from 'n
 import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, HubArtifactCache, openSqliteHubClientStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, dockerTaskHiddenPaths, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, applyAcceptedPredecessorPatches, assertSiwcWorkerLaunchable, SiwcWorkerSupervisor, siwcWorkerPrompt, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, selectedHubSkillFiles, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, dispatchNeedsObservation, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
@@ -69,7 +69,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const privateSource = queue ? await gitQueueCandidateSource(queue, store, artifacts, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }) : undefined;
       const broker = new GitWorkspaceBroker(git, privateSource); await preparation.enter('workspace');
       // C2: the pinned checkout shaping hides the instruction surface from a worker's clone; a queue verification Run keeps the full tree.
-      const hidden = queue ? undefined : profile.siwcWorker?.hiddenPaths ?? profile.nativeSubscription?.checkout?.hiddenPaths;
+      const hidden = queue ? undefined : dockerTaskHiddenPaths(selected) ?? undefined;
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker, hidden)).acquire(identity);
       const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches, hidden); await preparation.enter('secret-gate');
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.

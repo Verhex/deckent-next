@@ -4,10 +4,10 @@ import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { GitWorkspaceBroker, applyAcceptedPredecessorPatches, completeHiddenBase, diffAgainstBase, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace,
+import { GitWorkspaceBroker, applyAcceptedPredecessorPatches, compileNativeCodingDockerProfile, dockerTaskHiddenPaths, completeHiddenBase, diffAgainstBase, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace,
   SnapshotBudget, type GitWorkspaceLease } from '#adapters/index.js';
 import { assertPatchScope, capturedWorkspacePatch, classifyPatchScope, patchDigest, patchExclusions, patchFile, type WorkspacePatch } from '#engine/index.js';
-import { workspacePathHidden } from '#domain/index.js';
+import { instructionSurfacePaths, workspacePathHidden } from '#domain/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 /** C2 (owner Q4 2026-10-23, law-audit fold 5): a Cursor worker's checkout without the instruction surface yields the same patch as a full one. */
@@ -94,6 +94,22 @@ describe.skipIf(process.platform !== 'linux')('worker checkout shaping (C2): spa
     expect(blind.instructionSurface).toEqual(['CLAUDE.md']);
     expect(() => assertPatchScope(blind)).toThrow(expect.objectContaining({ code: 'PATCH_INSTRUCTION_SURFACE_WRITE' }));
     expect(() => assertPatchScope(classifyPatchScope(patch, ['src/**', 'CLAUDE.md'], 'warn', HIDDEN))).not.toThrow();
+  });
+
+  it('U9-7: a SIWC relay profile\'s frozen hidden set is the one list for its checkout and for the delivery floor', async () => {
+    const template = { id: 't', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456,
+      pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } };
+    const compiled = compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' },
+      permissionMode: 'unattended', model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit', scope: 'src/code.ts', acceptance: 'Zero exit' } });
+    // A set narrower than the registry list proves both consumers read the frozen relay set, not the registry default.
+    const own = ['CLAUDE.md', '.codex'], profile = { ...compiled, parameters: { ...compiled.parameters,
+      siwcWorker: { schemaVersion: 1, connectionId: '00000000-0000-4000-8000-000000000001', owner: { issuer: 'local', subject: 'p' }, hiddenPaths: own } } };
+    expect(dockerTaskHiddenPaths(profile)).toEqual(own); expect(instructionSurfacePaths(profile.parameters)).toEqual(own);
+    const f = await fixture(), lease = await f.allocate('relay', dockerTaskHiddenPaths(profile)!);
+    await expect(readFile(join(lease.workspace, 'CLAUDE.md'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(lease.workspace, 'AGENTS.md'), 'utf8')).toBe(BASE['AGENTS.md']);
+    await writeFile(join(lease.workspace, 'CLAUDE.md'), 'overwritten blind\n');
+    const scope = classifyPatchScope(await capture(f, lease, dockerTaskHiddenPaths(profile)), ['src/**'], 'warn', instructionSurfacePaths(profile.parameters));
+    expect(scope.instructionSurface).toEqual(['CLAUDE.md']); expect(() => assertPatchScope(scope)).toThrow(expect.objectContaining({ code: 'PATCH_INSTRUCTION_SURFACE_WRITE' }));
   });
 
   it('starts a shaped attempt from predecessor patches, including one that changes a hidden path', async () => {

@@ -171,7 +171,8 @@
         "src/capabilities/core/artifacts",
         "src/engine/core/resource-observation",
         "src/domain/core/attempt",
-        "src/adapters/core/native-cli-registry"
+        "src/adapters/core/native-cli-registry",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "ISOLATION"
     },
