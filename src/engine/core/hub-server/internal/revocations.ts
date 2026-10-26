@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { HUB_REVOCATION_REFRESH_MS, HubError, canonicalHubJson, counterSchema, identitySchema, hubRevocationEntrySchema, hubFeedSignatureSchema, type HubRevocationFeed } from '#domain/index.js';
+import { HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HubError, canonicalHubJson, counterSchema, identitySchema, hubRevocationEntrySchema, hubFeedSignatureSchema, hubRevocationCursorSchema, type HubRevocationFeed, type HubRevocationCursor } from '#domain/index.js';
 import { sha256, signatureMessage } from '#platform/index.js';
-import { hubRevocationFeedMessage, requireHubSignature, verifyHubRevocationFeed } from '#engine/core/hub/index.js';
+import { hubRevocationFeedMessage, hubRevocationCursorMessage, requireHubSignature, verifyHubRevocationFeed } from '#engine/core/hub/index.js';
 import { HubServerApplication } from './application.js';
 import { HubServerError, type HubServerContext, type HubServerTransaction } from './ports.js';
 
@@ -31,11 +31,11 @@ export class HubRevocationApplication extends HubServerApplication {
     }
     throw new HubServerError('HUB_SERVER_DENIED');
   }
-  private async signFeed(store: HubServerTransaction, entries: HubRevocationFeed['entries']) {
+  private async signFeed(store: HubServerTransaction, entries: HubRevocationFeed['entries'], catchup?: HubRevocationFeed['catchup']) {
     const previous = await store.latestFeed(), now = this.clock(), { signer, key } = await this.signer(now);
     if (previous && now < previous.issuedAtMs) throw new HubError('HUB_FEED_REPLAYED');
     const payload = { schemaVersion: 1 as const, hubId: this.ports.hubId, sequence: (previous?.sequence ?? 0) + 1,
-      issuedAtMs: now, nextRefreshBy: now + HUB_REVOCATION_REFRESH_MS, entries };
+      issuedAtMs: now, nextRefreshBy: now + HUB_REVOCATION_REFRESH_MS, entries, ...(catchup ? { catchup } : {}) };
     const feed = { ...payload, signature: { keyId: signer.keyId, algorithm: 'ed25519' as const,
       value: Buffer.from(await signer.sign(hubRevocationFeedMessage(payload))).toString('base64') } };
     verifyHubRevocationFeed(feed, { hubId: this.ports.hubId, key, nowMs: now, previous });
@@ -65,15 +65,33 @@ export class HubRevocationApplication extends HubServerApplication {
       return { feed, receipt, replayed: false };
     });
   }
-  /** A reader supplies its last applied sequence. Missed entries are re-signed at the current signed time; never silently truncated. */
+  /** Cursor pins immutable history; page production sequences never advance the client's completed snapshot watermark. */
   async revocations(context: HubServerContext, input: unknown = {}, signal?: AbortSignal) {
-    const query = z.object({ afterSequence: counterSchema.default(0) }).strict().parse(input);
+    const query = z.object({ afterSequence: counterSchema.default(0), continuation: hubRevocationCursorSchema.optional() }).strict().parse(input);
     return this.ports.store.transaction(async store => {
       signal?.throwIfAborted();
       await this.authorize(context, 'read', 'revocations', '');
       const previous = await store.latestFeed();
       if (query.afterSequence > (previous?.sequence ?? 0)) throw new HubError('HUB_FEED_REPLAYED');
-      const { feed, signer, now } = await this.signFeed(store, await store.feedEntries(query.afterSequence));
+      const cursor = query.continuation, clock = this.clock(), attestor = await this.signer(clock);
+      if (cursor) {
+        const { signature, ...payload } = cursor;
+        requireHubSignature(attestor.key, signature.keyId, hubRevocationCursorMessage(payload), signature.value);
+        if (cursor.hubId !== this.ports.hubId || cursor.afterSequence !== query.afterSequence || cursor.throughSequence > (previous?.sequence ?? 0)) throw new HubError('HUB_FEED_INVALID');
+        if (cursor.issuedAtMs > clock || cursor.nextRefreshBy <= clock || clock - cursor.issuedAtMs >= HUB_LIMITS.feedMaxAgeMs) throw new HubError('HUB_FEED_STALE');
+      }
+      const throughSequence = cursor?.throughSequence ?? previous?.sequence ?? 0;
+      const page = await store.revocationPage(query.afterSequence, throughSequence, cursor?.position, cursor?.throughPosition);
+      let next: HubRevocationCursor | null = null;
+      if (page.nextPosition !== null) {
+        const payload = { schemaVersion: 1 as const, hubId: this.ports.hubId, afterSequence: query.afterSequence, throughSequence,
+          position: page.nextPosition, throughPosition: page.throughPosition, page: (cursor?.page ?? 0) + 1,
+          issuedAtMs: cursor?.issuedAtMs ?? clock, nextRefreshBy: cursor?.nextRefreshBy ?? clock + HUB_REVOCATION_REFRESH_MS };
+        next = { ...payload, signature: { keyId: attestor.signer.keyId, algorithm: 'ed25519',
+          value: Buffer.from(await attestor.signer.sign(hubRevocationCursorMessage(payload))).toString('base64') } };
+      }
+      const { feed, signer, now } = await this.signFeed(store, page.entries, { schemaVersion: 1, afterSequence: query.afterSequence, throughSequence,
+        position: page.position, throughPosition: page.throughPosition, page: cursor?.page ?? 0, complete: next === null, next });
       await store.appendReceipt({ action: 'feed', context, resource: 'revocations', digest: sha256(canonicalHubJson(feed)), atMs: now, feed }, signer);
       await this.authorize(context, 'read', 'revocations', '');
       signal?.throwIfAborted();

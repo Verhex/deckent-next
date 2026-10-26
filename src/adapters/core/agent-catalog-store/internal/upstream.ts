@@ -31,7 +31,7 @@ export function catalogHubUpstream(db: DatabaseSync, open: (value: unknown) => u
     if (!sourceRow || !feedRow) { status = 'withdrawn'; continue; }
     const source = hubSourceSchema.parse(open(sourceRow.record)), feed = hubRevocationFeedSchema.parse(open(feedRow.record));
     if (source.scopeId !== scopeId || source.hubId !== install.hubId || feed.hubId !== source.hubId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
-    if (source.state !== 'active') { status = 'withdrawn'; continue; }
+    if (source.state !== 'active' || feed.catchup?.complete === false) { status = 'withdrawn'; continue; }
     try {
       verifyHubRevocationFeed(feed, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true }, nowMs, previous: null });
     } catch (error) {

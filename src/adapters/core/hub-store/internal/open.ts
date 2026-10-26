@@ -6,9 +6,11 @@ import { HUB_LIMITS, identitySchema } from '#domain/index.js';
 import { HubServerError } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { SqliteHubStore } from './store.js';
+import { backupHubV1, migrateHubV1, HUB_STORE_SCHEMA_VERSION } from './migration.js';
+import { createHubRevocations } from './revocations.js';
 
 // Application id and user_version identify this database, independently of the installation ledger.
-const APPLICATION_ID = 0x44485542, SCHEMA_VERSION = 1;
+const APPLICATION_ID = 0x44485542;
 function directory(path: string) {
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o077) !== 0 || realpathSync(path) !== path)
@@ -40,8 +42,14 @@ export function openHubStore(input: { readonly root: string; readonly scopeId: s
   let db: DatabaseSync | undefined;
   try {
     db = new NativeDatabase(path, { timeout: input.busyTimeoutMs, enableForeignKeyConstraints: true, allowExtension: false });
-    db.exec('BEGIN IMMEDIATE');
     const app = Number(db.prepare('PRAGMA application_id').get()?.application_id), version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
+    if (app !== 0 && app !== APPLICATION_ID || version !== 0 && version !== 1 && version !== HUB_STORE_SCHEMA_VERSION) throw new HubServerError('HUB_STORE_UNSAFE');
+    if (version === 1) {
+      const identity = db.prepare('SELECT hub_id,scope_id FROM hub_identity').all();
+      if (app !== APPLICATION_ID || identity.length !== 1 || identity[0]?.hub_id !== input.hubId || identity[0]?.scope_id !== scopeId) throw new HubServerError('HUB_STORE_UNSAFE');
+    }
+    const backupTail = version === 1 ? backupHubV1(db, path) : null;
+    db.exec('BEGIN IMMEDIATE');
     if (app === 0 && version === 0 && db.prepare("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1").get() === undefined) {
       db.exec(`CREATE TABLE hub_identity(hub_id TEXT NOT NULL,scope_id TEXT NOT NULL) STRICT;
         CREATE TABLE hub_keys(key_id TEXT NOT NULL,role TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(key_id,role)) STRICT;
@@ -51,9 +59,11 @@ export function openHubStore(input: { readonly root: string; readonly scopeId: s
           FOREIGN KEY(package_id,version) REFERENCES hub_versions(package_id,version)) STRICT;
         CREATE TABLE hub_receipts(sequence INTEGER PRIMARY KEY,previous TEXT,digest TEXT NOT NULL,record TEXT NOT NULL,key_id TEXT NOT NULL,signature TEXT NOT NULL) STRICT;
         CREATE INDEX hub_publish_rate ON hub_versions(publisher_id,at_ms);
-        PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${SCHEMA_VERSION};`);
+        PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${HUB_STORE_SCHEMA_VERSION};`);
+      createHubRevocations(db);
       db.prepare('INSERT INTO hub_identity VALUES(?,?)').run(input.hubId, scopeId);
-    } else if (app !== APPLICATION_ID || version !== SCHEMA_VERSION) throw new HubServerError('HUB_STORE_UNSAFE');
+    } else if (app === APPLICATION_ID && version === 1) migrateHubV1(db, backupTail);
+    else if (app !== APPLICATION_ID || version !== HUB_STORE_SCHEMA_VERSION) throw new HubServerError('HUB_STORE_UNSAFE');
     const identity = db.prepare('SELECT hub_id,scope_id FROM hub_identity').all();
     if (identity.length !== 1 || identity[0]?.hub_id !== input.hubId || identity[0]?.scope_id !== scopeId) throw new HubServerError('HUB_STORE_UNSAFE');
     db.exec('COMMIT');
