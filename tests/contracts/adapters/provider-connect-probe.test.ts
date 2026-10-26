@@ -28,8 +28,8 @@ describe('provider connection check', () => {
     expect(providerEndpoint(`http://${host}:8000/v1`)).toEqual({ ok: true, base: `http://${host}:8000` });
   });
 
-  it('lists the vendor rows, the generic and local rows and ChatGPT login as not available yet, each with its own store name (T4-B, Jev da5312fb)', () => {
-    expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['claude-cli-subscription', true], ['chatgpt-login', false], ['codex-cli-subscription', true], ['cursor-cli-subscription', true], ['local-openai', true], ['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
+  it('lists the vendor rows, the generic and local rows and ChatGPT sign-in open for chat (FIX8b), each with its own store name (T4-B, Jev da5312fb)', () => {
+    expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['claude-cli-subscription', true], ['chatgpt-login', true], ['codex-cli-subscription', true], ['cursor-cli-subscription', true], ['local-openai', true], ['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
       ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true]]);
     const fixed = PROVIDER_CONNECT_KINDS.filter(item => item.available && item.key?.secretName).map(kind => kind.key!.secretName!);
     // Every vendor keeps its own key: connecting one never overwrites another's.
@@ -37,7 +37,7 @@ describe('provider connection check', () => {
     for (const name of fixed) expect(name).toMatch(/^DECKENT_[A-Z_]+$/u);
     // Z.ai documents no free read (no models list): its rows have no probe; the subscription CLI row has no key to check (its preflight proves the
     // login without a model call); every other available row has one.
-    expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['claude-cli-subscription', 'codex-cli-subscription', 'cursor-cli-subscription', 'zai-api', 'zai-cn-api']);
+    expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['claude-cli-subscription', 'chatgpt-login', 'codex-cli-subscription', 'cursor-cli-subscription', 'zai-api', 'zai-cn-api']);
     for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.available && item.probe)) expect(kind.probe!.path).toMatch(/^\/(v1\/models|models|api\/v1\/key)/u);
     expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.connect?.seed).map(kind => [kind.id, kind.connect!.seed]))
       .toEqual([['claude-cli-subscription', 'claude-cli-subscription'], ['codex-cli-subscription', 'codex-cli-subscription'], ['cursor-cli-subscription', 'cursor-cli-subscription'], ['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api'], ['zai-cn-api', 'zai-cn-api'], ['openrouter', 'openrouter-api']]);

@@ -81,12 +81,13 @@ it('connect help lists current connectable kinds from host data in both language
     await modelsCommand(['models', 'connect', '--help', '--lang', locale], { env: {}, stdout: { write: (text: string) => { out.push(text); return true; } } as never,
       providerConnect: { kinds } } as never);
     expect(out.join('')).toContain('openrouter'); expect(out.join('')).toContain('claude-cli-subscription');
-    expect(out.join('')).not.toContain('chatgpt-login'); expect(out.join('')).not.toContain('{kinds}');
+    expect(out.join('')).toContain('chatgpt-login'); expect(out.join('')).not.toContain('{kinds}');
     out.length = 0;
     expect(await cliMain(['models', 'connect', '--help', '--lang', locale], { env: {},
       stdout: { write: (text: string) => { out.push(text); return true; } } as never,
       helpParams: async key => key === 'cli.help.modelsConnect' ? { kinds: providerConnectHelpKinds() } : {},
       loadHost: async () => { throw new Error('help must not initialize the host'); } })).toBe(0);
-    expect(out.join('')).toContain('openrouter'); expect(out.join('')).toContain('claude-cli-subscription'); expect(out.join('')).not.toContain('{kinds}');
+    expect(out.join('')).toContain('openrouter'); expect(out.join('')).toContain('claude-cli-subscription'); expect(out.join('')).toContain('chatgpt-login');
+    expect(out.join('')).not.toContain('{kinds}');
   }
 });

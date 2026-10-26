@@ -186,16 +186,23 @@ The alpha.56 items below describe candidate code and owner decisions; they do no
   claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. It runs only where
   Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers). Terminal chat with a Claude subscription is not
   supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
-- **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;
-  a paid API turn without a scope budget is refused. *Workaround:* connect an API key with `/provider`, set a budget, choose `/model`.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** Of the subscriptions only Sign in with ChatGPT serves
+  terminal chat (below); a paid API turn without a scope budget is refused. *Workaround:* sign in with ChatGPT in `/provider`, or
+  connect an API key there, set a budget and choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
 - **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
   access token (for Codex also the ID token) into the worker's container and checks that it has not expired; refresh tokens,
   API keys and the rest of the login file stay on the host. *Impact:* the worker's CLI can act as your subscription account
   until that token expires. *Workaround:* none; the token's own lifetime is the bound.
-- **Sign in with ChatGPT is candidate code, with worker activation held.** Alpha.56 adds person sign-in, consent and
-  connection custody. The Codex app-server runs inside the isolated worker; the host app-server route was rejected.
+- **Sign in with ChatGPT serves chat; the Codex worker on the plan is still held.** Alpha.56 opens person sign-in for terminal
+  chat and Deckent's own features (`/provider` → ChatGPT, or `deckent models connect --connection chatgpt-login`, from your own
+  terminal). The session stays only in your own local encrypted store: Linux or WSL, a folder only you can open (0700) on this
+  computer's local disk. A shared team host, a store on a network share or `/mnt/c`, or a folder other users can open is refused
+  before the browser opens; `deckent doctor` names the folder and the fix (for example `chmod 700 <folder>`), and Deckent never
+  changes permissions itself. macOS and native Windows are not supported yet. One sign-in per project; OpenAI offers no plan-limit
+  query, so Deckent shows only its own 30-day usage. Tools connected over MCP cannot use the plan as a raw API.
+  The Codex app-server runs inside the isolated worker; the host app-server route was rejected.
   Worker activation stays on HOLD until real-binary N1 proof (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, reason `activation-hold`);
   missing isolation is a typed refusal, never a host/token-file fallback. While held, no Run is assigned this route and a
   Codex worker keeps its existing connection; a Run frozen on it closes `launch-refused` before any workspace or container.
@@ -205,7 +212,9 @@ The alpha.56 items below describe candidate code and owner decisions; they do no
   supported connection; do not treat successful sign-in as proof that a Codex worker is available.
 
 - **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
-  window is used up. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
+  window is used up. Exception: a ChatGPT sign-in where you explicitly enabled continuation and chose an API model at connect may
+  continue on that model from your budget at a confirmed plan limit; every switch is shown and recorded, and the permission is
+  revocable. Temporary errors never switch billing paths. The Claude subscription never switches. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
   (`runRuntime.quotaRecovery.maxWaitMs`) and then asks you on a card whether to keep waiting or to use the next candidate of its
   WorkClass list; nothing is cancelled on its own and no AI can answer. A Run that was parked before the upgrade keeps the deadline it
   sealed then (the old default was 7 days). *Workaround:* answer with `deckent run resume --quota wait` or

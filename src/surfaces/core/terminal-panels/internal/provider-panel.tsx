@@ -12,9 +12,10 @@ import type { BudgetPanelView, CachePanelView, PanelLabels, PanelNotice, Provide
   ProviderSecretGrantPort } from './contract.js';
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
-export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false): PickerTree {
+export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false, signIn?: string): PickerTree {
   return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.pendingNote ? `${kind.pendingNote} · ${kind.detail}` : kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
-    ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
+    // FIX8b: the ChatGPT sign-in row has no key or catalog: its one action opens the sign-in window.
+    ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.id === signIn ? { childTitle: kind.label, children: [{ id: 'connect', label: labels.actions.signIn }] } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
       : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
       ...(kind.keyStored && kind.grantRequired ? [{ id: 'grant', label: labels.actions.grant }] : []),
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
@@ -228,7 +229,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
   return <PickerWindow title={title(view.title)} body={body} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
-    tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel)), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))}
+    tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel), port.siwc?.connection), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))}
     onResult={result => chosen(result, state)} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */

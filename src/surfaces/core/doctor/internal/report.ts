@@ -16,7 +16,10 @@ export interface InstallationBindingReport { readonly capability: 'supported' | 
 /** The installation's secret store as doctor shows it (SECRET-K1): backend id, status and typed code only; never a value. */
 export interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
   readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
-  readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] } }
+  readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] };
+  readonly globalRoot?: { readonly path: string; readonly mode: string } | null;
+  /** FIX8b: ChatGPT sign-in custody preflight (Linux); `refused` carries the reason and, for an open folder, its path and mode. */
+  readonly personalCustody?: Readonly<{ status: 'ready' | 'store' | 'untested' | 'refused'; reason?: string; path?: string; mode?: string; folder?: 'root' | 'parent' }> }
 
 /** Recovery files an interrupted backup restore left behind (S1 D4); absolute paths of this user's own installation. */
 export interface RecoveryFilesDoctorView { readonly leftovers: readonly string[]; readonly installationDirectory?: { readonly path: string; readonly mode: string } | null }

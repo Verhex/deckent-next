@@ -368,3 +368,17 @@ it('shows scoped ChatGPT custody refusals without account labels, tokens or host
   expect(rows[0]!.text).toContain('kimlik profili');
   expect(JSON.stringify(rows)).not.toContain('/home/');
 });
+
+it('names an open secret folder ssh-style with chmod 700 and says when ChatGPT sign-in custody would refuse (FIX8b E01, R22)', () => {
+  const store = (extra: object) => ({ ...report, secretStore: { ...report.secretStore, ...extra } }) as typeof report;
+  const custody = (extra: object, locale: 'en' | 'tr' = 'en') => doctorChecks(store(extra), facts(), locale).filter(row => row.id.startsWith('security.secretsRoot') || row.id === 'security.siwcCustody');
+  const open = custody({ globalRoot: { path: '/fixture/global', mode: '0755' }, personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/fixture/global', mode: '0755', folder: 'root' } });
+  // One fix for one folder: the root row carries the exact command; the custody row would only repeat it.
+  expect(open).toEqual([expect.objectContaining({ id: 'security.secretsRoot', state: 'warning', next: 'chmod 700 /fixture/global' })]);
+  expect(open[0]!.text).toContain('0755');
+  const parent = custody({ personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } }, 'tr');
+  expect(parent).toHaveLength(1); expect(parent[0]!.text).toContain('/tmp'); expect(parent[0]!.next).toBeUndefined();
+  expect(custody({ personalCustody: { status: 'refused', reason: 'unknown-locality' } })[0]!.text).toContain('local disk');
+  expect(custody({ backend: 'core.secret-store.env@1', personalCustody: { status: 'store' } })[0]).toMatchObject({ state: 'warning', next: 'deckent secret store --to core.secret-store.encrypted-file@1' });
+  expect(custody({ personalCustody: { status: 'ready' } })[0]).toMatchObject({ state: 'ok' });
+});

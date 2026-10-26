@@ -42,20 +42,28 @@ export async function personalPrivateFile(path: string, uid: number, maxBytes: n
     return { identity: custodyDigest(identity(info)), text };
   } finally { await handle.close(); }
 }
+/** The first directory that keeps the store root from being private, ssh-style (mode as `0755`/`1777`): the root itself when it is not this
+ * person's 0700 directory, or a parent another user (not root) owns or can write. Null: every directory passes. Never repaired here. */
+export async function unsafeStoreDirectory(root: string, uid: number): Promise<Readonly<{ path: string; mode: string; parent: boolean }> | null> {
+  const found = (path: string, info: Stats, parent: boolean) => Object.freeze({ path, mode: (info.mode & 0o7777).toString(8).padStart(4, '0'), parent });
+  const rootInfo = await lstat(root);
+  if (!rootInfo.isDirectory() || rootInfo.uid !== uid || (rootInfo.mode & 0o077) !== 0) return found(root, rootInfo, false);
+  // On the allowlisted Linux filesystems POSIX ACL named entries cannot override a zero group-class mask (0700/0600).
+  for (let path = dirname(root); ; path = dirname(path)) {
+    const info = await lstat(path);
+    if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0 || (info.uid !== uid && info.uid !== 0)) return found(path, info, true);
+    if (dirname(path) === path) return null;
+  }
+}
 export type PersonalHostObservation = Readonly<{ locationDigest: string; keyIdentityDigest: string | null; mountEvidenceDigest: string; pairPresent: boolean }>;
 /** Strict Linux proof. Unsupported platforms/backing fail closed, without using the performance filesystem classifier. */
 export async function observePersonalStoreHost(root: string, uid: number): Promise<PersonalHostObservation> {
   if (process.platform !== 'linux' || !uid || uid !== process.getuid?.()) throw new PersonalCustodyError('foreign-os-owner');
   const canonical = await realpath(root);
   if (canonical !== resolve(root)) throw unsafe();
+  if (await unsafeStoreDirectory(root, uid)) throw unsafe();
   const rootInfo = await lstat(root);
   if (!rootInfo.isDirectory() || rootInfo.uid !== uid || (rootInfo.mode & 0o077) !== 0) throw unsafe();
-  // On the allowlisted Linux filesystems POSIX ACL named entries cannot override a zero group-class mask (0700/0600).
-  for (let path = dirname(root); ; path = dirname(path)) {
-    const info = await lstat(path);
-    if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o022) !== 0 || (info.uid !== uid && info.uid !== 0)) throw unsafe();
-    if (dirname(path) === path) break;
-  }
   const [mountEvidenceDigest, envelope, key] = await Promise.all([observeLocalBacking(root, rootInfo.dev),
     personalPrivateFile(join(root, ENCRYPTED_FILE_SECRET_STORE_NAME), uid, Number.MAX_SAFE_INTEGER),
     personalPrivateFile(join(root, ENCRYPTED_FILE_SECRET_STORE_KEY), uid, 32)]);
@@ -64,6 +72,25 @@ export async function observePersonalStoreHost(root: string, uid: number): Promi
   if (custodyDigest(identity(await lstat(root))) !== custodyDigest(identity(rootInfo)) || await realpath(root) !== canonical) throw unsafe();
   return Object.freeze({ locationDigest: custodyDigest([canonical, rootInfo.dev, rootInfo.ino, rootInfo.uid]), keyIdentityDigest: key?.identity ?? null,
     mountEvidenceDigest, pairPresent: envelope !== null });
+}
+export type PersonalStoreReadiness = Readonly<{ status: 'ready' } | { status: 'store' } | { status: 'untested'; reason: 'no-root' | 'unreadable' }
+  | { status: 'refused'; reason: string; path?: string; mode?: string; folder?: 'root' | 'parent' }>;
+/** Doctor's preflight: the producer's own read-only host observation, bounded like the producer; no binding write, witness or evidence. */
+export async function inspectPersonalStoreReadiness(root: string | null): Promise<PersonalStoreReadiness> {
+  const uid = process.getuid?.();
+  if (root === null || uid === undefined) return { status: 'untested', reason: 'no-root' };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([(async (): Promise<PersonalStoreReadiness> => {
+      const open = await unsafeStoreDirectory(root, uid);
+      if (open) return { status: 'refused', reason: 'unsafe-root', path: open.path, mode: open.mode, folder: open.parent ? 'parent' : 'root' };
+      await observePersonalStoreHost(root, uid);
+      return { status: 'ready' };
+    })(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new PersonalCustodyError('unknown-locality')), registry.probeTimeoutMs); timer.unref(); })]);
+  } catch (error) {
+    if (error instanceof PersonalCustodyError) return { status: 'refused', reason: error.reason };
+    return { status: 'untested', reason: absent(error) ? 'no-root' : 'unreadable' };
+  } finally { clearTimeout(timer); }
 }
 const unescapeMount = (value: string) => value.replace(/\\(040|011|012|134)/gu, (_, code: string) => String.fromCharCode(Number.parseInt(code, 8)));
 async function observeLocalBacking(root: string, dev: number): Promise<string> {
@@ -85,7 +112,8 @@ async function observeLocalBacking(root: string, dev: number): Promise<string> {
     return custodyDigest([fs.type, mount, ancestry]);
   } catch (error) { if (error instanceof PersonalCustodyError) throw error; throw new PersonalCustodyError('unknown-locality'); }
 }
-async function localDevice(path: string, seen: string[], depth: number): Promise<void> {
+/** Exported for the sysfs-fixture contract test only. */
+export async function localDevice(path: string, seen: string[], depth: number): Promise<void> {
   if (depth >= registry.deviceMaxDepth) throw new PersonalCustodyError('unknown-locality');
   const canonical = await realpath(path);
   if (seen.includes(canonical) || registry.remoteDevicePatterns.some(part => canonical.toLowerCase().includes(part))) throw new PersonalCustodyError('unknown-locality');

@@ -189,6 +189,9 @@ describe('/provider window', () => {
     const withModels = providerPanelTree(KINDS, terminalPanelLabels('en').provider, true);
     expect(withModels.items.slice(3).map(item => item.children?.map(child => [child.id, child.blocked?.reason ?? null]))).toEqual([
       [['connect', null], ['model', null], ['disconnect', null]], [['connect', null], ['model', 'Store its key first (Connect).']]]);
+    // FIX8b: an open ChatGPT row offers only the sign-in window, never a key entry or a catalog pick.
+    const open = { ...KINDS, kinds: KINDS.kinds.map(kind => kind.id === 'chatgpt-login' ? { ...kind, blocked: null } : kind) };
+    expect(providerPanelTree(open, terminalPanelLabels('en').provider, true, 'chatgpt-login').items[2]!.children).toEqual([{ id: 'connect', label: 'Continue with ChatGPT' }]);
     const { port } = providerPort();
     const { element } = panel('provider', { provider: port }, 'tr');
     const view = mount(element, 80, 40, true);

@@ -1,16 +1,34 @@
 import { randomUUID } from 'node:crypto';
 import { modelInvocationProfileSchema, type SubscriptionConnectionRequest, type SubscriptionConnectionResult } from '#domain/index.js';
-import { subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, OPENAI_CHAT_COMPLETIONS_FAMILY, SIWC_INFERENCE, SIWC_USAGE_SUMMARY, siwcResponsesDefinitionSchema, readSqliteSubscriptionUsageSummary, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
+import { subscriptionActor, ModelInvocationPolicyAuthorization, modelInvocationBillingAxis, assertAuthorityWitness, OAuthConnectionError, PersonalCustodyError } from '#engine/index.js';
+import { PROVIDER_CONNECT_REGISTRY, OPENAI_CHAT_COMPLETIONS_FAMILY, SIWC_INFERENCE, SIWC_USAGE_SUMMARY, siwcResponsesDefinitionSchema, readSqliteSubscriptionUsageSummary, attestLocalInteractiveTerminal, installationSecretRoot, unsafeStoreDirectory, localPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { DeckentError, ErrorRegistry } from '#platform/index.js';
 import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { connectConfiguredModel } from './connect.js';
 
 const MILLISECONDS_PER_DAY = 86_400_000;
+/** One gate and one error boundary for the CLI and the terminal window: sign-in follows the kind's registry availability (logout and usage
+ * stay reachable), and an OAuth/custody refusal reaches the person as its registered EN/TR message with the cause-specific next step. */
 export async function executeConfiguredSiwc(root: string, request: SubscriptionConnectionRequest, options: ConfigLoadOptions,
   presentation: Readonly<{ signal?: AbortSignal; fallback?: (url: string) => void }> = {}): Promise<SubscriptionConnectionResult> {
+  const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id);
+  if (!kind || !kind.available && request.operation !== 'logout' && request.operation !== 'usage') throw ErrorRegistry.createError('MODEL_CONNECT_NOT_CONNECTABLE');
+  try { return await siwcOperation(root, request, options, presentation, kind.id); }
+  catch (error) {
+    // `connect` arrives already registered (connectConfiguredModel); login/logout/inspect arrive as the OAuth owner's typed refusal.
+    const typed = error instanceof OAuthConnectionError || error instanceof PersonalCustodyError ? { code: error.code, reason: error.reason }
+      : error instanceof DeckentError && error.code === 'SIWC_STORE_NOT_PERSONAL' ? { code: error.code, reason: error.params?.['reason'] } : null;
+    if (!typed) throw error;
+    // The person's own terminal learns which folder is open and its mode (ssh-style); the refusal itself carries only the reason.
+    const storeRoot = typed.reason === 'unsafe-root' ? installationSecretRoot(options.env ?? process.env, options.platform) : null;
+    const open = storeRoot && process.getuid ? await unsafeStoreDirectory(storeRoot, process.getuid()).catch(() => null) : null;
+    throw ErrorRegistry.createError(typed.code, { params: { ...(typeof typed.reason === 'string' ? { reason: typed.reason } : {}), ...(open ? { path: open.path, mode: open.mode, folder: open.parent ? 'parent' : 'root' } : {}) } });
+  }
+}
+async function siwcOperation(root: string, request: SubscriptionConnectionRequest, options: ConfigLoadOptions,
+  presentation: Readonly<{ signal?: AbortSignal; fallback?: (url: string) => void }>, connection: string): Promise<SubscriptionConnectionResult> {
   await assertAuthorityWitness('models.login', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), { attest: () => attestLocalInteractiveTerminal() });
   const context = await loadConfiguredScopeContext(root, request.scopeId, options, request.operation === 'prepare' || request.operation === 'usage' ? 'read' : 'write');
   if (subscriptionActor(context.principal).principalClass !== 'person') throw ErrorRegistry.createError('HEADLESS_PERSON_REQUIRED');
@@ -44,9 +62,7 @@ export async function executeConfiguredSiwc(root: string, request: SubscriptionC
         : await app.connect({ ...(connectionId ? { connectionId, enablePlanUse: true } : {}), planUse: true }, presentation.signal);
       return result;
     }, presentation);
-  const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id);
-  if (!kind) throw ErrorRegistry.createError('MODEL_CONNECT_NOT_CONNECTABLE');
-  const models = await connectConfiguredModel(root, { schemaVersion: 1, commandId: randomUUID(), scopeId: request.scopeId, connection: kind.id,
+  const models = await connectConfiguredModel(root, { schemaVersion: 1, commandId: randomUUID(), scopeId: request.scopeId, connection,
     model: { pull: 'available' }, delegate: request.delegate ?? [], subscription: { ...(request.newAccount ? { newAccount: true } : {}), ...(request.connectionId ? { connectionId: request.connectionId } : {}),
       apiContinuation: request.apiContinuation ?? null } }, options, { siwcPresentation: presentation });
   if (models.status !== 'connected') return { models, state: models.status };

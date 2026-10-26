@@ -1,7 +1,7 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { assertActorAssurance, principalToActor, resolveLocalOsPrincipal, type ConfigLoadOptions } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
-import { installationSecretRoot, openConfiguredSecretStore, openRegisteredSecretStore, readSecretsConfig, registeredSecretStores } from '#adapters/index.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, inspectPersonalStoreReadiness, installationSecretRoot, openConfiguredSecretStore, openRegisteredSecretStore, readSecretsConfig, registeredSecretStores, type PersonalStoreReadiness } from '#adapters/index.js';
 import { inspectSecretEnvironmentGuard, isSecretName, missingSecretReferenceNames, type SecretStore, type SecretStoreInspection } from '#engine/index.js';
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
 export interface SecretStoreInspectionView extends SecretStoreInspection {
@@ -11,6 +11,8 @@ export interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly leftover?: Readonly<{ backends: readonly string[]; entries: number; unverified: readonly string[]; codes?: Readonly<Record<string, string>> }>;
   /** U1 S1: the installation (global) root every file-backed store lives in, with its mode (null: none resolves or it does not exist yet). */
   readonly globalRoot?: Readonly<{ path: string; mode: string }> | null;
+  /** FIX8b: whether ChatGPT sign-in's personal custody would accept this store now (Linux only; read-only host facts, nothing written). */
+  readonly personalCustody?: PersonalStoreReadiness;
 }
 export interface SecretNamesView { readonly schemaVersion: 1; readonly backend: string; readonly names: readonly string[] }
 /** Read the selection without resolving any secret value. */
@@ -26,6 +28,7 @@ export async function inspectConfiguredSecretStore(projectRoot: string, options:
   return Object.freeze({ schemaVersion: 1, backend: store.descriptor.id, writable: store.descriptor.writable, enumerable: store.descriptor.enumerable, ...health,
     globalRoot: root !== null && info?.isDirectory() ? Object.freeze({ path: root, mode: (info.mode & 0o777).toString(8).padStart(4, '0') }) : null,
     ...(store.descriptor.id === 'core.secret-store.env@1' ? { envGuard: await environmentGuard(projectRoot, options) } : {}),
+    ...((options.platform ?? process.platform) === 'linux' ? { personalCustody: store.descriptor.id !== ENCRYPTED_FILE_SECRET_STORE_ID ? { status: 'store' as const } : await inspectPersonalStoreReadiness(root) } : {}),
     ...(leftover.entries || leftover.unverified.length ? { leftover } : {}) });
 }
 /** Other-store names are counted without values; unlistable stores remain unverified (Astra 2456 N2), with their typed code when they gave one

@@ -187,16 +187,23 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
   sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Yalnız Deckent'in bubblewrap
   korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar). Claude aboneliğiyle terminal
   sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
-- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam
-  bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` ile API anahtarı bağlayın, bütçe koyun, `/model` seçin.
+- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Aboneliklerden yalnız ChatGPT ile giriş terminal
+  sohbetine hizmet eder (aşağıda); kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde ChatGPT ile giriş
+  yapın ya da orada API anahtarı bağlayıp bütçe koyun ve `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
 - **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
   yalnız geçerli erişim token'ını (Codex'te kimlik token'ını da) kopyalar ve süresinin dolmadığını denetler; yenileme
   token'ları, API anahtarları ve giriş dosyasının geri kalanı makinede kalır. *Etki:* işçinin CLI'ı, o token'ın süresi
   dolana kadar abonelik hesabınız adına işlem yapabilir. *Yol:* yok; sınır, token'ın kendi süresidir.
-- **ChatGPT ile giriş aday koddur; işçi etkinleştirmesi bekletilir.** Alpha.56 kişi girişini, rızayı ve bağlantı
-  saklamasını ekler. Codex app-server yalıtılmış işçide çalışır; host app-server yolu reddedilmiştir.
+- **ChatGPT ile giriş sohbete açıktır; plandaki Codex işçisi hâlâ bekletilir.** Alpha.56 terminal sohbeti ve Deckent'in kendi
+  özellikleri için kişi girişini açar (`/provider` → ChatGPT ya da kendi terminalinizden `deckent models connect --connection
+  chatgpt-login`). Oturum yalnız sizin yerel şifreli deponuzda durur: Linux ya da WSL, bu bilgisayarın yerel diskinde yalnız sizin
+  açabildiğiniz (0700) bir klasör. Paylaşılan ekip sunucusu, ağ paylaşımında ya da `/mnt/c` üzerinde bir depo veya başka
+  kullanıcıların açabildiği bir klasör tarayıcı açılmadan reddedilir; `deckent doctor` klasörü ve düzeltmeyi (örneğin
+  `chmod 700 <klasör>`) gösterir, Deckent izinleri kendisi değiştirmez. macOS ve yerel Windows henüz desteklenmiyor. Her proje
+  için bir giriş; OpenAI plan sınırını sorgulama yolu sunmadığı için Deckent yalnız kendi 30 günlük kullanımını gösterir. MCP ile
+  bağlanan araçlar planı ham API olarak kullanamaz. Codex app-server yalıtılmış işçide çalışır; host app-server yolu reddedilmiştir.
   Gerçek binary ile N1 kanıtına kadar işçi etkinleştirmesi HOLD'dur (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, neden `activation-hold`);
   eksik yalıtım tipli rettir, host/token dosyası alternatifi yoktur. Bekletme sürerken hiçbir Run bu yola atanmaz ve Codex
   işçisi mevcut bağlantısıyla çalışır; bu yola dondurulmuş bir Run çalışma alanı veya konteynerden önce `launch-refused` ile kapanır.
@@ -206,7 +213,9 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
   başarılı olması Codex işçisinin kullanılabildiğini kanıtlamaz.
 
 - **Aboneliklerden API modeline otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli bir API'ye
-  geçmez. alpha.55'ten beri abonelik kotası yüzünden bekleyen bir işçi Run'ı en çok 5 saat bekler (`runRuntime.quotaRecovery.maxWaitMs`),
+  geçmez. İstisna: bağlanırken devamı açıkça etkinleştirip bir API modeli seçtiğiniz ChatGPT girişi, doğrulanmış plan sınırında o
+  modelde bütçenizden devam edebilir; her geçiş gösterilir ve kaydedilir, izin geri alınabilir. Geçici hatalar ödeme yolunu asla
+  değiştirmez. Claude aboneliği asla geçmez. alpha.55'ten beri abonelik kotası yüzünden bekleyen bir işçi Run'ı en çok 5 saat bekler (`runRuntime.quotaRecovery.maxWaitMs`),
   sonra size bir kartta beklemeye devam mı edileceğini yoksa WorkClass listesindeki sıradaki adayın mı kullanılacağını sorar; hiçbir şey
   kendiliğinden iptal edilmez ve hiçbir AI cevap veremez. Yükseltmeden önce bekletilmiş bir Run o zaman mühürlediği süreyi korur (eski
   varsayılan 7 gündü). *Yol:* `deckent run resume --quota wait` ya da `deckent run resume --quota next-candidate` ile cevaplayın ya da

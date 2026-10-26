@@ -38,7 +38,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
         freshDone: t('tui.panel.model.switch.freshDone', {}, locale), keepDone: t('tui.panel.model.switch.keepDone', {}, locale) } },
     provider: { title: t('tui.panel.provider.title', {}, locale), hints: t('tui.panel.provider.hints', {}, locale),
       actions: { grant: t('tui.provider.action.grant', {}, locale), connect: t('tui.panel.provider.action.connect', {}, locale), replace: t('tui.panel.provider.action.replace', {}, locale),
-        disconnect: t('tui.panel.provider.action.disconnect', {}, locale), model: t('tui.panel.provider.action.model', {}, locale) },
+        disconnect: t('tui.panel.provider.action.disconnect', {}, locale), model: t('tui.panel.provider.action.model', {}, locale), signIn: t('siwc.card.title', {}, locale) },
       modelTitle: t('tui.panel.provider.modelTitle', {}, locale), modelEmpty: t('tui.panel.provider.modelEmpty', {}, locale), keyName: t('tui.panel.provider.keyName', {}, locale),
       endpointTitle: t('tui.panel.provider.endpointTitle', {}, locale), endpointHint: t('tui.panel.provider.endpointHint', {}, locale),
       endpointOther: t('tui.panel.provider.endpointOther', {}, locale), previewTitle: t('tui.panel.provider.previewTitle', {}, locale),

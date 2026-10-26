@@ -12,7 +12,8 @@
   "localDevicePaths": [
     "/ata",
     "/nvme",
-    "/VMBUS:"
+    "/VMBUS:",
+    "/MSFT1000:"
   ],
   "remoteDevicePatterns": [
     "/session",
