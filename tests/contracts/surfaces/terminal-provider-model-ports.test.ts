@@ -204,6 +204,9 @@ describe('/provider port: connect a model (T4-B)', () => {
       seedModels: async kind => kind === 'openai-api' ? [{ nativeId: 'gpt-6-luna', displayName: 'GPT-6 Luna' }, { nativeId: 'gpt-6-astra', displayName: 'GPT-6 Astra', priced: false }] : [] };
     return { commands, connect, extra: {
       connectModel: async (_root: string, command: ModelConnectCommand) => { commands.push(command); return results.shift()!; },
+      // U2: "connected" is said only when the invocable-now reading names the model; this host's reading does.
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: { providerId: 'openai-api', providerVersion: 1, modelId: 'gpt-6-luna', modelVersion: 1 },
+        label: 'gpt-6-luna', nativeId: 'gpt-6-luna', catalogRevision: 'c', bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never,
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'c', providers: [
         { id: 'vendor-a', version: 1, models: [{ id: 'a', version: 1, nativeId: 'native-a', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] }] },
         { id: 'claude', version: 1, models: [{ id: 'c', version: 1, nativeId: 'native-c', protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] }] }] } }) as never } };
@@ -286,7 +289,8 @@ describe('/provider port: connect a model (T4-B)', () => {
     expect(commands.map(command => command.commandId)).toEqual([commands[0]!.commandId, commands[0]!.commandId]);
     expect(commands[0]).toMatchObject({ schemaVersion: 1, scopeId: 'scope', connection: 'openai-api', endpoint: null, model: { nativeId: 'gpt-6-luna' } });
     expect(done.title).toBe('Model connected: gpt-6-luna'); expect(done.summary).toBe('gpt-6-luna is connected; choose it with /model.');
-    expect(done.lines.map(line => line.label)).toEqual(['Model', 'Steps', 'Key', 'Spending', 'Service', 'Next']);
+    expect(done.lines.map(line => line.label)).toEqual(['Model', 'Steps', 'Key', 'Spending', 'Service', '']);
+    expect(done.lines.at(-1)).toEqual({ label: '', text: 'Choose it with /model (this session, or also as your default).', tone: 'success' });
     expect(done.lines.find(line => line.label === 'Spending')!.tone).toBe('warning');
     expect(JSON.stringify([pending, done, commands])).not.toContain(CANARY);
     // K5: carried and not-carried models are rows of the window; the summary line only counts them.
@@ -333,7 +337,8 @@ describe('/model source', () => {
     expect(inspected).toBe(1);
     expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual(states.models.map(entry => [entry.reference.modelId,
       entry.reference.modelId === 'chat', entry.availability.invocable ? null : modelInvocabilityText(entry.availability, 'en')]));
-    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => modelInvocabilityText(entry.availability, 'en')));
+    // U2: each row leads with its chat on/off state, then the same shared invocability words.
+    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => `${active.has(entry.reference.modelId) ? 'On' : 'Off'} · ${modelInvocabilityText(entry.availability, 'en')}`));
     expect(view.choices[0]!.exact).toBe('local-openai@1/chat@1 · native native-chat');
     expect(view.choices[1]!.command).toBe('deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> '
       + `--expected-revision 3 --binding-digest ${'d'.repeat(64)} --catalog-revision catalog-1`);

@@ -5,7 +5,7 @@ export type FolderFacts = Readonly<{ kind: 'coding' | 'documents' | 'empty' | 'u
 export type FirstTaskIntent = Readonly<{ commandId: string; scopeId: string; folder: string; intent: string; pending?: RunIntentRecord }>;
 export type OnboardingConfigBasis = Readonly<{ projectDigest: string | null; globalDigest: string }>;
 export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; plan: SetupPlan; observation: SetupObservation; answers: Readonly<Record<string, unknown>>;
-  deferred: readonly string[]; folder: string; folderFacts: FolderFacts; scopeId: string;
+  deferred: readonly string[]; modelUsable: boolean; folder: string; folderFacts: FolderFacts; scopeId: string;
   hosts: readonly Readonly<{ id: string; cli: string; login: string }>[];
   budget: Readonly<{ needed: boolean; presetUsd: number; presetsUsd: readonly number[]; currentUsd: number | null; reason?: string }>;
   permissions: Readonly<{ state: 'applied' | 'needed' | 'unavailable'; reason: string }>;

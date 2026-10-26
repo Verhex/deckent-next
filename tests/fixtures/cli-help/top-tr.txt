@@ -75,7 +75,7 @@ Onaylar:
       [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | recovery | mcp list|grant|revoke | scopes
+      revoke | upgrade | recovery | mcp list|grant|revoke|narrow | scopes
       [--scope <id>]
 
 Kurulum/Bakım:

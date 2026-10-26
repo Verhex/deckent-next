@@ -52,8 +52,10 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   config.language = locale; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline', notify: 'off' };
   await writeFile(configPath, JSON.stringify(config)); const before = await readFile(configPath, 'utf8');
   const step = locale === 'tr' ? 'Adım 1/' : 'Step 1/', permission = locale === 'tr' ? 'İzin ayarları' : 'Permission settings', ready = locale === 'tr' ? 'Hazır!' : 'Ready!', hint = locale === 'tr' ? 'Enter gönder' : 'Enter send';
-  const steps = [[step, '\u001b'], [permission, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [step, '\u001b'],
-    [permission, '\u001b'], [ready, '\u001b'], [hint, '/exit\r']];
+  // A fresh non-Git folder without a model: model, permissions, project instructions (no DECKENT.md yet), then Ready.
+  const instructions = locale === 'tr' ? 'Proje yönergeleri' : 'Project instructions';
+  const steps = [[step, '\u001b'], [permission, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [step, '\u001b'],
+    [permission, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };
   expect(run.code).toBe(0); expect(run.output.indexOf(step)).toBeLessThan(run.output.indexOf(ready));

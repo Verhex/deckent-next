@@ -75,7 +75,7 @@ Approvals:
       [--scope <id>] [--json]
   policy      Inspect policy and standing grants (without an action: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | recovery | mcp list|grant|revoke | scopes
+      revoke | upgrade | recovery | mcp list|grant|revoke|narrow | scopes
       [--scope <id>]
 
 Setup / Maintenance:

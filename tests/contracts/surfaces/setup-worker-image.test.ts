@@ -38,10 +38,12 @@ const stages = (facts: Partial<ExecutionFacts> | null, values: Record<string, un
 };
 
 describe('BR1 setup stages: worker image, then the execution settings (pure plan)', () => {
-  it('order: the runtime, the worker image, the execution settings, then the model; family stages are never --yes-eligible', () => {
+  it('order: the model, then the runtime, the worker image and the execution settings; family stages are never --yes-eligible', () => {
     const { plan } = stages({ worker: worker() });
     const ids = plan.stages.map(stage => stage.id);
-    expect(ids.slice(ids.indexOf('execution:runtime'))).toEqual(['execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model']);
+    // U3-1b: the setup order registry (stages.json) places the model before the execution family.
+    expect(ids).toContain('core:model'); expect(ids.indexOf('core:model')).toBeLessThan(ids.indexOf('execution:runtime'));
+    expect(ids.slice(ids.indexOf('execution:runtime'))).toEqual(['execution:runtime', 'execution:worker', 'execution:worker-settings']);
     expect(plan.stages.filter(stage => stage.namespace === 'execution').every(stage => !stage.autoEligible)).toBe(true);
   });
 
@@ -289,9 +291,11 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
     const calls: unknown[] = [];
     const context = { env: {}, initializeNativeCodingRegistry: async (_root: string, input: unknown) => { calls.push(input); return { status: 'current' }; },
       installConfiguredExecutionPool: async (_root: string, _scope: string, apply: boolean) => { calls.push(apply); return { status: 'conflict', configured: null }; } } as unknown as SetupCommandContext;
-    const input = { scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
+    const input = { scopeId: 'erp-demo', image: IMAGE, provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
+    // U4-1r: the first registry is bound to the chosen provider's image; without it nothing is previewed.
+    expect(await runForegroundStage(context, '/x', stage('work.registry', { ...input, image: undefined }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
     expect(await runForegroundStage(context, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'applied' });
-    expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
+    expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', image: IMAGE, provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
     expect(await runForegroundStage(context, '/x', stage('work.pool', { scopeId: 'erp-demo' }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'POOL_CONFLICT' });
     const failing = { env: {}, initializeNativeCodingRegistry: async () => { throw Object.assign(new Error('x'), { code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' }); } } as unknown as SetupCommandContext;
     expect(await runForegroundStage(failing, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' });

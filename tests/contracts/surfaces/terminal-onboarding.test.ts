@@ -1,11 +1,11 @@
 import { expect, it } from 'vitest';
-import { loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
+import { loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, onboardingSteps, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
 import { planSetup, SetupStageRegistry } from '#engine/index.js';
 const observation = { schemaVersion: 2 as const, environment: { platform: 'linux' as const, node: 'supported' as const },
   language: { configured: 'en' as const, requested: null, system: null }, folder: { installation: 'present' as const, homeRoot: false, configuredScope: 's', suggestedScope: null },
   profile: { available: [], selected: null }, policy: { state: 'current' as const }, sandbox: { realm: 'bubblewrap' as const, selfTest: 'ok' as const, usernsRestricted: false },
   model: { connections: 1 }, check: { state: 'ok' as const } };
-const snapshot: OnboardingSnapshot = { configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) }, observation, plan: planSetup(observation, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), answers: {}, deferred: [],
+const snapshot: OnboardingSnapshot = { configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) }, observation, plan: planSetup(observation, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), answers: {}, deferred: [], modelUsable: true,
   folder: 'orders', folderFacts: { kind: 'documents', readme: false, tests: false }, scopeId: 's',
   hosts: [{ id: 'first', cli: 'absent', login: 'found' }, { id: 'second', cli: 'found', login: 'found' }],
   budget: { needed: true, presetUsd: 10, presetsUsd: [5, 10, 25], currentUsd: 0 }, permissions: { state: 'applied', reason: '' }, pending: [] };
@@ -34,6 +34,11 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const reopened = createOnboardingSession(port, { ...snapshot, deferred }, true);
   expect(reopened.model().steps.map(row => row.kind)).toEqual(['stage', 'budget', 'first-task']);
   expect(reopened.model().steps[0]?.id).toBe('core:model');
+  // İ-2: a deferred model screen returns only while no model is usable (a chat-only activation is usable without a worker catalog row).
+  const unconnected = { ...observation, model: { connections: 0 } };
+  const chatOnly = { ...snapshot, observation: unconnected, plan: planSetup(unconnected, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), deferred: ['core:model'] };
+  expect(onboardingSteps(chatOnly).some(row => row.id === 'core:model')).toBe(false);
+  expect(onboardingSteps({ ...chatOnly, modelUsable: false })[0]?.id).toBe('core:model');
   let attestations = 0;
   const stopped = { assertPerson: async () => { attestations++; throw new Error('must not open'); } } as OnboardingPort;
   const { runOnboardingSession } = await loadOnboardingScreens();

@@ -227,6 +227,7 @@ export const CLI_CATALOG = [
       action('list', 'approvals', 'cli.help.action.policy.mcp.list', 'cli.help.policy'),
       action('grant', 'approvals', 'cli.help.action.policy.mcp.grant', 'cli.help.policy', { requires: ['--group <id>'] }),
       action('revoke', 'approvals', 'cli.help.action.policy.mcp.revoke', 'cli.help.policy', { requires: ['--group <id>'] }),
+      action('narrow', 'approvals', 'cli.help.action.policy.mcp.narrow', 'cli.help.policy', { requires: ['--group <id>'] }),
     ] },
     action('scopes', 'observe', 'cli.help.action.policy.scopes', 'cli.help.policy'),
   ] },

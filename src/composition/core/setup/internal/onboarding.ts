@@ -52,6 +52,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     const currentUsd = budgetReason ? null : account?.checkpoint ? account.checkpoint.account.budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd : 0;
     // Billing comes from the connected model's registry/profile, not a provider-name list.
     const chat = await terminal.describeTerminalChatPlan?.(root, options);
+    // İ-2 is about a usable model (the same read as the /model window), not only the worker catalog; an unreadable answer counts as none.
+    const modelUsable = (await terminal.inspectInvocableModels?.(root, scopeId, options).catch(() => null))?.models.some(row => row.availability.invocable) ?? false;
     const binding = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId);
     const pending: RunIntentRecord[] = [];
     const reader = await openSqliteRunProposalReader(await context.path(), config.storage.sqlite);
@@ -64,7 +66,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       }
     } finally { reader.close(); }
     return { configBasis, plan: planned, observation: observed.observation, answers: values, deferred: (await store.list(principal, folder)).map(row => row.stageId),
-      folder, folderFacts: { kind, readme: visible.some(name => /^readme(?:\.|$)/iu.test(name)), tests: visible.some(name => /^(test|tests|spec|specs)$/u.test(name)) }, scopeId,
+      modelUsable, folder, folderFacts: { kind, readme: visible.some(name => /^readme(?:\.|$)/iu.test(name)), tests: visible.some(name => /^(test|tests|spec|specs)$/u.test(name)) }, scopeId,
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
         presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: { state: 'unavailable' as const, reason: 'onboarding.permissions.unavailable' }, pending };
