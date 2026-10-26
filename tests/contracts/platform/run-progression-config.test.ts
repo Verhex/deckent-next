@@ -52,7 +52,7 @@ describe('bounded concurrent Run configuration (schema 4 additive)', () => {
       const en = await app.explain({ keyPath: 'runRuntime.maxConcurrentRuns' });
       await writeFile(projectPath, JSON.stringify({ language: 'tr', service: { maxConcurrentExecutions: 2 } }));
       const tr = await app.explain({ keyPath: 'runRuntime.maxConcurrentRuns' });
-      expect(en.description).toMatch(/concurrent Runs/i); expect(tr.description).toMatch(/eşzamanlı Run/);
+      expect(en.description).toMatch(/concurrent Runs/i); expect(tr.description).toMatch(/eşzamanlı iş/);
       expect(await readFile(globalPath, 'utf8')).toBe(JSON.stringify({ runRuntime: { maxConcurrentRuns: 3 } }));
     } finally { await rm(root, { recursive: true, force: true }); }
   });

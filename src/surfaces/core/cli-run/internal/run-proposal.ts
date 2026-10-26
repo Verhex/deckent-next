@@ -16,7 +16,8 @@ export function renderRunProposal(data: RunPlanningResult, locale: Locale): stri
   const next = { recorded: t('proposal.next.recorded', nextParams, locale), pending: t('proposal.next.pending', nextParams, locale), accepted: t('proposal.next.accepted', nextParams, locale), rejected: t('proposal.next.rejected', nextParams, locale), parked: t('proposal.next.parked', nextParams, locale) } as const;
   return [t('proposal.summary', { proposal: r.proposal.proposalId, run: r.proposal.runId, status: states[r.status], revision: r.revision }, locale),
     t('proposal.attribution', { actor: r.proposal.proposer.id, scope: r.proposal.scopeId, source: r.proposal.source.kind }, locale),
-    ...(r.reason ? [ErrorRegistry.createError(r.reason, { locale, ...(data.reasonParams ? { params: data.reasonParams } : {}) }).message] : []),
+    // A pending approval's reason names the approval it waits for; the record carries its id.
+    ...(r.reason ? [ErrorRegistry.createError(r.reason, { locale, ...(data.reasonParams ? { params: data.reasonParams } : r.approval ? { params: { approvalId: r.approval.approvalId } } : {}) }).message] : []),
     ...(r.approval ? [t('proposal.approval', { id: r.approval.approvalId, expiry: r.approval.expiresAt }, locale)] : []),
     ...(data.budgetSemantics === 'not-metered' ? [t('proposal.budget.notMetered', {}, locale)] : [
       t('proposal.budget', { amount: currencyAmountText(r.proposal.budgetCeiling.limitMinorUnits, r.proposal.budgetCeiling.currency, locale),

@@ -1,10 +1,12 @@
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { requireLedgerVersion, EFFECT_PRODUCER_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+/** node:sqlite loads only when the ledger is observed, so importing the SDK never loads it (sqlite-ledger-lazy). */
+const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 /** Whole-installation observation: revoked scope grants never hide unresolved business effects or active work from lifecycle custody. */
 export function hasUnsettledInstallationWork(path: string, busyTimeoutMs: number): boolean {
-  const db = new DatabaseSync(path, { readOnly: true, timeout: busyTimeoutMs });
+  const db = new (nativeSqlite().DatabaseSync)(path, { readOnly: true, timeout: busyTimeoutMs });
   try {
     requireLedgerVersion(db, EFFECT_PRODUCER_LEDGER_VERSION);
     return !!db.prepare("SELECT 1 FROM effect_intents WHERE state NOT IN ('settled','refused') LIMIT 1").get()
@@ -20,7 +22,7 @@ export async function quiescentInstallationScopes(path: string, limits: { readon
   if (hasUnsettledInstallationWork(path, limits.busyTimeoutMs)) throw ErrorRegistry.createError('UNINSTALL_WORK_ACTIVE');
   let recorded: string[];
   try {
-    const db = new DatabaseSync(path, { readOnly: true, timeout: limits.busyTimeoutMs });
+    const db = new (nativeSqlite().DatabaseSync)(path, { readOnly: true, timeout: limits.busyTimeoutMs });
     try { recorded = db.prepare('SELECT scope_id FROM scope_registry ORDER BY scope_id LIMIT ?').all(limits.maxScopes + 1).map(row => String(row['scope_id'])); }
     finally { db.close(); }
   } catch { throw ErrorRegistry.createError('UNINSTALL_SCOPE_UNVERIFIED', { params: { path } }); }

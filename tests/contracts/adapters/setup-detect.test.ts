@@ -60,7 +60,7 @@ describe.skipIf(posix)('I-S2 execution-environment detection', () => {
     expect(docker(facts)).toMatchObject({ cli: 'absent', daemon: 'not-run', path: null });
     expect(facts.runtimes.map(row => row.support)).toEqual(['supported', 'unsupported']);
     expect(decide(facts)).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.none' } });
-    expect(MESSAGE_REGISTRY.catalogs.en['setup.execution.none']).toContain('no Run, /do or delivery');
+    expect(MESSAGE_REGISTRY.catalogs.en['setup.execution.none']).toContain('work, /do and delivery cannot run');
   });
 
   it('reachable engine, Desktop and rootless are told apart from `docker info`; only read verbs run', async () => {

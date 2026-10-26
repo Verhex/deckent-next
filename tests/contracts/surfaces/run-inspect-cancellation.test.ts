@@ -20,7 +20,7 @@ it('a Run cancelled before its only attempt was dispatched says no worker was st
   expect(prevented.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
   const en = inspect(prevented), tr = inspect(prevented, 'tr');
   expect(en).not.toContain(NOT_CONFIRMED); expect(en).toContain('Cancellation: request recorded; no worker was started');
-  expect(tr).not.toContain('worker sonlanması doğrulanmadı'); expect(tr).toContain('hiçbir worker başlatılmadı');
+  expect(tr).not.toContain('işçi sonlanması doğrulanmadı'); expect(tr).toContain('hiçbir işçi başlatılmadı');
 });
 it('negative: a worker in flight or one that ran under the cancellation keeps the unconfirmed-termination line', () => {
   // A dispatched, running worker (started observation) with cancellation requested.

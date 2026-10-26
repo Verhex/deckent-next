@@ -1,4 +1,4 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, type Stats } from 'node:fs';
 import { lstat, readFile, realpath, rmdir, unlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, parse, relative, sep } from 'node:path';
@@ -23,7 +23,7 @@ export async function fileDigest(path: string) {
   return digest.digest('hex');
 }
 /** A private, single-link regular file of this user, or null when absent. Anything else is never an owned member. */
-export async function memberStat(path: string) {
+export async function memberStat(path: string): Promise<Stats | null> {
   const info = await lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   if (info && (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || info.mode & 0o077 || await realpath(dirname(path)) !== dirname(path))) refuse('EFFECT_TARGET_REJECTED');
   return info;

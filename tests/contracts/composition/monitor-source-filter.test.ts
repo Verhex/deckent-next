@@ -11,7 +11,7 @@ import { main } from '#surfaces/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, uninstallHoldPath } from '#platform/index.js';
 
 // CARD admission -> assert access boundary; all projects/ledgers are temporary fixtures.
 // A poisoned ledger alone is insufficient: monitor converts read errors into diagnostics.
@@ -104,7 +104,8 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   expect(snapshot.sourcesRead).toEqual(['other']); expect(snapshot.installs).toMatchObject([{ id: 'other', status: 'unavailable' }]);
   expect(snapshot.installs[0]!.diagnostics.some(code => code.startsWith('ledger-unavailable:'))).toBe(true);
   expect(trace.databases).toContain(f.other.ledger); expect(trace.databases).not.toContain(f.current.ledger);
-  expect(trace.fs.filter(path => path.startsWith(f.current.data + '/'))).toEqual([]);
+  // The current installation's config load checks only its uninstall admission fence (U10); no other current data is read.
+  expect(trace.fs.filter(path => path.startsWith(f.current.data + '/') && path !== uninstallHoldPath(f.current.data))).toEqual([]);
 });
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] unknown ids collect nothing, while omission retains all Next sources and proves the poison would be touched', async () => {
   const f = await fixture(), empty = await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'missing' });

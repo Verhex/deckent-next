@@ -83,7 +83,7 @@ it('status is read-only, human in both languages and typed with --json; a bare `
   expect(en.text()).toContain('deckent coding instructions trust --scope <id>');
   const tr = capture();
   expect(await main(['coding', 'instructions', 'status', '--lang', 'tr'], { root: f.root, env: f.env, stdin: piped(), stdout: tr.sink, stderr: capture().sink, ...handlers('trusted', calls) })).toBe(0);
-  expect(tr.text()).toContain('Güvenilir: buradaki worker');
+  expect(tr.text()).toContain('Güvenilir: buradaki işçiler');
   const json = capture();
   expect(await main(['coding', 'instructions', 'status', '--json'], { root: f.root, env: f.env, stdin: piped(), stdout: json.sink, stderr: capture().sink, ...handlers('trusted', calls) })).toBe(0);
   expect(JSON.parse(json.text())).toMatchObject({ schemaVersion: 1, targets: [{ target: 'n1', state: 'trusted', digest: DIGEST }] });

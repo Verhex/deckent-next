@@ -89,7 +89,7 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect(model.text).toContain('called with: Bearer '); expect(model.text).not.toContain(SECRET);
     const preview = mcpTurnTools(offered).preview(whoami.spec.name, {});
     expect(preview).toContain(server.url);
-    for (const shown of [JSON.stringify(listed), JSON.stringify(got), JSON.stringify(w.audits), w.cards.map(describeMcpTrustCard).join('\n'), preview!, model.text,
+    for (const shown of [JSON.stringify(listed), JSON.stringify(got), JSON.stringify(w.audits), w.cards.map(card => describeMcpTrustCard(card)).join('\n'), preview!, model.text,
       describeMcpApproval({ ...whoami, args: {} })]) expect(shown).not.toContain(SECRET);
     // The registry file holds the reference, never the value.
     const personal = join(w.home, '.deckent', 'mcp.json');

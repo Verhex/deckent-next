@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
 import { encodeCommandProjection, firstRunPolicyTemplate, FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type McpCapabilityPreview } from '#domain/index.js';
 import { createHash } from 'node:crypto';
-import { FIRST_RUN_RECOVERY_RULES } from '#engine/index.js';
+import { FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { changeConfiguredMcpCapabilities, inspectConfiguredMcpCapabilities, listConfiguredMcpCapabilityScopes } from '#composition/core/approvals/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { inspectConfiguredProviderSpendAccount, manageConfiguredProviderSpend } from '#composition/core/provider-spend/index.js';
@@ -24,7 +24,7 @@ async function fixture(shape: 'template' | 'hand-built' | 'live-shape' | 'n1-sha
   const f = await runtime(), template = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
     scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
     shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer',
-    firstCommitOperationId: 'coding.first-commit', executionEnvironmentIds: ['docker'], recoveryRules: FIRST_RUN_RECOVERY_RULES });
+    firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: FIRST_RUN_TOOL_NAMES.uninstallOperationIds, executionEnvironmentIds: ['docker'], recoveryRules: FIRST_RUN_RECOVERY_RULES });
   await trace(`fixture ${shape}: runtime created`);
   const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
   delete config.provider_spending; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
