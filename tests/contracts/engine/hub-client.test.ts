@@ -476,7 +476,7 @@ it('catches up 1001 signed revocations atomically per page, refuses gaps/bad sig
     await f.app.installFile(install('completed', bundle({ name: 'other' }), { feed: complete }));
     expect((await selection(f)).get('t')?.seal.agentId).toBe('other-agent');
   } finally { opened.close(); }
-});
+}, 120_000); // 1001 real Ed25519-signed, store-appended withdrawals: ~16 s alone, over the 30 s default under 5-way parallel load; the >500-entry paging proof needs every one of them.
 
 it('H7 dispatches wire-safe install/verify/export to the same client and rejects noncanonical base64 before writes', async () => {
   const { HubApplication } = await import('#engine/core/hub-operations/index.js');

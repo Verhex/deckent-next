@@ -21,6 +21,11 @@ export function assertSocketPublicationBudget(endpoint: string): void {
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, endpoint);
   }
 }
+/** The parent's real path. A stop removes its empty directory between the caller's `lstat` and this call: that is a stopped service, not an unsafe endpoint. */
+export async function resolveSocketParent(parent: string): Promise<string> {
+  try { return await realpath(parent); }
+  catch (error) { throw new LocalRuntimeSocketError((error as NodeJS.ErrnoException | null)?.code === 'ENOENT' ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error }); }
+}
 export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): Promise<ResolvedLocalRuntimeSocketOptions> {
   if (process.platform !== 'linux' || !process.getuid) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED');
   if (options?.endpoint && Buffer.byteLength(options.endpoint, 'utf8') >= 108) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, options.endpoint);
@@ -43,7 +48,7 @@ export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): 
     throw new LocalRuntimeSocketError(missing ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error });
   }
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700
-    || await realpath(parent) !== resolve(parent)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
+    || await resolveSocketParent(parent) !== resolve(parent)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
   const digest = createHash('sha256').update(`${options.endpoint}\0${process.getuid()}`).digest('hex');
   return Object.freeze({ ...options, custodyId: digest, guardEndpoint: `\0deckent-${digest}` });
 }
