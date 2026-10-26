@@ -45,5 +45,6 @@
   "siwc.doctor.connection": "ChatGPT plan connection for {model}: {state}",
   "siwc.doctor.disabled": "Plan use is disabled, expired or awaiting reconnect. Inspect the connection in /provider.",
   "siwc.card.otherAccount": "Connect a different account (new authorization)",
-  "siwc.account.signOutFirst": "Disconnect the current ChatGPT connection before authorizing a different account. Limits never rotate accounts."
+  "siwc.account.signOutFirst": "Disconnect the current ChatGPT connection before authorizing a different account. Limits never rotate accounts.",
+  "siwc.help.action.logout": "Sign a ChatGPT connection out and revoke its sign-in (your terminal)"
 }

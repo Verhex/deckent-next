@@ -22,9 +22,7 @@ export async function previewConfiguredModel(projectRoot: string, input: ModelIn
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) { return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta); }
 async function invoke(input: ModelInvocationCommand, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, entry: 'raw' | 'feature' = 'raw', onNotice?: (text: string) => void | Promise<void>) {
   try {
-    const parsed = modelInvocationCommandInputSchema.safeParse(input);
-    if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-    const command = parsed.data as ModelInvocationCommand, context = await loadContext(command.scopeId);
+    const command = parsedCommand(input), context = await loadContext(command.scopeId);
     const app = application(context, options, host, false, entry, configuredContinuationPin(input));
     const result = await app.invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
     if (entry !== 'feature' || !onDelta || !onNotice) return result;
@@ -35,21 +33,22 @@ async function invoke(input: ModelInvocationCommand, loadContext: (scopeId: stri
 }
 /** Context measurement of a command (T-L5, runtime-internal): the provider's count of exactly what `invoke` would send, under the same peer principal, policy, binding, activation and profile checks; null when the model or server has no counter. */
 export async function measurePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, signal?: AbortSignal, entry: 'raw' | 'feature' = 'raw') {
-  try {
-    const parsed = modelInvocationCommandInputSchema.safeParse(input);
-    if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-    const command = parsed.data as ModelInvocationCommand, context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
-    return await application(context, options, undefined, false, entry).measure(command, undefined, signal);
-  } catch (error) { throw queryFailure(error); }
+  return measure(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, entry);
 }
 /** Direct local measurement shares invocation's principal, policy, binding and activation gates; no model execution or spending. */
 export async function measureConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, entry: 'raw' | 'feature' = 'raw') {
+  return measure(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, entry);
+}
+async function measure(input: ModelInvocationCommand, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal: AbortSignal | undefined, entry: 'raw' | 'feature') {
   try {
-    const parsed = modelInvocationCommandInputSchema.safeParse(input);
-    if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-    const command = parsed.data as ModelInvocationCommand, context = await loadInvocationContext(projectRoot, command.scopeId, options, 'write');
-    return await application(context, options, undefined, false, entry).measure(command, undefined, signal);
+    const command = parsedCommand(input);
+    return await application(await loadContext(command.scopeId), options, undefined, false, entry).measure(command, undefined, signal);
   } catch (error) { throw queryFailure(error); }
+}
+function parsedCommand(input: ModelInvocationCommand) {
+  const parsed = modelInvocationCommandInputSchema.safeParse(input);
+  if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+  return parsed.data as ModelInvocationCommand;
 }
 export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false, entry: 'raw' | 'feature' = 'raw', profileGuard?: (profile: import('#domain/index.js').ModelInvocationProfile) => Promise<void>) {
   // One trusted clock for pricing and durable invocation records (I40).

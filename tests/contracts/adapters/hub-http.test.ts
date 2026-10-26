@@ -76,3 +76,28 @@ it('binds the outgoing request to the approved endpoint and refuses an oversized
   expect(await hubHttpRequest(new Request('https://approved.invalid/mcp', { method: 'POST', body: Buffer.alloc(HUB_LIMITS.httpMaxBytes + 1) }), { local: false, transport })).toMatchObject({ outcome: 'refused', reason: 'request-invalid' });
   expect(dns).toBe(0);
 });
+
+it('verifies issuer-bound OIDC signatures, nonce and passkey-specific assurance before accepting an account', async () => {
+  const { sign, createPublicKey, createPrivateKey } = await import('node:crypto');
+  const { HubOidcPasskeyVerifier } = await import('#adapters/core/hub-http/index.js');
+  const privateKey = createPrivateKey({ key: Buffer.from(`302e020100300506032b657004220420${'09'.repeat(32)}`, 'hex'), format: 'der', type: 'pkcs8' });
+  const jwk = createPublicKey(privateKey).export({ format: 'jwk' });
+  const verifier = new HubOidcPasskeyVerifier([{ issuer: 'https://idp.example', audience: 'hub', algorithms: ['EdDSA'],
+    passkeyAcr: ['urn:fixture:webauthn-second-factor'], passkeyAmr: ['fixture:passkey'] }], async (issuer, kid) => {
+    expect(issuer).toBe('https://idp.example'); expect(kid).toBe('fixture'); return jwk;
+  }, () => 100000);
+  const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  const token = (changes: object = {}) => {
+    const message = `${encode({ alg: 'EdDSA', kid: 'fixture' })}.${encode({ iss: 'https://idp.example', sub: 'account', aud: 'hub', nonce: 'challenge',
+      exp: 200, iat: 1, email: 'test@example.com', email_verified: true, name: 'Fixture', acr: 'urn:fixture:webauthn-second-factor', amr: ['fixture:passkey'], ...changes })}`;
+    return { idToken: `${message}.${sign(null, Buffer.from(message), privateKey).toString('base64url')}` };
+  };
+  const expected = { issuer: 'https://idp.example', audience: 'hub', challenge: 'challenge', nowMs: 100000 };
+  expect(await verifier.verify(token(), expected)).toMatchObject({ subject: 'account', emailVerified: true, passkeyVerified: true });
+  await expect(verifier.verify(token({ nonce: 'replay' }), expected)).rejects.toMatchObject({ code: 'HUB_ACCOUNT_REFUSED' });
+  await expect(verifier.verify(token({ amr: ['mfa'] }), expected)).rejects.toMatchObject({ code: 'HUB_ACCOUNT_REFUSED' });
+  await expect(verifier.verify(token({ exp: 99 }), expected)).rejects.toMatchObject({ code: 'HUB_ACCOUNT_REFUSED' });
+  await expect(verifier.verify(token({ aud: 'other' }), expected)).rejects.toMatchObject({ code: 'HUB_ACCOUNT_REFUSED' });
+  const tampered = token(); tampered.idToken = tampered.idToken.replace(/.$/, value => value === 'A' ? 'B' : 'A');
+  await expect(verifier.verify(tampered, expected)).rejects.toMatchObject({ code: 'HUB_ACCOUNT_REFUSED' });
+});

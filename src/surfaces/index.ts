@@ -26,5 +26,6 @@ export type { KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
 export type { HubHttpAuth, HubMcpOptions } from '#surfaces/core/hub-mcp/index.js';
 export function loadHubHttpSurface(): Promise<typeof import('#surfaces/core/hub-mcp/index.js')> { return import('#surfaces/core/hub-mcp/index.js'); }
 
-export { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
+// U4B onboarding budget choices: loaded on use, so help/--version never reach the models surface (and through it the engine barrel; COLDSTART).
+export function loadModelsSurface(): Promise<typeof import('#surfaces/core/cli-models/index.js')> { return import('#surfaces/core/cli-models/index.js'); }
 export type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';

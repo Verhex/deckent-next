@@ -111,11 +111,11 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(await turnOf(f, 'mcp__files__echo', { text: 'auto' }, 'deny', 't2')).toEqual({ cards: 0, status: 'ok' });
     const calls = readFileSync(log, 'utf8').split('\n').filter(line => line.includes('"call"'));
     expect(calls).toHaveLength(2);
-    // I2 also bounds removal: a deny on the current first-commit operation binds the person, so removing its rule is refused.
+    // I2 also bounds removal: a deny on a current (v18) uninstall operation binds the person, so removing its rule is refused.
     // MCP trust is preserved by the current-version rollback boundary.
     const current = JSON.parse(readFileSync(join(f.data, 'policy.json'), 'utf8')) as { grants: unknown[] };
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...current, grants: [...current.grants,
-      { id: 'run-card', effect: 'deny', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['coding.first-commit'] } }] }));
+      { id: 'run-card', effect: 'deny', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['installation.remove-data'] } }] }));
     const guarded = readFileSync(join(f.data, 'policy.json'), 'utf8');
     expect(await upgrade('rollback')).toMatchObject({ status: 'refused', missing: ['delegation'] });
     expect(readFileSync(join(f.data, 'policy.json'), 'utf8')).toBe(guarded);

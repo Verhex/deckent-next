@@ -406,7 +406,7 @@ it('migrates the separate Hub v1 store with a private backup, monotonic backfill
   f.close(); closers.splice(closers.indexOf(f.close), 1);
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   const path = join(f.path, 'hub.sqlite'), db = new DatabaseSync(path);
-  db.exec('DROP TABLE hub_revocations; DROP TABLE hub_revocation_events; DROP INDEX hub_revocation_command; PRAGMA user_version=1'); db.close();
+  db.exec('DROP TABLE hub_service_records; DROP TABLE hub_service_audit; DROP TABLE hub_revocations; DROP TABLE hub_revocation_events; DROP INDEX hub_revocation_command; PRAGMA user_version=1'); db.close();
   const migrated = openHubStore(f.options);
   expect(await migrated.store.revocations([{ kind: 'key', id: publisher.keyId }])).toEqual([expect.objectContaining({ severity: 'revoke' })]);
   const page = await migrated.store.revocationPage(0, 3); expect(page.entries).toHaveLength(3); migrated.close();

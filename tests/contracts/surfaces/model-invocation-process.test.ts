@@ -310,7 +310,9 @@ async function assertAccountSurfaces(project: string, root: string, env: Record<
   if (!result.ok) throw new Error('ACCOUNT_INSPECTION_FAILED');
   const cliResult = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'spending', '--input', path, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout);
-  expect(cliResult).toEqual(result.value);
+  // alpha.56 BP: the period view carries its own read time (`asOfMs`); each surface's read is compared without it.
+  const unread = (value: unknown) => { const view = value as { period?: object }; return view.period ? { ...view, period: { ...view.period, asOfMs: 0 } } : view; };
+  expect(unread(cliResult)).toEqual(unread(result.value));
   for (const [locale, held, sources] of [
     ['en', 'Hold reasons are not shown', 'may combine local calculations and provider-reported charges'],
     ['tr', 'bekletme nedenlerini göstermez', 'Yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir'],
@@ -320,7 +322,7 @@ async function assertAccountSurfaces(project: string, root: string, env: Record<
     expect(human).toContain(held); expect(human).toContain(sources);
   }
   const mcpResult = await callMcp(project, env, 'inspect_provider_spending', query);
-  expect(mcpResult.isError).not.toBe(true); expect(mcpResult.structuredContent).toEqual(result.value);
+  expect(mcpResult.isError).not.toBe(true); expect(unread(mcpResult.structuredContent)).toEqual(unread(result.value));
   expect(JSON.stringify(result.value)).not.toMatch(/prompt-first|retained-sensitive-usage|completion-/);
   const wrong = join(root, 'account-wrong.json'); await writeFile(wrong, JSON.stringify({ ...query, budgetRevision: 2 }));
   expect(await callSdk(project, env, 'spending', wrong)).toEqual({ ok: false, code: 'PROVIDER_SPEND_CONFLICT' });

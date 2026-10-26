@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 /**
@@ -113,7 +113,8 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const f = await fixture();
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
-      ['Who uses this installation: applied', '\u001b']], { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
+      // U4E G2: a person's interactive install ends in the profile's starting mode (core:solo: full auto) through the previewed carrier card.
+      ['Confirm the previewed permissions', '1\r'], ['Starting permissions: applied', '\u001b']], { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
     const permissions = run.output.indexOf('Permissions: applied');
@@ -124,8 +125,9 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(run.output.indexOf('Language: applied', permissions)).toBeGreaterThan(permissions);
     expect(run.output.indexOf('Who uses this installation: applied')).toBeGreaterThan(run.output.indexOf('Language: applied', permissions));
     const summary = screen(run.output);
-    for (const line of ['1. Language · done', '6. Permissions · done', '3. Folder and scope · done', '5. Who uses this installation · done', '8. Final check · done']) expect(summary).toContain(line);
-    for (const result of ['Permissions: applied', 'Language: applied', 'Who uses this installation: applied']) expect(summary).toContain(result);
+    for (const line of ['1. Language · done', '6. Permissions · done', '3. Folder and scope · done', '5. Who uses this installation · done', '7. Starting permissions · done',
+      '9. Final check · done']) expect(summary).toContain(line);
+    for (const result of ['Permissions: applied', 'Language: applied', 'Who uses this installation: applied', 'Starting permissions: applied']) expect(summary).toContain(result);
     for (const title of ['Model connection', 'Worker image', 'Execution environment', 'Project instructions', 'First work kind', 'Worker pool']) expect(summary).not.toContain(title);
     expect(summary).not.toContain('Final check: applied'); // KUR-14: the observed warnings settle; no read-only apply loop.
     expect(summary).toContain('Setup is complete.');
@@ -145,6 +147,16 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(rerun.status).toBe(0);
     expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile core:solo is already saved in your user's configuration.");
     expect(rerun.output).not.toContain('Will only you use this installation?');
+    // The carrier's full-auto grant rewrote the policy revision (PRE-9 chain); the first-run anchor keeps it installed (above: policyCurrent).
+    const path = join(f.root, '.deckent', 'policy.json'), chained = JSON.parse(await readFile(path, 'utf8')) as { revision: string; grants: { id: string }[] };
+    expect(chained.revision).toMatch(/^a-/u);
+    // A newer template's rule missing from that policy is still offered through the same add-only upgrade, never as hand-written.
+    const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    await writeFile(path, JSON.stringify({ ...chained, grants: chained.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
+    // NEGATIVE: without the first-run anchor the document is hand-written and setup leaves it unchanged.
+    await writeFile(path, JSON.stringify({ ...chained, grants: chained.grants.filter(rule => rule.id !== 'first-run-read-tools') }), { mode: 0o600 });
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'skipped:setup.reason.policyHandBuilt' });
   }, 240_000);
 
   it('interrupted after the permissions (Esc): the next run shows them done and asks the unsaved selections again', async () => {
@@ -205,7 +217,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect((await f.deckent(['init', '--yes', '--scope', 'erp'])).code).toBe(0);
     const path = join(f.root, '.deckent', 'policy.json'), current = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
     const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
-    await writeFile(path, JSON.stringify({ ...current, revision: 'first-run-template-v15', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
+    await writeFile(path, JSON.stringify({ ...current, revision: `first-run-template-v${FIRST_RUN_POLICY_TEMPLATE_VERSION - 1}`, grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
     const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Add these rules', 'y'], ['Permissions: applied', '\u001b']]);

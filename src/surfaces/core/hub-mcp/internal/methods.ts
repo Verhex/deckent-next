@@ -1,8 +1,9 @@
+import { executeHubService } from './service-methods.js';
 import { ProtocolError, type Server, type ServerContext } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema, identitySchema, requireBoundedHubJson } from '#domain/index.js';
-import { HubClientError, HubRevocationApplication, decodeHubBundle, encodeHubBundle, type HubServerApplication, type HubServerContext } from '#engine/index.js';
+import { HubClientError, HubModeratedApplication, HubRevocationApplication, decodeHubBundle, encodeHubBundle, type HubServerApplication, type HubServerContext } from '#engine/index.js';
 import { t, ErrorRegistry, type Locale } from '#platform/index.js';
 
 export interface HubMcpOptions {
@@ -33,7 +34,7 @@ export function registerHubMethods(server: Server, app: HubServerApplication, co
     'hub/packages/get': { schema: query, run: async (input, request) => {
       const p = query.parse(input), ctx = context(request), row = await app.inspect(ctx, p.packageId, p.version);
       const files = await Promise.all(row.files.map(async file => ({ path: file.path, bytes: await app.readFile(ctx, p.packageId, p.version, file.path) })));
-      return { hubId: app.ports.hubId, revocationState: await app.revocationState(ctx, p.packageId, p.version), bundle: JSON.parse(Buffer.from(encodeHubBundle({ manifest: row.manifest, envelope: row.envelope, files })).toString('utf8')) as unknown };
+      return { hubId: app.ports.hubId, ...(app instanceof HubModeratedApplication ? { evidence: await app.evidence(ctx, p.packageId, p.version) } : {}), revocationState: await app.revocationState(ctx, p.packageId, p.version), bundle: JSON.parse(Buffer.from(encodeHubBundle({ manifest: row.manifest, envelope: row.envelope, files })).toString('utf8')) as unknown };
     } },
     'hub/agents/get': { schema: agent, run: async (input, request) => {
       const p = agent.parse(input), row = await app.inspect(context(request), p.packageId, p.version);
@@ -52,6 +53,14 @@ export function registerHubMethods(server: Server, app: HubServerApplication, co
       const p = review.parse(input); return app.review(context(request), p.packageId, p.version, p.signature, request.mcpReq.signal);
     } },
   };
+  if (app instanceof HubModeratedApplication) {
+    methods['hub/moderators/get'] = { schema: z.object(meta).strict(), run: (_input, request) => { void _input; return app.moderatorRoster(context(request)); } };
+    methods['hub/moderation-log/get'] = { schema: z.object({ after: z.number().int().nonnegative().default(0), limit: z.number().int().positive().max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax), ...meta }).strict(),
+      run: (input, request) => { const p = z.object({ after: z.number(), limit: z.number() }).parse(input); return app.publicLog(context(request), p.after, p.limit); } };
+    tools.hub_service = { schema: z.object({ operation: z.string(), input: z.unknown() }).strict(), description: t('hub.service.command', {}, options.locale),
+      run: (input, request) => { const p = z.object({ operation: z.string(), input: z.unknown() }).strict().parse(input);
+        return executeHubService(app, context(request), p.operation, p.input, request.mcpReq.signal); } };
+  }
   const invoke = async (entry: Entry, input: unknown, request: ServerContext) => {
     try { request.mcpReq.signal.throwIfAborted(); return await entry.run(input, request); }
     catch (error) {
@@ -64,7 +73,7 @@ export function registerHubMethods(server: Server, app: HubServerApplication, co
   };
   const bindLifecycle = (name: 'yank' | 'revoke' | 'feed'): Entry => ({ schema: lifecycle,
     run: (input, request) => options.lifecycle![name]!(context(request), lifecycle.parse(input).input, request.mcpReq.signal) });
-  const revocations = new HubRevocationApplication(app.ports);
+  const revocations = app instanceof HubRevocationApplication ? app : new HubRevocationApplication(app.ports);
   options = { ...options, lifecycle: { yank: (ctx, input, signal) => revocations.withdraw(ctx, 'yank', input, signal),
     revoke: (ctx, input, signal) => revocations.withdraw(ctx, 'revoke', input, signal), feed: (ctx, input, signal) => revocations.revocations(ctx, input, signal), ...options.lifecycle } };
   if (options.lifecycle?.yank) tools.hub_yank = { ...bindLifecycle('yank'), description: t('hub.tool.yank', {}, options.locale) };

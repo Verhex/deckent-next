@@ -20,6 +20,10 @@ export const floorFamilies = [
     whyEn: 'Both change the host outside the sandbox (Docker group membership is root-equivalent); only a person at a terminal runs them (owner 2026-10-19).',
     whyTr: 'İkisi de sandbox dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19).',
     routes: [['execution-environment', 'fixture-target', 'install'], ['installation', 'fixture-target', 'repair']] },
+  { id: 'uninstall', en: 'Installation uninstall and purge', tr: 'Kurulumu kaldırma ve verisini silme',
+    whyEn: 'Removing the installation or purging its data cannot be undone by Deckent; only the person at their own terminal confirms it (alpha.56 U10B).',
+    whyTr: 'Kurulumu kaldırmayı ya da verisini silmeyi Deckent geri alamaz; yalnız kendi terminalindeki kişi onaylar (alpha.56 U10B).',
+    routes: [['installation', 'fixture-target', 'uninstall'], ['installation', 'fixture-target', 'purge']] },
   { id: 'mode', en: 'Permission mode set, including full access', tr: 'Full access dahil izin kipi değiştirme',
     whyEn: 'An AI must not choose a weaker permission mode for itself.', whyTr: 'AI kendi izin kipini gevşetemez.',
     routes: ['standart', 'full-auto', 'full-access'].map(id => ['permission-mode', id, 'set']) },
@@ -80,7 +84,7 @@ export function inventory(vocabulary) {
   const add = (route, floor, family) => { const [kind, id, action] = route; routes.set(JSON.stringify(route), { kind, id, action, floor, family }); };
   for (const { kind, actions } of vocabulary.resources) for (const action of actions)
     add([kind, kind === 'config' ? 'project:language' : 'fixture-target', action], kind === 'secret' || kind === 'backup' && action === 'restore'
-      || kind === 'permission-mode' && action === 'set' || kind === 'execution-environment' && action === 'install' || kind === 'installation' && action === 'repair', 'vocabulary');
+      || kind === 'permission-mode' && action === 'set' || kind === 'execution-environment' && action === 'install' || kind === 'installation' && ['repair', 'uninstall', 'purge'].includes(action), 'vocabulary');
   nonFloorRoutes.forEach(route => add(route, false, 'boundary-control'));
   floorFamilies.forEach(family => family.routes.forEach(route => add(route, true, family.id)));
   return [...routes.values()].sort((a, b) => { const x = JSON.stringify(a), y = JSON.stringify(b); return x < y ? -1 : x > y ? 1 : 0; });

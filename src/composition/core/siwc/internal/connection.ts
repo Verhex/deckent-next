@@ -1,12 +1,12 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { identityProfileConfigSchema, type VerifiedPrincipal } from '#domain/index.js';
-import { AuditApplication, subscriptionActor, PersonalCustodyError, IdentityProfileRegistry, OAuthConnectionApplication, OAuthConnectionError, assertAuthorityWitness,
+import { subscriptionActor, PersonalCustodyError, IdentityProfileRegistry, OAuthConnectionApplication, OAuthConnectionError, assertAuthorityWitness,
   policySecretChangeAuthorization, type OAuthConnectionOwner, type OAuthConnectionView } from '#engine/index.js';
-import { createInstallationSecretCustody, openConfiguredSecretStore, openLocalIntegrityAuthority, openSqliteAuditStore,
+import { createInstallationSecretCustody, openConfiguredSecretStore,
   SIWC_PROTOCOL, createSiwcOAuthTransport, siwcBrowserAuthorization, createSiwcConnectionLock, localInstallationBindingSource,
   localPrincipalChannel, localPrincipalPeer, withLocalPrincipalChannel, attestLocalInteractiveTerminal } from '#adapters/index.js';
 import { resolveGlobalConfigPaths, type ConfigLoadOptions } from '#platform/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 
 export type SiwcBrowserPresentation = Readonly<{ fallback?: (url: string) => void; signal?: AbortSignal }>;
 /** Private host lifecycle composition. The terminal process alone admits login, never the runtime service or MCP. */
@@ -45,15 +45,13 @@ export async function withConfiguredSiwc<T>(root: string, scopeId: string, optio
         locationDigest: createHash('sha256').update(JSON.stringify(location)).digest('hex') };
     },
   });
-  const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-  try {
-    const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, false));
+  return withScopeAudit(context, audit => {
     const app = new OAuthConnectionApplication({ owner, protocol: SIWC_PROTOCOL, store: openConfiguredSecretStore(context.config, env, platform), custody,
       connectionLock: createSiwcConnectionLock(`${resolveGlobalConfigPaths(env, platform).platformPath}.secret-custody`),
       authorize: policySecretChangeAuthorization(context.document, context.principal), audit: event => { audit.record(event); }, now: Date.now,
       ...createSiwcOAuthTransport(), browser: (makeUrl, signal) => siwcBrowserAuthorization(makeUrl, signal, presentation) });
-    return await work(app, caller);
-  } finally { store.close(); }
+    return work(app, caller);
+  }, false);
 }
 /** The rich local terminal alone receives the optional account label. All JSON/MCP views omit the field entirely. */
 export function siwcConnectionView(view: OAuthConnectionView, surface: 'terminal' | 'json' | 'mcp') {

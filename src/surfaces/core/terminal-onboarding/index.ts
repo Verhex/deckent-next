@@ -13,3 +13,5 @@ export { parseTerminalLaunch } from './internal/launch.js';
 
 export { guideQuestion } from './internal/guides.js';
 export { settleOnboardingReady } from './internal/ready.js';
+
+export { workerImageQuestion, workerImageProgress } from './internal/worker-image.js';

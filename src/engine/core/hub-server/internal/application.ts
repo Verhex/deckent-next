@@ -26,8 +26,8 @@ export class HubServerApplication {
     if (!Number.isSafeInteger(now) || now < 0) throw new HubServerError('HUB_STORE_UNSAFE');
     return now;
   }
-  protected async signer(now: number) {
-    const attestor = await this.ports.attestor(now);
+  protected async signer(now: number, purpose: 'attestation' | 'feed' = 'attestation') {
+    const attestor = await (purpose === 'feed' && this.ports.feedSigner ? this.ports.feedSigner(now) : this.ports.attestor(now));
     if (!attestor.key.active || attestor.key.role !== 'hub' || attestor.key.keyId !== attestor.signer.keyId
       || ed25519KeyId(attestor.signer.spki) !== attestor.key.keyId || attestor.key.publicKey !== attestor.signer.spki.toString('base64')) throw new HubError('HUB_SIGNER_UNTRUSTED');
     return attestor;
@@ -66,6 +66,7 @@ export class HubServerApplication {
       if (envelope.signatures.some(s => s.role === 'hub')) throw new HubError('HUB_FOREIGN_PACKAGE');
       const signed = verifyHubPackage(manifest, envelope, files, { publisher, reviewers: [] });
       if (signed.signatures.length !== 1) throw new HubError('HUB_FOREIGN_PACKAGE');
+      await this.publicationGate(store, context, manifest, envelope, files, this.clock());
       return { publisher, signed };
     };
     const verified = await verify();
@@ -95,12 +96,18 @@ export class HubServerApplication {
       signal?.throwIfAborted();
       await this.authorize(context, 'publish', manifest.packageId, digest);
       await store.insert({ manifest, envelope: accepted, files: artifacts, revision: 1 }, now, publisher.publisherId!);
+      await this.publicationRecorded(store, { manifest, envelope: accepted, files: artifacts, revision: 1 }, context, now);
       const receipt = await store.appendReceipt({ action: 'publish', context, resource: `${manifest.packageId}@${manifest.version}`, digest: sha256(canonicalHubJson(accepted)), atMs: now }, signer);
       signal?.throwIfAborted();
       await this.authorize(context, 'publish', manifest.packageId, digest);
       return { envelope: accepted, receipt };
     });
   }
+  protected async publicationGate(_store: Pick<HubServerTransaction, 'key' | 'revocations'>, _context: HubServerContext, _manifest: HubPackage,
+    _envelope: HubEnvelope, _files: readonly HubPackageFile[], _now: number): Promise<void> {
+    void _store; void _context; void _manifest; void _envelope; void _files; void _now;
+  }
+  protected async publicationRecorded(_store: HubServerTransaction, _row: HubStoredVersion, _context: HubServerContext, _now: number): Promise<void> { void _store; void _row; void _context; void _now; }
   private async requirePublication(store: Pick<HubServerTransaction, 'latest' | 'publishesSince' | 'get'>, manifest: HubPackage, publisherId: string, now: number) {
     const previous = await store.latest(manifest.packageId);
     if (previous && !newerHubVersion(manifest.version, previous.manifest.version)) throw new HubServerError('HUB_VERSION_CONFLICT');
@@ -134,7 +141,7 @@ export class HubServerApplication {
       return { envelope, receipt };
     });
   }
-  private async sign(manifest: HubStoredVersion['manifest'], envelope: HubEnvelope, signer: HubServerSigner, signature: Omit<HubPackageSignature, 'algorithm' | 'keyId' | 'value'>): Promise<HubPackageSignature> {
+  protected async sign(manifest: HubStoredVersion['manifest'], envelope: HubEnvelope, signer: HubServerSigner, signature: Omit<HubPackageSignature, 'algorithm' | 'keyId' | 'value'>): Promise<HubPackageSignature> {
     return { ...signature, keyId: signer.keyId, algorithm: 'ed25519', value: Buffer.from(await signer.sign(hubPackageSignatureMessage(manifest, envelope, signature))).toString('base64') };
   }
   protected async requireVersion(packageId: string, version: string, store: Pick<HubServerTransaction, 'get'> = this.ports.store): Promise<HubStoredVersion> {

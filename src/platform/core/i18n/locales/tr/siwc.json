@@ -45,5 +45,6 @@
   "siwc.doctor.connection": "{model} için ChatGPT plan bağlantısı: {state}",
   "siwc.doctor.disabled": "Plan kullanımı kapalı, süresi dolmuş veya yeniden bağlantı bekliyor. /provider üzerinden denetleyin.",
   "siwc.card.otherAccount": "Başka bir hesap bağla (yeni yetkilendirme)",
-  "siwc.account.signOutFirst": "Başka bir hesap yetkilendirmeden önce mevcut ChatGPT bağlantısını kesin. Limitlerde hesap döndürülmez."
+  "siwc.account.signOutFirst": "Başka bir hesap yetkilendirmeden önce mevcut ChatGPT bağlantısını kesin. Limitlerde hesap döndürülmez.",
+  "siwc.help.action.logout": "ChatGPT girişini iptal edin (sizin terminalinizde)"
 }

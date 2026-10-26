@@ -13,3 +13,7 @@ export type { WorkerRemovalResource, WorkerRemovalObservation, WorkerRemovalDriv
 export { observeWorkerRemovalReferences, nativeWorkerRemovalDriver } from './internal/removal-driver.js';
 export type { WorkerReferenceOwner, NativeWorkerRemovalInput } from './internal/removal-driver.js';
 export { observeWorkerRemovalInventory } from './internal/removal-inventory.js';
+
+export { readWorkerImageState, writeWorkerImageState, recoverWorkerImageContext, observeWorkerImageProgress, watchWorkerImageRequests } from './internal/state.js';
+
+export { inspectWorkerImageChoices, type WorkerImageChoice } from './internal/choices.js';

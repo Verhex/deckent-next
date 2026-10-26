@@ -1,8 +1,12 @@
+import { randomUUID } from 'node:crypto';
+import { userInfo } from 'node:os';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
-  resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
-import type { AuditEvent } from '#domain/index.js';
+  resolveAuditedApprovalAssurance, registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities,
+  EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type EffectTarget } from '#engine/index.js';
+import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity } from '#adapters/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, type AuditEvent, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
+import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 for (const id of ['local-terminal-card', 'local-cli', 'local-sdk', 'mcp']) registerApprovalChannel(id);
@@ -39,4 +43,32 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
       check(answer); return answer;
     } finally { audit?.close(); journal.close(); }
   } catch (error) { throw queryFailure(error); }
+}
+/** A person's confirmed card applies its exact commands through the scope's operation broker and the shared effect contract. The card already
+ * confirmed the complete preview: a pending approval is decided once (reason = the card digest; normal approval authority still applies). */
+export async function applyConfirmedEffects(root: string, context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>, descriptor: OperationDescriptor,
+  target: EffectTarget, commands: readonly EffectCommand[], reason: string, options: ConfigLoadOptions) {
+  const { config, layout, principal } = context;
+  const clock = new SystemTrustedClock(), policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+  const sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
+  const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), path = await context.path();
+  const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+  const approvals = openSqliteApprovalStore(path, config.storage.sqlite);
+  try {
+    const broker = new OperationApprovalBroker(approvals.store, integrity, policy, clock,
+      { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
+    const app = new EffectApplication({ resolve: async ref => ref.id === descriptor.operation.id && ref.version === descriptor.operation.version ? descriptor : null },
+      { resolve: kind => kind === target.kind ? target : null }, store, broker, sessions, new OperationPolicyAuthorization(policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER });
+    const outcomes = [];
+    for (const command of commands) {
+      let outcome = await app.submit('execute', command);
+      if (outcome.status === 'approval-pending') {
+        await configuredApproval(root, 'decide', { schemaVersion: 1, commandId: randomUUID(), scopeId: command.scopeId, approvalId: outcome.approval.approvalId,
+          expectedRevision: outcome.approval.revision, decision: 'allow', reason, channel: 'local-terminal-card' }, options);
+        outcome = await app.submit('execute', command);
+      }
+      outcomes.push(outcome);
+    }
+    return outcomes;
+  } finally { approvals.close(); store.close(); }
 }

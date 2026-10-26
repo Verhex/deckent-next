@@ -3,6 +3,7 @@ import { createServer as createTlsServer, type ServerOptions as TlsOptions } fro
 import { isIP, type AddressInfo } from 'node:net';
 import { once } from 'node:events';
 import { HUB_LIMITS } from '#domain/index.js';
+import type { HubServerPeer } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 export class HubNetworkError extends Error {
@@ -18,7 +19,7 @@ export interface HubListenerOptions {
   readonly endpoint: string;
   /** Material is loaded by the protected hub-process composition, never accepted from a request or logged. */
   readonly tls?: Pick<TlsOptions, 'cert' | 'key' | 'ca'>;
-  readonly fetch: (request: Request) => Promise<Response>;
+  readonly fetch: (request: Request, peer?: HubServerPeer) => Promise<Response>;
 }
 /** Own-process listener adapter. Construction has no effect while hub.serve is off. */
 export async function startHubHttpListener(options: HubListenerOptions) {
@@ -52,7 +53,9 @@ export async function startHubHttpListener(options: HubListenerOptions) {
       const method = incoming.method ?? 'GET';
       const request = new Request(new URL(path, endpoint.origin), { method, headers, signal: controller.signal,
         ...(method !== 'GET' && method !== 'HEAD' ? { body: Buffer.concat(chunks, size) } : {}) });
-      const response = await options.fetch(request);
+      const address = incoming.socket.remoteAddress;
+      if (!address || !isIP(address)) throw new HubNetworkError('HUB_NETWORK_INVALID');
+      const response = await options.fetch(request, { address });
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       if (response.body) {
         const reader = response.body.getReader(); let sent = 0;

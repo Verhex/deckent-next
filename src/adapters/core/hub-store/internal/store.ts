@@ -1,3 +1,4 @@
+import { SqliteHubServiceTransaction } from './service.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { canonicalHubJson, hubEnvelopeSchema, hubPackageSchema, hubRevocationFeedSchema } from '#domain/index.js';
 import { artifactReceiptSchema } from '#capabilities/index.js';
@@ -7,7 +8,8 @@ import { sha256, signatureMessage } from '#platform/index.js';
 import { hubRevocations, hubRevocationPage, recordHubRevocations } from './revocations.js';
 
 class SqliteHubTransaction implements HubServerTransaction {
-  constructor(private readonly db: DatabaseSync, private readonly scopeId: string) {}
+  readonly service: SqliteHubServiceTransaction;
+  constructor(private readonly db: DatabaseSync, private readonly scopeId: string) { this.service = new SqliteHubServiceTransaction(db); }
   key(keyId: string, role: HubRegisteredKey['role']): HubRegisteredKey | null {
     const row = this.db.prepare('SELECT record FROM hub_keys WHERE key_id=? AND role=?').get(keyId, role);
     return row ? hubRegisteredKeySchema.parse(JSON.parse(String(row.record))) : null;

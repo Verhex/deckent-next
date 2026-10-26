@@ -22,6 +22,8 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<InstallationStartabilityView>;
   inspectOwnerBaseline?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly missing: number; readonly digest: string }>;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
+  /** Setup's read of a first-run policy a governed edit re-revisioned (U4E full-auto); `null` reads as hand-built. */
+  inspectAnchoredPolicyTemplate?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<'current' | 'upgradable' | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
   // S1 D4: files an interrupted backup restore left behind; doctor-only, read-soft (null when unwired or unreadable).

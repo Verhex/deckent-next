@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { userInfo } from 'node:os';
-import { planSetup, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
+import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
-import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/index.js';
+import { loadModelsSurface } from '#surfaces/index.js';
 import type { TerminalLaunchContext } from '#surfaces/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -38,7 +38,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     if (before.digest !== after.digest || JSON.stringify(before.global) !== JSON.stringify(after.global)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
     const configBasis = { projectDigest: after.digest, globalDigest: sha256(JSON.stringify(after.global)) };
     const coding = observed.observation.families?.['coding'] as { repository: string; hosts: { id: string; cli: string; login: string }[] } | undefined;
-    const provider = (observed.observation.families?.['work'] as { pendingProvider?: string } | undefined)?.pendingProvider;
+    const provider = (observed.observation.families?.['work'] as { pendingProvider?: string } | undefined)?.pendingProvider ?? affectedToolchainProfiles(config)[0]?.provider;
     const values = { ...(provider ? { 'work:kind': provider } : {}), ...answers };
     const planned = planSetup(observed.observation, { schemaVersion: 2, values }, observed.registry, { phase: 'onboarding' });
     const worker = (observed.observation.families?.['execution'] as { worker?: { acquisition?: { images: { provider: string; imageId: string }[] } | null } } | undefined)?.worker;
@@ -49,7 +49,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     try { const dir = await opendir(directory); inspected = true; for await (const entry of dir) { if (names.length >= 64) break; if (entry.isFile() || entry.isDirectory()) names.push(entry.name); } } catch { /* unknown remains explicit */ }
     const visible = names.filter(name => !name.startsWith('.'));
     const kind = eligible ? 'coding' as const : !inspected ? 'unknown' as const : !visible.length ? 'empty' as const : 'documents' as const;
-    let budgetReason: string | undefined;
+    let budgetReason: string | undefined; const { SCOPE_BUDGET_CHOICES } = await loadModelsSurface();
     const account = terminal.inspectProviderSpendAccount ? await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options)
       .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; budgetReason = typeof code === 'string' && ErrorRegistry.has(code) ? code : 'INVENTORY_UNAVAILABLE'; return null; }) : null;
     const currentUsd = budgetReason ? null : account?.checkpoint ? account.checkpoint.account.budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd : 0;
@@ -94,18 +94,21 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     async defer(stageId: string, planDigest: string) { await assertPerson(); await prepareProductFile(context.layout, 'onboarding');
       await store.defer({ principal, folder, stageId, planDigest, deferredAt: Date.now() }); },
     async apply(stage: SetupStage, basis: Readonly<{ projectDigest: string | null; globalDigest: string }>) { await assertPerson(); return setup.applySetupStage(root, stage, { ...options, scopeId, expectedConfig: basis }); },
-    previewConsent: (provider: string) => previewOnboardingConsent(root, provider, options),
-    async consent(provider: string, digest: string) {
+    async previewConsent(provider: string) { await assertPerson(); return previewOnboardingConsent(root, provider, options); },
+    async consent(provider: string, digest: string, imageId?: string) {
       await assertPerson();
+      const offered = imageId ? await previewOnboardingConsent(root, provider, options) : null;
+      if (imageId && !offered?.images.some(image => image.imageId === imageId && image.ready)) throw ErrorRegistry.createError('WORKER_LABEL_MISMATCH');
       const witness = { attest: async () => {
-        if ((await previewOnboardingConsent(root, provider, options)).digest !== digest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+        if ((await previewOnboardingConsent(root, provider, options, false)).digest !== digest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
         return attestLocalInteractiveTerminal();
       } };
-      await consentConfiguredWorkerImage(root, { providers: [provider], scopeId, commandId: randomUUID() }, options, witness);
+      await consentConfiguredWorkerImage(root, { providers: [provider], scopeId, commandId: randomUUID(), ...(imageId ? { imageId } : {}) }, options, witness);
     },
     async budget(usd: number) {
       await assertPerson(); if (!terminal.manageProviderSpend || !terminal.inspectProviderSpendAccount) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
       const account = await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options);
+      const { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } = await loadModelsSurface();
       const command = account.checkpoint ? scopeBudgetRevisionCommand(account, usd, false, 'terminal') : scopeBudgetCreateCommand(scopeId, usd, 'terminal');
       await terminal.manageProviderSpend(root, command, options);
     },

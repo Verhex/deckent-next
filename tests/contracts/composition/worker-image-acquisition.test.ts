@@ -83,3 +83,67 @@ it('S3 consent/marker/crash/ready facts and daemon-global reservation/takeover s
   await use('installation-c'); expect(reservations.at(-1)).toBe('r43-20261026'); expect(audit).toContainEqual(expect.objectContaining({ event: 'lockTakenOver', from: 'dead-instance' }));
   expect((await readdir(home)).some(name => /proposal|registry|pool/u.test(name))).toBe(false);
 });
+
+it('U6-S5: Docker appears without a config change: the service resumes the same consent once, while failed/adoption consent cannot authorize a build', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'worker-docker-wait-')); roots.push(root);
+  const options = { env: { HOME: root, DECKENT_GLOBAL_HOME: join(root, 'global'), PATH: process.env.PATH ?? '/usr/bin' } };
+  const configDir = join(root, '.deckent'), home = join(configDir, 'workspaces/toolchains'); await mkdir(home, { recursive: true });
+  const source = await readWorkerImageSources(process.cwd());
+  const binding = workerConsentBinding({ recipe: source.recipe, providers: ['codex'], npmRegistry: 'https://mirror.invalid/npm', sources: {} });
+  const consent = { operation: 'worker-image.consent@1' as const, id: 'wait-consent', person: { id: 'person', issuer: 'local-os', subject: 'person' }, scopeId: 'scope', ...binding, createdAt: new Date().toISOString() };
+  await writeFile(join(configDir, 'config.json'), JSON.stringify({ schema_version: 4, toolchains: { currency: { registryEndpoint: binding.sources[0] }, image: { consents: [consent] }, update: { buildTimeoutMs: 20000 } } }));
+  const bytes = await readFile(join(configDir, 'config.json'), 'utf8'); let reachable = false, builds = 0, probes = 0;
+  const runner: WorkerImageBuildRunner = async command => {
+    if (command.args[1] === '--daemon-identity') { probes++; return reachable ? evidence(command.requestId, { daemonId: 'daemon', endpoint: 'unix:///fixture' }) : { ...evidence(command.requestId, {}), exitCode: 1 }; }
+    if (command.args[1] === '--held-version') return evidence(command.requestId, { heldVersion: null });
+    builds++;
+    const plan = JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8'));
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 3, daemonId: 'daemon', imageVersion: plan.imageVersion, imageId: `sha256:${'a'.repeat(64)}`, recipeSha256: binding.recipeDigest,
+      measuredAt: new Date().toISOString(), images: [{ providers: ['codex'], imageId: `sha256:${'a'.repeat(64)}`, tag: 'deckent/worker:r32-codex' }] }));
+    return evidence(command.requestId, {});
+  };
+  const dependencies = { runner, instanceId: 'instance', fetcher: async () => ({ version: '0.156.0', source: 'fixture', observedAt: new Date().toISOString() }) };
+  const waiting = await acquireConfiguredWorkerImage(root, options, dependencies);
+  expect(waiting).toMatchObject({ phase: 'waiting-docker', code: 'WORKER_IMAGE_DOCKER_WAITING', consentId: 'wait-consent' }); expect(builds).toBe(0);
+  const controller = new AbortController(), handle = startWorkerImageAcquisition(root, options, controller.signal, dependencies);
+  try {
+    const deadline = Date.now() + 8000;
+    while (probes < 2 && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(probes).toBe(2); reachable = true; // No config event: only the service tick can observe this change.
+    while ((await inspectConfiguredWorkerImage(root, options))?.phase !== 'ready' && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    expect(await inspectConfiguredWorkerImage(root, options)).toMatchObject({ phase: 'ready', consentId: 'wait-consent' });
+    await Promise.all([acquireConfiguredWorkerImage(root, options, dependencies), acquireConfiguredWorkerImage(root, options, dependencies)]);
+    expect(builds).toBe(1); expect(await readFile(join(configDir, 'config.json'), 'utf8')).toBe(bytes);
+    expect(() => matchingWorkerConsent([{ ...consent, imageId: `sha256:${'b'.repeat(64)}` }], binding)).toThrow(expect.objectContaining({ code: 'WORKER_IMAGE_CONSENT_MISSING' }));
+    expect(matchingWorkerConsent([{ ...consent, imageId: `sha256:${'b'.repeat(64)}` }], binding, `sha256:${'b'.repeat(64)}`)).toMatchObject({ id: consent.id });
+  } finally { controller.abort(); await handle.done; }
+}, 15000);
+
+it('U6-S4 adoption is consent-bound, rechecks lineage and publishes only the selected provider without applying runtime settings', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'worker-adoption-')); roots.push(root);
+  const options = { env: { HOME: root, DECKENT_GLOBAL_HOME: join(root, 'global'), PATH: process.env.PATH ?? '/usr/bin' } };
+  const configDir = join(root, '.deckent'); await mkdir(configDir);
+  const source = await readWorkerImageSources(process.cwd()), imageId = `sha256:${'a'.repeat(64)}`;
+  const binding = workerConsentBinding({ recipe: source.recipe, providers: ['codex'], npmRegistry: 'https://mirror.invalid/npm', sources: {} });
+  const consent = { operation: 'worker-image.consent@1', id: 'adopt-1', imageId, person: { id: 'person', issuer: 'local-os', subject: 'person' }, scopeId: 'scope', ...binding, createdAt: new Date().toISOString() };
+  const configFile = join(configDir, 'config.json');
+  const configure = async (id: string) => { await writeFile(configFile, JSON.stringify({ schema_version: 4, toolchains: { currency: { registryEndpoint: binding.sources[0] }, image: { consents: [{ ...consent, id }] } } })); clearConfigCache(); };
+  let provenance = 'adopted-lineage-unknown', adopted = 0;
+  const runner: WorkerImageBuildRunner = async command => {
+    if (command.args[1] === '--daemon-identity') return evidence(command.requestId, { daemonId: 'daemon', endpoint: 'unix:///fixture' });
+    if (command.args[1] === '--held-version') return evidence(command.requestId, { heldVersion: null });
+    adopted++; expect(command.args).toContain('--image-id'); expect(command.args.at(-1)).toBe(imageId);
+    expect(JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8'))).toMatchObject({ adopt: true });
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 3, daemonId: 'daemon', imageVersion: 'r31-20261024', imageId, recipeSha256: binding.recipeDigest, provenance,
+      measuredAt: new Date().toISOString(), images: [{ providers: ['codex', 'claude'], imageId, tag: null }] }));
+    return evidence(command.requestId, {});
+  };
+  const dependencies = { runner, instanceId: 'instance', fetcher: async () => { throw new Error('Adoption cannot resolve or download a version'); } };
+  await configure('adopt-1');
+  expect(await acquireConfiguredWorkerImage(root, options, dependencies)).toMatchObject({ phase: 'failed', code: 'WORKER_LABEL_MISMATCH', images: [] });
+  await acquireConfiguredWorkerImage(root, options, dependencies); expect(adopted).toBe(1); // No blind retry of rejected lineage.
+  provenance = 'adopted-label-matched'; await configure('adopt-2'); const bytes = await readFile(configFile, 'utf8');
+  expect(await acquireConfiguredWorkerImage(root, options, dependencies)).toMatchObject({ phase: 'ready', images: [{ provider: 'codex', imageId, tagVersion: 'r31-codex' }] });
+  expect((await inspectConfiguredWorkerImage(root, options))?.images).toHaveLength(1); expect(adopted).toBe(2);
+  expect(await readFile(configFile, 'utf8')).toBe(bytes);
+});
