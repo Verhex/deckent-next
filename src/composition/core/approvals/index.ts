@@ -1,4 +1,4 @@
-export { configuredApproval } from './internal/application.js';
+export { configuredApproval, applyConfirmedEffects } from './internal/application.js';
 export { withPolicyAdministration } from './internal/standing.js';
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from './internal/mcp-capabilities.js';
 export { inspectConfiguredDecisionDelegations, changeConfiguredDecisionDelegation } from './internal/delegations.js';

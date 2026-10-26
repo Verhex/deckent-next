@@ -66,7 +66,7 @@ Models:
   models      Inspect and manage models
       binding | activation | activate | deactivate | invoke | invocation |
       purge-content | cancel | spending | reconcile-spending | create-budget |
-      revise-budget | audit-spending | connect | login |
+      revise-budget | audit-spending | connect | login | logout |
       catalog list|register|activate|deactivate | roles show|set
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
@@ -83,6 +83,8 @@ Approvals:
       [--scope <id>]
 
 Setup / Maintenance:
+  uninstall   Preview or uninstall one installation; keep data by default.
+      [--purge] [--dry-run] [--json]
   audit       Verify audit history and checkpoint evidence
               (without an action: verify)
       verify | rebaseline

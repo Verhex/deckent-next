@@ -3,7 +3,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyModelCatalog, applyRunLifecycle, createRun, inspectConfiguredWorkerTranscript, inspectConfiguredWorkers, inspectRun } from '../../../src/index.js';
+import { applyModelCatalog, inspectModelCatalog, applyRunLifecycle, createRun, inspectConfiguredWorkerTranscript, inspectConfiguredWorkers, inspectRun } from '../../../src/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { FileArtifactStore, compileNativeCodingDockerProfile, openSqliteAttemptStore } from '#adapters/index.js';
@@ -61,8 +61,11 @@ async function fixture(kind: 'claude' | 'codex' = 'claude', retainOutput = true)
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
   await catalog({ action: 'register', catalog: await seedCatalog() }); await catalog({ action: 'register', catalog: codexCatalog });
+  // Law 6 (owner Q-L6): a channel activation already activates its fresh priced models; activate only what is still inactive, at its revision.
   for (const [channelId, modelId] of [[SEED_CHANNEL, null], [SEED_CHANNEL, SONNET], [SEED_CHANNEL, HAIKU], [CODEX_CHANNEL, null], [CODEX_CHANNEL, 'gpt-exact-1']] as const) {
-    await catalog({ action: 'activate', channelId, modelId, expectedRevision: 0 });
+    const channel = (await inspectModelCatalog(project, { schemaVersion: 1, scopeId: 's', channelId }, options)).channels.find(row => row.access === 'allowed');
+    const current = channel?.access !== 'allowed' ? null : modelId === null ? channel.activation : channel.models.find(row => row.modelId === modelId)?.activation ?? null;
+    if (current?.state !== 'active') await catalog({ action: 'activate', channelId, modelId, expectedRevision: current?.revision ?? 0 });
   }
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind, dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };

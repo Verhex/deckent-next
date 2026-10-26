@@ -46,7 +46,7 @@ function connectHarness(project: Record<string, unknown>, global: Record<string,
     endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
     secretName: () => 'DECKENT_ANTHROPIC_KEY', seed: readProviderConnectSeed,
     adapter: (id, value) => connectionAdapter(providerConnectKind(id)!, value),
-    principal: async () => ({ issuer: 'local', subject: 'me' }) as never,
+    principal: async () => ({ issuer: 'local', subject: 'me', assurance: 'os-user' }) as never, // a person: an AI actor needs the preflight port (U2-S4)
     layers: async () => ({ global: state.global, project: state.project, effective: { ...state.global, ...state.project } }),
     write: async change => { writes.push({ keyPath: change.keyPath, value: change.value, layer: change.layer });
       state[change.layer] = { ...state[change.layer], [change.keyPath]: change.value }; return null; },

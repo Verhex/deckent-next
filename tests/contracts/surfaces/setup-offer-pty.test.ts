@@ -148,8 +148,9 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     const f = await fixture(true);
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b'],
-      // U4: a first launch opens the sequential onboarding before the Workline; Esc ("Later") defers each screen.
-      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
+      // U4: a first launch opens the sequential onboarding before the Workline; Esc ("Later") defers each screen. U4E G2: the window closed before
+      // the profile was saved, so the pending permission screen comes first (permissions, model, coding CLI, first commit, instructions).
+      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Step 5/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();
@@ -157,6 +158,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     expect(run.status, run.output.slice(-3000)).toBe(0);
     // The setup summary (the same flow as `deckent init`), then the terminal on the scope the window wrote; no card again, no error.
     expect(run.output).toContain('Permissions: applied');
+    expect(run.output).toContain('Authority pending. Open deckent terminal'); expect(run.output.indexOf('Permission settings')).toBeGreaterThan(run.output.indexOf('Step 1/'));
     expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     expect(run.output.indexOf('Step 1/')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Ready!'));

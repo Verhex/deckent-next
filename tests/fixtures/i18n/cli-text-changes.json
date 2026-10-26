@@ -1356,7 +1356,7 @@
     },
     "setup.execution.workerNone": {
       "before": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı benimser.",
-      "after": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı kullanır."
+      "after": "Hazır işçi imajı yok. CLI seçmek ve imaj kaynaklarını onaylamak için deckent veya /setup aç."
     },
     "agentstats.mode.shadow": {
       "before": "Toplama geçişi: gölge. Yalnız istatistik kaydeder; öneri, kart ya da daraltma yok.",

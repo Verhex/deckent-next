@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ channel: 'mcp' as 'mcp' | undefined, values: new Map<string, string>(), seenActors: [] as string[] }));
-vi.mock('#composition/core/scoped-request/index.js', () => ({ loadConfiguredScopeContext: async () => ({
+// The real scope audit helper runs on the mocked adapters' audit store below (FIX6: one helper for every scope audit).
+vi.mock('#composition/core/scoped-request/index.js', async original => ({ ...await original<object>(), loadConfiguredScopeContext: async () => ({
   principal: { id: 'person', issuer: state.channel ? 'host/mcp' : 'host', subject: '1000', assurance: state.channel ? 'workload-verified' : 'os-user', scopeIds: ['scope'] },
   installationId: 'installation', config: { projectRoot: '/fixture', company: { id: 'company' }, identity: { profile: { id: 'core:solo', version: 1 } },
     installation: {}, storage: { sqlite: {} }, approvals: { keyFile: 'fixture.key' } }, layout: {}, path: async () => 'fixture-ledger',

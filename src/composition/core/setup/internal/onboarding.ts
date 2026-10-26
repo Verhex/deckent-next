@@ -6,7 +6,7 @@ import { userInfo } from 'node:os';
 import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
-import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/index.js';
+import { loadModelsSurface } from '#surfaces/index.js';
 import type { TerminalLaunchContext } from '#surfaces/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -49,7 +49,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     try { const dir = await opendir(directory); inspected = true; for await (const entry of dir) { if (names.length >= 64) break; if (entry.isFile() || entry.isDirectory()) names.push(entry.name); } } catch { /* unknown remains explicit */ }
     const visible = names.filter(name => !name.startsWith('.'));
     const kind = eligible ? 'coding' as const : !inspected ? 'unknown' as const : !visible.length ? 'empty' as const : 'documents' as const;
-    let budgetReason: string | undefined;
+    let budgetReason: string | undefined; const { SCOPE_BUDGET_CHOICES } = await loadModelsSurface();
     const account = terminal.inspectProviderSpendAccount ? await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options)
       .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; budgetReason = typeof code === 'string' && ErrorRegistry.has(code) ? code : 'INVENTORY_UNAVAILABLE'; return null; }) : null;
     const currentUsd = budgetReason ? null : account?.checkpoint ? account.checkpoint.account.budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd : 0;
@@ -108,6 +108,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     async budget(usd: number) {
       await assertPerson(); if (!terminal.manageProviderSpend || !terminal.inspectProviderSpendAccount) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
       const account = await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options);
+      const { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } = await loadModelsSurface();
       const command = account.checkpoint ? scopeBudgetRevisionCommand(account, usd, false, 'terminal') : scopeBudgetCreateCommand(scopeId, usd, 'terminal');
       await terminal.manageProviderSpend(root, command, options);
     },

@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { AUDIT_EVENT_SCHEMA_VERSION, policySchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelReference } from '#domain/index.js';
-import { subscriptionActor, readSubscriptionRejection, AuditApplication, modelInvocationProfileDigest, ModelBindingApplication, modelInvocationBillingAxis, type ModelInvocationResult } from '#engine/index.js';
-import { SIWC_USAGE_LIMIT_STATUS, SIWC_INFERENCE, siwcResponsesDefinitionSchema, openLocalIntegrityAuthority, openSqliteAuditStore } from '#adapters/index.js';
+import { subscriptionActor, readSubscriptionRejection, modelInvocationProfileDigest, ModelBindingApplication, modelInvocationBillingAxis, type ModelInvocationResult } from '#engine/index.js';
+import { SIWC_USAGE_LIMIT_STATUS, SIWC_INFERENCE, siwcResponsesDefinitionSchema } from '#adapters/index.js';
 import { ErrorRegistry, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
+import { withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { inspectionApplication } from './inspect.js';
 import type { loadInvocationContext } from './context.js';
 
@@ -50,13 +51,11 @@ export async function prepareConfiguredSiwcContinuation(context: Context, option
   if (!isDeepStrictEqual((await readProfiles()).find(row => row.scopeId === original.scopeId && isDeepStrictEqual(row.reference, original.reference)), source))
     throw ErrorRegistry.createError('MODEL_INVOCATION_PROFILE_CONFLICT');
   const auditOwner = await withConfiguredSiwc(context.config.projectRoot, original.scopeId, options, 'lease', async (app, caller) => { await app.inspectForLease(sourceDefinition.connectionId, caller); return subscriptionActor(context.principal).owner; }, {}, context.principal);
-  const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-  try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, false)).record({
+  await withScopeAudit(context, async audit => audit.record({
     schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: original.scopeId, principal: auditOwner,
     atMs: Date.now(), policyRevision: policySchema.parse(await context.policy.load()).revision,
     subject: { kind: 'subscription-api-continuation', schemaVersion: 1, actor: { issuer: context.principal.issuer, subject: context.principal.subject }, sourceInvocationId: result.receipt.claim.invocationId,
-      connectionId: sourceDefinition.connectionId, profileDigest: sourceDefinition.apiContinuation.profileDigest, reference: target.reference, commandId: command.commandId, phase: 'intent' } });
-  } finally { store.close(); }
+      connectionId: sourceDefinition.connectionId, profileDigest: sourceDefinition.apiContinuation!.profileDigest, reference: target.reference, commandId: command.commandId, phase: 'intent' } }), false);
   await notice(target.reference);
   if (signal?.aborted) throw ErrorRegistry.createError('OAUTH_CONNECTION_CANCELLED');
   continuationPins.set(command, async profile => {

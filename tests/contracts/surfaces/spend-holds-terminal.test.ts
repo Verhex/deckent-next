@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteProviderSpendAccountReader,
   openSqliteProviderSpendManagementStore, openSqliteProviderSpendIntegrityReader, upgradeExistingProductLedger } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, parseProviderSpendAccountQuery } from '#domain/index.js';
@@ -86,6 +86,8 @@ async function confirmView(f: Awaited<ReturnType<typeof fixture>>, locale: 'en' 
 }
 
 it.each(['en', 'tr'] as const)('shows exact settled vs held totals and releases only after a governed selection (%s)', async locale => {
+  // alpha.56 BP: the window reports the current period's use; read in the fixture's own (millisecond-timestamp) month so the exact charge counts.
+  vi.useFakeTimers({ now: 10, toFake: ['Date'] }); onTestFinished(() => { vi.useRealTimers(); });
   const f = await fixture(), before = await f.snapshot(), start = await spendRecoveryView(f.call(locale));
   expect(text(start)).toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
   expect(text(start)).toContain(locale === 'tr' ? '8,50 USD' : '8.50 USD');
@@ -149,7 +151,11 @@ it('upgrades a v49 ledger without rewriting financial evidence and forbids an un
   db.exec(`${DOWNGRADE_TO_V51_LEDGER_SQL} DROP INDEX acceptance_metrics_attempt; DROP TABLE acceptance_metrics; DROP INDEX model_invocation_spend_unreconciled_holds; PRAGMA user_version=49`); db.close();
   await expect(openSqliteModelInvocationStore(f.path, options, 'forbid')).rejects.toThrow('ATTEMPT_STORE_VERSION');
   await mkdir(join(f.root, 'backup'));
-  await upgradeExistingProductLedger(f.path, options, join(f.root, 'backup'), new Date('2026-10-09T00:00:00Z')); expect(await f.snapshot()).toEqual(before); await integrity(f.path);
+  await upgradeExistingProductLedger(f.path, options, join(f.root, 'backup'), new Date('2026-10-09T00:00:00Z')); await integrity(f.path);
+  // v72 (alpha.56 BP) archives each account checkpoint once and re-checkpoints it with its period: one new revision, no amount rewritten.
+  const after = await f.snapshot(), amounts = (value: typeof before) => ({ reservationCount: value.reservationCount, budget: value.account.budget,
+    reserved: value.account.reservedMinorUnits, exact: value.account.settledExactMinorUnits, settled: value.account.settledMinorUnits, frozen: value.account.frozen });
+  expect(after.revision).toBe(before.revision + 1); expect(amounts(after)).toEqual(amounts(before));
 });
 
 it.each(['en', 'tr'] as const)('opens selections on exhausted turn and on /usage in the real Ink terminal (%s)', async locale => {
@@ -174,13 +180,16 @@ it.each(['tr', 'en'] as const)('startup recovery refreshes /usage and the exhaus
   expect(started.spend).toEqual({ released: 1, zeroTariff: 0, inconsistent: [] });
   const snapshot = await f.snapshot();
   expect(snapshot.account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: '1024.51', budget: { limitMinorUnits: 2500 } });
+  // alpha.56 BP: a monthly budget is spent per local calendar month. This fixture's charge fell in an earlier month (millisecond timestamps), so the
+  // current period has used nothing; the exhaustion window and /usage both report that one period figure, never the lifetime total.
+  expect((await f.inspection.inspect({ schemaVersion: 1, scopeId: 'scope', current: true })).period?.usedExactMinorUnits).toBe('0');
   const exhaustion = await spendRecoveryView(f.call(locale));
-  expect(text(exhaustion)).toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
-  expect(text(exhaustion)).toContain(locale === 'tr' ? '0,00 USD' : '0.00 USD');
+  expect(text(exhaustion)).toContain(locale === 'tr' ? 'Kapanan tutar: 0,00 USD' : 'Settled: 0.00 USD');
+  expect(text(exhaustion)).not.toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
   const usage = await terminalAdminPorts({ ...f.call(locale), installationId: 'fixture', projectId: 'fixture', status: async () => '', doctor: async () => undefined }).info.ports.usage!({ usage: EMPTY_SESSION_USAGE });
   const output = JSON.stringify(usage.model);
   expect(output).toContain(locale === 'tr' ? 'Ayrılan (etkin + askıda)' : 'Reserved (active + held)');
-  expect(output).toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
+  expect(output).toContain(locale === 'tr' ? '{"key":"Kesinleşen","value":"0,00 USD"}' : '{"key":"Settled","value":"0.00 USD"}');
   expect(output).toContain(locale === 'tr' ? '25,00 USD' : '25.00 USD');
   expect((await integrity(f.path))?.reservedMinorUnits).toBe(0);
 });

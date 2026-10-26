@@ -2,7 +2,7 @@ import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, t } from '#platform/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
@@ -50,7 +50,8 @@ async function parity(f: Fixture, locale: 'en' | 'tr') {
     expect(configRows.find(item => item.id === picked.id)?.blocked?.reason ?? null).toBe(state.invocable ? null : word);
     expect(rendered).toContain(word);
     const row = model.choices.find(choice => JSON.stringify(choice.reference) === JSON.stringify(reference))!;
-    expect(row.blocked).toBe(state.invocable ? null : word); expect(row.detail).toBe(word);
+    // The /model row leads with its own On/Off activation word (U2 one active; this host has no activation reader, so Off), then the shared decision.
+    expect(row.blocked).toBe(state.invocable ? null : word); expect(row.detail).toBe(`${t('tui.model.state.off', {}, locale)} · ${word}`);
     expect(provider.invocableModels!.find(item => JSON.stringify(item.reference) === JSON.stringify(reference))!.availability).toEqual(state);
     expect(provider.notes).toContain(`${reference.providerId} / ${entry.label}: ${word}`);
     expect(mapped.find(item => item.channelId === reference.providerId && item.modelId === reference.modelId && item.scopeId === 'scope'))
@@ -93,7 +94,7 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
         accounts: f.rows('SELECT * FROM provider_spend_accounts'), audit: f.rows('SELECT * FROM audit_events') }).toEqual(before);
     });
 
-  it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] regression: 13 API models connected through the /provider producer are invocable in the monitor, with no catalog activation rows', async () => {
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] regression: 13 API models connected through the /provider producer are invocable in the monitor; connect activates each channel and model (law 6)', async () => {
     const f = await fixture();
     const extra = [
       { id: 'config', effect: 'allow', actions: ['write'], scopes: 'all', principals: me, resource: { kind: 'config', ids: 'all' } },
@@ -110,7 +111,7 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
         key: null, probe: null, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'openrouter-api',
           dialect: { tokenLimitField: 'max_tokens', streamUsage: 'include', toolChoice: ['auto', 'none', 'required'] } } }] });
     const seeds = [ ['openai-api', 'openai-api', 3], ['deepseek-api', 'deepseek-api', 2], ['zai-api', 'zai-api', 2], ['w11-api-fixture', 'openrouter-api', 6] ] as const;
-    const connected: string[] = [];
+    const connected: string[] = [], native: string[] = [];
     // Seven real priced API profiles plus six seeded API references on a keyless, zero-tariff loopback fixture.
     // The fixture verifies the live ledger shape without any metadata/model endpoint or paid call.
     const port = providerPanelPort(f.project, 'scope', { providerConnect: { ...providerConnect, kinds: registry.kinds.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available,
@@ -120,11 +121,15 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
       const catalog = await readProviderConnectSeed(seed);
       for (const model of catalog.providers.flatMap(provider => provider.models).slice(0, count)) {
         const outcome = await port.connectModel!({ kind: connection, endpoint: connection === 'w11-api-fixture' ? 'http://127.0.0.1:9' : null, model: `seed:${model.nativeId}` });
-        expect(outcome.connected, outcome.summary).toBe(true); connected.push(model.id);
+        expect(outcome.connected, outcome.summary).toBe(true); connected.push(model.id); native.push(model.nativeId);
       }
     }
     expect(connected).toHaveLength(13);
-    expect(f.rows('SELECT * FROM model_catalog_activations')).toEqual([]);
+    // Law 6 (owner 2026-10-26, Q-L6): connecting a provider activates its channel and each connected model at connect time.
+    const activations = f.rows('SELECT channel_id, model_id, state FROM model_catalog_activations') as { channel_id: string; model_id: string; state: string }[];
+    expect(activations.every(row => row.state === 'active')).toBe(true);
+    expect(activations.filter(row => row.model_id).map(row => row.model_id).sort()).toEqual([...native].sort());
+    expect(activations.filter(row => !row.model_id).map(row => row.channel_id).sort()).toEqual(['deepseek-api', 'openai-api', 'openrouter-api', 'zai-api']);
     const snapshot = await inspectMonitor(f.project, { env });
     const shown = snapshot.installs[0]!.map!.models.filter(model => connected.includes(model.modelId));
     expect(shown).toHaveLength(13); for (const model of shown) expect(model.availability, `${model.channelId}/${model.modelId}`).toEqual({ invocable: true, reason: null });
