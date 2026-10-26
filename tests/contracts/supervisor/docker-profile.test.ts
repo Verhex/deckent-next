@@ -3,6 +3,7 @@ import { arch, hostname, platform, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { DockerSupervisor, recordedDockerSupervisor, recordedWorkerIsolation, runNodeDockerCommand } from '#adapters/index.js';
+import { workerIsolationProven } from '#domain/index.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 it.skipIf(!imageId || process.platform !== 'linux')('captures actual Docker origin and restores exact immutable options without accepting foreign origin or unknown parameters', async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'deckent-profile-')); const os = userInfo();
@@ -73,4 +74,28 @@ it('restores a recorded supervisor lazily: its profile is answered without the d
   // First use restores; a profile of another adapter is rejected by the Docker restore, never run.
   await expect(recorded.observe({} as never)).rejects.toThrow();
   expect(() => recordedDockerSupervisor({ ...profile, schemaVersion: 2 } as never)).toThrow();
+});
+
+// U9-7c `worker-relay-profile-custody`: a SIWC relay worker records adapter v4 with the v2 private-model-relay isolation derived from its options;
+// a v3 meaning, a mismatched block or a missing relay is never read as proven, and the record carries nonsecret handles only.
+it.skipIf(process.platform !== 'linux')('records a relay worker as v4 / isolation v2 and refuses every mismatched or downcast relay record', async () => {
+  const os = userInfo(), A = 'synthetic-upstream-access-canary-A', C = 'synthetic-relay-capability-canary-C';
+  const relay = { schemaVersion: 1, socketPath: '/run/deckent/r.sock', bootstrapPath: '/run/deckent/b.mjs', bootstrapSha256: 'b'.repeat(64), helperPath: '/run/deckent/h.mjs',
+    helperSha256: 'c'.repeat(64), policySha256: 'd'.repeat(64), bindingSha256: 'e'.repeat(64) };
+  const isolation = { schemaVersion: 2, network: 'none', egress: { kind: 'private-model-relay', provider: 'siwc', policySha256: 'd'.repeat(64), bindingSha256: 'e'.repeat(64) } };
+  const options = { executable: '/usr/bin/docker', imageId: `sha256:${'a'.repeat(64)}`, workspaceRoot: '/tmp/deckent-profile', uid: os.uid, gid: os.gid,
+    memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
+  const captured = await new DockerSupervisor({ ...options, relay }, async command => ({ stdout: command.args[0] === 'info' || command.args[2] === 'info' ? 'daemon\n'
+    : JSON.stringify({ Host: 'unix:///var/run/docker.sock' }), stderr: '' })).captureProfile();
+  expect(captured.adapterVersion).toBe(4); expect(captured.parameters.isolation).toEqual(isolation);
+  expect(recordedWorkerIsolation(captured)).toEqual(isolation); expect(workerIsolationProven(recordedWorkerIsolation(captured))).toBe(true);
+  const text = JSON.stringify(captured); expect(text).not.toContain(A); expect(text).not.toContain(C);
+  const variant = (version: number, block: unknown, withRelay = true) => ({ ...captured, adapterVersion: version,
+    parameters: { ...captured.parameters, isolation: block, options: withRelay ? captured.parameters.options : options } });
+  for (const [label, record] of [['v3 meaning', variant(3, isolation)], ['v1 block', variant(4, { schemaVersion: 1, network: 'none', egress: { kind: 'none' } })],
+    ['other binding', variant(4, { ...isolation, egress: { ...isolation.egress, bindingSha256: 'f'.repeat(64) } })], ['no relay', variant(4, isolation, false)]] as const) {
+    expect(recordedWorkerIsolation(record), label).toBeNull(); expect(workerIsolationProven(recordedWorkerIsolation(record)), label).toBe(false);
+  }
+  expect(() => new DockerSupervisor({ ...options, relay, connection: { schemaVersion: 1, socketPath: '/run/c.sock', bootstrapPath: '/run/b.mjs', bootstrapSha256: 'b'.repeat(64), provider: 'codex' } }))
+    .toThrow();
 });

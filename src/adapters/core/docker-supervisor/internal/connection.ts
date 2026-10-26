@@ -24,3 +24,21 @@ export async function dockerConnectionMounts(input: z.infer<typeof dockerConnect
       '--mount', `type=bind,src=${connection.bootstrapPath},dst=/run/deckent-bootstrap.mjs,readonly`];
   } catch { throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID'); }
 }
+/** U9-7a: the SIWC worker relay channel (one private host socket) and its two pinned standalone programs; never a credential path. */
+export const dockerRelaySchema = z.object({ schemaVersion: z.literal(1), socketPath: path, bootstrapPath: path, bootstrapSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  helperPath: path, helperSha256: z.string().regex(/^[a-f0-9]{64}$/), policySha256: z.string().regex(/^[a-f0-9]{64}$/), bindingSha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
+export const DOCKER_RELAY_TARGETS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs' });
+export async function dockerRelayMounts(input: z.infer<typeof dockerRelaySchema>, uid: number) {
+  try {
+    const relay = dockerRelaySchema.parse(input);
+    const [socket, parent] = await Promise.all([lstat(relay.socketPath), lstat(dirname(relay.socketPath))]);
+    if (!socket.isSocket() || socket.uid !== uid || (socket.mode & 0o077) || !parent.isDirectory() || parent.uid !== uid || (parent.mode & 0o077)
+      || await realpath(relay.socketPath) !== relay.socketPath) throw new Error();
+    for (const [file, sha256] of [[relay.bootstrapPath, relay.bootstrapSha256], [relay.helperPath, relay.helperSha256]] as const) {
+      const stat = await lstat(file);
+      if (!stat.isFile() || (stat.mode & 0o022) || await realpath(file) !== file || createHash('sha256').update(await readFile(file)).digest('hex') !== sha256) throw new Error();
+    }
+    return ['--mount', `type=bind,src=${relay.socketPath},dst=${DOCKER_RELAY_TARGETS.socket},readonly`, '--mount', `type=bind,src=${relay.bootstrapPath},dst=${DOCKER_RELAY_TARGETS.bootstrap},readonly`,
+      '--mount', `type=bind,src=${relay.helperPath},dst=${DOCKER_RELAY_TARGETS.helper},readonly`];
+  } catch { throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID'); }
+}

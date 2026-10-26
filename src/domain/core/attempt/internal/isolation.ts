@@ -7,10 +7,14 @@ import { identitySchema } from '#domain/core/primitives/index.js';
  * `egress` the one channel out — `none`, or `provider-gateway` (the host CONNECT gateway to one catalog provider's model hosts). Every
  * supervisor adapter records this block; a record without it was written before it existed.
  */
-export const workerIsolationSchema = z.object({ schemaVersion: z.literal(1), network: z.string().min(1).max(64),
+export const workerIsolationSchema = z.union([z.object({ schemaVersion: z.literal(1), network: z.string().min(1).max(64),
   egress: z.discriminatedUnion('kind', [z.object({ kind: z.literal('none') }).strict(), z.object({ kind: z.literal('provider-gateway'), provider: identitySchema }).strict()]),
-}).strict().readonly();
+}).strict().readonly(),
+// U9-7c (v2): the one channel out is the host's private model relay — capability-bound, host-only upstream credential, registry endpoint only.
+// A reader that knows only v1 refuses it; it is never recorded as `none` or as the CONNECT gateway.
+z.object({ schemaVersion: z.literal(2), network: z.string().min(1).max(64), egress: z.object({ kind: z.literal('private-model-relay'), provider: identitySchema,
+  policySha256: z.string().regex(/^[a-f0-9]{64}$/u), bindingSha256: z.string().regex(/^[a-f0-9]{64}$/u) }).strict() }).strict().readonly()]);
 export type WorkerIsolation = z.infer<typeof workerIsolationSchema>;
-/** Pure: the recorded block proves the worker reached no customer system — no network route and no egress but a provider gateway. Missing,
- * unreadable or anything wider is unproven. */
+/** Pure: the recorded block proves the worker reached no customer system — no network route and no egress but a provider gateway or the
+ * bound private model relay. Missing, unreadable or anything wider is unproven. */
 export const workerIsolationProven = (recorded: unknown) => { const parsed = workerIsolationSchema.safeParse(recorded); return parsed.success && parsed.data.network === 'none'; };
