@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { productResourcePath, type ProductLayout } from '#platform/index.js';
-import { LocalRuntimeSocketError, assertSocketPublicationBudget } from './endpoint.js';
+import { LocalRuntimeSocketError, assertSocketPublicationBudget, resolveSocketParent } from './endpoint.js';
 
 /** One deterministic, short, owner-only directory per installation data root. Full SHA-256 avoids truncation collisions.
  * The Linux peer/custody transport remains the authority; a read never creates or repairs a directory. */
@@ -22,7 +22,7 @@ export async function prepareRuntimeSocket(layout: ProductLayout, create = true)
   const stat = await lstat(parent).catch(error => {
     throw new LocalRuntimeSocketError((error as NodeJS.ErrnoException).code === 'ENOENT' ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error });
   });
-  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o700 || await realpath(parent) !== parent) {
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o700 || await resolveSocketParent(parent) !== parent) {
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
   }
   const socket = await lstat(endpoint).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; });
