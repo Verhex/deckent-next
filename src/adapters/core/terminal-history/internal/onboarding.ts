@@ -27,21 +27,29 @@ export function openOnboardingDeferrals(path: string) {
       return document.parse(raw);
     } finally { await file.close(); }
   };
+  /** One locked rewrite: `keep` filters the current entries, `added` is appended. */
+  const write = async (keep: (row: OnboardingDeferral) => boolean, added: readonly OnboardingDeferral[]) => {
+    const lock = `${path}.lock`, temporary = `${path}.${randomUUID()}.tmp`;
+    // A conflicting writer is refused. Never steal a lock or lose another principal/folder's update.
+    await mkdir(lock, { mode: 0o700 });
+    try {
+      const current = await read(), next = document.parse({ schemaVersion: 2, entries: [...current.entries.filter(keep), ...added] });
+      const serialized = JSON.stringify(next);
+      if (Buffer.byteLength(serialized) > MAX_DEFERRAL_BYTES) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+      const file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, privateMode);
+      try { await file.writeFile(serialized); await file.sync(); } finally { await file.close(); }
+      await rename(temporary, path);
+    } finally { await unlink(temporary).catch(() => undefined); await rmdir(lock); }
+  };
   return {
     async list(principal: string, folder: string) { return (await read()).entries.filter(row => row.principal === principal && row.folder === folder); },
     async defer(input: OnboardingDeferral) {
-      const value = entry.parse(input), lock = `${path}.lock`, temporary = `${path}.${randomUUID()}.tmp`;
-      // A conflicting writer is refused. Never steal a lock or lose another principal/folder's update.
-      await mkdir(lock, { mode: 0o700 });
-      try {
-        const current = await read(), next = document.parse({ schemaVersion: 2, entries: [...current.entries.filter(row =>
-          row.principal !== value.principal || row.folder !== value.folder || row.stageId !== value.stageId), value] });
-        const serialized = JSON.stringify(next);
-        if (Buffer.byteLength(serialized) > MAX_DEFERRAL_BYTES) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
-        const file = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, privateMode);
-        try { await file.writeFile(serialized); await file.sync(); } finally { await file.close(); }
-        await rename(temporary, path);
-      } finally { await unlink(temporary).catch(() => undefined); await rmdir(lock); }
+      const value = entry.parse(input);
+      await write(row => row.principal !== value.principal || row.folder !== value.folder || row.stageId !== value.stageId, [value]);
+    },
+    /** R18: drops this principal's deferrals of the named steps in this folder (settled elsewhere); other people's and folders' stay. */
+    async settle(principal: string, folder: string, stageIds: readonly string[]) {
+      await write(row => row.principal !== principal || row.folder !== folder || !stageIds.includes(row.stageId), []);
     },
   };
 }
