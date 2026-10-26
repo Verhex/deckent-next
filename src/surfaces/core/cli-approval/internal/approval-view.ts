@@ -1,6 +1,6 @@
 import { HARD_FLOOR_CARD_CELLS, approvalDecisionClass, approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalRecord } from '#domain/index.js';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
-import { displayId, formatAgo, formatClock, formatDuration, orderPendingFirst, renderCliTable, safeCell, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
+import { formatAgo, formatClock, formatDuration, orderPendingFirst, renderCliTable, safeCell, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 import registry from './approval.json' with { type: 'json' };
 
 /** Bounds of the person's approval list (C-APPROVE registry): pages scanned, rows shown. */
@@ -48,13 +48,13 @@ export function approvalState(record: ApprovalRecord, nowMs: number, locale: Loc
 /** A picker row for one waiting approval: what and the request, redacted like a table cell (card option labels are drawn as given). */
 export const approvalPickLabel = (record: ApprovalRecord, locale: Locale) => safeCell(`${approvalWhat(record, locale)} · ${record.request.summary}`);
 
-/** The pipe/TTY table: short id · state · what · summary · requester. Waiting rows first; the caller says how many were not shown. */
+/** Full inspectable ids and one description per row; detailed summaries remain in inspect and the decision card. */
 export function approvalTable(records: readonly ApprovalRecord[], nowMs: number, locale: Locale, style: CliTableStyle): string {
-  const ids = records.map(record => record.request.approvalId);
-  return renderCliTable([{ header: t('cli.approval.column.id', {}, locale) }, { header: t('cli.approval.column.state', {}, locale) },
-    { header: t('cli.approval.column.what', {}, locale), shrink: true }, { header: t('cli.approval.column.summary', {}, locale), shrink: true },
+  return renderCliTable([{ header: t('cli.approval.column.id', {}, locale), shrink: false }, { header: t('cli.approval.column.state', {}, locale) },
+    { header: t('cli.approval.column.what', {}, locale), shrink: true },
     { header: t('cli.approval.column.requester', {}, locale), shrink: true }],
-  records.map(record => [displayId(record.request.approvalId, ids), approvalState(record, nowMs, locale), approvalWhat(record, locale), record.request.summary, actor(record)]), style);
+  records.map(record => [record.request.approvalId, approvalState(record, nowMs, locale), approvalWhat(record, locale), actor(record)]),
+  { ...style, width: Math.min(style.width, APPROVAL_LIST.tableWidth) }) + '\n' + t('cli.approval.tableDetails', {}, locale);
 }
 
 /** One record as readable lines (inspect, decide and renew results, and the TTY card body): never a hash or a raw id beyond the approval's own. */

@@ -80,7 +80,7 @@ it('C-DOCTOR: the default view lists only open workers with a summary first; --a
   expect(all.text).toMatch(/t1 +run1 +finished +gpt-exact-1 +24\.7 s/u);
   expect(all.text).toMatch(/t3 +run1 +finished with error/u);
   const tr = await run(['list', '--all'], 'tr');
-  expect(tr.text.split('\n')[0]).toBe('scope: s (varsayılan) · 1 çalışan · 1 dikkat bekleyen · 3 geçmiş');
+  expect(tr.text.split('\n')[0]).toBe('Kapsam: s (varsayılan) · 1 çalışan · 1 dikkat bekleyen · 3 geçmiş');
   expect(tr.text).toContain('hatayla bitti');
   expect(tr.text).not.toMatch(/\bunknown\b/u); // PRE-5: the engine's unknown provider reads in Turkish in the table too
   // A lost worker (no process, no result) names the command that shows its Run.

@@ -17,7 +17,7 @@
   "memory.view.noIndependentEvaluator": "No independent evaluator is available in this scope: candidates stay candidates until a person verifies them.",
   "memory.view.evaluator": "Evaluator for this scope: {model} by {maker}, {price}.",
   "memory.view.evaluator.price.perToken": "catalog price {input} in / {output} out per million tokens (as of {asOf}); at most {calls} calls a day of up to {tokens} answer tokens, so answers cost at most {ceiling} a day",
-  "memory.view.evaluator.price.subscription": "subscription channel (quota only, no money)",
+  "memory.view.evaluator.price.subscription": "subscription channel (quota only; no extra charge)",
   "memory.view.evaluator.price.notVerified": "price not verified",
   "memory.view.evaluator.independence": "An entry is evaluated only by a model of another maker than the one that did the work; the candidate text is sent to that model's provider.",
   "memory.view.evaluator.unavailable": "The memory evaluator could not be read; candidates stay candidates.",

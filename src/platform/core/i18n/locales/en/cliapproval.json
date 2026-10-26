@@ -175,5 +175,6 @@
   "cli.policy.recovery.scope": "Scope: {scope}",
   "cli.policy.recovery.exitsUnmet": "Its measured exit criteria are not met; the change will be refused.",
   "cli.policy.recovery.applied": "Changed.",
-  "cli.policy.recovery.current": "Already so; nothing changed."
+  "cli.policy.recovery.current": "Already so; nothing changed.",
+  "cli.approval.tableDetails": "Full details: deckent approval inspect --input <file|->; input fields: deckent approval inspect --schema. Use the full id shown above."
 }

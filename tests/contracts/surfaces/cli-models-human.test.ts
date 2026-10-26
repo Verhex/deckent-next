@@ -74,6 +74,14 @@ function host(f: Awaited<ReturnType<typeof project>>, calls: { kind: string; val
   return { out, err, calls, context: context as never };
 }
 
+it('F5: catalog lifecycle agrees with retirement dates and retains deprecation, in the selected language', async () => {
+  const setup = await project({}, 'tr'), h = host(setup);
+  expect(await main(['models', 'catalog', 'list', '--scope', 'live'], h.context)).toBe(0);
+  expect(h.out.text()).toMatch(/model-a-old.*emekli/u);
+  expect(h.out.text()).toMatch(/model-a-soon.*kullanımdan kaldırılıyor/u);
+  expect(h.out.text()).not.toContain('yaşam döngüsü active');
+});
+
 it('bare models: one table of the scope\'s models grouped by channel, state in words, retired with its date, no raw values (EN)', async () => {
   const f = await project(), h = host(f);
   expect(await main(['models'], h.context)).toBe(0);
@@ -109,7 +117,7 @@ it('the retirement warning threshold is the config field (law 6): 30 days warns 
   const f = await project({ terminal: { scopeId: 'live' }, models: { retirementWarningDays: 30 } }, 'tr'), h = host(f);
   expect(await main(['models'], h.context)).toBe(0);
   const text = h.out.text();
-  expect(text).toContain("Scope live'da kullanılabilir modeller");
+  expect(text).toContain('Kapsam: live · kullanılabilir modeller');
   expect(text).toMatch(/Model kimliği\s+Kanal\s+Durum\s+Effort düzeyi/u);
   expect(text).toMatch(/model-a-old\s+abonelik claude\s+emekli \(2026-10-15\)/u);
   expect(text).toMatch(/model-b-later.*2026-11-08.*20 gün/u);

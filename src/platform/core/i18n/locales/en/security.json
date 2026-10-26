@@ -6,5 +6,13 @@
   "security.mcp.note.project": "project file: only these environment variables are read: {names}; any other reads as its default or empty, and a value carrying a credential refuses the server; secret references are refused",
   "security.mcp.note.moved": "a trust record for this server in the project's data folder is no longer used; decide again on this card",
   "security.mcp.trustCard.argument": "argument {index}: {value}",
-  "security.witness.config": "The setting {key} is protected: only a person at their own interactive terminal may change it. Run the same deckent command (for a setting also the terminal's /config) in your own terminal on this host, with input and output on the same terminal. AI tools, MCP, SDK scripts, CI, piped commands and --json cannot change it. Nothing was changed."
+  "security.witness.config": "The setting {key} is protected: only a person at their own interactive terminal may change it. Run the same deckent command (for a setting also the terminal's /config) in your own terminal on this host, with input and output on the same terminal. AI tools, MCP, SDK scripts, CI, piped commands and --json cannot change it. Nothing was changed.",
+  "mcp.trustCard.posture.remote": "Remote HTTP server: nothing runs on this machine; headers are sent to that endpoint with every request.",
+  "mcp.trustCard.posture.host": "No sandbox: runs as your user; files, processes and network are reachable.",
+  "mcp.trustCard.posture.readOnly": "read-only",
+  "mcp.trustCard.posture.writable": "writable",
+  "mcp.trustCard.posture.startedSandbox": "Started in a sandbox; project access: {project}. A server that must write the project needs `realm: host` and then runs without a sandbox.",
+  "mcp.trustCard.posture.network": "Sandbox with network: the project and .git are read-only. The server has its own persistent HOME for caches and network access; your HOME, project secrets and Deckent state are hidden. No sandbox means no start. To write the project, `realm: host` is required and runs without a sandbox.",
+  "mcp.trustCard.posture.preferred": "Uses a sandbox when available; otherwise runs on the host and says so at launch. In a sandbox the project and .git are read-only. To write the project, `realm: host` is required and runs without a sandbox.",
+  "mcp.trustCard.posture.required": "A sandbox is required; the project and .git are read-only. To write the project, `realm: host` is required and runs without a sandbox."
 }

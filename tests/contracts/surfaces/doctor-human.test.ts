@@ -66,7 +66,7 @@ describe('doctor rows (pure)', () => {
   it('PRE-34: the Docker row is the setup decision in the setup\'s words; not reachable is an error only when work is configured to run there', () => {
     const docker = (state: string, code: string, extra: Partial<DoctorCheckFacts> = {}) => doctorChecks(report, facts({ executionEnvironment: { state, reason: { code, params: { runtime: 'Docker', version: '27.3.1' } } }, ...extra }), 'tr')
       .find(row => row.id === 'work.docker')!;
-    expect(docker('done', 'setup.execution.ready')).toEqual({ group: 'work', id: 'work.docker', state: 'ok', text: 'Docker 27.3.1 hazır: Run, /do ve teslim onu kullanabilir.' });
+    expect(docker('done', 'setup.execution.ready')).toEqual({ group: 'work', id: 'work.docker', state: 'ok', text: 'Docker 27.3.1 hazır: iş, /do ve teslim onu kullanabilir.' });
     const onboarding = "Çalıştırma ortamı: deckent'i açın, ilk açılışta ayarlanır (terminalde: /setup)";
     expect(docker('blocked', 'setup.execution.stopped')).toMatchObject({ state: 'warning', next: onboarding, text: expect.stringContaining('Docker kurulu ama hizmeti çalışmıyor') });
     expect(docker('blocked', 'setup.execution.stopped', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error', next: onboarding });
@@ -75,7 +75,7 @@ describe('doctor rows (pure)', () => {
     expect(docker('blocked', 'setup.execution.unknown')).toMatchObject({ state: 'untested' });
     expect(docker('blocked', 'setup.execution.unknown').next).toBeUndefined();
     const en = doctorChecks(report, facts({ executionEnvironment: { state: 'blocked', reason: { code: 'setup.execution.none', params: {} } } }), 'en').find(row => row.id === 'work.docker')!;
-    expect(en.text).toBe('No execution environment is installed: no Run, /do or delivery. Chat, MCP and governed tools work.');
+    expect(en.text).toBe('No execution environment is installed: work, /do and delivery cannot run. Chat, MCP and governed tools work. Open /setup in the Deckent terminal to set up execution.');
   });
   it('PRE-34: a current worker image without a version names the configured image instead of nothing', () => {
     const image = { ...report, imageRefresh: { status: 'current', reason: null, imageVersion: null } };

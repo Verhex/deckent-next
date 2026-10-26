@@ -3699,6 +3699,7 @@
     },
     "src/surfaces/core/setup": {
       "dependencies": [
+        "src/surfaces/core/cli-identity",
         "src/platform/core/errors",
         "src/platform/core/output",
         "src/platform/core/i18n",
