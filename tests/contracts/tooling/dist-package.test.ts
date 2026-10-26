@@ -154,7 +154,7 @@ describe('bundled native executables in the SBOM and notices (BWRAP-SELECT)', ()
       externalReferences: [{ type: 'source-distribution', url: lock.source.url, hashes: [{ alg: 'SHA-256', content: lock.source.sha256 }] }, { type: 'vcs', url: 'https://github.com/containers/bubblewrap' }] });
     expect(bwrap!.properties).toContainEqual({ name: 'deckent:bundle:path', value: 'dist/adapters/core/shell-sandbox-bwrap/bundled/linux-x64/bwrap' });
     expect(bwrap!.components!.map(item => [item.purl, item.licenses])).toEqual([
-      ['pkg:apk/alpine/musl@1.2.6-r2?arch=x86_64&distro=alpine-3.24.2', [{ license: { id: 'MIT' } }]],
+      ['pkg:apk/alpine/musl@1.2.6-r3?arch=x86_64&distro=alpine-3.24.2', [{ license: { id: 'MIT' } }]],
       ['pkg:apk/alpine/libcap@2.78-r0?arch=x86_64&distro=alpine-3.24.2', [{ license: { id: 'BSD-3-Clause' } }]],
       ['pkg:apk/alpine/gcc@15.2.0-r5?arch=x86_64&distro=alpine-3.24.2', [{ expression: 'GPL-3.0-or-later WITH GCC-exception-3.1' }]]]);
     const bom = cyclonedx({ pkg: { name: 'deckent', version: '1.0.0', license: 'Apache-2.0' }, identity: { sourceTreeSha256: 'abc', sourceCommit: null }, tools: [],
