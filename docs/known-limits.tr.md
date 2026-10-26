@@ -22,7 +22,7 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
   etiketiyle atlar; Windows kontrolünün yeşil olması bu parçaların çalıştığı anlamına gelmez. *Yol:* WSL2 kullanın.
 - **Konuşma kökeni yalnız sürdürme listesini süzer.** `/resume` geçerli işletim sistemi kullanıcısının başlangıç klasörünü gösterir; “Tüm klasörler” proje içindeki listeyi genişletir. Eski kayıtlar dosya sahibine proje kökünde görünür. Bu bilgiler yetki vermez.
 - **Native Windows bir projeyi alt klasörlerinden açmaz.** Diğer platformlarda bir alt klasörde başlatılan `deckent` ve
-  `deckent-mcp` üstteki kurulumu kullanır; native Windows'ta bu yürüyüş için sahip ve kip denetimi olmadığından
+  `deckent-mcp` üstteki kurulumu kullanır (ev klasörünün üstündekini asla); native Windows'ta bu yürüyüş için sahip ve kip denetimi olmadığından
   `INSTALLATION_ROOT_WALK_UNSUPPORTED` ile durur. *Yol:* projenin kendi klasöründe çalıştırın ya da `deckent-mcp --project` verin.
 - **macOS'un doğrulaması ayrı ve eksiktir.** Zorunlu kontrollerin parçası değildir. *Etki:* orada yürütme ve güvenlik davranışı
   kanıtsızdır; gerçek iş için buna güvenmeyin. Yerel runtime soketi yalnız Linux'tadır; bu yüzden servis taşıması, yedekleme ve

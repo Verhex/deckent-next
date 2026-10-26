@@ -28,6 +28,9 @@ it('walks up only to a guarded installation, refuses an unsafe one and keeps the
   // The global state root is never a project: by default under $HOME, and when relocated.
   expect(await resolve(`${p}/a`, installed('/home/u'), {}, { env: { HOME: '/home/u' } })).toMatchObject({ found: false });
   expect(await resolve('/g/x', installed('/g'))).toMatchObject({ found: false });
+  // The walk stops at $HOME (Git's discovery ceiling): a safe same-UID installation above it is never adopted; outside HOME the walk is unchanged.
+  expect(await resolve('/home/u/work/x', installed('/home'))).toEqual({ root: '/home/u/work/x', folder: '', found: false, gitTop: null });
+  expect(await resolve('/srv/p/a', installed('/srv/p'))).toMatchObject({ root: '/srv/p', folder: 'a', found: true });
   // An identity not created yet: not an installation, and nothing further up is adopted in its place.
   expect(await resolve(`${p}/n/x`, { ...installed(p), ...installed(`${p}/n`, {}, false) })).toMatchObject({ root: `${p}/n/x`, found: false });
   const tracked = { ...installed(p), [`${p}/.git`]: dir() };
