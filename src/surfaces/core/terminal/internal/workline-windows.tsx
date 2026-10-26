@@ -90,8 +90,8 @@ export function useWindowSlot() {
     pending.current = settle; setOpen({ id: ++sequence.current, render, settle });
   }), []);
   const close = useCallback(() => { pending.current?.(null); }, []);
-  const element = open ? <Fragment key={open.id}>{open.render(open.settle)}</Fragment> : null;
-  return { ask, close, element, open: open !== null };
+  // FIX8a R25/R28: one identity per open window; a fresh object every render re-ran every effect keyed on the slot (a render ↔ RPC loop).
+  return useMemo(() => ({ ask, close, element: open ? <Fragment key={open.id}>{open.render(open.settle)}</Fragment> : null, open: open !== null }), [ask, close, open]);
 }
 export type WindowSlot = ReturnType<typeof useWindowSlot>;
 
