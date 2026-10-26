@@ -7,8 +7,9 @@ export class ProviderModelListError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' | 'MODEL_CONNECT_DISCOVERY_INVALID' | 'MODEL_CONNECT_DISCOVERY_LIMIT',
     override readonly cause: ProviderDiscoveryCause = 'invalid-list', readonly status?: number) { super(code); this.name = 'ProviderModelListError'; }
 }
-/** Reads cannot outlive their request, including injected transports with non-cancelling streams. */
-export async function readProviderPart(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal) {
+/** Reads cannot outlive their request, including injected transports with non-cancelling streams. The result type is spelled from the global reader: an inferred
+ * one names the bare `stream/web` module in the published declarations, which the zero-dependency package cannot resolve. */
+export async function readProviderPart(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal): ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']> {
   signal.throwIfAborted(); let abort!: () => void;
   try { return await Promise.race([reader.read(), new Promise<never>((_resolve, reject) => {
     abort = () => reject(signal.reason); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
