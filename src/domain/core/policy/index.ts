@@ -7,7 +7,7 @@ export { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, HARD_F
   namedPersonPolicyAdditions, policyNamedPeople, type NamedPersonAdditions,
   type FirstRunTemplateAdditions } from './internal/first-run-template.js';
 export type { FirstRunPolicyTemplate, FirstRunPolicyTemplateInput } from './internal/first-run-template.js';
-export { companyIdSchema, policyDeclaredScopes, policyScopeGrants, policyScopeMembership } from './internal/scope.js';
+export { companyIdSchema, policyDeclaredScopes, policyNamedScopes, policyScopeGrants, policyScopeMembership } from './internal/scope.js';
 export type { Policy, PolicyRequest, PolicyDecision } from './internal/evaluate.js';
 export type { ApprovalAssuranceRule, BindingsFile, BindingsV3, PermissionMode, PermissionModeEntry, PolicyFile, PrincipalPermissionMode } from './internal/schema.js';
 export { effectivePermissionMode, fullAccessGrant, fullAutoGrant, fullAutoNotInEffect, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeView,

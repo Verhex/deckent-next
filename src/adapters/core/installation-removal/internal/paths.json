@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "recoveryDirectory": ".deckent-uninstall",
+  "purgeMembers": {
+    "ledger": "",
+    "bindings": "",
+    "policy": "",
+    "installationIdentity": "identity.json",
+    "approvals": "{keyFile}"
+  },
+  "cacheMembers": {
+    "scratch": ["^[0-9a-f]{32}$", "^[0-9a-f]{32}$"],
+    "treeScanCache": ["^[a-f0-9]{64}\\.json$"]
+  },
+  "sharedSecretFiles": [
+    "secrets.json",
+    "secrets.sealed.json",
+    "secrets.key"
+  ],
+  "initialBackupPrefix": "initial-",
+  "finalBackupPrefix": "final-"
+}

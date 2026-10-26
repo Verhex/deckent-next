@@ -12,8 +12,8 @@ export class UninstallRecovery {
   readonly directory: string;
   private readonly hold: string;
   constructor(private readonly root: string, private readonly installationId: string, private readonly principal: VerifiedPrincipal,
-    private readonly integrity: IntegrityAuthority, private readonly maxBytes: number) {
-    this.directory = join(root, 'uninstall-recovery'); this.hold = uninstallHoldPath(root);
+    private readonly integrity: IntegrityAuthority, private readonly maxBytes: number, externalDirectory?: string) {
+    this.directory = externalDirectory ?? join(root, 'uninstall-recovery'); this.hold = uninstallHoldPath(root);
   }
   private async safeDirectory(path: string) {
     const info = await lstat(path);
@@ -56,6 +56,7 @@ export class UninstallRecovery {
   }
   async admit(plan: UninstallPlan) {
     await this.safeDirectory(this.root);
+    if (dirname(this.directory) !== this.root) { await mkdir(dirname(this.directory), { mode: 0o700, recursive: true }); await this.safeDirectory(dirname(this.directory)); }
     await mkdir(this.directory, { mode: 0o700 }).catch(error => { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; });
     await this.safeDirectory(this.directory);
     const retained = await this.retained(plan.planDigest);
