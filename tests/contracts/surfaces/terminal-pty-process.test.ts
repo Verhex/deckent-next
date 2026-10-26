@@ -295,8 +295,9 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       ['Deckent workline', '/hel'],
       ['/help', '\r'],
       // SW-1: /help opens its window (registry rows: name, two spaces, detail; the palette pads names to a column); Esc closes it and leaves
-      // the one framed system summary line, then the composer owns the keyboard again.
-      ['Stop following workers and runs', '\u001b'],
+      // the one framed system summary line, then the composer owns the keyboard again. The anchor is the first Info row: since /roles
+      // (4a1096a96) /watch-stop sits on row 16, past the window's first page.
+      ['/status  Show whether Deckent is running', '\u001b'],
       ['Help: ', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],
