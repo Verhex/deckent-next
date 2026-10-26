@@ -24,7 +24,7 @@ async function fixture(shape: 'template' | 'hand-built' | 'live-shape' | 'n1-sha
   const f = await runtime(), template = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
     scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write',
     shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer',
-    executionEnvironmentIds: ['docker'], recoveryRules: FIRST_RUN_RECOVERY_RULES });
+    firstCommitOperationId: 'coding.first-commit', executionEnvironmentIds: ['docker'], recoveryRules: FIRST_RUN_RECOVERY_RULES });
   await trace(`fixture ${shape}: runtime created`);
   const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
   delete config.provider_spending; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();

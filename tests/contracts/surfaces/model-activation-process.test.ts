@@ -128,8 +128,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
     { cwd: project, env, timeout: 10_000 })).stdout;
   const humanTr = (await execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1), '--lang', 'tr'],
     { cwd: project, env, timeout: 10_000 })).stdout;
-  expect(humanEn).toContain('persisted active activation'); expect(humanEn).toContain('availability');
-  expect(humanTr).toContain('kayıtlı aktif aktivasyonu'); expect(humanTr).toContain('kullanılabilirliği');
+  expect(humanEn).toContain('persisted On activation'); // U2-S4: the state reads On/Off expect(humanEn).toContain('availability');
+  expect(humanTr).toContain('kayıtlı Açık aktivasyonu'); expect(humanTr).toContain('kullanılabilirliği');
   await expect(execute(process.execPath, [cli, 'models', 'activation', '--scope', 'scope-a', '--provider', 'provider'],
     { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_ARGUMENT_MISSING') });
   await expect(execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1).map(value => value === 'scope-a' ? 'wrong-scope' : value)],

@@ -82,9 +82,9 @@ it('bare models: one table of the scope\'s models grouped by channel, state in w
   expect(text).toContain('scope: live (default)');
   expect(text).toContain('Models you can use in scope live');
   expect(text).toMatch(/Model\s+Channel\s+State\s+Effort/u);
-  expect(text).toMatch(/model-a-1\s+subscription claude\s+active\s+low, high/u);
+  expect(text).toMatch(/model-a-1\s+subscription claude\s+On\s+low, high/u); // U2-S4: state reads On/Off
   expect(text).toMatch(/model-a-old\s+subscription claude\s+retired \(2026-10-15\)/u);
-  expect(text).toMatch(/model-b-later\s+API api-b\s+active/u);
+  expect(text).toMatch(/model-b-later\s+API api-b\s+On/u);
   expect(text).toMatch(/sub-c.*no access/u);
   expect(text).toMatch(/model-a-soon.*2026-10-29.*10 days/u);
   expect(text).not.toMatch(/model-b-later retires/u);

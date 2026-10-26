@@ -266,7 +266,7 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   expect(JSON.stringify(inspected.spending)).not.toContain('upstream_inference_cost');
   const account = await inspectAccount(f);
   expect(account).toMatchObject({ reservationCount: 2, reservedMinorUnits: 0, settledMinorUnits: 1,
-    checkpoint: { account: { schemaVersion: 2, settledExactMinorUnits: '0.04', settledMinorUnits: 1, frozen: false } } });
+    checkpoint: { account: { schemaVersion: 3, settledExactMinorUnits: '0.04', settledMinorUnits: 1, frozen: false } } }); // v3: budget periods (alpha.56 BP)
   const accountQuery = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 };
   await expect(inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env }))
     .rejects.toMatchObject({ code: 'POLICY_DENIED' });
