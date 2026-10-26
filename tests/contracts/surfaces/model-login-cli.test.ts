@@ -79,7 +79,7 @@ it('help names the own dir, the account switch and the refusals', async () => {
 });
 it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait is aborted, nothing returns, typed OAUTH_CONNECTION_CANCELLED (FIX8c)', async () => {
   for (const key of ['\u001b', '\u0003']) {
-    const f = await project(), stdin = tty(), seen: AbortSignal[] = []; card.interactive = true; card.answers = ['yes'];
+    const f = await project(), stdin = tty(), seen: AbortSignal[] = [], sigint = process.listenerCount('SIGINT'); card.interactive = true; card.answers = ['yes'];
     // The fake browser wait settles only through its signal, as the adapter does (it closes its loopback listener on abort).
     const execute = (_root: string, _request: unknown, _options: unknown, presentation?: { signal?: AbortSignal }) => new Promise<never>((_resolve, reject) => {
       seen.push(presentation!.signal!); presentation!.signal!.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { code: 'OAUTH_CONNECTION_CANCELLED' })));
@@ -87,6 +87,6 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
     });
     await expect(modelsCommand(['models', 'login', '--connection', 'chatgpt-login', '--scope', 'scope'], { root: f.root, env: f.env, stdin, stdout: capture().sink,
       siwc: { connection: 'chatgpt-login', execute } } as never)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
-    expect(seen).toHaveLength(1); expect(seen[0]!.aborted).toBe(true); expect(process.listenerCount('SIGINT')).toBe(0);
+    expect(seen).toHaveLength(1); expect(seen[0]!.aborted).toBe(true); expect(process.listenerCount('SIGINT')).toBe(sigint);
   }
 });

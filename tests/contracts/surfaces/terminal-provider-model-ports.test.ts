@@ -107,6 +107,12 @@ describe('/provider port', () => {
     expect(outcome.lines.map(line => line.text).join('\n')).not.toContain('No model uses');
     expect(outcome.lines.at(-1)!.text).toBe(t('tui.provider.model.next', {}, 'en'));
     expect((await port.inspect()).kinds[0]!.detail).toBe('1 model(s) connected');
+    // Negative: a key-required kind whose key is gone stays "not connected" even when a profile of its provider remains.
+    const keyed = { ...connectHost('ok').kinds[0]!, catalogProviderId: pulled.providerId };
+    const gone = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [keyed] },
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: pulled, label: 'fixture-small', nativeId: 'fixture-small', catalogRevision: 'c',
+        bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText);
+    expect((await gone.inspect()).kinds[0]!.detail).toBe('not connected');
   });
 
   it('every refused check stores nothing and says why in the person\'s language', async () => {
