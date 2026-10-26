@@ -133,3 +133,18 @@ it('shows preview, plan billing and the registry management URL only for the sel
   invocable = false;
   expect((await source.inspect()).choices[0]!.detail).not.toContain('ChatGPT planı kullanılıyor');
 });
+
+it('N2: a discovered model reads as its own name and its connection kind, never the hash ids (the exact reference stays in details)', async () => {
+  const provider = `local-openai-${'29a0c9bc'.repeat(4)}`, model = `model-${'6cfaea59'.repeat(4)}`;
+  const reference = { providerId: provider, providerVersion: 1, modelId: model, modelVersion: 1 };
+  const source = modelPanelSource('/fixture', 'scope', {
+    providerConnect: { kinds: [{ id: 'local-openai', labelKey: 'tui.provider.kind.localOpenai' }] } as never,
+    inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'catalog',
+      providers: [{ id: provider, version: 1, models: [{ id: model, version: 1, nativeId: 'fixture-small', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] }] }] } }),
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference, label: model, nativeId: 'fixture-small', catalogRevision: 'catalog',
+      bindingDigest: 'a'.repeat(64), availability: { invocable: true, reason: null } }] }),
+  }, {}, 'en');
+  const shown = (await source.inspect()).choices[0]!;
+  expect(shown.label).toBe('fixture-small'); expect(shown.providerLabel).not.toMatch(/[0-9a-f]{32}/u); expect(shown.providerLabel).toBeTruthy();
+  expect(shown.exact).toContain(model);
+});

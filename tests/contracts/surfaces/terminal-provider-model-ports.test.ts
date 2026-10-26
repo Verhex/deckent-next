@@ -384,13 +384,13 @@ describe('/model source', () => {
     const source0 = modelPanelSource(root, 'scope', host, options, 'en');
     const view = await source0.inspect();
     expect(view.defaultBlocked).toBeNull();
-    expect(view.notes).toContain("In use: chat (from this project's setting; it wins over your default).");
+    expect(view.notes).toContain("In use: native-chat (from this project's setting; it wins over your default).");
     const outcome = await source0.makeDefault!(view.choices[1]!);
     expect(writes).toEqual([expect.objectContaining({ action: 'set', keyPath: 'terminal.defaultModel', layer: 'global', scopeId: 'scope', value: ref('coder') })]);
     expect(outcome.status).toBe('applied');
     expect(outcome.lines.at(-1)).toBe('This project names its own model, so the project setting still wins here.');
     source = 'user-default';
-    expect((await source0.inspect()).notes).toContain('In use: chat (your default model).');
+    expect((await source0.inspect()).notes).toContain('In use: native-chat (your default model).');
   });
   it('OpenRouter carries the seed models and no next-slice note on its row or connect result', async () => {
     const { root, options } = await project({});
