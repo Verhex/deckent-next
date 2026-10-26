@@ -1,0 +1,21 @@
+# Deckent
+
+> Deckent is a customer-installed Agent Control & Execution Plane for authorized, isolated work and durable business processes. Secure Core runs independently; proprietary Enterprise is separate.
+
+These Markdown sources describe a pre-release. Read the AI installation guide first and preserve its person-only steps. The alpha.56 guide is candidate documentation; npm publication and site deployment are separate release gates.
+
+## Installation
+
+- [AI installation guide](https://raw.githubusercontent.com/Verhex/deckent-next/main/docs/ai-install.md): prerequisites, verified artifact installation, readiness, person-only steps and uninstall.
+- [AI kurulum rehberi](https://raw.githubusercontent.com/Verhex/deckent-next/main/docs/ai-install.tr.md): the same guide in Turkish.
+- [Product and source installation](https://raw.githubusercontent.com/Verhex/deckent-next/main/README.md): current released scope and first session.
+
+## Operation and limits
+
+- [Architecture overview](https://raw.githubusercontent.com/Verhex/deckent-next/main/docs/architecture-overview.md): typed contract, effects, isolation and signed Hub packages.
+- [Known limits](https://raw.githubusercontent.com/Verhex/deckent-next/main/docs/known-limits.md): refusals, recovery, platforms and unverified paths.
+
+## Optional
+
+- [Contributing](https://raw.githubusercontent.com/Verhex/deckent-next/main/CONTRIBUTING.md): source workflow and targeted checks.
+- [Security](https://raw.githubusercontent.com/Verhex/deckent-next/main/SECURITY.md): supported scope and private vulnerability reporting.

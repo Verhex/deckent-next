@@ -116,6 +116,8 @@ flowchart LR
 
 ## Get started
 
+For an AI assistant installing on your behalf, use the [AI installation guide](docs/ai-install.md); it names the steps only you can complete.
+
 ### Requirements
 
 - Linux, or Windows through WSL2, on x86_64. Native Windows is not supported, and on macOS the runtime service does not

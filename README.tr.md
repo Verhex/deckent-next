@@ -115,6 +115,8 @@ flowchart LR
 
 ## Başlarken
 
+Sizin adınıza kurulum yapan AI asistanı için [AI kurulum rehberini](docs/ai-install.tr.md) kullanın; yalnız sizin tamamlayabileceğiniz adımları belirtir.
+
 ### Gereksinimler
 
 - x86_64 üzerinde Linux ya da WSL2 ile Windows. Native Windows desteklenmiyor; macOS'ta runtime servisi henüz çalışmıyor

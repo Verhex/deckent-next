@@ -12,12 +12,18 @@ async function fixture(changes: Record<string, string | null> = {}) {
   await mkdir(join(root, 'scripts'));
   await mkdir(join(root, '.deckent/docs/architecture/nested'), { recursive: true });
   await mkdir(join(root, 'docs'));
+  await mkdir(join(root, 'site'));
   await cp(new URL('../../../scripts/lint-docs.mjs', import.meta.url), join(root, 'scripts/lint-docs.mjs'));
+  const catalog = 'src/surfaces/core/cli-kit/internal/command-catalog.ts';
+  await mkdir(join(root, 'src/surfaces/core/cli-kit/internal'), { recursive: true });
+  await cp(new URL('../../../' + catalog, import.meta.url), join(root, catalog));
   const files = { 'package.json': '{"version":"1.0.0-alpha.17"}', 'CHANGELOG.md': '# Changelog\n\n' + release(17) + '\n' + release(9),
     'PLAN.md': '# Plan\n', 'ARCHITECTURE.md': '# Architecture\n', 'README.md': 'Current alpha.17. Historical screenshot alpha.10.',
     'README.tr.md': 'Güncel alpha.17. Eski görüntü alpha.10.', 'SECURITY.md': 'Supports alpha.17.',
     'docs/guide.md': '# Guide\n[Türkçe](guide.tr.md) · [readme](../README.md)\n', 'docs/guide.tr.md': '# Kılavuz\n[English](guide.md) · [readme](../README.md)\n',
-    'docs/secret-helpers.md': '# Optional secret helpers\n', ...changes };
+    'docs/secret-helpers.md': '# Optional secret helpers\n',
+    'docs/ai-install.md': '# AI install\n`deckent init --yes --scope project --json`\n',
+    'docs/ai-install.tr.md': '# AI kurulum\n`deckent init --yes --scope project --json`\n', 'site/llms.txt': '# Deckent\n', ...changes };
   for (const [name, value] of Object.entries(files)) if (value !== null) await writeFile(join(root, name), value);
   return root;
 }
@@ -30,6 +36,18 @@ function lint(root: string) {
     return { status: result.status, output: readFileSync(receipt, 'utf8') };
   } finally { closeSync(fd); }
 }
+describe('AI installation command drift gate', () => {
+  it('checks AI guide commands and their flags against the live catalog in both languages, including shell blocks', async () => {
+    const valid = '# AI install\n```sh\ndeckent doctor --json\ndeckent uninstall --dry-run --json\n```\n`deckent policy mcp list --scope project`';
+    expect(lint(await fixture({ 'docs/ai-install.md': valid })).status).toBe(0);
+    for (const [command, error] of [['deckent invent', 'unknown CLI command deckent invent'],
+      ['deckent policy mcp invent', 'unknown CLI command deckent policy mcp invent'],
+      ['deckent doctor --purge', 'unknown CLI flag --purge for deckent doctor']]) {
+      const result = lint(await fixture({ 'docs/ai-install.tr.md': `# Kurulum\n\`\`\`sh\n${command}\n\`\`\`` }));
+      expect(result.status).toBe(1); expect(result.output).toContain(`docs/ai-install.tr.md: ${error}`);
+    }
+  });
+});
 describe('documentation release drift gate', () => {
   it('accepts landed alpha.17 with older numeric alpha.9, and CRLF checkouts', async () => {
     const root = await fixture({ 'CHANGELOG.md': [release(17), release(9)].join('\r\n') });
