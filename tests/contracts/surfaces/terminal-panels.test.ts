@@ -1,4 +1,7 @@
-import { writeFile } from 'node:fs/promises';
+import { writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { ConfigNumberWindow } from '#surfaces/core/terminal-panels/index.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
@@ -327,3 +330,27 @@ describe('TERM-PANEL: a window with a list draws one title and one key-hint row 
   });
 });
 
+
+
+it('H7 Hub window shows the scope/source card, cancelling never writes, and only a fresh apply reaches the shared handler', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hub-window-')), path = join(root, 'source.json'), requests: unknown[] = [], errors: unknown[] = [];
+  const input = { hubId: 'a'.repeat(64), publicKey: 'A'.repeat(59) + '=', expectedRevision: null, endpoint: 'https://hub.invalid/mcp', local: false, label: 'Company hub', trustPolicy: 'publisher-pinned' };
+  await writeFile(path, JSON.stringify(input));
+  const port = hubPanelPort({ root, scopeId: 's', options: {}, locale: 'en', maxBytes: 8192, timeoutMs: 10000,
+    execute: async (_root, request) => { requests.push(request); return { applied: true }; } });
+  const element = createElement(SettingsPanel, { kind: 'hub', ports: { hub: port }, labels: terminalPanelLabels('en'), push: () => undefined,
+    onError: error => { errors.push(error); }, errorText: String, openApproval: () => undefined, onClose: () => undefined });
+  const view = mount(element);
+  try {
+    await settle(80); await view.press(DOWN + ENTER); await view.press(path + ENTER, 100);
+    if (process.platform === 'win32') {
+      expect(errors).toEqual([expect.objectContaining({ code: 'CLI_INVOCATION_INPUT_UNAVAILABLE' })]); expect(requests).toHaveLength(0); return;
+    }
+    await armed(view.frame, 'y apply');
+    expect(view.frame()).toContain('https://hub.invalid/mcp'); expect(requests).toHaveLength(0);
+    await view.press('n'); expect(requests).toHaveLength(0);
+    await view.press(DOWN + ENTER); await view.press(path + ENTER, 100); await armed(view.frame, 'y apply');
+    await view.press('y', 100);
+    expect(errors).toEqual([]); expect(requests).toEqual([expect.objectContaining({ operation: 'hub.sources.add', input: expect.objectContaining({ scopeId: 's', endpoint: input.endpoint }) })]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

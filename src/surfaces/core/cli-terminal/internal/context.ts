@@ -1,3 +1,4 @@
+import type { HubCommandContext } from '#surfaces/core/cli-hub/index.js';
 import type { PermissionMode } from '#domain/index.js';
 import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
@@ -94,7 +95,7 @@ export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ re
 export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
   detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
-export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
+export interface TerminalLaunchContext extends MonitorCommandContext, HubCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;
   admitModelActivation?: import('#surfaces/core/cli-models/index.js').ModelActivationAdmissionHandler;

@@ -425,3 +425,63 @@ it('keeps a valid revocation when another cached package is corrupt, withholding
   expect((await selection(f)).get('t')?.seal.agentId).toBe('order-agent');
   store = await f.deps.openStore('read'); try { expect((await store.refreshResult('s', hub.keyId))?.items.find(item => item.id === 'invoice-agent')?.upstream).toBe('revoked'); } finally { store.close(); }
 });
+
+it('H7 dispatches wire-safe install/verify/export to the same client and rejects noncanonical base64 before writes', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const f = await setup(), app = new HubApplication({ client: f.app }), command = install();
+  const encoded = Buffer.from(command.bundles[0]!).toString('base64');
+  await expect(app.execute({ operation: 'hub.install', input: { ...command, bundles: [encoded + '\n'] } })).rejects.toMatchObject({ code: 'HUB_PACKAGE_INVALID' });
+  expect(count(f.path, 'hub_installs')).toBe(0);
+  expect(await app.execute({ operation: 'hub.install', input: { ...command, bundles: [encoded] } })).toMatchObject({ replayed: false });
+  expect(await app.execute({ operation: 'hub.verify', input: query })).toMatchObject({ version: '1.0.0' });
+  expect(await app.execute({ operation: 'hub.export', input: query })).toEqual({ encoding: 'base64', bundle: encoded });
+});
+
+it('H7 refuses unsigned AI remote writes before the governed transport; cancellation and missing connection never send', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const f = await setup(), remote = vi.fn(async () => 'sent'), app = new HubApplication({ client: f.app, remote });
+  const request = { operation: 'hub.publish', input: { schemaVersion: 1, scopeId: 's', commandId: 'publish', hubId: hub.keyId, input: { bundle: {} } } };
+  f.as(ai);
+  await expect(app.execute(request)).rejects.toMatchObject({ code: 'HUB_AUTHORITY_REFUSED' });
+  expect(remote).not.toHaveBeenCalled();
+  const controller = new AbortController(); controller.abort();
+  await expect(app.execute(request, controller.signal)).rejects.toThrow(); expect(remote).not.toHaveBeenCalled();
+  f.as({ id: 'person', issuer: 'os', subject: 'u', assurance: 'os-user', scopeIds: ['s'] });
+  await expect(new HubApplication({ client: f.app }).execute({ operation: 'hub.search', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId } })).rejects.toMatchObject({ code: 'HUB_CONNECTION_UNAVAILABLE' });
+  expect(remote).not.toHaveBeenCalled();
+});
+
+it('H7 scope policy refuses absent grants and approval-only grants; an explicit hub grant carries its revision', async () => {
+  const { HubPolicyAuthorization } = await import('#engine/core/hub-operations/index.js');
+  const person = { id: 'person', issuer: 'os', subject: 'u', assurance: 'os-user', scopeIds: ['s'] };
+  let grants: unknown[] = [];
+  const policy = new HubPolicyAuthorization({ load: async () => ({ schemaVersion: 1, revision: 'hub-policy', restrictions: [], grants }) });
+  await expect(policy.authorize('install', 's', person)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  grants = [{ id: 'hub-import', effect: 'require-approval', principals: 'all', scopes: ['s'], actions: ['install'], resource: { kind: 'hub', ids: ['s'] } }];
+  await expect(policy.authorize('install', 's', person)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+  grants = [{ ...grants[0] as object, effect: 'allow' }];
+  expect(await policy.authorize('install', 's', person)).toEqual({ revision: 'hub-policy', ruleId: 'hub-import' });
+});
+
+it('H7 scans every outbound package before network using the local known-secret snapshot', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const { snapshotKnownSecrets } = await import('#platform/index.js');
+  const f = await setup(), remote = vi.fn(async () => 'sent');
+  const app = new HubApplication({ client: f.app, remote, knownSecrets: () => snapshotKnownSecrets([{ name: 'SYNTHETIC', value: 'Review invoice.' }]) });
+  await expect(app.execute({ operation: 'hub.publish', input: { schemaVersion: 1, scopeId: 's', commandId: 'publish', hubId: hub.keyId,
+    input: { bundle: JSON.parse(Buffer.from(encodeHubBundle(bundle())).toString('utf8')) } } })).rejects.toMatchObject({ code: 'HUB_SECRET_REFUSED' });
+  expect(remote).not.toHaveBeenCalled();
+});
+
+it('H7 refuses AI operator revocation even with an enrolled key and grant, before transport', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const f = await setup(), key = ed25519Signer(Buffer.from(`302e020100300506032b657004220420${'04'.repeat(32)}`, 'hex')), remote = vi.fn(async () => 'sent');
+  const custody = { create: async () => ({ keyId: key.keyId, publicKey: key.spki.toString('base64') }), signAction: async () => { throw new Error('operator must never sign'); } };
+  const catalog = { ...f.catalog, custody };
+  await new SignerKeyApplication(catalog).enrol({ schemaVersion: 1, scopeId: 's', commandId: 'enrol-operator-denial', principal: { issuer: ai.issuer, subject: ai.subject }, label: 'AI publisher' });
+  f.as(ai);
+  const app = new HubApplication({ client: new HubClientApplication({ ...f.deps, catalog }), remote });
+  await expect(app.execute({ operation: 'hub.revoke', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'revoke',
+    input: { schemaVersion: 1, commandId: 'revoke', kind: 'package-version', id: 'acme/invoice@1.0.0', reason: 'Security withdrawal', authority: 'operator' } } })).rejects.toMatchObject({ code: 'HUB_AUTHORITY_REFUSED' });
+  expect(remote).not.toHaveBeenCalled();
+});

@@ -1,3 +1,5 @@
+import { hubToolDefinitions } from './hub-tools.js';
+import type { HubOperationHandler } from '#engine/index.js';
 import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList } from '#engine/index.js';
 import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { runProposalSchema, type RunProposal } from '#domain/index.js';
@@ -35,6 +37,7 @@ import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, sk
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
+  executeHub?: HubOperationHandler;
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
   listTargetQueue?(query: QueueList): Promise<unknown>;
   verifyAudit?(query: AuditVerifyQuery): Promise<AuditVerification>;
@@ -115,7 +118,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   // idempotent: true only when engine/adapter code proves a commandId-keyed (or identity-keyed) durable
   // replay returns the prior result without a second effect; evidence is file:line-cited per tool in
   // proof/D03-MCP-IDEMPOTENT-2026-09-27/review.md. No default — every entry states it explicitly.
-  const definitions: { readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; modelDelivery?: boolean; boundedDelivery?: boolean; invoke(input: unknown, delivery?: ModelInvocationDelivery | RuntimeServiceDelivery): Promise<unknown> }[] = [
+  const definitions: { readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; modelDelivery?: boolean; boundedDelivery?: boolean; invoke(input: unknown, delivery?: ModelInvocationDelivery | RuntimeServiceDelivery, signal?: AbortSignal): Promise<unknown> }[] = [
     { readOnly: true, destructive: false, idempotent: true, name: 'inspect_run', description: t('mcp.tool.inspectRun', {}, locale), schema: runQuerySchema,
       invoke: (input: unknown) => applications.inspectRun(runQuerySchema.parse(input)) },
     { readOnly: true, destructive: false, idempotent: true, name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
@@ -123,6 +126,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, idempotent: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  definitions.push(...hubToolDefinitions(applications.executeHub, locale));
   if (applications.inspectTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_delivery_queue', description: t('mcp.tool.inspectTargetQueue', {}, locale), schema: queueQuerySchema,
     invoke: input => applications.inspectTargetQueue!(queueQuerySchema.parse(input)) });
   if (applications.listTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'list_delivery_queue', description: t('mcp.tool.listTargetQueue', {}, locale), schema: queueListSchema,
@@ -374,7 +378,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
         if (!bounded) return failure(id, 'MCP_RESPONSE_LIMIT');
         delivery = bounded;
       }
-      const result = jsonToolResult(await tool.invoke(args, delivery));
+      const result = jsonToolResult(await tool.invoke(args, delivery, context.mcpReq.signal));
       if (!toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes)) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
         ? invocationLimit('MCP_RESPONSE_LIMIT') : failure(id, 'MCP_RESPONSE_LIMIT');
       return result;

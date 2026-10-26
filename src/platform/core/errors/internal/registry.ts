@@ -945,6 +945,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   HUB_DOWNGRADE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DOWNGRADE_REFUSED', p, l) }) },
   HUB_PACKAGE_REVOKED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PACKAGE_REVOKED', p, l) }) },
   HUB_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_CORRUPT', p, l) }) },
+  HUB_CONNECTION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_CONNECTION_UNAVAILABLE', p, l) }) },
   HUB_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_UNAVAILABLE', p, l) }) },
   HUB_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.HUB_OUTCOME_UNKNOWN', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },

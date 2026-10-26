@@ -69,3 +69,24 @@ it('refresh uses the governed MCP fetch and preserves both approval gates before
   await expect(reader(current, 0, new AbortController().signal)).rejects.toThrow();
   expect(f.counts()).toEqual({ dns: 1, tokens: 1 });
 });
+
+it('H7 person Hub steps refuse MCP and missing TTY witness before inspecting a project or opening storage', async () => {
+  const { executeConfiguredHub } = await import('#composition/core/hub/index.js');
+  const { withMcpPrincipal } = await import('#adapters/core/local-principal/index.js');
+  const request = { operation: 'hub.sources.add' as const, input: { ...source, trustPolicy: 'publisher-pinned' } };
+  let attestations = 0;
+  const witness = { attest: async () => { attestations++; return true; } };
+  await expect(withMcpPrincipal(() => executeConfiguredHub('/does-not-exist/h7', request, {}, { witness }))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(attestations).toBe(0);
+  await expect(executeConfiguredHub('/does-not-exist/h7', request, {}, { witness: { attest: async () => false } })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+});
+
+
+it('H7 remote operations share the first-use/effect boundary and never start network without its person decision', async () => {
+  const { governedHubOperations } = await import('#adapters/core/hub-http/index.js');
+  const f = await setup(), current = (await f.app.listSources({ schemaVersion: 1, scopeId: 's' }))[0]!;
+  f.approve(); f.revokeConsent();
+  const remote = governedHubOperations(f.deps, 'test.invalid/hub');
+  await expect(remote({ operation: 'hub.search', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, after: '', limit: 1 } }, current, new AbortController().signal)).rejects.toThrow();
+  expect(f.counts()).toEqual({ dns: 0, tokens: 0 }); expect(f.records.size).toBe(0);
+});

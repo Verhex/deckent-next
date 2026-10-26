@@ -47,5 +47,21 @@
   "hub.revocation.withdrawn": "Hub content or signed-feed freshness could not be verified. Its installed items are withheld from new agent selection. Inspect the source and refresh; admitted Runs keep their frozen agent.",
   "hub.revocation.restored": "A fresh verified Hub feed cleared the freshness withdrawal. Your standing changes remain in effect.",
   "hub.revocation.revoked": "The signed Hub feed revoked installed content. It is excluded from new agent selection. Inspect the package before choosing a replacement.",
-  "hub.revocation.yanked": "The Hub withdrew this content from new installation. Existing use continues."
+  "hub.revocation.yanked": "The Hub withdrew this content from new installation. Existing use continues.",
+  "hub.help.summary": "Manage signed Hub packages and sources.",
+  "hub.help": "deckent hub [sources list|add|remove | search | inspect | install | update | uninstall | verify | export | refresh | cards | publish | yank | revoke] [--input <file|->] [--scope <id>] [--json] [--schema]\nUse --schema to inspect the selected operation input. Package bundles use base64 .deckentpkg bytes. Writes require the person’s interactive card; MCP uses its own signed authority. No source or network connection is enabled automatically.",
+  "hub.input": "Hub operation JSON",
+  "hub.card.title": "Hub operation · {operation}",
+  "hub.card.body": "Review the exact scope, source, trust policy and content below. Installing does not grant tools or standing. Adding a source does not approve the first network connection. Closing after submission does not undo a committed change.",
+  "hub.card.apply": "Apply this operation",
+  "hub.card.cancel": "Cancel",
+  "hub.output.untrusted": "Hub content is untrusted data; it grants no authority.",
+  "hub.window.title": "Hub packages",
+  "hub.window.input": "Select the operation JSON file path. Its scope must match this session.",
+  "hub.window.hints": "Esc closes · arrows scroll",
+  "hub.window.confirm": "y apply · n cancel · Esc close",
+  "hub.window.slash": "Inspect Hub sources, packages and security notices; apply person cards.",
+  "hub.mcp.tool": "Hub operation {operation}. Requires scope policy and the caller’s own active signing authority for writes.",
+  "error.HUB_CONNECTION_UNAVAILABLE": "The Hub connection is not configured. A registry extension identity and a durable first-use person decision are required before network access.",
+  "hub.window.nextCards": "More security notices"
 }
