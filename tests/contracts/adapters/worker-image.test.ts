@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readWorkerImageHeldVersion, prepareWorkerImageBuildContext, readWorkerImageSources, resolveWorkerBuildPlan, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { readWorkerImageHeldVersion, prepareWorkerImageBuildContext, readWorkerImageSources, resolveWorkerBuildPlan, runWorkerImageBuild, workerImageEstimate, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { layeredWorkerRecipeSchema } from '#engine/index.js';
 import { parseVersionHistory, validateRecipe, assertVersionAdvances, heldVersion, adoptionProvenance } from '../../../assets/worker-image/history.mjs';
 import { baseDockerfile, imageDockerfile } from '../../../assets/worker-image/layers.mjs';
@@ -12,6 +12,12 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const packageRoot = process.cwd();
 
+it('IMGOPT: the image card names the measured base plus exactly the selected CLIs, every recipe CLI is measured, an unmeasured one is not guessed', async () => {
+  const ids = layeredWorkerRecipeSchema.parse((await readWorkerImageSources(packageRoot)).recipe).providers.map(provider => provider.id);
+  const all = workerImageEstimate(ids), single = ids.map(id => workerImageEstimate([id]));
+  expect(single.every(row => row.sizeGigabytes! > 0 && row.sizeGigabytes! < all.sizeGigabytes! && row.referenceMs! < all.referenceMs!)).toBe(true);
+  expect(workerImageEstimate(['unmeasured-cli'])).toEqual({ sizeGigabytes: null, referenceMs: null });
+});
 
 it('v3 resolves at plan time from the install registry, isolates CLI cache inputs, guards lineage and refuses unknown or credentialed sources', async () => {
   const recipe = layeredWorkerRecipeSchema.parse((await readWorkerImageSources(packageRoot)).recipe);
