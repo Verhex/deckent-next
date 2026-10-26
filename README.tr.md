@@ -491,7 +491,7 @@ anlatır.
 - **İşletin**: salt okunur görünüm için `deckent monitor`, sağlık için `deckent doctor`, ayarlar için `deckent config`;
   isterseniz zamanlanmış, doğrulanabilir kurtarma setleri için `deckent backup create|verify|restore`.
 - **İmzalı içeriği yönetin**: imzalı ajan ve skill paketlerini içe aktarıp doğrulayın, güven ve iptal kayıtlarını inceleyin,
-  değişiklikleri kapsamlı kartlarla kararlaştırın. Halka açık Hub bağlantısı dağıtım kurulumu ister; varsayılan kaynak açılmaz.
+  değişiklikleri kapsama bağlı kartlarla kararlaştırın. Halka açık Hub bağlantısı dağıtım kurulumu ister; varsayılan kaynak açılmaz.
 - **Kurulumu önizleyerek kaldırın**: `deckent uninstall --dry-run --json` planı gösterir. Uygulamak kendi terminalinizde
   kart ister; veriler varsayılan kalır, purge yönetilen yedek ve kanıtlanmış sahiplik gerektirir. İmajlar korunur.
   Adımları ve kalan sınırları [AI kurulum rehberi](docs/ai-install.tr.md#kaldırma) anlatır.
