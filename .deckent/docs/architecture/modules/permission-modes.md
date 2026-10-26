@@ -325,8 +325,9 @@ Main vault = the installation store. Project vault = encrypted-file store under 
 project's anchor (a linked worktree's main working tree), bound to the anchor's data root and git common dir. `.deck` (references only) selects `project`
 per name; a main key is used in a project only with a grant decided on `secret`/`set` and sealed as `authority-decision` before `grants.json`. One resolver
 serves every provider read; one inventory serves `secret list [--all]`. The terminal turn checks the provider credential locally before binding;
-`SECRET_GRANT_REQUIRED` on a solo attested terminal opens one approval-priority card; yes = `secret grant` (source card); the turn restarts once. An agent
-shell's authority commands are the edit-authority floor in every mode. Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).
+`SECRET_GRANT_REQUIRED` on a solo attested terminal opens one approval-priority card; yes = `secret grant` (source card); the turn restarts once. A recognised agent-shell
+authority call keeps the edit-authority card in every mode; the text/argv classifier is defense in depth, so `false` never means safe — the boundary is
+semantic policy/approval for the principal plus enforced sandbox/socket custody (host fallback does not isolate; a TTY witness does not prove a person on the same OS account). Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).
 
 ## U5A own-mode opening (alpha.56 candidate)
 

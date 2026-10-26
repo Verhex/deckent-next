@@ -56,7 +56,8 @@ const productArgvRunsAuthority = (words: readonly string[]) => words.some((word,
  * — directly, through the product's own entry, a launcher (interpreter, `-c` string, eval, package runner, privilege) or a pty wrapper (`script`, `unbuffer`,
  * `expect`: they forge the terminal witness). A pty wrapper whose payload cannot be read (an expansion), or a command the strict scanner cannot read that
  * names a pty wrapper, counts too: when it cannot be told what runs, the card stays. The answer is the `authority` tier — the `edit-authority` cell, kept in
- * full access. Text that only mentions the words (`echo`, a commit message) does not count.
+ * full access. Text that only mentions the words (`echo`, a commit message) does not count. Defense in depth (lead 2026-10-26, AUDIT-3DEC D3): `false`
+ * means not recognised, never safe; the boundary is semantic policy/approval plus enforced sandbox and socket custody.
  */
 export function classifyShellAuthority(command: string): boolean {
   return typeof command === 'string' && command.length > 0 && runsAuthority(command, 0);
