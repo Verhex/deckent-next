@@ -218,4 +218,16 @@ describe('mouse reports', () => {
     expect(text).toBe('akaşi ğüİ'); expect(text).not.toContain('\ufffd'); expect(wheel).toEqual([1]);
     mouse.close();
   });
+  it('N1: bytes another view reads while the terminal is handed over never reach the composer stream', async () => {
+    const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
+    const mouse = mouseFilteredInput(real);
+    mouse.input.setEncoding('utf8'); real.emit('data', Buffer.from('queued'));
+    // The /setup window reads the same TTY while it owns it; Node emits 'data' for its reads too.
+    mouse.hold(true); real.emit('data', Buffer.from('abc\r')); mouse.hold(false);
+    let text = ''; mouse.input.on('data', (chunk: string) => { text += chunk; });
+    real.emit('data', Buffer.from('x'));
+    await settle(10);
+    expect(text).toBe('x');
+    mouse.close();
+  });
 });
