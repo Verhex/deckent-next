@@ -1,10 +1,14 @@
+import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V17_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   getPolicyVocabulary, matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { DecisionPolicyAuthorization } from '#engine/core/decision/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
+
+// Historical fixtures before v16 exclude both later additive deltas.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, ...FIRST_RUN_V17_RULE_IDS];
 
 // I-POL (alpha.48, owner A48-D3 + MON-NAMES + CA-1 + C3, 2026-10-19): one bump v12 → v13 with seven add-only rules. The named installing person
 // (the founding admin of every identity profile: the template does not depend on the profile) gets six; the MCP actor gets one read. No authority
@@ -15,11 +19,11 @@ const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds:
 const mcp = { ...owner, ...mcpRef, assurance: 'workload-verified' as const };
 const colleague = { ...owner, id: 'colleague', subject: 'colleague' };
 const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
-  policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds, recoveryRules: FIRST_RUN_RECOVERY_RULES };
+  policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, firstCommitOperationId: 'coding.first-commit', executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds, recoveryRules: FIRST_RUN_RECOVERY_RULES };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
 // S4 + S4B-1 (alpha.55) + D1 (alpha.56): the current template is v16; v14 (memory reads), v15 and v16 (FIRST_RUN_CURRENT_UPGRADE_RULE_IDS) are add-only deltas over v13;
 // v13 is the current one without both (`v14ids` names every later rule).
-const current = firstRunPolicyTemplate(input), v14ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.memoryInspect, FIRST_RUN_UPGRADE_RULE_IDS.observeMemory, ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+const current = firstRunPolicyTemplate(input), v14ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.memoryInspect, FIRST_RUN_UPGRADE_RULE_IDS.observeMemory, ...FIRST_RUN_V15_RULE_IDS, ...POST_V15_RULE_IDS];
 const v14 = current.policy.grants.filter(rule => v14ids.includes(rule.id));
 const built = { version: 13, bindings: current.bindings, policy: { ...current.policy, revision: 'first-run-template-v13', grants: current.policy.grants.filter(rule => !v14ids.includes(rule.id)) } };
 const v13ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.environmentInstall, FIRST_RUN_UPGRADE_RULE_IDS.installationRepair, FIRST_RUN_UPGRADE_RULE_IDS.modelDeactivation,
@@ -143,7 +147,7 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
       // S8-3: the catalog aggregator's exact list.
       'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory',
       // v16 (alpha.56 D1): the recovery cells at require-approval (the first batch of 32; a second run adds the rest).
-      ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].slice(0, POLICY_CHANGE_MAX));
+      ...POST_V15_RULE_IDS].slice(0, POLICY_CHANGE_MAX));
     for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson)
       : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : rule.id.startsWith('first-run-memory-evaluator') ? memoryEvaluatorPrincipalRef(shapePerson)
         : rule.id === 'first-run-recovery-model' ? recoveryPrincipalRef(shapePerson) : rule.id.startsWith('first-run-catalog-aggregator') ? catalogAggregatorPrincipalRef(shapePerson) : shapePerson]);
@@ -151,14 +155,14 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
     // Applied, a second plan adds only the rest of the batch, then is current: no repeated additions.
     const more = (grants: readonly unknown[]) => namedPersonPolicyAdditions({ ...policy, grants: [...policy.grants, ...grants] }, { ...names, person: shapePerson, scopeId: 'live', serviceId: 'local' });
     const rest = more(plan.rules);
-    expect(rest.status === 'plan' && rest.rules.every(rule => FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.includes(rule.id)), name).toBe(true);
+    expect(rest.status === 'plan' && rest.rules.every(rule => POST_V15_RULE_IDS.includes(rule.id)), name).toBe(true);
     expect(more([...plan.rules, ...(rest.status === 'plan' ? rest.rules : [])]).status).toBe('current');
   }
 });
 
 it('since v14 the rollback delta is the latest version\'s: no v13 rule is a rollback candidate (it stays like v11 and v12); doctor recognises v13', () => {
-  const delta = firstRunTemplateRollback(current.policy, person, 'installation', FIRST_RUN_RECOVERY_RULES);
-  expect(delta.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(delta.conflicts).toEqual([]);
+  const delta = firstRunTemplateRollback(current.policy, person, 'installation', FIRST_RUN_RECOVERY_RULES, 'coding.first-commit');
+  expect(delta.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_V17_RULE_IDS]); expect(delta.conflicts).toEqual([]);
   expect(delta.rules.some(rule => v13ids.includes(rule.id))).toBe(false);
   for (const id of [FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt, ...v12ids]) expect(v14ids.includes(id), id).toBe(false);
   // A customized v13 rule is not part of the delta: neither removed nor reported.

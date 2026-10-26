@@ -147,7 +147,9 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     await access(cli);
     const f = await fixture(true);
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b'], ['Deckent workline', '/exit\r']]);
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b'],
+      // U4: a first launch opens the sequential onboarding before the Workline; Esc ("Later") defers each screen.
+      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();
@@ -156,6 +158,8 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     // The setup summary (the same flow as `deckent init`), then the terminal on the scope the window wrote; no card again, no error.
     expect(run.output).toContain('Permissions: applied');
     expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
+    expect(run.output.indexOf('Step 1/')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
+    expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Ready!'));
     expect(run.output.slice(run.output.indexOf('Permissions: applied'))).not.toContain(CARD);
     expect(run.output).not.toMatch(/CLI_INSTALLATION_MISSING|TERMINAL_SCOPE_REQUIRED/u);
     expect((await readdir(f.root)).sort()).toEqual(['.deckent', '.git']);

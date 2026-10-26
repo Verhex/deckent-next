@@ -1,12 +1,16 @@
+import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
 import { expect, it } from 'vitest';
 import { firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback, namedPersonPolicyAdditions, mcpPrincipalRef,
-  FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, RECOVERY_ROLLOUT, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
+  FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V17_RULE_IDS, POLICY_CHANGE_MAX, RECOVERY_ROLLOUT, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { DispatchPolicyAuthorization, PoolControlPolicyAuthorization, WorkTargetPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/core/policy/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
+// Historical fixtures before v16 exclude both later additive deltas.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, ...FIRST_RUN_V17_RULE_IDS];
+
 const person = { issuer: 'host', subject: 'owner' };
 const principal = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
-const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'],
+const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', firstCommitOperationId: 'coding.first-commit', executionEnvironmentIds: ['docker'],
   recoveryRules: RECOVERY_ROLLOUT.rules.map(id => ({ id, version: 1 })) };
 const input = { scopeId: 'installation', principal: person, ...names, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['run_shell'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' };
@@ -15,7 +19,7 @@ const built = firstRunPolicyTemplate(input);
 // v10 never had the v12 owner rules either (POLICY-V12): the exact v10 bytes are the current template minus the v11 and v12 rules.
 const v12ids = ['first-run-scope-inspect', 'first-run-service-shutdown'];
 // I-POL (alpha.48): nor the v13 delta, which is now the rollback delta (owner A48-D3, D3c).
-const v13ids: readonly string[] = [...['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory'], ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]; // the v13 delta, v14's (S4), v15's (S4B-1 + S7) and v16's (D1), all later than this file's version
+const v13ids: readonly string[] = [...['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory'], ...FIRST_RUN_V15_RULE_IDS, ...POST_V15_RULE_IDS]; // the v13 delta, v14's (S4), v15's (S4B-1 + S7) and v16's (D1), all later than this file's version
 const v10 = { ...built.policy, revision: 'first-run-template-v10', grants: built.policy.grants.filter(rule => !ids.includes(rule.id) && !v12ids.includes(rule.id) && !v13ids.includes(rule.id)) };
 const identity = { scopeId: 'installation', runId: 'run', taskId: 'task', attemptId: 'attempt', generation: 1 };
 const source = (policy: unknown) => ({ async load() { return resolvePolicyBindings(policy, built.bindings); } });
@@ -76,8 +80,8 @@ it('preserves customized v11 ids and existing coverage; since v13 no v11 rule is
   if (plan.status !== 'plan') throw new Error('missing v11 plan');
   expect(plan.rules.map(rule => rule.id)).toEqual([ids[2], ...v12ids, ...v13ids].slice(0, POLICY_CHANGE_MAX));
   // The rollback holds only the current (v16) delta: neither the content-equal v11 rules nor the customized one are touched or reported.
-  const rollback = firstRunTemplateRollback({ ...built.policy, grants: built.policy.grants.map(rule => rule.id === changed.id ? changed : rule) }, person, undefined, names.recoveryRules);
-  expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
+  const rollback = firstRunTemplateRollback({ ...built.policy, grants: built.policy.grants.map(rule => rule.id === changed.id ? changed : rule) }, person, undefined, names.recoveryRules, 'coding.first-commit');
+  expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_V17_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
   expect(firstRunTemplateRollback(built.policy, mcpPrincipalRef(person), undefined)).toEqual({ rules: [], conflicts: [] });
   expect(firstRunPolicyTemplate({ ...input, principal: mcpPrincipalRef(person) }).policy.grants.filter(rule => ids.includes(rule.id))).toEqual([]);
 });

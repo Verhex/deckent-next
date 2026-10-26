@@ -5,7 +5,7 @@ const observation = { schemaVersion: 2 as const, environment: { platform: 'linux
   language: { configured: 'en' as const, requested: null, system: null }, folder: { installation: 'present' as const, homeRoot: false, configuredScope: 's', suggestedScope: null },
   profile: { available: [], selected: null }, policy: { state: 'current' as const }, sandbox: { realm: 'bubblewrap' as const, selfTest: 'ok' as const, usernsRestricted: false },
   model: { connections: 1 }, check: { state: 'ok' as const } };
-const snapshot: OnboardingSnapshot = { configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) }, observation, plan: planSetup(observation, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), answers: {}, deferred: [],
+const snapshot: OnboardingSnapshot = { configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) }, observation, plan: planSetup(observation, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), answers: {}, deferred: [], modelUsable: true,
   folder: 'orders', folderFacts: { kind: 'documents', readme: false, tests: false }, scopeId: 's',
   hosts: [{ id: 'first', cli: 'absent', login: 'found' }, { id: 'second', cli: 'found', login: 'found' }],
   budget: { needed: true, presetUsd: 10, presetsUsd: [5, 10, 25], currentUsd: 0 }, permissions: { state: 'applied', reason: '' }, pending: [] };
@@ -34,6 +34,11 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const reopened = createOnboardingSession(port, { ...snapshot, deferred }, true);
   expect(reopened.model().steps.map(row => row.kind)).toEqual(['stage', 'budget', 'first-task']);
   expect(reopened.model().steps[0]?.id).toBe('core:model');
+  // İ-2: a deferred model screen returns only while no model is usable (a chat-only activation is usable without a worker catalog row).
+  const unconnected = { ...observation, model: { connections: 0 } };
+  const chatOnly = { ...snapshot, observation: unconnected, plan: planSetup(unconnected, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), deferred: ['core:model'] };
+  expect(onboardingSteps(chatOnly).some(row => row.id === 'core:model')).toBe(false);
+  expect(onboardingSteps({ ...chatOnly, modelUsable: false })[0]?.id).toBe('core:model');
   let attestations = 0;
   const stopped = { assertPerson: async () => { attestations++; throw new Error('must not open'); } } as OnboardingPort;
   const { runOnboardingSession } = await loadOnboardingScreens();
@@ -59,4 +64,11 @@ it('U4C: a relaunched ready card skips settled owners, refuses a refused write a
   const blocked = { ...snapshot, plan: { ...snapshot.plan, stages: [stage('execution:worker', true),
     { ...stage('execution:worker-settings', true), state: 'blocked' as const }, stage('work:kind', true), stage('work:pool', true)] } };
   expect(onboardingSteps(blocked).find(row => row.kind === 'ready')?.stages[0]?.state).toBe('blocked');
+});
+
+it('U4E G2: install permission recovery precedes an absent model; not-applicable profiles never get a permission success card', () => {
+  const missing = { ...snapshot, observation: { ...observation, model: { connections: 0 } }, budget: { ...snapshot.budget, needed: false },
+    permissions: { state: 'needs-profile' as const, reason: 'onboarding.permissions.profileMissing' } };
+  expect(onboardingSteps(missing)[0]?.kind).toBe('permissions');
+  expect(onboardingSteps({ ...missing, permissions: { state: 'not-applicable', reason: '' } }).some(step => step.kind === 'permissions')).toBe(false);
 });

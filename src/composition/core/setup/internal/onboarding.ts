@@ -15,7 +15,7 @@ import { startConfiguredRunIntent, transitionConfiguredRunIntent } from '#compos
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { previewOnboardingConsent } from './consent-preview.js';
 import type { AddCodingProfile, configuredSetup } from './wiring.js';
-import { observeOnboardingPermissions, applyOnboardingPermissions } from './permissions.js';
+import { observeSetupPermissions, applySetupPermissions } from './permissions.js';
 import { applyConfiguredFirstCommit } from './first-commit.js';
 /** Trusted host binding. Canonical launch-folder and authenticated principal are derived here, never accepted as authority from UI answers. */
 export async function configuredOnboarding(host: object, setup: Pick<ReturnType<typeof configuredSetup>, 'observeSetup' | 'applySetupStage'>,
@@ -55,6 +55,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     const currentUsd = budgetReason ? null : account?.checkpoint ? account.checkpoint.account.budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd : 0;
     // Billing comes from the connected model's registry/profile, not a provider-name list.
     const chat = await terminal.describeTerminalChatPlan?.(root, options);
+    // İ-2 is about a usable model (the same read as the /model window), not only the worker catalog; an unreadable answer counts as none.
+    const modelUsable = (await terminal.inspectInvocableModels?.(root, scopeId, options).catch(() => null))?.models.some(row => row.availability.invocable) ?? false;
     const binding = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId);
     const pending: RunIntentRecord[] = [];
     const reader = await openSqliteRunProposalReader(await context.path(), config.storage.sqlite);
@@ -67,11 +69,11 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       }
     } finally { reader.close(); }
     return { configBasis, plan: planned, observation: observed.observation, answers: values, deferred: (await store.list(principal, folder)).map(row => row.stageId),
-      folder, folderFacts: { kind, readme: visible.some(name => /^readme(?:\.|$)/iu.test(name)), tests: visible.some(name => /^(test|tests|spec|specs)$/u.test(name)) }, scopeId,
+      modelUsable, folder, folderFacts: { kind, readme: visible.some(name => /^readme(?:\.|$)/iu.test(name)), tests: visible.some(name => /^(test|tests|spec|specs)$/u.test(name)) }, scopeId,
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
       hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
-        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeOnboardingPermissions(root, scopeId, options), pending };
+        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending };
   };
   return { observe, assertPerson,
     async previewFirstCommit(message: string, include: readonly string[] = []) {
@@ -81,7 +83,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       await assertPerson(); return applyConfiguredFirstCommit(root, directory, scopeId, input, options, signal);
     },
     async firstCommitRecovery() { await assertPerson(); return observeFirstCommitRecovery(directory, options.env ?? process.env); },
-    async permissions(digest: string) { await assertPerson(); await applyOnboardingPermissions(root, scopeId, digest, options); },
+    async previewPermissions(profile?: Readonly<{ id: string; version: number }>) { await assertPerson(); return observeSetupPermissions(root, scopeId, options, profile); },
+    async permissions(digest: string, profile?: Readonly<{ id: string; version: number }>) { await assertPerson(); await applySetupPermissions(root, scopeId, digest, options, undefined, profile); },
     async previewProfile(stage: SetupStage) {
       await assertPerson(); const input = stage.operation?.input ?? {};
       const result = await (host as { addCodingProfile?: AddCodingProfile }).addCodingProfile!(root, { provider: input['provider'], kind: input['kind'], image: input['image'], apply: false }, options);

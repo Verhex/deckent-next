@@ -12,7 +12,15 @@ export function setupDocument(plan: SetupPlan, apply: Readonly<{ requested: bool
   return { schemaVersion: SETUP_DOCUMENT_SCHEMA_VERSION, planSchemaVersion: plan.schemaVersion, planDigest: plan.planDigest, registryDigest: plan.registryDigest,
     stages: plan.stages.map(stage => ({ id: stage.id, namespace: stage.namespace, phase: stage.phase, state: stage.state, title: stage.title, reason: stage.reason,
       question: stage.question, default: stage.default, cli: stage.cli, operation: stage.operation, autoEligible: stage.autoEligible })),
+    authority: setupAuthority(plan),
     apply: { requested: apply.requested, results: apply.results } };
+}
+
+/** Derived from the install carrier's observation, never from --yes or an apply exit code. */
+export function setupAuthority(plan: SetupPlan) {
+  const stage = plan.stages.find(row => row.id === 'permissions:start-mode');
+  return { status: !stage ? 'unavailable' as const : stage.state === 'done' ? 'applied' as const : stage.state === 'skipped' ? 'not-applicable' as const : 'authority-pending' as const,
+    state: stage?.state ?? null, nextAction: stage && !['done', 'skipped'].includes(stage.state) ? 'setup.permissions.pending' : null };
 }
 
 /** A message the plan names by key (stage titles, reasons, questions are message keys of the setup contract): read from the shared
@@ -35,7 +43,7 @@ export const languageName = (code: string, locale: Locale) => LANGUAGE_NAMES[cod
 export function stageText(plan: SetupPlan, key: string, params: Readonly<Record<string, string | number>>, locale: Locale): string {
   const shown = Object.fromEntries(Object.entries(params).map(([name, value]) => {
     const stage = name === 'stage' ? plan.stages.find(item => item.id === value) : undefined;
-    return [name, stage ? stageTitle(stage, locale) : name === 'language' ? languageName(String(value), locale) : terminalSafeText(String(value))];
+    return [name, stage ? stageTitle(stage, locale) : name === 'language' ? languageName(String(value), locale) : name === 'mode' || name === 'effective' ? terminalSafeText(setupMessage(`terminal.mode.stop.${value}`, {}, locale)) : terminalSafeText(String(value))];
   }));
   return setupMessage(key, shown, locale);
 }
@@ -65,6 +73,7 @@ export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonl
   });
   for (const result of apply.results) lines.push(applyLine(plan, result, locale));
   if (!apply.results.some(result => result.status === 'applied')) lines.push(apply.requested ? t('setup.render.nothingAppliedYes', {}, locale) : t('setup.render.nothingApplied', {}, locale));
+  if (setupAuthority(plan).status === 'authority-pending') lines.push('', t('setup.permissions.pending', {}, locale));
   // The installation is complete once the final check settled; the first open sets up the provider and the first job (onboarding).
   if (plan.stages.some(stage => stage.id === 'core:final-check' && stage.state === 'done')) lines.push('', t('setup.install.done', {}, locale));
   return lines.join('\n');

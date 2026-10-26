@@ -290,6 +290,8 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
     const context = { env: {}, initializeNativeCodingRegistry: async (_root: string, input: unknown) => { calls.push(input); return { status: 'current' }; },
       installConfiguredExecutionPool: async (_root: string, _scope: string, apply: boolean) => { calls.push(apply); return { status: 'conflict', configured: null }; } } as unknown as SetupCommandContext;
     const input = { scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
+    // U4-1r: the first registry is bound to the chosen provider's image; without it nothing is previewed.
+    expect(await runForegroundStage(context, '/x', stage('work.registry', { ...input, image: undefined }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
     expect(await runForegroundStage(context, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'applied' });
     expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
     expect(await runForegroundStage(context, '/x', stage('work.pool', { scopeId: 'erp-demo' }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'POOL_CONFLICT' });

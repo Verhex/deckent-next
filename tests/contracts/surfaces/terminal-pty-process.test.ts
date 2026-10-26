@@ -18,6 +18,7 @@ import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js'
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget } from '../../fixtures/priced-provider.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
 
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -186,6 +187,7 @@ async function governedChat() {
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+  await settleOnboarding(resolveProductLayout({ projectRoot, root: data }));
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const activation = new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
     new ModelBindingApplication({ async read() { return catalog; } }), async () => openSqliteModelActivationStore(ledger, sqlite), () => 1);

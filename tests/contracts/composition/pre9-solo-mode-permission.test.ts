@@ -92,7 +92,7 @@ describe.skipIf(process.platform !== 'linux')('PRE-9: the installation owner ope
       { id: RULE_IDS['full-access'], effect: 'allow', actions: ['set'], scopes: [SCOPE], principals: named, resource: { kind: 'permission-mode', ids: ['full-access'] } },
     ]);
     const change = f.audit().map(event => event.subject).filter(subject => subject.kind === 'authority-change').at(-1);
-    expect(change).toMatchObject({ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 16 } }, counts: { grantsAdded: 2, grantsRemoved: 0 } });
+    expect(change).toMatchObject({ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 17 } }, counts: { grantsAdded: 2, grantsRemoved: 0 } });
     expect((change as { commandId: string }).commandId.startsWith(INSTALLER_PERMISSION_MODES_COMMAND_PREFIX)).toBe(true);
     // The same set again changes nothing.
     expect(await open(f.root, ['full-auto', 'full-access'])).toMatchObject({ status: 'current' });
@@ -116,7 +116,12 @@ describe.skipIf(process.platform !== 'linux')('PRE-9: the installation owner ope
     expect(await snapshot(f.root)).toEqual(before);
     await openWitnessed(f.root, ['full-auto']);
     const prior = f.audit().filter(event => event.subject.kind === 'authority-change').length;
-    expect(await openOwnPermissionMode(f.root, input, {}, uid(), attested)).toBe(true); expect(asks).toBe(1);
+    let openedRevision: string | null = null;
+    const grantPreview = await open(f.root, [], false);
+    expect(await openOwnPermissionMode(f.root, { ...input, expect: grantPreview.revision!, onOpened: receipt => { openedRevision = receipt.revision; } }, {}, uid(), attested)).toBe(true); expect(asks).toBe(1);
+    expect(openedRevision).toBe((await open(f.root, [], false)).revision);
+    // Even an already-open mode refuses a stale carrier preview before taking the current fast path.
+    await expect(openOwnPermissionMode(f.root, { ...input, expect: grantPreview.revision! }, {}, uid(), attested)).rejects.toMatchObject({ code: 'PERMISSION_MODE_CONFLICT' });
     expect((await f.permissionRules()).map(rule => rule.id)).toEqual([RULE_IDS['full-auto'], RULE_IDS['full-access']]);
     expect(f.audit().filter(event => event.subject.kind === 'authority-change')).toHaveLength(prior + 1);
     // Review an old revision, then move it with another authorized writer. The accepted old card must never apply.
@@ -291,7 +296,7 @@ it('the refusal texts point to the product command for the installation owner (E
 // Guards: they pin the invariants the design relies on.
 it('guard: the first-run template stays v14 and opens no mode by default (a fresh install runs standart until the owner opens one)', () => {
   const built = firstRunPolicyTemplate({ scopeId: SCOPE, principal: { issuer: 'host', subject: 'owner' }, ...FIRST_RUN_TOOL_NAMES });
-  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(16);
+  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(17);
   expect(built.policy.schemaVersion === 2 && built.policy.grants.some(rule => rule.resource.kind === 'permission-mode')).toBe(false);
 });
 
