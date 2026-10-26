@@ -5,6 +5,7 @@ import { configSections, configRegistryGeneration, createDefaultConfig } from '#
 import { isRecord, isSensitiveConfigKey, redactSensitive } from '#platform/index.js';
 import { resolveLocale, MESSAGE_REGISTRY } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
+import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
 export function configDefinitions(): ReadonlyMap<string, ConfigDefinition> {
   const definitions = new Map<string, ConfigDefinition>();
@@ -120,7 +121,8 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const descriptionKey = schema.description ?? definition.descriptionKey;
   return { key: keyPath, value, defaultValue, source, descriptionKey,
     description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[descriptionKey] ?? descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
-    binding: definition.binding, apply: definition.apply, redacted: value === '[REDACTED]' };
+    binding: definition.binding, apply: path.length > 1 && (RESTART_EXEMPT as Readonly<Record<string, readonly string[]>>)[path[0]!]?.includes(path[1]!) ? 'live' : definition.apply,
+    redacted: value === '[REDACTED]' };
 }
 /** A card's bounded display copy of a value at `keyPath` (T3 L2): redacted like every field view, JSON text, cut with "…" past `max`. */
 export function configDisplayText(snapshot: ConfigSnapshot, keyPath: string, value: unknown, max: number): string {

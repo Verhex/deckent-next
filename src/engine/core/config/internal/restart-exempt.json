@@ -1,5 +1,14 @@
 {
   "admission": [
     "registry"
+  ],
+  "terminal": [
+    "defaultModel",
+    "theme",
+    "banner",
+    "clearOnStart",
+    "layout",
+    "notify",
+    "viewportRows"
   ]
 }
