@@ -355,8 +355,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (deferred) accessNotices.push({ level: 'info', text: deferred });
     } catch (error) {
       if (context.signal?.aborted) throw error;
-      const code = (error as { code?: unknown } | null)?.code;
-      accessNotices.push({ level: 'warning', text: t('onboarding.session.unavailable', { code: typeof code === 'string' ? code : '-' }, locale) });
+      const { code: raw, params: p } = (error ?? {}) as { code?: unknown; params?: Readonly<Record<string, unknown>> }, code = typeof raw === 'string' ? raw : '-', family = p?.['family'], field = p?.['field']; // a refused fact names its family and field
+      accessNotices.push({ level: 'warning', text: typeof family === 'string' && typeof field === 'string' ? t('onboarding.session.unavailableField', { code, family, field }, locale) : t('onboarding.session.unavailable', { code }, locale) });
     }
     config = await loadConfig(root, { ...options, force: true }) as typeof config;
     chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;

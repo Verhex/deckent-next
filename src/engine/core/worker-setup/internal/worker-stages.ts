@@ -6,6 +6,8 @@ const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 /** BR1: the worker image as composition observes it (configuration, this installation's newest receipt, a read-only `image inspect` of the
  * configured image or else the receipt's, the Git path from coding detection). Absent until an installation can be read. */
 export const workerFactsSchema = z.object({ configured: imageId.nullable(), receipt: z.object({ imageId, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
+  // A v3 receipt's build duration (`timings.totalMs`), as the receipt view reports it for the consent card's estimate.
+  durationMs: z.number().nonnegative().finite().optional(),
   images: z.array(z.object({ imageId, providers: z.array(z.string()), tagVersion: z.string().regex(/^r[1-9][0-9]*(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u).nullable().optional() }).passthrough()).optional() }).strict().nullable(),
   provider: z.string().optional(), providerPending: z.boolean().optional(), acquisition: workerImageStateSchema.nullable().optional(),
   image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: z.string().min(1).max(4096).nullable() }).strict();

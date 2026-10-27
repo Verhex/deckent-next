@@ -6,6 +6,12 @@ import { CORE_STAGE_EVALUATORS, CORE_STAGE_TITLES } from './core-stages.js';
 import { SetupStageRegistry } from './registry.js';
 import { canonicalSetupJson } from './canonical.js';
 
+/** The first refused fact's dotted path (an unrecognized key appended): key names and indexes only, never a value, bounded for a one-line notice. */
+function refusedField(error: unknown): string {
+  const issue = (error as { issues?: readonly { path?: readonly (string | number)[]; keys?: readonly string[] }[] } | null)?.issues?.[0];
+  const path = [...issue?.path ?? [], ...issue?.keys?.slice(0, 1) ?? []].map(String).join('.').replace(/[^A-Za-z0-9_.:-]/gu, '?');
+  return path ? path.slice(0, 120) : '-';
+}
 const freezeStage = (stage: SetupStage): SetupStage => Object.freeze(stage);
 /** Pure, deterministic setup plan: the same observation, answers and registry give the same stages and `planDigest`.
  * It applies nothing; every `operation` names an existing owner that a surface calls after its own preview and confirmation.
@@ -14,7 +20,7 @@ const freezeStage = (stage: SetupStage): SetupStage => Object.freeze(stage);
 export function planSetup(observation: SetupObservation, answers: SetupAnswers = { schemaVersion: SETUP_PLAN_SCHEMA_VERSION, values: {} },
   registry: SetupStageRegistry = new SetupStageRegistry(), options: Readonly<{ phase?: SetupPhase; attestedPerson?: boolean }> = {}): SetupPlan {
   const observed = setupObservationSchema.safeParse(observation);
-  if (!observed.success) throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID');
+  if (!observed.success) throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID', { params: { family: 'core', field: refusedField(observed.error) } });
   const given = setupAnswersSchema.safeParse(answers);
   if (!given.success) throw ErrorRegistry.createError('SETUP_ANSWER_INVALID');
   const facts = observed.data, values = given.data.values, order = registry.order();
@@ -23,7 +29,7 @@ export function planSetup(observation: SetupObservation, answers: SetupAnswers =
   if (Object.keys(facts.families).some(namespace => !registry.family(namespace))) throw ErrorRegistry.createError('SETUP_FAMILY_UNKNOWN');
   const familyFacts = new Map(registry.list().map(family => {
     try { return [family.namespace, family.parseFacts(facts.families[family.namespace])] as const; }
-    catch { throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID', { params: { family: family.namespace } }); }
+    catch (error) { throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID', { params: { family: family.namespace, field: refusedField(error) } }); }
   }));
   const folderAnswer = identitySchema.safeParse(values['core:folder']);
   const scopeId = facts.folder.configuredScope ?? (folderAnswer.success ? folderAnswer.data : null);

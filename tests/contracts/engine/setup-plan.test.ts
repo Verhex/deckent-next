@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CORE_SETUP_STAGES, SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, planSetup, setupObservationSchema, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
-import { MESSAGE_KEYS } from '#platform/index.js';
+import { ErrorRegistry, MESSAGE_KEYS } from '#platform/index.js';
 
 const base: SetupObservation = { schemaVersion: 2,
   environment: { platform: 'linux', node: 'supported' }, language: { configured: null, requested: null, system: 'tr' },
@@ -147,6 +147,11 @@ describe('I-S1 setup planner', () => {
     expect(await code(() => planSetup({ ...observe(), families: { erp: {} } }, answers({}), registry))).toBe('SETUP_FAMILY_UNKNOWN');
     expect(await code(() => planSetup({ ...observe(), families: { execution: { ready: 'yes' } } }, answers({}), registry))).toBe('SETUP_OBSERVATION_INVALID');
     expect(await code(() => planSetup({ ...observe(), runtime: { installed: true } } as SetupObservation))).toBe('SETUP_OBSERVATION_INVALID');
+    // FIX14: the refusal names the family and the refused key path (never its value), so the fail-open notice is actionable.
+    let refused: { params?: Record<string, unknown> } = {};
+    try { planSetup({ ...observe(), families: { execution: { ready: true, durationMs: 9347 } } }, answers({}), registry); } catch (error) { refused = error as typeof refused; }
+    expect(refused.params).toEqual({ family: 'execution', field: 'durationMs' });
+    expect(ErrorRegistry.get('SETUP_OBSERVATION_INVALID', 'en', refused.params as never)!.message).toBe('The setup observation is invalid: the execution facts refuse the field durationMs.');
     expect(await code(() => planSetup(observe(), answers({ 'core:unknown': true })))).toBe('SETUP_ANSWER_INVALID');
     expect(await code(() => planSetup(observe(), answers({ 'core:profile': { id: 'acme:x', version: 1 } })))).toBe('SETUP_ANSWER_INVALID');
     expect(await code(() => planSetup(observe(), answers({ 'core:language': 'de' })))).toBe('SETUP_ANSWER_INVALID');

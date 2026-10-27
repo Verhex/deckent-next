@@ -165,6 +165,21 @@ describe.skipIf(process.platform !== 'linux')('BR1 adapters: receipts, read-only
     expect(await observeWorkerImage({ home, docker: null, configured: null, git: '/usr/bin/git' })).toEqual({ configured: null, receipt: { imageId: OTHER, imageVersion: 'r4-20260930' }, image: 'not-run', git: '/usr/bin/git' });
   });
 
+  it('FIX14: a v3 per-provider receipt (timings, r33-claude tag) and a ready acquisition observed as is pass the execution facts schema', async () => {
+    const home = await temp('v3'), pin = { consentId: 'consent-1', daemonId: 'daemon-1', recipeDigest: 'c'.repeat(64), provider: 'claude', imageId: OTHER, imageVersion: 'r32-20261027',
+      tagVersion: 'r32-claude', receiptPath: join(home, 'receipts', 'r32-20261027.json') };
+    await mkdir(join(home, 'receipts'), { recursive: true });
+    await writeFile(join(home, 'receipts', 'r33-20261027.json'), JSON.stringify({ schemaVersion: 3, measuredAt: '2026-10-27T09:30:19.813Z', repository: 'deckent/worker', imageVersion: 'r33-20261027',
+      previousVersion: 'r32-20261027', imageId: IMAGE, tag: 'deckent/worker:r33-claude', images: [{ providers: ['claude'], imageId: IMAGE, tag: 'deckent/worker:r33-claude', tagVersion: 'r33-claude',
+        labels: { 'dev.deckent.worker.provider': 'claude' }, manifest: { schemaVersion: 2, providers: [{ id: 'claude', version: '2.1.311 (Claude Code)', requiredFlagsPresent: true }] } }],
+      timings: { totalMs: 9347 }, activation: 'not-activated' }));
+    const observed = await observeWorkerImage({ home, executable: null, configured: OTHER, git: '/usr/bin/git' });
+    expect(observed.receipt).toMatchObject({ imageVersion: 'r33-20261027', durationMs: 9347, images: [{ tagVersion: 'r33-claude' }] });
+    const acquisition = { schemaVersion: 1, revision: 10, instanceId: 'instance-1', consentId: 'consent-1', phase: 'ready', step: null, startedAt: '2026-10-27T08:35:03.991Z',
+      lastProgressAt: '2026-10-27T08:36:03.599Z', expiresAt: '2026-10-27T09:36:03.835Z', daemonId: 'daemon-1', code: null, images: [pin], context: join(home, 'builds', 'r32-20261027') };
+    expect(() => stages({ worker: { ...observed, provider: 'claude', providerPending: false, acquisition } as Worker })).not.toThrow();
+  });
+
   /** A fake docker: `image inspect` knows only IMAGE; FAKE_DAEMON=down makes every call fail (exit 1). Logs every argv line. */
   const fakeDocker = async () => {
     const bin = await temp('bin'), log = join(bin, 'argv.log');

@@ -100,6 +100,7 @@
   "error.SETUP_STAGE_SHADOW": "A setup stage registration cannot replace Core or another family.",
   "error.SETUP_FAMILY_UNKNOWN": "Setup facts name a family that is not registered.",
   "error.SETUP_OBSERVATION_INVALID": "The setup observation is invalid.",
+  "error.SETUP_OBSERVATION_INVALID.field": "The setup observation is invalid: the {family} facts refuse the field {field}.",
   "error.SETUP_ANSWER_INVALID": "A setup answer is invalid or names an unknown stage.",
   "setup.instructions.title": "Project instructions",
   "setup.instructions.present": "DECKENT.md is present ({bridges} host bridge(s) found); deckent init --preview shows the bridge lines.",
