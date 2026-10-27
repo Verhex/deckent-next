@@ -33,10 +33,11 @@ menu ↔ CLI table has no gap.
 
 - Target the assembled release state: the package candidate with all its cards merged and built, never a card
   branch. Record exact revision and build.
-- Real installs only: a temp install, N1, or an owner project (such as proje-wsl) when the lead authorizes it.
-  Drive the real binary and terminal (a PTY for menus), not mocks.
+- Walk end to end in a BeUser sandbox: a disposable install the walker creates itself, where the persona ran
+  init and is that install's person. Drive the real binary and terminal (a PTY for menus), not mocks. N1 or an
+  owner project only for read-only observation the lead authorizes.
 - One persona brief per walker: persona, goals, skill level, tastes, the journey spec, the install and its
-  authority, the person-only steps, the transcript path. Prefer walkers from a different maker than the author
+  authority, the transcript path. Prefer walkers from a different maker than the author
   (Claude, Codex, Cursor); when none is available, say so in the report.
 - Walk every branch, menu and CLI twin. Per step record the command or keys, what the screen showed (trimmed),
   confusion, dead ends, wrong or missing next steps and taste notes.
@@ -49,8 +50,8 @@ Done when every branch has a verdict tied to the exact revision.
 
 ## 3. Acceptance and findings
 
-- Done = every journey branch walked GREEN on the assembled release. FRICTION is fixed or explicitly accepted by
-  the owner; RED and UNWALKED block.
+- Done = every journey branch walked GREEN on the assembled release, person-only steps included. FRICTION is
+  fixed or explicitly accepted by the owner; RED and UNWALKED block. The owner reads the report; he never walks.
 - Hermetic tests guard regressions on real risks (`deckent-lean-change`) and CI stays required; they are not the
   acceptance model, and bulk test runs never substitute for the walk.
 - A finding on a surface in the package is fixed in the same package, then that branch and its neighbours are
@@ -59,9 +60,10 @@ Done when every branch has a verdict tied to the exact revision.
 
 ## Safety
 
-- Never bypass person-only or AI markers, authority cards, approvals or policy. A person-only step is listed for
-  the owner with its exact command and stays UNWALKED until the owner does it.
-- Destructive actions (uninstall, purge, reset, force) only on a temp install or one the lead authorized for that
-  walk; never on live.
+- Person-only steps are walked as the persona only inside the walker's own BeUser sandbox, run without the
+  walker's AI markers in a PTY the walker owns, labelled `synthetic-person`; never evidence of a real approval.
+- On every other install (live, N1, owner projects, customer systems) never bypass person-only or AI markers,
+  authority cards, approvals or policy, and never act as the person.
+- Destructive actions (uninstall, purge, reset, force) only in a BeUser sandbox; never on live.
 - No secrets, tokens, keys or private content in transcripts; redact before retaining.
 - Bound each walk in time and retries; on an uncertain effect stop and report instead of retrying.
