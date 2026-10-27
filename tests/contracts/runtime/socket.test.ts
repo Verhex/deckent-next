@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, prepareRuntimeSocket, requestLocalRuntime, startLocalRuntimeSocketServer,
+import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, prepareRuntimeSocket, requestLocalRuntime, runtimeSocketLocation, startLocalRuntimeSocketServer,
   type LocalRuntimeSocketOptions } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { encodeServiceFrame, ServiceFrameError } from '../../../src/adapters/core/local-runtime-socket/index.js';
@@ -487,5 +487,38 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
       await expect(requestLocalRuntime(options, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation: 'inspectRun', input: {} }))
         .rejects.toSatisfy(error => { expectCode(error, 'LOCAL_RUNTIME_TRANSPORT'); return true; });
     } finally { await new Promise<void>(resolve => raw.close(() => resolve())); }
+  });
+});
+
+// Astra delta 3 R1 (alpha.56.1): a restrictive ambient umask masks mkdir/mkdtemp's 0700 (0177 gives 0600). An isolated child (umask is
+// process-wide) runs the built adapter end to end: the start's directory and the native staging directory are made 0700, the real native
+// listener publishes, a client describes through it, and dispose removes the endpoint. Needs `dist/` (`npm run build`).
+const CHILD = String.raw`
+const [dist, root, mask] = process.argv.slice(1);
+const { prepareRuntimeSocket, startLocalRuntimeSocketServer, requestLocalRuntime } = await import(dist + '/adapters/index.js');
+const { resolveProductLayout } = await import(dist + '/platform/index.js');
+const { RUNTIME_SERVICE_SCHEMA_VERSION } = await import(dist + '/engine/index.js');
+const { lstat } = await import('node:fs/promises'); const { dirname } = await import('node:path');
+process.umask(Number.parseInt(mask, 8));
+try {
+  const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: root }));
+  const options = { endpoint, maxConnections: 2, inputMaxBytes: 4096, responseMaxBytes: 4096, headerTimeoutMs: 2000, responseTimeoutMs: 2000, acceptRetryDelayMs: 25, acceptRetryLimit: 3 };
+  const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result: { answered: true } }));
+  const parentMode = (await lstat(dirname(endpoint))).mode & 0o777, socketMode = (await lstat(endpoint)).mode & 0o777;
+  const reply = await requestLocalRuntime(options, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'umask-1', operation: 'inspectRun', input: {} });
+  await server.dispose();
+  const gone = await lstat(endpoint).then(() => false, error => error.code === 'ENOENT');
+  console.log(JSON.stringify({ parentMode, socketMode, reply, gone }));
+} catch (error) { console.log(JSON.stringify({ code: error.code ?? String(error) })); }
+`;
+describe.skipIf(process.platform !== 'linux')('restrictive umask (Astra delta 3 R1)', () => {
+  for (const mask of ['100', '177']) it(`umask ${mask}: the real native listener publishes, answers and is disposed`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-umask-')); owned.push(root);
+    const dist = join(import.meta.dirname, '../../../dist');
+    const child = spawn(process.execPath, ['--input-type=module', '-e', CHILD, dist, root, mask], { stdio: ['ignore', 'pipe', 'inherit'] });
+    let out = ''; child.stdout!.on('data', chunk => { out += String(chunk); }); await once(child, 'close');
+    const result = JSON.parse(out.trim().split('\n').at(-1)!) as Record<string, unknown>;
+    owned.push(dirname(runtimeSocketLocation(resolveProductLayout({ projectRoot: root }))));
+    expect(result).toEqual({ parentMode: 0o700, socketMode: 0o600, reply: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'umask-1', ok: true, result: { answered: true } }, gone: true });
   });
 });

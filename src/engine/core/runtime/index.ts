@@ -38,7 +38,7 @@ export { runtimeServiceReadiness, runtimeMonotonicDeadline, runtimeDeadlineSigna
 export { awaitRuntimeServiceStart, awaitRuntimeServiceRestart } from './internal/readiness.js';
 export { prepareRuntimeClientRequest, acceptRuntimeClientResponse } from './internal/client.js';
 export { runtimeTargetQueueTerminal } from './internal/queue-client.js';
-export { describeRuntimeServiceWithin } from './internal/readiness.js';
+export { describeRuntimeServiceWithin, type RuntimeStartable } from './internal/readiness.js';
 
 export { createTargetQueueService, selectQueueActor } from './internal/queue-service.js';
 export type { QueueServiceContext, QueueServicePorts } from './internal/queue-service.js';
