@@ -916,4 +916,4 @@ Neden: alpha.56 `deckent uninstall` ~12 bin test ve güvenlik incelemesinden ge�
 - Dar kartlar indikten sonra toplanmış sürüm adayında, tercihen yazardan farklı üreticinin AI ajanları kişiyi canlandırarak gerçek kurulumda her dalı yürür; transkript ve dal başına hüküm saklanır. Yüzey ancak her dal yeşil yüründüğünde biter.
 - Hermetik testler gerçek riskler için yalın regresyon korumasıdır; CI zorunlu kalır, kabul modeli değildir ve yürüyüşün yerine toplu test koşulmaz. Doğrulama sıklığı Kanun 7'dedir.
 - Paketteki bir yüzeyde bulunan eksik aynı pakette düzeltilir, ertelenmez.
-- Yöntem `deckent-beuser` skill'idir; BeUser'ın Deckent ürününe alınması ayrı, sonra planlanacak bir ürün paketidir.
+- Yöntem `deckent-beuser` skill'idir. BeUser'ın Deckent ürününe alınması (persona popülasyonları, teslim kabulüne yerleşme) ayrı bir ürün paketidir; owner aynı gün tasarımını istedi, owner kararlarından sonra planlanır.
