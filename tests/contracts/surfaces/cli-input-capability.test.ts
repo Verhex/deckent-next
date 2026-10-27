@@ -26,7 +26,10 @@ it('ISY-33: shared JSON input errors retain the calling surface subject for ever
   expect(malformed.localize('tr').message).toBe('Kuyruk JSON verisi veya komut şeması geçersiz.');
   expect(malformed.localize('en').message).not.toContain('Model invocation');
   const memory = await readJsonInput('/missing-input-for-f2', 1024, { ...inputErrors, subject: 'cli.input.subject.memory' }).catch(error => error);
-  expect(memory.localize('tr').message).toBe('Hafıza girdisi okunamadı.');
+  // BeUser KER-06: a file that cannot be read names the person's own path, the cause and the next step (EN/TR); the code stays.
+  expect(memory).toMatchObject({ code: 'CLI_INVOCATION_INPUT_UNAVAILABLE', params: { path: '/missing-input-for-f2', reason: 'missing' } });
+  expect(memory.localize('tr').message).toBe('Hafıza girdisi okunamadı. /missing-input-for-f2 yok. Var olan bir JSON dosyasının yolunu verin ya da standart girdiden okumak için - verin.');
+  expect(memory.localize('en').message).toContain('/missing-input-for-f2 does not exist. Give the path of an existing JSON file, or - to read it from standard input.');
   const limit = await readJsonInput('-', 1, { ...inputErrors, subject: 'cli.input.subject.approval' }, Readable.from(['{}'])).catch(error => error);
   expect(limit.localize('tr').message).toContain('Onay girdisi');
   const hub = await readJsonInput('-', 1024, { ...inputErrors, subject: 'cli.input.subject.hub' }, Readable.from(['{'])).catch(error => error);
