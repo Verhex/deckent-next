@@ -258,5 +258,7 @@
   "climodels.models.card.channelCascade": "Bu kanalı ve açık modellerini aç. Daha önce seçilmemiş adaylar (her biri tarife kapısından geçer): {models}. Açıkça kapatılmış modeller kapalı kalır.",
   "models.catalog.lifecycle.active": "kullanılabilir",
   "models.catalog.lifecycle.retired": "emekli",
-  "models.catalog.lifecycle.deprecated": "kullanımdan kaldırılıyor"
+  "models.catalog.lifecycle.deprecated": "kullanımdan kaldırılıyor",
+  "climodels.budget.usdRange": "Tutar {min} ile {max} arasında tam ABD dolarıdır: kapsamın tüm API sağlayıcıları için aylık sınır.",
+  "climodels.budget.command": "deckent models {action} komutu"
 }

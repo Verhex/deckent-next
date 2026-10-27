@@ -7,6 +7,7 @@
   "security.mcp.note.moved": "a trust record for this server in the project's data folder is no longer used; decide again on this card",
   "security.mcp.trustCard.argument": "argument {index}: {value}",
   "security.witness.config": "The setting {key} is protected: only a person at their own interactive terminal may change it. Run the same deckent command (for a setting also the terminal's /config) in your own terminal on this host, with input and output on the same terminal. AI tools, MCP, SDK scripts, CI, piped commands and --json cannot change it. Nothing was changed.",
+  "security.witness.spending": "Changing the API budget (create, raise, lower, unfreeze) or reconciling held spend is a person's act: run deckent models {action} in your own interactive terminal on this host (or /model → Change budget in deckent), with input and output on the same terminal. AI tools in a shell, SDK scripts, CI, piped commands and --json cannot do it; an MCP client is decided by its own policy grant. Nothing was changed.",
   "mcp.trustCard.posture.remote": "Remote HTTP server: nothing runs on this machine; headers are sent to that endpoint with every request.",
   "mcp.trustCard.posture.host": "No sandbox: runs as your user; files, processes and network are reachable.",
   "mcp.trustCard.posture.readOnly": "read-only",

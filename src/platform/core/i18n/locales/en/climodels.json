@@ -258,5 +258,7 @@
   "climodels.models.card.channelCascade": "Turn on this channel and its already-on models. Never-touched candidates (each must pass the tariff gate): {models}. Explicitly off models stay off.",
   "models.catalog.lifecycle.active": "available",
   "models.catalog.lifecycle.retired": "retired",
-  "models.catalog.lifecycle.deprecated": "deprecated"
+  "models.catalog.lifecycle.deprecated": "deprecated",
+  "climodels.budget.usdRange": "The amount is whole US dollars from {min} to {max}: a monthly limit for every API provider of the scope.",
+  "climodels.budget.command": "deckent models {action}"
 }
