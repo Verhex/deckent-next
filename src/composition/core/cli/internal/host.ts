@@ -159,7 +159,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),
     releaseQuota: releaseConfiguredQuota, applyPoolCapacity: applyConfiguredPoolCapacity, inspectPoolCapacity: inspectConfiguredPoolCapacity, applyRunLifecycle: applyConfiguredRunLifecycle, applyPoolHold: applyConfiguredPoolHold, inspectPoolHold: inspectConfiguredPoolHold, // K5 typed pool hold (local, ledger-read by the service)
-    previewUninstall: (root, purge, options) => previewConfiguredUninstall(root, purge, options).catch(error => { throw queryFailure(error); }),
+    previewUninstall: (root, query, options) => previewConfiguredUninstall(root, query, options).catch(error => { throw queryFailure(error); }),
     applyUninstall: (root, input, interaction, options, signal) => applyConfiguredUninstall(root, input, interaction, options, signal).catch(error => { throw queryFailure(error); }),
     previewInstallation: async (projectRoot, input) => {
       try { return await previewSuppliedInstallation(projectRoot,

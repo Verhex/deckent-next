@@ -12,4 +12,4 @@ export { extendUninstallInventory, uninstallRecoveryDirectory, assertNativeUnins
 export { writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease } from './internal/tombstone.js';
 export { prepareUninstallBackup } from './internal/backup.js';
 export { observeUninstallInventory } from './internal/observed-inventory.js';
-export { hasUnsettledInstallationWork, quiescentInstallationScopes } from './internal/quiescence.js';
+export { observeUninstallWork, installationScopes } from './internal/quiescence.js';

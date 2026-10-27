@@ -8,33 +8,30 @@ import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemT
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
-import { uninstallRecoveryDirectory, quiescentInstallationScopes, prepareUninstallBackup, writeUninstallTombstone } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, installationScopes, prepareUninstallBackup, writeUninstallTombstone } from '#adapters/index.js';
 import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
 export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: UninstallPlan, principal: VerifiedPrincipal,
   scopeId: string, scopeIds: readonly string[], options: ConfigLoadOptions, work: (admission: UninstallAdmission) => Promise<T>): Promise<T> {
   const path = await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock');
-  const lock = (() => {
-    try { return acquireLedgerLock(path); }
-    catch (error) {
-      if ((error as { code?: string }).code === 'LOCAL_RUNTIME_ALREADY_RUNNING') throw ErrorRegistry.createError('UNINSTALL_WORK_ACTIVE');
-      throw error;
-    }
-  })();
+  // A running service holds this custody: it is stopped by the plan's governed step, so a holder now is a service that came back (S4b).
+  const lock = (() => { try { return acquireLedgerLock(path); } catch (error) { if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
+    throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: plan.service.unit ?? '', command: plan.service.command ?? '' } }); } })();
   try {
     // Fresh identity/layout/target observations after custody and before the first journal write.
-    const current = await configuredUninstallInventory(config, plan.policyRevision, scopeIds, options, plan.purge);
-    if (current.inventory.installation.id !== plan.installation.id || current.inventory.layoutRevision !== plan.layoutRevision || current.inventory.blockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
+    const current = await configuredUninstallInventory(config, plan.policyRevision, scopeIds, options), directory = uninstallRecoveryDirectory(config.productLayout.root, options.env ?? process.env);
+    if (current.inventory.installation.id !== plan.installation.id || current.inventory.layoutRevision !== plan.layoutRevision || current.inventory.blockers.length
+      || plan.purge && current.inventory.dataBlockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
     const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
-    const recovery = new UninstallRecovery(config.productLayout.root, plan.installation.id, principal, integrity, config.installation.profileMaxBytes, uninstallRecoveryDirectory(config.productLayout.root));
+    const recovery = new UninstallRecovery(config.productLayout.root, plan.installation.id, principal, integrity, config.installation.profileMaxBytes, directory);
     const clock = new SystemTrustedClock(), peer = localPrincipalPeer();
     const sessions = await LocalOsSessionAuthority.create(scopeIds, config.approvals.sessionTtlMs, clock, peer ? { pid: peer.pid, uid: peer.uid } : undefined);
     sessions.requireInteractiveTerminal();
     const policy = createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes);
     const path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
     // Every ledger-recorded and policy-named scope is quiescent and decided again under custody: a deny or legal hold is never skipped.
-    const affected = await quiescentInstallationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, pageSize: config.inspection.maxPageSize, maxScopes: config.audit.maxRecords }, scopeIds);
+    const affected = installationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopeIds);
     const decided = await policy.load();
     for (const action of plan.purge ? ['uninstall', 'purge'] as const : ['uninstall'] as const) authorizeUninstall(decided, { ...principal, scopeIds: affected }, plan.installation.id, affected, action);
     const recoveryLocation = await recovery.admit(plan);
@@ -66,7 +63,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         async revalidate(item) {
           const fresh = await loadComposedConfig(config.projectRoot, { ...options, heal: false, force: true, uninstallHold: 'admit' });
           const document = await policy.load();
-          const observed = await configuredUninstallInventory(fresh, plan.policyRevision, scopeIds, options, plan.purge);
+          const observed = await configuredUninstallInventory(fresh, plan.policyRevision, scopeIds, options);
           if (fresh.productLayout.revision !== plan.layoutRevision || (document as { revision: string }).revision !== plan.policyRevision
             || observed.inventory.installation.id !== plan.installation.id || observed.inventory.blockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
           if (item && item.action === 'remove') {
@@ -83,13 +80,13 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
           const initial = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, phrase, false, options); backup = { ...plan.backup, destination: initial.set };
         },
         async approvePlan() { /* The immutable witnessed plan is retained; each command is decided through the broker above. */ },
-        async finish(result) { await writeUninstallTombstone(config.productLayout.root, principal, plan, result); await recovery.finish(result); passphrase = ''; },
+        async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); await recovery.finish(result); passphrase = ''; },
       });
     } catch (error) {
       const items = []; // One store transaction at a time: its custody lock is exclusive even within this process.
       for (const item of plan.items) items.push({ resourceId: item.resourceId, state: (await store.loadEffect(scopeId, commandKey(plan, item.resourceId)))?.state ?? null });
-      if (items.every(item => item.state === null || item.state === 'refused')) await recovery.finish({ schemaVersion: 1, planDigest: plan.planDigest,
-        status: 'cancelled', items, recoveryLocation, backup: plan.backup, packageRemoval: plan.packageRemoval });
+      if (items.every(item => item.state === null || item.state === 'refused')) await recovery.finish({ schemaVersion: 2, planDigest: plan.planDigest,
+        status: 'cancelled', items, recoveryLocation, backup: plan.backup, packageRemoval: plan.packageRemoval, uncertain: plan.work.uncertain });
       throw error;
     } finally { audit?.close(); if (!authorityClosed) approvals.close(); }
   } finally { lock.release(); }

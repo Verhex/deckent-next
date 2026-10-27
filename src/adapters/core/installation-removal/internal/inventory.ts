@@ -1,7 +1,8 @@
+import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
-import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, ErrorRegistry, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
+import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, type UninstallInventory } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { NativeServiceRemovalDriver, nativeServiceExec, readNativeServiceRecord } from './native-service.js';
@@ -9,30 +10,35 @@ import { InstallationServiceRemovalTarget } from './service.js';
 import paths from './paths.json' with { type: 'json' };
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
-const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
-export const removalRegistry = z.object({ schemaVersion: z.literal(3), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
+export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
+export const removalRegistry = z.object({ schemaVersion: z.literal(4), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
+  recoveryRoot: z.record(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.object({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) }).strict()),
+  systemctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
   purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
   treeMembers: z.record(z.object({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }).strict())
     .refine(value => Object.keys(value).every(name => restorable.includes(name))),
   cacheMembers: z.record(z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
 const registry = removalRegistry;
-const inside = (root: string, path: string) => { const child = relative(root, path); return !child || child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child); };
-export function assertNativeUninstallSupport(platform: string) {
-  if (platform !== 'linux') throw ErrorRegistry.createError('UNINSTALL_NATIVE_UNSUPPORTED', { params: { platform } });
+export function assertNativeUninstallSupport(platform: string) { if (platform !== 'linux') throw ErrorRegistry.createError('UNINSTALL_NATIVE_UNSUPPORTED', { params: { platform } }); }
+/** §5.5: one person-private recovery root from the registry (XDG state on Linux), outside every deletion root; one directory per installation.
+ * The alpha.56 location beside the data root is used only while it alone exists (an earlier interrupted purge finishes where it started). */
+export function uninstallRecoveryDirectory(root: string, env: Readonly<Record<string, string | undefined>>, platform: string = process.platform) {
+  const entry = registry.recoveryRoot[normalizeGlobalScopePlatform(platform, env)], home = env['HOME'] ?? env['USERPROFILE'];
+  const base = entry && ((entry.environment && env[entry.environment]) || (home ? join(home, entry.fallback) : null));
+  if (!entry || !base || !isAbsolute(base)) throw ErrorRegistry.createError('HOME_NOT_RESOLVED');
+  const current = join(base, entry.path, sha256(root)), legacy = join(dirname(root), registry.recoveryDirectory, sha256(root));
+  return existsSync(legacy) && !existsSync(current) ? legacy : current;
 }
-export const uninstallRecoveryDirectory = (root: string) => join(dirname(root), registry.recoveryDirectory, sha256(root));
-/** Native records and portable canonical layout resources are owner observations, never paths supplied by an uninstall request. */
-export async function extendUninstallInventory(config: ResolvedConfig, base: UninstallInventory, purge: boolean,
-  integrity: IntegrityAuthority | null, env: Readonly<Record<string, string | undefined>>) {
+/** Native records and portable canonical layout resources are owner observations, never paths supplied by an uninstall request. Data members are
+ * observed for every tier (the plan decides); a relocated or unsafe authority file refuses only the data-deleting tier. K1: an in-project
+ * installation's `.deckent` members qualify like global ones; a file the project's VCS tracks is never a member (kept and listed). */
+export async function extendUninstallInventory(config: ResolvedConfig, base: UninstallInventory, integrity: IntegrityAuthority | null,
+  env: Readonly<Record<string, string | undefined>>, globalRoot: string, tracked: ReadonlySet<string>) {
   const layout = config.productLayout, installationId = base.installation.id, resources = [...base.resources];
   const bounds = config.installation.packageMeasurement, targets = [];
   // The runtime's logical identity is not an OS service artifact. The native installer must retain an authenticated unit record.
   const recorded = integrity && await readNativeServiceRecord(productResourcePath(layout, 'installationIdentity'), installationId, integrity, config.installation.profileMaxBytes);
-  const old = resources.findIndex(item => item.resourceId === 'recorded-service');
-  if (old >= 0) resources.splice(old, 1);
-  if (!recorded && config.service.identity) resources.push({ resourceId: 'unrecorded-service', contribution: 'durable', locator: config.service.identity.serviceId,
-    version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing' });
   if (recorded) {
     const driver = new NativeServiceRemovalDriver(recorded, nativeServiceExec(config.installation.identityProbe, env), (_service, work) => work(), bounds.maxFileBytes);
     const target = new InstallationServiceRemovalTarget([driver.service], driver), observed = await driver.inspect(driver.service);
@@ -42,23 +48,21 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       present: observed.present, protected: !safe, capability: safe, backup: 'missing' });
     targets.push(target);
   }
-  const isGlobal = base.deletionRoots.includes(layout.root), projectData = join(config.projectRoot, PRODUCT_LAYOUT_REGISTRY.rootName);
-  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the purge.
+  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the data tier.
   let members: DataRemovalMember[] = [];
-  const blockers: string[] = [];
-  // R31: an unmoved in-project installation is not relocated: its data is the project's .deckent, which a purge always keeps.
-  if (purge && layout.root === projectData) blockers.push(`authority-in-project:${layout.root}`);
-  else if (purge && !isGlobal) blockers.push(`authority-relocated:${layout.root}`);
-  else if (purge) {
+  const blockers: string[] = [], kept = (path: string) => tracked.has(path) && !!resources.push({ resourceId: `tracked.${sha256(path)}`, contribution: 'durable',
+    locator: path, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: true, capability: false, backup: 'missing', keep: 'vcs-tracked' });
+  if (!base.deletionRoots.includes(layout.root)) blockers.push(`authority-relocated:${layout.root}`);
+  else {
     for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
       const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
-      // Verified absence is not unsafe; a relocated, unreadable or unsafe member blocks the whole purge with its exact path.
-      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) { blockers.push(`authority-relocated:${path}`); continue; }
-      try { if (await memberStat(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null, archivePath: relative(resourcePath, path).split(sep).join('/') }); }
+      // Verified absence is not unsafe; a relocated, unreadable or unsafe member blocks the whole data tier with its exact path.
+      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path)) { blockers.push(`authority-relocated:${path}`); continue; }
+      try { if (await memberStat(path) && !kept(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null, archivePath: relative(resourcePath, path).split(sep).join('/') }); }
       catch { blockers.push(`authority-unsafe:${path}`); }
     }
     if (blockers.length) members = [];
-    else if (integrity) members.push(...await treeMembers(layout, integrity, projectData, bounds));
+    else if (integrity) members.push(...(await treeMembers(layout, integrity, bounds)).filter(member => !kept(member.path)));
   }
   const owners = new Set(members.map(member => member.resourceId)), retained = resources.filter(item => !owners.has(item.resourceId));
   // Anything else in a member's directory (or beside a member tree's owner directory) has no recorded owner here: kept and reported.
@@ -66,8 +70,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   for (const directory of new Set([...trees, ...members.flatMap(member => member.directory ? [member.directory] : [])])) {
     for (const name of (await readdir(directory)).slice(0, bounds.maxFiles).sort()) {
       const locator = join(directory, name);
-      if (!members.some(member => member.path === locator || member.directory === locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null,
-        owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
+      if (!members.some(member => member.path === locator || member.directory === locator) && !tracked.has(locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable',
+        locator, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
     }
   }
   const memberResources = new Set(members.map(member => productResourcePath(layout, member.resourceId as ProductResource)));
@@ -80,23 +84,23 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     targets.push(target);
   }
   for (const name of registry.sharedSecretFiles) {
-    const locator = join(base.deletionRoots[0]!, name), info = await lstat(locator).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    const locator = join(globalRoot, name), info = await lstat(locator).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     if (info) retained.push({ resourceId: `shared.${name}`, contribution: 'durable', locator, version: null, owner: null, ownership: 'shared', ownershipEvidence: null,
       present: true, protected: true, capability: false, backup: 'missing' });
   }
   // A missing/foreign key disables native record inspection; it never opens an unverified record or creates a key on preview.
-  const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths, blockers: [...base.blockers, ...blockers],
-    inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: purge ? join(uninstallRecoveryDirectory(layout.root), 'backup') : null };
+  const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths, dataBlockers: [...base.dataBlockers, ...blockers],
+    inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: join(uninstallRecoveryDirectory(layout.root, env), 'backup') };
   return { inventory, targets, dataTarget: target, portable: members };
 }
 /** Signed per-file records of a tree owner: a private regular file whose content verifies as a sealed audit record with this installation's
  * key and names itself (eventId = file name). Unsigned, foreign-key, renamed or oversized files are never members; an unbounded tree has none. */
-async function treeMembers(layout: ResolvedConfig['productLayout'], integrity: IntegrityAuthority, projectData: string,
+async function treeMembers(layout: ResolvedConfig['productLayout'], integrity: IntegrityAuthority,
   bounds: { readonly maxFiles: number; readonly maxFileBytes: number }): Promise<DataRemovalMember[]> {
   const found: DataRemovalMember[] = [];
   for (const [name, tree] of Object.entries(registry.treeMembers) as [ProductResource, { directory: string }][]) {
     const resourcePath = productResourcePath(layout, name), directory = join(resourcePath, tree.directory);
-    if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, directory) || inside(projectData, directory)) continue;
+    if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, directory)) continue;
     const names = await readdir(directory).catch(() => null);
     if (!names || names.length > bounds.maxFiles) continue;
     for (const entry of names.sort()) {

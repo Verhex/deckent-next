@@ -1,10 +1,10 @@
 import { createReadStream, type Stats } from 'node:fs';
 import { lstat, readFile, realpath, rmdir, unlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { dirname, isAbsolute, join, parse, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, parse } from 'node:path';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
+import { pathWithin as inside } from '#platform/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const inside = (parent: string, child: string) => { const path = relative(parent, child); return !path || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)); };
 const refuse = (code: 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_PRECONDITION'): never => { throw new EffectTargetError(code); };
 /** One exact owned file of a purge: the resource owner names it; never a subtree or a path a request supplies. `directory`: its
  * owner's private directory, removed only when nothing else remains in it. */

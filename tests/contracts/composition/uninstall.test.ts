@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, lstat, symlink, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +9,7 @@ import { clearConfigCache, resolveProductLayout, uninstallHoldPath, loadConfig, 
 import { previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 // The scratch owner's session area shape (`<32 hex>/<32 hex>`); anything else under state/scratch is not its member.
 const AREA = `state/scratch/${'a'.repeat(32)}/${'b'.repeat(32)}`;
+const KEEP = { schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false } as const, ALL = { ...KEEP, tier: 'all' } as const;
 
 it('previews real recorded global caches without writing or exposing an installation name, and always preserves project/unknown global data', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: installation identity positive requires POSIX binding'); return; }
@@ -24,26 +27,26 @@ it('previews real recorded global caches without writing or exposing an installa
     await writeFile(join(project, '.deckent/user-file'), 'KEEP PROJECT', { mode: 0o600 });
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
     const before = await readdir(root, { recursive: true }), configBefore = await readFile(join(project, '.deckent/config.json'));
-    const plan = await previewConfiguredUninstall(project, false, options);
+    const plan = await previewConfiguredUninstall(project, KEEP, options);
     expect(plan.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'remove', owner: plan.installation.id });
     expect(plan.installation).not.toHaveProperty('name'); expect(plan.installation).not.toHaveProperty('generation');
-    expect(await previewConfiguredUninstall(project, false, options)).toEqual(plan);
+    expect(await previewConfiguredUninstall(project, KEEP, options)).toEqual(plan);
     expect(await readdir(root, { recursive: true })).toEqual(before); expect(await readFile(join(project, '.deckent/config.json'))).toEqual(configBefore);
     expect(await readFile(join(project, '.deckent/user-file'), 'utf8')).toBe('KEEP PROJECT');
     const otherGlobal = join(root, 'shared-global');
-    const foreign = await previewConfiguredUninstall(project, false, { env: { ...options.env, DECKENT_GLOBAL_HOME: otherGlobal }, heal: false });
+    const foreign = await previewConfiguredUninstall(project, KEEP, { env: { ...options.env, DECKENT_GLOBAL_HOME: otherGlobal }, heal: false });
     expect(foreign.items.every(item => item.action !== 'remove')).toBe(true);
-    expect(foreign.items.find(item => item.resourceId === 'global-data')).toMatchObject({ action: 'keep', ownership: 'shared' });
+    expect(foreign.items.find(item => item.resourceId === 'global-home')).toMatchObject({ action: 'keep', ownership: 'shared' });
     // An ancestor link can never acquire ownership by its configured spelling.
     await rm(join(data, 'state/scratch'), { recursive: true });
     await symlink(join(project, '.deckent'), join(data, 'state/scratch'));
-    const unsafe = await previewConfiguredUninstall(project, false, options);
+    const unsafe = await previewConfiguredUninstall(project, KEEP, options);
     expect(unsafe.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(await readFile(join(project, '.deckent/user-file'), 'utf8')).toBe('KEEP PROJECT');
     await mkdir(join(data, 'customer-data'), { mode: 0o700 });
     await writeFile(join(data, 'customer-data/record'), 'CUSTOMER', { mode: 0o600 });
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data, resources: { scratch: 'customer-data' } }, terminal: { scopeId: 's' } }), { mode: 0o600 });
-    const relocated = await previewConfiguredUninstall(project, false, options);
+    const relocated = await previewConfiguredUninstall(project, KEEP, options);
     expect(relocated.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'keep', protected: true, ownership: 'unknown' });
     expect(await readFile(join(data, 'customer-data/record'), 'utf8')).toBe('CUSTOMER');
     // Cache hits also honor the durable lifecycle fence; a malformed hold is never healed or interpreted as absent.
@@ -82,15 +85,23 @@ it('applies the confirmed real temp cache through the production broker and gene
     const keyFile = getConfigFieldDefault('approvals').keyFile;
     await openLocalIntegrityAuthority(layout, keyFile, true);
     const ledger = productResourcePath(layout, 'ledger');
-    const db = openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite); db.close(); await chmod(ledger, 0o600);
+    const db = openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite);
+    // G7: more finished dispatches than one inspection page is history, never active work.
+    const insert = db.prepare('INSERT INTO dispatches(scope_id,attempt_id,record) VALUES (?,?,?)');
+    for (let index = 0; index <= getConfigFieldDefault('inspection').maxPageSize; index++) insert.run('s', `attempt-${index}`, JSON.stringify({ request: { identity: { runId: 'done' } }, terminal: { exitCode: 0 } }));
+    db.close(); await chmod(ledger, 0o600);
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
-    const plan = await previewConfiguredUninstall(project, false, options), command = { schemaVersion: 1, commandId: 'confirmed-card', planDigest: plan.planDigest };
+    const plan = await previewConfiguredUninstall(project, KEEP, options), command = { schemaVersion: 2, commandId: 'confirmed-card', planDigest: plan.planDigest };
     const busy = acquireLedgerLock(`${ledger}-lock`);
     try {
-      await expect(applyConfiguredUninstall(project, command, { confirm: async () => true }, options)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' });
+      // G20 (owner 2026-10-27): the ledger custody a running service holds is "the service is running", never "work active".
+      await expect(applyConfiguredUninstall(project, command, { confirm: async () => true }, options)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
       expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
       await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     } finally { busy.release(); }
+    expect(plan).toMatchObject({ blockers: [], work: { running: [], complete: true } });
+    // Preview reads the ledger without creating sidecars.
+    for (const suffix of ['-wal', '-shm']) await expect(lstat(ledger + suffix)).rejects.toMatchObject({ code: 'ENOENT' });
     let cards = 0;
     const result = await applyConfiguredUninstall(project, command, { confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; } }, options);
     expect(plan.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'remove', members: [join(data, AREA)] });
@@ -137,18 +148,20 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     const members = [ledger, join(data, 'bindings.json'), join(data, 'policy.json'), join(data, 'installation-identity/identity.json'), join(data, 'approvals', keyFile)];
     const policyBytes = await readFile(join(data, 'policy.json'));
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
-    const plan = await previewConfiguredUninstall(project, true, options);
+    const plan = await previewConfiguredUninstall(project, ALL, options);
     expect(plan.blockers).toEqual([]);
     expect(plan.items.filter(item => item.action === 'remove')).toEqual([expect.objectContaining({ resourceId: 'global-data', members })]);
     for (const locator of [join(data, 'runs'), join(data, 'audit'), ...strays.slice(2)]) expect(plan.items.find(item => item.locator === locator)).toMatchObject({ action: 'keep' });
     expect(plan.items.find(item => item.resourceId === 'shared.secrets.json')).toMatchObject({ action: 'keep', ownership: 'shared' });
-    const cancelled = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'cancel-purge', planDigest: plan.planDigest }, {
+    const cancelled = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'cancel-purge', planDigest: plan.planDigest }, {
       backupPassphrase: async () => phrase, confirm: async () => false,
     }, options);
+    // K7: the one card precedes the backup; a cancelled card leaves no backup and no hold. The backup lives outside every deleted folder.
     expect(cancelled.status).toBe('cancelled'); expect(await lstat(ledger)).toBeTruthy();
-    (await verifyBackupSet(cancelled.backup.destination!, phrase, getConfigFieldDefault('installation').packageMeasurement)).close();
+    await expect(lstat(cancelled.backup.destination!)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
     let cards = 0;
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'purge', planDigest: plan.planDigest }, {
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'purge', planDigest: plan.planDigest }, {
       backupPassphrase: async () => phrase, confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; },
     }, options);
     expect(result.status).toBe('completed'); expect(cards).toBe(1); expect(result.backup.destination).not.toBe(cancelled.backup.destination);
@@ -158,22 +171,22 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
     const finalSet = result.backup.destination!, verified = await verifyBackupSet(finalSet, phrase, getConfigFieldDefault('installation').packageMeasurement);
     expect(verified.state.installationId).toBe(plan.installation.id); verified.close();
-    const replay = await previewConfiguredUninstall(project, true, options);
+    const replay = await previewConfiguredUninstall(project, ALL, options);
     expect(replay.items.every(item => item.action === 'keep')).toBe(true);
-    expect((await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'replay', planDigest: replay.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
+    expect((await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'replay', planDigest: replay.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
     // M3: a crash after the final tail but before the tombstone/hold transition. Policy, identity and key are gone; the durable intent
     // plus a fresh observation reconciles the outcome (read-only on preview), never by a second deletion.
-    const directory = uninstallRecoveryDirectory(data), hold = JSON.stringify({ body: { schemaVersion: 1, installationId: plan.installation.id, planDigest: plan.planDigest }, keyId: 'purged', mac: 'unverifiable' });
+    const directory = uninstallRecoveryDirectory(data, options.env), hold = JSON.stringify({ body: { schemaVersion: 1, installationId: plan.installation.id, planDigest: plan.planDigest }, keyId: 'purged', mac: 'unverifiable' });
     const crash = async () => { for (const name of [`${plan.planDigest}.tombstone.json`, 'tombstone.json']) await rm(join(directory, name), { force: true }); await writeFile(uninstallHoldPath(data), hold, { mode: 0o600 }); };
     await crash();
-    const pending = await previewConfiguredUninstall(project, true, options);
+    const pending = await previewConfiguredUninstall(project, ALL, options);
     expect(pending).toEqual(replay); expect(await lstat(uninstallHoldPath(data))).toBeTruthy();
-    expect((await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'after-crash', planDigest: pending.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
+    expect((await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'after-crash', planDigest: pending.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await lstat(join(directory, 'tombstone.json'))).toBeTruthy();
     // M3/D2: a member recreated with the same bytes is not the purged file (new inode): held as unknown, nothing deleted, no success.
     await crash(); await writeFile(join(data, 'policy.json'), policyBytes, { mode: 0o600 });
-    await expect(previewConfiguredUninstall(project, true, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
-    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'partial', planDigest: pending.planDigest }, { confirm: async () => true }, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
+    await expect(previewConfiguredUninstall(project, ALL, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'partial', planDigest: pending.planDigest }, { confirm: async () => true }, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
     expect(await readFile(join(data, 'policy.json'))).toEqual(policyBytes); expect(await lstat(uninstallHoldPath(data))).toBeTruthy();
     // C2/D2: the managed restore of exactly the intent's final set works from the held state (no hand-removed hold), preserves the
     // recreated file, retires the intent and releases the hold; the installation then previews normally.
@@ -182,8 +195,8 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await readdir(data)).some(name => name.startsWith('policy.json.damaged-'))).toBe(true);
     await expect(lstat(join(directory, 'final-tail.json'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await lstat(join(directory, `${plan.planDigest}.restored.json`))).toBeTruthy();
-    const reopened = await previewConfiguredUninstall(project, false, options); expect(reopened.blockers).toEqual([]);
-    expect((await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'after-restore', planDigest: reopened.planDigest }, { confirm: async () => true }, options)).status).toMatch(/^(completed|noop)$/);
+    const reopened = await previewConfiguredUninstall(project, KEEP, options); expect(reopened.blockers).toEqual([]);
+    expect((await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'after-restore', planDigest: reopened.planDigest }, { confirm: async () => true }, options)).status).toMatch(/^(completed|noop)$/);
     for (const path of members) expect(await lstat(path)).toBeTruthy();
     for (const path of [strays[0]!, strays[3]!]) expect(await readFile(path, 'utf8')).toBe('FOREIGN KEEP');
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
@@ -211,16 +224,16 @@ it('keeps purge closed before any backup or hold when a legal hold names a compa
     const ledger = productResourcePath(layout, 'ledger'); await mkdir(join(data, 'state'), { recursive: true, mode: 0o700 });
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
-    const plan = await previewConfiguredUninstall(project, true, options);
+    const plan = await previewConfiguredUninstall(project, ALL, options);
     expect(plan.scopeSummary).toContain('retained-company');
-    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'held', planDigest: plan.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'held', planDigest: plan.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
       .rejects.toMatchObject({ code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold-retained-company' } });
-    await expect(lstat(uninstallRecoveryDirectory(data))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(uninstallRecoveryDirectory(data, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await lstat(ledger)).toBeTruthy();
     // Unreadable recorded company scopes: no retention rule can be checked for all data, so nothing is admitted or removed.
     const db = new DatabaseSync(ledger); try { db.exec('DROP TABLE scope_registry'); } finally { db.close(); }
-    const shallow = await previewConfiguredUninstall(project, false, options);
-    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'unverified', planDigest: shallow.planDigest }, { confirm: async () => true }, options))
+    const shallow = await previewConfiguredUninstall(project, KEEP, options);
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'unverified', planDigest: shallow.planDigest }, { confirm: async () => true }, options))
       .rejects.toMatchObject({ code: 'UNINSTALL_SCOPE_UNVERIFIED' });
     expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -248,46 +261,64 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
     const ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
-    const unsafe = await previewConfiguredUninstall(project, true, options);
+    const unsafe = await previewConfiguredUninstall(project, ALL, options);
     expect(unsafe.blockers).toContain(`authority-unsafe:${join(data, 'bindings.json')}`);
     expect(unsafe.items.some(item => item.resourceId === 'global-data')).toBe(false);
-    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'unsafe', planDigest: unsafe.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'unsafe', planDigest: unsafe.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
       .rejects.toMatchObject({ code: 'UNINSTALL_AUTHORITY_UNVERIFIED', params: { path: join(data, 'bindings.json') } });
     expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
-    await expect(lstat(uninstallRecoveryDirectory(data))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(uninstallRecoveryDirectory(data, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     // A relocated authority file is never followed to its configured spelling; the data-keeping uninstall stays available.
     await chmod(join(data, 'bindings.json'), 0o600); await config({ bindings: 'moved/bindings.json' }); clearConfigCache();
-    const moved = await previewConfiguredUninstall(project, true, options);
+    const moved = await previewConfiguredUninstall(project, ALL, options);
     expect(moved.blockers).toContain(`authority-relocated:${join(data, 'moved/bindings.json')}`);
-    expect((await previewConfiguredUninstall(project, false, options)).blockers).toEqual([]);
+    expect((await previewConfiguredUninstall(project, KEEP, options)).blockers).toEqual([]);
     expect(await lstat(join(data, 'bindings.json'))).toBeTruthy(); expect(await lstat(ledger)).toBeTruthy();
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('names an unmoved in-project installation as project data a purge keeps, and a data root outside the global home as relocated (R31)', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+it('deletes an in-project installation\'s backed-up members (K1) but keeps Git-tracked, unknown and not-backed-up files and the folder, with the backup outside the project', async () => {
+  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: K1 in-project purge needs Linux custody and /usr/bin/git'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { verifyBackupSet } = await import('#adapters/core/backup-store/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-purge-in-project-'));
   try {
     const project = join(root, 'project'), data = join(root, 'global'), local = join(project, '.deckent'), elsewhere = join(root, 'elsewhere');
-    for (const path of [local, data, elsewhere]) await mkdir(path, { recursive: true, mode: 0o700 });
-    const actor = readLocalOsIdentity(), options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
+    for (const path of [join(local, 'state'), data, elsewhere]) await mkdir(path, { recursive: true, mode: 0o700 });
+    const actor = readLocalOsIdentity(), options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
     const install = async (layoutRoot?: string) => {
       await writeFile(join(local, 'config.json'), JSON.stringify({ ...(layoutRoot ? { layout: { root: layoutRoot } } : {}), terminal: { scopeId: 's' } }), { mode: 0o600 });
-      await writeFile(join(layoutRoot ?? local, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
-        id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
+      for (const name of ['policy.json', 'bindings.json']) await writeFile(join(layoutRoot ?? local, name), JSON.stringify(name === 'bindings.json' ? { schemaVersion: 1, revision: 'b1', bindings: [] }
+        : { schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
+          id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
       const layout = resolveProductLayout({ projectRoot: project, ...(layoutRoot ? { root: layoutRoot } : {}) });
       await new FileInstallationIdentityStore(layout).loadOrCreate(); await openLocalIntegrityAuthority(layout, getConfigFieldDefault('approvals').keyFile, true); clearConfigCache();
+      return layout;
     };
-    await install();
-    const kept = await previewConfiguredUninstall(project, true, options);
-    expect(kept.blockers).toContain(`authority-in-project:${local}`); expect(kept.blockers.some(value => value.startsWith('authority-relocated:'))).toBe(false);
-    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'in-project', planDigest: kept.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
-      .rejects.toMatchObject({ code: 'UNINSTALL_PURGE_PROJECT_DATA', params: { path: local } });
-    expect(await lstat(join(local, 'policy.json'))).toBeTruthy();
-    // Negative: a data root moved outside the global home is a genuine relocation and keeps the authority refusal.
+    const layout = await install(), ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    await writeFile(join(local, 'notes.txt'), 'UNKNOWN KEEP', { mode: 0o600 }); await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY KEEP\n', { mode: 0o600 });
+    // Dogfood: the team commits a Deckent file; Git tracking makes it the team's, never a member.
+    const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', HOME: join(root, 'home') } });
+    git('init', '-q'); git('add', '-f', '.deckent/bindings.json');
+    const plan = await previewConfiguredUninstall(project, ALL, options), members = plan.items.find(item => item.resourceId === 'global-data')!.members!;
+    expect(plan.blockers).toEqual([]); expect(plan.purge).toBe(true);
+    expect(members).toEqual(expect.arrayContaining([ledger, join(local, 'policy.json'), join(local, 'installation-identity/identity.json')]));
+    expect(members).not.toContain(join(local, 'bindings.json'));
+    expect(plan.items.find(item => item.resourceId.startsWith('tracked.'))).toMatchObject({ locator: join(local, 'bindings.json'), action: 'keep', reason: 'vcs-tracked' });
+    expect(plan.items.find(item => item.resourceId === 'terminalHistory')).toMatchObject({ action: 'keep', reason: 'not-backed-up' });
+    expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    expect(result.status).toBe('completed');
+    for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1');
+    expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP'); expect(await readFile(join(local, 'state/terminal-history.jsonl'), 'utf8')).toBe('HISTORY KEEP\n');
+    (await verifyBackupSet(result.backup.destination!, phrase, getConfigFieldDefault('installation').packageMeasurement)).close();
+    expect(result.backup.destination!.startsWith(project)).toBe(false);
+    // Negative: a data root moved outside the global home and the project is a genuine relocation; the data tier stays closed with its path.
     await install(elsewhere);
-    expect((await previewConfiguredUninstall(project, true, options)).blockers).toContain(`authority-relocated:${elsewhere}`);
+    expect((await previewConfiguredUninstall(project, ALL, options)).blockers).toContain(`authority-relocated:${elsewhere}`);
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -311,17 +342,17 @@ it('resumes an interrupted final tail only through a second card that lists the 
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     const members = [ledger, join(data, 'bindings.json'), join(data, 'policy.json'), join(data, 'installation-identity/identity.json'), join(data, 'approvals', keyFile)];
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
-    const plan = await previewConfiguredUninstall(project, true, options);
+    const plan = await previewConfiguredUninstall(project, ALL, options);
     tail.left = 4; // the process "dies" inside the final tail after policy.json is gone: authority must come from the verified set
     let interrupted;
-    try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
+    try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
     finally { tail.left = null; }
     expect(interrupted.status).toBe('unknown'); expect(await lstat(uninstallHoldPath(data))).toBeTruthy();
     const remaining: string[] = []; for (const path of members) if (await lstat(path).catch(() => null)) remaining.push(path);
     expect(remaining.length).toBeGreaterThan(0); expect(remaining).not.toContain(join(data, 'policy.json'));
-    const second = await previewConfiguredUninstall(project, true, options);
+    const second = await previewConfiguredUninstall(project, ALL, options);
     expect(second.items.filter(item => item.action === 'remove')).toEqual([expect.objectContaining({ resourceId: 'global-data', members: remaining, reason: 'resume' })]);
-    const command = { schemaVersion: 1, commandId: 'resume', planDigest: second.planDigest };
+    const command = { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest };
     // Cancelling the second card deletes nothing; a wrong passphrase cannot verify the set, so nothing is deleted either.
     expect((await applyConfiguredUninstall(project, command, { backupPassphrase: async () => { throw Error('unexpected prompt'); }, confirm: async () => false }, options)).status).toBe('cancelled');
     await expect(applyConfiguredUninstall(project, command, { backupPassphrase: async () => 'wrong-passphrase', confirm: async () => true }, options)).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' });
@@ -332,7 +363,7 @@ it('resumes an interrupted final tail only through a second card that lists the 
     expect(resumed).toMatchObject({ status: 'completed', planDigest: second.planDigest }); expect(cards).toBe(1);
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
-    const replay = await previewConfiguredUninstall(project, true, options);
+    const replay = await previewConfiguredUninstall(project, ALL, options);
     expect(replay.items.every(item => item.action === 'keep')).toBe(true);
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
@@ -364,11 +395,11 @@ it('purges a tree only through its owner\'s signed records that the final set re
     const keep = [join(operations, 'unsigned-note'), join(operations, `renamed-${eventId}`), join(data, 'audit/authority-revisions/r-1.json'), join(data, 'artifacts', 'a'.repeat(64), 'b'.repeat(64))];
     await writeFile(keep[0]!, 'FOREIGN KEEP', { mode: 0o600 }); await writeFile(keep[1]!, await readFile(record), { mode: 0o600 });
     for (const path of keep.slice(2)) await writeFile(path, 'UNREADY KEEP', { mode: 0o600 });
-    const plan = await previewConfiguredUninstall(project, true, options);
+    const plan = await previewConfiguredUninstall(project, ALL, options);
     expect(plan.blockers).toEqual([]);
     expect(plan.items.find(item => item.resourceId === 'global-data')!.members).toContain(record);
     for (const locator of [...keep.slice(0, 2), join(data, 'audit/authority-revisions'), join(data, 'artifacts')]) expect(plan.items.find(item => item.locator === locator)).toMatchObject({ action: 'keep' });
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'tree', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'tree', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(result.status).toBe('completed');
     await expect(lstat(record)).rejects.toMatchObject({ code: 'ENOENT' });
     for (const path of keep) expect((await readFile(path)).length).toBeGreaterThan(0);

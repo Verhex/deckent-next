@@ -21,14 +21,14 @@ export { getConfigKnownSecrets } from '#platform/core/config/index.js';
 export { formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal } from '#platform/core/crash-reporting/index.js';
 export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
 export { ENVIRONMENT_KEYS, envValue, adoptProductionReact, callerEnvironment } from '#platform/core/host/index.js';
-export { isMainModule } from '#platform/core/host/index.js';
+export { isMainModule, packageRemovalCommand } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths, resolveProjectRoot, type ProjectRootPorts, type ProjectRootResolution } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
-export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
+export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, observeUserUnit, disableUserUnit, type UserUnitExec, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
 export { readBuildIdentity, isSourceCheckout, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
 export { isLiteralLoopbackHostname } from '#platform/core/validate/index.js';
@@ -88,7 +88,7 @@ export { ED25519_PKCS8_BYTES, ED25519_SPKI_BYTES, ed25519KeyId, ed25519Signer, g
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
-export { isRecord, assertSafeKeys, digestText, pathsShareTree } from '#platform/core/utils/index.js';
+export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, PRIVATE_PERMISSION_MASK } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
 export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 

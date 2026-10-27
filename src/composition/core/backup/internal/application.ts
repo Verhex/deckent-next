@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
 import { BackupApplication, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority } from '#engine/index.js';
 import { PolicyFileError, FileBackupStorage, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
-import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease } from '#adapters/index.js';
+import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory } from '#adapters/index.js';
 import { ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -35,7 +35,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     const existingPolicy = await lstat(productResourcePath(layout, 'policy')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const identity = readLocalOsIdentity();
     // Restoring exactly the final set of an interrupted purge ends that purge (its hold) once the restore succeeded.
-    const release = command.action === 'restore' ? await uninstallRestoreRelease(layout.root, { ...identity, scopeIds: [] }, config.installation.profileMaxBytes, command.set) : null;
+    const release = command.action === 'restore' ? await uninstallRestoreRelease(uninstallRecoveryDirectory(layout.root, options.env ?? process.env), layout.root, { ...identity, scopeIds: [] }, config.installation.profileMaxBytes, command.set) : null;
     let document, authority: BackupAuthority;
     // Astra 2471 R1: a held installation's policy pair is what the interrupted restore left; only then may restore fall back to the set's policy.
     const current = existingPolicy && await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load().catch(async error => {

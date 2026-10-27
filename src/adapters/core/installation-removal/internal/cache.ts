@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
 import { lstat, opendir, realpath, rmdir, unlink } from 'node:fs/promises';
-import { dirname, isAbsolute, join, parse, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, parse } from 'node:path';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
+import { pathWithin as inside, PRIVATE_PERMISSION_MASK } from '#platform/index.js';
 /** `members`: the resource owner's naming, one anchored pattern per level below `path`; a last-level match is one owned tree. */
 export interface CacheRemovalResource { readonly resourceId: string; readonly path: string; readonly ownershipDigest: string; readonly members: readonly string[] }
 export interface CacheRemovalBounds { readonly maxEntries: number; readonly maxDepth: number }
-const inside = (parent: string, child: string) => { const path = relative(parent, child); return !path || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)); };
-const PRIVATE_PERMISSION_MASK = 0o077;
 const rejected = (): never => { throw new EffectTargetError('EFFECT_TARGET_REJECTED'); };
 /** Disposal is restricted to the owner's named members below a registered path; unlisted entries and non-empty parents stay.
  * Directory removal is bounded, link-free and never recursive rm. */

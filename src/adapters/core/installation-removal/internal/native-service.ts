@@ -1,13 +1,12 @@
-import { constants } from 'node:fs';
+import { constants, existsSync } from 'node:fs';
 import { lstat, open, realpath, readlink, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { execFile } from 'node:child_process';
 import { z } from 'zod';
 import { EffectTargetError } from '#engine/index.js';
-import { sha256, type IntegrityAuthority } from '#platform/index.js';
-import { readProcessFile } from '#platform/index.js';
+import { sha256, readProcessFile, PRIVATE_PERMISSION_MASK, type IntegrityAuthority } from '#platform/index.js';
 import type { RemovalService, ServiceObservation, ServiceRemovalDriver } from './service.js';
-const PRIVATE_PERMISSION_MASK = 0o077;
+import { removalRegistry } from './inventory.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const artifact = z.object({ path: z.string().min(1), digest, link: z.string().nullable() }).strict();
 const recordSchema = z.object({ schemaVersion: z.literal(1), installationId: z.string().min(1), manager: z.literal('systemd'), scope: z.literal('user'),
@@ -34,11 +33,12 @@ export async function readNativeServiceRecord(directory: string, installationId:
     return record;
   } finally { await file.close(); }
 }
-/** No shell, elevation or inherited credentials. All commands and manager output share the caller's existing limits. */
+/** No shell, elevation or inherited credentials; systemctl by absolute path from the registry (K4). Commands and output share the caller's limits. */
 export function nativeServiceExec(bounds: { timeoutMs: number; outputBytes: number }, env: Readonly<Record<string, string | undefined>>): NativeServiceExec {
   const bus = Object.fromEntries(['PATH', 'HOME', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS'].flatMap(key => env[key] === undefined ? [] : [[key, env[key]]]));
-  return args => new Promise((resolve, reject) => execFile('systemctl', ['--user', ...args], { env: bus, shell: false, encoding: 'utf8',
-    timeout: bounds.timeoutMs, maxBuffer: bounds.outputBytes }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+  const systemctl = removalRegistry.systemctl.find(path => existsSync(path));
+  return args => new Promise((resolve, reject) => systemctl ? execFile(systemctl, ['--user', ...args], { env: bus, shell: false, encoding: 'utf8',
+    timeout: bounds.timeoutMs, maxBuffer: bounds.outputBytes }, (error, stdout) => error ? reject(error) : resolve(stdout)) : reject(new Error('SYSTEMCTL_ABSENT')));
 }
 /** Exact user-unit artifacts only. Enablement links are removed individually; `disable` may otherwise follow Also=/aliases. */
 export class NativeServiceRemovalDriver implements ServiceRemovalDriver {

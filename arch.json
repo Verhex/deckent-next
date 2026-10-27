@@ -1530,7 +1530,11 @@
         "src/adapters/core/approval-store",
         "src/engine/core/effect",
         "src/domain/core/effect",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/adapters/core/runtime-launcher",
+        "src/composition/core/runtime-service",
+        "src/composition/core/runs",
+        "src/composition/core/approvals"
       ],
       "plan": "INSTALLATION"
     },
@@ -4376,7 +4380,6 @@
         "src/engine/core/toolchain-currency",
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/utils",
-        "src/adapters/core/attempt-store",
         "src/domain/core/policy",
         "src/adapters/core/local-runtime-socket",
         "src/engine/core/audit"

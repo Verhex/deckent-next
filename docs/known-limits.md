@@ -629,16 +629,27 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Skills with support files are refused by owner decision (2026-10-26, H6).** SKILL.md-only skills may be used; a skill
   requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
   *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
-- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews; application needs the
-  person's real-terminal card. Ledger, audit/identity keys, secrets and project data stay by default. Images remain until a
-  complete usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
-  *Workaround:* follow the plan's per-item instructions, then the package removal command it prints; see the
+- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews any tier; application needs the
+  person's real-terminal card. Keep-data removes only caches and stops the service. Images remain until a complete
+  usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
+  *Workaround:* follow the plan's per-item instructions, then the printed program command; see the
   [AI installation guide](ai-install.md#uninstall).
-- **Purge is bounded by ownership, backup and delete authority.** `deckent uninstall --purge` removes only covered files
-  after a managed backup and person confirmation. Company retention and unready folders stay, with their paths shown.
-  Moved/unsafe authority files stop purge before it starts. A partial final purge resumes only after remaining bytes and
-  delete authority are re-verified; otherwise files stay and managed backup restore remains available. An unknown step
-  stays unknown. *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
+- **Delete everything deletes only what the backup set restores.** `deckent uninstall --all` deletes, after a verified
+  plan-bound backup, the authority files and signed audit records the standard `deckent backup` set restores (owner K7).
+  Chat history, logs, workspaces, earlier backups, run folders, `DECKENT.md` and its bridge lines, the shared global home and
+  this folder's global slices are not in that set, so they stay and are listed; the project `.deckent` folder therefore
+  usually stays. Keep-work currently removes the same as keep-data and is offered only when it would differ.
+  *Workaround:* remove the listed files yourself after reviewing them; widening deletion needs a backup-set extension decision.
+- **Force and the service have bounded reach.** `--force` cancels runs and rejects approvals with the person's authority but
+  cannot withdraw queued deliveries (no withdrawal owner exists: `UNINSTALL_DELIVERY_QUEUED`); unknown results are never
+  closed. A unit Deckent did not create is disabled only with `--disable-unit` when every K4 check holds; otherwise the command
+  is printed. A hand-made launcher (for example `~/.local/bin/deckent-…`) is not detected. Uninstall refuses a
+  `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet.
+  *Workaround:* finish deliveries with the delivery commands, stop the unit yourself, or ask the administrator for a direct allow.
+- **A partial deletion resumes only after re-verification.** Moved/unsafe authority files and unreadable Git tracking stop
+  the data tier before it starts. A partial final deletion resumes only after remaining bytes and delete authority are
+  re-verified; otherwise files stay and managed backup restore remains available. An unknown step stays unknown.
+  *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
 
 ## Desktop and other surfaces
 

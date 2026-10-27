@@ -1,4 +1,6 @@
 import { closeSync, openSync, readSync } from 'node:fs';
+import { lstat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
 /** A service manager that runs a process: systemd places a unit's processes in the unit's control group (`<name>.service`) and names one main process. */
@@ -45,3 +47,24 @@ export async function detectServiceManager(pid: number | undefined, mainPid: Ser
 /** The operator command that restarts the unit through its manager. */
 export const serviceManagerRestartCommand = (found: ServiceManagerUnit): string =>
   `systemctl ${found.scope === 'user' ? '--user ' : ''}restart ${found.unit}`;
+/** One bounded `systemctl --user` command supplied by the adapter (absolute path, no shell, no inherited credentials); resolves with its stdout. */
+export type UserUnitExec = (args: readonly string[]) => Promise<string>;
+const showValues = async (exec: UserUnitExec, unit: string, properties: readonly string[]) => Object.fromEntries((await exec(['show',
+  ...properties.flatMap(name => ['--property', name]), '--', unit])).trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+/** K4: a user unit Deckent did not create, observed as running this installation's described service. `eligible` only when its main process is that
+ * process, nothing else is in its control group, it has no alias or drop-in and its regular unit file declares no Also=/Alias=. Never a system unit. */
+export async function observeUserUnit(found: { readonly scope: 'user' | 'system'; readonly unit: string }, processId: number, exec: UserUnitExec) {
+  const command = `systemctl ${found.scope === 'user' ? '--user ' : ''}disable --now ${found.unit}`, values = found.scope === 'user' && process.platform === 'linux'
+    ? await showValues(exec, found.unit, ['MainPID', 'ControlGroup', 'FragmentPath', 'Names', 'DropInPaths']).catch(() => null) : null;
+  const text = values && readProcessFile(values['FragmentPath'] ?? ''), file = text && await lstat(values['FragmentPath']!).catch(() => null);
+  const eligible = !!file && file.isFile() && file.size === Buffer.byteLength(text) && !/^\s*(?:Also|Alias)\s*=\s*\S/mu.test(text) && !values['DropInPaths']
+    && values['Names']?.trim() === found.unit && Number(values['MainPID']) === processId
+    && readProcessFile(join('/sys/fs/cgroup', values['ControlGroup'] ?? '', 'cgroup.procs'))?.trim() === String(processId);
+  return { unitDisable: eligible ? 'eligible' as const : 'command-only' as const, command };
+}
+/** K4 (d)/(e): `disable --now` of the exact user unit after the governed shutdown; the unit file stays. Returns its previous state and the undo command. */
+export async function disableUserUnit(unit: string, exec: UserUnitExec) {
+  const previous = (await showValues(exec, unit, ['UnitFileState']))['UnitFileState'] ?? 'unknown';
+  await exec(['disable', '--now', '--', unit]);
+  return { unit, previous, undo: `systemctl --user ${previous === 'enabled' ? 'enable --now' : 'start'} ${unit}` };
+}

@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { InstallationServiceRemovalTarget, InstallationCacheRemovalTarget, type ServiceObservation, type ServiceRemovalDriver } from '#adapters/core/installation-removal/index.js';
 const roots: string[] = [];
+const observed = { dataBlockers: [], managedScopes: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true },
+  service: { running: false, unit: null, unitDisable: 'none' as const, command: null } };
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 it('observes stop and disable before removing only the owned service; foreign/Also/trigger/self and unresolved native states refuse', async () => {
@@ -89,12 +92,12 @@ it('keeps an authenticated recovery hold on unknown, rejects a different install
   const principal = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['company'] };
   const integrity = createHmacIntegrity('fixture', new Uint8Array(32).fill(7));
   const recovery = new UninstallRecovery(root, 'installation', principal, integrity, 65536);
-  const plan = createUninstallPlan({ schemaVersion: 1, purge: false }, { installation: { id: 'installation', root }, scopeSummary: ['company'], layoutRevision: 'l1',
-    policyRevision: 'p1', inventoryRevision: 'i1', resources: [], blockers: [], protectedPaths: [], deletionRoots: [root], backupDestination: null, packageRemoval: { command: null, shared: true } });
+  const plan = createUninstallPlan({ schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false }, { installation: { id: 'installation', root }, scopeSummary: ['company'], layoutRevision: 'l1',
+    policyRevision: 'p1', inventoryRevision: 'i1', resources: [], blockers: [], protectedPaths: [], deletionRoots: [root], backupDestination: null, packageRemoval: { command: null, shared: true }, ...observed });
   expect(await recovery.retained(plan.planDigest)).toBeNull();
   await expect(lstat(join(root, 'uninstall-recovery'))).rejects.toMatchObject({ code: 'ENOENT' });
   await recovery.admit(plan); expect(await recovery.retained(plan.planDigest)).toEqual(plan);
-  const outcome = { schemaVersion: 1 as const, planDigest: plan.planDigest, status: 'unknown' as const, items: [], recoveryLocation: root, backup: plan.backup, packageRemoval: plan.packageRemoval };
+  const outcome = { schemaVersion: 2 as const, planDigest: plan.planDigest, status: 'unknown' as const, items: [], recoveryLocation: root, backup: plan.backup, packageRemoval: plan.packageRemoval, uncertain: [] };
   await recovery.finish(outcome); expect(await lstat(uninstallHoldPath(root))).toBeTruthy();
   await expect(new UninstallRecovery(root, 'another-installation', principal, integrity, 65536).retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
   await expect(new UninstallRecovery(root, 'installation', { ...principal, subject: 'another-person' }, integrity, 65536).retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
@@ -190,18 +193,23 @@ it('keeps immutable tombstones across reinstall and never substitutes an old com
   const { uninstallHoldPath } = await import('#platform/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-reinstalled-purge-')); roots.push(root);
   const data = join(root, 'global'); await mkdir(data, { mode: 0o700 });
-  const directory = uninstallRecoveryDirectory(data); await mkdir(directory, { mode: 0o700, recursive: true });
+  // §5.5: the recovery directory is the person's XDG state, outside the data root; the alpha.56 place beside it is read only while it alone exists.
+  const env = { HOME: join(root, 'home') }, directory = uninstallRecoveryDirectory(data, env);
+  expect(directory.startsWith(join(root, 'home', '.local', 'state', 'deckent', 'uninstall'))).toBe(true);
+  const legacy = join(root, '.deckent-uninstall', createHash('sha256').update(data).digest('hex')); await mkdir(legacy, { recursive: true });
+  expect(uninstallRecoveryDirectory(data, env)).toBe(legacy); expect(uninstallRecoveryDirectory(data, { ...env, XDG_STATE_HOME: join(root, 'state') })).toBe(legacy);
+  await mkdir(directory, { mode: 0o700, recursive: true }); expect(uninstallRecoveryDirectory(data, env)).toBe(directory);
   const actor = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['s'] };
-  const plan = (id: string) => createUninstallPlan({ schemaVersion: 1, purge: true }, { installation: { id, root: data }, scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: id,
-    resources: [], blockers: [], protectedPaths: [], deletionRoots: [data], backupDestination: join(root, 'backup'), packageRemoval: { command: null, shared: true } });
-  const finish = async (value: ReturnType<typeof plan>) => writeUninstallTombstone(data, actor, value, { schemaVersion: 1, planDigest: value.planDigest,
-    status: 'completed', items: [], recoveryLocation: directory, backup: value.backup, packageRemoval: value.packageRemoval });
+  const plan = (id: string) => createUninstallPlan({ schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, { installation: { id, root: data }, scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: id,
+    resources: [], blockers: [], protectedPaths: [], deletionRoots: [data], backupDestination: join(root, 'backup'), packageRemoval: { command: null, shared: true }, ...observed });
+  const finish = async (value: ReturnType<typeof plan>) => writeUninstallTombstone(directory, data, actor, value, { schemaVersion: 2, planDigest: value.planDigest,
+    status: 'completed', items: [], recoveryLocation: directory, backup: value.backup, packageRemoval: value.packageRemoval, uncertain: [] });
   const first = plan('first'); await finish(first);
   const saved = await readFile(join(directory, `${first.planDigest}.tombstone.json`));
-  expect((await readUninstallTombstone(data, actor, 65536))?.plan.installation.id).toBe('first');
+  expect((await readUninstallTombstone(directory, data, actor, 65536))?.plan.installation.id).toBe('first');
   await writeFile(uninstallHoldPath(data), 'unknown-new-purge', { mode: 0o600 });
-  expect(await readUninstallTombstone(data, actor, 65536)).toBeNull();
+  expect(await readUninstallTombstone(directory, data, actor, 65536)).toBeNull();
   const second = plan('second'); await finish(second); await rm(uninstallHoldPath(data));
-  expect((await readUninstallTombstone(data, actor, 65536))?.plan.installation.id).toBe('second');
+  expect((await readUninstallTombstone(directory, data, actor, 65536))?.plan.installation.id).toBe('second');
   expect(await readFile(join(directory, `${first.planDigest}.tombstone.json`))).toEqual(saved);
 });

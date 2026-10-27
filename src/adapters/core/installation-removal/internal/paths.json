@@ -1,6 +1,28 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "recoveryDirectory": ".deckent-uninstall",
+  "recoveryRoot": {
+    "linux": {
+      "environment": "XDG_STATE_HOME",
+      "fallback": ".local/state",
+      "path": "deckent/uninstall"
+    },
+    "wsl": {
+      "environment": "XDG_STATE_HOME",
+      "fallback": ".local/state",
+      "path": "deckent/uninstall"
+    },
+    "darwin": {
+      "environment": null,
+      "fallback": "Library/Application Support",
+      "path": "deckent/uninstall"
+    },
+    "win32": {
+      "environment": "LOCALAPPDATA",
+      "fallback": "AppData/Local",
+      "path": "deckent/uninstall"
+    }
+  },
   "purgeMembers": {
     "ledger": "",
     "bindings": "",
@@ -29,5 +51,14 @@
     "secrets.key"
   ],
   "initialBackupPrefix": "initial-",
-  "finalBackupPrefix": "final-"
+  "finalBackupPrefix": "final-",
+  "systemctl": [
+    "/usr/bin/systemctl",
+    "/bin/systemctl"
+  ],
+  "git": [
+    "/usr/bin/git",
+    "/usr/local/bin/git",
+    "/opt/homebrew/bin/git"
+  ]
 }

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { BackupApplication, EffectTargetError, policyBackupAuthorization, type UninstallPlan } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { FileBackupStorage, recordBackupAudit, readBackupConfig, verifyBackupSet, ledgerFingerprint, type VerifiedBackup } from '#adapters/core/backup-store/index.js';
@@ -52,7 +52,7 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
     const bound = [];
     for (const member of members) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
     const snapshot: DataRemovalSnapshot = { set: verified.set, manifestDigest: digest(await readFile(join(verified.set, 'MANIFEST.sha256'))), members: bound };
-    await writeUninstallIntent(layout.root, principal, plan, snapshot);
+    await writeUninstallIntent(dirname(plan.backup.destination), layout.root, principal, plan, snapshot);
     return { set, snapshot };
   } finally { verified.close(); }
 }

@@ -30,9 +30,9 @@ export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, Instal
 
 export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';
 
-export { createUninstallPlan, assertUninstallPlanCurrent, uninstallAuthorityBlocker, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
+export { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
 export type { UninstallInventory, UninstallContribution } from './internal/uninstall-plan.js';
-export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError } from './internal/uninstall-contract.js';
-export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem } from './internal/uninstall-contract.js';
-export { UninstallApplication, authorizeUninstall, approvedUninstallEffects, uninstallAffectedScopes } from './internal/uninstall-application.js';
+export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError, UNINSTALL_TIERS } from './internal/uninstall-contract.js';
+export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem, UninstallTier, UninstallQuery, UninstallWork, UninstallService } from './internal/uninstall-contract.js';
+export { UninstallApplication, authorizeUninstall, approvedUninstallEffects, uninstallAffectedScopes, uninstallManagedScopes } from './internal/uninstall-application.js';
 export type { UninstallApplicationPorts, UninstallAdmission, UninstallInteraction } from './internal/uninstall-application.js';

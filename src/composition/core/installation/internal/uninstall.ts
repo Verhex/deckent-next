@@ -1,79 +1,79 @@
 import { userInfo } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { policySchema } from '#domain/index.js';
-import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority } from '#adapters/index.js';
-import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, type UninstallInteraction } from '#engine/index.js';
-import { ErrorRegistry, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
+import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
+  uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, querySystemdMainPid } from '#adapters/index.js';
+import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, uninstallManagedScopes, type UninstallInteraction } from '#engine/index.js';
+import { ErrorRegistry, productResourcePath, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail } from '#adapters/index.js';
-import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
+import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
+import { configuredApproval } from '#composition/core/approvals/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+const load = (root: string, options: ConfigLoadOptions) => loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
 
 /** Trusted local composition: read-only previews and witnessed application admission use the same owned inventory. */
 async function configuredUninstall(root: string, options: ConfigLoadOptions) {
-  const config = await loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
-  const layout = config.productLayout, scopeId = readTerminalConfig(config as Record<string, unknown>).scopeId;
+  const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env;
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
-  const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
-
+  const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, options);
   const scopes = (document: unknown) => uninstallAffectedScopes(document, [scopeId,
     ...(config.service.identity ? [config.service.identity.scopeId] : []), ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])]);
+  const installationId = async () => { const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
+    if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE'); return identity.value.installationId; };
+  // Like BackupApplication, this installation-wide operation uses explicit all-scopes policy, not project-record admission. The ledger is only read (no sidecars).
+  const person = async () => ({ ...readLocalOsIdentity(), scopeIds: scopes(await source.load()) }), exec = nativeServiceExec(config.installation.identityProbe, env);
   return new UninstallApplication({
     channel: localPrincipalChannel(), witness: { attest: () => { const peer = localPrincipalPeer(); return attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } },
-    async principal() {
-      const document = policySchema.parse(await source.load()), identity = readLocalOsIdentity();
-      // Like BackupApplication, this installation-wide operation uses explicit all-scopes policy, not project-record admission.
-      // No ledger open (even read-only SQLite may create WAL/SHM), so preview cannot create sidecars.
-      return { ...identity, scopeIds: scopes(document) };
-    },
-    async authorize(action, principal) {
-      const document = policySchema.parse(await source.load());
-      const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
-      if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
-      authorizeUninstall(document, principal, identity.value.installationId, scopes(document), action);
-    },
-    async inventory(purge) {
-      const document = policySchema.parse(await source.load());
-      return (await configuredUninstallInventory(config, document.revision, scopes(document), options, purge)).inventory;
+    principal: person,
+    async authorize(action, principal) { authorizeUninstall(policySchema.parse(await source.load()), principal, await installationId(), scopes(await source.load()), action); },
+    async inventory() {
+      const document = policySchema.parse(await source.load()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
+      return { ...inventory, managedScopes: uninstallManagedScopes(document, scopes(document)) };
     },
     async retainedPlan(digest) {
-      const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
-      if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
-      const principal = { ...readLocalOsIdentity(), scopeIds: scopes(await source.load()) };
-      const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
-      return new UninstallRecovery(layout.root, identity.value.installationId, principal, integrity, config.installation.profileMaxBytes, uninstallRecoveryDirectory(layout.root)).retained(digest);
+      return new UninstallRecovery(layout.root, await installationId(), await person(), await openLocalIntegrityAuthority(layout, config.approvals.keyFile),
+        config.installation.profileMaxBytes, uninstallRecoveryDirectory(layout.root, env)).retained(digest);
     },
-    async withAdmission(plan, _commandId, work) {
-      const document = policySchema.parse(await source.load()), scopeIds = scopes(document);
-      return withUninstallAdmission(config, plan, { ...readLocalOsIdentity(), scopeIds }, scopeId, scopeIds, options, work);
-    },
+    async withAdmission(plan, _commandId, work) { const principal = await person(); return withUninstallAdmission(config, plan, principal, scopeId, principal.scopeIds, options, work); },
+    // K3: the person's own authority through the existing owners; a cancellation is a durable intent, a rejection the person's decision.
+    force: { cancelRun: async ref => { await requestConfiguredRunCancellation(root, { schemaVersion: 1, scopeId: ref.scopeId, runId: ref.id, commandId: randomUUID(), action: 'cancel', expectedRevision: ref.revision }, options); },
+      rejectApproval: async ref => { await configuredApproval(root, 'decide', { schemaVersion: 1, scopeId: ref.scopeId, approvalId: ref.id, commandId: randomUUID(), expectedRevision: ref.revision,
+        decision: 'deny', reason: 'uninstall --force', channel: 'local-cli' }, options); } },
+    // Waits are bounded by their owners' configuration: the cancellation claim lifetime, else the service lifecycle budget.
+    settle: { budgetMs: config.cancellation?.claimTtlMs ?? terminal.serviceStartTimeoutMs, wait: delay },
+    service: { budgetMs: terminal.serviceStartTimeoutMs, describe: signal => client.describeService(signal),
+      async unit(pid) { const found = await detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS, env));
+        return found && { unit: found.unit, ...await observeUserUnit(found, pid, exec) }; },
+      async shutdown() { const live = await client.describeService(AbortSignal.timeout(terminal.serviceStartTimeoutMs));
+        if (!live.identity) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_UNAVAILABLE');
+        return client.shutdownService({ schemaVersion: 1, commandId: randomUUID(), serviceId: live.identity.serviceId, instanceId: live.instanceId, reason: 'uninstall' }, AbortSignal.timeout(terminal.serviceStartTimeoutMs)); },
+      disable: unit => disableUserUnit(unit, exec) },
   });
 }
 async function completed(root: string, options: ConfigLoadOptions, settle = false) {
-  const config = await loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
-  return readUninstallTombstone(config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes, productResourcePath(config.productLayout, 'installationIdentity'), settle);
+  const config = await load(root, options), directory = uninstallRecoveryDirectory(config.productLayout.root, options.env ?? process.env);
+  return { directory, previous: await readUninstallTombstone(directory, config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes,
+    productResourcePath(config.productLayout, 'installationIdentity'), settle) };
 }
-export async function previewConfiguredUninstall(root: string, purge: boolean, options: ConfigLoadOptions = {}) {
-  const previous = await completed(root, options); if (previous) return completedUninstallPreview(previous.plan, previous.remaining);
-  return (await configuredUninstall(root, options)).preview(purge);
+export async function previewConfiguredUninstall(root: string, query: unknown, options: ConfigLoadOptions = {}) {
+  const { previous } = await completed(root, options); if (previous) return completedUninstallPreview(previous.plan, previous.remaining);
+  return (await configuredUninstall(root, options)).preview(query);
 }
 export async function applyConfiguredUninstall(root: string, input: unknown, interaction: UninstallInteraction, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
-  const previous = await completed(root, options);
-  if (previous) {
-    const witnessed = async () => { const peer = localPrincipalPeer();
-      if (localPrincipalChannel() || !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'uninstall' } }); };
-    await witnessed();
-    const plan = completedUninstallPreview(previous.plan, previous.remaining);
-    const command = uninstallApplySchema.safeParse(input); if (!command.success) throw ErrorRegistry.createError('UNINSTALL_INVALID');
-    if (command.data.planDigest !== plan.planDigest) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');
-    // The second card resumes an interrupted tail; its answer grants no authority (decided again in the owner, under custody).
-    if (previous.remaining) {
-      if (!await interaction.confirm(plan)) return { ...previous.result, status: 'cancelled' as const, items: [], planDigest: plan.planDigest };
-      await witnessed();
-      const config = await loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
-      return { ...await resumeUninstallFinalTail(config, { ...readLocalOsIdentity(), scopeIds: [] }, await interaction.backupPassphrase?.() ?? ''), planDigest: plan.planDigest };
-    }
-    return { ...(await completed(root, options, true) ?? previous).result, status: 'noop' as const, planDigest: plan.planDigest };
-  }
-  return (await configuredUninstall(root, options)).apply(input, interaction, signal);
+  const { previous, directory } = await completed(root, options);
+  if (!previous) return (await configuredUninstall(root, options)).apply(input, interaction, signal);
+  const witnessed = async () => { const peer = localPrincipalPeer();
+    if (localPrincipalChannel() || !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'uninstall' } }); };
+  await witnessed();
+  const plan = completedUninstallPreview(previous.plan, previous.remaining);
+  const command = uninstallApplySchema.safeParse(input); if (!command.success) throw ErrorRegistry.createError('UNINSTALL_INVALID');
+  if (command.data.planDigest !== plan.planDigest) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');
+  // The second card resumes an interrupted tail; its answer grants no authority (decided again in the owner, under custody).
+  if (!previous.remaining) return { ...((await completed(root, options, true)).previous ?? previous).result, status: 'noop' as const, planDigest: plan.planDigest };
+  if (!await interaction.confirm(plan)) return { ...previous.result, status: 'cancelled' as const, items: [], planDigest: plan.planDigest };
+  await witnessed();
+  return { ...await resumeUninstallFinalTail(await load(root, options), directory, { ...readLocalOsIdentity(), scopeIds: [] }, await interaction.backupPassphrase?.() ?? ''), planDigest: plan.planDigest };
 }
