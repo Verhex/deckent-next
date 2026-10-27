@@ -471,7 +471,7 @@ describe('/model source', () => {
     const { root, options } = await project({});
     const view = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'not-configured', availability: 'not-observed', catalog: null }) }, options, 'tr')
       .inspect();
-    expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('buradan eklenmez');
+    expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('Henüz bağlı bir model yok'); expect(view.notes[0]).toContain('/provider');
   });
 });
 

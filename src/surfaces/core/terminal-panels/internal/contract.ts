@@ -195,6 +195,8 @@ export interface ModelPanelLabels {
   /** T4-B shadow window: `{model}` the project's model; its two governed choices and "keep as it is". */
   readonly shadowTitle: string; readonly shadowRemove: string; readonly shadowAlign: string; readonly shadowKeep: string;
   readonly switch: ModelSwitchLabels;
+  /** BeUser alpha.56.1 (3t): the empty list's action row that opens the `/provider` connect flow. */
+  readonly connect?: string;
 }
 
 /** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */

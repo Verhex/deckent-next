@@ -33,7 +33,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
     model: { hints: t('tui.panel.model.hints', {}, locale), session: t('tui.panel.model.session', {}, locale), sessionAndDefault: t('tui.panel.model.sessionAndDefault', {}, locale),
       pinnedMark: t('tui.panel.model.pinnedMark', {}, locale), configuredMark: t('tui.panel.model.configuredMark', {}, locale), pinned: t('tui.panel.model.pinned', {}, locale),
       shadowTitle: t('tui.panel.model.shadowTitle', {}, locale), shadowRemove: t('tui.panel.model.shadowRemove', {}, locale),
-      shadowAlign: t('tui.panel.model.shadowAlign', {}, locale), shadowKeep: t('tui.panel.model.shadowKeep', {}, locale),
+      shadowAlign: t('tui.panel.model.shadowAlign', {}, locale), shadowKeep: t('tui.panel.model.shadowKeep', {}, locale), connect: t('tui.panel.model.connect', {}, locale),
       switch: { title: t('tui.panel.model.switch.title', {}, locale), fresh: t('tui.panel.model.switch.fresh', {}, locale), keep: t('tui.panel.model.switch.keep', {}, locale),
         freshDone: t('tui.panel.model.switch.freshDone', {}, locale), keepDone: t('tui.panel.model.switch.keepDone', {}, locale) } },
     provider: { title: t('tui.panel.provider.title', {}, locale), hints: t('tui.panel.provider.hints', {}, locale),

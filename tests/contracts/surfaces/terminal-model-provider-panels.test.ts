@@ -96,6 +96,20 @@ describe('/model window', () => {
     expect(calls.notices.map(notice => notice.text)).toEqual([expect.stringContaining('This session uses fast (local-openai) from the next turn')]);
   });
 
+  it('BeUser alpha.56.1 (3t): with no model to pick, the first row connects one through the same /provider flow; without that flow the row is absent', async () => {
+    const empty: ModelPanelView = { title: 'Models · scope', notes: ['NO-MODEL-NOTE'], defaultBlocked: null, choices: [] };
+    const { port } = modelPort(empty);
+    const { element } = panel('model', { model: { ...port, provider: providerPort().port } });
+    const view = mount(element, 80, 40, true);
+    await settle(80);
+    expect(view.frame()).toMatch(/>\s+Connect a model…/u);
+    await view.press(ENTER, 80);
+    expect(view.frame()).toContain(terminalPanelLabels('en').provider.title);
+    const bare = mount(panel('model', { model: modelPort(empty).port }).element, 80, 40, true);
+    await settle(80);
+    expect(bare.frame()).not.toContain('Connect a model');
+  });
+
   it('"also make default" is locked with its reason when the host binds no default write', () => {
     const labels = terminalPanelLabels('en').model;
     const tree = modelPanelTree({ ...MODELS, defaultBlocked: 'DECISION-PENDING' }, null, labels, 'T', false);
