@@ -54,5 +54,6 @@
   "config.field.runRuntime.nervous.mode": "Nervous detection (protected; no AI may change it): off does nothing; shadow seals proposals without effects; live executes only a measured rule’s stop step under the owner’s standing grant. Requires a runtime service restart.",
   "config.surface.effectiveDefault": "{key} = {value} (source: {source})",
   "config.issue.unrecognized": "unknown configuration key",
-  "config.issue.type": "incorrect value type"
+  "config.issue.type": "incorrect value type",
+  "config.issue.allowed": "allowed values: {values}"
 }

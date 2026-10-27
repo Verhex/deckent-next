@@ -27,6 +27,7 @@
   "clisetup.config.expected": "a value of type {expected}",
   "clisetup.config.undefined": "{key} is not defined in this installation (optional section). Define it with deckent config on a terminal; details: deckent config explain {key}",
   "error.CLI_CONFIG_VALUE_MISSING": "Missing value for {key}. It takes: {values}. Choose it on a terminal with deckent config set {key}, or give it as JSON: deckent config set {key} <json>.",
+  "error.CLI_CONFIG_VALUE_NOT_JSON": "The value for {key} is not JSON. It takes: {values}. Text goes in JSON quotes, for example: deckent config set {key} '\"<value>\"'.",
   "error.CLI_CONFIG_VALUE_MISSING.partialTime": "This list is partial: discovery stopped at its time limit with {found} found.",
   "error.CLI_CONFIG_VALUE_MISSING.partialSize": "This list is partial: discovery stopped at its size limit with {found} found.",
   "clisetup.coding.none": "This installation has no coding profile. Add one with deckent coding template (guided on a terminal) or deckent init.",

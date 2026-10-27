@@ -17,9 +17,11 @@ export function configDefinitions(): ReadonlyMap<string, ConfigDefinition> {
   }
   return definitions;
 }
+/** BeUser KER-02: the refusal names the key the person asked for (control and format characters shown as `?`), never a literal `{key}`. */
+const unknownKey = (keyPath: string) => new ConfigApplicationError('CONFIG_KEY_UNKNOWN', { key: keyPath.slice(0, 256).replace(/[\p{Cc}\p{Cf}]/gu, '?') });
 export function configPath(keyPath: string): string[] {
   const path = keyPath.split('.');
-  if (!path.length || path.some(part => !part || ['__proto__', 'constructor', 'prototype'].includes(part))) throw new ConfigApplicationError('CONFIG_KEY_UNKNOWN');
+  if (!path.length || path.some(part => !part || ['__proto__', 'constructor', 'prototype'].includes(part))) throw unknownKey(keyPath);
   return path;
 }
 export function atConfigPath(value: unknown, path: readonly string[]): unknown {
@@ -54,13 +56,13 @@ function schemaCachePart(schema: z.ZodTypeAny, part: string): string {
 }
 export function definitionFor(keyPath: string) {
   const path = configPath(keyPath), definition = configDefinitions().get(path[0]!);
-  if (!definition) throw new ConfigApplicationError('CONFIG_KEY_UNKNOWN');
+  if (!definition) throw unknownKey(keyPath);
   let schema = definition.schema;
   // Dynamic array indexes and record names share their registry node; cache growth follows schemas, not document values.
   const schemaPath = [path[0]!];
   for (const part of path.slice(1)) {
     schemaPath.push(schemaCachePart(schema, part));
-    const child = childSchema(schema, part); if (!child) throw new ConfigApplicationError('CONFIG_KEY_UNKNOWN'); schema = child;
+    const child = childSchema(schema, part); if (!child) throw unknownKey(keyPath); schema = child;
   }
   return { path, definition, schema, schemaKey: JSON.stringify(schemaPath) };
 }

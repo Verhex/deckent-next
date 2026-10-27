@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { DeckentError, ErrorRegistry } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, type Params } from '#platform/index.js';
 import type { ApprovalSubject, AuditEvent, VerifiedPrincipal } from '#domain/index.js';
 import type { DeckentConfig } from '#platform/index.js';
 import type { Environment } from '#platform/index.js';
@@ -68,8 +68,8 @@ export type ConfigChangeOutcome =
   | { readonly status: 'approval-pending'; readonly commandId: string; readonly expect: string | null; readonly keyPath: string; readonly layer: ConfigLayer;
     readonly approval: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } };
 export class ConfigApplicationError extends DeckentError {
-  constructor(code: string) {
-    const error = ErrorRegistry.createError(code);
+  constructor(code: string, params?: Params) {
+    const error = ErrorRegistry.createError(code, params ? { params } : {});
     super(code, error.message, error.suggestion, error.docLink, error.whatHappened, error.why, error.howToFix, error.category, undefined, error.localize, error.params);
     this.name = 'ConfigApplicationError';
   }

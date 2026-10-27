@@ -36,7 +36,7 @@ const cases: readonly (readonly [string, unknown, readonly ConfigIssue[]])[] = [
   ['float for int', { mcp: { maxConcurrentCalls: 1.5 } }, one('mcp.maxConcurrentCalls', 'invalid_type')],
   ['Infinity for a safe positive int', { mcp: { maxConcurrentCalls: Infinity } }, [{ path: 'mcp.maxConcurrentCalls', reason: 'invalid_type' }, { path: 'mcp.maxConcurrentCalls', reason: 'too_big' }]],
   ['unsafe integer above max', { runRuntime: { pollIntervalMs: 2 ** 53 } }, one('runRuntime.pollIntervalMs', 'too_big')],
-  ['bad enum', { output_mode: 'turbo' }, one('output_mode', 'invalid_enum_value')],
+  ['bad enum (BeUser KER-05: with the values it takes)', { output_mode: 'turbo' }, [{ path: 'output_mode', reason: 'invalid_enum_value', allowed: ['standard', 'explanatory', 'verbose', 'json'] }]],
   // CONFIG-SURFACE schema 4: a retired top-level field is a typed rejection before zod runs (explicit v3 layers heal on read instead).
   ['retired field', { mode: 'turbo' }, one('mode', 'CONFIG_FIELD_RETIRED')],
   ['bad literal', { storage: { driver: 'postgres' } }, one('storage.driver', 'invalid_literal')],
@@ -53,9 +53,9 @@ const cases: readonly (readonly [string, unknown, readonly ConfigIssue[]])[] = [
     one('inspection.workers.sources.0.id', 'custom')],
   ['object refine custom (no path)', { inspection: { workers: { sources: [
     { id: 'a', kind: 'next-project', path: 'p', scopeId: 's' }, { id: 'a', kind: 'legacy-tasks', path: 'q', scopeId: 's' }] } } }, one('inspection.workers', 'custom')],
-  ['several fields, schema order', { output_mode: 'x', language: 'de' }, [{ path: 'language', reason: 'invalid_enum_value' }, { path: 'output_mode', reason: 'invalid_enum_value' }]],
+  ['several fields, schema order', { output_mode: 'x', language: 'de' }, [{ path: 'language', reason: 'invalid_enum_value', allowed: ['en', 'tr'] }, { path: 'output_mode', reason: 'invalid_enum_value', allowed: ['standard', 'explanatory', 'verbose', 'json'] }]],
   ['section: unknown key', { terminal: { nope: 1 } }, one('terminal', 'unrecognized_keys')],
-  ['section: bad enum in optional sub-object', { terminal: { shell: { schemaVersion: 1, realm: 'x' } } }, one('terminal.shell.realm', 'invalid_enum_value')],
+  ['section: bad enum in optional sub-object', { terminal: { shell: { schemaVersion: 1, realm: 'x' } } }, [{ path: 'terminal.shell.realm', reason: 'invalid_enum_value', allowed: ['require-sandbox', 'prefer-sandbox', 'host'] }]],
   ['section: refine message on array element', { terminal: { fetch: { schemaVersion: 1, allowedHosts: ['127.0.0.1'] } } }, one('terminal.fetch.allowedHosts.0', 'custom')],
   ['section: missing required fields', { provider_spending: {} }, [{ path: 'provider_spending.schemaVersion', reason: 'invalid_union' }, { path: 'provider_spending.budgets', reason: 'invalid_type' }]],
 ];
@@ -65,10 +65,11 @@ describe('config error shape (zod 4 issue-code guard)', () => {
     expect(issues(input)).toEqual(expected);
   });
 
-  it('the localized message carries the reason verbatim in both catalogs', () => {
-    const error = (() => { try { validateConfig({ output_mode: 'turbo' }, 'tr'); } catch (caught) { return caught as ConfigValidationError; } throw new Error('expected'); })();
+  it('the localized message carries the reason verbatim in both catalogs; an enum names the values it takes (BeUser KER-05)', () => {
+    const error = (() => { try { validateConfig({ output_mode: 'turbo', mcp: { maxConcurrentCalls: 'x' } }, 'tr'); } catch (caught) { return caught as ConfigValidationError; } throw new Error('expected'); })();
     expect(error.code).toBe('CONFIG_VALIDATION');
-    expect(error.message).toContain('output_mode: geçersiz değer (invalid_enum_value)');
-    expect(error.localize?.('en').message).toContain('output_mode: invalid value (invalid_enum_value)');
+    expect(error.message).toContain('mcp.maxConcurrentCalls: geçersiz değer (değer türü geçersiz)');
+    expect(error.message).toContain('output_mode: geçersiz değer (geçerli değerler: standard, explanatory, verbose, json)');
+    expect(error.localize?.('en').message).toContain('output_mode: invalid value (allowed values: standard, explanatory, verbose, json)');
   });
 });

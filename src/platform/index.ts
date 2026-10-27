@@ -45,7 +45,7 @@ export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
 export { createDefaultConfig, mergeConfigLayers } from '#platform/core/config/index.js';
-export { ConfigValidationError } from '#platform/core/config/index.js';
+export { ConfigValidationError, configIssue } from '#platform/core/config/index.js';
 export type { ConfigWarning } from '#platform/core/config/index.js';
 export { validateConfig, versionedConfig } from '#platform/core/config/index.js';
 export { resolveConfigSecrets } from '#platform/core/config/index.js';

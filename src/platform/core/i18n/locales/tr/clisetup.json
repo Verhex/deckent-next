@@ -27,6 +27,7 @@
   "clisetup.config.expected": "{expected} türünde bir değer",
   "clisetup.config.undefined": "{key} bu kurulumda tanımlı değil (isteğe bağlı bölüm). Terminalde deckent config ile tanımlayın; ayrıntı: deckent config explain {key}",
   "error.CLI_CONFIG_VALUE_MISSING": "{key} için değer eksik. Aldığı değerler: {values}. Terminalde deckent config set {key} ile seçin ya da JSON olarak verin: deckent config set {key} <json>.",
+  "error.CLI_CONFIG_VALUE_NOT_JSON": "{key} için verilen değer JSON değil. Aldığı değerler: {values}. Metin JSON tırnağı içinde verilir, örneğin: deckent config set {key} '\"<değer>\"'.",
   "error.CLI_CONFIG_VALUE_MISSING.partialTime": "Bu liste eksik: keşif süre sınırında durdu, {found} değer bulundu.",
   "error.CLI_CONFIG_VALUE_MISSING.partialSize": "Bu liste eksik: keşif boyut sınırında durdu, {found} değer bulundu.",
   "clisetup.coding.none": "Bu kurulumda kodlama profili yok. Eklemek için: deckent coding template (terminalde adım adım) ya da deckent init.",

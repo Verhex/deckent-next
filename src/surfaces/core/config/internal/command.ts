@@ -106,7 +106,8 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   }
   if (!isWrite || !keyPath || parsed.args.length !== (action === 'set' ? 3 : 2)) throw ErrorRegistry.createError('CLI_USAGE');
   let value: unknown;
-  if (action === 'set') { try { value = JSON.parse(parsed.args[2]!); } catch { throw ErrorRegistry.createError('CLI_USAGE'); } }
+  // BeUser KER-05: a value that is not JSON names the key, what it takes and the quoting, never a bare usage error.
+  if (action === 'set') { try { value = JSON.parse(parsed.args[2]!); } catch { throw await valueMissing(context, root, options, locale, keyPath, 'CLI_CONFIG_VALUE_NOT_JSON'); } }
   const scopeId = parsed.scope ?? ((await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (!context.resolveConfigPrincipal) throw ErrorRegistry.createError('CLI_USAGE');
@@ -146,12 +147,13 @@ async function chosenValueShown(context: ConfigCommandContext, root: string, opt
   visit(value);
   return strings.every(text => text !== '\u0000' && !/^\$DECK:|^\$ENV:/u.test(text) && redactSensitive(text) === text);
 }
-/** `config set <key>` without a value off a terminal: exit 2, naming the missing value and what this key takes (its choices or schema). */
-async function valueMissing(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string) {
+/** `config set <key>` without a value off a terminal (or with one that is not JSON): exit 2, naming the key and what it takes (its choices or schema). */
+async function valueMissing(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string,
+  code: 'CLI_CONFIG_VALUE_MISSING' | 'CLI_CONFIG_VALUE_NOT_JSON' = 'CLI_CONFIG_VALUE_MISSING') {
   const field = await context.configApplication!(root, options).explain({ keyPath });
   const model = await configValueModel(field, root, locale, context.configChoiceSources?.(root, options));
   // CONFIG-PARTIAL-CLI: a list its discovery cut short says so, and `--json` carries the cut (`partial`: time | size, `found`) beside the values.
-  return ErrorRegistry.createError('CLI_CONFIG_VALUE_MISSING', { params: { key: keyPath, values: configChoiceWords(model.choices, schemaWord(field.schema, locale), locale),
+  return ErrorRegistry.createError(code, { params: { key: keyPath, values: configChoiceWords(model.choices, schemaWord(field.schema, locale), locale),
     ...(model.partial ? { partial: model.partial.reason, found: model.partial.found } : {}) }, locale });
 }
 /** Opens the `/config` window (whole, or narrowed to one key) and prints what it left: its summaries, then an approval to decide. */
