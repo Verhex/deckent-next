@@ -21,7 +21,7 @@ export function uninstallMessages(locale: Locale): Readonly<Record<string, strin
     'reason.unsafe-path': t('cli.uninstall.reason.unsafe-path', {}, locale), 'reason.service-unresolved': t('cli.uninstall.reason.service-unresolved', {}, locale),
     'reason.retained-overlap': t('cli.uninstall.reason.retained-overlap', {}, locale), 'reason.dependency-unresolved': t('cli.uninstall.reason.dependency-unresolved', {}, locale),
     'reason.resume': t('cli.uninstall.reason.resume', {}, locale), 'reason.vcs-tracked': t('cli.uninstall.reason.vcs-tracked', {}, locale),
-    'reason.not-backed-up': t('cli.uninstall.reason.not-backed-up', {}, locale),
+    'reason.not-backed-up': t('cli.uninstall.reason.not-backed-up', {}, locale), 'reason.vcs-unverified': t('cli.uninstall.reason.vcs-unverified', {}, locale),
     'group.authority': t('cli.uninstall.group.authority', {}, locale),
     'group.cache': t('cli.uninstall.group.cache', {}, locale), 'group.work': t('cli.uninstall.group.work', {}, locale),
     'group.settings': t('cli.uninstall.group.settings', {}, locale), 'group.identity': t('cli.uninstall.group.identity', {}, locale),
@@ -42,12 +42,10 @@ export function uninstallGroup(item: Pick<UninstallItem, 'resourceId'>): string 
   const exact = Object.entries(registry.groups).find(([, ids]) => ids.includes(item.resourceId))?.[0];
   return exact ?? Object.entries(registry.prefixes).find(([prefix]) => item.resourceId.startsWith(prefix))?.[1] ?? null;
 }
-/** One readable line per tier blocker: an authority or VCS path keeps its path; a resource blocker its reason. */
+/** One readable line per tier blocker: an authority path keeps its path; a resource blocker its reason. */
 export function uninstallBlockerText(blocker: string, locale: Locale): string {
-  const messages = uninstallMessages(locale), path = /^(authority-(relocated|unsafe)|vcs-unavailable):(.+)$/su.exec(blocker);
-  const where = { path: safe(path?.[3] ?? '') };
-  if (path) return path[1] === 'authority-relocated' ? t('cli.uninstall.blocker.authority-relocated', where, locale)
-    : path[1] === 'vcs-unavailable' ? t('cli.uninstall.blocker.vcs-unavailable', where, locale) : t('cli.uninstall.blocker.authority-unsafe', where, locale);
+  const messages = uninstallMessages(locale), path = /^authority-(relocated|unsafe):(.+)$/su.exec(blocker), where = { path: safe(path?.[2] ?? '') };
+  if (path) return path[1] === 'relocated' ? t('cli.uninstall.blocker.authority-relocated', where, locale) : t('cli.uninstall.blocker.authority-unsafe', where, locale);
   const key = blocker.startsWith('policy:') ? 'blocker.policy' : `blocker.${blocker}`, reason = blocker.slice(blocker.lastIndexOf(':') + 1);
   return messages[key] ?? messages[`reason.${reason}`] ?? `${t('cli.uninstall.unknown', {}, locale)} (${safe(blocker)})`;
 }

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -212,4 +214,24 @@ it('keeps immutable tombstones across reinstall and never substitutes an old com
   const second = plan('second'); await finish(second); await rm(uninstallHoldPath(data));
   expect((await readUninstallTombstone(directory, data, actor, 65536))?.plan.installation.id).toBe('second');
   expect(await readFile(join(directory, `${first.planDigest}.tombstone.json`))).toEqual(saved);
+});
+
+it('reads Git tracking hardened: a hostile repository config runs nothing, tracked paths are kept, unreadable tracking keeps every project path', async () => {
+  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: hardened Git probe needs Linux and /usr/bin/git'); return; }
+  const { projectTracking } = await import('#adapters/core/installation-removal/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-vcs-')); roots.push(root);
+  const project = join(root, 'project'), data = join(project, '.deckent'), marker = join(root, 'marker'), bounds = { timeoutMs: 10_000, outputBytes: 65_536 };
+  await mkdir(data, { recursive: true }); await writeFile(join(data, 'policy.json'), 'TEAM', { mode: 0o600 }); await writeFile(join(data, 'ledger.db'), 'LOCAL', { mode: 0o600 });
+  const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+  git('init', '-q'); git('add', '-f', '.deckent/policy.json');
+  // The repository's own config asks Git to run a command (fsmonitor, hooks): the uninstall probe must never execute it.
+  for (const [key, value] of [['core.fsmonitor', `touch ${marker}`], ['core.hooksPath', root]]) git('config', key, value!);
+  const tracked = await projectTracking(project, data, '/usr/bin/git', bounds);
+  expect(tracked(join(data, 'policy.json'))).toBe('vcs-tracked'); expect(tracked(data)).toBe('vcs-tracked'); expect(tracked(join(data, 'ledger.db'))).toBeNull();
+  await expect(lstat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+  // A Git that cannot answer inside a repository (here: not absolute / refusing) never makes a project path untracked.
+  for (const configured of ['git', join(root, 'missing-git')]) {
+    const unreadable = await projectTracking(project, data, configured, bounds);
+    expect(unreadable(join(data, 'ledger.db'))).toBe('vcs-unverified'); expect(unreadable(join(root, 'global', 'ledger.db'))).toBeNull();
+  }
 });

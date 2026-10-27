@@ -13,3 +13,4 @@ export { writeUninstallTombstone, readUninstallTombstone, completedUninstallPrev
 export { prepareUninstallBackup } from './internal/backup.js';
 export { observeUninstallInventory } from './internal/observed-inventory.js';
 export { observeUninstallWork, installationScopes } from './internal/quiescence.js';
+export { projectTracking } from './internal/vcs.js';

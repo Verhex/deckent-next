@@ -647,8 +647,8 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   başlatıcı (örneğin `~/.local/bin/deckent-…`) tespit edilmez. Kaldırma `require-approval` politika kararını reddeder
   (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez.
   *Yol:* teslimleri teslim komutlarıyla bitirin, birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.
-- **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası ve okunamayan Git izleme bilgisi veri
-  kademesini başlamadan durdurur. Yarım son silme yalnız kalan baytlar ve silme yetkisi yeniden doğrulanınca sürer; yoksa
+- **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur;
+  Git izleme bilgisi okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. Yarım son silme yalnız kalan baytlar ve silme yetkisi yeniden doğrulanınca sürer; yoksa
   dosyalar kalır, yönetilen yedekten geri yükleme kullanılabilir. Bilinmeyen adım bilinmiyor kalır.
   *Yol:* veriyi koruyan kaldırmayı seçin ya da bildirilen engeli çözün; tahmin edilen yolları silmeyin.
 

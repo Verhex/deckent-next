@@ -646,8 +646,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   is printed. A hand-made launcher (for example `~/.local/bin/deckent-…`) is not detected. Uninstall refuses a
   `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet.
   *Workaround:* finish deliveries with the delivery commands, stop the unit yourself, or ask the administrator for a direct allow.
-- **A partial deletion resumes only after re-verification.** Moved/unsafe authority files and unreadable Git tracking stop
-  the data tier before it starts. A partial final deletion resumes only after remaining bytes and delete authority are
+- **A partial deletion resumes only after re-verification.** Moved/unsafe authority files stop the data tier before it starts;
+  when Git tracking cannot be read, every project file counts as possibly tracked and stays. A partial final deletion resumes only after remaining bytes and delete authority are
   re-verified; otherwise files stay and managed backup restore remains available. An unknown step stays unknown.
   *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
 

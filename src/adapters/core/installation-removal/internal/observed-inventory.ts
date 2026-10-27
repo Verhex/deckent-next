@@ -6,7 +6,7 @@ import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapter
 import { ErrorRegistry, packageRemovalCommand, pathWithin as inside, sha256, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
 import { extendUninstallInventory, assertNativeUninstallSupport, removalRegistry, restorable } from './inventory.js';
 import { observeUninstallWork } from './quiescence.js';
-import { trackedProjectFiles } from './vcs.js';
+import { projectTracking } from './vcs.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { affectedToolchainProfiles, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 const hash = (value: unknown) => sha256(JSON.stringify(value));
@@ -24,7 +24,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   // A relocated cache cannot acquire ownership merely because config names it. Only the registry paths within the owned data root qualify.
   const candidates = (['scratch', 'treeScanCache'] as const).filter(resource => rooted
     && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && inside(layout.root, productResourcePath(layout, resource)));
-  const tracked = await trackedProjectFiles(config.projectRoot, projectData, config.execution?.git?.gitExecutable ?? null, config.installation.identityProbe);
+  const tracked = await projectTracking(config.projectRoot, projectData, config.execution?.git?.gitExecutable ?? null, config.installation.identityProbe);
   const protectedPaths = [...new Set([...(layout.root === projectData ? [] : [projectData]), layout.bootstrapConfigPath, ...Object.keys(layout.resources)
     .filter(resource => !candidates.includes(resource as typeof candidates[number])).map(resource => productResourcePath(layout, resource as ProductResource))])];
   // Ownership evidence names the resource owner's membership rule; the fresh scan's member version is what a removal may delete.
@@ -37,12 +37,12 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
     const locator = productResourcePath(layout, resource), disposable = owned.find(item => item.resourceId === resource);
     const info = await lstat(locator).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
     let version: string | null = info ? hash([info.dev, info.ino, info.mode, info.size, info.mtimeMs, info.ctimeMs]) : null;
-    let capability = false, ownership: UninstallResource['ownership'] = 'unknown', members: readonly string[] | null = null, trackedInside = false;
+    let capability = false, ownership: UninstallResource['ownership'] = 'unknown', members: readonly string[] | null = null, held: 'vcs-tracked' | 'vcs-unverified' | null = null;
     if (disposable) {
       try {
         const scan = await target.inspect({ kind: target.kind, id: resource });
         ({ version, members } = scan); ownership = 'exclusive';
-        trackedInside = scan.members.some(member => [...tracked.files].some(path => inside(member, path))); capability = !trackedInside;
+        held = scan.members.map(tracked).find(Boolean) ?? null; capability = !held;
         // The owner's unnamed entries are kept and listed; only its named members are removed.
         for (const locator of scan.unlisted) resources.push({ resourceId: `${resource}.unlisted.${hash(locator)}`, contribution: 'durable', locator, version: null,
           owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
@@ -52,7 +52,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
       owner: disposable && ownership === 'exclusive' ? installationId : null, ownership,
       ownershipEvidence: disposable && ownership === 'exclusive' ? disposable.ownershipDigest : null,
       present: members ? members.length > 0 : info !== null, protected: !disposable, capability, backup: 'missing',
-      ...(trackedInside ? { keep: 'vcs-tracked' as const } : disposable || restorable.includes(resource) ? {} : { keep: 'not-backed-up' as const }) });
+      ...(held ? { keep: held } : disposable || restorable.includes(resource) ? {} : { keep: 'not-backed-up' as const }) });
   }
   if (globalRoot !== layout.root) resources.push({ resourceId: 'global-home', contribution: 'durable', locator: globalRoot,
     version: null, owner: null, ownership: 'shared', ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing' });
@@ -65,11 +65,11 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
     present: null, protected: true, capability: false, backup: 'missing' });
   const inventory: UninstallInventory = { installation: { id: installationId, root: layout.root }, scopeSummary: scopeIds,
     layoutRevision: layout.revision, policyRevision, inventoryRevision: hash(resources), resources, blockers: [], protectedPaths,
-    dataBlockers: tracked.unavailable ? [`vcs-unavailable:${config.projectRoot}`] : [], deletionRoots: rooted ? [layout.root] : [globalRoot], backupDestination: null,
+    dataBlockers: [], deletionRoots: rooted ? [layout.root] : [globalRoot], backupDestination: null,
     packageRemoval: { command: packageRemovalCommand(), shared: true }, managedScopes: [], service: { running: false, unit: null, unitDisable: 'none', command: null },
     work: observeUninstallWork(productResourcePath(layout, 'ledger'), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords }) };
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
-  const extended = await extendUninstallInventory(config, inventory, integrity, env, globalRoot, tracked.files);
+  const extended = await extendUninstallInventory(config, inventory, integrity, env, globalRoot, tracked);
   const imagesObserved = config.execution?.docker ? await observeWorkerRemovalInventory({ home: join(productResourcePath(layout, 'workspaces'), 'toolchains'), installationId,
     // The builder's own custody root (toolchains builder): its lock fences lease writes against this removal.
     buildersRoot: join(resolveGlobalScopePaths(normalizeGlobalScopePlatform(options.platform ?? process.platform, env), env, { ignoreProjectOverride: true }).stateDir,

@@ -16,8 +16,8 @@ export const uninstallResourceSchema = z.object({
   backup: z.enum(['covered', 'missing', 'protected-session', 'non-exportable']),
   /** A kept resource's exact removal step for the person, produced by its owner; never run by uninstall. */
   manualCommand: text.optional(),
-  /** Why an observed resource stays when no generic reason says it: tracked by the project's VCS, or outside the restorable backup set. */
-  keep: z.enum(['vcs-tracked', 'not-backed-up']).optional(),
+  /** Why an observed resource stays when no generic reason says it: tracked (or possibly tracked) by the project's VCS, or outside the backup set. */
+  keep: z.enum(['vcs-tracked', 'vcs-unverified', 'not-backed-up']).optional(),
 }).strict().readonly();
 const ref = z.object({ scopeId: text, id: text, revision: z.number().int().nonnegative().safe() }).strict().readonly();
 /** Itemized ledger work, read-only: running and parked runs, pending approvals, open deliveries and every unreconciled effect, call or held money. */

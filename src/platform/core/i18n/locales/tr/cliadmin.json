@@ -365,6 +365,7 @@
   "cli.uninstall.reason.dependency-unresolved": "önkoşul çözümlenmedi",
   "cli.uninstall.reason.resume": "yarıda kalan silmeden kaldı; yalnız yedek ve silme izni yeniden doğrulanınca silinir",
   "cli.uninstall.reason.vcs-tracked": "projenin Git’i izliyor",
+  "cli.uninstall.reason.vcs-unverified": "Git izleme bilgisi okunamadı, bu yüzden korunur",
   "cli.uninstall.reason.not-backed-up": "yedek setinde değil, bu yüzden silinmez",
   "cli.uninstall.group.authority": "iş kayıtları, ayarlar ve anahtarlar",
   "cli.uninstall.group.cache": "önbellek",
@@ -386,7 +387,6 @@
   "cli.uninstall.blocker.service-managed": "bir servis yöneticisi servisi yeniden başlatıyor (--disable-unit)",
   "cli.uninstall.blocker.work-unverified": "iş kayıtları tam okunamadı",
   "cli.uninstall.blocker.policy": "politika size izin vermiyor",
-  "cli.uninstall.blocker.vcs-unavailable": "{path} için Git izleme bilgisi okunamadı",
   "cli.uninstall.blocker.authority-relocated": "{path} kayıtlı konumunda değil; hiçbir şey silinmeyecek",
   "cli.uninstall.blocker.authority-unsafe": "{path} bu kullanıcının özel dosyası olarak doğrulanamadı; hiçbir şey silinmeyecek",
   "cli.uninstall.backupPassphrase": "Yedek parolası"

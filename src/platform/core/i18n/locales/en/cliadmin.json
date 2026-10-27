@@ -365,6 +365,7 @@
   "cli.uninstall.reason.dependency-unresolved": "a prerequisite is unresolved",
   "cli.uninstall.reason.resume": "left by an interrupted deletion; deleted only after the backup and the delete permission are verified again",
   "cli.uninstall.reason.vcs-tracked": "tracked by the project's Git",
+  "cli.uninstall.reason.vcs-unverified": "Git tracking could not be read, so it is kept",
   "cli.uninstall.reason.not-backed-up": "not in the backup set, so it is not deleted",
   "cli.uninstall.group.authority": "work records, settings and keys",
   "cli.uninstall.group.cache": "cache",
@@ -386,7 +387,6 @@
   "cli.uninstall.blocker.service-managed": "a service manager restarts the service (--disable-unit)",
   "cli.uninstall.blocker.work-unverified": "the work records could not be fully read",
   "cli.uninstall.blocker.policy": "policy does not allow it for you",
-  "cli.uninstall.blocker.vcs-unavailable": "the Git tracking of {path} could not be read",
   "cli.uninstall.blocker.authority-relocated": "{path} is not at its recorded location; nothing will be deleted",
   "cli.uninstall.blocker.authority-unsafe": "{path} could not be verified as a private file of this user; nothing will be deleted",
   "cli.uninstall.backupPassphrase": "Backup passphrase"

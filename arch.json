@@ -4382,7 +4382,8 @@
         "src/platform/core/utils",
         "src/domain/core/policy",
         "src/adapters/core/local-runtime-socket",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/engine/core/workspaces"
       ],
       "plan": "INSTALLATION"
     },

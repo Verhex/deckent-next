@@ -1177,7 +1177,6 @@
   "error.UNINSTALL_UNCERTAIN_EFFECTS": "Sonucu bilinmeyen {count} işlem var: {list}. Hiçbir şey silinmedi. Önce uzlaştırın (deckent models reconcile-spending --input <dosya>, deckent operation inspect --command-id <id>, deckent recovery review) ya da --force ile devam edin: adlarıyla yedeğe ve makbuza yazılır, açık kalır.",
   "error.UNINSTALL_UNCERTAIN_MANAGED": "Bu kurulum {owner} için şirket politikasıyla yönetiliyor: sonucu bilinmeyen işlem varken veri silinemez. Hiçbir şey silinmedi. {owner} kaydından sorumlu yöneticiye başvurun ya da verileri koruyarak kaldırın: deckent uninstall --keep-data.",
   "error.UNINSTALL_DELIVERY_QUEUED": "Kuyrukta hâlâ {count} teslim var ve kaldırma bunları geri çekemez. Hiçbir şey silinmedi. deckent task integration-queue-list ile bakın ya da verileri koruyarak kaldırın: deckent uninstall --keep-data.",
-  "error.UNINSTALL_VCS_UNVERIFIED": "Her şeyi sil işlemi hiçbir şey silinmeden durdu: {path} için Git izleme bilgisi okunamadı; deponuzun izlediği dosyalar ayırt edilemiyor. git'i erişilebilir yapın (ya da execution.git.gitExecutable ayarlayın) veya verileri koruyarak kaldırın: deckent uninstall --keep-data.",
   "error.UNINSTALL_FLAG_MOVED": "{flag} artık {to}. Önizlemek için: deckent uninstall {to} --dry-run",
   "cli.input.subject.hub": "Hub isteği"
 }

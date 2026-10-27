@@ -7,6 +7,7 @@ import { verifyAuditRecord, type UninstallInventory } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { NativeServiceRemovalDriver, nativeServiceExec, readNativeServiceRecord } from './native-service.js';
 import { InstallationServiceRemovalTarget } from './service.js';
+import type { ProjectTracking } from './vcs.js';
 import paths from './paths.json' with { type: 'json' };
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
@@ -34,7 +35,7 @@ export function uninstallRecoveryDirectory(root: string, env: Readonly<Record<st
  * observed for every tier (the plan decides); a relocated or unsafe authority file refuses only the data-deleting tier. K1: an in-project
  * installation's `.deckent` members qualify like global ones; a file the project's VCS tracks is never a member (kept and listed). */
 export async function extendUninstallInventory(config: ResolvedConfig, base: UninstallInventory, integrity: IntegrityAuthority | null,
-  env: Readonly<Record<string, string | undefined>>, globalRoot: string, tracked: ReadonlySet<string>) {
+  env: Readonly<Record<string, string | undefined>>, globalRoot: string, tracked: ProjectTracking) {
   const layout = config.productLayout, installationId = base.installation.id, resources = [...base.resources];
   const bounds = config.installation.packageMeasurement, targets = [];
   // The runtime's logical identity is not an OS service artifact. The native installer must retain an authenticated unit record.
@@ -50,8 +51,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   }
   // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the data tier.
   let members: DataRemovalMember[] = [];
-  const blockers: string[] = [], kept = (path: string) => tracked.has(path) && !!resources.push({ resourceId: `tracked.${sha256(path)}`, contribution: 'durable',
-    locator: path, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: true, capability: false, backup: 'missing', keep: 'vcs-tracked' });
+  const blockers: string[] = [], kept = (path: string) => { const keep = tracked(path); return !!keep && !!resources.push({ resourceId: `tracked.${sha256(path)}`,
+    contribution: 'durable', locator: path, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: true, capability: false, backup: 'missing', keep }); };
   if (!base.deletionRoots.includes(layout.root)) blockers.push(`authority-relocated:${layout.root}`);
   else {
     for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
@@ -70,7 +71,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   for (const directory of new Set([...trees, ...members.flatMap(member => member.directory ? [member.directory] : [])])) {
     for (const name of (await readdir(directory)).slice(0, bounds.maxFiles).sort()) {
       const locator = join(directory, name);
-      if (!members.some(member => member.path === locator || member.directory === locator) && !tracked.has(locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable',
+      if (!members.some(member => member.path === locator || member.directory === locator) && !tracked(locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable',
         locator, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
     }
   }

@@ -86,8 +86,8 @@ Kişi gerçek terminalde `deckent uninstall` çalıştırır. Menü, her biri ke
 Bütün denetimler tek onaydan önce yapılır; silinecek bir şey yoksa soru sorulmaz. Ret nedenini ve sonraki adımı söyler:
 çalışan iş (`--force` kişinin kendi yetkisiyle iptal eder, sonucu bilinmeyen işlemi kapatmaz), servisi yeniden başlatan
 servis yöneticisi (`--disable-unit`, Deckent'in kaydetmediği bir kullanıcı birimini yalnız bu servisi çalıştırdığı
-kanıtlanırsa kapatır), politika, saklama ya da yasal saklama, taşınmış ya da güvensiz yetki dosyası veya okunamayan Git
-izleme bilgisi. `--yes` yalnız son kartı atlar; plan yine yazdırılır. İşçi imajları kalır; yalnız kartın verdiği kesin komutu
+kanıtlanırsa kapatır), politika, saklama ya da yasal saklama veya taşınmış ya da güvensiz yetki dosyası. Git izleme bilgisi
+okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. `--yes` yalnız son kartı atlar; plan yine yazdırılır. İşçi imajları kalır; yalnız kartın verdiği kesin komutu
 kullanın. macOS/Windows servis kaldırması elledir. Yarım silme yalnız kalan baytlar ve yetki yeniden doğrulanınca sürer.
 
 Adım sonuçlarını okuyun: kesildi, engellendi veya bilinmiyor tamamlandı değildir. Kurulum yöntemi kanıtlanınca çıktı programı

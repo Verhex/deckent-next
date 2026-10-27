@@ -135,9 +135,8 @@ const BLOCKER_ERRORS: Readonly<Record<string, string>> = { 'work-active': 'UNINS
   'work-unverified': 'UNINSTALL_SCOPE_UNVERIFIED', 'backup-destination': 'UNINSTALL_BACKUP_COVERAGE' };
 /** The typed refusal of a plan's first blocker, with the counts and next step its message names; null when the plan has none. */
 export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'work' | 'service' | 'purge' | 'installation'>) {
-  const authority = plan.blockers.find(value => /^(authority-(relocated|unsafe)|vcs-unavailable):/u.test(value));
-  if (authority) return ErrorRegistry.createError(authority.startsWith('vcs-') ? 'UNINSTALL_VCS_UNVERIFIED' : 'UNINSTALL_AUTHORITY_UNVERIFIED',
-    { params: { path: authority.slice(authority.indexOf(':') + 1) } });
+  const authority = plan.blockers.find(value => /^authority-(relocated|unsafe):/u.test(value));
+  if (authority) return ErrorRegistry.createError('UNINSTALL_AUTHORITY_UNVERIFIED', { params: { path: authority.slice(authority.indexOf(':') + 1) } });
   const known = plan.blockers.find(value => BLOCKER_ERRORS[value]), work = plan.work;
   if (known) return ErrorRegistry.createError(BLOCKER_ERRORS[known]! as 'UNINSTALL_WORK_ACTIVE', { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)),
     approvals: String(plan.purge ? work.approvals.length : 0), count: String(known === 'delivery-queued' ? work.deliveries.length : work.uncertain.length),
