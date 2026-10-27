@@ -81,6 +81,7 @@ hücreyi sınar; onay gereğini koşulsuz allow'a çeviremez, yöneticinin kendi
 | Sıradan onay | Açık `approval` / onay kimliği / `decide`; güncel politika, oturum, istek özeti, süre, görev ayrılığı ve güvence. Korunan/riski bilinmeyen kartlar tabanda kalır. |
 | Operator hold durdurma / sürdürme | Sıradan operatör kontrolü `run/cancel` veya `run/reserve` kullanır; başarısızlıktan devam ayrı karar adımıdır. |
 | Tutulan sağlayıcı harcamasını uzlaştırma (settle, release, write-off) | `provider-spend-account/reconcile`, eski v1 harcama izinleri dahil bütün AI aktörleri için kod tabanıdır (owner Q-SPEND (b), 2026-10-26). Kişi yönetilen uzlaştırma yolunu kullanır; olağan çağrı hesaplaşması içeride devam eder. |
+| API bütçesini oluşturma, değiştirme ya da dondurmasını kaldırma; tutulan harcamayı uzlaştırma | `provider-spend-account/budget-revision` (ve `reconcile`) politika hücreleridir; MCP dışındaki her çağıran (CLI, terminal, SDK) ayrıca runtime servisinde kişinin terminal tanığına ihtiyaç duyar (2026-10-27): kabuktaki bir AI aracı, CI, boru ya da `--json` `AUTHORITY_WITNESS_REQUIRED` ile reddedilir ve hiçbir şey değişmez. Bir MCP istemcisini politika izni belirler (bütçe değişikliği tabanda değildir). |
 | Admission, operasyon, havuz, model, diğer harcama eylemleri, iş hedefi | `deckent policy vocabulary --json` sözlüğündeki sıradan hücreler. Tabanda olmamak, her taşımanın eylemi sunduğunu veya uygulamanın izin verdiğini garanti etmez. |
 
 Karar adımında allow, aktörü ve eylemi açıkça adlandırmalıdır: `principals: "all"` veya
