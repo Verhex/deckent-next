@@ -4,7 +4,7 @@ import { uninstallBlockerError, type UninstallPlan, type UninstallQuery } from '
 import { readHidden } from '#surfaces/core/cli-admin/index.js';
 import { askCliCard, cliMode, formatDuration, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { uninstallDetailLines, uninstallMessages, uninstallPlanLines, uninstallStatusMessage, uninstallSummaryLines, uninstallTierChoices } from './uninstall-text.js';
+import { uninstallDetailLines, uninstallMessages, uninstallPlanLines, uninstallResolvable, uninstallStatusMessage, uninstallSummaryLines, uninstallTierChoices } from './uninstall-text.js';
 import type { InstallationCommandContext } from './context.js';
 export { uninstallPlanLines, uninstallDetailLines, uninstallSummaryLines } from './uninstall-text.js';
 const TIERS: Readonly<Record<string, UninstallQuery['tier']>> = { '--keep-data': 'keep-data', '--keep-work': 'keep-work', '--all': 'all' };
@@ -40,8 +40,9 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   const ask = (request: CliCardRequest) => askCliCard(request, { locale, env: options.env, stdout: context.stdout, signal }), cancel = { id: 'cancel', label: t('cli.uninstall.cancel', {}, locale) };
   const cancelled = () => { print([uninstallStatusMessage('cancelled', locale)]); return 1 as ExitCode; };
   // The menu, when the person named no tier: one summary card; a refused tier stays visible with its reason under the card.
-  while (!named.length && !yes) {
-    const choices = uninstallTierChoices(plan, locale), answer = await ask({ title, initial: 'keep-data',
+  // When every tier is refused for good, there is no choice to offer: the refusal below names its cause and next step.
+  while (!named.length && !yes && uninstallTierChoices(plan, locale).some(choice => !choice.blocked)) {
+    const choices = uninstallTierChoices(plan, locale), answer = await ask({ title, initial: choices.find(choice => !choice.blocked)!.tier,
       body: [...uninstallSummaryLines(plan, locale), ...choices.flatMap(choice => choice.blocked ? [t('cli.uninstall.tier.blocked', { tier: choice.label, reason: choice.blocked }, locale)] : [])],
       options: [...choices.filter(choice => !choice.blocked).map(choice => ({ id: choice.tier, label: choice.label })), { id: 'details', label: t('cli.uninstall.details', {}, locale) }, cancel] });
     if (answer === 'details') { print(uninstallDetailLines(plan, locale)); continue; }
@@ -50,8 +51,9 @@ export async function uninstallCommand(argv: readonly string[], context: Install
     break;
   }
   // Every check before the one confirmation. A refusal the person can resolve is offered with its flag twin (--force, --disable-unit).
-  for (let blocker = plan.blockers[0]; blocker; blocker = plan.blockers[0]) {
-    const work = ['work-active', 'work-pending', 'uncertain-effects'].includes(blocker) && !query.force, unit = blocker === 'service-managed' && !query.disableUnit && plan.service.unitDisable === 'eligible';
+  // A policy refusal is decided by the engine's own authorization (typed error with its owner), so it is not pre-empted here.
+  for (let blocker = plan.blockers.find(value => !value.startsWith('policy:')); blocker; blocker = plan.blockers.find(value => !value.startsWith('policy:'))) {
+    const work = uninstallResolvable(blocker, plan) && blocker !== 'service-managed' && !query.force, unit = blocker === 'service-managed' && !query.disableUnit && uninstallResolvable(blocker, plan);
     const error = uninstallBlockerError(plan)!;
     if (yes || !(work || unit)) { print(uninstallPlanLines(plan, locale)); throw error; }
     const offer = work ? { id: 'force', label: blocker === 'uncertain-effects' ? t('cli.uninstall.uncertain.offer', {}, locale) : t('cli.uninstall.force.offer', {}, locale) }
@@ -61,7 +63,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
     if (answer !== offer.id) { print(uninstallPlanLines(plan, locale)); throw error; }
     plan = await preview(root, query = work ? { ...query, force: true } : { ...query, disableUnit: true }, options);
   }
-  if (plan.nothingToRemove) { print([t('cli.uninstall.nothing', {}, locale), plan.packageRemoval.command ? `  ${safe(plan.packageRemoval.command)}` : t('cli.uninstall.packageUnknown', {}, locale)]); return 0; }
+  if (plan.nothingToRemove && !plan.blockers.length) { print([t('cli.uninstall.nothing', {}, locale), plan.packageRemoval.command ? `  ${safe(plan.packageRemoval.command)}` : t('cli.uninstall.packageUnknown', {}, locale)]); return 0; }
   if (!context.applyUninstall) throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED');
   const result = await context.applyUninstall(root, { schemaVersion: 2, commandId: randomUUID(), planDigest: plan.planDigest }, {
     backupPassphrase: () => readHidden(process.stdin, context.stderr ?? process.stderr, t('cli.uninstall.backupPassphrase', {}, locale)),

@@ -91,6 +91,15 @@ it('offers force for running work before any card and prints a kept image\'s ste
   card.requests.length = 0; card.answers.push('cancel');
   await expect(uninstallCommand(['uninstall', '--keep-data'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE', params: { runs: '1' } });
   expect(card.requests[0]!.options.map(option => option.id)).toEqual(['force', 'cancel']); expect(asked).toHaveLength(1);
+  // The menu keeps a tier whose refusal the person can resolve: running work blocks every tier, yet the choice leads to the force offer.
+  card.requests.length = 0; card.answers.push('all', 'cancel');
+  await expect(uninstallCommand(['uninstall'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' });
+  expect(card.requests[0]!.options.map(option => option.id)).toEqual(['keep-data', 'all', 'details', 'cancel']); expect(card.requests[1]!.options[0]).toMatchObject({ id: 'force' });
+  // A policy refusal (legal hold) is the engine's typed decision with its owner, never a generic ownership error from the surface.
+  const held = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...inventory(), policyBlocker: 'UNINSTALL_PURGE_DENIED' }),
+    applyUninstall: async () => { throw Object.assign(new Error('denied'), { code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold' } }); } };
+  card.requests.length = 0;
+  await expect(uninstallCommand(['uninstall', '--all', '--force', '--yes'], held)).rejects.toMatchObject({ code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold' } });
   const command = `docker --host unix:///run/user/1/docker.sock image rm --no-prune -- sha256:${'1'.repeat(64)}`;
   const plan = createUninstallPlan(query('all'), inventory({ resources: [{ resourceId: 'image.1', contribution: 'worker-image', locator: `sha256:${'1'.repeat(64)}`, version: null, owner: null, ownership: 'unknown',
     ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing', manualCommand: command }], dataBlockers: ['authority-unsafe:/fixture/bindings.json'] }));
