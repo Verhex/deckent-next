@@ -39,7 +39,7 @@ labelled judgement calls, never hard violations; a documented standard overrides
 5. Observe the actual CLI/Terminal/API/MCP/worker or other real surface named by the proof contract.
    An absent or planned Desktop/Dashboard cannot be claimed as shipped from a prototype. A person- or
    company-facing surface needs its BeUser walk (`deckent-beuser`) on the assembled release state, after
-   the narrow cards land: every journey branch GREEN with a retained transcript, or the claim is HOLD.
+   the narrow cards land: every journey branch GREEN (or FRICTION the owner accepted, recorded) with a retained transcript, or HOLD.
 6. Check relevant denial, company/scope isolation, secret boundary, cancellation, idempotency/replay,
    partial-effect and recovery cases. Platform/accessibility/performance/HA claims require their
    own bounded measurements and environments; do not manufacture a universal proof checklist.
