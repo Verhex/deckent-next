@@ -366,6 +366,7 @@
   "cli.uninstall.reason.resume": "yarıda kalan silmeden kaldı; yalnız yedek ve silme izni yeniden doğrulanınca silinir",
   "cli.uninstall.reason.vcs-tracked": "projenin Git’i izliyor",
   "cli.uninstall.reason.not-backed-up": "yedek setinde değil, bu yüzden silinmez",
+  "cli.uninstall.group.authority": "iş kayıtları, ayarlar ve anahtarlar",
   "cli.uninstall.group.cache": "önbellek",
   "cli.uninstall.group.work": "iş kayıtları",
   "cli.uninstall.group.settings": "ayarlar",

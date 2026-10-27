@@ -366,6 +366,7 @@
   "cli.uninstall.reason.resume": "left by an interrupted deletion; deleted only after the backup and the delete permission are verified again",
   "cli.uninstall.reason.vcs-tracked": "tracked by the project's Git",
   "cli.uninstall.reason.not-backed-up": "not in the backup set, so it is not deleted",
+  "cli.uninstall.group.authority": "work records, settings and keys",
   "cli.uninstall.group.cache": "cache",
   "cli.uninstall.group.work": "work records",
   "cli.uninstall.group.settings": "settings",

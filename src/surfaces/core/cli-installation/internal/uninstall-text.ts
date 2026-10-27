@@ -22,6 +22,7 @@ export function uninstallMessages(locale: Locale): Readonly<Record<string, strin
     'reason.retained-overlap': t('cli.uninstall.reason.retained-overlap', {}, locale), 'reason.dependency-unresolved': t('cli.uninstall.reason.dependency-unresolved', {}, locale),
     'reason.resume': t('cli.uninstall.reason.resume', {}, locale), 'reason.vcs-tracked': t('cli.uninstall.reason.vcs-tracked', {}, locale),
     'reason.not-backed-up': t('cli.uninstall.reason.not-backed-up', {}, locale),
+    'group.authority': t('cli.uninstall.group.authority', {}, locale),
     'group.cache': t('cli.uninstall.group.cache', {}, locale), 'group.work': t('cli.uninstall.group.work', {}, locale),
     'group.settings': t('cli.uninstall.group.settings', {}, locale), 'group.identity': t('cli.uninstall.group.identity', {}, locale),
     'group.history': t('cli.uninstall.group.history', {}, locale), 'group.backups': t('cli.uninstall.group.backups', {}, locale),
