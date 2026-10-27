@@ -6,7 +6,7 @@ export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_R
   | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 /** Which custody check refused (alpha.56.1): a closed token for LOCAL_RUNTIME_ENDPOINT_UNSAFE, never a path or file content. */
 export type LocalRuntimeUnsafeReason = 'parent-create' | 'parent-stat' | 'parent-type' | 'parent-link' | 'parent-owner' | 'parent-mode' | 'parent-realpath'
-  | 'socket-stat' | 'socket-type' | 'socket-link' | 'socket-owner' | 'socket-mode' | 'ledger-lock' | 'endpoint-remove';
+  | 'parent-mode-kept' | 'socket-stat' | 'socket-type' | 'socket-link' | 'socket-owner' | 'socket-mode' | 'ledger-lock' | 'endpoint-remove';
 export class LocalRuntimeSocketError extends Error {
   constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
 }

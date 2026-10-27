@@ -67,16 +67,19 @@ export type AdminPathsHandler = (root: string, options: ConfigLoadOptions) => Pr
 /** What the service is running now, from the configured scope's pool (local ledger read; null when it cannot be read). */
 async function runningWork(context: AdminCommandContext, root: string, options: ConfigLoadOptions) {
   const scopeId = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
-  if (typeof scopeId !== 'string') return { unread: 'no-scope' } as const;
-  if (!context.inspectPoolHold) return { unread: '-' } as const;
+  if (typeof scopeId !== 'string') return { unread: 'no-scope', scopeId: '-' } as const;
+  if (!context.inspectPoolHold) return { unread: '-', scopeId } as const;
   return context.inspectPoolHold(root, { schemaVersion: 1, scopeId }, options).then(view => ({ scopeId, running: view.occupancy.execution,
-    evaluating: Math.max(0, view.occupancy.inFlight - view.occupancy.execution) }), (error: { code?: unknown } | null) => ({ unread: typeof error?.code === 'string' ? error.code : '-' }) as const);
+    evaluating: Math.max(0, view.occupancy.inFlight - view.occupancy.execution) }), (error: { code?: unknown } | null) => ({ unread: typeof error?.code === 'string' ? error.code : '-', scopeId }) as const);
 }
 /** BeUser alpha.56.1 (Selin): the running work, or why it cannot be read now (no terminal scope, or the typed refusal). */
 function workText(work: Awaited<ReturnType<typeof runningWork>>, locale: Locale, card = false): string {
   const params = 'unread' in work ? {} : { running: work.running, evaluating: work.evaluating, scope: terminalSafeText(work.scopeId) };
   if (!('unread' in work)) return card ? t('cli.runtime.card.work', params, locale) : t('cli.runtime.status.work', params, locale);
-  return work.unread === 'no-scope' ? t('cli.runtime.status.workNoScope', {}, locale) : t('cli.runtime.status.workFailed', { code: terminalSafeText(work.unread) }, locale);
+  if (work.unread === 'no-scope') return t('cli.runtime.status.workNoScope', {}, locale);
+  // BeUser round 2 (SM4): the reason in words — a scope without a pool says so with its next step; any other refusal is its own typed message.
+  if (work.unread === 'RUN_POOL_REQUIRED') return t('cli.runtime.status.workNoPool', { scope: terminalSafeText(work.scopeId) }, locale);
+  return t('cli.runtime.status.workFailed', { reason: ErrorRegistry.get(work.unread, locale)?.message ?? terminalSafeText(work.unread) }, locale);
 }
 /**
  * Owner CLI review 2026-10-19 (`runtime`), A48-D8: the status from what protocol v29 already carries — build (and whether it is this CLI's),

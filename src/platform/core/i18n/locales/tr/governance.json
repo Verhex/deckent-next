@@ -412,6 +412,7 @@
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "Yerel runtime bağlantı yolu ya da ledger kilit dosyası sahiplik veya dosya sistemi denetimini geçemedi.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason": "{thing} sahiplik veya dosya sistemi denetimini geçemedi (denetim: {reason}).",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode": "Runtime soket dizininin izinleri yanlış (denetim: parent-mode). Servisi `deckent runtime serve` ile ya da `deckent` açarak başlatın: başlatma kendi boş dizinini yeniden oluşturur. Yine reddedilirse dizin boş değildir ya da sizin değildir; `deckent paths` yolunu gösterir.",
+  "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentModeKept": "Runtime soket dizininin izinleri yanlış ve dizin boş değil ya da sizin değil; bu yüzden başlatma onu yeniden oluşturmadı (denetim: parent-mode-kept). `deckent paths` yolunu gösterir; dizini boşaltın ya da sahibini düzeltin, sonra yeniden başlatın.",
   "runtime.socket.thing.directory": "Runtime soket dizini",
   "runtime.socket.thing.socket": "Runtime soketi",
   "runtime.socket.thing.lock": "Ledger kilit dosyası",

@@ -326,7 +326,11 @@ it('BeUser alpha.56.1 (Selin): describe names the service manager and why work i
   const described = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('POLICY_DENIED'); } });
   expect(await main(['runtime'], described.context)).toBe(0);
   expect(described.out.text()).toContain('· run by systemd (deckent-live.service)'); expect(described.out.text()).not.toContain('started');
-  expect(described.out.text()).toContain('Running work: cannot be read now (POLICY_DENIED)');
+  expect(described.out.text()).toContain(`Running work: cannot be read now: ${ErrorRegistry.get('POLICY_DENIED', 'en')!.message}`);
+  // BeUser round 2 (SM4): a scope without a pool says so in words, with its next step.
+  const noPool = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
+  expect(await main(['runtime'], noPool.context)).toBe(0);
+  expect(noPool.out.text()).toContain('Running work: none yet, no worker pool is set up for scope live; set one up with `deckent init pool --scope live --preview`');
   const refused = managed();
   expect(await main(['runtime', 'shutdown', '--reason', 'maintenance'], refused.context)).toBe(1);
   expect(refused.err.text()).toContain('Stop it through its manager: systemctl --user stop deckent-live.service'); expect(calls).toEqual([]);

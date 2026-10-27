@@ -412,6 +412,7 @@
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "The local runtime endpoint or the ledger's lock file failed ownership or filesystem checks.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason": "{thing} failed its ownership or file-system check (check: {reason}).",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode": "The runtime socket directory has the wrong permissions (check: parent-mode). Start the service with `deckent runtime serve` or by opening `deckent`: the start re-creates its own empty directory. If it still refuses, the directory is not empty or not yours; `deckent paths` names it.",
+  "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentModeKept": "The runtime socket directory has the wrong permissions and is not empty or not yours, so the start did not re-create it (check: parent-mode-kept). `deckent paths` names it; empty it or fix its owner, then start again.",
   "runtime.socket.thing.directory": "The runtime socket directory",
   "runtime.socket.thing.socket": "The runtime socket",
   "runtime.socket.thing.lock": "The ledger's lock file",

@@ -52,6 +52,7 @@ function discoveryUnavailable(p: Params, l: Locale): string {
 function runtimeEndpointUnsafe(p: Params, l: Locale): string {
   const reason = typeof p['reason'] === 'string' && /^[a-z]+(?:-[a-z]+)*$/u.test(p['reason']) ? p['reason'] : null;
   if (reason === 'parent-mode') return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode', {}, l);
+  if (reason === 'parent-mode-kept') return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentModeKept', {}, l);
   if (!reason) return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l);
   const thing = reason.startsWith('parent-') ? t('runtime.socket.thing.directory', {}, l) : reason === 'ledger-lock' ? t('runtime.socket.thing.lock', {}, l) : t('runtime.socket.thing.socket', {}, l);
   return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason', { ...p, thing }, l);

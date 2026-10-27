@@ -25,7 +25,7 @@ export async function prepareRuntimeSocket(layout: ProductLayout, create = true,
     throw (error as NodeJS.ErrnoException).code === 'ENOENT' ? new LocalRuntimeSocketError('LOCAL_RUNTIME_UNAVAILABLE', { cause: error }) : unsafeEndpoint('parent-stat', error);
   });
   const parentRefused = socketParentRefusal(stat) ?? (await resolveSocketParent(parent) !== parent ? 'parent-realpath' : null);
-  if (parentRefused) throw unsafeEndpoint(parentRefused);
+  if (parentRefused) throw unsafeEndpoint(create && parentRefused === 'parent-mode' ? 'parent-mode-kept' : parentRefused); // the start could not re-create it
   const socket = await lstat(endpoint).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw unsafeEndpoint('socket-stat', error); });
   const socketRefused = socket ? socketFileRefusal(socket) : null;
   if (socketRefused) throw unsafeEndpoint(socketRefused); if (healed) onHealed?.('parent-mode'); return endpoint; // reported once the checks passed

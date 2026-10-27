@@ -58,7 +58,10 @@ it.skipIf(process.platform !== 'linux')('uses distinct short private endpoints a
   expect(doctor.checks.map(check => check.code)).not.toContain('DOCTOR_SOCKET_UNAVAILABLE');
   await writeFile(join(parent, 'keep'), 'kept', { mode: 0o600 });
   const healed: string[] = [], onHealed = (reason: string) => { healed.push(reason); };
-  await expect(prepareRuntimeSocket(layout, true, onHealed)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });
+  const kept = queryFailure(await prepareRuntimeSocket(layout, true, onHealed).catch((error: unknown) => error));
+  // BeUser round 2: the start itself refusing never tells the person to run the start; it says why it could not re-create the directory.
+  expect(kept).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode-kept' } });
+  expect(kept.message).toContain('not empty or not yours'); expect(kept.message).not.toContain('deckent runtime serve');
   expect(await readFile(join(parent, 'keep'), 'utf8')).toBe('kept'); expect(healed).toEqual([]);
   // Its own empty directory with only the mode wrong is re-created owner-only at the service start, once, and reported (no path).
   await rm(join(parent, 'keep'));
