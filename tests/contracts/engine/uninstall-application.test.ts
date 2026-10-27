@@ -212,3 +212,45 @@ it('asks nothing when nothing would change, stops the service before custody in 
     .rejects.toMatchObject({ code: 'UNINSTALL_PLAN_CHANGED', params: { diff: 'uncertain:effect:erp-credit-note' } });
   expect(calls).toEqual(['cancel:run-2']);
 });
+
+it('K3 on the real delivery queue: delete everything refuses a queued delivery naming the next command; --force withdraws it through the queue owner', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { migrateLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { SqliteTargetQueue } = await import('#adapters/core/target-queue-store/index.js');
+  const { observeUninstallWork } = await import('#adapters/core/installation-removal/index.js');
+  const { TargetQueueApplication } = await import('#engine/index.js');
+  const { targetQueueRequestSchema } = await import('#domain/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-queue-')), ledger = join(root, 'ledger.sqlite'), db = new DatabaseSync(ledger);
+  try {
+    migrateLedger(db, 'allow');
+    const principal: VerifiedPrincipal = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] }, asked: string[] = [];
+    const queue = new TargetQueueApplication(new SqliteTargetQueue(db), { async authorize(_request, _principal, action) { asked.push(action); }, async validate() {} },
+      { capacity: 8, perTarget: 4, activeTargets: 2, batchSize: 2, batchWindowMs: 100, leaseMs: 1000, verificationTimeoutMs: 1000, revalidations: 2 }, () => {});
+    await queue.submit(targetQueueRequestSchema.parse({ schemaVersion: 1, commandId: 'delivery-1', identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' },
+      actor: { id: 'person', issuer: 'fixture', subject: 'person' }, target: { schemaVersion: 1, installationId: 'i', adapter: { id: 'adapter', version: 1 }, resourceBinding: 'a'.repeat(64),
+        target: { kind: 'record', id: 'erp-invoice' } }, payloadDigest: 'b'.repeat(64), policyRevision: 'p1', outputDigest: 'c'.repeat(64), acceptedRevision: 1, submittedAt: 1, deadline: 5000 }), principal);
+    const custody: string[] = [];
+    const app = () => new UninstallApplication({ channel: undefined, witness: { attest: async () => true }, principal: async () => principal, authorize: async () => {},
+      inventory: async () => ({ installation: { id: 'installation', root: '/fixture/data' }, scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: 'i1',
+        resources: [], blockers: [], dataBlockers: [], protectedPaths: [], deletionRoots: ['/fixture/data'], backupDestination: '/fixture/recovery/backup', packageRemoval: { command: null, shared: true },
+        // The work comes from the ledger itself, read-only, exactly as the uninstall inventory observes it.
+        work: observeUninstallWork(ledger, { busyTimeoutMs: 1000, maxRecords: 64 }), managedScopes: [], service: { running: false, unit: null, unitDisable: 'none', command: null } }),
+      retainedPlan: async () => null,
+      withAdmission: async (_plan, _id, run) => { custody.push('custody'); return run({ scopeId: 's', recoveryLocation: '/fixture/recovery', effects: { inspect: async () => null, execute: async () => { throw new Error('no effect expected'); } },
+        revalidate: async () => {}, prepareBackup: async () => {}, approvePlan: async () => {}, finish: async () => {} }); },
+      force: { cancelRun: async () => {}, rejectApproval: async () => {},
+        withdrawDelivery: async ref => { const record = await queue.inspect(ref.scopeId, ref.id, principal); if (record) await queue.cancel(record, principal); } },
+      settle: { budgetMs: 1000, wait: async () => {} }, service: { budgetMs: 1000, describe: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); },
+        unit: async () => null, shutdown: async () => {}, disable: async unit => ({ unit, previous: 'enabled', undo: '' }) } });
+    const query = { schemaVersion: 2, tier: 'all', force: false, disableUnit: false } as const, confirm = { confirm: async () => true, backupPassphrase: async () => 'temporary' };
+    // Negative: without --force nothing is touched and the refusal names the next command.
+    const refused = await app().preview(query);
+    const error = await app().apply({ schemaVersion: 2, commandId: 'q1', planDigest: refused.planDigest }, confirm).catch((caught: unknown) => caught as { code?: string; message?: string });
+    expect(error).toMatchObject({ code: 'UNINSTALL_DELIVERY_QUEUED' }); expect(error?.message).toContain('deckent uninstall --all --force');
+    expect(new SqliteTargetQueue(db).load('s', 'delivery-1')?.state).toBe('queued'); expect(custody).toEqual([]);
+    // --force: the queue owner cancels it with the person's authority (no direct row write); the plan sees no drift and custody follows.
+    const forced = await app().preview({ ...query, force: true });
+    expect(await app().apply({ schemaVersion: 2, commandId: 'q2', planDigest: forced.planDigest }, confirm)).toMatchObject({ status: 'completed' });
+    expect(new SqliteTargetQueue(db).load('s', 'delivery-1')?.state).toBe('cancelled'); expect(asked).toEqual(['submit', 'inspect', 'cancel']); expect(custody).toEqual(['custody']);
+  } finally { db.close(); await rm(root, { recursive: true, force: true }); }
+});

@@ -63,6 +63,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   const archived: DataRemovalMember[] = [], taken = new Set(members.map(member => member.path)), rel = (path: string) => relative(layout.root, path).split(sep).join('/');
   const located = Object.keys(layout.resources).map(name => productResourcePath(layout, name as ProductResource)), matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
   const conversation = registry.archive.conversation.map(name => productResourcePath(layout, name as ProductResource)); let seen = 0;
+  const unlisted = (locator: string) => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
+    ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
   const walk = async (directory: string, depth: number): Promise<void> => {
     for (const entry of (await readdir(directory)).sort()) {
       const path = join(directory, entry);
@@ -73,8 +75,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && (located.some(resource => inside(resource, path)) || matches(registry.archive.rootFiles, path)))
         archived.push(...(conversation.some(resource => inside(resource, path)) ? ['conversation-data', 'global-data'] : ['global-data'])
           .map(target => ({ resourceId: rel(path), path, directory: null, archivePath: '', target, archived: true })));
-      else resources.push({ resourceId: `unlisted.${sha256(path)}`, contribution: 'durable', locator: path, version: null, owner: null, ownership: 'unknown', ownershipEvidence: null,
-        present: true, protected: false, capability: false, backup: 'missing' });
+      else unlisted(path);
     }
   };
   if (project.own && !blockers.length) await walk(layout.root, 0).catch(() => { archived.length = 0; blockers.push('archive-limit'); });
@@ -89,13 +90,16 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (entry?.state === 'committed' && entry.rel && entry.next) written.set(entry.rel, [...written.get(entry.rel) ?? [], entry.next]);
     }
     const bridge = async (name: string) => { const path = join(config.projectRoot, name); return await memberStat(path, true).catch(() => null) && written.has(name) && !kept(path) ? path : null; };
+    // A changed DECKENT.md stays with the bridge lines that point to it; a changed bridge line stays. Both are listed.
     const skeleton = await bridge(PROJECT_INSTRUCTION_REGISTRY.files[0]!);
-    if (skeleton && written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton))) add(skeleton);
+    const changed = !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton));
+    if (skeleton) { if (changed) unlisted(skeleton); else add(skeleton); }
     for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path);
-      if (path && (await readFile(path, 'utf8')).split('\n').some(line => line.replace(/\r$/u, '') === row.line)) add(path, { line: row.line }); }
+      if (path && !changed && (await readFile(path, 'utf8')).split('\n').some(line => line.replace(/\r$/u, '') === row.line)) add(path, { line: row.line }); else if (path) unlisted(path); }
     for (const { directory, record } of await listProjectVaults(globalRoot).catch(() => []))
-      if (record?.anchor.installationId === installationId && record.anchor.projectRoot === config.projectRoot && record.anchor.repository === null)
-        for (const entry of await readdir(directory)) if ((await lstat(join(directory, entry))).isFile()) add(join(directory, entry), { directory });
+      if (record?.anchor.installationId !== installationId || record.anchor.projectRoot !== config.projectRoot) continue;
+      else if (record.anchor.repository !== null) unlisted(directory);
+      else for (const entry of await readdir(directory)) if ((await lstat(join(directory, entry))).isFile()) add(join(directory, entry), { directory });
   }
   archived.push(...outside);
   // Rows a tier's archive covers leave that tier's plan: the archive's resource stands for them there.

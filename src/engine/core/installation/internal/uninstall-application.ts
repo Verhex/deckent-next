@@ -193,7 +193,7 @@ export class UninstallApplication {
         const record = await admission.effects.inspect(admission.scopeId, key);
         states.find(state => state.resourceId === item.resourceId)!.state = record?.state ?? null;
       }
-      if (pending.every(item => states.find(state => state.resourceId === item.resourceId)!.state === 'settled') && !steps.stopService && !steps.cancelRuns.length) {
+      if (pending.every(item => states.find(state => state.resourceId === item.resourceId)!.state === 'settled') && !steps.stopService && !forced) {
         const noop = result('noop', admission.recoveryLocation); await admission.finish(noop); return noop;
       }
       if (plan.backup.required) {
