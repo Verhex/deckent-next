@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, expect, it } from 'vitest';
 import { createOpenAiChatNativePort, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound } from '#adapters/core/provider-openai-chat/index.js';
@@ -144,4 +145,15 @@ it('maps provider-neutral turn messages onto the chat request shape and bounds a
   expect(openAiChatPromptUpperBound({ model: MODEL, messages, tools } as never))
     .toBe(Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * 5 + 32);
   expect(openAiChatPromptUpperBound({ model: MODEL } as never)).toBe(Buffer.byteLength('{"messages":[],"tools":[]}', 'utf8') + 64);
+});
+
+// BeUser M-04 (alpha.56.1): a streamed tool call exactly as vLLM 0.30 sends it (recorded from a real server, model renamed; qwen3_xml parser,
+// `--enable-auto-tool-choice`): null `token_ids`/`prompt_token_ids`, the name in its own delta, arguments in pieces, `finish_reason: tool_calls`,
+// a separate usage chunk with `choices: []`, then [DONE].
+it('assembles a recorded vLLM streamed tool call into one call with its full arguments', async () => {
+  const recorded = readFileSync(new URL('../../fixtures/provider-openai-chat/vllm-0.30-streamed-tool-call.sse', import.meta.url), 'utf8');
+  const { endpoint } = await fixture(sse(recorded.split(/(?<=\n\n)/u)));
+  const { result } = await send(endpoint, request(true));
+  expect(result).not.toMatchObject({ kind: 'rejected' });
+  expect(openAiChatMessageFromInvocation(asInvocation(result))?.toolCalls).toEqual([{ id: 'chatcmpl-tool-a88082c0a23a2825', name: 'read_file', argumentsJson: '{"path": "README.md"}' }]);
 });

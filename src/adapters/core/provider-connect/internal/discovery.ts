@@ -1,10 +1,9 @@
 import { displayAddress } from '#platform/index.js';
 import { createHash } from 'node:crypto';
-import { endpointMayCarryKey, exactModelIdSchema, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
+import { endpointMayCarryKey, exactModelIdSchema, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from '#adapters/core/provider-openai-chat/index.js';
 import { PROVIDER_CONNECT_LIMITS, type ProviderConnectKind } from './registry.js';
 import { providerProbeBase, type ProviderProbeOptions } from './probe.js';
-
 import { ProviderModelListError, readProviderPart, providerListHttpError } from './failure.js';
 export { ProviderModelListError } from './failure.js';
 /** A separate channel for each kind/address: equal API ids at two servers never overwrite each other's profiles. */
@@ -70,12 +69,19 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
   } finally { void reader?.cancel().catch(() => undefined); }
 }
 /** Only the selected exact id becomes a catalog fact. A list is evidence of availability, not tools, vision, context size or reasoning. */
-export function discoveredProviderCatalog(kind: ProviderConnectKind, endpoint: string | null, nativeId: string): ProviderCatalogDocument {
+/** BeUser AYSE-16: a keyless loopback server (free) is asked once whether it accepts OpenAI tool calls (one offered tool, one output token; 200 = yes). */
+export async function probeLocalToolCalls(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, options: ProviderProbeOptions = {}): Promise<boolean> {
+  const base = providerProbeBase(kind, endpoint), path = kind.connect?.chatPath, tool = { type: 'function', function: { name: 'deckent_connect_check', parameters: { type: 'object', properties: {} } } };
+  if (!path || endpointMayCarryKey(base) || kind.connect?.adapter !== 'openai-chat-http') return false;
+  return ((options.fetch ?? fetch) as unknown as typeof fetch)(`${base}${path}`, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs), headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: nativeId, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, tools: [tool], tool_choice: 'auto' }) }).then(response => { void response.body?.cancel().catch(() => undefined); return response.status === 200; }, () => false);
+}
+export function discoveredProviderCatalog(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, toolCalls = false): ProviderCatalogDocument {
   const base = providerProbeBase(kind, endpoint), channelId = providerDiscoveryChannel(kind, endpoint);
   const modelId = `model-${createHash('sha256').update(nativeId).digest('hex').slice(0, 32)}`;
   return parseProviderCatalogDocument({ schemaVersion: 2, revision: `${channelId}-${modelId}`, providers: [{ id: channelId, version: 1,
     channel: { kind: ['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname) ? 'local-server' : 'http-api', cli: null, aliases: [] },
     models: [{ id: modelId, version: 1, nativeId, protocols: [{ family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION,
-      capabilities: [] }], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
+      capabilities: toolCalls ? [{ id: OPENAI_CHAT_TOOL_CALLS_CAPABILITY, version: 1, state: 'supported' }] : [] }], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
       minCliVersion: null, efforts: [], aliases: [] }] }] });
 }

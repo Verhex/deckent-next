@@ -83,9 +83,11 @@ export interface WorklineLabels extends WorklineActionLabels {
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
 
+const LOCAL_FALLBACK = new Set(['RUN_ADMISSION_NOT_CONFIGURED', 'BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE']); // no background Run can start here yet
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
+    readonly localFallback?: string; readonly localNoTools?: string; // owner İ-1/İ-6/İ-7: no worker admission → the task runs here (with / without model tools)
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
@@ -470,9 +472,12 @@ export function WorklineApp(props: WorklineProps) {
         await show(props.doPlan.lines(result));
         if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
       } catch (error) {
-        setPlanning(false);
-        if (!execution.signal.aborted) await show([errorText(error)]);
-        else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
+        setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
+        if (!execution.signal.aborted && LOCAL_FALLBACK.has(String((error as { code?: unknown })?.code)) && props.doPlan.localFallback) {
+          onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; /* lead 2026-10-27 (owner İ-1/İ-6/İ-7, Jev 70b89253): runs here via the agent's governed tools */ const tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
+          push([notice('info', `${errorText(error)}\n${tools === false && props.doPlan.localNoTools ? props.doPlan.localNoTools : props.doPlan.localFallback}`)]); await runTurn(slash.args.trim(), mentioned, execution); return true;
+        }
+        if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }
       finally { setPlanning(false); setPlanWait(null); setDoRunning(false); setActiveDo(null); }
       return true;

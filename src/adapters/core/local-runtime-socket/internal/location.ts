@@ -4,7 +4,6 @@ import { lstat, mkdir, open, readdir, rmdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { productResourcePath, type ProductLayout } from '#platform/index.js';
 import { LocalRuntimeSocketError, assertSocketPublicationBudget, resolveSocketParent, socketFileRefusal, socketParentRefusal, unsafeEndpoint } from './endpoint.js';
-
 /** One deterministic, short, owner-only directory per installation data root. Full SHA-256 avoids truncation collisions.
  * The Linux peer/custody transport remains the authority; a read never creates or repairs a directory (only the service start heals its own). */
 export function runtimeSocketLocation(layout: ProductLayout): string {

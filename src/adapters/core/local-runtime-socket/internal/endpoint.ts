@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstat, realpath, rm, rmdir } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
-
 export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_NATIVE_UNAVAILABLE' | 'LOCAL_RUNTIME_OPTIONS'
   | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 /** Which custody check refused (alpha.56.1): a closed token for LOCAL_RUNTIME_ENDPOINT_UNSAFE, never a path or file content. */
@@ -20,12 +19,10 @@ export function socketParentRefusal(stat: Readonly<{ isDirectory(): boolean; isS
 export function socketFileRefusal(stat: Readonly<{ isSocket(): boolean; isSymbolicLink(): boolean; uid: number; mode: number }>): LocalRuntimeUnsafeReason | null {
   return stat.isSymbolicLink() ? 'socket-link' : !stat.isSocket() ? 'socket-type' : stat.uid !== process.getuid!() ? 'socket-owner' : (stat.mode & 0o777) !== 0o600 ? 'socket-mode' : null;
 }
-
 export type LocalRuntimeSocketOptions = Readonly<{ endpoint: string; maxConnections: number; inputMaxBytes: number;
   responseMaxBytes: number; headerTimeoutMs: number; responseTimeoutMs: number; acceptRetryDelayMs: number; acceptRetryLimit: number }>;
 /** `custodyId`: the digest naming this endpoint's custody (the guard socket is `\0deckent-<custodyId>`). */
 export type ResolvedLocalRuntimeSocketOptions = LocalRuntimeSocketOptions & Readonly<{ custodyId: string; guardEndpoint: string }>;
-
 function positive(value: number): boolean { return Number.isSafeInteger(value) && value > 0; }
 export function assertSocketPublicationBudget(endpoint: string): void {
   const parent = dirname(endpoint);
@@ -63,7 +60,6 @@ export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): 
   const digest = createHash('sha256').update(`${options.endpoint}\0${process.getuid()}`).digest('hex');
   return Object.freeze({ ...options, custodyId: digest, guardEndpoint: `\0deckent-${digest}` });
 }
-
 export async function assertOwnedSocket(endpoint: string): Promise<void> {
   let stat;
   try { stat = await lstat(endpoint); }
@@ -75,7 +71,6 @@ export async function assertOwnedSocket(endpoint: string): Promise<void> {
   const refused = process.getuid ? socketFileRefusal(stat) : 'socket-owner';
   if (refused) throw unsafeEndpoint(refused);
 }
-
 export async function removeOwnedSocket(endpoint: string, missingIsSafe: boolean): Promise<void> {
   let stat; try { stat = await lstat(endpoint); }
   catch (error) {

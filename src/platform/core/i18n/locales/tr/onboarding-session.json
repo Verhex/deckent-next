@@ -20,6 +20,7 @@
   "onboarding.permissions.unavailable": "Bu derlemede profil varsayımları gözlenemiyor. İzinler değişmedi. /mode veya /policy kullanın ya da /setup ile dönün.",
   "onboarding.firstTask.title": "Hazır! İlk işinizi seçin",
   "onboarding.firstTask.body": "Bu ekran ilk açılış oturumunu bitirir. Ertelenen hazırlıklar, politika, bütçe ve onay kontrolleri geçerlidir.",
+  "onboarding.firstTask.local": "Arka plan işçileri henüz kurulmadı; bu ilk iş burada, terminalde modelin araçlarıyla çalışır. İşçileri sonra /setup ile ekleyebilirsiniz.",
   "onboarding.firstTask.freeText": "İlk işinizi kendiniz yazın",
   "onboarding.firstTask.submit": "/do ile gönder",
   "onboarding.firstTask.later": "İş göndermeden çalışma alanını aç",

@@ -20,6 +20,7 @@
   "onboarding.permissions.unavailable": "Profile defaults cannot be observed in this build. Permissions remain unchanged. Use /mode or /policy, or return with /setup.",
   "onboarding.firstTask.title": "Ready! Choose your first task",
   "onboarding.firstTask.body": "This finishes onboarding. Deferred setup and all policy, budget and approval checks still apply.",
+  "onboarding.firstTask.local": "Background workers are not set up yet, so this first task runs here in the terminal with the model's tools; /setup adds workers later.",
   "onboarding.firstTask.freeText": "Write your own first task",
   "onboarding.firstTask.submit": "Submit through /do",
   "onboarding.firstTask.later": "Open the workline without a task",

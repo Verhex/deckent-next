@@ -706,6 +706,8 @@
   "brain.planning": "Brain is planning with the selected model. No Run has been admitted.",
   "brain.cancelHint": "Esc / Ctrl+C: cancel planning",
   "brain.requestHint": "Enter /do followed by the work you want planned.",
+  "brain.localFallback": "So this task runs here in the terminal with the model's tools; your mode, the sandbox and approvals apply.",
+  "brain.localNoTools": "So this task runs here in the terminal, but this model has no tool support here: it can only answer in words and cannot read or change files. For tools, connect a model that supports them, or start the server with tool calling (vLLM: --enable-auto-tool-choice --tool-call-parser <parser>) and connect it again with /provider.",
   "cli.help.summary.do": "Plan an intent through Brain and existing approval gates",
   "cli.help.do": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
   "mcp.tool.planRun": "Generate a receipted RunProposal from an intent with the selected active model and provider-spend budget. Same command/input replays. MCP cannot decide approvals.",

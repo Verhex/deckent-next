@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { planRun } from '../../../src/index.js';
-import { formatHumanError } from '#platform/index.js';
+import { DeckentError, formatHumanError } from '#platform/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
@@ -82,4 +82,16 @@ it('a cancellation crossing an already-started admission does not hide its retur
   await settle(40); view.stdin.write('\u0003'); await until(() => signal?.aborted === true, 'local cancellation');
   release!({ ...pending, run, proposal: { ...pending.proposal, status: 'accepted', reason: null, approval: null } });
   await until(() => view.stdout.text.includes('Run r admitted. Follow /tasks or /monitor.'), 'returned admission remains visible');
+});
+it.each([['RUN_ADMISSION_NOT_CONFIGURED', true], ['BRAIN_TIER_REFUSED', true], ['MODEL_NOT_ACTIVATED', false]] as const)('/do refused with %s runs here only when no background Run can start (owner İ-1/İ-6/İ-7)', async (code, local) => {
+  const asked: string[] = [];
+  const view = mountWorkline({ errorText: error => `REFUSED ${(error as DeckentError).code}`,
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', localNoTools: 'NO TOOLS', lines: () => [],
+      plan: async () => { throw new DeckentError(code, code); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do Read package.json\r');
+  await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown');
+  if (local) await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn answer'); else await settle(80);
+  expect(asked).toEqual(local ? ['Read package.json'] : []);
+  expect(view.stdout.text.includes('RUNS HERE')).toBe(local); expect(view.stdout.frame).not.toContain('PLANNING');
 });

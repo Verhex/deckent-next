@@ -350,7 +350,7 @@
   "error.DISPATCH_CONFLICT": "Atama eşzamanlı olarak değişti veya kayıtlı durumuyla çakışıyor. Kayıtlı durumu yeniden okuyup tekrar deneyin.",
   "error.DISPATCH_NOT_ADMITTED": "Atama bu Attempt, kapsam veya iş durumu için kabul edilmedi.",
   "error.DISPATCH_PROFILE_VALIDATION_REQUIRED": "Yürütme profili doğrulanamadı; atama başlatılmadı.",
-  "error.RUN_ADMISSION_NOT_CONFIGURED": "İş kabulü açık bir havuz ve kapasite profili gerektirir.",
+  "error.RUN_ADMISSION_NOT_CONFIGURED": "Arka plan işçileri henüz kurulmadı: bu kapsam için iş türü ve işçi havuzu yok. `deckent` içinde /setup ile kurun (İlk iş türü, sonra İşçi havuzu); betikten: `deckent init registry --scope <kimlik> … --preview`, sonra `deckent init pool --scope <kimlik> --preview`.",
   "error.RUN_STORE_CORRUPT": "İş kayıtları tutarsız; başarılı güncelleme iddia edilmiyor.",
   "error.RUN_STORE_CONFLICT": "İş değişti veya mevcut değil. Kayıtlı durumunu yeniden okuyun.",
   "error.RUN_NOT_FOUND": "Kayıtlı iş bulunamadı: {run}.",

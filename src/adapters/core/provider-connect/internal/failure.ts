@@ -1,6 +1,5 @@
 import { classifyProviderRejection } from '#engine/index.js';
 import { PROVIDER_CONNECT_LIMITS } from './registry.js';
-
 export type ProviderDiscoveryCause = 'no-credential' | 'credential-rejected' | 'access-denied' | 'rate-limit' | 'spend-limit'
   | 'limit-reached' | 'http-status' | 'redirect' | 'network' | 'timeout' | 'invalid-list' | 'not-listable';
 export class ProviderModelListError extends Error {

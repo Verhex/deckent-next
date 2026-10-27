@@ -42,6 +42,12 @@ function readinessReason(error: unknown, locale: Locale): string {
 /** The /model window renders the shared scoped invocation read model; picking still rechecks through governed preparation. */
 export function modelPanelSource(root: string, scopeId: string, host: Host, options: ConfigLoadOptions, locale: Locale): ModelPanelSource {
   const defaultBlocked = () => host.configApplication && host.resolveConfigPrincipal ? null : t('tui.model.defaultReadOnly', {}, locale);
+  /** BeUser AYSE-16: the exact model's declared protocol family and all its capabilities, or null when it is not declared. */
+  const protocolOf = async (reference: ModelReference | null) => {
+    const declared = await host.inspectDeclaredModels?.(root, options), exact = reference ?? (await host.describeTerminalChatPlan?.(root, options))?.reference;
+    const model = declared?.status === 'declared' && exact ? declared.catalog.providers.find(row => row.id === exact.providerId && row.version === exact.providerVersion)?.models.find(row => row.id === exact.modelId && row.version === exact.modelVersion) : undefined;
+    return model?.protocols.length ? { family: model.protocols[0]!.family, capabilities: model.protocols.flatMap(protocol => protocol.capabilities) } : null;
+  };
   return {
     ...(host.prepareModelSwitch ? { async prepare(choice: ModelPanelChoice, reasoning?: 'off') {
       try { await host.prepareModelSwitch!(root, scopeId, choice.reference, options, reasoning); }
@@ -62,14 +68,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         action: desired, expectedRevision: current.activation?.revision ?? 0, expectedBinding: binding.binding,
         ...(desired === 'activate' ? { catalogRevision: binding.catalogRevision } : {}) } as never, options);
     } } : {}),
-    async reasoningOffSupported(reference) {
-      const declared = await host.inspectDeclaredModels?.(root, options);
-      const plan = reference ? null : await host.describeTerminalChatPlan?.(root, options);
-      const exact = reference ?? plan?.reference;
-      return declared?.status === 'declared' && !!exact && declared.catalog.providers.some(provider => provider.id === exact.providerId && provider.version === exact.providerVersion
-        && provider.models.some(model => model.id === exact.modelId && model.version === exact.modelVersion && model.protocols.some(protocol =>
-          protocol.capabilities.some(capability => capability.id === 'chat-template-enable-thinking' && capability.version === 1 && capability.state === 'supported'))));
-    },
+    async reasoningOffSupported(reference) { return (await protocolOf(reference))?.capabilities.some(row => row.id === 'chat-template-enable-thinking' && row.version === 1 && row.state === 'supported') ?? false; },
+    async toolsDeclared(reference) { const protocol = await protocolOf(reference); return protocol ? protocol.capabilities.some(row => row.id === 'tool-calls' && row.state === 'supported') : null; }, // domain OPENAI_CHAT_TOOL_CALLS_CAPABILITY
     async inspect(): Promise<ModelPanelView> {
       const title = t('tui.model.title', { scope: scopeId }, locale), notes: string[] = [];
       const declared = host.inspectDeclaredModels ? await host.inspectDeclaredModels(root, options) : null;

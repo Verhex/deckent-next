@@ -155,6 +155,8 @@ export interface ModelPanelSource {
   /** Current session preference, rechecked before pinning. */
   reasoning?(): 'off' | undefined;
   reasoningOffSupported?(reference: ModelPanelReference | null): Promise<boolean>;
+  /** BeUser AYSE-16: whether the exact model declares tool calls (false), or null when it is not declared (unknown). */
+  toolsDeclared?(reference: ModelPanelReference | null): Promise<boolean | null>;
   makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
