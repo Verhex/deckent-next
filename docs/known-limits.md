@@ -630,22 +630,25 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
   *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
 - **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews any tier; application needs the
-  person's real-terminal card. Keep-data removes only caches and stops the service. Images remain until a complete
-  usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
+  person's real-terminal card. Keep-data removes only caches, stops the service and retires the folder: the service stays down
+  until the person opens `deckent` there and chooses Continue. Images remain until a complete usage-reference contract exists;
+  the card provides the exact manual step. macOS/Windows service removal is manual.
   *Workaround:* follow the plan's per-item instructions, then the printed program command; see the
   [AI installation guide](ai-install.md#uninstall).
-- **Delete everything deletes only what the backup set restores.** `deckent uninstall --all` deletes, after a verified
-  plan-bound backup, the authority files and signed audit records the standard `deckent backup` set restores (owner K7).
-  Chat history, logs, workspaces, earlier backups, run folders, `DECKENT.md` and its bridge lines, the shared global home and
-  this folder's global slices are not in that set, so they stay and are listed; the project `.deckent` folder therefore
-  usually stays. Keep-work currently removes the same as keep-data and is offered only when it would differ.
-  *Workaround:* remove the listed files yourself after reviewing them; widening deletion needs a backup-set extension decision.
-- **Force and the service have bounded reach.** `--force` cancels runs and rejects approvals with the person's authority but
-  cannot withdraw queued deliveries (no withdrawal owner exists: `UNINSTALL_DELIVERY_QUEUED`); unknown results are never
-  closed. A unit Deckent did not create is disabled only with `--disable-unit` when every K4 check holds; otherwise the command
-  is printed. A hand-made launcher (for example `~/.local/bin/deckent-…`) is not detected. Uninstall refuses a
-  `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet.
-  *Workaround:* finish deliveries with the delivery commands, stop the unit yourself, or ask the administrator for a direct allow.
+- **Delete everything is complete only for a project-folder installation.** In a project's own `.deckent`, `--all` archives
+  (encrypted, beside the backup set, verified) and deletes every Deckent file there, `DECKENT.md` and the bridge line init wrote,
+  and this folder's unshared vault slice; Git-tracked, unknown and linked files stay and keep their folder. An installation whose
+  data root is the shared global home keeps the alpha.56 behaviour: only the backed-up authority files go. A stray file inside a
+  cache folder, a changed `DECKENT.md`, a tracked `CLAUDE.md`, a vault shared by a repository's worktrees and this folder's
+  instruction-trust entry stay. An archive larger than the backup limits refuses before anything is deleted.
+  `deckent backup restore --set <path>` brings files back without overwriting files that exist again, so a bridge line is not re-added.
+  *Workaround:* review the listed files; run `deckent init` to recreate bridges after a restore.
+- **Force and the service have bounded reach.** `--force` cancels runs, rejects approvals and withdraws queued deliveries with
+  the person's own authority (a refusal names the scope); unknown results are never closed. A unit Deckent did not create is
+  disabled only with `--disable-unit` when every K4 check holds; otherwise the command is printed. Hand-made launchers are found
+  only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall refuses a `require-approval` policy decision
+  (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet.
+  *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.
 - **A partial deletion resumes only after re-verification.** Moved/unsafe authority files stop the data tier before it starts;
   when Git tracking cannot be read, every project file counts as possibly tracked and stays. A partial final deletion resumes only after remaining bytes and delete authority are
   re-verified; otherwise files stay and managed backup restore remains available. An unknown step stays unknown.

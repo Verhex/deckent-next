@@ -18,4 +18,4 @@ export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '
 export { getConfigKnownSecrets } from './internal/redaction-context.js';
 export { restoreHoldPath, type RestoreHoldAdmission } from './internal/bootstrap.js';
 
-export { uninstallHoldPath, assertNoUninstallHold } from './internal/uninstall-hold.js';
+export { uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from './internal/uninstall-hold.js';

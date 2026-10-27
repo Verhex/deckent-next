@@ -8,6 +8,7 @@ import { FileBackupStorage, recordBackupAudit, readBackupConfig, verifyBackupSet
 import { resolveGlobalConfigReadPath, sha256, type ResolvedConfig, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { fileDigest, memberStat, type DataRemovalMember, type DataRemovalSnapshot } from './data.js';
 import { writeUninstallIntent } from './tombstone.js';
+import { createUninstallArchive, uninstallArchiveRoots } from './archive.js';
 import paths from './paths.json' with { type: 'json' };
 const unbound = (): never => { throw new EffectTargetError('EFFECT_TARGET_PRECONDITION'); };
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -34,7 +35,7 @@ async function bindMember(verified: VerifiedBackup, member: DataRemovalMember, b
 /** The existing backup application owns create/verify/audit of the standard set that `deckent backup restore` restores. The final set is
  * re-verified, every member is bound to its exact verified content and a durable final-tail intent is written before any deletion. */
 export async function prepareUninstallBackup(config: ResolvedConfig, plan: UninstallPlan, scopeId: string, principal: VerifiedPrincipal,
-  policy: unknown, integrity: IntegrityAuthority, members: readonly DataRemovalMember[], passphrase: string, final: boolean, options: ConfigLoadOptions) {
+  policy: unknown, integrity: IntegrityAuthority, members: readonly DataRemovalMember[], passphrase: string, final: boolean, options: ConfigLoadOptions, approved = plan.planDigest) {
   if (!plan.backup.destination) throw new Error('UNINSTALL_BACKUP_COVERAGE');
   const limits = config.installation.packageMeasurement, layout = config.productLayout;
   const set = join(plan.backup.destination, `${final ? paths.finalBackupPrefix : paths.initialBackupPrefix}${randomUUID()}`), globalPath = await resolveGlobalConfigReadPath(options.env, options.platform);
@@ -49,8 +50,11 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
   const verified = await verifyBackupSet(set, passphrase, limits);
   try {
     if (verified.state.installationId !== plan.installation.id) unbound();
-    const bound = [];
-    for (const member of members) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
+    // Only the members of the data resource this plan removes; archived files bind to the archive, the authority set to the semantic set.
+    const removing = new Set(plan.items.filter(item => item.action === 'remove').map(item => item.resourceId)), own = members.filter(member => removing.has(member.target ?? 'global-data'));
+    const bound = own.some(member => member.archived) ? [...await createUninstallArchive(set, uninstallArchiveRoots(config.projectRoot, dirname(globalPath)), own.filter(member => member.archived),
+      { installationId: plan.installation.id, approved, plan: plan.planDigest }, passphrase, limits)] : [];
+    for (const member of own.filter(member => !member.archived)) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
     const snapshot: DataRemovalSnapshot = { set: verified.set, manifestDigest: digest(await readFile(join(verified.set, 'MANIFEST.sha256'))), members: bound };
     await writeUninstallIntent(dirname(plan.backup.destination), layout.root, principal, plan, snapshot);
     return { set, snapshot };

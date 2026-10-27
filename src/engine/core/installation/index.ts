@@ -30,7 +30,7 @@ export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, Instal
 
 export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';
 
-export { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
+export { createUninstallPlan, assertUninstallPlanCurrent, uninstallBlockerError, uninstallPlanDrift, uninstallLauncherResource, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
 export type { UninstallInventory, UninstallContribution } from './internal/uninstall-plan.js';
 export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError, UNINSTALL_TIERS } from './internal/uninstall-contract.js';
 export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem, UninstallTier, UninstallQuery, UninstallWork, UninstallService } from './internal/uninstall-contract.js';

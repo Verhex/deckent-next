@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "recoveryDirectory": ".deckent-uninstall",
   "recoveryRoot": {
     "linux": {
@@ -60,5 +60,28 @@
     "/usr/bin/git",
     "/usr/local/bin/git",
     "/opt/homebrew/bin/git"
-  ]
+  ],
+  "archive": {
+    "conversation": [
+      "terminalHistory",
+      "terminalSessions",
+      "runtimeLog",
+      "ledgerBackups",
+      "crashes",
+      "approvalPreviews"
+    ],
+    "rootFiles": [
+      "^\\.gitignore$",
+      "^config\\.json\\.bak\\..+$",
+      "^installation/retired\\.json$"
+    ],
+    "transient": [
+      "^uninstall-hold\\.json$",
+      "^state/ledger\\.db-(wal|shm|journal|lock)$",
+      "^state/runtime\\.sock$"
+    ],
+    "companionSuffix": ".archive",
+    "owner": "uninstall-files",
+    "manifestSuffix": ".archive.json"
+  }
 }

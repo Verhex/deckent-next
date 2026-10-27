@@ -44,7 +44,8 @@
     "history": [
       "terminalHistory",
       "terminalSessions",
-      "runtimeLog"
+      "runtimeLog",
+      "conversation-data"
     ],
     "backups": [
       "ledgerBackups"

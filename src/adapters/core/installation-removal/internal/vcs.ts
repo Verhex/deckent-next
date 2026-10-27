@@ -15,7 +15,8 @@ export async function projectTracking(projectRoot: string, projectData: string, 
   if (!git || !isAbsolute(git)) return inRepository(projectRoot) ? unverified : () => null;
   const answer = await new Promise<{ out: string; err: string; code: unknown }>(resolve => execFile(git, localGitArgs(projectRoot, ['--literal-pathspecs', 'ls-files', '-z', '--', projectData]),
     { env: { ...GIT_LOCAL_ENV, LC_ALL: 'C' }, shell: false, encoding: 'utf8', timeout: bounds.timeoutMs, maxBuffer: bounds.outputBytes }, (error, out, err) => resolve({ out, err, code: error ? error.code ?? -1 : 0 })));
-  if (answer.code === 128 && /not a git repository/u.test(answer.err) && !inRepository(projectRoot)) return () => null;
+  // Git itself saying there is no repository is an answer (a stray `.git` folder is no repository); any other failure is not.
+  if (answer.code === 128 && /not a git repository/u.test(answer.err)) return () => null;
   if (answer.code !== 0) return unverified;
   const files = answer.out.split('\0').filter(Boolean).map(path => join(projectRoot, path));
   return path => files.some(file => pathWithin(path, file)) ? 'vcs-tracked' : null;

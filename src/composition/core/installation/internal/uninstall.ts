@@ -4,10 +4,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
   uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, querySystemdMainPid } from '#adapters/index.js';
-import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, uninstallManagedScopes, type UninstallInteraction } from '#engine/index.js';
-import { ErrorRegistry, productResourcePath, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions } from '#platform/index.js';
+import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, type UninstallInteraction } from '#engine/index.js';
+import { ErrorRegistry, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { createConfiguredRuntimeClient, withQueueContext } from '#composition/core/runtime-service/index.js';
 import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
@@ -29,19 +29,17 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
     channel: localPrincipalChannel(), witness: { attest: () => { const peer = localPrincipalPeer(); return attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } },
     principal: person,
     async authorize(action, principal) { authorizeUninstall(policySchema.parse(await source.load()), principal, await installationId(), scopes(await source.load()), action); },
-    async inventory() {
-      const document = policySchema.parse(await source.load()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
-      return { ...inventory, managedScopes: uninstallManagedScopes(document, scopes(document)) };
+    async inventory() { const document = policySchema.parse(await source.load()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
+      return { ...inventory, managedScopes: uninstallManagedScopes(document, scopes(document)), resources: [...inventory.resources, ...handMadeLaunchers(root, env).map(uninstallLauncherResource)] };
     },
-    async retainedPlan(digest) {
-      return new UninstallRecovery(layout.root, await installationId(), await person(), await openLocalIntegrityAuthority(layout, config.approvals.keyFile),
-        config.installation.profileMaxBytes, uninstallRecoveryDirectory(layout.root, env)).retained(digest);
-    },
-    async withAdmission(plan, _commandId, work) { const principal = await person(); return withUninstallAdmission(config, plan, principal, scopeId, principal.scopeIds, options, work); },
+    async retainedPlan(digest) { return new UninstallRecovery(layout.root, await installationId(), await person(), await openLocalIntegrityAuthority(layout, config.approvals.keyFile),
+      config.installation.profileMaxBytes, uninstallRecoveryDirectory(config, env)).retained(digest); },
+    async withAdmission(plan, approved, work) { const principal = await person(); return withUninstallAdmission(config, plan, approved, principal, scopeId, principal.scopeIds, options, work); },
     // K3: the person's own authority through the existing owners; a cancellation is a durable intent, a rejection the person's decision.
     force: { cancelRun: async ref => { await requestConfiguredRunCancellation(root, { schemaVersion: 1, scopeId: ref.scopeId, runId: ref.id, commandId: randomUUID(), action: 'cancel', expectedRevision: ref.revision }, options); },
       rejectApproval: async ref => { await configuredApproval(root, 'decide', { schemaVersion: 1, scopeId: ref.scopeId, approvalId: ref.id, commandId: randomUUID(), expectedRevision: ref.revision,
-        decision: 'deny', reason: 'uninstall --force', channel: 'local-cli' }, options); } },
+        decision: 'deny', reason: 'uninstall --force', channel: 'local-cli' }, options); },
+      withdrawDelivery: ref => withQueueContext(root, ref.scopeId, options, undefined, false, async queue => { const record = await queue.app.inspect(ref.scopeId, ref.id, queue.principal); if (record) await queue.app.cancel(record, queue.principal); }) },
     // Waits are bounded by their owners' configuration: the cancellation claim lifetime, else the service lifecycle budget.
     settle: { budgetMs: config.cancellation?.claimTtlMs ?? terminal.serviceStartTimeoutMs, wait: delay },
     service: { budgetMs: terminal.serviceStartTimeoutMs, describe: signal => client.describeService(signal),
@@ -54,7 +52,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   });
 }
 async function completed(root: string, options: ConfigLoadOptions, settle = false) {
-  const config = await load(root, options), directory = uninstallRecoveryDirectory(config.productLayout.root, options.env ?? process.env);
+  const config = await load(root, options), directory = uninstallRecoveryDirectory(config, options.env ?? process.env);
   return { directory, previous: await readUninstallTombstone(directory, config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes,
     productResourcePath(config.productLayout, 'installationIdentity'), settle) };
 }

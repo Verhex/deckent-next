@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, rmdir, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ErrorRegistry, sha256, uninstallHoldPath, PRIVATE_PERMISSION_MASK, type IntegrityAuthority } from '#platform/index.js';
 import type { UninstallPlan, UninstallResult } from '#engine/index.js';
@@ -11,7 +11,7 @@ export class UninstallRecovery {
   readonly directory: string;
   private readonly hold: string;
   constructor(private readonly root: string, private readonly installationId: string, private readonly principal: VerifiedPrincipal,
-    private readonly integrity: IntegrityAuthority, private readonly maxBytes: number, externalDirectory?: string) {
+    private readonly integrity: IntegrityAuthority, private readonly maxBytes: number, externalDirectory?: string, private readonly leftovers: readonly string[] = []) {
     this.directory = externalDirectory ?? join(root, 'uninstall-recovery'); this.hold = uninstallHoldPath(root);
   }
   private async safeDirectory(path: string) {
@@ -80,6 +80,11 @@ export class UninstallRecovery {
       await unlink(this.hold);
       const directory = await open(this.root, constants.O_RDONLY | constants.O_DIRECTORY);
       try { await directory.sync(); } finally { await directory.close(); }
+      // A completed project-folder deletion leaves no custody files behind; each folder goes only when empty, the installation's own last.
+      if (result.status === 'completed' && this.leftovers.length) {
+        for (const path of this.leftovers) await unlink(path).catch(() => undefined);
+        for (const folder of [...new Set(this.leftovers.map(dirname)), this.root]) await rmdir(folder).catch(() => undefined);
+      }
     }
   }
 }

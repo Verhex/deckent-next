@@ -104,6 +104,6 @@ it('offers force for running work before any card and prints a kept image\'s ste
   const plan = createUninstallPlan(query('all'), inventory({ resources: [{ resourceId: 'image.1', contribution: 'worker-image', locator: `sha256:${'1'.repeat(64)}`, version: null, owner: null, ownership: 'unknown',
     ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing', manualCommand: command }], dataBlockers: ['authority-unsafe:/fixture/bindings.json'] }));
   const en = uninstallPlanLines(plan, 'en').join('\n'), tr = uninstallPlanLines(plan, 'tr').join('\n');
-  for (const text of [en, tr]) { expect(text).toContain(command); expect(text).toContain('/fixture/bindings.json'); expect(text).toContain('deckent backup restore'); }
+  for (const text of [en, tr]) { expect(text).toContain(command); expect(text).toContain('/fixture/bindings.json'); }
   expect(tr).toContain('Sizin yapmanız gereken');
 });

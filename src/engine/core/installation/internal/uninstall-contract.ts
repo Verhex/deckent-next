@@ -17,7 +17,9 @@ export const uninstallResourceSchema = z.object({
   /** A kept resource's exact removal step for the person, produced by its owner; never run by uninstall. */
   manualCommand: text.optional(),
   /** Why an observed resource stays when no generic reason says it: tracked (or possibly tracked) by the project's VCS, or outside the backup set. */
-  keep: z.enum(['vcs-tracked', 'vcs-unverified', 'not-backed-up']).optional(),
+  keep: z.enum(['vcs-tracked', 'vcs-unverified', 'not-backed-up', 'unrecorded']).optional(),
+  /** The tiers this observation applies to (absent: every tier); a project's archived files are one resource per data tier. */
+  tiers: z.array(z.enum(UNINSTALL_TIERS)).min(1).optional(),
 }).strict().readonly();
 const ref = z.object({ scopeId: text, id: text, revision: z.number().int().nonnegative().safe() }).strict().readonly();
 /** Itemized ledger work, read-only: running and parked runs, pending approvals, open deliveries and every unreconciled effect, call or held money. */
@@ -40,14 +42,15 @@ export interface UninstallItem extends UninstallResource {
 }
 export interface UninstallPlan {
   readonly schemaVersion: 2; readonly installation: UninstallInstallation; readonly tier: UninstallTier; readonly force: boolean; readonly disableUnit: boolean;
-  /** Data deletion (tier `all`): durable members leave only after a verified, plan-bound backup. */
+  /** Tier `all`: the installation itself goes (tombstone). Any tier that deletes data (`backup.required`) archives it first (K7). */
   readonly purge: boolean;
   readonly scopeSummary: readonly string[]; readonly layoutRevision: string; readonly policyRevision: string;
   readonly inventoryRevision: string; readonly registryDigest: string; readonly planDigest: string;
   readonly items: readonly UninstallItem[]; readonly blockers: readonly string[];
   readonly work: UninstallWork; readonly service: UninstallService;
   /** What applying does before any removal: governed service stop, K4 unit disable, and force's own cancellations and rejections. */
-  readonly steps: { readonly stopService: boolean; readonly disableUnit: boolean; readonly cancelRuns: UninstallWork['running']; readonly rejectApprovals: UninstallWork['approvals'] };
+  readonly steps: { readonly stopService: boolean; readonly disableUnit: boolean; readonly cancelRuns: UninstallWork['running']; readonly rejectApprovals: UninstallWork['approvals'];
+    readonly withdrawDeliveries: UninstallWork['deliveries'] };
   /** Nothing would be removed, stopped, cancelled or rejected: no confirmation is asked. */
   readonly nothingToRemove: boolean;
   /** Every tier from the same observation, for the menu: how many resources it removes and its first blocker. */

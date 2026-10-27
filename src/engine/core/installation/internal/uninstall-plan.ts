@@ -7,7 +7,7 @@ import data from './uninstall-resources.json' with { type: 'json' };
 import { UninstallError, UNINSTALL_TIERS, uninstallInstallationSchema, uninstallPlanQuerySchema, uninstallResourceSchema, uninstallWorkSchema, uninstallServiceSchema,
   type UninstallPlan, type UninstallResource, type UninstallItem, type UninstallInstallation, type UninstallTier, type UninstallWork, type UninstallService } from './uninstall-contract.js';
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
-const contribution = z.object({ id, owner: id, kind: z.enum(['service', 'image', 'path']), disposable: z.boolean(), operation: id, targetKind: id, after: z.array(id) }).strict();
+const contribution = z.object({ id, owner: id, kind: z.enum(['service', 'image', 'path']), removeFrom: z.enum(UNINSTALL_TIERS), operation: id, targetKind: id, after: z.array(id) }).strict();
 export type UninstallContribution = z.infer<typeof contribution>;
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
@@ -51,6 +51,7 @@ type Query = { readonly tier: UninstallTier; readonly force: boolean; readonly d
 /** Item actions and blockers of one tier over one observation; pure. */
 function decide({ tier, force, disableUnit }: Query, installation: UninstallInstallation, resources: readonly UninstallResource[], inventory: UninstallInventory,
   registry: ReturnType<typeof uninstallRegistry>) {
+  resources = resources.filter(resource => !resource.tiers || resource.tiers.includes(tier));
   const purge = tier === 'all', blockers = [...inventory.blockers, ...(purge ? inventory.dataBlockers : []), ...(tier !== 'keep-data' && inventory.policyBlocker ? [`policy:${inventory.policyBlocker}`] : [])];
   const items: UninstallItem[] = resources.map(resource => {
     const entry = registry.entries.find(item => item.id === resource.contribution);
@@ -60,11 +61,11 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     else if (resource.keep) reason = resource.keep;
     else if (resource.protected) reason = 'protected';
     else if (resource.ownership !== 'exclusive' || !resource.ownershipEvidence || resource.owner !== installation.id) reason = 'ownership';
-    else if (!entry.disposable && !purge) reason = 'durable';
+    else if (UNINSTALL_TIERS.indexOf(tier) < UNINSTALL_TIERS.indexOf(entry.removeFrom)) reason = 'durable';
     else if (resource.backup === 'protected-session' || resource.backup === 'non-exportable') reason = resource.backup;
     else if (resource.present === null || resource.version === null) { action = 'blocked'; reason = 'observation-unknown'; }
     else if (!resource.capability) { action = 'manual'; reason = 'unsupported'; }
-    else if (purge && !entry.disposable && resource.backup !== 'covered') { action = 'blocked'; reason = 'backup-coverage'; }
+    else if (entry.removeFrom !== 'keep-data' && resource.backup !== 'covered') { action = 'blocked'; reason = 'backup-coverage'; }
     else { action = 'remove'; reason = 'owned'; }
     if (action === 'remove' && entry.kind === 'path') {
       if ((resource.members ?? [resource.locator]).some(locator => {
@@ -95,14 +96,16 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
       }
     }
   }
-  if (purge && (!inventory.backupDestination || !isAbsolute(inventory.backupDestination)
+  // K7: every tier that deletes data (not only caches) archives it first, to a destination outside every deleted folder.
+  const archived = items.some(item => item.action === 'remove' && registry.entries.find(entry => entry.id === item.contribution)!.removeFrom !== 'keep-data');
+  if (archived && (!inventory.backupDestination || !isAbsolute(inventory.backupDestination)
     || inventory.deletionRoots.some(root => within(root, inventory.backupDestination!) || within(inventory.backupDestination!, root)))) blockers.push('backup-destination');
   // Work and service are checked before any card (owner 2026-10-27): a running service is stopped, never reported as work.
   const work = inventory.work, service = inventory.service;
   if (!work.complete) blockers.push('work-unverified');
   if (work.running.length && !force) blockers.push('work-active');
   if (purge && (work.parked.length || work.approvals.length) && !force) blockers.push('work-pending');
-  if (purge && work.deliveries.length) blockers.push('delivery-queued');
+  if (purge && work.deliveries.length && !force) blockers.push('delivery-queued');
   if (purge && work.uncertain.length) {
     if (!force) blockers.push('uncertain-effects');
     else if (work.uncertain.some(item => inventory.managedScopes.includes(item.scopeId))) blockers.push('uncertain-managed');
@@ -110,8 +113,8 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
   const unit = service.running && service.unit !== null;
   if (unit && !(disableUnit && service.unitDisable === 'eligible')) blockers.push('service-managed');
   const steps = { stopService: service.running, disableUnit: unit && disableUnit && service.unitDisable === 'eligible',
-    cancelRuns: force ? [...work.running, ...(purge ? work.parked : [])] : [], rejectApprovals: force && purge ? [...work.approvals] : [] };
-  return { items, blockers: [...new Set(blockers)].sort(), steps };
+    cancelRuns: force ? [...work.running, ...(purge ? work.parked : [])] : [], rejectApprovals: force && purge ? [...work.approvals] : [], withdrawDeliveries: force && purge ? [...work.deliveries] : [] };
+  return { items, blockers: [...new Set(blockers)].sort(), steps, archived };
 }
 /** Pure plan over owner observations. No healing, filesystem writes, service starts or identity creation. */
 export function createUninstallPlan(query: unknown, inventory: UninstallInventory, registry = uninstallRegistry()): UninstallPlan {
@@ -120,19 +123,19 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
   if (new Set(resources.map(value => value.resourceId)).size !== resources.length) throw new UninstallError('UNINSTALL_INVALID');
   const work = uninstallWorkSchema.parse(inventory.work), service = uninstallServiceSchema.parse(inventory.service);
   const observed = { ...inventory, work, service };
-  const { items, blockers, steps } = decide({ tier, force, disableUnit }, installation, resources, observed, registry);
+  const { items, blockers, steps, archived } = decide({ tier, force, disableUnit }, installation, resources, observed, registry);
   const tiers = Object.fromEntries(UNINSTALL_TIERS.map(other => { const plan = decide({ tier: other, force, disableUnit }, installation, resources, observed, registry);
     return [other, { removes: plan.items.filter(item => item.action === 'remove').length, blocker: plan.blockers[0] ?? null }]; })) as UninstallPlan['tiers'];
-  const nothingToRemove = !items.some(item => item.action === 'remove') && !steps.stopService && !steps.disableUnit && !steps.cancelRuns.length && !steps.rejectApprovals.length;
+  const nothingToRemove = !items.some(item => item.action === 'remove') && !steps.stopService && !steps.disableUnit && !steps.cancelRuns.length && !steps.rejectApprovals.length && !steps.withdrawDeliveries.length;
   const body = { schemaVersion: 2 as const, installation, tier, force, disableUnit, purge: tier === 'all', scopeSummary: [...inventory.scopeSummary].sort(),
     layoutRevision: inventory.layoutRevision, policyRevision: inventory.policyRevision, inventoryRevision: inventory.inventoryRevision,
     registryDigest: registry.digest, items, blockers, work, service, steps, nothingToRemove, tiers,
-    backup: { required: tier === 'all', destination: inventory.backupDestination }, packageRemoval: { ...inventory.packageRemoval }, canApply: false as const };
+    backup: { required: archived, destination: inventory.backupDestination }, packageRemoval: { ...inventory.packageRemoval }, canApply: false as const };
   return freeze(JSON.parse(JSON.stringify({ ...body, planDigest: hash(body) })) as UninstallPlan);
 }
 const BLOCKER_ERRORS: Readonly<Record<string, string>> = { 'work-active': 'UNINSTALL_WORK_ACTIVE', 'work-pending': 'UNINSTALL_WORK_ACTIVE', 'delivery-queued': 'UNINSTALL_DELIVERY_QUEUED',
   'uncertain-effects': 'UNINSTALL_UNCERTAIN_EFFECTS', 'uncertain-managed': 'UNINSTALL_UNCERTAIN_MANAGED', 'service-managed': 'UNINSTALL_SERVICE_RUNNING',
-  'work-unverified': 'UNINSTALL_SCOPE_UNVERIFIED', 'backup-destination': 'UNINSTALL_BACKUP_COVERAGE' };
+  'work-unverified': 'UNINSTALL_SCOPE_UNVERIFIED', 'backup-destination': 'UNINSTALL_BACKUP_COVERAGE', 'archive-limit': 'UNINSTALL_BACKUP_COVERAGE' };
 /** The typed refusal of a plan's first blocker, with the counts and next step its message names; null when the plan has none. */
 export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'work' | 'service' | 'purge' | 'installation'>) {
   const authority = plan.blockers.find(value => /^authority-(relocated|unsafe):/u.test(value));
@@ -154,12 +157,15 @@ export function uninstallPlanDrift(approved: UninstallPlan, current: UninstallPl
   const named = new Set(approved.work.uncertain.map(item => `${item.kind}:${item.id}`)), same = current.items.length === approved.items.length && current.items.every(item => {
     const was = approved.items.find(other => other.resourceId === item.resourceId); return !!was && (was.action === item.action || was.action === 'remove' && item.present === false); });
   return [...current.blockers.map(value => `blocker:${value}`), ...current.work.running.map(item => `running:${item.id}`),
-    ...(current.purge ? [...current.work.parked, ...current.work.approvals].map(item => `pending:${item.id}`) : []),
+    ...(current.purge ? [...current.work.parked, ...current.work.approvals, ...current.work.deliveries].map(item => `pending:${item.id}`) : []),
     ...current.work.uncertain.filter(item => !named.has(`${item.kind}:${item.id}`)).map(item => `uncertain:${item.kind}:${item.id}`),
     ...(!same || current.installation.id !== approved.installation.id || current.policyRevision !== approved.policyRevision
       || current.layoutRevision !== approved.layoutRevision ? ['resources'] : []), ...(current.service.running ? ['service-running'] : [])];
 }
 
+/** S22: a launcher the person made (observed by the host) stays: the card names it and its exact removal step. */
+export const uninstallLauncherResource = (path: string): UninstallResource => ({ resourceId: `launcher.${hash(path)}`, contribution: 'durable', locator: path, version: null,
+  owner: null, ownership: 'foreign', ownershipEvidence: null, present: true, protected: true, capability: false, backup: 'missing', keep: 'unrecorded', manualCommand: `rm ${path}` });
 /** Catalog proposals only: composition still owes non-delegable person admission and the durable approval broker. */
 export function uninstallOperationDescriptors(registry = uninstallRegistry()): readonly OperationDescriptor[] {
   const operations = new Map<string, OperationDescriptor>();

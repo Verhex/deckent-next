@@ -75,12 +75,14 @@ deckent uninstall --dry-run --json
 The person runs `deckent uninstall` at a real terminal. A menu offers three tiers, each with a flag of its own; you may preview
 any of them with `--dry-run` or `--json` (for example `deckent uninstall --all --dry-run --json`):
 
-- `--keep-data` (default): caches go and the running service stops; work records, settings and history stay. Reinstall adopts them.
-- `--keep-work`: keeps pending work; offered only when pending work would be treated differently.
-- `--all`: first a passphrase backup that `deckent backup restore` brings back, kept in the person's private recovery folder
-  outside every deleted folder; then only the backed-up authority files and signed audit records of this installation are
-  deleted, also inside a project's `.deckent`. Files outside the backup set, files the project's Git tracks and unknown files
-  stay and are listed; the folder goes only when empty.
+- `--keep-data` (default): caches go and the running service stops; work records, settings and history stay. The folder is
+  retired: the next `deckent` there asks once whether to continue with the earlier data.
+- `--keep-work`: also archives and deletes conversation data (history, logs, sessions, earlier backups); work records and
+  pending work stay. Offered when there is pending work.
+- `--all`: first a passphrase backup and an encrypted archive of every other file it deletes, both verified and kept in the
+  person's private recovery folder outside every deleted folder; then the project's `.deckent`, `DECKENT.md` and the bridge line
+  init wrote are deleted. Files the project's Git tracks and unknown files stay and are listed; a folder goes only when empty.
+  `deckent backup restore` with that backup set brings everything back.
 
 Every check runs before the one confirmation, and nothing is asked when there is nothing to remove. A refusal names its
 cause and next step: running work (`--force` cancels it with the person's own authority and never closes an unknown result),

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "directories": [".local/bin", "bin"],
+  "namePattern": "^deckent",
+  "maxEntries": 256
+}

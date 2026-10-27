@@ -4383,7 +4383,10 @@
         "src/domain/core/policy",
         "src/adapters/core/local-runtime-socket",
         "src/engine/core/audit",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/adapters/core/project-instructions",
+        "src/adapters/core/secret-store",
+        "src/engine/core/secret-store"
       ],
       "plan": "INSTALLATION"
     },

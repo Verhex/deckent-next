@@ -34,7 +34,7 @@ async function unseal<T extends { schemaVersion: number; root: string; actor: un
     const { body } = sealed, { planDigest, ...original } = body.plan;
     if (!verifyEd25519(Buffer.from(sealed.publicKey, 'base64'), signatureMessage(context, JSON.stringify(body)), Buffer.from(sealed.signature, 'base64'))
       || body.schemaVersion !== 1 || body.root !== root || JSON.stringify(body.actor) !== JSON.stringify({ issuer: actor.issuer, subject: actor.subject })
-      || body.plan.installation.root !== root || sha256(JSON.stringify(original)) !== planDigest || !body.plan.purge) fail();
+      || body.plan.installation.root !== root || sha256(JSON.stringify(original)) !== planDigest || !(body.plan.purge || body.plan.backup.required)) fail();
     return body;
   } finally { await file.close(); }
 }
@@ -65,7 +65,7 @@ type Member = DataRemovalSnapshot['members'][number];
  * same bytes, moved, linked or changed is not this purge's member. */
 async function memberState(member: Member): Promise<'absent' | 'bound' | 'changed'> {
   let info;
-  try { info = await memberStat(member.path); } catch { return 'changed'; }
+  try { info = await memberStat(member.path, member.archived); } catch { return 'changed'; }
   if (!info) return 'absent';
   return info.dev === member.dev && info.ino === member.ino && info.size === member.size && info.mtimeMs === member.mtimeMs && info.ctimeMs === member.ctimeMs
     && await fileDigest(member.path) === member.digest ? 'bound' : 'changed';
@@ -120,7 +120,8 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
         || createHash('sha256').update(await readFile(join(verified.set, 'MANIFEST.sha256'))).digest('hex') !== intent.snapshot.manifestDigest) throw tailUnknown(directory, intent);
       const authority = async (resource: 'policy' | 'bindings') => {
         const path = productResourcePath(layout, resource), member = intent.snapshot.members.find(item => item.path === path);
-        if (!member) return null;
+        // A tier that keeps the authority files (keep-work) decides again from the files themselves.
+        if (!member) return readFile(path, 'utf8').then(text => JSON.parse(text) as unknown, () => null);
         const bytes = remaining.includes(member) ? await readFile(path) : Buffer.from(verified.state.entries.find(entry => entry.resource === resource && entry.path === '')?.content ?? '', 'base64');
         if (createHash('sha256').update(bytes).digest('hex') !== member.digest) throw tailUnknown(directory, intent);
         return JSON.parse(bytes.toString('utf8')) as unknown;

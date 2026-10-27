@@ -75,13 +75,14 @@ deckent uninstall --dry-run --json
 Kişi gerçek terminalde `deckent uninstall` çalıştırır. Menü, her biri kendi bayrağı olan üç kademe sunar; her birini
 `--dry-run` ya da `--json` ile önizleyebilirsiniz (örneğin `deckent uninstall --all --dry-run --json`):
 
-- `--keep-data` (varsayılan): önbellekler silinir ve çalışan servis durur; iş kayıtları, ayarlar ve geçmiş kalır. Yeniden
-  kurulum bunları benimser.
-- `--keep-work`: bekleyen işleri korur; yalnız bekleyen iş farklı ele alınacaksa sunulur.
-- `--all`: önce `deckent backup restore` ile geri getirilebilen parolalı bir yedek, silinen her klasörün dışındaki kişisel
-  kurtarma klasöründe; ardından yalnız bu kurulumun yedeklenmiş yetki dosyaları ve imzalı denetim kayıtları silinir, proje
-  `.deckent` klasöründe de. Yedek setinde olmayan, projenin Git'inin izlediği ve tanınmayan dosyalar kalır ve listelenir;
-  klasör yalnız boşsa silinir.
+- `--keep-data` (varsayılan): önbellekler silinir ve çalışan servis durur; iş kayıtları, ayarlar ve geçmiş kalır. Klasör emekli
+  edilir: oradaki bir sonraki `deckent`, önceki veriyle devam edilip edilmeyeceğini bir kez sorar.
+- `--keep-work`: konuşma verisini de (geçmiş, kayıtlar, oturumlar, önceki yedekler) arşivleyip siler; iş kayıtları ve bekleyen
+  işler kalır. Bekleyen iş varken sunulur.
+- `--all`: önce parolalı bir yedek ve sildiği diğer her dosyanın şifreli arşivi, ikisi de doğrulanmış ve silinen her klasörün
+  dışındaki kişisel kurtarma klasöründe; ardından projenin `.deckent` klasörü, init'in yazdığı `DECKENT.md` ve köprü satırı
+  silinir. Projenin Git'inin izlediği ve tanınmayan dosyalar kalır ve listelenir; klasör yalnız boşsa silinir.
+  O yedek setiyle `deckent backup restore` hepsini geri getirir.
 
 Bütün denetimler tek onaydan önce yapılır; silinecek bir şey yoksa soru sorulmaz. Ret nedenini ve sonraki adımı söyler:
 çalışan iş (`--force` kişinin kendi yetkisiyle iptal eder, sonucu bilinmeyen işlemi kapatmaz), servisi yeniden başlatan

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
 const roots: string[] = [];
@@ -124,11 +124,14 @@ it('keeps immutable tombstones across reinstall and never substitutes an old com
   const root = await mkdtemp(join(tmpdir(), 'deckent-reinstalled-purge-')); roots.push(root);
   const data = join(root, 'global'); await mkdir(data, { mode: 0o700 });
   // §5.5: the recovery directory is the person's XDG state, outside the data root; the alpha.56 place beside it is read only while it alone exists.
-  const env = { HOME: join(root, 'home') }, directory = uninstallRecoveryDirectory(data, env);
+  const env = { HOME: join(root, 'home') }, at = (where: string, redirect: string | null = null) => ({ productLayout: { root: where }, installation: { uninstallRecoveryRoot: redirect } });
+  const directory = uninstallRecoveryDirectory(at(data), env);
   expect(directory.startsWith(join(root, 'home', '.local', 'state', 'deckent', 'uninstall'))).toBe(true);
   const legacy = join(root, '.deckent-uninstall', createHash('sha256').update(data).digest('hex')); await mkdir(legacy, { recursive: true });
-  expect(uninstallRecoveryDirectory(data, env)).toBe(legacy); expect(uninstallRecoveryDirectory(data, { ...env, XDG_STATE_HOME: join(root, 'state') })).toBe(legacy);
-  await mkdir(directory, { mode: 0o700, recursive: true }); expect(uninstallRecoveryDirectory(data, env)).toBe(directory);
+  expect(uninstallRecoveryDirectory(at(data), env)).toBe(legacy); expect(uninstallRecoveryDirectory(at(data), { ...env, XDG_STATE_HOME: join(root, 'state') })).toBe(legacy);
+  // K7: the protected config may redirect the root (it still must lie outside every deleted folder; the plan checks that).
+  expect(uninstallRecoveryDirectory(at(join(root, 'other'), join(root, 'vault')), env).startsWith(join(root, 'vault'))).toBe(true);
+  await mkdir(directory, { mode: 0o700, recursive: true }); expect(uninstallRecoveryDirectory(at(data), env)).toBe(directory);
   const actor = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['s'] };
   const plan = (id: string) => createUninstallPlan({ schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, { installation: { id, root: data }, scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: id,
     resources: [], blockers: [], protectedPaths: [], deletionRoots: [data], backupDestination: join(root, 'backup'), packageRemoval: { command: null, shared: true }, ...observed });
@@ -162,4 +165,35 @@ it('reads Git tracking hardened: a hostile repository config runs nothing, track
     const unreadable = await projectTracking(project, data, configured, bounds);
     expect(unreadable(join(data, 'ledger.db'))).toBe('vcs-unverified'); expect(unreadable(join(root, 'global', 'ledger.db'))).toBeNull();
   }
+});
+
+it('archives members into the encrypted companion bound to D0, never deletes one changed after archiving, and restores only files that are missing', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: uninstall archive custody is Linux-only'); return; }
+  const { createBackupSet } = await import('#adapters/core/backup-store/index.js');
+  const { createUninstallArchive, restoreUninstallArchive, InstallationDataRemovalTarget } = await import('#adapters/core/installation-removal/index.js');
+  const { resolveProductLayout, productResourcePath } = await import('#platform/index.js');
+  const { DatabaseSync } = await import('node:sqlite');
+  const base = await mkdtemp(join(tmpdir(), 'deckent-uninstall-archive-')); roots.push(base);
+  const project = join(base, 'project'), root = join(project, '.deckent'), layout = resolveProductLayout({ projectRoot: project, root });
+  const file = async (path: string, bytes: string | Uint8Array, mode = 0o600) => { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); await writeFile(path, bytes, { mode }); };
+  await file(productResourcePath(layout, 'config'), '{}'); await file(productResourcePath(layout, 'policy'), '{}'); await file(productResourcePath(layout, 'bindings'), '{}');
+  await file(join(productResourcePath(layout, 'installationIdentity'), 'identity.json'), '{"installationId":"temporary"}');
+  await file(join(productResourcePath(layout, 'approvals'), 'authority.key'), Buffer.alloc(32, 9));
+  const ledger = productResourcePath(layout, 'ledger'); new DatabaseSync(ledger).close(); await chmod(ledger, 0o600);
+  const history = join(root, 'state/terminal-history.jsonl'), script = join(root, 'workspaces/toolchains/build.sh');
+  await file(history, 'HISTORY\n'); await file(script, '#!/bin/sh\n', 0o755);
+  const limits = { maxFiles: 100, maxDepth: 10, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 22 }, phrase = 'fixture-private-backup-passphrase';
+  const set = join(base, 'recovery/set'); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
+  const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
+  const bound = await createUninstallArchive(set, root, members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
+  expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
+  // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
+  const target = new InstallationDataRemovalTarget('fixture', members, [], root), ref = { kind: target.kind, id: 'conversation-data' };
+  target.prepare(async () => ({ set, manifestDigest: createHash('sha256').update(await readFile(join(set, 'MANIFEST.sha256'))).digest('hex'), members: bound }));
+  const request = { target: ref, operation: { id: 'installation.remove-data', version: 1 }, idempotencyKey: 'archive', expectedVersion: (await target.observe(ref)).version, input: null };
+  await writeFile(history, 'NEWER'); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
+  expect(await readFile(script, 'utf8')).toBe('#!/bin/sh\n');
+  // Restore writes what is missing (mode kept) and never overwrites what exists again.
+  await rm(script); await restoreUninstallArchive(set, root, phrase, limits);
+  expect((await lstat(script)).mode & 0o777).toBe(0o755); expect(await readFile(history, 'utf8')).toBe('NEWER');
 });

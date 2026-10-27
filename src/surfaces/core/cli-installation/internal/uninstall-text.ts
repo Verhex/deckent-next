@@ -10,6 +10,7 @@ export function uninstallMessages(locale: Locale): Readonly<Record<string, strin
     'blocker.delivery-queued': t('cli.uninstall.blocker.delivery-queued', {}, locale), 'blocker.uncertain-effects': t('cli.uninstall.blocker.uncertain-effects', {}, locale),
     'blocker.uncertain-managed': t('cli.uninstall.blocker.uncertain-managed', {}, locale), 'blocker.service-managed': t('cli.uninstall.blocker.service-managed', {}, locale),
     'blocker.work-unverified': t('cli.uninstall.blocker.work-unverified', {}, locale), 'blocker.policy': t('cli.uninstall.blocker.policy', {}, locale),
+    'blocker.archive-limit': t('cli.uninstall.blocker.archive-limit', {}, locale), 'reason.unrecorded': t('cli.uninstall.reason.unrecorded', {}, locale),
     'state.claimed': t('cli.uninstall.state.claimed', {}, locale), 'state.settled': t('cli.uninstall.state.settled', {}, locale),
     'state.unknown': t('cli.uninstall.state.unknown', {}, locale), 'state.refused': t('cli.uninstall.state.refused', {}, locale),
     'state.kept': t('cli.uninstall.state.kept', {}, locale),
@@ -73,16 +74,17 @@ export function uninstallPlanLines(plan: UninstallPlan, locale: Locale): readonl
   const manual = [...new Set([...kept.flatMap(item => item.manualCommand ? [item.manualCommand] : []),
     ...(plan.service.running && plan.service.command && !plan.steps.disableUnit ? [plan.service.command] : []), ...(plan.packageRemoval.command ? [plan.packageRemoval.command] : [])])];
   return [
-    ...(removed.length ? [plan.purge ? t('cli.uninstall.removeBackup', { groups: names(removed, locale) }, locale) : t('cli.uninstall.remove', { groups: names(removed, locale) }, locale)] : []),
+    ...(removed.length ? [plan.backup.required ? t('cli.uninstall.removeBackup', { groups: names(removed, locale) }, locale) : t('cli.uninstall.remove', { groups: names(removed, locale) }, locale)] : []),
     ...(plan.steps.stopService ? [t('cli.uninstall.stop', {}, locale)] : []),
     ...(plan.steps.disableUnit && plan.service.unit ? [t('cli.uninstall.unit', { unit: safe(plan.service.unit) }, locale)] : []),
-    ...(plan.steps.cancelRuns.length || plan.steps.rejectApprovals.length ? [t('cli.uninstall.force', { runs: String(plan.steps.cancelRuns.length), approvals: String(plan.steps.rejectApprovals.length) }, locale)] : []),
+    ...(plan.steps.cancelRuns.length || plan.steps.rejectApprovals.length || plan.steps.withdrawDeliveries.length ? [t('cli.uninstall.force', { runs: String(plan.steps.cancelRuns.length),
+      approvals: String(plan.steps.rejectApprovals.length), deliveries: String(plan.steps.withdrawDeliveries.length) }, locale)] : []),
     ...[...new Set(kept.map(item => item.reason))].map(reason => t('cli.uninstall.kept', { groups: names(kept.filter(item => item.reason === reason), locale), reason: messages[`reason.${reason}`] ?? safe(reason) }, locale)),
     ...(absent.length ? [t('cli.uninstall.absent', { count: String(absent.length) }, locale)] : []),
     ...plan.blockers.map(blocker => t('cli.uninstall.blocked', { reason: uninstallBlockerText(blocker, locale) }, locale)),
     ...(manual.length ? [t('cli.uninstall.forYou', {}, locale), ...manual.map(command => `  ${safe(command)}`)] : []),
     ...(plan.packageRemoval.command ? [] : [t('cli.uninstall.packageUnknown', {}, locale)]),
-    ...(plan.purge ? [t('cli.uninstall.backup', { path: safe(plan.backup.destination ?? '') }, locale), t('cli.uninstall.restore', {}, locale), t('cli.uninstall.remote', {}, locale)] : []),
+    ...(plan.backup.required ? [t('cli.uninstall.backup', { path: safe(plan.backup.destination ?? '') }, locale), t('cli.uninstall.restore', {}, locale), t('cli.uninstall.remote', {}, locale)] : []),
     ...(plan.purge && plan.force && plan.work.uncertain.length ? [t('cli.uninstall.uncertain', { list: plan.work.uncertain.map(item => safe(`${item.kind} ${item.id}`)).join(', ') }, locale)] : []),
   ];
 }
@@ -97,7 +99,7 @@ export function uninstallDetailLines(plan: UninstallPlan, locale: Locale, verbos
 }
 /** A blocker the person can resolve on the next card (running or pending work, unknown results, an eligible unit), offered with its flag twin. */
 export const uninstallResolvable = (blocker: string | null | undefined, plan: UninstallPlan) => !!blocker
-  && (['work-active', 'work-pending', 'uncertain-effects'].includes(blocker) || blocker === 'service-managed' && plan.service.unitDisable === 'eligible');
+  && (['work-active', 'work-pending', 'uncertain-effects', 'delivery-queued'].includes(blocker) || blocker === 'service-managed' && plan.service.unitDisable === 'eligible');
 /** The menu's tiers: keep-data always (recommended), keep-work only with pending work it treats differently from keep-data, all always; a tier
  * the same observation refuses for good carries its reason, shown under the card (a resolvable refusal stays selectable). */
 export function uninstallTierChoices(plan: UninstallPlan, locale: Locale): readonly { readonly tier: UninstallTier; readonly label: string; readonly blocked: string | null }[] {

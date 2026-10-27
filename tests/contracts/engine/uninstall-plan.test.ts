@@ -41,8 +41,8 @@ it('pins one keep/purge inventory for every preview consumer and protects reloca
   expect(overlap.items.find(item => item.resourceId === 'cache')).toMatchObject({ action: 'blocked', reason: 'retained-overlap' });
   const unsafe = createUninstallPlan(query('all'), { ...inventory, backupDestination: '/fixture/relocated/backup' });
   expect(unsafe.blockers).toContain('backup-destination');
-  expect(() => uninstallRegistry([{ id: 'scratch', owner: 'extension', kind: 'path', targetKind: 'extension-resource', disposable: true, operation: 'extension.remove', after: [] }])).toThrow();
-  expect(() => uninstallRegistry([{ id: 'extension.resource', owner: 'extension', kind: 'path', targetKind: 'extension-resource', disposable: false, operation: 'extension.remove', after: ['extension.resource'] }])).toThrow();
+  expect(() => uninstallRegistry([{ id: 'scratch', owner: 'extension', kind: 'path', targetKind: 'extension-resource', removeFrom: 'keep-data', operation: 'extension.remove', after: [] }])).toThrow();
+  expect(() => uninstallRegistry([{ id: 'extension.resource', owner: 'extension', kind: 'path', targetKind: 'extension-resource', removeFrom: 'all', operation: 'extension.remove', after: ['extension.resource'] }])).toThrow();
 });
 
 it('checks work and the service before any card: nothing to do asks nothing, a running service is a stop step, force never closes unknown results', () => {

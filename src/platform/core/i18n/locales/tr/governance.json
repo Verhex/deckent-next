@@ -1176,7 +1176,8 @@
   "error.UNINSTALL_SERVICE_RUNNING_UNMANAGED": "Deckent servisi hâlâ çalışıyor ve süresi içinde durmadı. Hiçbir şey silinmedi. deckent runtime shutdown ile durdurun, sonra deckent uninstall komutunu yeniden çalıştırın.",
   "error.UNINSTALL_UNCERTAIN_EFFECTS": "Sonucu bilinmeyen {count} işlem var: {list}. Hiçbir şey silinmedi. Önce uzlaştırın (deckent models reconcile-spending --input <dosya>, deckent operation inspect --command-id <id>, deckent recovery review) ya da --force ile devam edin: adlarıyla yedeğe ve makbuza yazılır, açık kalır.",
   "error.UNINSTALL_UNCERTAIN_MANAGED": "Bu kurulum {owner} için şirket politikasıyla yönetiliyor: sonucu bilinmeyen işlem varken veri silinemez. Hiçbir şey silinmedi. {owner} kaydından sorumlu yöneticiye başvurun ya da verileri koruyarak kaldırın: deckent uninstall --keep-data.",
-  "error.UNINSTALL_DELIVERY_QUEUED": "Kuyrukta hâlâ {count} teslim var ve kaldırma bunları geri çekemez. Hiçbir şey silinmedi. deckent task integration-queue-list ile bakın ya da verileri koruyarak kaldırın: deckent uninstall --keep-data.",
+  "error.UNINSTALL_DELIVERY_QUEUED": "Kuyrukta hâlâ {count} teslim var. Hiçbir şey silinmedi. Kendi yetkinizle geri çekip devam edin: deckent uninstall --all --force ya da deckent task integration-queue-list ile bakın.",
+  "error.UNINSTALL_RETIRED": "Deckent bu klasörden kaldırıldı, verisi korundu ({path}). Klasörü yeniden açana kadar servis başlamaz: terminalinizde deckent çalıştırıp Devam'ı seçin.",
   "error.UNINSTALL_FLAG_MOVED": "{flag} artık {to}. Önizlemek için: deckent uninstall {to} --dry-run",
   "cli.input.subject.hub": "Hub isteği"
 }

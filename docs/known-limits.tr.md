@@ -631,22 +631,25 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   ek dosya isteyen skill çalışamaz. *Etki:* paketin doğrulanması/kurulması skill'in çalışabildiğini kanıtlamaz.
   *Yol:* yalnız SKILL.md kullanan alternatif seçin; destek dosyalarını açmak yeni owner kararı ister.
 - **Kaldırma imajları ve korunan veriyi tutar.** `deckent uninstall --dry-run --json` her kademeyi önizler; uygulamak kişinin
-  gerçek terminaldeki kartını ister. Verileri koru yalnız önbellekleri siler ve servisi durdurur. Tam kullanım-referansı
-  sözleşmesi gelene kadar imajlar korunur; kart kesin elle kaldırma adımını verir. macOS/Windows servis kaldırması elledir.
+  gerçek terminaldeki kartını ister. Verileri koru yalnız önbellekleri siler, servisi durdurur ve klasörü emekli eder: kişi orada
+  `deckent` açıp Devam'ı seçene kadar servis başlamaz. Tam kullanım-referansı sözleşmesi gelene kadar imajlar korunur; kart kesin
+  elle kaldırma adımını verir. macOS/Windows servis kaldırması elledir.
   *Yol:* planın adım talimatlarını, ardından yazdırdığı program komutunu izleyin;
   [AI kurulum rehberine](ai-install.tr.md#kaldırma) bakın.
-- **Her şeyi sil yalnız yedek setinin geri getirdiğini siler.** `deckent uninstall --all`, doğrulanmış ve plana bağlı yedekten
-  sonra standart `deckent backup` setinin geri getirdiği yetki dosyalarını ve imzalı denetim kayıtlarını siler (owner K7).
-  Konuşma geçmişi, kayıtlar, çalışma alanları, önceki yedekler, iş klasörleri, `DECKENT.md` ve köprü satırları, paylaşılan
-  global ev ve bu klasörün global dilimleri bu sette değildir; kalır ve listelenir, bu yüzden proje `.deckent` klasörü
-  çoğunlukla kalır. Bekleyen işleri koru şu an verileri koru ile aynı şeyi siler ve yalnız fark ettiğinde sunulur.
-  *Yol:* listelenen dosyaları inceleyip kendiniz silin; silmeyi genişletmek yedek setini genişletme kararı ister.
-- **Force ve servis sınırlıdır.** `--force` kişinin yetkisiyle işleri iptal eder ve onayları reddeder ama kuyruktaki teslimi geri
-  çekemez (geri çekme sahibi yok: `UNINSTALL_DELIVERY_QUEUED`); sonucu bilinmeyen işlem kapatılmaz. Deckent'in kaydetmediği
-  birim yalnız `--disable-unit` ile ve bütün K4 koşulları sağlanırsa kapatılır; aksi halde komut yazdırılır. El yapımı
-  başlatıcı (örneğin `~/.local/bin/deckent-…`) tespit edilmez. Kaldırma `require-approval` politika kararını reddeder
+- **Her şeyi sil yalnız proje klasörü kurulumunda eksiksizdir.** Projenin kendi `.deckent` klasöründe `--all`, oradaki her Deckent
+  dosyasını, init'in yazdığı `DECKENT.md` ve köprü satırını ve bu klasörün paylaşılmayan kasa dilimini önce arşivler (şifreli,
+  yedek setinin yanında, doğrulanmış), sonra siler; Git'in izlediği, tanınmayan ve bağlantılı dosyalar kalır, klasörleri de kalır.
+  Veri kökü paylaşılan global ev olan kurulum alpha.56 davranışını korur: yalnız yedeklenmiş yetki dosyaları silinir. Önbellek
+  klasöründeki yabancı dosya, değiştirilmiş `DECKENT.md`, Git'in izlediği `CLAUDE.md`, bir deponun çalışma ağaçlarınca paylaşılan
+  kasa ve bu klasörün talimat güveni kaydı kalır. Yedek sınırlarını aşan arşiv hiçbir şey silinmeden reddedilir.
+  `deckent backup restore --set <path>` dosyaları yeniden var olanların üzerine yazmadan geri getirir; köprü satırı yeniden eklenmez.
+  *Yol:* listelenen dosyaları inceleyin; geri yüklemeden sonra köprüler için `deckent init` çalıştırın.
+- **Force ve servis sınırlıdır.** `--force` kişinin kendi yetkisiyle işleri iptal eder, onayları reddeder ve kuyruktaki teslimleri
+  geri çeker (ret kapsamı adıyla söyler); sonucu bilinmeyen işlem kapatılmaz. Deckent'in kaydetmediği birim yalnız
+  `--disable-unit` ile ve bütün K4 koşulları sağlanırsa kapatılır; aksi halde komut yazdırılır. El yapımı başlatıcılar yalnız
+  `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur. Kaldırma `require-approval` politika kararını reddeder
   (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez.
-  *Yol:* teslimleri teslim komutlarıyla bitirin, birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.
+  *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.
 - **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur;
   Git izleme bilgisi okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. Yarım son silme yalnız kalan baytlar ve silme yetkisi yeniden doğrulanınca sürer; yoksa
   dosyalar kalır, yönetilen yedekten geri yükleme kullanılabilir. Bilinmeyen adım bilinmiyor kalır.

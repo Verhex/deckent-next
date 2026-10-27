@@ -68,9 +68,10 @@ export interface UninstallApplicationPorts {
   /** Authenticated manifest owner, read only; null if no retained command exists. */
   retainedPlan(digest: string): Promise<UninstallPlan | null>;
   /** Missing broker/hold/resource owners/final-tail → undefined, never a permissive default. */
-  withAdmission?: <T>(plan: UninstallPlan, commandId: string, work: (admission: UninstallAdmission) => Promise<T>) => Promise<T>;
+  /** `approved`: the confirmed digest D0 that the archive binds to (the admitted plan is the fresh D1 that matched it). */
+  withAdmission?: <T>(plan: UninstallPlan, approved: string, work: (admission: UninstallAdmission) => Promise<T>) => Promise<T>;
   /** K3: the existing run cancellation and approval decision owners, as the witnessed person; nothing is closed, released or killed. */
-  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void> };
+  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: Ref): Promise<void> };
   /** Configured wait for cancelled work: its budget and poll interval; a timeout leaves the work, and the fresh plan names it. */
   readonly settle?: { readonly budgetMs: number; wait(ms: number): Promise<unknown> };
   /** The runtime service: its describe answer, the user unit whose main process it is (K4 checks), governed shutdown and `disable --now`. */
@@ -154,13 +155,15 @@ export class UninstallApplication {
     await this.person(gated); // a card answer grants no authority and may have outlived its session
     if (signal?.aborted) return result('cancelled', null);
     const { steps } = approved;
-    if ((steps.cancelRuns.length || steps.rejectApprovals.length) && !this.ports.force) throw new UninstallError('UNINSTALL_UNSUPPORTED');
+    const forced = steps.cancelRuns.length + steps.rejectApprovals.length + steps.withdrawDeliveries.length;
+    if (forced && !this.ports.force) throw new UninstallError('UNINSTALL_UNSUPPORTED');
     for (const ref of steps.cancelRuns) await this.ports.force!.cancelRun(ref);
     for (const ref of steps.rejectApprovals) await this.ports.force!.rejectApproval(ref);
-    if ((steps.cancelRuns.length || steps.rejectApprovals.length) && this.ports.settle) {
+    for (const ref of steps.withdrawDeliveries) await this.ports.force!.withdrawDelivery(ref);
+    if (forced && this.ports.settle) {
       const { budgetMs, wait } = this.ports.settle, deadline = runtimeMonotonicDeadline(budgetMs);
       for (let current = await this.replan(approved); ; current = await this.replan(approved)) {
-        const left = current.work.running.length + (current.purge ? current.work.parked.length + current.work.approvals.length : 0);
+        const left = current.work.running.length + (current.purge ? current.work.parked.length + current.work.approvals.length + current.work.deliveries.length : 0);
         if (!left || deadline.expired() || signal?.aborted) break;
         interaction.progress?.({ remaining: left, leftMs: Math.ceil(deadline.remaining()) }); await wait(Math.min(this.registry.waitPollMs, deadline.remaining()));
       }
@@ -171,7 +174,7 @@ export class UninstallApplication {
     const drift = uninstallPlanDrift(approved, plan);
     if (drift.length) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED', { params: { diff: drift.slice(0, 8).join(', ') } });
     states.splice(0, states.length, ...plan.items.map(item => ({ resourceId: item.resourceId, state: null })));
-    return admit(plan, command.commandId, async admission => {
+    return admit(plan, approved.planDigest, async admission => {
       admitted = admission;
       // D2 under custody: the same expectation as D1, now that no service or other process can change the ledger.
       const custody = uninstallPlanDrift(approved, await this.replan(approved, false));
@@ -193,10 +196,10 @@ export class UninstallApplication {
       if (pending.every(item => states.find(state => state.resourceId === item.resourceId)!.state === 'settled') && !steps.stopService && !steps.cancelRuns.length) {
         const noop = result('noop', admission.recoveryLocation); await admission.finish(noop); return noop;
       }
-      if (plan.purge) {
+      if (plan.backup.required) {
         if (signal?.aborted) { const cancelled = result('cancelled', admission.recoveryLocation); await admission.finish(cancelled); return cancelled; }
         // K7: create → verify (audit included) → bind to this plan before the first deletion; an unverifiable backup deletes nothing.
-        await this.person(true); await admission.prepareBackup(await interaction.backupPassphrase?.());
+        await this.person(gated); await admission.prepareBackup(await interaction.backupPassphrase?.());
       }
       await this.person(gated);
       await admission.revalidate(null); await admission.approvePlan();

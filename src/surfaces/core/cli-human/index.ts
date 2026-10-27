@@ -9,3 +9,4 @@ export { holdTerminalInput, lendHeldInput } from './internal/input-hold.js';
 export { askCliCard, cliCardGate, standingCardOptions, type CliCardIo, type CliCardOption, type CliCardRequest, type StandingAnswer } from './internal/card.js';
 export { renderInputSchema, schemaRequested } from './internal/schema.js';
 export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/acceptance.js';
+export { reopenRetiredFolder } from './internal/reopen.js';

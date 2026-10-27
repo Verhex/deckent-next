@@ -176,7 +176,7 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     expect((await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'replay', planDigest: replay.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
     // M3: a crash after the final tail but before the tombstone/hold transition. Policy, identity and key are gone; the durable intent
     // plus a fresh observation reconciles the outcome (read-only on preview), never by a second deletion.
-    const directory = uninstallRecoveryDirectory(data, options.env), hold = JSON.stringify({ body: { schemaVersion: 1, installationId: plan.installation.id, planDigest: plan.planDigest }, keyId: 'purged', mac: 'unverifiable' });
+    const directory = uninstallRecoveryDirectory({ productLayout: { root: data }, installation: { uninstallRecoveryRoot: null } }, options.env), hold = JSON.stringify({ body: { schemaVersion: 1, installationId: plan.installation.id, planDigest: plan.planDigest }, keyId: 'purged', mac: 'unverifiable' });
     const crash = async () => { for (const name of [`${plan.planDigest}.tombstone.json`, 'tombstone.json']) await rm(join(directory, name), { force: true }); await writeFile(uninstallHoldPath(data), hold, { mode: 0o600 }); };
     await crash();
     const pending = await previewConfiguredUninstall(project, ALL, options);
@@ -228,7 +228,7 @@ it('keeps purge closed before any backup or hold when a legal hold names a compa
     expect(plan.scopeSummary).toContain('retained-company');
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'held', planDigest: plan.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
       .rejects.toMatchObject({ code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold-retained-company' } });
-    await expect(lstat(uninstallRecoveryDirectory(data, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(uninstallRecoveryDirectory({ productLayout: { root: data }, installation: { uninstallRecoveryRoot: null } }, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await lstat(ledger)).toBeTruthy();
     // Unreadable recorded company scopes: no retention rule can be checked for all data, so nothing is admitted or removed.
     const db = new DatabaseSync(ledger); try { db.exec('DROP TABLE scope_registry'); } finally { db.close(); }
@@ -267,7 +267,7 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'unsafe', planDigest: unsafe.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
       .rejects.toMatchObject({ code: 'UNINSTALL_AUTHORITY_UNVERIFIED', params: { path: join(data, 'bindings.json') } });
     expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
-    await expect(lstat(uninstallRecoveryDirectory(data, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(uninstallRecoveryDirectory({ productLayout: { root: data }, installation: { uninstallRecoveryRoot: null } }, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     // A relocated authority file is never followed to its configured spelling; the data-keeping uninstall stays available.
     await chmod(join(data, 'bindings.json'), 0o600); await config({ bindings: 'moved/bindings.json' }); clearConfigCache();
@@ -278,47 +278,66 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('deletes an in-project installation\'s backed-up members (K1) but keeps Git-tracked, unknown and not-backed-up files and the folder, with the backup outside the project', async () => {
+it('deletes an in-project installation (K1) after archiving every owned file, but keeps Git-tracked and unknown files (and so the folder), with the archive outside the project', async () => {
   if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: K1 in-project purge needs Linux custody and /usr/bin/git'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { verifyBackupSet } = await import('#adapters/core/backup-store/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-purge-in-project-'));
   try {
-    const project = join(root, 'project'), data = join(root, 'global'), local = join(project, '.deckent'), elsewhere = join(root, 'elsewhere');
-    for (const path of [join(local, 'state'), data, elsewhere]) await mkdir(path, { recursive: true, mode: 0o700 });
-    const actor = readLocalOsIdentity(), options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
-    const install = async (layoutRoot?: string) => {
-      await writeFile(join(local, 'config.json'), JSON.stringify({ ...(layoutRoot ? { layout: { root: layoutRoot } } : {}), terminal: { scopeId: 's' } }), { mode: 0o600 });
-      for (const name of ['policy.json', 'bindings.json']) await writeFile(join(layoutRoot ?? local, name), JSON.stringify(name === 'bindings.json' ? { schemaVersion: 1, revision: 'b1', bindings: [] }
-        : { schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
-          id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
-      const layout = resolveProductLayout({ projectRoot: project, ...(layoutRoot ? { root: layoutRoot } : {}) });
-      await new FileInstallationIdentityStore(layout).loadOrCreate(); await openLocalIntegrityAuthority(layout, getConfigFieldDefault('approvals').keyFile, true); clearConfigCache();
-      return layout;
-    };
+    const { project, local, options, phrase, install } = await projectInstallation(root), elsewhere = join(root, 'elsewhere'); await mkdir(elsewhere, { mode: 0o700 });
     const layout = await install(), ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
-    await writeFile(join(local, 'notes.txt'), 'UNKNOWN KEEP', { mode: 0o600 }); await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY KEEP\n', { mode: 0o600 });
+    await writeFile(join(local, 'notes.txt'), 'UNKNOWN KEEP', { mode: 0o600 }); await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
     // Dogfood: the team commits a Deckent file; Git tracking makes it the team's, never a member.
     const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', HOME: join(root, 'home') } });
     git('init', '-q'); git('add', '-f', '.deckent/bindings.json');
     const plan = await previewConfiguredUninstall(project, ALL, options), members = plan.items.find(item => item.resourceId === 'global-data')!.members!;
-    expect(plan.blockers).toEqual([]); expect(plan.purge).toBe(true);
-    expect(members).toEqual(expect.arrayContaining([ledger, join(local, 'policy.json'), join(local, 'installation-identity/identity.json')]));
-    expect(members).not.toContain(join(local, 'bindings.json'));
+    expect(plan.blockers).toEqual([]); expect(plan).toMatchObject({ purge: true, backup: { required: true } });
+    expect(members).toEqual(expect.arrayContaining([ledger, join(local, 'policy.json'), join(local, 'installation-identity/identity.json'), join(local, 'state/terminal-history.jsonl'), join(local, 'config.json')]));
+    expect(members).not.toContain(join(local, 'bindings.json')); expect(members).not.toContain(join(local, 'notes.txt'));
     expect(plan.items.find(item => item.resourceId.startsWith('tracked.'))).toMatchObject({ locator: join(local, 'bindings.json'), action: 'keep', reason: 'vcs-tracked' });
-    expect(plan.items.find(item => item.resourceId === 'terminalHistory')).toMatchObject({ action: 'keep', reason: 'not-backed-up' });
+    expect(plan.items.find(item => item.locator === join(local, 'notes.txt'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(result.status).toBe('completed');
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1');
-    expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP'); expect(await readFile(join(local, 'state/terminal-history.jsonl'), 'utf8')).toBe('HISTORY KEEP\n');
+    expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');
     (await verifyBackupSet(result.backup.destination!, phrase, getConfigFieldDefault('installation').packageMeasurement)).close();
-    expect(result.backup.destination!.startsWith(project)).toBe(false);
+    expect(await lstat(`${result.backup.destination!}.archive`)).toBeTruthy(); expect(result.backup.destination!.startsWith(project)).toBe(false);
     // Negative: a data root moved outside the global home and the project is a genuine relocation; the data tier stays closed with its path.
     await install(elsewhere);
     expect((await previewConfiguredUninstall(project, ALL, options)).blockers).toContain(`authority-relocated:${elsewhere}`);
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('keep-work archives and deletes only conversation data and retires the folder; delete everything then leaves no .deckent and backup restore brings every file back', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-archive-'));
+  try {
+    const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
+    for (const path of [join(local, 'runs'), join(local, 'workspaces/toolchains')]) await mkdir(path, { recursive: true, mode: 0o700 });
+    await writeFile(join(local, 'runs/run-1.json'), 'RUN RECORD', { mode: 0o644 }); await writeFile(join(local, 'workspaces/toolchains/build.sh'), '#!/bin/sh\n', { mode: 0o755 });
+    // A pending run makes keep-work a real choice: work records stay, conversation data goes (archived first).
+    const work = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
+    expect(work.items.find(item => item.resourceId === 'conversation-data')).toMatchObject({ action: 'remove', members: [join(local, 'state/terminal-history.jsonl')] });
+    expect(work.items.some(item => item.resourceId === 'global-data')).toBe(false); expect(work.backup.required).toBe(true);
+    const kept = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'keep-work', planDigest: work.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    expect(kept.status).toBe('completed'); await expect(lstat(join(local, 'state/terminal-history.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(join(local, 'runs/run-1.json'), 'utf8')).toBe('RUN RECORD');
+    expect(await lstat(join(local, 'installation/retired.json'))).toBeTruthy(); // §5.4: the service stays down until the person reopens the folder
+    // Delete everything: every owned file is archived, verified, then deleted; nothing is left of the project's .deckent.
+    const all = await previewConfiguredUninstall(project, ALL, options);
+    expect(all.blockers).toEqual([]);
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'all', planDigest: all.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    expect(result.status).toBe('completed'); await expect(lstat(local)).rejects.toMatchObject({ code: 'ENOENT' });
+    // `deckent backup restore <set>`: the semantic set and the uninstall archive beside it bring the installation and its files back.
+    await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
+    expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(join(local, 'runs/run-1.json'), 'utf8')).toBe('RUN RECORD');
+    expect((await lstat(join(local, 'workspaces/toolchains/build.sh'))).mode & 0o777).toBe(0o755);
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -409,3 +428,20 @@ it('purges a tree only through its owner\'s signed records that the final set re
     expect(verifyAuditRecord(JSON.parse(await readFile(record, 'utf8')), restored).event.eventId).toBe(eventId);
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
+
+/** A project-folder installation (İ-6): its data root is the project's own .deckent. */
+async function projectInstallation(root: string) {
+  const project = join(root, 'project'), data = join(root, 'global'), local = join(project, '.deckent');
+  for (const path of [join(local, 'state'), data]) await mkdir(path, { recursive: true, mode: 0o700 });
+  const actor = readLocalOsIdentity(), options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
+  const install = async (layoutRoot?: string) => {
+    await writeFile(join(local, 'config.json'), JSON.stringify({ ...(layoutRoot ? { layout: { root: layoutRoot } } : {}), terminal: { scopeId: 's' } }), { mode: 0o600 });
+    for (const name of ['policy.json', 'bindings.json']) await writeFile(join(layoutRoot ?? local, name), JSON.stringify(name === 'bindings.json' ? { schemaVersion: 1, revision: 'b1', bindings: [] }
+      : { schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
+        id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
+    const layout = resolveProductLayout({ projectRoot: project, ...(layoutRoot ? { root: layoutRoot } : {}) });
+    await new FileInstallationIdentityStore(layout).loadOrCreate(); await openLocalIntegrityAuthority(layout, getConfigFieldDefault('approvals').keyFile, true); clearConfigCache();
+    return layout;
+  };
+  return { project, local, options, phrase, install };
+}

@@ -88,7 +88,8 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
     expect(finished.at(-1)?.status).toBe('noop');
     // Purge cancellation and backup failure run against a fresh data resource, before its generic effect may be claimed.
     await mkdir(cache, { mode: 0o700 }); await writeFile(join(cache, 'retained'), 'DATA', { mode: 0o600 });
-    const purgeInventory = { ...inventory, backupDestination: join(root, '..', 'external-backup'), resources: [{ ...inventory.resources[0]!, version: (await cacheTarget.observe({ kind: cacheTarget.kind, id: 'cache' })).version }] };
+    // K7: a tier that deletes data (here an archived file group) backs it up first; caches alone need no backup.
+    const purgeInventory = { ...inventory, backupDestination: join(root, '..', 'external-backup'), resources: [{ ...inventory.resources[0]!, contribution: 'conversation', version: (await cacheTarget.observe({ kind: cacheTarget.kind, id: 'cache' })).version }] };
     observed = purgeInventory; retained = createUninstallPlan({ schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, purgeInventory);
     const purgeCommand = { ...command, planDigest: retained.planDigest };
     covered = false; await expect(new UninstallApplication(ports()).apply(purgeCommand, interaction)).rejects.toMatchObject({ code: 'UNINSTALL_BACKUP_COVERAGE' });
@@ -171,7 +172,8 @@ it('asks nothing when nothing would change, stops the service before custody in 
     inventory: async () => inventory(), retainedPlan: async () => null,
     withAdmission: async (plan, _id, run) => { calls.push(`custody:${plan.service.running}`); return run({ scopeId: 's', recoveryLocation: '/fixture/recovery', effects: { inspect: async () => null, execute: async () => { throw new Error('no effect expected'); } },
       revalidate: async () => {}, prepareBackup: async () => { calls.push('backup'); }, approvePlan: async () => {}, finish: async result => { calls.push(`finish:${result.status}`); } }); },
-    force: { cancelRun: async ref => { calls.push(`cancel:${ref.id}`); work = { ...work, running: [] }; }, rejectApproval: async ref => { calls.push(`reject:${ref.id}`); work = { ...work, approvals: [] }; } },
+    force: { cancelRun: async ref => { calls.push(`cancel:${ref.id}`); work = { ...work, running: [] }; }, rejectApproval: async ref => { calls.push(`reject:${ref.id}`); work = { ...work, approvals: [] }; },
+      withdrawDelivery: async ref => { calls.push(`withdraw:${ref.id}`); work = { ...work, deliveries: [] }; } },
     settle: { budgetMs: 1000, wait: async () => {} },
     service: { budgetMs: 1000, describe: async () => { if (!answering) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); return descriptor(instance); },
       unit: async () => ({ unit: 'deckent-fixture.service', unitDisable: 'eligible', command: 'systemctl --user disable --now deckent-fixture.service' }),
@@ -195,16 +197,17 @@ it('asks nothing when nothing would change, stops the service before custody in 
   expect(result).toMatchObject({ status: 'completed', unit: { unit: 'deckent-fixture.service', previous: 'enabled' } }); expect(cards).toBe(1);
   // K3: force cancels and rejects with the person's authority, names the unknown result and closes nothing; a NEW unknown result after cancelling stops before custody.
   calls.length = 0; answering = false;
-  work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 2 }], approvals: [{ scopeId: 's', id: 'approval-1', revision: 0 }], uncertain: [effect] };
+  work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 2 }], approvals: [{ scopeId: 's', id: 'approval-1', revision: 0 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 3 }], uncertain: [effect] };
   const forced = await app().preview(query({ tier: 'all', force: true }));
   const named = await app().apply({ schemaVersion: 2, commandId: 'c4', planDigest: forced.planDigest }, { ...confirm, backupPassphrase: async () => 'temporary' });
-  expect(calls).toEqual(['cancel:run-1', 'reject:approval-1', 'custody:false', 'backup', 'finish:completed']);
+  // Nothing here deletes data, so no backup is asked; force's own steps and the unknown result are named.
+  expect(calls).toEqual(['cancel:run-1', 'reject:approval-1', 'withdraw:ticket-1', 'custody:false', 'finish:completed']);
   expect(named.uncertain).toEqual([effect]);
   calls.length = 0;
   work = { ...idle, running: [{ scopeId: 's', id: 'run-2', revision: 1 }], uncertain: [effect] };
   const drifting = await app().preview(query({ tier: 'all', force: true }));
   const cancelRun = async () => { calls.push('cancel:run-2'); work = { ...work, running: [], uncertain: [effect, { ...effect, id: 'erp-credit-note' }] }; };
-  const raced = new UninstallApplication({ ...(app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports, force: { cancelRun, rejectApproval: async () => {} } });
+  const raced = new UninstallApplication({ ...(app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports, force: { cancelRun, rejectApproval: async () => {}, withdrawDelivery: async () => {} } });
   await expect(raced.apply({ schemaVersion: 2, commandId: 'c5', planDigest: drifting.planDigest }, confirm))
     .rejects.toMatchObject({ code: 'UNINSTALL_PLAN_CHANGED', params: { diff: 'uncertain:effect:erp-credit-note' } });
   expect(calls).toEqual(['cancel:run-2']);

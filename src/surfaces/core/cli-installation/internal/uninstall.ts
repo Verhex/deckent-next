@@ -70,9 +70,9 @@ export async function uninstallCommand(argv: readonly string[], context: Install
     progress: event => print([t('cli.uninstall.progress', { count: String(event.remaining), left: formatDuration(event.leftMs, locale) }, locale)]),
     confirm: async (current: UninstallPlan) => {
       if (yes) { print([title, ...uninstallPlanLines(current, locale)]); return true; }
-      const label = current.purge ? t('cli.uninstall.apply.purge', {}, locale) : current.steps.stopService ? t('cli.uninstall.apply.stop', {}, locale) : t('cli.uninstall.apply.remove', {}, locale);
+      const label = current.backup.required ? t('cli.uninstall.apply.purge', {}, locale) : current.steps.stopService ? t('cli.uninstall.apply.stop', {}, locale) : t('cli.uninstall.apply.remove', {}, locale);
       // An irreversible deletion keeps Cancel preselected; keeping data preselects the action like the rest of the menu.
-      return await ask({ title, body: uninstallPlanLines(current, locale), initial: current.purge ? 'cancel' : 'apply', options: [{ id: 'apply', label }, cancel] }) === 'apply';
+      return await ask({ title, body: uninstallPlanLines(current, locale), initial: current.backup.required ? 'cancel' : 'apply', options: [{ id: 'apply', label }, cancel] }) === 'apply';
     },
   }, options, signal);
   const messages = uninstallMessages(locale);
@@ -80,7 +80,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
     ...result.items.filter(item => item.state).map(item => `${safe(plan.items.find(resource => resource.resourceId === item.resourceId)?.locator ?? item.resourceId)}: ${messages[`state.${item.state}`]}`),
     ...(result.unit ? [t('cli.uninstall.unitReceipt', { unit: safe(result.unit.unit), previous: safe(result.unit.previous), undo: safe(result.unit.undo) }, locale)] : []),
     ...(result.uncertain.length && plan.purge ? [t('cli.uninstall.uncertain', { list: result.uncertain.map(item => safe(`${item.kind} ${item.id}`)).join(', ') }, locale)] : []),
-    ...(result.backup.destination && plan.purge ? [t('cli.uninstall.backup', { path: safe(result.backup.destination) }, locale)] : []),
+    ...(result.backup.destination && plan.backup.required ? [t('cli.uninstall.backup', { path: safe(result.backup.destination) }, locale)] : []),
     result.packageRemoval.command ? t('cli.uninstall.packageHandoff', { command: safe(result.packageRemoval.command) }, locale) : t('cli.uninstall.packageUnknown', {}, locale)]);
   return result.status === 'completed' || result.status === 'noop' ? 0 : 1;
 }
