@@ -122,6 +122,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   if (step.kind === 'connected') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={() => {
     push([{ level: step.outcome.connected ? 'info' : 'warning', text: step.outcome.summary }]);
     if (step.outcome.approvalId && openApproval) { openApproval(step.outcome.approvalId); onClose(); return; }
+    // BeUser re-walk (3t): a connected model ends the errand - closing its result closes the window (inside /model: back to the refreshed list).
+    if (step.outcome.connected) { onClose(); return; }
     back();
   }} />;
   if (step.kind === 'workspace') return <PickerWindow title={title(step.target.label)} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position}

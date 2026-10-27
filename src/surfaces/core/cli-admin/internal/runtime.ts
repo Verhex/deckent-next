@@ -66,11 +66,12 @@ export type AdminPathsHandler = (root: string, options: ConfigLoadOptions) => Pr
 
 /** What the service is running now, from the configured scope's pool (local ledger read; null when it cannot be read). */
 async function runningWork(context: AdminCommandContext, root: string, options: ConfigLoadOptions) {
-  const scopeId = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const config = await loadConfig(root, options).catch(() => null), scopeId = (config?.['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
+  const admission = Boolean(config?.['admission']);
   if (typeof scopeId !== 'string') return { unread: 'no-scope', scopeId: '-' } as const;
   if (!context.inspectPoolHold) return { unread: '-', scopeId } as const;
   return context.inspectPoolHold(root, { schemaVersion: 1, scopeId }, options).then(view => ({ scopeId, running: view.occupancy.execution,
-    evaluating: Math.max(0, view.occupancy.inFlight - view.occupancy.execution) }), (error: { code?: unknown } | null) => ({ unread: typeof error?.code === 'string' ? error.code : '-', scopeId }) as const);
+    evaluating: Math.max(0, view.occupancy.inFlight - view.occupancy.execution) }), (error: { code?: unknown } | null) => ({ unread: typeof error?.code === 'string' ? error.code : '-', scopeId, admission }) as const);
 }
 /** BeUser alpha.56.1 (Selin): the running work, or why it cannot be read now (no terminal scope, or the typed refusal). */
 function workText(work: Awaited<ReturnType<typeof runningWork>>, locale: Locale, card = false): string {
@@ -78,7 +79,9 @@ function workText(work: Awaited<ReturnType<typeof runningWork>>, locale: Locale,
   if (!('unread' in work)) return card ? t('cli.runtime.card.work', params, locale) : t('cli.runtime.status.work', params, locale);
   if (work.unread === 'no-scope') return t('cli.runtime.status.workNoScope', {}, locale);
   // BeUser round 2 (SM4): the reason in words — a scope without a pool says so with its next step; any other refusal is its own typed message.
-  if (work.unread === 'RUN_POOL_REQUIRED') return t('cli.runtime.status.workNoPool', { scope: terminalSafeText(work.scopeId) }, locale);
+  // BeUser re-walk: without an admission pool in the settings the first step is the work kind (/setup), not `init pool` (which would refuse).
+  if (work.unread === 'RUN_POOL_REQUIRED') return 'admission' in work && !work.admission ? t('cli.runtime.status.workNoKind', { scope: terminalSafeText(work.scopeId) }, locale)
+    : t('cli.runtime.status.workNoPool', { scope: terminalSafeText(work.scopeId) }, locale);
   return t('cli.runtime.status.workFailed', { reason: ErrorRegistry.get(work.unread, locale)?.message ?? terminalSafeText(work.unread) }, locale);
 }
 /**

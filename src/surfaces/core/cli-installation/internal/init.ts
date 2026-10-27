@@ -126,6 +126,7 @@ export async function initCommand(argv: readonly string[], context: Installation
         : value.status === 'created' ? t('cli.init.pool.created', params, locale)
         : value.status === 'current' ? t('cli.init.pool.current', params, locale)
         : value.status === 'conflict' ? t('cli.init.pool.conflict', params, locale)
+        : value.reason === 'invalid-admission' ? t('cli.init.pool.noAdmission', params, locale) // BeUser re-walk: the field and the managed first step
         : t('cli.init.pool.unavailable', params, locale);
     } });
     return;

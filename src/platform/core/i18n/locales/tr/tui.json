@@ -865,6 +865,7 @@
   "tui.provider.state.notConnected": "bağlı değil",
   "tui.provider.state.unknown": "anahtar {name}: depo adları listeleyemiyor",
   "tui.provider.note.storeUnlisted": "Gizli depo anahtar adlarını listeleyemedi: {reason}",
+  "tui.provider.note.storeEnv": "Anahtarlar burada ortam değişkenlerinden okunuyor, bu yüzden adları listelenmiyor. Bu hiçbir şeyi engellemez; yerel sunucu anahtar istemez.",
   "tui.provider.note.noStore": "Bu terminalin gizli depoya yolu yok; burada hiçbir şey saklanamaz.",
   "tui.provider.field.check": "Deneme",
   "tui.provider.field.endpoint": "Adres",

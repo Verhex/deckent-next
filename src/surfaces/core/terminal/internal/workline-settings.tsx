@@ -52,6 +52,8 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice, sessionModel.current?.reasoning?.()) } : {}),
       ...(model.budget ? { budget: model.budget } : {}), ...(model.cache ? { cache: model.cache } : {}),
       ...(model.protocol ? { protocol: model.protocol } : {}), ...(model.workspace ? { workspace: model.workspace } : {}),
+      // BeUser re-walk (3t RED): the embedded `/provider` flow (the empty list's "Connect a model…" row, a row's provider fix) and the activation fixes.
+      ...(model.provider ? { provider: model.provider } : {}), ...(model.fix ? { fix: (choice: ModelPanelChoice, action: 'activate' | 'deactivate' | 'reconcile') => model.fix!(choice, action) } : {}),
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice, fresh?: boolean) => sessionModel.current?.pin(choice, fresh) } } : {}) };

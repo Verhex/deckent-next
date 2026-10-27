@@ -363,6 +363,20 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       .rejects.toMatchObject({ stderr: expect.stringContaining('LOCAL_RUNTIME_UNAVAILABLE') });
   });
 
+  // BeUser re-walk on the built binary (3t RED): the workline rebuilt the /model port without `provider`, so the empty list's connect row never
+  // appeared in the real terminal; Enter opened the budget amounts. Built `deckent`, real pseudo-terminal, empty catalog.
+  it('an empty /model offers "Connect a model…" first and Enter opens the provider window (real terminal)', async () => {
+    const f = await project();
+    const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
+      ['Deckent workline', '/model\r'],
+      ['Connect a model…', '\r'],
+      ['Providers', '\u001b'],
+      ['Deckent workline', '/exit\r'],
+    ]);
+    expect(result.timeout, result.output).toBeUndefined();
+    expect(result.output).toContain('No model is connected yet'); expect(result.output).not.toMatch(/25 USD/u);
+  });
+
   it('degrades when piped: the rich view refuses with a typed usage error, line mode runs', async () => {
     const f = await project();
     const piped = await new Promise<{ code: number | null; stderr: string; stdout: string }>((resolvePromise, reject) => {

@@ -865,6 +865,7 @@
   "tui.provider.state.notConnected": "not connected",
   "tui.provider.state.unknown": "key {name}: the store cannot list names",
   "tui.provider.note.storeUnlisted": "The secret store could not list key names: {reason}",
+  "tui.provider.note.storeEnv": "Keys are read from environment variables here, so their names are not listed. This does not block anything; a local server needs no key.",
   "tui.provider.note.noStore": "This terminal has no route to the secret store; nothing can be stored here.",
   "tui.provider.field.check": "Check",
   "tui.provider.field.endpoint": "Endpoint",

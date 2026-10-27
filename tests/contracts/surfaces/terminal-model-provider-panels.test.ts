@@ -281,7 +281,8 @@ describe('/provider window', () => {
     expect(calls.notices).toEqual([]);
     await view.press(ENTER, 60);
     expect(calls.notices).toEqual([{ level: 'info', text: 'gpt-6-luna is connected; choose it with /model.' }]);
-    expect(view.frame()).toContain('Providers');
+    // BeUser re-walk (3t): a connected model ends the errand - the window closes in one step (no second Esc through the provider list).
+    expect(calls.closed).toBe(1);
   });
 
   it('T4-B: a connection that waits for approval opens the approval card after its window closes', async () => {

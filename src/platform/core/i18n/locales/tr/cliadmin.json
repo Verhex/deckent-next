@@ -150,6 +150,7 @@
   "cli.runtime.status.managed": "{manager} çalıştırıyor ({unit})",
   "cli.runtime.status.workNoScope": "Çalışan işler: şu an okunamıyor (terminal kapsamı ayarlı değil; bir kez `deckent --scope <kimlik>` açın)",
   "cli.runtime.status.workNoPool": "Çalışan işler: sayılamıyor, bu klasörün ayarlarında {scope} kapsamı için işçi havuzu kurulmamış; `deckent init pool --scope {scope} --preview` ile kurun",
+  "cli.runtime.status.workNoKind": "Çalışan işler: sayılamıyor, {scope} kapsamı için henüz iş türü ya da işçi havuzu kurulmamış; `deckent` içinde /setup ile kurun (İlk iş türü, sonra İşçi havuzu)",
   "cli.runtime.status.workFailed": "Çalışan işler: şu an okunamıyor: {reason}",
   "cli.runtime.status.socket": "Soket: {path}",
   "cli.runtime.status.socketAbsent": "Soket (şu an yok): {path}",

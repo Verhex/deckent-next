@@ -124,7 +124,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       let names: readonly string[] | null = null;
       if (host.listSecretNames) {
         try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
-        catch (error) { notes.push(t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); }
+        catch (error) { notes.push((error as { code?: unknown } | null)?.code === 'SECRET_STORE_UNSUPPORTED' ? t('tui.provider.note.storeEnv', {}, locale) : t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); } // env store: plain, non-blocking (BeUser 3t)
       }
       let named: readonly string[] = [], served: string | null = null;
       try {

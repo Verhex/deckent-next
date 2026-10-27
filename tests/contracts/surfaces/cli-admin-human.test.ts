@@ -330,7 +330,12 @@ it('BeUser alpha.56.1 (Selin): describe names the service manager and why work i
   // BeUser round 2 (SM4): a scope without a pool says so in words, with its next step.
   const noPool = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
   expect(await main(['runtime'], noPool.context)).toBe(0);
-  expect(noPool.out.text()).toContain('Running work: cannot be counted, no worker pool is set up for scope live in this folder\'s settings; set one up with `deckent init pool --scope live --preview`');
+  // BeUser re-walk: with no admission pool in the settings the first step is the work kind (/setup), never `init pool` (it would refuse).
+  expect(noPool.out.text()).toContain('Running work: cannot be counted, no work kind or worker pool is set up for scope live yet; set them up in `deckent` with /setup');
+  const declared = await project({ terminal: { scopeId: 'live' }, admission: { registry: {}, poolId: 'p1', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } });
+  const withKind = io(declared, { ...runtimeHandlers(calls), inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
+  expect(await main(['runtime'], withKind.context)).toBe(0);
+  expect(withKind.out.text()).toContain('no worker pool is set up for scope live in this folder\'s settings; set one up with `deckent init pool --scope live --preview`');
   const refused = managed();
   expect(await main(['runtime', 'shutdown', '--reason', 'maintenance'], refused.context)).toBe(1);
   expect(refused.err.text()).toContain('Stop it through its manager: systemctl --user stop deckent-live.service'); expect(calls).toEqual([]);

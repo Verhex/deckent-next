@@ -71,6 +71,17 @@ it.each(['en', 'tr'] as const)('a multi-workspace key result gives the selection
   expect(JSON.stringify(result)).not.toContain(CANARY);
 });
 
+it('BeUser re-walk (3t): an environment-variable store that cannot list names is said plainly as non-blocking, never as a failure', async () => {
+  const { root, options } = await project({}), store = secrets();
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', { ...store.host, listSecretNames: async () => { throw ErrorRegistry.createError('SECRET_STORE_UNSUPPORTED', { params: { backend: 'core.secret-store.env@1' } }); },
+      providerConnect: connectHost('ok') }, options, locale, errorText);
+    const notes = (await port.inspect()).notes.join('\n');
+    expect(notes).toContain(locale === 'en' ? 'This does not block anything; a local server needs no key.' : 'Bu hiçbir şeyi engellemez; yerel sunucu anahtar istemez.');
+    expect(notes).not.toContain('core.secret-store.env@1');
+  }
+});
+
 describe('/provider port', () => {
   it('a passing check stores the key under its name through the store handler; rows name the outcome, the key name and the next step, never the key', async () => {
     const { root, options } = await project({ provider_invocation_profiles: { schemaVersion: 1, profiles: [] } });

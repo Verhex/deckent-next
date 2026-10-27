@@ -150,6 +150,7 @@
   "cli.runtime.status.managed": "run by {manager} ({unit})",
   "cli.runtime.status.workNoScope": "Running work: cannot be read now (no terminal scope is set; open `deckent --scope <id>` once)",
   "cli.runtime.status.workNoPool": "Running work: cannot be counted, no worker pool is set up for scope {scope} in this folder's settings; set one up with `deckent init pool --scope {scope} --preview`",
+  "cli.runtime.status.workNoKind": "Running work: cannot be counted, no work kind or worker pool is set up for scope {scope} yet; set them up in `deckent` with /setup (First work kind, then Worker pool)",
   "cli.runtime.status.workFailed": "Running work: cannot be read now: {reason}",
   "cli.runtime.status.socket": "Socket: {path}",
   "cli.runtime.status.socketAbsent": "Socket (not present now): {path}",
