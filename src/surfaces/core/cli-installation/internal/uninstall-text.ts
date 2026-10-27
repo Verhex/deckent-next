@@ -86,13 +86,13 @@ export function uninstallPlanLines(plan: UninstallPlan, locale: Locale): readonl
     ...(plan.purge && plan.force && plan.work.uncertain.length ? [t('cli.uninstall.uncertain', { list: plan.work.uncertain.map(item => safe(`${item.kind} ${item.id}`)).join(', ') }, locale)] : []),
   ];
 }
-/** `--dry-run`: the plan card, then every item with its path and reason (absent ones included), the installation and the plan digest. */
-export function uninstallDetailLines(plan: UninstallPlan, locale: Locale): readonly string[] {
+/** `--dry-run`: the plan card, then every present item with its path and reason (`verbose`: absent ones too), the installation and the digest. */
+export function uninstallDetailLines(plan: UninstallPlan, locale: Locale, verbose = false): readonly string[] {
   const messages = uninstallMessages(locale), unknown = t('cli.uninstall.unknown', {}, locale);
   const label = (item: UninstallItem) => item.action === 'remove' ? t('cli.uninstall.item.remove', {}, locale) : item.action === 'keep' ? t('cli.uninstall.item.keep', {}, locale)
     : item.action === 'manual' ? t('cli.uninstall.item.manual', {}, locale) : unknown;
   return [...uninstallPlanLines(plan, locale), t('cli.uninstall.installation', { path: safe(plan.installation.root), scopes: plan.scopeSummary.map(safe).join(', ') }, locale),
-    ...plan.items.flatMap(item => (item.members ?? [item.locator]).map(locator => `${label(item)}: ${safe(locator)} · ${messages[`reason.${item.reason}`] ?? unknown}`)),
+    ...plan.items.filter(item => verbose || item.present !== false).flatMap(item => (item.members ?? [item.locator]).map(locator => `${label(item)}: ${safe(locator)} · ${messages[`reason.${item.reason}`] ?? unknown}`)),
     t('cli.uninstall.digest', { digest: plan.planDigest }, locale)];
 }
 /** A blocker the person can resolve on the next card (running or pending work, unknown results, an eligible unit), offered with its flag twin. */

@@ -8,7 +8,7 @@ import { uninstallDetailLines, uninstallMessages, uninstallPlanLines, uninstallR
 import type { InstallationCommandContext } from './context.js';
 export { uninstallPlanLines, uninstallDetailLines, uninstallSummaryLines } from './uninstall-text.js';
 const TIERS: Readonly<Record<string, UninstallQuery['tier']>> = { '--keep-data': 'keep-data', '--keep-work': 'keep-work', '--all': 'all' };
-const SWITCHES = ['--force', '--yes', '--dry-run', '--json', '--disable-unit', '--no-color', '--lang'];
+const SWITCHES = ['--force', '--yes', '--dry-run', '--json', '--disable-unit', '--verbose', '--no-color', '--lang'];
 
 /**
  * Owner 2026-10-27: a menu of tiers (keep data — default; keep pending work; delete everything, backup first) whose every step has a flag
@@ -35,7 +35,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   const print = (lines: readonly string[]) => emit(lines, { ...sinks, render: value => value.join('\n') }), title = t('cli.uninstall.title', { path: safe(root) }, locale);
   let query: UninstallQuery = { schemaVersion: 2, tier: TIERS[named[0] ?? ''] ?? 'keep-data', force: seen.has('--force'), disableUnit: seen.has('--disable-unit') };
   let plan = await preview(root, query, options);
-  if (previewOnly) { emit(plan, { ...sinks, json, render: value => [title, ...uninstallDetailLines(value, locale), t('cli.uninstall.previewOnly', {}, locale)].join('\n') }); return 0; }
+  if (previewOnly) { emit(plan, { ...sinks, json, render: value => [title, ...uninstallDetailLines(value, locale, seen.has('--verbose')), t('cli.uninstall.previewOnly', {}, locale)].join('\n') }); return 0; }
   const signal = AbortSignal.timeout(getConfigFieldDefault('approvals').sessionTtlMs);
   const ask = (request: CliCardRequest) => askCliCard(request, { locale, env: options.env, stdout: context.stdout, signal }), cancel = { id: 'cancel', label: t('cli.uninstall.cancel', {}, locale) };
   const cancelled = () => { print([uninstallStatusMessage('cancelled', locale)]); return 1 as ExitCode; };
@@ -45,7 +45,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
     const choices = uninstallTierChoices(plan, locale), answer = await ask({ title, initial: choices.find(choice => !choice.blocked)!.tier,
       body: [...uninstallSummaryLines(plan, locale), ...choices.flatMap(choice => choice.blocked ? [t('cli.uninstall.tier.blocked', { tier: choice.label, reason: choice.blocked }, locale)] : [])],
       options: [...choices.filter(choice => !choice.blocked).map(choice => ({ id: choice.tier, label: choice.label })), { id: 'details', label: t('cli.uninstall.details', {}, locale) }, cancel] });
-    if (answer === 'details') { print(uninstallDetailLines(plan, locale)); continue; }
+    if (answer === 'details') { print(uninstallDetailLines(plan, locale, true)); continue; }
     if (!answer || answer === 'cancel') return cancelled();
     if (answer !== query.tier) plan = await preview(root, query = { ...query, tier: answer as UninstallQuery['tier'] }, options);
     break;

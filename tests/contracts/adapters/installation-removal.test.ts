@@ -5,45 +5,11 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { InstallationServiceRemovalTarget, InstallationCacheRemovalTarget, type ServiceObservation, type ServiceRemovalDriver } from '#adapters/core/installation-removal/index.js';
+import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
 const roots: string[] = [];
 const observed = { dataBlockers: [], managedScopes: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true },
   service: { running: false, unit: null, unitDisable: 'none' as const, command: null } };
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-
-it('observes stop and disable before removing only the owned service; foreign/Also/trigger/self and unresolved native states refuse', async () => {
-  for (const scope of ['user', 'system'] as const) {
-    const resource = { resourceId: 'service', installationId: 'temp', manager: 'systemd' as const, scope, unit: 'fixture.service', ownershipDigest: 'a'.repeat(64) };
-    let current: ServiceObservation = { ownershipDigest: resource.ownershipDigest, active: true, enabled: true, present: true, mainPid: 123,
-      also: [], triggers: [], foreignArtifacts: false, callerInService: false, revision: 'v1' };
-    const transcript: string[] = [];
-    const driver: ServiceRemovalDriver = { identity: `fixture-${scope}`, async withCustody(_service, work) { return work(); },
-      async inspect() { transcript.push('inspect'); return current; },
-      async stop() { transcript.push('stop'); current = { ...current, active: false, mainPid: 0 }; },
-      async disable() { transcript.push('disable'); current = { ...current, enabled: false }; },
-      async removeOwnedArtifacts() { transcript.push('remove-owned'); current = { ...current, present: false }; },
-      async reload() { transcript.push('reload'); } };
-    const target = new InstallationServiceRemovalTarget([resource], driver), ref = { kind: target.kind, id: 'service' };
-    const version = (await target.observe(ref)).version;
-    if (process.platform !== 'linux') {
-      await expect(target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'key', expectedVersion: version, input: null })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-      console.info('verify-not-run: service removal positive requires Linux manager custody'); continue;
-    }
-    await target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'key', expectedVersion: version, input: null });
-    expect(transcript).toEqual(['inspect', 'inspect', 'stop', 'inspect', 'disable', 'inspect', 'remove-owned', 'reload', 'inspect']);
-    expect(await target.lookup(ref, 'key')).toEqual({ status: 'applied', version: null });
-    for (const change of [{ ownershipDigest: 'foreign' }, { also: ['foreign.service'] }, { triggers: ['foreign.socket'] }, { callerInService: true }, { active: null }]) {
-      current = { ...current, ...change }; const prior = transcript.length;
-      await expect(target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'other', expectedVersion: version, input: null })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-      expect(transcript.slice(prior)).toEqual(['inspect']); current = { ...current, ownershipDigest: resource.ownershipDigest, also: [], triggers: [], callerInService: false, active: false };
-    }
-    current = { ...current, present: true, active: true, enabled: true, mainPid: 123 };
-    driver.stop = async () => { transcript.push('stop-unproven'); };
-    const expectedVersion = (await target.observe(ref)).version, prior = transcript.length;
-    await expect(target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'lost', expectedVersion, input: null })).rejects.toMatchObject({ code: 'EFFECT_TARGET_UNKNOWN' });
-    expect(transcript.slice(prior)).toEqual(['inspect', 'stop-unproven', 'inspect']); expect(await target.lookup(ref, 'lost')).toBeNull();
-  }
-});
 
 it('removes only the owner-named members of a cache, keeping same-user strays and their parent while refusing symlinks, protected overlap and drift', async () => {
   if (process.platform === 'win32') {
@@ -107,44 +73,6 @@ it('keeps an authenticated recovery hold on unknown, rejects a different install
   const manifest = join(root, 'uninstall-recovery', `${plan.planDigest}.json`);
   await writeFile(manifest, (await readFile(manifest, 'utf8')).replace('p1', 'p2'), { mode: 0o600 });
   await expect(recovery.retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
-});
-
-it('uses the bounded native systemd driver only for the exact recorded user unit and enablement links, refusing foreign artifacts before stop', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native systemd removal is Linux-only'); return; }
-  const { NativeServiceRemovalDriver, InstallationServiceRemovalTarget, readNativeServiceRecord } = await import('#adapters/core/installation-removal/index.js');
-  const { sha256, createHmacIntegrity } = await import('#platform/index.js');
-  const root = await mkdtemp(join(tmpdir(), 'deckent-native-uninstall-')); roots.push(root);
-  const units = join(root, 'units'), links = join(units, 'default.target.wants'), identity = join(root, 'identity');
-  await mkdir(units, { mode: 0o700 }); await mkdir(links, { mode: 0o700 }); await mkdir(identity, { mode: 0o700 });
-  const unit = join(units, 'temporary.service'), link = join(links, 'temporary.service'), foreign = join(units, 'customer.service');
-  const bytes = '[Unit]\nDescription=temporary fixture\n[Service]\nExecStart=/fixture-only\n';
-  await writeFile(unit, bytes, { mode: 0o600 }); await writeFile(foreign, 'KEEP', { mode: 0o600 }); await symlink(unit, link);
-  const record = { schemaVersion: 1 as const, installationId: 'temporary', manager: 'systemd' as const, scope: 'user' as const, unit: 'temporary.service', directory: units,
-    artifacts: [{ path: unit, digest: sha256(bytes), link: null }, { path: link, digest: sha256(unit), link: unit }] };
-  const integrity = createHmacIntegrity('fixture', Buffer.alloc(32, 7));
-  await writeFile(join(identity, 'native-service.json'), JSON.stringify({ body: record, keyId: integrity.keyId, mac: integrity.sign(JSON.stringify(record)) }), { mode: 0o600 });
-  expect(await readNativeServiceRecord(identity, 'temporary', integrity, 65536)).toEqual(record);
-  await expect(readNativeServiceRecord(identity, 'foreign', integrity, 65536)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-  let active = true, also = 'customer.service'; const commands: string[][] = [];
-  const exec = async (args: readonly string[]) => {
-    commands.push([...args]);
-    if (args[0] === 'stop') { active = false; return ''; }
-    if (args[0] === 'daemon-reload') return '';
-    expect(args[0]).toBe('show');
-    const present = await lstat(unit).then(() => true, () => false), enabled = await lstat(link).then(() => true, () => false);
-    return Object.entries({ LoadState: present ? 'loaded' : 'not-found', ActiveState: active ? 'active' : 'inactive', UnitFileState: enabled ? 'enabled' : present ? 'disabled' : '',
-      MainPID: active ? '999999' : '0', FragmentPath: present ? unit : '', DropInPaths: '', Names: 'temporary.service', Also: also, Triggers: '', TriggeredBy: '', ConsistsOf: '', BoundBy: '', PropagatesStopTo: '', OnSuccess: '', OnFailure: '', ControlGroup: '' }).map(([key, value]) => `${key}=${value}`).join('\n');
-  };
-  const driver = new NativeServiceRemovalDriver(record, exec, (_service, work) => work(), 65536);
-  const target = new InstallationServiceRemovalTarget([driver.service], driver), ref = { kind: target.kind, id: driver.service.resourceId };
-  const request = { target: ref, operation: { id: 'installation.remove-service', version: 1 }, expectedVersion: (await target.observe(ref)).version, idempotencyKey: 'approved-native-card', input: null };
-  await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-  expect(commands.some(args => args[0] === 'stop')).toBe(false); expect(await readFile(foreign, 'utf8')).toBe('KEEP');
-  also = ''; request.expectedVersion = (await target.observe(ref)).version; await target.apply(request);
-  expect(commands.filter(args => args[0] === 'stop')).toEqual([['stop', '--', 'temporary.service']]);
-  expect(commands.some(args => args[0] === 'disable')).toBe(false); // disable can cascade through Also=/aliases
-  await expect(lstat(unit)).rejects.toMatchObject({ code: 'ENOENT' }); await expect(lstat(link)).rejects.toMatchObject({ code: 'ENOENT' });
-  expect(await readFile(foreign, 'utf8')).toBe('KEEP'); expect(await target.lookup(ref, 'approved-native-card')).toEqual({ status: 'applied', version: null });
 });
 
 it('refuses unsupported native managers with typed manual guidance rather than translating them into Linux deletions', async () => {

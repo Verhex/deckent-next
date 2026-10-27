@@ -318,7 +318,7 @@
   "cli.uninstall.unit": "Devre dışı bırakılacak: {unit} (birim dosyası kalır)",
   "cli.uninstall.force": "İptal edilecek: {runs} iş · reddedilecek: {approvals} onay",
   "cli.uninstall.kept": "Korunacak: {groups} — {reason}",
-  "cli.uninstall.absent": "Mevcut değil: {count} kalem (deckent uninstall --dry-run listeler)",
+  "cli.uninstall.absent": "Mevcut değil: {count} kalem (deckent uninstall --dry-run --verbose listeler)",
   "cli.uninstall.more": "{count} tane daha",
   "cli.uninstall.forYou": "Sizin yapmanız gereken:",
   "cli.uninstall.backup": "Yedek: {path} (parolalı; hiçbir şey silinmeden önce doğrulanır)",

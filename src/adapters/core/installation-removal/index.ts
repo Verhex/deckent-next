@@ -1,11 +1,8 @@
-export { InstallationServiceRemovalTarget } from './internal/service.js';
-export type { RemovalService, ServiceObservation, ServiceRemovalDriver } from './internal/service.js';
 export { InstallationCacheRemovalTarget } from './internal/cache.js';
 export type { CacheRemovalResource, CacheRemovalBounds } from './internal/cache.js';
 
 export { UninstallRecovery } from './internal/recovery.js';
-export { NativeServiceRemovalDriver, nativeServiceExec, readNativeServiceRecord } from './internal/native-service.js';
-export type { NativeServiceRecord, NativeServiceExec } from './internal/native-service.js';
+export { nativeServiceExec, type NativeServiceExec } from './internal/native-service.js';
 export { InstallationDataRemovalTarget } from './internal/data.js';
 export type { DataRemovalMember, DataRemovalSnapshot } from './internal/data.js';
 export { extendUninstallInventory, uninstallRecoveryDirectory, assertNativeUninstallSupport } from './internal/inventory.js';

@@ -6,6 +6,7 @@
   "security.mcp.note.project": "project file: only these environment variables are read: {names}; any other reads as its default or empty, and a value carrying a credential refuses the server; secret references are refused",
   "security.mcp.note.moved": "a trust record for this server in the project's data folder is no longer used; decide again on this card",
   "security.mcp.trustCard.argument": "argument {index}: {value}",
+  "security.witness.uninstall": "Uninstall changes nothing from here: removing Deckent needs a person at their own interactive terminal. AI tools, MCP, CI, scripts and piped commands only preview it (deckent uninstall --dry-run or --json), even with --yes. Nothing was changed.",
   "security.witness.config": "The setting {key} is protected: only a person at their own interactive terminal may change it. Run the same deckent command (for a setting also the terminal's /config) in your own terminal on this host, with input and output on the same terminal. AI tools, MCP, SDK scripts, CI, piped commands and --json cannot change it. Nothing was changed.",
   "mcp.trustCard.posture.remote": "Remote HTTP server: nothing runs on this machine; headers are sent to that endpoint with every request.",
   "mcp.trustCard.posture.host": "No sandbox: runs as your user; files, processes and network are reachable.",

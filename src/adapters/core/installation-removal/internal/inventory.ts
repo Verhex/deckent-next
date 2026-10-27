@@ -5,8 +5,6 @@ import { z } from 'zod';
 import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, type UninstallInventory } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
-import { NativeServiceRemovalDriver, nativeServiceExec, readNativeServiceRecord } from './native-service.js';
-import { InstallationServiceRemovalTarget } from './service.js';
 import type { ProjectTracking } from './vcs.js';
 import paths from './paths.json' with { type: 'json' };
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
@@ -38,17 +36,6 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   env: Readonly<Record<string, string | undefined>>, globalRoot: string, tracked: ProjectTracking) {
   const layout = config.productLayout, installationId = base.installation.id, resources = [...base.resources];
   const bounds = config.installation.packageMeasurement, targets = [];
-  // The runtime's logical identity is not an OS service artifact. The native installer must retain an authenticated unit record.
-  const recorded = integrity && await readNativeServiceRecord(productResourcePath(layout, 'installationIdentity'), installationId, integrity, config.installation.profileMaxBytes);
-  if (recorded) {
-    const driver = new NativeServiceRemovalDriver(recorded, nativeServiceExec(config.installation.identityProbe, env), (_service, work) => work(), bounds.maxFileBytes);
-    const target = new InstallationServiceRemovalTarget([driver.service], driver), observed = await driver.inspect(driver.service);
-    const safe = observed.ownershipDigest === driver.service.ownershipDigest && observed.present !== null && !observed.also.length && !observed.triggers.length && !observed.foreignArtifacts && !observed.callerInService;
-    resources.push({ resourceId: driver.service.resourceId, contribution: 'service', locator: driver.service.unit, version: (await target.observe({ kind: target.kind, id: driver.service.resourceId })).version,
-      owner: safe ? installationId : null, ownership: safe ? 'exclusive' : 'unknown', ownershipEvidence: safe ? driver.service.ownershipDigest : null,
-      present: observed.present, protected: !safe, capability: safe, backup: 'missing' });
-    targets.push(target);
-  }
   // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the data tier.
   let members: DataRemovalMember[] = [];
   const blockers: string[] = [], kept = (path: string) => { const keep = tracked(path); return !!keep && !!resources.push({ resourceId: `tracked.${sha256(path)}`,

@@ -318,7 +318,7 @@
   "cli.uninstall.unit": "Will be disabled: {unit} (its unit file stays)",
   "cli.uninstall.force": "Will be cancelled: {runs} runs · rejected: {approvals} approvals",
   "cli.uninstall.kept": "Kept: {groups} — {reason}",
-  "cli.uninstall.absent": "Not present: {count} items (deckent uninstall --dry-run lists them)",
+  "cli.uninstall.absent": "Not present: {count} items (deckent uninstall --dry-run --verbose lists them)",
   "cli.uninstall.more": "{count} more",
   "cli.uninstall.forYou": "For you to do:",
   "cli.uninstall.backup": "Backup: {path} (passphrase; verified before anything is deleted)",
