@@ -474,7 +474,7 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('delete everything removes the bridges init wrote and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed', async () => {
+it('delete everything removes the bridges init wrote (a file init created whole, else only its line) and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { projectVaultDirectory, admitProjectVault, directoryLocation, previewProjectInstructions, createWorkspaceScope, WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } = await import('#adapters/index.js');
@@ -483,13 +483,12 @@ it('delete everything removes the bridges init wrote and this folder\'s own vaul
     const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     const team = '# Team rules\r\nkeep every byte\r\n', deck = join(project, 'DECKENT.md'), claude = join(project, 'CLAUDE.md'), agents = join(project, 'AGENTS.md');
-    await writeFile(claude, team, { mode: 0o644 });
     // Init's own preview and file target (the approval broker before it needs a person's terminal): its committed journal names the bytes it wrote.
     const preview = await previewProjectInstructions(project, ['claude-code', 'agents-md'], name => `# ${name}\n`);
     const writer = new WorkspaceFileTarget(await createWorkspaceScope(project), productResourcePath(layout, 'fileEffects'));
     for (const [index, change] of preview.changes.entries()) await writer.apply({ target: { kind: writer.kind, id: change.path }, operation: WORKSPACE_FILE_WRITE_OPERATION.operation,
       idempotencyKey: String(index).repeat(64), expectedVersion: change.beforeDigest, input: { content: change.after } });
-    expect(await readFile(claude, 'utf8')).toBe(`${team}@DECKENT.md\n`);
+    expect(await readFile(claude, 'utf8')).toBe('@DECKENT.md\n'); expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n');
     // Vaults: this folder's own slice (no repository) and one a repository's worktrees share for the same folder.
     const identity = await new FileInstallationIdentityStore(layout).read(), installationId = identity.status === 'available' ? identity.value.installationId : '';
     const anchor = { installationId, projectId: '00000000-0000-4000-8000-000000000001', binding: (await directoryLocation(local))!, repository: null, projectRoot: project };
@@ -503,15 +502,19 @@ it('delete everything removes the bridges init wrote and this folder\'s own vaul
     const changed = await previewConfiguredUninstall(project, ALL, options);
     expect(removed(changed)).not.toContain(deck); expect(removed(changed)).not.toContain(claude);
     expect(listed(changed, deck)).toBeTruthy(); expect(listed(changed, claude)).toBeTruthy();
-    // Negative: a bridge line the person changed stays and is listed; the unchanged DECKENT.md and CLAUDE.md line go.
+    // Negative: a bridge line the person changed stays and is listed.
     await writeFile(deck, original); await writeFile(agents, 'Read DECKENT.md first\n');
+    const edited = await previewConfiguredUninstall(project, ALL, options);
+    expect(removed(edited)).not.toContain(agents); expect(listed(edited, agents)).toBeTruthy();
+    // AGENTS.md as init created it goes whole; CLAUDE.md init created but the person added to loses only its bridge line.
+    await writeFile(agents, 'Read DECKENT.md\n'); await writeFile(claude, `@DECKENT.md\n${team}`);
     const plan = await previewConfiguredUninstall(project, ALL, options);
-    expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, join(own, 'key.json')])); expect(removed(plan)).not.toContain(agents);
-    expect(listed(plan, agents)).toBeTruthy(); expect(listed(plan, other)).toBeTruthy(); expect(removed(plan).some(path => path.startsWith(other))).toBe(false);
+    expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'key.json')]));
+    expect(listed(plan, other)).toBeTruthy(); expect(removed(plan).some(path => path.startsWith(other))).toBe(false);
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'bridges', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(result.status).toBe('completed');
     await expect(lstat(deck)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(claude, 'utf8')).toBe(team);
-    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md first\n');
+    await expect(lstat(agents)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(own)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(other, 'key.json'), 'utf8')).toBe('{}');
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

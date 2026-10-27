@@ -4365,6 +4365,7 @@
     "src/adapters/core/installation-removal": {
       "dependencies": [
         "src/engine/core/effect",
+        "src/adapters/core/workspace-write",
         "src/platform/core/errors",
         "src/platform/core/integrity",
         "src/platform/core/config",

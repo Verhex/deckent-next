@@ -7,6 +7,7 @@ import { verifyAuditRecord, type UninstallInventory, type UninstallResource } fr
 import { InstallationDataRemovalTarget, fileDigest, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY } from '#adapters/core/project-instructions/index.js';
 import { listProjectVaults } from '#adapters/core/secret-store/index.js';
+import { ABSENT_FILE_VERSION } from '#adapters/core/workspace-write/index.js';
 import type { ProjectTracking } from './vcs.js';
 import paths from './paths.json' with { type: 'json' };
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
@@ -84,18 +85,21 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   // installation and folder, outside a repository that worktrees could share) goes too. Changed, tracked, shared or foreign ones stay.
   const outside: DataRemovalMember[] = [], add = (path: string, extra: Partial<DataRemovalMember> = {}) => outside.push({ resourceId: 'project', path, directory: null, archivePath: '', target: 'global-data', archived: true, ...extra });
   if (project.own && archived.length) {
-    const written = new Map<string, string[]>();
+    const written = new Map<string, string[]>(), created = new Set<string>();
     for (const name of (await readdir(productResourcePath(layout, 'fileEffects')).catch(() => [] as string[])).slice(0, bounds.maxFiles)) {
-      const entry = await readFile(join(productResourcePath(layout, 'fileEffects'), name), 'utf8').then(text => JSON.parse(text) as { rel?: string; next?: string; state?: string }, () => null);
+      const entry = await readFile(join(productResourcePath(layout, 'fileEffects'), name), 'utf8').then(text => JSON.parse(text) as { rel?: string; expected?: string; next?: string; state?: string }, () => null);
       if (entry?.state === 'committed' && entry.rel && entry.next) written.set(entry.rel, [...written.get(entry.rel) ?? [], entry.next]);
+      if (entry?.state === 'committed' && entry.expected === ABSENT_FILE_VERSION) created.add(`${entry.rel}\0${entry.next}`);
     }
     const bridge = async (name: string) => { const path = join(config.projectRoot, name); return await memberStat(path, true).catch(() => null) && written.has(name) && !kept(path) ? path : null; };
     // A changed DECKENT.md stays with the bridge lines that point to it; a changed bridge line stays. Both are listed.
     const skeleton = await bridge(PROJECT_INSTRUCTION_REGISTRY.files[0]!);
     const changed = !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton));
     if (skeleton) { if (changed) unlisted(skeleton); else add(skeleton); }
-    for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path);
-      if (path && !changed && (await readFile(path, 'utf8')).split('\n').some(line => line.replace(/\r$/u, '') === row.line)) add(path, { line: row.line }); else if (path) unlisted(path); }
+    // A bridge file init created whole that still holds exactly those bytes goes whole; otherwise only its exact line goes.
+    for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), text = path && !changed ? await readFile(path, 'utf8') : null;
+      if (path && text !== null && created.has(`${row.path}\0${await fileDigest(path)}`)) add(path);
+      else if (path && text?.split('\n').some(line => line.replace(/\r$/u, '') === row.line)) add(path, { line: row.line }); else if (path) unlisted(path); }
     for (const { directory, record } of await listProjectVaults(globalRoot).catch(() => []))
       if (record?.anchor.installationId !== installationId || record.anchor.projectRoot !== config.projectRoot) continue;
       else if (record.anchor.repository !== null) unlisted(directory);
