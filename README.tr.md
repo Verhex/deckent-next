@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.55.1`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.56`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -490,14 +490,19 @@ anlatır.
   kalıcı izinler ve doğrulayabileceğiniz bir denetim izi.
 - **İşletin**: salt okunur görünüm için `deckent monitor`, sağlık için `deckent doctor`, ayarlar için `deckent config`;
   isterseniz zamanlanmış, doğrulanabilir kurtarma setleri için `deckent backup create|verify|restore`.
+- **İmzalı içeriği yönetin**: imzalı ajan ve skill paketlerini içe aktarıp doğrulayın, güven ve iptal kayıtlarını inceleyin,
+  değişiklikleri kapsama bağlı kartlarla kararlaştırın. Halka açık Hub bağlantısı dağıtım kurulumu ister; varsayılan kaynak açılmaz.
+- **Kurulumu önizleyerek kaldırın**: `deckent uninstall --dry-run --json` planı gösterir. Uygulamak kendi terminalinizde
+  kart ister; veriler varsayılan kalır, purge yönetilen yedek ve kanıtlanmış sahiplik gerektirir. İmajlar korunur.
+  Adımları ve kalan sınırları [AI kurulum rehberi](docs/ai-install.tr.md#kaldırma) anlatır.
 - **Kodda olan, henüz gerçek kullanımda kanıtlanmamış çekirdek katmanlar**: sistem her iş türü için işçi modelini
   görebildiğiniz bir listeden seçer; hafıza kabul edilen işten dolar ve onu siz ya da bağımsız bir değerlendirici doğrular;
   kaybolan işçiler tespit edilir ve öneri olarak kaydedilir; Brain bir korumalı alan içinde, sizin kendi girişiniz ve
   onayınızdan sonra kendi Claude aboneliğinizle planlayabilir; ajanlar ve skill'ler sürümlüdür ve onlara yapılan her AI
   değişikliği imzalıdır. Her anahtar (hafıza, kaybolan işçi tespiti, kurtarma, ajan istatistiği) kapalı başlar ve hiçbir
   şeyi uygulamayan bir gölge kipi vardır; gölgedeki hafıza doğrulama ve kurtarma yine de modelini çağırır, yani veri o
-  sağlayıcıya gider ve çağrı harcanır. Otomatik kurtarma henüz devreye giremez: bu sürümde hiçbir tespit kuralı harekete
-  geçecek şekilde yükseltilemez. Yeni haklar kurulum sahibinin policy yükseltmesiyle gelir: ilk kurulum şablonundan gelen
+  sağlayıcıya gider ve çağrı harcanır. Otomatik kurtarma ancak ölçülmüş kuralı yükseltip kesin eylem iznini verdikten ve
+  kipi açtıktan sonra devreye girer. Yeni haklar kurulum sahibinin policy yükseltmesiyle gelir: ilk kurulum şablonundan gelen
   policy için `deckent policy upgrade --template current`, elle yazılmış policy için
   `deckent init policy --scope <id> --upgrade --person <issuer>/<subject>`
   ([bilinen sınırlar](docs/known-limits.tr.md#çekirdek-katmanlar)).
@@ -528,14 +533,14 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 ## Yol haritası
 
-Tarih sözü verilmez; sıra verilir. Önce Deckent'in işi kendi başına yürütmesini sağlayan çekirdek katmanlar gelir: alpha.55
-onları kod olarak getirir, her biri bir kişi açana kadar kapalıdır, betadan önce açılıp gerçek kullanımda kanıtlanırlar.
-Sonraki sürüm imzalı ajanlar ve skill'ler için Deckent Hub'ı ekler. Beta katmanları gerçek kullanımla sağlamlaştırır; masaüstü
-uygulamasının geliştirilmesi de betayla birlikte başlar.
+Tarih sözü verilmez; sıra verilir. Alpha.56 çekirdek katmanları, kurtarma kartlarını ve imzalı Hub paket yönetimini;
+rehberli ilk kullanımı, ChatGPT ile sohbet girişini ve güvenli kaldırmayı içerir. Korunan katman anahtarları kapalı başlar;
+gerçek kullanım kanıtları ve ChatGPT planındaki Codex işçisinin etkinleştirilmesi beta öncesi kapılardır. Beta bu katmanları
+gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi yanında başlar.
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.55<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar kodda, anahtarları kapalı başlar"] --> C["Betadan önce · çekirdek katmanlar açılır<br/>imzalı ajanlar ve skill'ler için Deckent Hub<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.56<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Betadan önce · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```

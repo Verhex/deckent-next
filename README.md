@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.55.1`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.56`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
@@ -494,13 +494,18 @@ OpenRouter settings.
   list and revoke, and an audit trail you can verify.
 - **Operate**: `deckent monitor` for a read-only view, `deckent doctor` for health, `deckent config` for settings, and
   `deckent backup create|verify|restore` for verifiable recovery sets on a schedule if you choose.
+- **Manage signed content**: import and verify signed agent and skill packages, inspect trust and revocations, and decide
+  changes on scoped cards. Public Hub connections still need deployment setup; no source is enabled by default.
+- **Remove an installation with a preview**: `deckent uninstall --dry-run --json` shows the plan. Applying it needs your
+  terminal card; data stays by default, and purge needs a managed backup and proven ownership. Images stay protected.
+  The [AI installation guide](docs/ai-install.md#uninstall) explains the steps and remaining limits.
 - **Core layers, in code and not yet proven in real use**: the system picks the worker model for each kind of work from a
   list you can see; memory fills from accepted work and is verified by you or an independent evaluator; lost workers are
   detected and recorded as proposals; the Brain can plan with your own Claude subscription inside a sandbox, after your own
   login and consent; agents and skills are versioned and every AI change to them is signed. Each switch (memory, lost-worker
   detection, recovery, agent statistics) starts off and has a shadow mode that applies nothing; memory verification and
-  recovery in shadow still call their model, so data goes to that provider and the call is spent. Automatic recovery cannot
-  act yet: no detection rule can be promoted to act in this release. The new rights come from a policy upgrade by the
+  recovery in shadow still call their model, so data goes to that provider and the call is spent. Automatic recovery does not
+  act until you promote a measured rule, grant its exact action and enable the mode. The new rights come from a policy upgrade by the
   installation owner: `deckent policy upgrade --template current` for a policy from the first-run template, or
   `deckent init policy --scope <id> --upgrade --person <issuer>/<subject>` for a hand-written one
   ([known limits](docs/known-limits.md#core-layers)).
@@ -532,14 +537,14 @@ OpenRouter settings.
 
 ## Roadmap
 
-Dates are not promised; the order is. The core layers that let Deckent run work on its own come first: alpha.55 brings
-them as code, each off until a person turns it on, and they are switched on and proven in real use before the beta.
-The next release adds the Deckent Hub for signed agents and skills. The beta then hardens the layers through real use, and Desktop
-app development starts alongside it.
+Dates are not promised; the order is. Alpha.56 includes the core layers, recovery cards and signed Hub package
+management, plus guided first use, ChatGPT chat sign-in and safe uninstall. The protected layer switches still start off;
+their real-use proof and the ChatGPT-plan Codex worker activation remain gates before the beta. The beta then hardens
+these layers through real use, and Desktop app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.55<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers in code, their switches start off"] --> C["Before the beta · core layers switched on<br/>Deckent Hub for signed agents and skills<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  N["Now · alpha.56<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers · recovery cards · signed packages<br/>ChatGPT chat · guided setup · uninstall"] --> C["Before the beta · real-use acceptance<br/>core layers enabled with measured rules<br/>ChatGPT-plan worker proof · Hub deployment gates<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
   C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```

@@ -9,7 +9,7 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını veya canlı/N1 kabulü iddiası değildir.
+Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 ## Platformlar: denenenler ve denenmeyenler
 
@@ -211,6 +211,10 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
   ve taşıma için sınır kanıtı sağlayıcının üretim desteği veya bu birleşime özel uygunluk onayı değildir ve desteklenmeyen
   birleşim kimlik doğrulamalı işten önce tipli retle durur. *Yol:* desteklenen mevcut bağlantıyı kullanın; girişin
   başarılı olması Codex işçisinin kullanılabildiğini kanıtlamaz.
+
+- **SSH üzerinden ChatGPT girişi dönüş portunu yönlendirmeyi ister.** CLI ve terminal giriş URL'sini gösterir, ancak dönüş
+  hâlâ Deckent'in çalıştığı makinenin loopback adresine gelir; cihaz koduyla giriş yolu yoktur. *Yol:* tarayıcınızın
+  makinesinden o dönüş portunu yönlendirin ya da Deckent host'unda yerel giriş yapın.
 
 - **Aboneliklerden API modeline otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli bir API'ye
   geçmez. İstisna: bağlanırken devamı açıkça etkinleştirip bir API modeli seçtiğiniz ChatGPT girişi, doğrulanmış plan sınırında o
@@ -471,8 +475,12 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
   yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
   gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
   da günlük yerine yükseltme öncesini seçin.
+- **Alpha.56'dan eski sürüme dönüş geçiş öncesi yedeği ister.** Alpha.55.1 v73 kurulum defterini yazmadan reddeder
+  (`ATTEMPT_STORE_VERSION`); yükseltilmiş veritabanını açamaz. Var olan Hub v1/v2 deposu v3'e yükseltilirken yedeklenir; yeni açılan v3 deposunda yedeklenecek bir şey yoktur.
+  Politika geri alma yalnız içeriği eşit v18 farkını kaldırır; önceki v16/v17 hakları ve özelleştirilmiş satırlar kalır.
+  *Yol:* eşleşen geçiş öncesi veri/politikayı geri yükleyin; yalnız binary değiştirmek yetmez.
 - **Kaybolan işçi saklama çözülene kadar slotunu tutabilir.** Nervous ve kurtarma `off` başlar; başlangıç kuralları
-  kişi ölçülmüş kuralı yükseltip kurtarma eylemini verene kadar geçicidir. Alpha.56 adayı
+  kişi ölçülmüş kuralı yükseltip kurtarma eylemini verene kadar geçicidir. Alpha.56
   `deckent policy recovery` ve `deckent recovery review` üzerinden kör vaka incelemesini ekler; kurtarma gölgesi
   işçiyi durdurmadan mühürlü would-stop (durduracaktı) kayıtlarını da tüketir. Gölge kararları yapılandırılmış modeli
   çağırıp harcama yapabilir; kurtarma etkisi uygulamaz. *Yol:* Run'ın sabitlediği kipe bakıp `deckent monitor` ile izleyin;
@@ -495,9 +503,11 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
   politika revizyonuna bağlıdır, sonra mühürlenen ölçümlere değil. Alpha.56 öncesi kaybolan işçinin yalıtım kaydı yoktur;
   vaka kişiye gider ve gölge ölçümü yeniden başlar.
 
-- **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
-  havuza ulaştı. Model bağlantısı, `/do`, boş bir Docker daemon'unda işçi imajı derlemesi ve temiz daemon'da başlangıç
-  araç zinciri tazelemesi orada denenmedi. *Yol:* README'deki ilk iş yolunu izleyin ve farkı bildirin.
+- **Tam temiz makine kabulü açıktır.** 2026-10-15/16 provası model/ilk iş zincirinden önce durdu. Alpha.56 daha sonra
+  paketli kurulum ve sohbet yüzeylerini kontrollü girdilerle denedi; bu, soğuk Docker imajı kurmayı, gerçek ilk commit'i
+  ve yardımsız `init` → `/do` → teslim zincirinin tamamını kanıtlamaz.
+  *Yol:* README ilk iş adımlarını izleyip farklı olanı bildirin.
+
 - **Yeniden başlatma kurtarması bağımsız incelemeden geçmedi:** gerçek konteyner öldürme ve servis yeniden başlatmasıyla.
 - **`service.identity`'yi ayarlayan bir yükseltmeden sonra çalışan servis bir kez elle durdurulmalıdır** (`deckent runtime serve`
   üzerinde Ctrl+C ya da boşta durma); ancak ondan sonra `runtime restart` çalışır: servis kimliğini yalnız başlarken okur.
@@ -601,17 +611,22 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **İmza anahtarları host anahtar deposunu ister.** AI ve sistem katalog yazmaları bir kişinin kaydettiği imza anahtarını ister; native
   Windows'ta host anahtar deposu yoktur ve bu yazmalar reddedilir. Bir anahtarı iptal etmek yeni ve bekleyen eylemlerini durdurur, ama
   verdiği terfiler bir kişi geri alana kadar kalır (owner'ın seçimi). Skill'ler yalnız bir kişinin eklediği içe aktarma anahtarıyla içe
-  aktarılır; Deckent Hub alpha.56 ile gelir.
+  aktarılır. Alpha.56 imzalı Hub paketlerini sağlar; halka açık ağ kullanımı aşağıdaki sınırlarla kalır.
 - **Auditor'ın henüz canlı okuyucusu ve sınıflandırıcısı yok.** Politika turu kayıtları mühürlenir, ama izleme okuyucusunun çalışma zamanı
   işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner ayrıntısını bekler).
 
 ## Hub paketleri ve kaldırma
 
-- **Hub ağı dağıtım bağlantılarını bekler.** Alpha.56 adayı imzalı paketleri, yerel kaynak/güven kartlarını,
+- **Hub ağı dağıtım bağlantılarını bekler.** Alpha.56 imzalı paketleri, yerel kaynak/güven kartlarını,
   çevrimdışı önbellek doğrulamasını ve yönetilen taşıma portlarını sağlar. İlk kullanım, kimlik doğrulama ve güven
   hizmetleri bağlanmadan arama, uzak inceleme ve yayın `HUB_CONNECTION_UNAVAILABLE` verir. Varsayılan açık Hub/kaynak
   yoktur; halka açılma ayrı owner kapısıdır. *Yol:* doğrulanmış çevrimdışı paketleri ve
   [imzalı Hub rehberini](architecture-overview.tr.md#imzali-hub-paketleri) kullanın; paket kurmak araç/politika izni vermez.
+- **Hub online anahtarları kökten imzalı delegasyon ister.** Paketler ve iptal akışları attestation/feed amacına ve
+  geçerlilik aralığına bağlı `hub-key-delegation:1` taşır (registry varsayılanı en çok 90 gün, saat sapması 5 dk). Yeni içerikte
+  güvenilir saat aralığın içinde olmalıdır; sapma aralığı genişletmez, geri çekilmiş/iptal anahtar yeni içerik imzalayamaz.
+  Saklanan paketlerin tarihsel doğrulama kuralları korunur; süresi bitmiş/güvenilmeyen akış seçimi kapatır.
+  *Yol:* güvenilen kaynaktan taze delegasyonlu akış alın; reddi aşmak için sabitlenmiş kökü değiştirmeyin.
 - **Destek dosyalı skill'ler owner kararıyla reddedilir (2026-10-26, H6).** Yalnız SKILL.md içeren skill kullanılabilir;
   ek dosya isteyen skill çalışamaz. *Etki:* paketin doğrulanması/kurulması skill'in çalışabildiğini kanıtlamaz.
   *Yol:* yalnız SKILL.md kullanan alternatif seçin; destek dosyalarını açmak yeni owner kararı ister.
