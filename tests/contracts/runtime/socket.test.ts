@@ -491,8 +491,9 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
 });
 
 // Astra delta 3 R1 (alpha.56.1): a restrictive ambient umask masks mkdir/mkdtemp's 0700 (0177 gives 0600). An isolated child (umask is
-// process-wide) runs the built adapter end to end: the start's directory and the native staging directory are made 0700, the real native
-// listener publishes, a client describes through it, and dispose removes the endpoint. Needs `dist/` (`npm run build`).
+// process-wide) runs the built adapter: the start's directory and the native staging directory are made 0700, the real native
+// listener publishes, a client request reaches a stub handler (inspectRun, not the service), and dispose removes the endpoint. The real service
+// start + describe under these umasks is in terminal-pty-process.test.ts. Needs `dist/` (`npm run build`).
 const CHILD = String.raw`
 const [dist, root, mask] = process.argv.slice(1);
 const { prepareRuntimeSocket, startLocalRuntimeSocketServer, requestLocalRuntime } = await import(dist + '/adapters/index.js');
@@ -511,8 +512,8 @@ try {
   console.log(JSON.stringify({ parentMode, socketMode, reply, gone }));
 } catch (error) { console.log(JSON.stringify({ code: error.code ?? String(error) })); }
 `;
-describe.skipIf(process.platform !== 'linux')('restrictive umask (Astra delta 3 R1)', () => {
-  for (const mask of ['100', '177']) it(`umask ${mask}: the real native listener publishes, answers and is disposed`, async () => {
+describe.skipIf(process.platform !== 'linux')('restrictive umask, native publication with a stub handler (Astra delta 3 R1)', () => {
+  for (const mask of ['100', '177']) it(`umask ${mask}: the real native listener publishes, a stub inspectRun handler answers, dispose removes it`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-umask-')); owned.push(root);
     const dist = join(import.meta.dirname, '../../../dist');
     const child = spawn(process.execPath, ['--input-type=module', '-e', CHILD, dist, root, mask], { stdio: ['ignore', 'pipe', 'inherit'] });

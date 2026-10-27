@@ -1,6 +1,6 @@
 import { hostname, tmpdir, userInfo } from 'node:os';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { chmod, lstat, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
@@ -8,6 +8,7 @@ import { restartConfiguredRuntimeService } from '../../../src/composition/core/c
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, configServiceState } from '#engine/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
+import { runtimeSocketLocation } from '#adapters/index.js';
 
 const roots: string[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const observer = { async onPage() {}, async onError() {} };
@@ -98,4 +99,50 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a
   expect(error).toMatchObject({ code: 'RUNTIME_SERVICE_EXTERNALLY_MANAGED', params: { command: 'systemctl --user restart proje-wsl.service' } });
   expect(launched).toBe(0);
   expect((await describeOf(f.project, f.env)).instanceId).toBe(before);
+});
+
+// RESTART-HUNT option B on the restart loop with the real services and the real shared predicate (Astra delta 4 M1): when the stopped
+// service's directory comes back as a bwrap mask leaves it (0755, empty), the restart launches the start once and it heals; a non-empty, linked
+// or non-directory parent stays UNSAFE with nothing launched; a state changed after the decision ends typed, never connected.
+// Like the bwrap mask, the shape appears right after the stopping service removed its directory (polled each millisecond; bounded by the service's end).
+const maskAfterStop = (parent: string, shape: (parent: string) => Promise<void>) => new Promise<void>((done, fail) => {
+  const tick = setInterval(() => { void lstat(parent).catch(async () => { clearInterval(tick); try { await shape(parent); done(); } catch (error) { fail(error); } }); }, 1);
+  void services.at(-1)!.settled.then(() => setTimeout(() => { clearInterval(tick); done(); }, 2_000));
+});
+const shapes = {
+  modeOnly: async (parent: string) => { await mkdir(parent, { mode: 0o700 }); await chmod(parent, 0o755); },
+  nonEmpty: async (parent: string) => { await mkdir(parent, { mode: 0o700 }); await writeFile(join(parent, 'keep'), 'x', { mode: 0o600 }); await chmod(parent, 0o755); },
+  link: async (parent: string) => { await mkdir(`${parent}-target`, { recursive: true, mode: 0o755 }); await symlink(`${parent}-target`, parent); },
+  file: async (parent: string) => { await writeFile(parent, 'x', { mode: 0o600 }); },
+};
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT: after a restart\'s stop the mask-shaped own directory is healed by the one start; a non-empty, linked or non-directory shape is never healed or connected', async () => {
+  for (const [name, shape] of Object.entries(shapes)) {
+    const f = await fixture(); await start(f.project, f.env);
+    const parent = dirname(runtimeSocketLocation((await loadConfig(f.project, { env: f.env, heal: false, force: true })).productLayout)); roots.push(parent, `${parent}-target`);
+    const masked = maskAfterStop(parent, shape); let launched = 0;
+    const result = await restartConfiguredRuntimeService(f.project, { env: f.env }, async input => { launched++; await masked; await start(f.project, input.env); return { pid: process.pid }; },
+      fileURLToPath(import.meta.url)).catch((error: unknown) => error);
+    await masked;
+    if (name === 'modeOnly') {
+      expect(result, name).toMatchObject({ mode: 'started' }); expect(launched).toBe(1);
+      expect((await lstat(parent)).mode & 0o777).toBe(0o700); await expect(describeOf(f.project, f.env)).resolves.toMatchObject({ instanceId: expect.any(String) });
+    } else {
+      // The stop removed the socket first, so the one launch follows genuine absence (the old rule); the started service refuses the shape.
+      expect(result, name).toMatchObject({ code: expect.stringMatching(/^(LOCAL_RUNTIME_ENDPOINT_UNSAFE|RUNTIME_AUTOSTART_FAILED)$/u) }); expect(launched, name).toBeLessThanOrEqual(1);
+      await expect(describeOf(f.project, f.env), name).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+      const now = await lstat(parent);
+      expect(name === 'link' ? now.isSymbolicLink() : name === 'file' ? now.isFile() : now.isDirectory() && (now.mode & 0o777) === 0o755, name).toBe(true);
+    }
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT TOCTOU on the restart: content planted after the decision ends typed UNSAFE, one launch, never a connection', async () => {
+  const f = await fixture(); await start(f.project, f.env);
+  const parent = dirname(runtimeSocketLocation((await loadConfig(f.project, { env: f.env, heal: false, force: true })).productLayout)); roots.push(parent);
+  const masked = maskAfterStop(parent, shapes.modeOnly); let launched = 0;
+  const result = await restartConfiguredRuntimeService(f.project, { env: f.env }, async () => {
+    launched++; await masked; await rm(parent, { recursive: true, force: true }); await shapes.nonEmpty(parent); return { pid: 1 }; // changed after the decision
+  }, fileURLToPath(import.meta.url)).catch((error: unknown) => error);
+  expect(result).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode' } }); expect(launched).toBe(1);
+  await rm(parent, { recursive: true, force: true });
 });

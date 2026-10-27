@@ -3,16 +3,16 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
 import { createServer as createSocketServer } from 'node:net';
-import { access, chmod, lstat, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, prepareRuntimeSocket, readLocalOsIdentity } from '#adapters/index.js';
+import { openSqliteModelActivationStore, prepareRuntimeSocket, readLocalOsIdentity, runtimeSocketLocation } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -379,5 +379,58 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       child.on('error', reject); child.on('close', code => resolvePromise({ code, stderr, stdout })); child.stdin.end('hello\n');
     });
     expect(line.code).toBe(0); expect(`${line.stdout}${line.stderr}`).toContain('TERMINAL_CHAT_NOT_CONFIGURED');
+  });
+});
+
+// RESTART-HUNT option B on the real binary (Astra delta 4 M1): the built `deckent` terminal, its autostart and the detached `runtime serve`.
+describe.skipIf(process.platform !== 'linux')('RESTART-HUNT: real-binary autostart over an own wrong-mode socket directory', () => {
+  const ownParent = async (f: { projectRoot: string }) => {
+    const configPath = join(f.projectRoot, '.deckent/config.json');
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { layout: { root: string }; terminal: Record<string, unknown> };
+    await writeFile(configPath, JSON.stringify({ ...config, terminal: { ...config.terminal, scopeId: 'scope' } }), { mode: 0o600 });
+    const parent = dirname(runtimeSocketLocation(resolveProductLayout({ projectRoot: f.projectRoot, root: config.layout.root }))); roots.push(parent);
+    await mkdir(parent, { mode: 0o700 }); await chmod(parent, 0o755); // what an open-view bwrap mask leaves on the host
+    return { parent, log: join(config.layout.root, 'state/runtime-service.log') };
+  };
+  it('an own empty 0755 directory: describe refuses, the terminal launches the start once, it heals (0700, healed event) and the terminal connects', async () => {
+    const f = await governedChat(), { parent, log } = await ownParent(f);
+    const refused = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 }).catch((error: { stderr?: string }) => error);
+    expect(String((refused as { stderr?: string }).stderr)).toContain('LOCAL_RUNTIME_ENDPOINT_UNSAFE'); // K1: the reader still refuses
+    const opened = await inPty(f.projectRoot, f.env, [], [['started in the background', '/exit\r']]);
+    const pid = Number(/\(pid (\d+),/.exec(opened.output)?.[1]); if (Number.isSafeInteger(pid) && pid > 0) daemons.push(pid);
+    expect(opened.timeout, opened.output).toBeUndefined(); expect(opened.status, opened.output).toBe(0);
+    expect((await lstat(parent)).mode & 0o777).toBe(0o700);
+    expect(await readFile(log, 'utf8')).toMatch(/runtime socket directory had the wrong mode|Runtime soket dizininin izni yanlıştı/u);
+    const described = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
+    expect(JSON.parse(described.stdout)).toMatchObject({ processId: pid });
+  });
+  it('a non-empty, linked or non-directory parent: the terminal shows the typed refusal and launches nothing', async () => {
+    for (const spoil of [async (parent: string) => { await chmod(parent, 0o700); await writeFile(join(parent, 'keep'), 'x', { mode: 0o600 }); await chmod(parent, 0o755); },
+      async (parent: string) => { const other = `${parent}-target`; roots.push(other); await mkdir(other, { mode: 0o755 }); await rm(parent, { recursive: true }); await symlink(other, parent); },
+      async (parent: string) => { await rm(parent, { recursive: true }); await writeFile(parent, 'x', { mode: 0o600 }); }]) {
+      const f = await governedChat(), { parent, log } = await ownParent(f); await spoil(parent);
+      const opened = await inPty(f.projectRoot, f.env, [], [['(code: LOCAL_RUNTIME_ENDPOINT_UNSAFE)', '/exit\r']]);
+      expect(opened.timeout, opened.output).toBeUndefined();
+      expect(opened.output).not.toContain('started in the background');
+      await expect(lstat(log)).rejects.toMatchObject({ code: 'ENOENT' }); // the launch creates the service log first: none was launched
+    }
+  });
+  for (const mask of ['0100', '0177']) it(`umask ${mask}: the real runtime service starts, answers a real describe and stops, leaving no endpoint`, async () => {
+    const f = await governedChat();
+    const config = JSON.parse(await readFile(join(f.projectRoot, '.deckent/config.json'), 'utf8')) as { layout: { root: string } };
+    const endpoint = runtimeSocketLocation(resolveProductLayout({ projectRoot: f.projectRoot, root: config.layout.root })); roots.push(dirname(endpoint));
+    // An existing installation (its identities published once under the ordinary umask) restarted under a restrictive one.
+    await startRuntime(f.projectRoot, f.env); const first = runtimes.at(-1)!; first.kill('SIGTERM'); await new Promise(done => first.once('exit', done));
+    await expect(lstat(dirname(endpoint))).rejects.toMatchObject({ code: 'ENOENT' }); // a clean stop removed its directory
+    const child = spawn('/bin/sh', ['-c', `umask ${mask} && exec "$0" "$@"`, process.execPath, cli, 'runtime', 'serve', '--json'], { cwd: f.projectRoot, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    runtimes.push(child); let out = '', err = ''; child.stderr!.on('data', chunk => { err += String(chunk); });
+    await new Promise<void>((done, fail) => { const timer = setTimeout(() => fail(new Error(`READY_TIMEOUT:${err.slice(-600)}`)), 20_000);
+      child.once('exit', () => { clearTimeout(timer); fail(new Error(`SERVICE_EXIT:${out.slice(-400)}${err.slice(-600)}`)); });
+      child.stdout!.on('data', chunk => { out += String(chunk); if (/"event":"ready"/u.test(out)) { clearTimeout(timer); done(); } }); });
+    expect([(await lstat(dirname(endpoint))).mode & 0o777, (await lstat(endpoint)).mode & 0o777]).toEqual([0o700, 0o600]);
+    const described = JSON.parse((await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 })).stdout) as { processId: number };
+    expect(described.processId).toBe(child.pid);
+    child.kill('SIGTERM'); await new Promise<void>(done => { if (child.exitCode !== null || child.signalCode !== null) done(); else child.once('exit', () => done()); });
+    await expect(lstat(endpoint)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });
