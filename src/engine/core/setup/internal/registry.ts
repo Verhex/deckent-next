@@ -15,7 +15,7 @@ const STAGE_TABLE = z.object({ $comment: z.string().optional(), schemaVersion: z
 
 export type SetupFamilyStage = Readonly<{ id: string; namespace: string; after: CoreSetupStageId; title: string; phase: SetupPhase;
   evaluate: (context: SetupStageContext) => SetupDecision }>;
-export type SetupFamilyEntry = Readonly<{ namespace: string; source: string; parseFacts: (value: unknown) => unknown; stages: readonly SetupFamilyStage[] }>;
+export type SetupFamilyEntry = Readonly<{ namespace: string; source: string; parseFacts: (value: unknown) => unknown; factsSchema: z.ZodTypeAny; stages: readonly SetupFamilyStage[] }>;
 
 /** Immutable stage registry. Core holds the generic stages; adapter families (execution environment, source control, Enterprise,
  * business systems) add stages and facts under their own namespace and never replace Core or another family (as identity profiles). */
@@ -40,7 +40,7 @@ export class SetupStageRegistry {
         ids.add(stage.id);
       }
       const facts = value.facts;
-      families.push(Object.freeze({ namespace: value.namespace, source: value.source, parseFacts: (input: unknown) => facts.parse(input),
+      families.push(Object.freeze({ namespace: value.namespace, source: value.source, parseFacts: (input: unknown) => facts.parse(input), factsSchema: facts,
         stages: Object.freeze(value.stages.map(stage => Object.freeze({ id: stage.id, namespace: value.namespace, after: stage.after, title: stage.title,
           // The stage table's row (Core's contract for the stages it knows), else the descriptor's own phase, else the anchor's phase.
           phase: STAGE_TABLE.phases[stage.id] ?? stage.phase ?? STAGE_TABLE.phases[stage.after]!, evaluate: stage.evaluate }))) }));
