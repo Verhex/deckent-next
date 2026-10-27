@@ -64,7 +64,8 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
     }
   } catch (error) {
     options.signal?.throwIfAborted();
-    throw error instanceof ProviderModelListError ? error : new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network');
+    throw error instanceof ProviderModelListError ? error : new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network',
+      undefined, `${base}${kind.probe.path}`);
   } finally { void reader?.cancel().catch(() => undefined); }
 }
 /** Only the selected exact id becomes a catalog fact. A list is evidence of availability, not tools, vision, context size or reasoning. */

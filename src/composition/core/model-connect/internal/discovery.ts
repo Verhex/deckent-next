@@ -39,7 +39,7 @@ export async function listConfiguredConnectionModels(projectRoot: string, scopeI
     return ids.map(nativeId => ({ nativeId, displayName: nativeId, priced: providerConnectModelPriced(kind, nativeId, base) }));
   } catch (error) {
     if (error instanceof ProviderModelListError) { await recordConfiguredProviderFailure(projectRoot, 'model-discovery', error, options);
-      throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '' } }); }
+      throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '', address: error.address ?? '' } }); }
     if (error instanceof ModelConnectError || error instanceof ProviderConnectError || error instanceof ProviderProbeError) {
       throw ErrorRegistry.createError(error.code);
     }

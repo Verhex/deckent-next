@@ -528,6 +528,8 @@
   "models.connect.cause.invalid-list": "invalid or oversized list",
   "models.connect.cause.not-listable": "this connection does not list models",
   "models.connect.cause.unexpected": "unexpected failure",
+  "models.connect.cause.tried": "{cause} (tried {address})",
+  "models.connect.hint.localPort": "If the server runs in a container or a VM, check that its port is published to this host (port mapping).",
   "toolchain.cursor.noVersionFeed": "Vendor publishes no version feed; the admitted worker-image version is {version}. Currency is unverified.",
   "cli.help.modelsConnect.kindsFromProvider": "see /provider",
   "error.WORKER_IMAGE_CONSENT_MISSING": "Worker image consent does not match the selected providers, recipe or complete sources. Review a new consent card.",

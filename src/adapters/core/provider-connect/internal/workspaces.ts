@@ -46,7 +46,7 @@ export async function listKindProviderWorkspaces(kind: ProviderConnectKind, endp
   throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT', 'invalid-list');
   } catch (error) { options.signal?.throwIfAborted();
     if (error instanceof ProviderModelListError) throw error;
-    throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network');
+    throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network', undefined, new URL(limits.path, endpoint).href);
   }
 }
 /** Only a row from the complete fresh discovery can supply the header. */

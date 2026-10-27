@@ -36,6 +36,15 @@ function discoveryCause(p: Params, l: Locale): string {
     default: return t('models.connect.cause.unexpected', {}, l);
   }
 }
+/** alpha.56.1: a network or timeout failure names the address it tried (credential-free by construction); a loopback one adds the port hint. */
+function discoveryUnavailable(p: Params, l: Locale): string {
+  const address = (p['cause'] === 'network' || p['cause'] === 'timeout') && typeof p['address'] === 'string' ? p['address'] : '';
+  let local = false;
+  // The provider locality invariant's literal loopback hosts (`isLiteralLoopbackHostname`; importing it here would close a unit cycle).
+  try { local = address !== '' && ['127.0.0.1', '[::1]'].includes(new URL(address).hostname); } catch { /* not an address: no hint */ }
+  const cause = address ? t('models.connect.cause.tried', { cause: discoveryCause(p, l), address }, l) : discoveryCause(p, l);
+  return `${t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause }, l)}${local ? ` ${t('models.connect.hint.localPort', {}, l)}` : ''}`;
+}
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
 function installationFileUnsafe(p: Params, l: Locale): string {
@@ -235,7 +244,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
-  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause: discoveryCause(p, l) }, l) }) },
+  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: discoveryUnavailable(p, l) }) },
   MODEL_CONNECT_DISCOVERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_INVALID', p, l) }) },
   MODEL_CONNECT_DISCOVERY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_LIMIT', p, l) }) },
   MODEL_CONNECT_PRICE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_PRICE_REQUIRED', p, l) }) },

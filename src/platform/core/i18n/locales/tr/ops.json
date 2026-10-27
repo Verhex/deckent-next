@@ -528,6 +528,8 @@
   "models.connect.cause.invalid-list": "geçersiz veya sınırı aşan liste",
   "models.connect.cause.not-listable": "bu bağlantı modelleri listeleyemiyor",
   "models.connect.cause.unexpected": "beklenmeyen hata",
+  "models.connect.cause.tried": "{cause} (denenen adres: {address})",
+  "models.connect.hint.localPort": "Sunucu bir container ya da sanal makinede çalışıyorsa portunun bu makineye açıldığını (port eşlemesi) denetleyin.",
   "toolchain.cursor.noVersionFeed": "Üretici sürüm akışı yayınlamıyor; kabul edilmiş işçi imajı sürümü {version}. Güncellik doğrulanmadı.",
   "cli.help.modelsConnect.kindsFromProvider": "/provider ile listeleyin",
   "error.WORKER_IMAGE_CONSENT_MISSING": "İşçi imajı onayı seçili sağlayıcı, tarif veya tam kaynaklarla eşleşmiyor. Yeni onay kartını inceleyin.",

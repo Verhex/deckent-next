@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { connectConfiguredModel, listConfiguredConnectionModels } from '#composition/core/model-connect/index.js';
 import { probeProviderConnection } from '#adapters/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
@@ -123,6 +123,19 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect(f.rows('SELECT COUNT(*) AS n FROM model_catalog_models')).toEqual(rows);
     expect(f.state.requests).toEqual([]);
+  });
+
+  it('alpha.56.1: an unreachable server names the exact address tried and, for a loopback server, the port-mapping hint; never a credential', async () => {
+    const f = await fixture(), unreachable = { discoveryOptions: { fetch: async () => { throw new TypeError('fetch failed'); } } };
+    const error = await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, { env: f.env }, unreachable).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', params: { cause: 'network', address: `${f.endpoint}/v1/models` } });
+    const params = (error as { params: Record<string, string> }).params;
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', params)!.message).toBe(`The model list could not be read: network unavailable (tried ${f.endpoint}/v1/models). `
+      + 'If the server runs in a container or a VM, check that its port is published to this host (port mapping).');
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'tr', params)!.message).toContain(`(denenen adres: ${f.endpoint}/v1/models). Sunucu bir container`);
+    // A remote address is named without the local hint; a non-network cause names no address.
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, address: 'https://llm.example/v1/models' })!.message).toBe('The model list could not be read: network unavailable (tried https://llm.example/v1/models).');
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, cause: 'http-status', status: 503 })!.message).toBe('The model list could not be read: HTTP status 503.');
   });
 
   it('inspect policy denial precedes network and preserves configuration', async () => {
