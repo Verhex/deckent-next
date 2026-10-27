@@ -130,9 +130,13 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     const error = await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, { env: f.env }, unreachable).catch((caught: unknown) => caught);
     expect(error).toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', params: { cause: 'network', address: `${f.endpoint}/v1/models` } });
     const params = (error as { params: Record<string, string> }).params;
-    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', params)!.message).toBe(`The model list could not be read: network unavailable (tried ${f.endpoint}/v1/models). `
-      + 'If the server runs in a container or a VM, check that its port is published to this host (port mapping).');
-    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'tr', params)!.message).toContain(`(denenen adres: ${f.endpoint}/v1/models). Sunucu bir container`);
+    // BeUser alpha.56.1 (Ayşe): a local server that did not answer is named as such; the plain steps first, then the container/VM hint.
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', params)!.message).toBe(`The model list could not be read: the server at ${f.endpoint}/v1/models did not answer. `
+      + 'Check that the server is running and that this is the port it listens on. If it runs in a container or a VM, also check that this port is published to this computer (port mapping).');
+    const tr = ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'tr', params)!.message;
+    expect(tr).toContain(`${f.endpoint}/v1/models adresindeki sunucu yanıt vermedi. Sunucunun açık olduğunu`); expect(tr).not.toContain('ağa ulaşılamadı');
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, cause: 'timeout' })!.message).toContain('did not answer in time');
+    expect(ErrorRegistry.createError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE').category).toBe('error'); // a server condition: the error exit, not usage
     // A remote address is named without the local hint; a non-network cause names no address.
     expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, address: 'https://llm.example/v1/models' })!.message).toBe('The model list could not be read: network unavailable (tried https://llm.example/v1/models).');
     expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, cause: 'http-status', status: 503 })!.message).toBe('The model list could not be read: HTTP status 503.');

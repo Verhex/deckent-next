@@ -55,7 +55,7 @@ export async function stopConfiguredRuntimeService(projectRoot: string, options:
   return { command, autoStarted: descriptor.autoStarted === true, result: await client.shutdownService(command, within(deadline)) };
 }
 /** CI-108: manager-run means the service process IS its unit's main process, as systemd reports it (bounded); its control group alone only names a candidate. */
-const managerRunning = (pid: number | undefined) => detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS));
+export const managerRunning = (pid: number | undefined) => detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS));
 /** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current
  * build — all within one monotonic budget. A new service is launched only after absence is observed. */
 export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},

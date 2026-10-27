@@ -1,4 +1,4 @@
-import type { ConfigLoadOptions } from '#platform/index.js';
+import type { ConfigLoadOptions, ServiceManagerUnit } from '#platform/index.js';
 import type { ServiceShutdownAdmissionResult, ShutdownCommand, ToolchainCurrencyReport } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -60,4 +60,6 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   startRuntimeService?: RuntimeServiceStartHandler;
   describeRuntimeService?: RuntimeServiceDescribeHandler;
   shutdownRuntimeService?: RuntimeServiceShutdownHandler;
+  /** The manager unit whose main process the service is (systemd), or null (BeUser alpha.56.1: describe names it; shutdown defers to it). */
+  runtimeServiceManager?: (pid: number | undefined) => Promise<ServiceManagerUnit | null>;
 }

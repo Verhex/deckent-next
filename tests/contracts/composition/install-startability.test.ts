@@ -48,7 +48,14 @@ it.skipIf(process.platform !== 'linux')('uses distinct short private endpoints a
   // alpha.56.1: each refusal names the check that refused (a closed token, never the path), so a full-suite failure is diagnosable.
   await mkdir(parent, { mode: 0o755 });
   // RESTART-HUNT: a reader never repairs; a non-empty directory with the wrong mode is refused even at the service start (nothing removed).
-  await expect(prepareRuntimeSocket(layout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });
+  const modeOnly = queryFailure(await prepareRuntimeSocket(layout, false).catch((error: unknown) => error));
+  expect(modeOnly).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode' } });
+  // BeUser alpha.56.1 (Mert): it names the directory and the next step, never the path; doctor reports it as fixable by the start, not a blocker.
+  expect(modeOnly.message).toContain('runtime socket directory has the wrong permissions'); expect(modeOnly.message).toContain('`deckent runtime serve`');
+  expect(modeOnly.message).not.toContain('/tmp/dk-');
+  const doctor = await inspectInstallationStartability(root, { env: { HOME: join(root, 'home') } });
+  expect(doctor.checks.find(check => check.code === 'DOCTOR_SOCKET_HEALABLE')?.message).toBe(modeOnly.message);
+  expect(doctor.checks.map(check => check.code)).not.toContain('DOCTOR_SOCKET_UNAVAILABLE');
   await writeFile(join(parent, 'keep'), 'kept', { mode: 0o600 });
   const healed: string[] = [], onHealed = (reason: string) => { healed.push(reason); };
   await expect(prepareRuntimeSocket(layout, true, onHealed)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });

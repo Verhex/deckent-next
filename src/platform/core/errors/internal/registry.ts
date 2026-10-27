@@ -42,8 +42,19 @@ function discoveryUnavailable(p: Params, l: Locale): string {
   let local = false;
   // The provider locality invariant's literal loopback hosts (`isLiteralLoopbackHostname`; importing it here would close a unit cycle).
   try { local = address !== '' && ['127.0.0.1', '[::1]'].includes(new URL(address).hostname); } catch { /* not an address: no hint */ }
+  // BeUser alpha.56.1 (Ayşe): a local server that did not answer is not "the network"; the plain steps come first, then the container/VM hint.
+  if (local) return p['cause'] === 'timeout' ? t('models.connect.localSlow', { address }, l) : t('models.connect.localSilent', { address }, l);
   const cause = address ? t('models.connect.cause.tried', { cause: discoveryCause(p, l), address }, l) : discoveryCause(p, l);
-  return `${t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause }, l)}${local ? ` ${t('models.connect.hint.localPort', {}, l)}` : ''}`;
+  return t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause }, l);
+}
+/** BeUser alpha.56.1 (Mert): the refusal names which thing failed (the runtime socket directory, the socket, the ledger lock file) and, for the
+ * directory whose only fault is its mode, the next step (the service start re-creates its own empty directory). Never a path. */
+function runtimeEndpointUnsafe(p: Params, l: Locale): string {
+  const reason = typeof p['reason'] === 'string' && /^[a-z]+(?:-[a-z]+)*$/u.test(p['reason']) ? p['reason'] : null;
+  if (reason === 'parent-mode') return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode', {}, l);
+  if (!reason) return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l);
+  const thing = reason.startsWith('parent-') ? t('runtime.socket.thing.directory', {}, l) : reason === 'ledger-lock' ? t('runtime.socket.thing.lock', {}, l) : t('runtime.socket.thing.socket', {}, l);
+  return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason', { ...p, thing }, l);
 }
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
@@ -244,7 +255,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
-  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: discoveryUnavailable(p, l) }) },
+  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: discoveryUnavailable(p, l) }) },
   MODEL_CONNECT_DISCOVERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_INVALID', p, l) }) },
   MODEL_CONNECT_DISCOVERY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_LIMIT', p, l) }) },
   MODEL_CONNECT_PRICE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_PRICE_REQUIRED', p, l) }) },
@@ -413,18 +424,18 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG: { category: 'config', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', p, l) }) },
   DOCTOR_CONFIG_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_CONFIG_INCOMPLETE', p, l) }) },
   DOCTOR_LEDGER_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_LEDGER_UNAVAILABLE', p, l) }) },
+  DOCTOR_SOCKET_HEALABLE: { category: 'config', render: (_p, l) => ({ message: t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode', {}, l) }) },
   DOCTOR_SOCKET_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_SOCKET_UNAVAILABLE', p, l) }) },
   DOCTOR_POLICY_UNREADABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_POLICY_UNREADABLE', p, l) }) },
   DOCTOR_BUBBLEWRAP_NOT_STAGED: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_BUBBLEWRAP_NOT_STAGED', p, l) }) },
   INSTALLATION_NOT_STARTABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_NOT_STARTABLE', p, l) }) },
   LOCAL_RUNTIME_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_OPTIONS', p, l) }) },
   RUNTIME_SHUTDOWN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SHUTDOWN_UNAVAILABLE', p, l) }) },
-  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
+  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: p['action'] === 'stop' ? t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED.stop', p, l) : t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
   RUNTIME_AUTOSTART_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_AUTOSTART_FAILED', p, l) }) },
   TERMINAL_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_SCOPE_REQUIRED', p, l) }) },
   LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },
-  LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: typeof p['reason'] === 'string' && /^[a-z]+(?:-[a-z]+)*$/u.test(p['reason'])
-    ? t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason', p, l) : t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l) }) },
+  LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: runtimeEndpointUnsafe(p, l) }) },
   LOCAL_RUNTIME_ALREADY_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ALREADY_RUNNING', p, l) }) },
   LOCAL_RUNTIME_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_TRANSPORT', p, l) }) },
   RUNTIME_SERVICE_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_TRANSPORT', p, l) }) },

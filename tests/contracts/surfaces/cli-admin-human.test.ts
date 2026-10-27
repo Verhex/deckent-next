@@ -320,6 +320,20 @@ it('bare runtime: build, configuration, running work and socket from what v29 ca
   expect(stoppedJson.err.text()).toContain('LOCAL_RUNTIME_UNAVAILABLE');
 });
 
+it('BeUser alpha.56.1 (Selin): describe names the service manager and why work is unreadable; shutdown of a managed service defers to it unless --force', async () => {
+  const f = await project(), calls: unknown[] = [], unit = { manager: 'systemd' as const, scope: 'user' as const, unit: 'deckent-live.service' };
+  const managed = (extra: Record<string, unknown> = {}) => io(f, { ...runtimeHandlers(calls), runtimeServiceManager: async (pid: number | undefined) => (pid === 4242 ? unit : null), ...extra });
+  const described = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('POLICY_DENIED'); } });
+  expect(await main(['runtime'], described.context)).toBe(0);
+  expect(described.out.text()).toContain('· run by systemd (deckent-live.service)'); expect(described.out.text()).not.toContain('started');
+  expect(described.out.text()).toContain('Running work: cannot be read now (POLICY_DENIED)');
+  const refused = managed();
+  expect(await main(['runtime', 'shutdown', '--reason', 'maintenance'], refused.context)).toBe(1);
+  expect(refused.err.text()).toContain('Stop it through its manager: systemctl --user stop deckent-live.service'); expect(calls).toEqual([]);
+  expect(await main(['runtime', 'shutdown', '--reason', 'maintenance', '--force'], managed().context)).toBe(0);
+  expect(calls).toEqual(['maintenance']);
+});
+
 it('runtime shutdown: any caller off a terminal names its reason (audited); a person confirms on a card showing the affected work', async () => {
   const f = await project(), calls: unknown[] = [];
   const noReason = io(f, runtimeHandlers(calls));

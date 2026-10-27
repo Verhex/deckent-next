@@ -82,7 +82,9 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
     : node.status === 'unsupported' ? row('setup', 'setup.node', 'error', t('doctor.check.node.old', { version: node.version, floor: node.floor ?? '-' }, l), t('doctor.check.node.next', { floor: node.floor ?? '-' }, l))
       : row('setup', 'setup.node', 'untested', t('doctor.check.node.unknown', { version: node.version }, l)));
   rows.push(row('setup', 'setup.host', 'ok', t('doctor.check.host', { platform: r.platform, cpu: r.host.cpuCores, memory: gigabytes(r.host.totalMemMB), workers: r.host.recommendedMaxWorkers }, l)));
-  if (r.startability) rows.push(r.startability.status === 'ready' ? row('setup', 'setup.startability', 'ok', t('doctor.check.startability.ok', {}, l))
+  const healable = r.startability?.status === 'ready' ? r.startability.checks.find(check => check.code === 'DOCTOR_SOCKET_HEALABLE') : undefined;
+  if (healable) rows.push(row('setup', 'setup.startability', 'warning', healable.message, 'deckent runtime serve'));
+  else if (r.startability) rows.push(r.startability.status === 'ready' ? row('setup', 'setup.startability', 'ok', t('doctor.check.startability.ok', {}, l))
     : row('setup', 'setup.startability', 'error', t('doctor.check.startability.blocked', { reason: r.startability.checks[0]?.message ?? '-' }, l), 'deckent doctor --verbose'));
   if (r.serviceConfig === 'stale') rows.push(row('setup', 'setup.service', 'warning', t('doctor.check.service.stale', {}, l), 'deckent runtime restart'));
   else if (r.serviceConfig === 'current') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.current', {}, l)));

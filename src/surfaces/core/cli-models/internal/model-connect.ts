@@ -33,17 +33,16 @@ const stepWord = (state: string, locale: Locale) => state === 'written' ? t('mod
 /** The person's summary: what is connected, under which key name, what each governed step did and what (if anything) still waits. */
 export function renderModelConnect(result: ModelConnectResult, locale: Locale): string {
   const reference = `${result.reference.providerId}@${result.reference.providerVersion}/${result.reference.modelId}@${result.reference.modelVersion}`;
-  const lines = [result.status === 'connected' ? t('models.connect.connected', { reference, scope: result.scopeId }, locale)
+  // BeUser alpha.56.1 (Ayşe): the human result first (each model and its state), then the scope and reference, the key, and the bookkeeping steps.
+  const lines = (result.models ?? []).map(model => { const params = { model: terminalSafeText(model.nativeId) };
+    return model.state === 'connected' ? t('models.connect.pull.connected', params, locale) : model.state === 'unpriced' ? t('models.connect.pull.unpriced', params, locale)
+      : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale) : t('models.connect.pull.notInCatalog', params, locale); });
+  lines.push(result.status === 'connected' ? t('models.connect.connected', { reference, scope: result.scopeId }, locale)
     : t('models.connect.pending', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-' }, locale),
-  t('models.connect.steps', { catalog: stepWord(result.steps.catalog, locale), declaration: stepWord(result.steps.declaration, locale),
-    profile: stepWord(result.steps.profile, locale), activation: stepWord(result.steps.activation, locale), carried: result.steps.carried }, locale),
   result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false ? t('models.connect.keyMissing', { name: result.credentialRef }, locale)
-    : t('models.connect.key', { name: result.credentialRef }, locale)];
-  for (const model of result.models ?? []) {
-    const params = { model: terminalSafeText(model.nativeId) };
-    lines.push(model.state === 'connected' ? t('models.connect.pull.connected', params, locale) : model.state === 'unpriced' ? t('models.connect.pull.unpriced', params, locale)
-      : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale) : t('models.connect.pull.notInCatalog', params, locale));
-  }
+    : t('models.connect.key', { name: result.credentialRef }, locale),
+  t('models.connect.steps', { catalog: stepWord(result.steps.catalog, locale), declaration: stepWord(result.steps.declaration, locale),
+    profile: stepWord(result.steps.profile, locale), activation: stepWord(result.steps.activation, locale), carried: result.steps.carried }, locale));
   if (result.notCarried.length) lines.push(t('models.connect.notCarried', { models: result.notCarried.map(item => `${item.reference.providerId}@${item.reference.providerVersion}/`
     + `${item.reference.modelId}@${item.reference.modelVersion} (${item.code})`).join(', ') }, locale));
   if (result.tariff === 'unmetered') lines.push(t('models.connect.unmetered', {}, locale));

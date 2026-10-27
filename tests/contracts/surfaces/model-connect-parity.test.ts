@@ -37,6 +37,15 @@ describe('models.connect surface parity', () => {
       env: {}, connectModel: async () => result })).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
 
+  it('BeUser alpha.56.1 (Ayşe): the person\'s text leads with the model and its state; the reference, key and bookkeeping steps follow', async () => {
+    const out: string[] = [];
+    await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'local-openai', '--command-id', 'c-3', '--lang', 'tr'], { root: '/project', env: {},
+      stdout: { write: (text: string) => { out.push(text); return true; } } as never, connectModel: async () => ({ ...result, models: [{ nativeId: 'Qwen3.8', state: 'connected' }] }) as never });
+    const lines = out.join('').trim().split('\n');
+    expect(lines[0]).toBe('Qwen3.8: bağlandı ve açık'); expect(lines[1]).toContain('scope kapsamına bağlandı');
+    expect(lines.findIndex(line => line.startsWith('Katalog:'))).toBeGreaterThan(1);
+  });
+
   it('S3-3: the CLI kind takes the executable, the login dir and the consent choice into the same command; the result names the login and the consent', async () => {
     const seen: unknown[] = [], out: string[] = [], cli = { ...result, connection: 'claude-cli-subscription', credentialRef: null, keyStored: null, cli: { configDir: '/home/p/.claude', delegate: ['ai'] } };
     const run = (extra: string[]) => modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'claude-cli-subscription', '--model', 'vendor-model', '--command-id', 'c-9', ...extra],
