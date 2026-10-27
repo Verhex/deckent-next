@@ -33,7 +33,8 @@ const stepWord = (state: string, locale: Locale) => state === 'written' ? t('mod
 /** The person's summary: what is connected, under which key name, what each governed step did and what (if anything) still waits. */
 export function renderModelConnect(result: ModelConnectResult, locale: Locale): string {
   const reference = `${result.reference.providerId}@${result.reference.providerVersion}/${result.reference.modelId}@${result.reference.modelVersion}`;
-  // BeUser alpha.56.1 (Ayşe): the human result first (each model and its state), then the scope and reference, the key, and the bookkeeping steps.
+  // BeUser alpha.56.1 (Ayşe): a pull leads with the human result (each model and its state), then the scope and reference, the key, the bookkeeping
+  // steps. A single `--model`/`--reference` connect has no per-model rows and still opens with the reference line.
   const lines = (result.models ?? []).map(model => { const params = { model: terminalSafeText(model.nativeId) };
     return model.state === 'connected' ? t('models.connect.pull.connected', params, locale) : model.state === 'unpriced' ? t('models.connect.pull.unpriced', params, locale)
       : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale) : t('models.connect.pull.notInCatalog', params, locale); });
