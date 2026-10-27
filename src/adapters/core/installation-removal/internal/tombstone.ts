@@ -9,6 +9,7 @@ import { verifyBackupSet } from '#adapters/core/backup-store/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 import { memberStat, boundState, removeBoundMembers, type DataRemovalSnapshot } from './data.js';
 import { verifyUninstallArchive } from './archive.js';
+import { configuredTracking } from './vcs.js';
 const TOMBSTONE = 'uninstall-tombstone:1', INTENT = 'uninstall-final-tail:1';
 const fail = (): never => { throw ErrorRegistry.createError('UNINSTALL_RECOVERY_INVALID'); };
 const exists = (path: string) => lstat(path).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
@@ -134,7 +135,8 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
     // M2: the archive the intent bound still decrypts and names every archived member before anything more is deleted.
     if (remaining.some(member => member.archived)) await verifyUninstallArchive(intent.snapshot.set, intent.snapshot.archive ?? { digest: '', roots: [] }, remaining, passphrase,
       config.installation.packageMeasurement).catch(() => { throw tailUnknown(directory, intent); });
-    for (const member of remaining) if (await boundState(member) !== 'bound') throw tailUnknown(directory, intent);
+    const tracked = await configuredTracking(config); // B2: what the project's VCS tracks now is the team's: the tail stays unknown
+    for (const member of remaining) if (tracked(member.path) || await boundState(member) !== 'bound') throw tailUnknown(directory, intent);
     // The one executor of the normal final step: each member's exact operation (a bridge keeps everything but its bound line).
     await removeBoundMembers(remaining, intent.snapshot.root);
     const settled = await reconcileFinalTail(directory, root, actor, maxBytes, true);

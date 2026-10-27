@@ -480,7 +480,7 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
 });
 
 it('delete everything removes the bridges init wrote (a file init created whole, else only its line) and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: bridge purge needs Linux custody and /usr/bin/git'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { projectVaultDirectory, admitProjectVault, directoryLocation, previewProjectInstructions, createWorkspaceScope, WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } = await import('#adapters/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-bridges-'));
@@ -515,6 +515,12 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     // AGENTS.md as init created it goes whole; CLAUDE.md init created but the person added to loses only its bridge line.
     const claudeBefore = Buffer.concat([Buffer.from('@DECKENT.md\n'), team]);
     await writeFile(agents, 'Read DECKENT.md\n'); await writeFile(claude, claudeBefore);
+    // B2: a root bridge the team's Git tracks is theirs: kept and listed, never cut.
+    const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', HOME: join(root, 'home') } });
+    git('init', '-q'); git('add', 'CLAUDE.md');
+    const tracked = await previewConfiguredUninstall(project, ALL, options);
+    expect(removed(tracked)).not.toContain(claude); expect(tracked.items.find(item => item.locator === claude)).toMatchObject({ action: 'keep', reason: 'vcs-tracked' });
+    git('rm', '-q', '--cached', 'CLAUDE.md');
     const plan = await previewConfiguredUninstall(project, ALL, options);
     expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'key.json')]));
     expect(listed(plan, other)).toBeTruthy(); expect(removed(plan).some(path => path.startsWith(other))).toBe(false);
@@ -524,6 +530,11 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     let interrupted; try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'bridges', planDigest: plan.planDigest }, confirm, options); } finally { tail.at = null; }
     expect(interrupted.status).toBe('unknown'); expect((await readFile(claude)).equals(claudeBefore)).toBe(true);
     const second = await previewConfiguredUninstall(project, ALL, options);
+    // B2: a remaining member Git started tracking after the interruption stops the resumed tail before anything more is deleted.
+    git('add', 'AGENTS.md');
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
+    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect((await readFile(claude)).equals(claudeBefore)).toBe(true);
+    git('rm', '-q', '--cached', 'AGENTS.md');
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, options);
     expect(result.status).toBe('completed');
     expect(await unremoved(deck)).toBe(false); expect((await readFile(claude)).equals(team)).toBe(true);

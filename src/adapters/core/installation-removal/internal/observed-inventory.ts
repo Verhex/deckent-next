@@ -6,7 +6,7 @@ import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapter
 import { ErrorRegistry, packageRemovalCommand, pathWithin as inside, sha256, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
 import { extendUninstallInventory, assertNativeUninstallSupport, removalRegistry, restorable } from './inventory.js';
 import { observeUninstallWork } from './quiescence.js';
-import { projectTracking } from './vcs.js';
+import { configuredTracking } from './vcs.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { affectedToolchainProfiles, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 const hash = (value: unknown) => sha256(JSON.stringify(value));
@@ -24,7 +24,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   // A relocated cache cannot acquire ownership merely because config names it. Only the registry paths within the owned data root qualify.
   const candidates = (['scratch', 'treeScanCache'] as const).filter(resource => rooted
     && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && inside(layout.root, productResourcePath(layout, resource)));
-  const tracked = await projectTracking(config.projectRoot, projectData, config.execution?.git?.gitExecutable ?? null, config.installation.identityProbe);
+  const tracked = await configuredTracking(config);
   const protectedPaths = [...new Set([...(layout.root === projectData ? [] : [projectData]), layout.bootstrapConfigPath, ...Object.keys(layout.resources)
     .filter(resource => !candidates.includes(resource as typeof candidates[number])).map(resource => productResourcePath(layout, resource as ProductResource))])];
   // Ownership evidence names the resource owner's membership rule; the fresh scan's member version is what a removal may delete.

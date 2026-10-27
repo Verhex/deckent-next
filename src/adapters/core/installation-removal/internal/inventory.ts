@@ -93,9 +93,9 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (entry.expected === ABSENT_FILE_VERSION) created.add(`${entry.rel}\0${entry.next}`);
     }
     const bridge = async (name: string) => { const path = join(config.projectRoot, name); return await memberStat(path, true).catch(() => null) && written.has(name) && !kept(path) ? path : null; };
-    // A changed DECKENT.md stays with the bridge lines that point to it; a changed bridge line stays. Both are listed.
-    const skeleton = await bridge(PROJECT_INSTRUCTION_REGISTRY.files[0]!);
-    const changed = !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton));
+    // A DECKENT.md that stays (changed, tracked or not init's) keeps the bridge lines that point to it.
+    const skeleton = await bridge(PROJECT_INSTRUCTION_REGISTRY.files[0]!), stays = !skeleton && !!await lstat(join(config.projectRoot, PROJECT_INSTRUCTION_REGISTRY.files[0]!)).catch(() => null);
+    const changed = stays || !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton));
     if (skeleton) { if (changed) unlisted(skeleton); else add(skeleton); }
     // A bridge file init created whole that still holds exactly those bytes goes whole; otherwise only its exact line goes.
     for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), bytes = path && !changed ? await readFile(path) : null;
