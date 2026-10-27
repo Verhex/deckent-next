@@ -21,7 +21,7 @@ export function acquireLedgerLock(path: string): LedgerLock {
   try { fd = native.lockFile(path); }
   catch (error) {
     const unsafe = (error as { code?: unknown }).code === 'LOCAL_PEER_LOCK_UNSAFE';
-    throw new LocalRuntimeSocketError(unsafe ? 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' : 'LOCAL_RUNTIME_TRANSPORT', { cause: error });
+    throw unsafe ? new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error }, undefined, 'ledger-lock') : new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
   if (fd === null) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
   let held: number | null = fd;

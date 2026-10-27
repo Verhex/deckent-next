@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { productResourcePath, type ProductLayout } from '#platform/index.js';
-import { LocalRuntimeSocketError, assertSocketPublicationBudget, resolveSocketParent } from './endpoint.js';
+import { LocalRuntimeSocketError, assertSocketPublicationBudget, resolveSocketParent, socketFileRefusal, socketParentRefusal, unsafeEndpoint } from './endpoint.js';
 
 /** One deterministic, short, owner-only directory per installation data root. Full SHA-256 avoids truncation collisions.
  * The Linux peer/custody transport remains the authority; a read never creates or repairs a directory. */
@@ -17,15 +17,16 @@ export async function prepareRuntimeSocket(layout: ProductLayout, create = true)
   const endpoint = runtimeSocketLocation(layout), parent = endpoint.slice(0, endpoint.lastIndexOf('/'));
   if (create) {
     try { await mkdir(parent, { mode: 0o700 }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw unsafeEndpoint('parent-create', error); }
   }
   const stat = await lstat(parent).catch(error => {
-    throw new LocalRuntimeSocketError((error as NodeJS.ErrnoException).code === 'ENOENT' ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error });
+    throw (error as NodeJS.ErrnoException).code === 'ENOENT' ? new LocalRuntimeSocketError('LOCAL_RUNTIME_UNAVAILABLE', { cause: error }) : unsafeEndpoint('parent-stat', error);
   });
-  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o700 || await resolveSocketParent(parent) !== parent) {
-    throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
-  }
-  const socket = await lstat(endpoint).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; });
-  if (socket && (!socket.isSocket() || socket.isSymbolicLink() || socket.uid !== process.getuid!() || (socket.mode & 0o777) !== 0o600)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
+  const parentRefused = socketParentRefusal(stat);
+  if (parentRefused) throw unsafeEndpoint(parentRefused);
+  if (await resolveSocketParent(parent) !== parent) throw unsafeEndpoint('parent-realpath');
+  const socket = await lstat(endpoint).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw unsafeEndpoint('socket-stat', error); });
+  const socketRefused = socket ? socketFileRefusal(socket) : null;
+  if (socketRefused) throw unsafeEndpoint(socketRefused);
   return endpoint;
 }

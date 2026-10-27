@@ -409,6 +409,7 @@
   "error.TERMINAL_SCOPE_REQUIRED": "Bir kapsam seçin: `deckent init policy --scope <id> --apply` çalıştırın, ardından `deckent --scope <id>`.",
   "error.LOCAL_RUNTIME_UNAVAILABLE": "Bu proje için yerel runtime servisi çalışmıyor. `deckent runtime serve` ile başlatın.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "Yerel runtime bağlantı yolu ya da ledger kilit dosyası sahiplik veya dosya sistemi denetimini geçemedi.",
+  "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason": "Yerel runtime bağlantı yolu ya da ledger kilit dosyası sahiplik veya dosya sistemi denetimini geçemedi (denetim: {reason}).",
   "error.LOCAL_RUNTIME_ALREADY_RUNNING": "Bu projenin bağlantı noktası ya da ledger'ı başka bir runtime servisine ait; bağlantı noktası ne olursa olsun ledger başına tek servis çalışır.",
   "error.LOCAL_RUNTIME_TRANSPORT": "Runtime servisine ulaşılamadı veya bağlantı kesildi. Yapılandırılmış servisi başlatıp aynı komutu yeniden deneyin.",
   "error.RUNTIME_SERVICE_TRANSPORT": "Runtime yanıtı güvenle iletilemedi. Yeniden denemeden önce kayıtlı durumu inceleyin.",

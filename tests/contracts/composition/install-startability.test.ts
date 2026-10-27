@@ -3,7 +3,8 @@ import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
-import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { prepareRuntimeSocket, runtimeSocketLocation } from '#adapters/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 
@@ -44,12 +45,18 @@ it.skipIf(process.platform !== 'linux')('uses distinct short private endpoints a
   const layout = resolveProductLayout({ projectRoot: root }), otherLayout = resolveProductLayout({ projectRoot: other });
   const endpoint = runtimeSocketLocation(layout), parent = dirname(endpoint); roots.push(parent);
   expect(runtimeSocketLocation(otherLayout)).not.toBe(endpoint);
+  // alpha.56.1: each refusal names the check that refused (a closed token, never the path), so a full-suite failure is diagnosable.
   await mkdir(parent, { mode: 0o755 });
-  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });
   await chmod(parent, 0o700); await writeFile(endpoint, 'not a socket', { mode: 0o600 });
-  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'socket-type' });
   await rm(parent, { recursive: true }); await symlink(other, parent);
-  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+  const refused = await prepareRuntimeSocket(layout).catch((error: unknown) => error);
+  expect(refused).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-link' });
+  const failure = queryFailure(refused);
+  expect(failure).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-link' } });
+  expect(ErrorRegistry.get('LOCAL_RUNTIME_ENDPOINT_UNSAFE', 'en', (failure as { params: Record<string, string> }).params)!.message).toMatch(/\(check: parent-link\)\.$/u);
+  expect(failure.message).not.toContain('/tmp/dk-');
 });
 
 it.skipIf(process.platform !== 'linux')('init keeps a pre-existing project config; preview stays read-only and conflicting policy refuses before ledger creation', async () => {

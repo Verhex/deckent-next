@@ -423,7 +423,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   RUNTIME_AUTOSTART_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_AUTOSTART_FAILED', p, l) }) },
   TERMINAL_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_SCOPE_REQUIRED', p, l) }) },
   LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },
-  LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l) }) },
+  LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: typeof p['reason'] === 'string' && /^[a-z]+(?:-[a-z]+)*$/u.test(p['reason'])
+    ? t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason', p, l) : t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l) }) },
   LOCAL_RUNTIME_ALREADY_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ALREADY_RUNNING', p, l) }) },
   LOCAL_RUNTIME_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_TRANSPORT', p, l) }) },
   RUNTIME_SERVICE_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_TRANSPORT', p, l) }) },
