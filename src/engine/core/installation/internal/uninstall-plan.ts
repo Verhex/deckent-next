@@ -58,10 +58,11 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     if (!entry) throw new UninstallError('UNINSTALL_INVALID');
     let action: UninstallItem['action'] = 'keep'; let reason: string;
     if (resource.present === false) reason = 'absent';
+    // A tier that keeps this kind of data says so first; why a resource stays even when its tier deletes data comes after.
+    else if (UNINSTALL_TIERS.indexOf(tier) < UNINSTALL_TIERS.indexOf(entry.removeFrom)) reason = 'durable';
     else if (resource.keep) reason = resource.keep;
     else if (resource.protected) reason = 'protected';
     else if (resource.ownership !== 'exclusive' || !resource.ownershipEvidence || resource.owner !== installation.id) reason = 'ownership';
-    else if (UNINSTALL_TIERS.indexOf(tier) < UNINSTALL_TIERS.indexOf(entry.removeFrom)) reason = 'durable';
     else if (resource.backup === 'protected-session' || resource.backup === 'non-exportable') reason = resource.backup;
     else if (resource.present === null || resource.version === null) { action = 'blocked'; reason = 'observation-unknown'; }
     else if (!resource.capability) { action = 'manual'; reason = 'unsupported'; }
