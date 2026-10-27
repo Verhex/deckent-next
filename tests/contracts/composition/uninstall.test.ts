@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, lstat, symlink, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { FileInstallationIdentityStore, readLocalOsIdentity, openLocalIntegrityAuthority, acquireLedgerLock } from '#adapters/index.js';
 import { clearConfigCache, resolveProductLayout, uninstallHoldPath, loadConfig, getConfigFieldDefault, productResourcePath } from '#platform/index.js';
@@ -54,15 +54,20 @@ it('previews real recorded global caches without writing or exposing an installa
     await writeFile(uninstallHoldPath(data), 'incomplete', { mode: 0o600 });
     await expect(loadConfig(project, options)).rejects.toMatchObject({ code: 'UNINSTALL_LIFECYCLE_HOLD' });
     expect((await lstat(uninstallHoldPath(data))).size).toBe(10);
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 // A trusted-witness fixture only; actual controlling-terminal acceptance remains a separate lead check.
 vi.mock('#adapters/core/local-principal/internal/interactive.js', () => ({ attestLocalInteractiveTerminal: async () => true }));
 // A process death inside the final tail: unlinks after `left` more calls fail; null passes every call through.
-const tail = vi.hoisted(() => ({ left: null as number | null }));
+const tail = vi.hoisted(() => ({ left: null as number | null, at: null as string | null }));
 vi.mock('node:fs/promises', async original => { const actual = await original<typeof import('node:fs/promises')>();
-  return { ...actual, unlink: async (path: Parameters<typeof actual.unlink>[0]) => { if (tail.left !== null && tail.left-- <= 0) throw Object.assign(new Error('crash'), { code: 'EIO' }); return actual.unlink(path); } }; });
+  return { ...actual, unlink: async (path: Parameters<typeof actual.unlink>[0]) => {
+    // `at`: the process dies at the first unlink whose path names this text (one member of the final tail), once.
+    if (tail.left !== null && tail.left-- <= 0 || tail.at && String(path).includes(tail.at) && !(tail.at = null)) throw Object.assign(new Error('crash'), { code: 'EIO' });
+    return actual.unlink(path); } }; });
+/** A member still there for a resumed tail: under its name, or moved aside by a removal the crash interrupted (resumed, never left as a stray). */
+const unremoved = async (path: string) => !!await lstat(path).catch(() => null) || (await readdir(dirname(path)).catch(() => [] as string[])).some(name => name.startsWith(`.${basename(path)}.`) && name.endsWith('.removing'));
 
 it('applies the confirmed real temp cache through the production broker and generic store, then replays without another removal', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: production admission uses Linux custody'); return; }
@@ -115,7 +120,7 @@ it('applies the confirmed real temp cache through the production broker and gene
     expect((await applyConfiguredUninstall(project, { ...command, commandId: 'replay' }, { confirm: async () => true }, options)).status).toBe('noop');
     const effects = JSON.parse(await readFile(join(result.recoveryLocation!, 'effects.json'), 'utf8'));
     expect(effects.body.records).toHaveLength(1); expect(effects.body.records[0]).toMatchObject({ state: 'settled', intent: { approval: { approvalId: expect.any(String) } } });
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 it('purges only the exact backed-up authority files, keeps every unrecorded or shared file, reconciles an interrupted final tail without deleting again and restores through deckent backup restore', async () => {
@@ -200,7 +205,7 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     for (const path of members) expect(await lstat(path)).toBeTruthy();
     for (const path of [strays[0]!, strays[3]!]) expect(await readFile(path, 'utf8')).toBe('FOREIGN KEEP');
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 it('keeps purge closed before any backup or hold when a legal hold names a company scope no allow lists, and when recorded scopes cannot be read', async () => {
@@ -237,7 +242,7 @@ it('keeps purge closed before any backup or hold when a legal hold names a compa
       .rejects.toMatchObject({ code: 'UNINSTALL_SCOPE_UNVERIFIED' });
     expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 it('blocks the whole purge before any backup, hold or cache removal when an authority file is unsafe or relocated, naming its exact path', async () => {
@@ -275,7 +280,7 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
     expect(moved.blockers).toContain(`authority-relocated:${join(data, 'moved/bindings.json')}`);
     expect((await previewConfiguredUninstall(project, KEEP, options)).blockers).toEqual([]);
     expect(await lstat(join(data, 'bindings.json'))).toBeTruthy(); expect(await lstat(ledger)).toBeTruthy();
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 it('deletes an in-project installation (K1) after archiving every owned file, but keeps Git-tracked and unknown files (and so the folder), with the archive outside the project', async () => {
@@ -307,7 +312,7 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     // Negative: a data root moved outside the global home and the project is a genuine relocation; the data tier stays closed with its path.
     await install(elsewhere);
     expect((await previewConfiguredUninstall(project, ALL, options)).blockers).toContain(`authority-relocated:${elsewhere}`);
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 it('keep-work archives and deletes only conversation data and retires the folder; delete everything then leaves no .deckent and backup restore brings every file back', async () => {
@@ -338,7 +343,7 @@ it('keep-work archives and deletes only conversation data and retires the folder
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(join(local, 'runs/run-1.json'), 'utf8')).toBe('RUN RECORD');
     expect((await lstat(join(local, 'workspaces/toolchains/build.sh'))).mode & 0o777).toBe(0o755);
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 it('resumes an interrupted final tail only through a second card that lists the remaining members, verifies the final set with the passphrase and decides the delete permission again', async () => {
@@ -367,7 +372,7 @@ it('resumes an interrupted final tail only through a second card that lists the 
     try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
     finally { tail.left = null; }
     expect(interrupted.status).toBe('unknown'); expect(await lstat(uninstallHoldPath(data))).toBeTruthy();
-    const remaining: string[] = []; for (const path of members) if (await lstat(path).catch(() => null)) remaining.push(path);
+    const remaining: string[] = []; for (const path of members) if (await unremoved(path)) remaining.push(path);
     expect(remaining.length).toBeGreaterThan(0); expect(remaining).not.toContain(join(data, 'policy.json'));
     const second = await previewConfiguredUninstall(project, ALL, options);
     expect(second.items.filter(item => item.action === 'remove')).toEqual([expect.objectContaining({ resourceId: 'global-data', members: remaining, reason: 'resume' })]);
@@ -375,12 +380,12 @@ it('resumes an interrupted final tail only through a second card that lists the 
     // Cancelling the second card deletes nothing; a wrong passphrase cannot verify the set, so nothing is deleted either.
     expect((await applyConfiguredUninstall(project, command, { backupPassphrase: async () => { throw Error('unexpected prompt'); }, confirm: async () => false }, options)).status).toBe('cancelled');
     await expect(applyConfiguredUninstall(project, command, { backupPassphrase: async () => 'wrong-passphrase', confirm: async () => true }, options)).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_INVALID' });
-    for (const path of remaining) expect(await lstat(path)).toBeTruthy();
+    for (const path of remaining) expect(await unremoved(path)).toBe(true);
     expect(await lstat(uninstallHoldPath(data))).toBeTruthy();
     let cards = 0;
     const resumed = await applyConfiguredUninstall(project, command, { backupPassphrase: async () => phrase, confirm: async shown => { cards++; expect(shown).toEqual(second); return true; } }, options);
     expect(resumed).toMatchObject({ status: 'completed', planDigest: second.planDigest }); expect(cards).toBe(1);
-    for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    for (const path of members) expect(await unremoved(path)).toBe(false);
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     const replay = await previewConfiguredUninstall(project, ALL, options);
     expect(replay.items.every(item => item.action === 'keep')).toBe(true);
@@ -426,7 +431,7 @@ it('purges a tree only through its owner\'s signed records that the final set re
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     const restored = await openLocalIntegrityAuthority(layout, keyFile);
     expect(verifyAuditRecord(JSON.parse(await readFile(record, 'utf8')), restored).event.eventId).toBe(eventId);
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
 /** A project-folder installation (İ-6): its data root is the project's own .deckent. */
@@ -462,7 +467,7 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
     finally { tail.left = null; }
     expect(interrupted.status).toBe('unknown');
     const remaining: string[] = []; for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/a.json', 'state/terminal-sessions/b.json'])
-      if (await lstat(join(local, name)).catch(() => null)) remaining.push(join(local, name));
+      if (await unremoved(join(local, name))) remaining.push(join(local, name));
     expect(remaining.length).toBe(2);
     // The kept policy is not the file the intent recorded: the resumed tail cannot decide from it and deletes nothing.
     await writeFile(join(local, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'tampered', restrictions: [], grants: [] }), { mode: 0o600 });
@@ -470,7 +475,7 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
     const resumed = 'planDigest' in (second as object) ? applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: (second as { planDigest: string }).planDigest },
       { backupPassphrase: async () => phrase, confirm: async () => true }, options) : Promise.reject(second);
     await expect(resumed).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
-    for (const path of remaining) expect(await lstat(path)).toBeTruthy();
+    for (const path of remaining) expect(await unremoved(path)).toBe(true);
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -482,7 +487,8 @@ it('delete everything removes the bridges init wrote (a file init created whole,
   try {
     const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
-    const team = '# Team rules\r\nkeep every byte\r\n', deck = join(project, 'DECKENT.md'), claude = join(project, 'CLAUDE.md'), agents = join(project, 'AGENTS.md');
+    // The person's own bytes after the line: CRLF, invalid UTF-8 and no final newline all stay exactly as they are (M4).
+    const team = Buffer.concat([Buffer.from('# Team rules\r\nrule: '), Buffer.from([0xff, 0xfe]), Buffer.from('\r\nlast line')]), deck = join(project, 'DECKENT.md'), claude = join(project, 'CLAUDE.md'), agents = join(project, 'AGENTS.md');
     // Init's own preview and file target (the approval broker before it needs a person's terminal): its committed journal names the bytes it wrote.
     const preview = await previewProjectInstructions(project, ['claude-code', 'agents-md'], name => `# ${name}\n`);
     const writer = new WorkspaceFileTarget(await createWorkspaceScope(project), productResourcePath(layout, 'fileEffects'));
@@ -502,19 +508,31 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     const changed = await previewConfiguredUninstall(project, ALL, options);
     expect(removed(changed)).not.toContain(deck); expect(removed(changed)).not.toContain(claude);
     expect(listed(changed, deck)).toBeTruthy(); expect(listed(changed, claude)).toBeTruthy();
-    // Negative: a bridge line the person changed stays and is listed.
-    await writeFile(deck, original); await writeFile(agents, 'Read DECKENT.md first\n');
+    // Negative: a bridge line the person copied (or changed) stays and is listed; which copy is Deckent's is not proven.
+    await writeFile(deck, original); await writeFile(agents, 'Read DECKENT.md\nRead DECKENT.md\n');
     const edited = await previewConfiguredUninstall(project, ALL, options);
     expect(removed(edited)).not.toContain(agents); expect(listed(edited, agents)).toBeTruthy();
     // AGENTS.md as init created it goes whole; CLAUDE.md init created but the person added to loses only its bridge line.
-    await writeFile(agents, 'Read DECKENT.md\n'); await writeFile(claude, `@DECKENT.md\n${team}`);
+    const claudeBefore = Buffer.concat([Buffer.from('@DECKENT.md\n'), team]);
+    await writeFile(agents, 'Read DECKENT.md\n'); await writeFile(claude, claudeBefore);
     const plan = await previewConfiguredUninstall(project, ALL, options);
     expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'key.json')]));
     expect(listed(plan, other)).toBeTruthy(); expect(removed(plan).some(path => path.startsWith(other))).toBe(false);
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'bridges', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    // B1: the process dies while removing DECKENT.md, before the bridges; the resumed tail keeps every byte of CLAUDE.md but its bound line.
+    const confirm = { backupPassphrase: async () => phrase, confirm: async () => true };
+    tail.at = '.DECKENT.md.';
+    let interrupted; try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'bridges', planDigest: plan.planDigest }, confirm, options); } finally { tail.at = null; }
+    expect(interrupted.status).toBe('unknown'); expect((await readFile(claude)).equals(claudeBefore)).toBe(true);
+    const second = await previewConfiguredUninstall(project, ALL, options);
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, options);
     expect(result.status).toBe('completed');
-    await expect(lstat(deck)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(claude, 'utf8')).toBe(team);
+    expect(await unremoved(deck)).toBe(false); expect((await readFile(claude)).equals(team)).toBe(true);
     await expect(lstat(agents)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(own)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(other, 'key.json'), 'utf8')).toBe('{}');
-  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+    // M11: `deckent backup restore` brings back DECKENT.md, the init-created AGENTS.md, the vault slice and CLAUDE.md's bridge line, byte for byte.
+    const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
+    await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
+    expect((await readFile(claude)).equals(claudeBefore)).toBe(true); expect((await readFile(deck)).equals(original)).toBe(true);
+    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect(await readFile(join(own, 'key.json'), 'utf8')).toBe('{}');
+  } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

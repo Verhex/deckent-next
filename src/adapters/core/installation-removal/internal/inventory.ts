@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
-import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
+import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 import { InstallationDataRemovalTarget, fileDigest, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY } from '#adapters/core/project-instructions/index.js';
@@ -85,11 +85,12 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   // installation and folder, outside a repository that worktrees could share) goes too. Changed, tracked, shared or foreign ones stay.
   const outside: DataRemovalMember[] = [], add = (path: string, extra: Partial<DataRemovalMember> = {}) => outside.push({ resourceId: 'project', path, directory: null, archivePath: '', target: 'global-data', archived: true, ...extra });
   if (project.own && archived.length) {
-    const written = new Map<string, string[]>(), created = new Set<string>();
+    const written = new Map<string, string[]>(), earlier = new Map<string, string[]>(), created = new Set<string>();
     for (const name of (await readdir(productResourcePath(layout, 'fileEffects')).catch(() => [] as string[])).slice(0, bounds.maxFiles)) {
       const entry = await readFile(join(productResourcePath(layout, 'fileEffects'), name), 'utf8').then(text => JSON.parse(text) as { rel?: string; expected?: string; next?: string; state?: string }, () => null);
-      if (entry?.state === 'committed' && entry.rel && entry.next) written.set(entry.rel, [...written.get(entry.rel) ?? [], entry.next]);
-      if (entry?.state === 'committed' && entry.expected === ABSENT_FILE_VERSION) created.add(`${entry.rel}\0${entry.next}`);
+      if (entry?.state !== 'committed' || !entry.rel || !entry.next) continue;
+      written.set(entry.rel, [...written.get(entry.rel) ?? [], entry.next]); earlier.set(entry.rel, [...earlier.get(entry.rel) ?? [], entry.expected ?? '']);
+      if (entry.expected === ABSENT_FILE_VERSION) created.add(`${entry.rel}\0${entry.next}`);
     }
     const bridge = async (name: string) => { const path = join(config.projectRoot, name); return await memberStat(path, true).catch(() => null) && written.has(name) && !kept(path) ? path : null; };
     // A changed DECKENT.md stays with the bridge lines that point to it; a changed bridge line stays. Both are listed.
@@ -97,9 +98,9 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     const changed = !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton));
     if (skeleton) { if (changed) unlisted(skeleton); else add(skeleton); }
     // A bridge file init created whole that still holds exactly those bytes goes whole; otherwise only its exact line goes.
-    for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), text = path && !changed ? await readFile(path, 'utf8') : null;
-      if (path && text !== null && created.has(`${row.path}\0${await fileDigest(path)}`)) add(path);
-      else if (path && text?.split('\n').some(line => line.replace(/\r$/u, '') === row.line)) add(path, { line: row.line }); else if (path) unlisted(path); }
+    for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), bytes = path && !changed ? await readFile(path) : null;
+      if (path && bytes && created.has(`${row.path}\0${await fileDigest(path)}`)) add(path);
+      else if (path && bytes && lineCut(bytes, row.line)) add(path, { line: row.line, before: earlier.get(row.path)! }); else if (path) unlisted(path); }
     for (const { directory, record } of await listProjectVaults(globalRoot).catch(() => []))
       if (record?.anchor.installationId !== installationId || record.anchor.projectRoot !== config.projectRoot) continue;
       else if (record.anchor.repository !== null) unlisted(directory);
@@ -122,7 +123,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   }
   const all = [...members, ...archived], memberResources = new Set(members.map(member => productResourcePath(layout, member.resourceId as ProductResource)));
   const protectedPaths = base.protectedPaths.filter(path => !memberResources.has(path) && !archived.some(member => inside(path, member.path) || inside(member.path, path)));
-  const target = new InstallationDataRemovalTarget(sha256(JSON.stringify([installationId, layout.root])), all, protectedPaths, project.own ? layout.root : undefined);
+  const target = new InstallationDataRemovalTarget(sha256(JSON.stringify([installationId, layout.root])), all, protectedPaths);
   for (const [resourceId, contribution] of [['global-data', 'durable'], ['conversation-data', 'conversation']] as const) {
     const own = all.filter(member => (member.target ?? 'global-data') === resourceId);
     if (!own.length) continue;

@@ -1,13 +1,14 @@
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { lstat, open, readFile, realpath, rename, rmdir, unlink } from 'node:fs/promises';
+import { lstat, open, readFile, realpath, rename, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PRIVATE_PERMISSION_MASK, generateEd25519Pair, ed25519Signer, signatureMessage, verifyEd25519, sha256, ErrorRegistry, writeTextAtomic, uninstallHoldPath, productResourcePath, type ResolvedConfig } from '#platform/index.js';
 import { policyNamedScopes, resolvePolicyBindings, type VerifiedPrincipal } from '#domain/index.js';
 import { authorizeUninstall, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { verifyBackupSet } from '#adapters/core/backup-store/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
-import { fileDigest, memberStat, type DataRemovalSnapshot } from './data.js';
+import { memberStat, boundState, removeBoundMembers, type DataRemovalSnapshot } from './data.js';
+import { verifyUninstallArchive } from './archive.js';
 const TOMBSTONE = 'uninstall-tombstone:1', INTENT = 'uninstall-final-tail:1';
 const fail = (): never => { throw ErrorRegistry.createError('UNINSTALL_RECOVERY_INVALID'); };
 const exists = (path: string) => lstat(path).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
@@ -63,16 +64,6 @@ export async function writeUninstallIntent(directory: string, root: string, acto
 }
 type Intent = { schemaVersion: number; root: string; actor: unknown; scopes?: readonly string[]; plan: UninstallPlan; snapshot: DataRemovalSnapshot; result: UninstallResult;
   authority?: Readonly<Record<'policy' | 'bindings', string | null>> };
-type Member = DataRemovalSnapshot['members'][number];
-/** Bound means the exact verified file: same inode identity, private single-link regular file and same bytes. A file recreated with the
- * same bytes, moved, linked or changed is not this purge's member. */
-async function memberState(member: Member): Promise<'absent' | 'bound' | 'changed'> {
-  let info;
-  try { info = await memberStat(member.path, member.archived); } catch { return 'changed'; }
-  if (!info) return 'absent';
-  return info.dev === member.dev && info.ino === member.ino && info.size === member.size && info.mtimeMs === member.mtimeMs && info.ctimeMs === member.ctimeMs
-    && await fileDigest(member.path) === member.digest ? 'bound' : 'changed';
-}
 async function heldIntent(directory: string, root: string, actor: VerifiedPrincipal, maxBytes: number): Promise<Intent | null | undefined> {
   const hold = uninstallHoldPath(root), holdBytes = await readFile(hold, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   if (holdBytes === null) return undefined;
@@ -90,7 +81,7 @@ const tailUnknown = (directory: string, intent: Intent) => ErrorRegistry.createE
 async function reconcileFinalTail(directory: string, root: string, actor: VerifiedPrincipal, maxBytes: number, settle: boolean) {
   const intent = await heldIntent(directory, root, actor, maxBytes);
   if (!intent) return intent;
-  const states = await Promise.all(intent.snapshot.members.map(memberState));
+  const states = await Promise.all(intent.snapshot.members.map(boundState));
   if (states.every(state => state === 'bound')) return null;
   if (states.includes('changed')) throw tailUnknown(directory, intent);
   const remaining = intent.snapshot.members.filter((_, index) => states[index] === 'bound');
@@ -140,10 +131,12 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
       const scopes = [...new Set([...intent.scopes, ...intent.plan.scopeSummary, ...policyNamedScopes(document)])];
       for (const action of ['uninstall', 'purge'] as const) authorizeUninstall(document, { ...actor, scopeIds: scopes }, intent.plan.installation.id, scopes, action);
     } finally { verified.close(); }
-    for (const member of remaining) if (await memberState(member) !== 'bound') throw tailUnknown(directory, intent);
-    for (const member of remaining) await unlink(member.path);
-    for (const directory of new Set(intent.snapshot.members.flatMap(member => member.directory ? [member.directory] : [])))
-      await rmdir(directory).catch(error => { if (!['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes(error.code)) throw error; });
+    // M2: the archive the intent bound still decrypts and names every archived member before anything more is deleted.
+    if (remaining.some(member => member.archived)) await verifyUninstallArchive(intent.snapshot.set, intent.snapshot.archive ?? { digest: '', roots: [] }, remaining, passphrase,
+      config.installation.packageMeasurement).catch(() => { throw tailUnknown(directory, intent); });
+    for (const member of remaining) if (await boundState(member) !== 'bound') throw tailUnknown(directory, intent);
+    // The one executor of the normal final step: each member's exact operation (a bridge keeps everything but its bound line).
+    await removeBoundMembers(remaining, intent.snapshot.root);
     const settled = await reconcileFinalTail(directory, root, actor, maxBytes, true);
     if (!settled || settled.remaining) throw tailUnknown(directory, intent);
     return settled.result;

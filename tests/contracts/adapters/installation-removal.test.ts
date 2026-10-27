@@ -104,7 +104,7 @@ it('deletes only exact members bound to the verified backup: a failed backup, a 
   expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP'); expect(await readFile(second, 'utf8')).toBe('NEWER BYTES');
   const saved = await readFile(second);
   target.prepare(async () => { const bound = await snapshot(); await rm(second); await symlink(foreign, second); return bound; });
-  await expect(target.apply({ ...command, expectedVersion: (await target.observe(ref)).version })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+  await expect(target.apply({ ...command, expectedVersion: (await target.observe(ref)).version })).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
   expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP'); expect(await readFile(foreign, 'utf8')).toBe('KEEP UNTIL BACKED UP');
   await rm(second); await writeFile(second, saved, { mode: 0o600 });
   // M1: a new private file in the owner's directory is no member; it stays with its directory.
@@ -185,10 +185,10 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   const limits = { maxFiles: 100, maxDepth: 10, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 22 }, phrase = 'fixture-private-backup-passphrase';
   const set = join(base, 'recovery/set'); await mkdir(dirname(set), { mode: 0o700 }); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
   const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
-  const bound = await createUninstallArchive(set, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
+  const { members: bound } = await createUninstallArchive(set, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
   expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
   // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
-  const target = new InstallationDataRemovalTarget('fixture', members, [], root), ref = { kind: target.kind, id: 'conversation-data' };
+  const target = new InstallationDataRemovalTarget('fixture', members, []), ref = { kind: target.kind, id: 'conversation-data' };
   target.prepare(async () => ({ set, manifestDigest: createHash('sha256').update(await readFile(join(set, 'MANIFEST.sha256'))).digest('hex'), members: bound }));
   const request = { target: ref, operation: { id: 'installation.remove-data', version: 1 }, idempotencyKey: 'archive', expectedVersion: (await target.observe(ref)).version, input: null };
   await writeFile(history, 'NEWER'); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });

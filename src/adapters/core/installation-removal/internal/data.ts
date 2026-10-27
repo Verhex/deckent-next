@@ -1,9 +1,9 @@
 import { createReadStream, type Stats } from 'node:fs';
-import { lstat, readFile, realpath, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { createHash, randomUUID } from 'node:crypto';
+import { lstat, readFile, realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, parse } from 'node:path';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
-import { pathWithin as inside } from '#platform/index.js';
+import { pathWithin as inside, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, type PinnedFileIdentity } from '#platform/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const refuse = (code: 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_PRECONDITION'): never => { throw new EffectTargetError(code); };
 /** One exact owned file of a purge: the resource owner names it; never a subtree or a path a request supplies. `directory`: its
@@ -13,13 +13,29 @@ export interface DataRemovalMember { readonly resourceId: string; readonly path:
   readonly archivePath: string;
   /** The plan resource deleting it (default `global-data`); `archived`: bound to the uninstall archive (any mode), not the semantic set. */
   readonly target?: string; readonly archived?: boolean;
-  /** K1(f): remove only this exact whole line (a bridge line Deckent appended); the rest of the file stays byte for byte. */
-  readonly line?: string }
-/** The verified final backup's exact content of every present member, bound immediately before deletion. */
-export interface DataRemovalSnapshot {
-  readonly set: string; readonly manifestDigest: string;
-  readonly members: readonly { readonly path: string; readonly digest: string; readonly dev: number; readonly ino: number; readonly size: number; readonly mtimeMs: number; readonly ctimeMs: number;
-    readonly directory?: string | null; readonly archived?: boolean }[];
+  /** K1(f): remove only this exact whole line (a bridge line Deckent appended; `before`: the receipt's earlier file digests); the rest stays byte for byte. */
+  readonly line?: string; readonly before?: readonly string[] }
+/** One member bound to the verified final backup: its exact identity and bytes and the exact operation (whole file, or the bound byte range). */
+export type BoundMember = PinnedFileIdentity & { readonly path: string; readonly directory?: string | null; readonly archived?: boolean; readonly cut?: readonly [number, number]; readonly after?: string };
+/** The verified final backup's exact content of every present member, bound immediately before deletion. `root`: emptied folders go up to it. */
+export interface DataRemovalSnapshot { readonly set: string; readonly manifestDigest: string; readonly members: readonly BoundMember[]; readonly root?: string | undefined;
+  /** The uninstall archive beside the set: its manifest's digest and the folders it may restore into (none when nothing was archived). */
+  readonly archive?: { readonly digest: string; readonly roots: readonly string[] } | undefined }
+const same = (a: PinnedFileIdentity, b: PinnedFileIdentity) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.digest === b.digest;
+/** Bound: the exact verified file; done: a bound cut already applied (its result's bytes); anything else is not this purge's member. */
+export async function boundState(member: BoundMember): Promise<'absent' | 'bound' | 'changed'> {
+  const read = await readPinnedFile(member.path).catch(() => 'changed' as const);
+  if (read === 'changed') return read;
+  if (!read) return member.cut ? 'changed' : 'absent';
+  return same(read.identity, member) ? 'bound' : member.cut && read.identity.digest === member.after ? 'absent' : 'changed';
+}
+/** The one executor of a purge's final step (normal effect and resumed tail alike): each bound member through its pinned parent, then the
+ * folders that became empty (deepest first, up to `root`, never including it). Throws on the first member that is not the bound one. */
+export async function removeBoundMembers(members: readonly BoundMember[], root?: string) {
+  for (const member of members) await removePinnedFile(member.path, member, member.cut ? { cut: member.cut, after: member.after } : {});
+  const folders = members.flatMap(member => { const up = [];
+    for (let dir = member.directory ?? dirname(member.path); root && inside(root, dir) ? dir !== root : dir === member.directory; dir = dirname(dir)) up.push(dir); return up; });
+  for (const directory of [...new Set(folders)].sort((a, b) => b.length - a.length)) await removeEmptyPinnedDirectory(directory);
 }
 export async function fileDigest(path: string) {
   const digest = createHash('sha256');
@@ -37,8 +53,7 @@ export async function memberStat(path: string, archived = false): Promise<Stats 
 export class InstallationDataRemovalTarget implements EffectTarget {
   readonly kind = 'installation-data';
   private beforeRemove: (() => Promise<DataRemovalSnapshot>) | undefined;
-  /** `root`: emptied parent directories are removed up to (never including) it; the installation's own folder goes only with its recovery. */
-  constructor(private readonly binding: string, private readonly members: readonly DataRemovalMember[], protectedPaths: readonly string[], private readonly root?: string) {
+  constructor(private readonly binding: string, private readonly members: readonly DataRemovalMember[], protectedPaths: readonly string[]) {
     if (process.platform === 'win32' || !process.getuid || members.some(member => !isAbsolute(member.path) || member.path === parse(member.path).root
       || protectedPaths.some(path => inside(member.path, path) || inside(path, member.path)))) refuse('EFFECT_TARGET_REJECTED');
   }
@@ -58,36 +73,15 @@ export class InstallationDataRemovalTarget implements EffectTarget {
     const members = this.check(request.target);
     if (request.operation.id !== 'installation.remove-data' || request.operation.version !== 1 || !this.beforeRemove) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     if ((await this.observe(request.target)).version !== request.expectedVersion) refuse('EFFECT_TARGET_PRECONDITION');
-    // A failed or unbound snapshot closes no deletion loop; it is safe to report a refusal. After the first unlink, uncertainty is retained.
-    const snapshot = await this.beforeRemove();
-    const bound = async (member: DataRemovalMember, content: boolean) => {
-      const expected = snapshot.members.find(item => item.path === member.path), info = await memberStat(member.path, member.archived);
-      if (!info) return expected ? refuse('EFFECT_TARGET_PRECONDITION') : null;
-      if (!expected || info.dev !== expected.dev || info.ino !== expected.ino || info.size !== expected.size || info.mtimeMs !== expected.mtimeMs
-        || info.ctimeMs !== expected.ctimeMs || content && await fileDigest(member.path) !== expected.digest) refuse('EFFECT_TARGET_PRECONDITION');
-      return expected;
-    };
-    // Every member is compared with the verified backup before the first unlink: changed bytes are never deleted with an older backup.
+    // A failed or unbound snapshot closes no deletion loop; it is safe to report a refusal. After the first removal, uncertainty is retained.
+    const snapshot = await this.beforeRemove(), bound = members.map(member => snapshot.members.find(item => item.path === member.path));
+    // Every member is compared with the verified backup before the first removal: changed bytes are never deleted with an older backup.
     if (snapshot.members.some(item => !this.members.some(member => member.path === item.path))
       || createHash('sha256').update(await readFile(join(snapshot.set, 'MANIFEST.sha256'))).digest('hex') !== snapshot.manifestDigest) refuse('EFFECT_TARGET_PRECONDITION');
-    for (const member of members) await bound(member, true);
-    let started = false;
-    try {
-      for (const member of members) {
-        if (!await bound(member, false)) continue;
-        started = true;
-        if (!member.line) { await unlink(member.path); continue; }
-        const info = (await lstat(member.path)), next = `${member.path}.${randomUUID()}`;
-        await writeFile(next, (await readFile(member.path, 'utf8')).split('\n').filter(line => line.replace(/\r$/u, '') !== member.line).join('\n'), { mode: info.mode & 0o777, flag: 'wx' });
-        await rename(next, member.path);
-      }
-      // Folders go only once empty, deepest first: anything left (an unknown or tracked file) keeps its folder.
-      const folders = members.flatMap(member => { const up = [];
-        for (let dir = member.directory ?? dirname(member.path); this.root && inside(this.root, dir) ? dir !== this.root : dir === member.directory; dir = dirname(dir)) up.push(dir); return up; });
-      for (const directory of [...new Set(folders)].sort((a, b) => b.length - a.length))
-        await rmdir(directory).catch(error => { if (!['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes(error.code)) throw error; });
-      return { version: null };
-    } catch (cause) { if (started) throw new EffectTargetError('EFFECT_TARGET_UNKNOWN', { cause }); throw cause; }
+    for (const [index, member] of members.entries()) { const state = bound[index] ? await boundState(bound[index]) : await memberStat(member.path, member.archived).then(info => info ? 'changed' : 'absent');
+      if (state !== 'bound' && (state !== 'absent' || bound[index])) refuse('EFFECT_TARGET_PRECONDITION'); }
+    try { await removeBoundMembers(bound.filter(item => !!item), snapshot.root); return { version: null }; }
+    catch (cause) { throw new EffectTargetError('EFFECT_TARGET_UNKNOWN', { cause }); }
   }
   async lookup(target: { kind: string; id: string }, _key: string) {
     void _key; this.check(target);
