@@ -179,13 +179,13 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   await file(productResourcePath(layout, 'config'), '{}'); await file(productResourcePath(layout, 'policy'), '{}'); await file(productResourcePath(layout, 'bindings'), '{}');
   await file(join(productResourcePath(layout, 'installationIdentity'), 'identity.json'), '{"installationId":"temporary"}');
   await file(join(productResourcePath(layout, 'approvals'), 'authority.key'), Buffer.alloc(32, 9));
-  const ledger = productResourcePath(layout, 'ledger'); new DatabaseSync(ledger).close(); await chmod(ledger, 0o600);
+  const ledger = productResourcePath(layout, 'ledger'); await mkdir(dirname(ledger), { recursive: true, mode: 0o700 }); new DatabaseSync(ledger).close(); await chmod(ledger, 0o600);
   const history = join(root, 'state/terminal-history.jsonl'), script = join(root, 'workspaces/toolchains/build.sh');
   await file(history, 'HISTORY\n'); await file(script, '#!/bin/sh\n', 0o755);
   const limits = { maxFiles: 100, maxDepth: 10, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 22 }, phrase = 'fixture-private-backup-passphrase';
-  const set = join(base, 'recovery/set'); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
+  const set = join(base, 'recovery/set'); await mkdir(dirname(set), { mode: 0o700 }); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
   const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
-  const bound = await createUninstallArchive(set, root, members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
+  const bound = await createUninstallArchive(set, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
   expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
   // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
   const target = new InstallationDataRemovalTarget('fixture', members, [], root), ref = { kind: target.kind, id: 'conversation-data' };
@@ -194,6 +194,6 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   await writeFile(history, 'NEWER'); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
   expect(await readFile(script, 'utf8')).toBe('#!/bin/sh\n');
   // Restore writes what is missing (mode kept) and never overwrites what exists again.
-  await rm(script); await restoreUninstallArchive(set, root, phrase, limits);
+  await rm(script); await restoreUninstallArchive(set, [project], phrase, limits);
   expect((await lstat(script)).mode & 0o777).toBe(0o755); expect(await readFile(history, 'utf8')).toBe('NEWER');
 });

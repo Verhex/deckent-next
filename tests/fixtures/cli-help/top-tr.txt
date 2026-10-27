@@ -85,8 +85,8 @@ Onaylar:
 Kurulum/Bakım:
   uninstall   Deckent’i bu klasörden kaldırır;
               verileriniz varsayılan olarak korunur.
-      [--keep-data|--keep-work|--all] [--force]
-      [--disable-unit] [--yes] [--dry-run] [--json]
+      [--keep-data|--keep-work|--all] [--force] [--disable-unit]
+      [--yes] [--dry-run [--verbose]] [--json]
   audit       Audit geçmişini ve checkpoint kanıtını doğrula (eylemsiz: verify)
       verify | rebaseline
       [--scope <id>]

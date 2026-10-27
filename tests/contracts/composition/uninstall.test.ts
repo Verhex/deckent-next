@@ -456,7 +456,7 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
     await mkdir(join(local, 'state/terminal-sessions'), { mode: 0o700 });
     for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/a.json', 'state/terminal-sessions/b.json']) await writeFile(join(local, name), name, { mode: 0o600 });
     const plan = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
-    tail.left = 1; // the process "dies" after the first conversation file is gone
+    tail.left = 2; // one custody unlink, then the process "dies" after the first conversation file is gone
     let interrupted;
     try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
     finally { tail.left = null; }

@@ -84,8 +84,8 @@ Approvals:
 
 Setup / Maintenance:
   uninstall   Remove Deckent from this folder; keeps your data by default.
-      [--keep-data|--keep-work|--all] [--force]
-      [--disable-unit] [--yes] [--dry-run] [--json]
+      [--keep-data|--keep-work|--all] [--force] [--disable-unit]
+      [--yes] [--dry-run [--verbose]] [--json]
   audit       Verify audit history and checkpoint evidence
               (without an action: verify)
       verify | rebaseline
