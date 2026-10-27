@@ -905,3 +905,15 @@ Kaynak: DOCS-A56 owner kartı, dış `proof/ALPHA56-2026-10-24/PLAN-B-OWNER-TEST
 - **Koşullu birleştirme ve geçiş (2026-10-27 ~01:05 yerel):** owner “Okeydir o zaman her şey yeşilse birleştirme canlı/n1 geçişleri onay verildi.” dedi. Exact aday bağımsız PASS, yerel tam verify ve hosted CI yeşili koşuluyla PR #117 ve bu sürümün canlı/N1 geçişidir; sonraki sürümlere sürekli yetki değildir.
 - **Politika yükseltmesi (2026-10-27):** güncel DOCS-A56 ataması owner'ın canlı ve N1'de v16–v18 yükseltmesini uyguladığını bildirir; eski “owner yükseltmesi bekleniyor” notunun yerini alır. Recovery-rule/template versioning sorusu v17/v18 sonrasında da AÇIK; ürün kurulumlarının geneline otomatik yükseltme sonucu çıkarılmaz.
 - **Lead kararları owner cevabı değildir:** FIX9 imaj kartının hazır imajı/arka plan build'ini önseçmesi ve tek kurulu scope'u `init --yes` ile yeniden kullanması; FIX11 kökten imzalı online anahtar delegasyonu (90 gün/5 dk registry varsayılanı, yank yeni içeriği de durdurur); bubblewrap 0.13.0'da kalma ve 0.13.1 imzalayan değişikliğinin ayrı güven kararını beklemesi. Ayrıntı ve kaynak [mimari karar günlüğünde](../architecture/decisions.md).
+
+<a id="beuser-2026-10-27"></a>
+
+## Owner kararı — 2026-10-27: kabul = kişi/kurum yolculuğu (BeUser)
+
+Neden: alpha.56 `deckent uninstall` ~12 bin test ve güvenlik incelemesinden geçti ama ilk gerçek kullanımda beş yerden kırıldı; dar kartlar kendi testleri ve incelemesiyle kabul ediliyor, sürümden önce kimse kişinin yolunu yürümüyordu. Owner: “Önerini kabul ediyorum, iş metodolojimize bunu ekle: kabul = kullanıcı / kurum yolculuğu; dar kapsamdan sonra toplanmış sürümün durumu … sürekli test koşmak yerine bu süreçleri yazdıktan sonra AI araçlarına test ettirelim — hermetik test yerine BeUser mekanizması. Bunu skill haline getirelim.”
+
+- Bir yüzey kurulmadan önce yolculuk haritası (her başlangıç durumu, menü seçimi ve CLI bayrak ikizi, sonuç, sonraki adımlı ret; solo ve kurum kişileri) kanıtlanmış araçlardan türetilerek yazılır.
+- Dar kartlar indikten sonra toplanmış sürüm adayında, tercihen yazardan farklı üreticinin AI ajanları kişiyi canlandırarak gerçek kurulumda her dalı yürür; transkript ve dal başına hüküm saklanır. Yüzey ancak her dal yeşil yüründüğünde biter.
+- Hermetik testler gerçek riskler için yalın regresyon korumasıdır; CI zorunlu kalır, kabul modeli değildir ve yürüyüşün yerine toplu test koşulmaz. Doğrulama sıklığı Kanun 7'dedir.
+- Paketteki bir yüzeyde bulunan eksik aynı pakette düzeltilir, ertelenmez.
+- Yöntem `deckent-beuser` skill'idir; BeUser'ın Deckent ürününe alınması ayrı, sonra planlanacak bir ürün paketidir.

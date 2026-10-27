@@ -37,7 +37,9 @@ labelled judgement calls, never hard violations; a documented standard overrides
 4. Attribute the owned disk diff, durable side effects and receipts to the exact accepted attempt.
    Ambiguous recovery/receipt evidence remains unknown until reconciled.
 5. Observe the actual CLI/Terminal/API/MCP/worker or other real surface named by the proof contract.
-   An absent or planned Desktop/Dashboard cannot be claimed as shipped from a prototype.
+   An absent or planned Desktop/Dashboard cannot be claimed as shipped from a prototype. A person- or
+   company-facing surface needs its BeUser walk (`deckent-beuser`) on the assembled release state, after
+   the narrow cards land: every journey branch GREEN with a retained transcript, or the claim is HOLD.
 6. Check relevant denial, company/scope isolation, secret boundary, cancellation, idempotency/replay,
    partial-effect and recovery cases. Platform/accessibility/performance/HA claims require their
    own bounded measurements and environments; do not manufacture a universal proof checklist.
@@ -45,7 +47,7 @@ labelled judgement calls, never hard violations; a documented standard overrides
    Implementer checks, a second self-review and Jev are not independent PASS.
 
 Tests, typechecks, lint and CI support these claims within their measured scope. Test green cannot
-replace a missing producer, real consumer or settlement link. Verification cadence follows law 7
+replace a missing producer, real consumer, settlement link or BeUser walk. Verification cadence follows law 7
 (`.deckent/docs/core-memory/law_local_verification.md`); a batch merges only after independent PASS and green
 hosted PR CI on the exact head. Local checks, hosted CI and live proof remain separately identified. Unavailable evidence is blocking
 when the accepted proof contract requires it, rather than by an invented legacy ritual.
