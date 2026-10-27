@@ -8,7 +8,8 @@ import { restartConfiguredRuntimeService } from '../../../src/composition/core/c
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, configServiceState } from '#engine/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
-import { runtimeSocketLocation } from '#adapters/index.js';
+import { encodeServiceFrame, prepareRuntimeSocket, runtimeSocketLocation, ServiceFrameDecoder } from '#adapters/index.js';
+import { createServer } from 'node:net';
 
 const roots: string[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const observer = { async onPage() {}, async onError() {} };
@@ -101,9 +102,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a
   expect((await describeOf(f.project, f.env)).instanceId).toBe(before);
 });
 
-// RESTART-HUNT option B on the restart loop with the real services and the real shared predicate (Astra delta 4 M1): when the stopped
-// service's directory comes back as a bwrap mask leaves it (0755, empty), the restart launches the start once and it heals; a non-empty, linked
-// or non-directory parent stays UNSAFE with nothing launched; a state changed after the decision ends typed, never connected.
+// RESTART-HUNT option B on the restart path with the real composition and the real shared predicate (Astra delta 4/5 M1). Below: (1) the shape
+// exists BEFORE the restart decides (a stand-in old service leaves it while answering its shutdown) - mode-only gives exactly one start, every
+// other shape none; (2) a mask that appears only after a real service's stop: the one start follows genuine absence (the old rule) and the
+// started service heals or refuses the shape, never connecting to a bad one; (3) a state changed after the decision ends typed.
 // Like the bwrap mask, the shape appears right after the stopping service removed its directory (polled each millisecond; bounded by the service's end).
 const maskAfterStop = (parent: string, shape: (parent: string) => Promise<void>) => new Promise<void>((done, fail) => {
   const tick = setInterval(() => { void lstat(parent).catch(async () => { clearInterval(tick); try { await shape(parent); done(); } catch (error) { fail(error); } }); }, 1);
@@ -115,7 +117,45 @@ const shapes = {
   link: async (parent: string) => { await mkdir(`${parent}-target`, { recursive: true, mode: 0o755 }); await symlink(`${parent}-target`, parent); },
   file: async (parent: string) => { await writeFile(parent, 'x', { mode: 0o600 }); },
 };
-it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT: after a restart\'s stop the mask-shaped own directory is healed by the one start; a non-empty, linked or non-directory shape is never healed or connected', async () => {
+/** A stand-in old service on the real endpoint: answers describe with a stoppable descriptor and, when its shutdown arrives, removes its socket
+ * and directory, leaves `shape` there, and only then answers the admission - so the restart's next describe meets the shape. */
+async function shapingOldService(project: string, env: Record<string, string | undefined>, shape: (parent: string) => Promise<void>) {
+  const endpoint = await prepareRuntimeSocket((await loadConfig(project, { env, heal: false, force: true })).productLayout), parent = dirname(endpoint);
+  const peer = createServer({ allowHalfOpen: true }, socket => {
+    socket.on('error', () => undefined); const decoder = new ServiceFrameDecoder(65_536);
+    socket.on('data', chunk => decoder.push(chunk));
+    socket.on('end', async () => {
+      const frame = decoder.finish() as { schemaVersion: number; requestId: string; operation: string; input: Record<string, unknown> };
+      const reply = (result: unknown) => socket.end(encodeServiceFrame({ schemaVersion: frame.schemaVersion, requestId: frame.requestId, ok: true, result }, 65_536));
+      if (frame.operation === 'describeService') return reply({ schemaVersion: 1, instanceId: 'old-instance', shutdownAvailable: true, identity: { scopeId: 'service-scope', serviceId: 'runtime' } });
+      if (frame.operation !== 'shutdownService') return socket.destroy();
+      peer.close(); await rm(endpoint, { force: true }); await rm(parent, { recursive: true, force: true }); await shape(parent);
+      const principal = { id: 'owner', issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user', scopeIds: ['service-scope'] };
+      reply({ replayed: false, admission: { schemaVersion: 1, scopeId: 'service-scope', command: frame.input, actor: { principal, evidence: { method: 'os-peer', pid: process.pid,
+        uid: userInfo().uid, gid: userInfo().gid } }, authorization: { revision: 'grant', ruleId: 'shutdown' }, admittedAtMs: 1 } });
+    });
+  });
+  await new Promise<void>(done => peer.listen(endpoint, () => done())); await chmod(endpoint, 0o600);
+  return parent;
+}
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT: a shape present before the restart decides - mode-only starts exactly once and heals; non-empty, linked or non-directory start nothing', async () => {
+  for (const [name, shape] of Object.entries(shapes)) {
+    const f = await fixture(), parent = await shapingOldService(f.project, f.env, shape); roots.push(parent, `${parent}-target`);
+    let launched = 0;
+    const result = await restartConfiguredRuntimeService(f.project, { env: f.env }, async input => { launched++; await start(f.project, input.env); return { pid: process.pid }; },
+      fileURLToPath(import.meta.url)).catch((error: unknown) => error);
+    if (name === 'modeOnly') {
+      expect(result, name).toMatchObject({ mode: 'started' }); expect(launched, name).toBe(1);
+      expect((await lstat(parent)).mode & 0o777).toBe(0o700); await expect(describeOf(f.project, f.env)).resolves.toMatchObject({ instanceId: expect.any(String) });
+    } else {
+      // Non-empty carries the same `parent-mode` reason as mode-only: only the real predicate (emptiness) separates one start from none.
+      expect(result, name).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: name === 'nonEmpty' ? 'parent-mode' : name === 'link' ? 'parent-link' : 'parent-type' } });
+      expect(launched, name).toBe(0);
+    }
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT: a mask appearing only after a real stop - the one start follows genuine absence; the started service heals mode-only and never heals or connects to the other shapes', async () => {
   for (const [name, shape] of Object.entries(shapes)) {
     const f = await fixture(); await start(f.project, f.env);
     const parent = dirname(runtimeSocketLocation((await loadConfig(f.project, { env: f.env, heal: false, force: true })).productLayout)); roots.push(parent, `${parent}-target`);
