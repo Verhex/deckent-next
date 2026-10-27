@@ -5,9 +5,8 @@ export type ProviderDiscoveryCause = 'no-credential' | 'credential-rejected' | '
   | 'limit-reached' | 'http-status' | 'redirect' | 'network' | 'timeout' | 'invalid-list' | 'not-listable';
 export class ProviderModelListError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' | 'MODEL_CONNECT_DISCOVERY_INVALID' | 'MODEL_CONNECT_DISCOVERY_LIMIT',
-    override readonly cause: ProviderDiscoveryCause = 'invalid-list', readonly status?: number,
-    /** The address a network or timeout failure tried, as `displayAddress` projects it (scheme, host, port, path; never userinfo, query or fragment). */
-    readonly address?: string) { super(code); this.name = 'ProviderModelListError'; }
+    /** `address`: what a network or timeout failure tried, as `displayAddress` projects it (never userinfo, query or fragment). */
+    override readonly cause: ProviderDiscoveryCause = 'invalid-list', readonly status?: number, readonly address?: string) { super(code); this.name = 'ProviderModelListError'; }
 }
 /** Reads cannot outlive their request, including injected transports with non-cancelling streams. The result type is spelled from the global reader: an inferred
  * one names the bare `stream/web` module in the published declarations, which the zero-dependency package cannot resolve. */

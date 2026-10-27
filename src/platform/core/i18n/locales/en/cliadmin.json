@@ -5,6 +5,7 @@
   "cli.runtime.reconciliationFailed": "Reconciliation recovery failed: {code}.",
   "cli.runtime.restarted": "Runtime service restarted (pid {pid}, instance {instanceId}).",
   "cli.runtime.idleShutdown": "No request or execution for {duration} (hh:mm:ss): this automatically started service is stopping.",
+  "cli.runtime.socketHealed": "The runtime socket directory had the wrong mode and was empty; it was re-created owner-only.",
   "cli.runtime.shutdownAdmitted": "Runtime service {serviceId} (instance {instanceId}): shutdown accepted; it is stopping now.",
   "cli.secret.store.envMissing": "Config references available from env but missing in {to}: {names}.",
   "cli.secret.store.envPrompt": "Switch anyway? These references will stop resolving. [yes/no]",

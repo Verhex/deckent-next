@@ -51,6 +51,7 @@ export interface RuntimeServiceObserver extends BackupScheduleObserver {
   onLedgerUpgraded?(upgrade: Readonly<{ from: number; to: number; backupPath: string }>): void | Promise<void>;
   onToolCallApprovalsExpired?(result: Readonly<{ expired: number; failed: number; keyUnavailable: boolean }>): void | Promise<void>;
   onIdleShutdown?(event: Readonly<{ afterMs: number }>): void | Promise<void>;
+  onRuntimeSocketHealed?(event: Readonly<{ reason: 'parent-mode' }>): void | Promise<void>;
   onToolchainRefresh?(event: Readonly<{ phase: 'started' | 'current' | 'failed' | 'unverified'; imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
@@ -206,6 +207,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
         () => event.status === 'created' ? t('cli.backup.scheduled', { trigger }, locale)
           : event.status === 'skipped' ? t('cli.backup.scheduleSkipped', { trigger, set: event.set ?? '-', code: event.code ?? '-' }, locale)
           : t('cli.backup.scheduleFailed', { trigger, code: event.code ?? '-' }, locale), event.status === 'created' ? 'info' : 'error'); },
+    onRuntimeSocketHealed: async event => { output({ schemaVersion: 1, event: 'runtime-socket-healed', ...event }, () => t('cli.runtime.socketHealed', {}, locale)); },
     onIdleShutdown: async event => { output({ schemaVersion: 1, event: 'idle-shutdown', ...event },
       () => t('cli.runtime.idleShutdown', { duration: formatDuration(event.afterMs) }, locale)); },
     onAuditIntegrity: async status => { output({ schemaVersion: 1, event: 'audit-integrity', ...status },

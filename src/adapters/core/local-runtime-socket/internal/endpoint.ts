@@ -8,13 +8,10 @@ export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_R
 export type LocalRuntimeUnsafeReason = 'parent-create' | 'parent-stat' | 'parent-type' | 'parent-link' | 'parent-owner' | 'parent-mode' | 'parent-realpath'
   | 'socket-stat' | 'socket-type' | 'socket-link' | 'socket-owner' | 'socket-mode' | 'ledger-lock' | 'endpoint-remove';
 export class LocalRuntimeSocketError extends Error {
-  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) {
-    super(code, options); this.name = 'LocalRuntimeSocketError';
-  }
+  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string, readonly reason?: LocalRuntimeUnsafeReason) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
 }
 /** An unsafe-endpoint refusal naming the check that refused. */
-export const unsafeEndpoint = (reason: LocalRuntimeUnsafeReason, cause?: unknown) =>
-  new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', cause === undefined ? undefined : { cause }, undefined, reason);
+export const unsafeEndpoint = (reason: LocalRuntimeUnsafeReason, cause?: unknown) => new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', cause === undefined ? undefined : { cause }, undefined, reason);
 /** The socket directory checks shared by every reader and the server: a private directory of this uid at its own real path. */
 export function socketParentRefusal(stat: Readonly<{ isDirectory(): boolean; isSymbolicLink(): boolean; uid: number; mode: number }>): LocalRuntimeUnsafeReason | null {
   return stat.isSymbolicLink() ? 'parent-link' : !stat.isDirectory() ? 'parent-type' : stat.uid !== process.getuid!() ? 'parent-owner' : (stat.mode & 0o777) !== 0o700 ? 'parent-mode' : null;
@@ -33,9 +30,7 @@ function positive(value: number): boolean { return Number.isSafeInteger(value) &
 export function assertSocketPublicationBudget(endpoint: string): void {
   const parent = dirname(endpoint);
   // Native same-parent staging uses '/.sXXXXXX/s'; include the trailing NUL in sun_path's 108 bytes.
-  if (Buffer.byteLength(parent === '/' ? '' : parent, 'utf8') + 11 >= 108) {
-    throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, endpoint);
-  }
+  if (Buffer.byteLength(parent === '/' ? '' : parent, 'utf8') + 11 >= 108) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, endpoint);
 }
 /** The parent's real path. A stop removes its empty directory between the caller's `lstat` and this call: that is a stopped service, not an unsafe endpoint. */
 export async function resolveSocketParent(parent: string): Promise<string> {
@@ -63,9 +58,8 @@ export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): 
     const missing = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
     throw missing ? new LocalRuntimeSocketError('LOCAL_RUNTIME_UNAVAILABLE', { cause: error }) : unsafeEndpoint('parent-stat', error);
   }
-  const refused = socketParentRefusal(stat);
+  const refused = socketParentRefusal(stat) ?? (await resolveSocketParent(parent) !== resolve(parent) ? 'parent-realpath' : null);
   if (refused) throw unsafeEndpoint(refused);
-  if (await resolveSocketParent(parent) !== resolve(parent)) throw unsafeEndpoint('parent-realpath');
   const digest = createHash('sha256').update(`${options.endpoint}\0${process.getuid()}`).digest('hex');
   return Object.freeze({ ...options, custodyId: digest, guardEndpoint: `\0deckent-${digest}` });
 }

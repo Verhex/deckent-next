@@ -18,8 +18,7 @@ export async function querySystemdMainPid(unit: Readonly<{ scope: 'user' | 'syst
   env: Readonly<Record<string, string | undefined>> = process.env, exec: SystemdQueryExec = execBounded): Promise<number | null> {
   if (!UNIT.test(unit.unit)) return null;
   const busEnv: Record<string, string> = Object.fromEntries(BUS_ENVIRONMENT.flatMap(name => (typeof env[name] === 'string' ? [[name, env[name]]] : [])));
-  // A launcher that clears the environment (`env -i`) drops the user bus path; without it the query fails and the guard stays off (alpha.56.1):
-  // the user manager's runtime directory is the standard one of this user.
+  // alpha.56.1: a launcher that clears the environment (`env -i`) drops the user bus path; the user manager's standard runtime directory stands in.
   const uid = process.getuid?.();
   if (unit.scope === 'user' && busEnv['XDG_RUNTIME_DIR'] === undefined && uid !== undefined) busEnv['XDG_RUNTIME_DIR'] = `/run/user/${uid}`;
   const answer = await exec('systemctl', [...(unit.scope === 'user' ? ['--user'] : []), 'show', '-p', 'MainPID', '--value', '--', unit.unit],
