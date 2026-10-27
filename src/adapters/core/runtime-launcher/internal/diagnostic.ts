@@ -1,3 +1,4 @@
+import { displayAddress } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { z } from 'zod';
@@ -7,9 +8,8 @@ const diagnostic = z.object({ op: z.enum(['model-discovery', 'workspace-discover
   code: z.enum(['MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'MODEL_CONNECT_DISCOVERY_INVALID', 'MODEL_CONNECT_DISCOVERY_LIMIT', 'PROVIDER_PROBE_REFUSED']),
   cause: z.enum(['no-credential', 'credential-rejected', 'access-denied', 'rate-limit', 'spend-limit', 'limit-reached', 'http-status',
     'redirect', 'network', 'timeout', 'invalid-list', 'not-listable']), status: z.number().int().min(100).max(599).nullable(),
-  // alpha.56.1: the address a network or timeout failure tried (validated base + list path, never credentials).
-  address: z.string().max(2048).refine(text => { try { const url = new URL(text); return /^https?:$/u.test(url.protocol) && !url.username && !url.password && !/[?#]/u.test(text); }
-    catch { return false; } }).optional().catch(undefined) }).strip();
+  // alpha.56.1: the address a network or timeout failure tried, in its one display form (never userinfo, query or fragment).
+  address: z.string().max(2048).transform(text => displayAddress(text)).optional().catch(undefined) }).strip();
 /** The existing service log, with the launcher's private/no-follow custody. Only a closed diagnostic projection is appended. */
 export async function appendRuntimeProviderDiagnostic(path: string, input: unknown): Promise<void> {
   const event = diagnostic.parse(input);

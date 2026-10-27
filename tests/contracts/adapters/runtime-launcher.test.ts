@@ -69,11 +69,13 @@ it.skipIf(process.platform === 'win32')('records only closed provider diagnostic
   const link = join(root, 'link'); await symlink(path, link);
   await expect(appendRuntimeProviderDiagnostic(link, event)).rejects.toThrow();
   expect(await readFile(path, 'utf8')).toBe(JSON.stringify(event) + '\n');
-  // alpha.56.1: a network failure keeps the address it tried; one carrying credentials, a query or a fragment is dropped, the event kept.
+  // alpha.56.1 (Astra R2): a network failure keeps the address it tried in its display form: userinfo, query and fragment are removed, a non-http(s) one dropped.
   const tried = { ...event, cause: 'network', status: null, address: 'http://127.0.0.1:18080/v1/models' };
   await writeFile(path, '', { mode: 0o600 }); await appendRuntimeProviderDiagnostic(path, tried);
   for (const address of ['https://user:pw@llm.example/v1/models', 'https://llm.example/v1/models?key=private', 'https://llm.example/v1/models#k', 'file:///etc/passwd']) {
     await appendRuntimeProviderDiagnostic(path, { ...tried, address });
   }
-  expect((await readFile(path, 'utf8')).trim().split('\n').map(line => JSON.parse(line).address)).toEqual(['http://127.0.0.1:18080/v1/models', undefined, undefined, undefined, undefined]);
+  const logged = await readFile(path, 'utf8');
+  expect(logged.trim().split('\n').map(line => JSON.parse(line).address)).toEqual(['http://127.0.0.1:18080/v1/models', 'https://llm.example/v1/models', 'https://llm.example/v1/models', 'https://llm.example/v1/models', undefined]);
+  expect(logged).not.toMatch(/pw@|key=private|#k/u);
 });

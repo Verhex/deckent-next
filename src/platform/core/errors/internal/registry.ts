@@ -1,5 +1,5 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
-import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
+import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
 import { DeckentError } from './error.js';
 import type { ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
@@ -38,7 +38,7 @@ function discoveryCause(p: Params, l: Locale): string {
 }
 /** alpha.56.1: a network or timeout failure names the address it tried (credential-free by construction); a loopback one adds the port hint. */
 function discoveryUnavailable(p: Params, l: Locale): string {
-  const address = (p['cause'] === 'network' || p['cause'] === 'timeout') && typeof p['address'] === 'string' ? p['address'] : '';
+  const address = (p['cause'] === 'network' || p['cause'] === 'timeout' ? displayAddress(p['address']) : undefined) ?? '';
   let local = false;
   // The provider locality invariant's literal loopback hosts (`isLiteralLoopbackHostname`; importing it here would close a unit cycle).
   try { local = address !== '' && ['127.0.0.1', '[::1]'].includes(new URL(address).hostname); } catch { /* not an address: no hint */ }

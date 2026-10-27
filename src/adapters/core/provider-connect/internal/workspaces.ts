@@ -1,3 +1,4 @@
+import { displayAddress } from '#platform/index.js';
 import { ProviderModelListError, readProviderPart, providerListHttpError } from './failure.js';
 import { z } from 'zod';
 import { modelInvocationProfileSchema } from '#domain/index.js';
@@ -46,7 +47,7 @@ export async function listKindProviderWorkspaces(kind: ProviderConnectKind, endp
   throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT', 'invalid-list');
   } catch (error) { options.signal?.throwIfAborted();
     if (error instanceof ProviderModelListError) throw error;
-    throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network', undefined, new URL(limits.path, endpoint).href);
+    throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network', undefined, displayAddress(limits.path, endpoint));
   }
 }
 /** Only a row from the complete fresh discovery can supply the header. */

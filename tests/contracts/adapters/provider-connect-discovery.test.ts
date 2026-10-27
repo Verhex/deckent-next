@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { discoverProviderModels, discoveredProviderCatalog, providerConnectKind, providerDiscoveryChannel, PROVIDER_CONNECT_LIMITS,
-  ProviderModelListError, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
+  ProviderModelListError, listKindProviderWorkspaces, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
 
 const local = providerConnectKind('local-openai')!, generic = providerConnectKind('openai-compatible')!;
 const key = 'sk-discovery-canary-41db79';
@@ -133,4 +133,18 @@ it('seeded model discovery completes registry-paged lists with one bound, a sele
   await expect(discoverProviderModels(kind, null, key, { fetch: async () => { echoed++; return new Response(JSON.stringify({ data: [{ id: 'a' }], has_more: true, last_id: key })); } }))
     .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
   expect(echoed).toBe(1);
+});
+
+it('Astra R2 (alpha.56.1): a network failure keeps one display address (scheme, host, port, path) and never a query, userinfo or fragment', async () => {
+  const canary = 'reviewOpaqueCredential7fd91', down: ProviderProbeFetch = async () => { throw new TypeError('fetch failed'); };
+  const failure = async (work: Promise<unknown>) => { const error = await work.catch((caught: unknown) => caught) as ProviderModelListError;
+    expect(error).toBeInstanceOf(ProviderModelListError); expect(JSON.stringify({ ...error, address: error.address })).not.toContain(canary); return error.address; };
+  // A registry row whose list path carries a query secret (a test/Enterprise overlay); the shipped Anthropic row's `?limit=1` still gives a usable address.
+  expect(await failure(discoverProviderModels({ ...local, probe: { ...local.probe!, path: `/v1/models?k=${canary}#${canary}` } }, 'http://127.0.0.1:18080', null, { fetch: down })))
+    .toBe('http://127.0.0.1:18080/v1/models');
+  const anthropic = providerConnectKind('anthropic-api')!;
+  expect(await failure(discoverProviderModels(anthropic, null, key, { fetch: down }))).toBe('https://api.anthropic.com/v1/models');
+  // The workspace list: a path with userinfo never shows it.
+  const workspaces = { ...anthropic, connect: { ...anthropic.connect!, workspaceList: { ...anthropic.connect!.workspaceList!, path: `//review-user:${canary}@api.anthropic.com/v1/organizations/workspaces` } } };
+  expect(await failure(listKindProviderWorkspaces(workspaces, 'https://api.anthropic.com', key, { fetch: down }))).toBe('https://api.anthropic.com/v1/organizations/workspaces');
 });

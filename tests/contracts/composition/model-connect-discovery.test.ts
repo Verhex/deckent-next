@@ -136,6 +136,9 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     // A remote address is named without the local hint; a non-network cause names no address.
     expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, address: 'https://llm.example/v1/models' })!.message).toBe('The model list could not be read: network unavailable (tried https://llm.example/v1/models).');
     expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, cause: 'http-status', status: 503 })!.message).toBe('The model list could not be read: HTTP status 503.');
+    // Astra R2: the renderer shows only the display form of any address it is given.
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, address: 'https://u:secret-canary@llm.example/v1/models?api_key=secret-canary#secret-canary' })!.message)
+      .toBe('The model list could not be read: network unavailable (tried https://llm.example/v1/models).');
   });
 
   it('inspect policy denial precedes network and preserves configuration', async () => {

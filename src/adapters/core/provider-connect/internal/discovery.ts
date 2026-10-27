@@ -1,3 +1,4 @@
+import { displayAddress } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { endpointMayCarryKey, exactModelIdSchema, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from '#adapters/core/provider-openai-chat/index.js';
@@ -65,7 +66,7 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
   } catch (error) {
     options.signal?.throwIfAborted();
     throw error instanceof ProviderModelListError ? error : new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network',
-      undefined, `${base}${kind.probe.path}`);
+      undefined, displayAddress(`${base}${kind.probe.path}`));
   } finally { void reader?.cancel().catch(() => undefined); }
 }
 /** Only the selected exact id becomes a catalog fact. A list is evidence of availability, not tools, vision, context size or reasoning. */
