@@ -83,7 +83,7 @@ export class InstallationDataRemovalTarget implements EffectTarget {
       }
       // Folders go only once empty, deepest first: anything left (an unknown or tracked file) keeps its folder.
       const folders = members.flatMap(member => { const up = [];
-        for (let dir = member.directory ?? dirname(member.path); this.root ? dir !== this.root && inside(this.root, dir) : dir === member.directory; dir = dirname(dir)) up.push(dir); return up; });
+        for (let dir = member.directory ?? dirname(member.path); this.root && inside(this.root, dir) ? dir !== this.root : dir === member.directory; dir = dirname(dir)) up.push(dir); return up; });
       for (const directory of [...new Set(folders)].sort((a, b) => b.length - a.length))
         await rmdir(directory).catch(error => { if (!['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes(error.code)) throw error; });
       return { version: null };

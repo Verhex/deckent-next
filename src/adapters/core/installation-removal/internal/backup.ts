@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { BackupApplication, EffectTargetError, policyBackupAuthorization, type UninstallPlan } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { FileBackupStorage, recordBackupAudit, readBackupConfig, verifyBackupSet, ledgerFingerprint, type VerifiedBackup } from '#adapters/core/backup-store/index.js';
-import { resolveGlobalConfigReadPath, sha256, type ResolvedConfig, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
+import { resolveGlobalConfigReadPath, productResourcePath, sha256, type ResolvedConfig, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { fileDigest, memberStat, type DataRemovalMember, type DataRemovalSnapshot } from './data.js';
 import { writeUninstallIntent } from './tombstone.js';
 import { createUninstallArchive, uninstallArchiveRoots } from './archive.js';
@@ -56,7 +56,9 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
       { installationId: plan.installation.id, approved, plan: plan.planDigest }, passphrase, limits)] : [];
     for (const member of own.filter(member => !member.archived)) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
     const snapshot: DataRemovalSnapshot = { set: verified.set, manifestDigest: digest(await readFile(join(verified.set, 'MANIFEST.sha256'))), members: bound };
-    await writeUninstallIntent(dirname(plan.backup.destination), layout.root, principal, plan, snapshot);
+    const kept = async (resource: 'policy' | 'bindings') => { const path = productResourcePath(layout, resource);
+      return own.some(member => member.path === path) || !await memberStat(path) ? null : fileDigest(path); };
+    await writeUninstallIntent(dirname(plan.backup.destination), layout.root, principal, plan, snapshot, { policy: await kept('policy'), bindings: await kept('bindings') });
     return { set, snapshot };
   } finally { verified.close(); }
 }

@@ -52,14 +52,17 @@ async function publishPointer(directory: string, encoded: string) {
 }
 /** Durable final-tail intent, written after the final backup is verified and bound and before the first member is deleted. It is the
  * only admission a later process needs once policy, identity and the HMAC key are gone; it authorizes reconciliation, never a deletion. */
-export async function writeUninstallIntent(directory: string, root: string, actor: VerifiedPrincipal, plan: UninstallPlan, snapshot: DataRemovalSnapshot) {
+/** `authority`: digests of the policy and bindings files the tier keeps (null: absent), so a resumed tail decides from exactly those bytes. */
+export async function writeUninstallIntent(directory: string, root: string, actor: VerifiedPrincipal, plan: UninstallPlan, snapshot: DataRemovalSnapshot,
+  authority: Readonly<Record<'policy' | 'bindings', string | null>>) {
   const result: UninstallResult = { schemaVersion: 2, uncertain: plan.work.uncertain, planDigest: plan.planDigest, status: 'completed',
     items: plan.items.map(item => ({ resourceId: item.resourceId, state: item.action === 'remove' ? 'settled' as const : null })),
     recoveryLocation: join(directory, plan.planDigest), backup: { ...plan.backup, destination: snapshot.set }, packageRemoval: plan.packageRemoval };
   // `scopes`: every affected scope decided under custody, so a resumed tail decides the same set even after the ledger is gone.
-  await writeTextAtomic(join(directory, 'final-tail.json'), seal(INTENT, { schemaVersion: 1, root, actor: { issuer: actor.issuer, subject: actor.subject }, scopes: actor.scopeIds, plan, snapshot, result }));
+  await writeTextAtomic(join(directory, 'final-tail.json'), seal(INTENT, { schemaVersion: 1, root, actor: { issuer: actor.issuer, subject: actor.subject }, scopes: actor.scopeIds, plan, snapshot, result, authority }));
 }
-type Intent = { schemaVersion: number; root: string; actor: unknown; scopes?: readonly string[]; plan: UninstallPlan; snapshot: DataRemovalSnapshot; result: UninstallResult };
+type Intent = { schemaVersion: number; root: string; actor: unknown; scopes?: readonly string[]; plan: UninstallPlan; snapshot: DataRemovalSnapshot; result: UninstallResult;
+  authority?: Readonly<Record<'policy' | 'bindings', string | null>> };
 type Member = DataRemovalSnapshot['members'][number];
 /** Bound means the exact verified file: same inode identity, private single-link regular file and same bytes. A file recreated with the
  * same bytes, moved, linked or changed is not this purge's member. */
@@ -120,8 +123,13 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
         || createHash('sha256').update(await readFile(join(verified.set, 'MANIFEST.sha256'))).digest('hex') !== intent.snapshot.manifestDigest) throw tailUnknown(directory, intent);
       const authority = async (resource: 'policy' | 'bindings') => {
         const path = productResourcePath(layout, resource), member = intent.snapshot.members.find(item => item.path === path);
-        // A tier that keeps the authority files (keep-work) decides again from the files themselves.
-        if (!member) return readFile(path, 'utf8').then(text => JSON.parse(text) as unknown, () => null);
+        // A tier that keeps the authority files (keep-work) decides from exactly the bytes the intent recorded; anything else is unknown (fail closed).
+        if (!member) { const expected = intent.authority?.[resource], present = await memberStat(path).catch(() => { throw tailUnknown(directory, intent); });
+          if (expected === undefined || !present !== (expected === null)) throw tailUnknown(directory, intent);
+          if (!present) return null;
+          const kept = await readFile(path);
+          if (createHash('sha256').update(kept).digest('hex') !== expected) throw tailUnknown(directory, intent);
+          return JSON.parse(kept.toString('utf8')) as unknown; }
         const bytes = remaining.includes(member) ? await readFile(path) : Buffer.from(verified.state.entries.find(entry => entry.resource === resource && entry.path === '')?.content ?? '', 'base64');
         if (createHash('sha256').update(bytes).digest('hex') !== member.digest) throw tailUnknown(directory, intent);
         return JSON.parse(bytes.toString('utf8')) as unknown;

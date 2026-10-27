@@ -445,3 +445,31 @@ async function projectInstallation(root: string) {
   };
   return { project, local, options, phrase, install };
 }
+
+it('fails closed when a kept policy file changed before an interrupted keep-work tail resumes: nothing more is deleted, the tail stays unknown', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-tail-authority-'));
+  try {
+    const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    await mkdir(join(local, 'state/terminal-sessions'), { mode: 0o700 });
+    for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/a.json', 'state/terminal-sessions/b.json']) await writeFile(join(local, name), name, { mode: 0o600 });
+    const plan = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
+    tail.left = 1; // the process "dies" after the first conversation file is gone
+    let interrupted;
+    try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
+    finally { tail.left = null; }
+    expect(interrupted.status).toBe('unknown');
+    const remaining: string[] = []; for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/a.json', 'state/terminal-sessions/b.json'])
+      if (await lstat(join(local, name)).catch(() => null)) remaining.push(join(local, name));
+    expect(remaining.length).toBe(2);
+    // The kept policy is not the file the intent recorded: the resumed tail cannot decide from it and deletes nothing.
+    await writeFile(join(local, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'tampered', restrictions: [], grants: [] }), { mode: 0o600 });
+    const second = await previewConfiguredUninstall(project, KEEP, options).catch((error: unknown) => error);
+    const resumed = 'planDigest' in (second as object) ? applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: (second as { planDigest: string }).planDigest },
+      { backupPassphrase: async () => phrase, confirm: async () => true }, options) : Promise.reject(second);
+    await expect(resumed).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
+    for (const path of remaining) expect(await lstat(path)).toBeTruthy();
+  } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
