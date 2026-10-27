@@ -35,7 +35,7 @@ it('a unit name that is not one plain `.service` word is never passed to the man
     await expect(querySystemdMainPid({ scope: 'user', unit }, bounds, ENV, probe.exec)).resolves.toBeNull(); expect(probe.calls).toEqual([]);
   }
 });
-it('alpha.56.1: a cleared environment (a launcher\'s `env -i`) still reaches the user manager through this user\'s standard runtime directory; a given one is kept', async () => {
+it.skipIf(process.getuid === undefined)('alpha.56.1: a cleared environment (a launcher\'s `env -i`) still reaches the user manager through this user\'s standard runtime directory; a given one is kept', async () => {
   const cleared = recording(async () => '77\n');
   await expect(querySystemdMainPid({ scope: 'user', unit: 'deckent-proje.service' }, bounds, { PATH: '/usr/bin', HOME: '/home/u' }, cleared.exec)).resolves.toBe(77);
   expect(cleared.calls[0]!.options.env).toEqual({ PATH: '/usr/bin', XDG_RUNTIME_DIR: `/run/user/${process.getuid!()}` });
