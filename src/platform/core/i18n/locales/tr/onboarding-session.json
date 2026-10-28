@@ -7,6 +7,8 @@
   "onboarding.session.unavailable": "İlk kurulum ekranları gösterilemedi ({code}); çalışma satırı onlarsız açılıyor.",
   "onboarding.session.unavailableField": "İlk kurulum ekranları gösterilemedi ({code}: {family} bilgileri {field} alanını kabul etmiyor); çalışma satırı onlarsız açılıyor.",
   "onboarding.work.selected": "Kodlama işlerini {cli} yapsın mı?",
+  "onboarding.work.add": "Başka bir kodlama CLI'ı ekle",
+  "onboarding.work.configured": "Kodlama işi {cli} üzerinde kurulu. Böyle kalsın mı?",
   "onboarding.work.change": "Değiştir",
   "onboarding.work.none": "Oturum açılmış bir kodlama CLI seçin",
   "onboarding.work.available": "Oturum kaydı bulundu; kullanılabilirliği native ön kontrol belirler",

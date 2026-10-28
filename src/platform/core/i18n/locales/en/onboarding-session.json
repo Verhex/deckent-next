@@ -7,6 +7,8 @@
   "onboarding.session.unavailable": "First-run setup screens could not be shown ({code}); the workline opens without them.",
   "onboarding.session.unavailableField": "First-run setup screens could not be shown ({code}: the {family} facts refuse the field {field}); the workline opens without them.",
   "onboarding.work.selected": "Use {cli} for coding work?",
+  "onboarding.work.add": "Add another coding CLI",
+  "onboarding.work.configured": "Coding work is set up on {cli}. Keep it?",
   "onboarding.work.change": "Change",
   "onboarding.work.none": "Choose a signed-in coding CLI",
   "onboarding.work.available": "Sign-in found; native preflight checks usability",

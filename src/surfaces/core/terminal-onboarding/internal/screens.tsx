@@ -52,10 +52,13 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
         : [{ id: 'continue', label: t('onboarding.session.continue', {}, locale) }] };
     let choice: QuestionAnswer;
     if (step.kind === 'work') {
-      const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id));
+      const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id)), admitted = model.snapshot.admittedProviders ?? [];
       const provider = firstSignedInHost({ ...model.snapshot, hosts: rows });
-      choice = await askOnboardingQuestion({ ...question, title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale),
+      // BeUser M-28: a kind already set up (revisit) is kept by default; adding another CLI is the explicit second choice.
+      choice = admitted.length && step.stages[0]?.state === 'done' ? await askOnboardingQuestion({ ...question, title: t('onboarding.work.configured', { cli: admitted.join(', ') }, locale),
+        choices: [{ id: 'keep', label: t('onboarding.session.continue', {}, locale) }, { id: 'change', label: t('onboarding.work.add', {}, locale) }] }, io) : await askOnboardingQuestion({ ...question, title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale),
         choices: [...(provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : []), { id: 'change', label: t('onboarding.work.change', {}, locale) }] }, io);
+      if (choice.id === 'keep') { await session.finish(step); continue; }
       const changing = choice.id === 'change';
       if (changing) choice = await askOnboardingQuestion({ ...question, choices: rows.map(row => ({ id: row.id,
         label: `${row.id} · ${(row.cli === 'found' && row.login === 'found' ? t('onboarding.work.available', {}, locale) : t('onboarding.work.unavailable', {}, locale))}`,
