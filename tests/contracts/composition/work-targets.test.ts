@@ -15,6 +15,7 @@ import { confirmedDelivery, confirmedAdoption } from '../support/delivery-termin
 import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openConfiguredWorkspaceBroker } from '../../../src/composition/core/workspaces/index.js';
+import { checkConfiguredWorkTarget } from '../../../src/composition/core/workspace-patch/index.js';
 import { evaluatePolicy, getPolicyVocabulary, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, fingerprintGitSource } from '#adapters/index.js';
 import { RunWorkspaceAcquisitionApplication } from '#engine/index.js';
@@ -134,6 +135,12 @@ describe.skipIf(process.platform !== 'linux')('work target registry: typed refus
       await expect(openConfiguredWorkspaceBroker(f.project, execution, f.options)).rejects.toMatchObject({ code });
     });
   }
+  it('BeUser D-03: /config checks a candidate target with the same typed refusal before writing; a separate clone passes', async () => {
+    const f = await fixture({ workTarget: 'none' });
+    const candidate = (path: string) => ({ schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path, baseRef: BASE }] });
+    await expect(checkConfiguredWorkTarget(f.project, candidate(f.project), f.options)).rejects.toMatchObject({ code: 'WORK_TARGET_IS_PROJECT' });
+    await expect(checkConfiguredWorkTarget(f.project, candidate(f.target), f.options)).resolves.toBeUndefined();
+  });
   it('refuses more than one target in slice 1 as invalid configuration', async () => {
     const f = await fixture();
     await f.config([{ id: 'n1', kind: 'git', path: f.target, baseRef: BASE }, { id: 'n2', kind: 'git', path: f.target, baseRef: BASE }]); clearConfigCache();

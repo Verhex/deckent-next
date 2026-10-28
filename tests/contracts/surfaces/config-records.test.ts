@@ -63,7 +63,9 @@ describe('config record editors: actual config publication', () => {
     expect((await f.document()).execution).toMatchObject({ docker: execution.docker, git: execution.git, adoption: { targets: ['refs/heads/main'] } });
   });
   it('work targets: add, edit from discovered repository branches, and remove through the optional parent; keep other execution settings', async () => {
-    const f = await fixture({ execution }); await f.port.open('execution.workTargets.targets', 'project'); await f.port.draft(null);
+    const f = await fixture({ execution }); await f.port.open('execution.workTargets.targets', 'project');
+    // BeUser D-03: no folder is pre-selected (the project itself is never a valid target); the branches follow the chosen folder.
+    expect((await f.port.draft(null)).values['path']).toBeUndefined(); await f.port.draft(null, { path: f.root });
     await f.port.commit((await f.port.preview(null, { path: f.root, branch: 'refs/heads/main' })).token);
     const target = (await f.document()).execution.workTargets.targets[0]; expect(target).toMatchObject({ kind: 'git', path: f.root, baseRef: 'refs/heads/main' });
     await f.port.open('execution.workTargets.targets', 'project'); await expect(f.port.draft(null)).rejects.toThrow(); await f.port.draft('0');

@@ -1,7 +1,5 @@
 import { HubClientApplication, type HubClientDependencies } from '#engine/index.js';
-import { openSqliteHubClientStore } from '#adapters/index.js';
-import { HubArtifactCache } from '#adapters/index.js';
-import { openLocalIntegrityAuthority } from '#adapters/index.js';
+import { HubArtifactCache, openLocalIntegrityAuthority, openSqliteHubClientStore } from '#adapters/index.js';
 import { inspectProductDirectory, prepareProductDirectory } from '#platform/index.js';
 import { catalogDependencies, type ScopeContext } from '#composition/core/agent-catalog/index.js';
 /** H7 supplies the common card/policy authorization and H8 supplies optional signed trust evidence. No network or default source is composed. */

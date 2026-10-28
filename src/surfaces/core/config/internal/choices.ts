@@ -15,6 +15,8 @@ export interface ConfigChoiceSourcePort {
   list(source: ConfigChoiceSource, keyPath: string, context?: Readonly<{ path: string }>): Promise<ConfigChoiceList>;
   browse?(directory: string): Promise<readonly import('./records.js').ConfigFileChoice[]>;
   readDocument?(path: string): Promise<unknown>;
+  /** BeUser D-03: refuses a work target the work path would refuse (typed WORK_TARGET_*), before the record is written. */
+  checkWorkTarget?(workTargets: unknown): Promise<void>;
 }
 export type ConfigValueModel = Readonly<{ choices: readonly ConfigValueChoice[]; free: boolean; hidden: boolean; readOnly: string | null;
   stepper: ConfigStepper | null; generated: boolean; notice: string | null; partial: Readonly<{ reason: ConfigChoiceCut; found: number }> | null }>;

@@ -1,9 +1,12 @@
 import { resolve } from 'node:path';
-import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, ErrorRegistry, getConfigKnownSecrets, inspectProductDirectory, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, LocalOsSessionAuthority, openSqliteAttemptStore, resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand, type EffectConfirmation } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
+/** BeUser D-03: a candidate `execution.workTargets` gets the work path's own typed refusal before `/config` writes it. */
+export async function checkConfiguredWorkTarget(root: string, workTargets: unknown, options: ConfigLoadOptions): Promise<void> { const config = await loadConfig(root, { ...options, heal: false });
+  if (config.execution) await resolveGitWorkTarget(resolve(root), { ...config.execution, workTargets } as never, config.productLayout).catch(error => { throw queryFailure(error); }); }
 /** Local SDK/CLI producer; paths, principal, session and Git options never come from the wire. */
 export async function deliverWorkspaceIntegrationWithConfirmation(root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions, confirmation?: EffectConfirmation) {
   try {

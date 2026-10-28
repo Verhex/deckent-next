@@ -1,4 +1,4 @@
-import { relative, isAbsolute } from 'node:path';
+import { dirname, relative, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type ConfigStepper, type Locale, PRODUCT_LAYOUT_REGISTRY, resolveProductLayout } from '#platform/index.js';
 import { PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_PERIOD_REGISTRY } from '#domain/index.js';
@@ -69,7 +69,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
         return { id: String(i), label: typeof entry === 'string' ? entry.replace(/^refs\/heads\//u, '') : String(record['resource'] ?? record['scopeId'] ?? record['id'] ?? i + 1),
           detail: key === 'provider_spending.budgets' ? `${Number(record['limitMinorUnits']) / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd} ${String(record['currency'])}` : String(record['path'] ?? '') };
       });
-      const view = { key, layer, digest: read.digest, members, note: key === 'provider_spending.budgets' ? t('config.records.budgetNote', {}, locale) : key === 'execution.workTargets.targets' ? t('config.records.targetNote', {}, locale) : null };
+      const view = { key, layer, digest: read.digest, members, note: key === 'provider_spending.budgets' ? t('config.records.budgetNote', {}, locale) : key === 'execution.workTargets.targets' ? t('config.records.targetNote', { clone: `git clone ${root} ${root}-work` }, locale) : null };
       session = { view, value: structuredClone(entries), writeKey: key === 'provider_spending.budgets' && spendingRead?.value === undefined ? 'provider_spending' : key, container, layoutRoot: config.productLayout.root }; return view;
     },
     async draft(member, selected) {
@@ -91,8 +91,9 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
         fields = [field('branch', await choices('branches', view.key))]; values = { branch: entry };
       } else if (view.key === 'execution.workTargets.targets') {
         if (member === null && value.length) throw refused();
-        const path = selected?.['path'] ?? record['path'] ?? root;
-        const branches = await sources()?.list('branches', 'execution.workTargets.targets.0.baseRef', { path: String(path) }) ?? [];
+        // BeUser D-03: no default folder (the project itself is never a valid target); the person picks or browses to a separate clone.
+        const path = selected?.['path'] ?? record['path'];
+        const branches = typeof path === 'string' ? await sources()?.list('branches', 'execution.workTargets.targets.0.baseRef', { path }) ?? [] : [];
         fields = [field('path', await choices('paths', view.key)), field('branch', branches)];
         values = { path, branch: record['baseRef'] };
       } else if (view.key === 'layout.resources') {
@@ -128,6 +129,8 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
       } else if (view.key === 'execution.workTargets.targets') {
         const prior = active().container;
         const target = { ...previous, id: previous['id'] ?? `target-${randomUUID()}`, kind: 'git', path: values['path'], baseRef: values['branch'] };
+        // The same typed refusals the work path applies (project folder, product data, shared repository, missing branch), before anything is written.
+        await sources()?.checkWorkTarget?.({ schemaVersion: prior?.['schemaVersion'] ?? 2, targets: [target] });
         return previewValue({ ...prior, schemaVersion: prior?.['schemaVersion'] ?? 2, targets: [target] }, 'execution.workTargets');
       } else if (view.key === 'layout.resources') {
         const chosenPath = String(values['path']), path = isAbsolute(chosenPath) ? relative(active().layoutRoot, chosenPath) : chosenPath;
@@ -145,7 +148,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
       return previewValue(next);
     },
     async browse(directory) {
-      const entries = await sources()?.browse?.(directory ?? (active().view.key === 'layout.resources' ? active().layoutRoot : root)) ?? [];
+      const entries = await sources()?.browse?.(directory ?? (active().view.key === 'layout.resources' ? active().layoutRoot : active().view.key === 'execution.workTargets.targets' ? dirname(root) : root)) ?? [];
       paths.clear(); for (const entry of entries) if (entry.kind === 'directory' || active().view.key === 'layout.resources') paths.add(entry.path);
       return entries;
     },
