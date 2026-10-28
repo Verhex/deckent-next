@@ -310,6 +310,7 @@
   "cli.uninstall.service.unit": "Çalışan servis: {unit} (Deckent’in kaydetmediği birim)",
   "cli.uninstall.work.none": "Bekleyen iş: yok",
   "cli.uninstall.work.some": "Bekleyen iş: {running} çalışan, {parked} bekletilen, {approvals} onay, {deliveries} teslim, {uncertain} sonucu bilinmeyen",
+  "cli.uninstall.work.workspaces": "Bekleyebilecek iş olarak korunan işçi çalışma alanı: {count}",
   "cli.uninstall.here": "Bu klasörde: {groups}",
   "cli.uninstall.shared": "Paylaşılan: {groups} (korunur)",
   "cli.uninstall.remove": "Silinecek: {groups}",

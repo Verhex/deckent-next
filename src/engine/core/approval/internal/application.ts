@@ -32,7 +32,7 @@ export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' 
 }
 /** F6: the decider's own refusals (`decide` below) of the same person's allow of an operation approval the broker has not opened yet, taken before any
  * card: the `decide` grant covers every approval id (the broker's id is unknown until then, a fresh id stands for it), no four-eyes rule applies to the
- * requester deciding, and the minimum is Core's peer level (the card attests no turn capability). Pure; throws the decider's code. */
+ * requester deciding, and the minimum is Core's peer level (the card attests no turn capability). Writes nothing; throws the decider's code. */
 export function authorizeOwnApproval(policy: unknown, scopeId: string, principal: VerifiedPrincipal, descriptor: OperationDescriptor) {
   const id = randomUUID(); authorizeApproval(policy, 'decide', scopeId, id, principal);
   const rule = evaluatePolicy(policy, { principal, scopeId, action: 'decide', resource: { kind: 'approval', id } }).ruleId;

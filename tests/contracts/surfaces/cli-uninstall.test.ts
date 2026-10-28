@@ -110,6 +110,7 @@ it('offers force for running work before any card and prints a kept image\'s ste
     const quiet = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, inventory({ resources: [...inventory().resources, ...rows] })) };
     card.requests.length = 0; card.answers.push('cancel'); await uninstallCommand(['uninstall'], quiet).catch(() => null);
     expect(card.requests[0]!.options.map(option => option.id)).toEqual([...offered, 'details', 'cancel']);
+    expect(card.requests[0]!.body!.includes('Worker workspaces kept as possibly pending work: 1')).toBe(rows.length === 2); // the card says why
   }
   // A policy refusal (legal hold) is the engine's typed decision with its owner, never a generic ownership error from the surface.
   const held = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...inventory(), policyBlocker: 'UNINSTALL_PURGE_DENIED' }),

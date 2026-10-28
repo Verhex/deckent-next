@@ -55,15 +55,17 @@ const names = (items: readonly UninstallItem[], locale: Locale) => { const messa
   const listed = files.slice(0, registry.listedLimit);
   return [...shown, ...listed, ...(files.length > listed.length ? [t('cli.uninstall.more', { count: String(files.length - listed.length) }, locale)] : [])].join(' · '); };
 const workLine = (plan: UninstallPlan, locale: Locale) => { const work = plan.work, total = work.running.length + work.parked.length + work.approvals.length + work.deliveries.length + work.uncertain.length;
-  return total ? t('cli.uninstall.work.some', { running: String(work.running.length), parked: String(work.parked.length), approvals: String(work.approvals.length),
-    deliveries: String(work.deliveries.length), uncertain: String(work.uncertain.length) }, locale) : t('cli.uninstall.work.none', {}, locale); };
+  const line = total ? t('cli.uninstall.work.some', { running: String(work.running.length), parked: String(work.parked.length), approvals: String(work.approvals.length),
+    deliveries: String(work.deliveries.length), uncertain: String(work.uncertain.length) }, locale) : t('cli.uninstall.work.none', {}, locale),
+    workspaces = plan.items.filter(item => item.keep === 'workspace-pending').length; // F7: the menu's count of possibly pending worker workspaces, shown with it
+  return workspaces ? [line, t('cli.uninstall.work.workspaces', { count: String(workspaces) }, locale)] : [line]; };
 
 /** The menu card (owner 2026-10-27): what runs, what is pending, what this folder and the shared places hold; absent entries are not named. */
 export function uninstallSummaryLines(plan: UninstallPlan, locale: Locale): readonly string[] {
   const present = plan.items.filter(item => item.present !== false), shared = (item: UninstallItem) => registry.sharedGroups.includes(uninstallGroup(item) ?? '');
   const here = present.filter(item => !shared(item) && uninstallGroup(item)), elsewhere = present.filter(shared);
   return [...(!plan.service.running ? [] : [plan.service.unit ? t('cli.uninstall.service.unit', { unit: safe(plan.service.unit) }, locale) : t('cli.uninstall.service.plain', {}, locale)]),
-    workLine(plan, locale), ...(here.length ? [t('cli.uninstall.here', { groups: names(here, locale) }, locale)] : []),
+    ...workLine(plan, locale), ...(here.length ? [t('cli.uninstall.here', { groups: names(here, locale) }, locale)] : []),
     ...(elsewhere.length ? [t('cli.uninstall.shared', { groups: names(elsewhere, locale) }, locale)] : [])];
 }
 /** The plan card: first what WILL change (removed, stopped, disabled, cancelled), then what stays and why, absent entries collapsed, then the
