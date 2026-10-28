@@ -44,7 +44,9 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   const scope = async (path: string, scopeId: string) => (await recall(path))(`context\0${scopeId}\0${path}`, () => loadConfiguredScopeContext(path, scopeId, options, 'read'));
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadComposedConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
-    readImageRefresh: target => inspectToolchainRefresh(target.path, options), readDismissed: (target, scopeId, limit) => inspectConfiguredDismissedDeliveries(target.path, scopeId, limit, options),
+    readImageRefresh: target => inspectToolchainRefresh(target.path, options),
+    // BeUser M-33: a scope's set-aside results (the person's delivery-dismissed records).
+    readDismissed: (target, scopeId, limit) => inspectConfiguredDismissedDeliveries(target.path, scopeId, limit, options),
     // f4: active Brain quota waits (state/brain-waits) of this install; the reader creates nothing, a missing store is no wait.
     readBrainWaits: async target => { const layout = (await installed(target.path)).config.productLayout;
       return new FileBrainQuotaWaitStore(async () => inspectProductDirectory(layout, 'brainWaits').catch((error: unknown) => {

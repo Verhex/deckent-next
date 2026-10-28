@@ -7,8 +7,10 @@ import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecycleHandler, RunQueryHandler } from './context.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
+
 import { ticketSummaryBlock, queueSummaryRequest, DELIVERY_RENDER_LIMITS, type DeliverySummaryReader } from '#surfaces/core/delivery-summary/index.js';
 import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
+
 const approvalPageSchema = z.array(approvalRecordSchema);
 
 /** The card's risk and undo words from the producer's facts (B1 single card); a v1/v2 record declared none (`null`, shown as not declared). */

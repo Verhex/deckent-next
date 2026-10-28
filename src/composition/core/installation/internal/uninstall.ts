@@ -4,7 +4,8 @@ import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChanne
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail } from '#adapters/index.js';
+import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 

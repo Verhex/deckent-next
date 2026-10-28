@@ -2,6 +2,7 @@ import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { delegationWords, delegationLines, mcpCapabilityWords, mcpCapabilityPreviewLines, type DelegationHandlers, type McpCapabilityHandlers } from '#surfaces/core/work-labels/index.js';
 import type { TerminalLaunchContext } from './context.js';
+
 import type { PolicyPanelPort } from '#surfaces/core/terminal-panels/index.js';
 export function policyPanelPort(root: string, host: McpCapabilityHandlers, options: ConfigLoadOptions, locale: Locale, delegation?: DelegationHandlers, baseline?: TerminalLaunchContext['openOwnerBaselineInstallation']): PolicyPanelPort {
   const words = mcpCapabilityWords(locale), delegated = delegationWords(locale);

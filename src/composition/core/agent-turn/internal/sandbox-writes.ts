@@ -6,6 +6,7 @@ import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession,
   type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
+
 /**
  * Settles one finished call's write set (design §5–§6): scan, then every entry through the edit path rules (`writablePath` → denied; the
  * configuration file → `edit-authority`; the static floor → `edit-floor`; the self-source floor → `edit-self-source`; else `edit`), the edit decision (`decider`) and its own C11 effect of

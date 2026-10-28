@@ -4,7 +4,8 @@ import { readLocalOsIdentity, resolveDockerTaskProfile, isNativeCodingTemplate, 
 import { validateInstalledEvaluator } from '#capabilities/index.js';
 import { InstallationPreviewApplication, InstallationProfileError, type InstallationPreviewChoices } from '#engine/index.js';
 import { immutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
-import { PROJECT_CONFIG_PATH, inspectProductLayout, resolveProductLayout, validateConfig, versionedConfig } from '#platform/index.js';
+import { PROJECT_CONFIG_PATH, inspectProductLayout, resolveProductLayout } from '#platform/index.js';
+import { validateConfig, versionedConfig } from '#platform/index.js';
 export type InstallationPreview = Awaited<ReturnType<InstallationPreviewApplication['preview']>>;
 /** Pure supplied-profile preview: it neither reads installed config nor creates product paths or stores. */
 export async function previewSuppliedInstallation(projectRoot: string, supplied: unknown,

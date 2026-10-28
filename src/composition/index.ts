@@ -36,10 +36,15 @@ export * from '#composition/core/decision/index.js';
 export * from '#composition/core/memory/index.js';
 export * from '#composition/core/memory-rollout/index.js';
 export * from '#composition/core/agent-catalog/index.js';
+
 export { executeConfiguredBackup } from '#composition/core/backup/index.js';
+
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 export { inspectConfiguredDecisionDelegations } from '#composition/core/approvals/index.js';
 export { startConfiguredRunIntent, transitionConfiguredRunIntent, planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';
+
 export { releaseConfiguredQuota } from '#composition/core/runs/index.js';
+
 export { inspectConfiguredPolicyAdministration } from '#composition/core/approvals/index.js';
+
 export * from '#composition/core/hub/index.js';

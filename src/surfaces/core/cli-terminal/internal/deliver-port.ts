@@ -7,6 +7,7 @@ import { queueConfigRefusal, type DeliveryFileDiff, type DeliveryFileStat, type 
 import type { TargetQueueView } from '#engine/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import PORT from './deliver-port.json' with { type: 'json' };
+
 /** The newest recorded attempt of a Run's task (the identity `deckent task … --run --task` resolves); never guessed from a Run view. */
 export async function resolveLatestAttempt(inspectInventory: InventoryQueryHandler, root: string, scopeId: string, runId: string, taskId: string,
   options: ConfigLoadOptions): Promise<AttemptIdentity> {
@@ -19,6 +20,7 @@ export async function resolveLatestAttempt(inspectInventory: InventoryQueryHandl
   if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
   return best;
 }
+
 /** `deckent task patch-preview --stat`: per-file added/removed lines from the same unified diff the CLI prints (no source read here). */
 export function patchStat(changes: WorkspacePatch['changes'], render: (path: string, before: string | null, after: string | null) => string):
   Readonly<{ files: readonly DeliveryFileStat[]; added: number; removed: number }> {
@@ -35,6 +37,7 @@ export function patchStat(changes: WorkspacePatch['changes'], render: (path: str
   });
   return Object.freeze({ files: Object.freeze(files), added, removed });
 }
+
 /**
  * Bounded per-file diff bodies of the same patch (read-only): the CLI's own renderer, never a second diff. A file whose text holds a NUL byte, or
  * whose sides exceed the byte bound, or that lies beyond the file bound carries a typed reason instead of a body (the renderer is not run on it);
@@ -54,6 +57,7 @@ export function patchDiffs(changes: WorkspacePatch['changes'], render: (path: st
     return Object.freeze({ path: change.path, lines: Object.freeze(lines.slice(0, PORT.maxDiffLinesPerFile)), hidden: Math.max(0, lines.length - PORT.maxDiffLinesPerFile), unavailable: null });
   }));
 }
+
 /**
  * TESLIM-PENCERESI: the delivery window's port over the CLI's own handlers — inventory, patch preview, integration check and prepare, and
  * the trusted composition's verified-terminal delivery/adoption. Absent (no `/deliver`, no window) unless every handler is bound.
@@ -65,8 +69,15 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
   const describe = context.describeDeliverySummaries, summaries = async (requests: readonly DeliverySummaryRequest[]) =>
     describe ? await describe(root, requests, options).catch(() => requests.map(() => null)) : [];
   const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
-    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; }, blocked: async () => { const execution = (await loadConfig(root, options)).execution; return execution?.workTargets?.targets[0] ? queueConfigRefusal(execution) : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED'); },
-    async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) { const refusal = queueConfigRefusal((await loadConfig(root, options)).execution); if (refusal) throw refusal; // BeUser DR2-06: named before anything is queued
+    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; },
+    // BeUser DR2-06/08: what configuration alone shows the queue would refuse (a missing work target, a protected or not allow-listed branch).
+    async blocked() {
+      const execution = (await loadConfig(root, options)).execution;
+      return execution?.workTargets?.targets[0] ? queueConfigRefusal(execution) : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
+    },
+    async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
+      const refusal = queueConfigRefusal((await loadConfig(root, options)).execution);
+      if (refusal) throw refusal; // named before anything is queued
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;
       if (!ref) throw ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
@@ -81,7 +92,13 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
     },
     ...(describe ? { async summary(view: TargetQueueView) { return (await summaries([queueSummaryRequest(view, DELIVERY_RENDER_LIMITS.cardTopPaths)]))[0] ?? null; } } : {}),
   } : undefined;
-  const { changeDeliveryDismissal: change } = context; /* BeUser M-33: set aside / bring back (person card in the composition) */ return { ...(queue ? { queue } : {}), ...(change ? { async dismiss(target: Parameters<TerminalDeliveryPort['preview']>[0], action: 'dismiss' | 'restore') { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options); await change(root, { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: identity.attemptId, action }, options); } } : {}),
+  // BeUser M-33: set a result aside or bring it back on the latest attempt (the person card and its witness live in the composition).
+  const change = context.changeDeliveryDismissal;
+  const dismiss = change ? async (target: Parameters<TerminalDeliveryPort['preview']>[0], action: 'dismiss' | 'restore') => {
+    const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
+    await change(root, { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: identity.attemptId, action }, options);
+  } : undefined;
+  return { ...(queue ? { queue } : {}), ...(dismiss ? { dismiss } : {}),
     async preview(target) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
       const preview = await previewWorkspacePatch(root, identity, options);

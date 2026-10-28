@@ -14,8 +14,16 @@ export async function workspacePatchContext(root: string, input: unknown, option
   await authorization.authorizeIdentity('read-output', identity, principal);
   if (preparing) await authorization.authorizeIdentity('recover-output', identity, principal);
   const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-  const sameWorkSource = async (store: { loadRunWorkspaceCustody(scopeId: string, runId: string): Promise<{ readonly source: { readonly sourceFingerprint: string } } | null> }) => { const execution = config.execution, workspaceRoot = await inspectProductDirectory(layout, 'workspaces'); if (execution) // BeUser DR2-05: act where this Run's work was made
-    await assertSameWorkSource((await store.loadRunWorkspaceCustody(identity.scopeId, identity.runId))?.source.sourceFingerprint, { now: (await resolveGitWorkTarget(resolve(root), execution, layout)).git.sourceRoot, project: resolve(root) }, sourceRoot => new GitWorkspaceBroker({ ...execution.git, sourceRoot, workspaceRoot }).captureSourceBase().then(base => base.sourceFingerprint)); };
+  // BeUser DR2-05: integration, delivery and adoption act where this Run's work was made; another current work source is WORK_TARGET_CHANGED naming both.
+  const sameWorkSource = async (store: { loadRunWorkspaceCustody(scopeId: string, runId: string): Promise<{ readonly source: { readonly sourceFingerprint: string } } | null> }) => {
+    const execution = config.execution;
+    if (!execution) return;
+    const workspaceRoot = await inspectProductDirectory(layout, 'workspaces');
+    const recorded = (await store.loadRunWorkspaceCustody(identity.scopeId, identity.runId))?.source.sourceFingerprint;
+    const now = (await resolveGitWorkTarget(resolve(root), execution, layout)).git.sourceRoot;
+    const fingerprint = (sourceRoot: string) => new GitWorkspaceBroker({ ...execution.git, sourceRoot, workspaceRoot }).captureSourceBase().then(base => base.sourceFingerprint);
+    await assertSameWorkSource(recorded, { now, project: resolve(root) }, fingerprint);
+  };
   return { ...context, identity, artifacts, authorization, sameWorkSource, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
 }
 async function preparePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions, release: boolean) {

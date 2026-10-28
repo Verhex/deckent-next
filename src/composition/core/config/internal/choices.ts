@@ -6,7 +6,8 @@ import { resolveConfiguredScopeMembership, loadConfiguredScopeContext } from '#c
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { modelInvocabilityText, IdentityProfileRegistry, installationOwnScopes, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { executionRegistrySchema, policySchema } from '#domain/index.js';
-import { readLocalOsIdentity, discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
+import { readLocalOsIdentity } from '#adapters/index.js';
+import { discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
 import { ErrorRegistry, inspectProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import type { ConfigChoiceList, ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/index.js';
 /** Each inspection gets a fresh snapshot. No source grants write authority; ConfigApplication still admits the chosen value. A discovery its time limit or a size bound cut short stays `partial` (which) on its list. */

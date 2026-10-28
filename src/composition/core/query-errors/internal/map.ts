@@ -1,10 +1,12 @@
 import { AuthorityChangeError, AgentCatalogStoreError, DecisionApplicationError, MemoryJournalError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
 import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, MemoryError, AgentCatalogError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError, ModelRoleError, CatalogEvolutionError } from '#domain/index.js';
-import { ProviderSpendError, ModelInvocationStoreError, NervousError, type ProviderSpendAccount, ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
-import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError, LocalRuntimeSocketError } from '#adapters/index.js';
+import { ProviderSpendError, ModelInvocationStoreError, NervousError, type ProviderSpendAccount } from '#engine/index.js';
+import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
+import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
 import { UninstallError, InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
+import { LocalRuntimeSocketError } from '#adapters/index.js';
 import { RunError, TaskEvaluationError, TaskGraphError, WorkClassRegistryError, WorkerEffortError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';

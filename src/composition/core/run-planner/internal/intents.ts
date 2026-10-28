@@ -1,11 +1,13 @@
 import { userInfo } from 'node:os';
 import type { BrainPlanCommand } from '#domain/index.js';
-import { RunIntentApplication, RunPolicyAuthorization, isRunIntentResult, type RunIntentRecord, assertAuthorityWitness } from '#engine/index.js';
+import { RunIntentApplication, RunPolicyAuthorization, isRunIntentResult, type RunIntentRecord } from '#engine/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { attestLocalInteractiveTerminal, openSqliteRunProposalStore, localPrincipalChannel } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, openSqliteRunProposalStore } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { configuredWorkerSetupFact } from './intent-facts.js';
+import { assertAuthorityWitness } from '#engine/index.js';
+import { localPrincipalChannel } from '#adapters/index.js';
 async function withIntentOwner<T>(root: string, command: BrainPlanCommand, options: ConfigLoadOptions,
   run: (owner: RunIntentApplication) => Promise<T>) {
   const context = await loadConfiguredScopeContext(root, command.scopeId, options, 'write');

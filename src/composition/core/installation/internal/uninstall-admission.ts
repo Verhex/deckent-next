@@ -8,7 +8,8 @@ import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemT
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
-import { uninstallRecoveryDirectory, quiescentInstallationScopes, prepareUninstallBackup, writeUninstallTombstone, observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, quiescentInstallationScopes, prepareUninstallBackup, writeUninstallTombstone } from '#adapters/index.js';
+import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
 export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: UninstallPlan, principal: VerifiedPrincipal,

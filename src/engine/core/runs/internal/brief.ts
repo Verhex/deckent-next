@@ -26,7 +26,9 @@ export const resultBriefSchema = z.object({ schemaVersion: z.literal(1), attempt
   report: workerFinalReportResultSchema.nullable(), evaluation: briefEvaluationSchema,
   /** This receipt belongs to the Run; it does not prove this individual worker patch landed. */
   runDelivery: briefDeliverySchema.nullable(), openIssues: z.array(text).readonly().nullable(),
-  failedTests: briefFailedTestsSchema.optional(), deliveryOutlook: briefDeliveryOutlookSchema.optional(), setAside: z.literal(true).optional(), dismissalUnread: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/u).optional(), // M-33, additive (outlook values unchanged on the wire): a person set this awaiting patch aside / unread records' code
+  failedTests: briefFailedTestsSchema.optional(), deliveryOutlook: briefDeliveryOutlookSchema.optional(),
+  /** BeUser M-33 (additive; the outlook keeps its wire values): a person set this awaiting patch aside, or the set-aside records could not be read (typed code). */
+  setAside: z.literal(true).optional(), dismissalUnread: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/u).optional(),
 }).strict().readonly();
 export type ResultBrief = z.infer<typeof resultBriefSchema>;
 export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
