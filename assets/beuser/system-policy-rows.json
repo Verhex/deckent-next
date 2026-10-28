@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "beuser-system-policy",
+  "revision": 1,
+  "roles": [
+    {"id": "beuser-evaluator", "permissions": [
+      {"id": "own-run", "effect": "allow", "actions": ["inspect"], "resource": {"kind": "run", "ids": "all"}},
+      {"id": "own-transcript", "effect": "allow", "actions": ["inspect"], "resource": {"kind": "beuser-transcript", "ids": "all"}},
+      {"id": "own-evaluation", "effect": "allow", "actions": ["evaluate"], "resource": {"kind": "attempt", "ids": "all"}},
+      {"id": "role-model", "effect": "allow", "actions": ["invoke"], "resource": {"kind": "model-invocation", "ids": "all"}},
+      {"id": "own-realm", "effect": "allow", "actions": ["create", "destroy"], "resource": {"kind": "beuser-sandbox", "ids": "all"}}
+    ]}
+  ],
+  "bindings": [{"id": "beuser-evaluator", "actor": "beuser-evaluator", "roles": ["beuser-evaluator"]}]
+}

@@ -383,3 +383,6 @@ export async function upgradeInstalledPolicyTemplate(writer: PolicyTemplateDocum
     try { return done(await upgradePolicyTemplate(writer, { ...base, apply: true, audit: event => { audit.record(event); } }), named); } finally { audit.close(); }
   });
 }
+
+/** B1 data revision is independent of template v18. Explicit init/upgrade callers share the one archived planner/writer. */
+export { reconcileSystemPolicyRows as installSystemPolicyRows, reconcileSystemPolicyRows as upgradeSystemPolicyRows } from '#engine/core/system-policy-rows/index.js';
