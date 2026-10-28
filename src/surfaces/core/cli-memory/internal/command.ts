@@ -84,7 +84,9 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
   const scope = await resolveCommandScope({ command: 'deckent memory', locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: writing, interactive, listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) { emit(t('memory.cancelled', {}, locale), { ...sinks, level: 'warning' }); return 1; }
-  const io = { root, options, locale, scope, ask, inputMaxBytes: config.cli.invocationInputMaxBytes, resolve: (id: string) => resolveEntry(context, root, scope.scopeId, id, options) };
+  // BeUser E-03: where verified memory is used and whether it is on, said plainly (the switch stays the person's; nothing turns on here).
+  const mode = config.memoryAutomation.context.mode, usage = mode === 'on' ? t('memory.usage.on', {}, locale) : t('memory.usage.off', { mode }, locale);
+  const io = { root, options, locale, scope, ask, inputMaxBytes: config.cli.invocationInputMaxBytes, usage, resolve: (id: string) => resolveEntry(context, root, scope.scopeId, id, options) };
   if (args.action === 'review') return memoryReview(args, context, io);
   if (args.action === 'purge') return memoryPurge(args, context, io);
   if (args.action === 'retire' && args.source) return memoryRetireSource(args, context, io);
@@ -122,6 +124,7 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
     if (args.json || result.status === 'held') return finish(result);
     lines.push(result.entries.length ? table(result.entries, locale, context) : t('memory.none', {}, locale));
     if (result.withheld) lines.push(t('memory.withheld', { count: result.withheld }, locale));
+    lines.push(io.usage);
     if (context.inspectMemoryEvaluators) lines.push(...await context.inspectMemoryEvaluators(root, scope.scopeId, options).then(view => evaluatorLines(view, locale),
       () => [t('memory.view.evaluator.unavailable', {}, locale)]));
   }

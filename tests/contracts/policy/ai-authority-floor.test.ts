@@ -23,6 +23,9 @@ const FLOORED: readonly (readonly [string, string, string, string])[] = [
   ['installation purge', 'installation', 'installation', 'purge'],
   // Owner Q-SPEND (b), 2026-10-26: held-spend reconciliation stays a person's even under an older grant.
   ['provider spend reconciliation (settle, release, write-off)', 'provider-spend-account', 'ordinary-target', 'reconcile'],
+  // BeUser E-05 (owner 2026-10-28, "yalnız kişiye"): pinning or dropping a Hub source is a person's trust decision.
+  ['hub source add', 'hub', 's', 'sources.add'],
+  ['hub source remove', 'hub', 's', 'sources.remove'],
   ['secret write', 'secret', 'OPENAI_API_KEY', 'set'],
   ['secret delete', 'secret', 'OPENAI_API_KEY', 'delete'],
   ['secret store switch', 'secret', 'all', 'switch'],

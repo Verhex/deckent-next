@@ -69,5 +69,7 @@
   "memory.done.proposed": "Proposed {id} as a candidate.",
   "memory.done.verified": "Entry {id} is now verified (revision {revision}).",
   "memory.done.retired": "Entry {id} is retired (revision {revision}); its history is kept.",
-  "memory.example.propose": "{\n  \"kind\": \"fact\",\n  \"title\": \"Brand tone\",\n  \"body\": \"We write short, friendly sentences and address customers formally.\",\n  \"tags\": [\n    \"brand\",\n    \"tone\"\n  ],\n  \"lesson\": null\n}\nkind: fact, or lesson (then lesson holds the cause and the correction; field list: deckent memory propose --schema). tags must be different from each other.\nSave this as a file, edit it, then: deckent memory propose --input <file>"
+  "memory.example.propose": "{\n  \"kind\": \"fact\",\n  \"title\": \"Brand tone\",\n  \"body\": \"We write short, friendly sentences and address customers formally.\",\n  \"tags\": [\n    \"brand\",\n    \"tone\"\n  ],\n  \"lesson\": null\n}\nkind: fact, or lesson (then lesson holds the cause and the correction; field list: deckent memory propose --schema). tags must be different from each other.\nSave this as a file, edit it, then: deckent memory propose --input <file>",
+  "memory.usage.off": "Where memory is used: verified entries reach workers only when a Run is admitted and memoryAutomation.context.mode is on (now: {mode}); terminal chat never reads memory. To change it on your own terminal: deckent config set memoryAutomation.context.mode",
+  "memory.usage.on": "Where memory is used: verified entries reach workers when a Run is admitted (memoryAutomation.context.mode: on); terminal chat never reads memory."
 }

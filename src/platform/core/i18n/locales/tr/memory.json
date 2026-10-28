@@ -69,5 +69,7 @@
   "memory.done.proposed": "{id} aday olarak önerildi.",
   "memory.done.verified": "{id} kaydı artık doğrulandı (sürüm {revision}).",
   "memory.done.retired": "{id} kaydı emekliye ayrıldı (sürüm {revision}); geçmişi korunur.",
-  "memory.example.propose": "{\n  \"kind\": \"fact\",\n  \"title\": \"Marka tonu\",\n  \"body\": \"Kısa, sıcak cümleler yazarız ve müşteriye 'siz' diye hitap ederiz.\",\n  \"tags\": [\n    \"marka\",\n    \"ton\"\n  ],\n  \"lesson\": null\n}\nkind: fact ya da lesson (o zaman lesson neden ve düzeltmeyi taşır; alan listesi: deckent memory propose --schema). tags birbirinden farklı olmalı.\nBunu dosyaya kaydedin, düzenleyin, sonra: deckent memory propose --input <dosya>"
+  "memory.example.propose": "{\n  \"kind\": \"fact\",\n  \"title\": \"Marka tonu\",\n  \"body\": \"Kısa, sıcak cümleler yazarız ve müşteriye 'siz' diye hitap ederiz.\",\n  \"tags\": [\n    \"marka\",\n    \"ton\"\n  ],\n  \"lesson\": null\n}\nkind: fact ya da lesson (o zaman lesson neden ve düzeltmeyi taşır; alan listesi: deckent memory propose --schema). tags birbirinden farklı olmalı.\nBunu dosyaya kaydedin, düzenleyin, sonra: deckent memory propose --input <dosya>",
+  "memory.usage.off": "Hafıza nerede kullanılır: doğrulanmış kayıtlar yalnız bir iş kabul edilirken ve memoryAutomation.context.mode açıkken (şu an: {mode}) işçilere gider; terminal sohbeti hafızayı hiç okumaz. Kendi terminalinizde değiştirmek için: deckent config set memoryAutomation.context.mode",
+  "memory.usage.on": "Hafıza nerede kullanılır: doğrulanmış kayıtlar bir iş kabul edilirken işçilere gider (memoryAutomation.context.mode: on); terminal sohbeti hafızayı hiç okumaz."
 }

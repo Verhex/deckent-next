@@ -69,6 +69,8 @@ it('a person verifies on their own card: the card shows the entry and who propos
   expect(card.asked).toHaveLength(1); expect(JSON.stringify(card.asked[0])).toContain('Fatura kuralı'); expect(JSON.stringify(card.asked[0])).toContain('(AI)');
   expect(calls).toMatchObject([['verify', { scopeId: 'scope', entryId: 'lesson-fatura-1', expectedRevision: 1, basis: { kind: 'human-review', note: 'r1 kanıtı okundu' } }]]);
   expect(out.text()).toContain('verified');
+  // BeUser E-03: the card and the result say where verified memory is used and that context is off, with the switch (nothing turns it on).
+  expect(JSON.stringify(card.asked[0])).toContain('memoryAutomation.context.mode'); expect(out.text()).toContain('terminal chat never reads memory');
 });
 
 it('a cancelled card writes nothing and exits 1; retire passes reason and replacement; propose reads the content file as a human proposal', async () => {

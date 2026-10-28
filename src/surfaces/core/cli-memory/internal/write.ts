@@ -10,7 +10,7 @@ import type { MemoryCommandContext } from './context.js';
 import type { Parsed } from './command.js';
 import { contentLines, view } from './render.js';
 
-export interface WriteContext { readonly root: string; readonly options: ConfigLoadOptions; readonly locale: Locale; readonly scope: ScopeResolution; readonly inputMaxBytes: number;
+export interface WriteContext { readonly root: string; readonly options: ConfigLoadOptions; readonly locale: Locale; readonly scope: ScopeResolution; readonly inputMaxBytes: number; readonly usage?: string;
   readonly ask: (request: CliCardRequest) => Promise<string | null>; readonly resolve: (id: string) => Promise<MemoryInspection> }
 export const cardOptions = (locale: Locale) => [{ id: 'apply', label: t('memory.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('memory.card.cancel', {}, locale), key: 'n' }];
 const content = (value: MemoryContent, locale: Locale): string[] => [safeCell(value.title), ...contentLines(value, locale)];
@@ -38,12 +38,12 @@ export async function memoryWrite(args: Parsed, context: MemoryCommandContext, i
   if (found.status === 'not-found') throw ErrorRegistry.createError('MEMORY_NOT_FOUND');
   const { entry } = found, verify = args.action === 'verify';
   if (verify ? !context.verifyMemory : !context.retireMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
-  const body = [view(entry, found.history, locale), '', verify ? t('memory.card.verify.body', { note: safeCell(args.note!) }, locale)
+  const body = [view(entry, found.history, locale), '', ...(verify && io.usage ? [io.usage] : []), verify ? t('memory.card.verify.body', { note: safeCell(args.note!) }, locale)
     : t('memory.card.retire.body', { reason: safeCell(args.reason!), replacement: safeCell(args.supersededBy ?? '-') }, locale)];
   if (await io.ask({ title: verify ? t('memory.card.verify.title', {}, locale) : t('memory.card.retire.title', {}, locale), body, options: cardOptions(locale) }) !== 'apply') return cancelled();
   const base = { schemaVersion: 1 as const, commandId: randomUUID(), scopeId: scope.scopeId, entryId: entry.entryId, expectedRevision: entry.revision };
   const result = verify ? await context.verifyMemory!(io.root, { ...base, basis: { kind: 'human-review', note: args.note! } }, io.options)
     : await context.retireMemory!(io.root, { ...base, reason: args.reason!, supersededBy: args.supersededBy ?? null }, io.options);
-  emit(verify ? t('memory.done.verified', { id: result.entry.entryId, revision: result.entry.revision }, locale)
+  emit(verify ? [t('memory.done.verified', { id: result.entry.entryId, revision: result.entry.revision }, locale), ...(io.usage ? [io.usage] : [])].join('\n')
     : t('memory.done.retired', { id: result.entry.entryId, revision: result.entry.revision }, locale), sinks);
 }
