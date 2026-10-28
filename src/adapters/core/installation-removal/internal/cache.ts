@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { lstat, opendir, realpath, rmdir, unlink } from 'node:fs/promises';
+import { lstat, opendir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse } from 'node:path';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
-import { pathWithin as inside, PRIVATE_PERMISSION_MASK } from '#platform/index.js';
+import { pathWithin as inside, PRIVATE_PERMISSION_MASK, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory } from '#platform/index.js';
 /** `members`: the resource owner's naming, one anchored pattern per level below `path`; a last-level match is one owned tree. */
 export interface CacheRemovalResource { readonly resourceId: string; readonly path: string; readonly ownershipDigest: string; readonly members: readonly string[] }
 export interface CacheRemovalBounds { readonly maxEntries: number; readonly maxDepth: number }
@@ -76,14 +76,13 @@ export class InstallationCacheRemovalTarget implements EffectTarget {
       let started = false;
       try {
         for (const entry of scan.entries.sort((a, b) => b.path.length - a.path.length)) {
-          const now = await lstat(entry.path);
-          if (now.dev !== entry.dev || now.ino !== entry.ino || now.isSymbolicLink()) rejected();
-          if (!entry.directory && (now.size !== entry.size || now.mtimeMs !== entry.mtime || now.ctimeMs !== entry.ctime)) rejected();
-          started = true;
-          if (entry.directory) await rmdir(entry.path); else await unlink(entry.path);
+          // Review follow-up: removal goes through the pinned parent (no link followed); a file must still be the scanned one, a member folder empty.
+          const now = entry.directory ? null : (await readPinnedFile(entry.path).catch(() => null))?.identity, same = now && now.dev === entry.dev && now.ino === entry.ino;
+          if (!entry.directory && (!same || now.size !== entry.size || now.mtimeMs !== entry.mtime)) rejected();
+          started = true; if (entry.directory) await removeEmptyPinnedDirectory(entry.path, true); else await removePinnedFile(entry.path, now!);
         }
         // A parent that still holds an unlisted entry is kept; it was never a member.
-        for (const parent of scan.parents.sort((a, b) => b.length - a.length)) await rmdir(parent).catch(error => { if (!['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes(error.code)) throw error; });
+        for (const parent of scan.parents.sort((a, b) => b.length - a.length)) await removeEmptyPinnedDirectory(parent);
         return { version: null };
       } catch (cause) { if (started) throw new EffectTargetError('EFFECT_TARGET_UNKNOWN', { cause }); throw cause; }
     });

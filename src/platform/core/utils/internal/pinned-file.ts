@@ -122,11 +122,12 @@ export async function restorePinnedFile(path: string, bytes: Uint8Array, mode: n
     return 'restored';
   } finally { await dir.close(); }
 }
-/** An emptied folder goes through its pinned parent; a non-empty or missing one stays as it is. */
-export async function removeEmptyPinnedDirectory(path: string) {
+/** An emptied folder goes through its pinned parent; a non-empty or missing one stays as it is (`member`: a non-empty one is a refusal). */
+export async function removeEmptyPinnedDirectory(path: string, member = false) {
   const dir = await openPinnedParent(path);
   if (!dir) return;
-  try { await rmdir(at(dir, basename(path))).catch((error: unknown) => { if (!['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error; }); }
+  try { await rmdir(at(dir, basename(path))).catch((error: unknown) => { const code = (error as NodeJS.ErrnoException).code ?? '';
+    if (member && code !== 'ENOENT' || !['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes(code)) throw new PinnedFileError('changed'); }); }
   finally { await dir.close(); }
 }
 /**

@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rename, rm, symlink, lstat, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
 const roots: string[] = [];
 const observed = { dataBlockers: [], managedScopes: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true },
@@ -36,6 +36,22 @@ it('removes only the owner-named members of a cache, keeping same-user strays an
   await expect(blocked.observe(ref)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
 });
 
+it('removes cache members only through their pinned parent: a link planted after the scan touches nothing outside', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: pinned removal is Linux-only'); return; }
+  const platform = await import('#platform/index.js'), root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-pinned-cache-')); roots.push(root);
+  const cache = join(root, 'cache'), area = join(cache, 'b'.repeat(32)), outside = join(root, 'outside'), entry = join(area, 'entry');
+  for (const dir of [area, outside]) await mkdir(dir, { mode: 0o700, recursive: true });
+  await writeFile(entry, 'disposable', { mode: 0o600 }); await writeFile(join(outside, 'entry'), 'OUTSIDE', { mode: 0o600 });
+  const target = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64), members: ['^[0-9a-f]{32}$'] }], [],
+    { maxEntries: 10, maxDepth: 3 }, async work => work()), ref = { kind: target.kind, id: 'cache' };
+  const request = { target: ref, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'key', expectedVersion: (await target.observe(ref)).version, input: null };
+  // After the scan and before the removal, the member folder becomes a link to another folder holding a file of the same name.
+  const original = platform.readPinnedFile, spy = vi.spyOn(platform, 'readPinnedFile').mockImplementation(async path => {
+    if (path === entry && !await lstat(`${area}-moved`).catch(() => null)) { await rename(area, `${area}-moved`); await symlink(outside, area); }
+    return original(path); });
+  try { await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); } finally { spy.mockRestore(); }
+  expect(await readFile(join(outside, 'entry'), 'utf8')).toBe('OUTSIDE'); expect(await readFile(join(`${area}-moved`, 'entry'), 'utf8')).toBe('disposable');
+});
 it('never accepts a foreign target id or a symlink ancestor into the recorded disposable set', async () => {
   if (process.platform === 'win32') { console.info('verify-not-run: POSIX no-follow ownership check'); return; }
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-foreign-')); roots.push(root);
