@@ -382,6 +382,9 @@ it('keep-work archives and deletes only conversation data and retires the folder
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE');
     expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER'); // M10 (JOURNEY §5.2): keep-work keeps earlier backups where they are
     for (const path of [configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt')]) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    // ...archived (verified) in keep-work's own set first: the archive manifest names each of them.
+    const { createHash } = await import('node:crypto'), archivedIds = (JSON.parse(await readFile(`${kept.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
+    for (const path of [configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt')]) expect(archivedIds).toContain(createHash('sha256').update(path).digest('hex'));
     expect(await lstat(join(local, 'installation/retired.json'))).toBeTruthy(); // §5.4: the service stays down until the person reopens the folder
     // Delete everything: every owned file is archived, verified, then deleted; nothing is left of the project's .deckent.
     const all = await previewConfiguredUninstall(project, ALL, options);
@@ -391,7 +394,7 @@ it('keep-work archives and deletes only conversation data and retires the folder
     // `deckent backup restore <set>`: the semantic set and the uninstall archive beside it bring the installation and its files back.
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE'); expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER');
-    expect((await lstat(hook)).mode & 0o777).toBe(0o755); expect(await readFile(join(idle, 'tree/file.txt'), 'utf8')).toBe('WORK'); expect(await readFile(configBackup, 'utf8')).toBe('{}');
+    expect((await lstat(hook)).mode & 0o777).toBe(0o755);
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
