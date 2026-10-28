@@ -981,6 +981,7 @@
     },
     "src/platform/core/host": {
       "dependencies": [
+        "src/platform/core/utils",
         "src/platform/core/common",
         "src/platform/core/errors"
       ],

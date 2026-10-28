@@ -195,6 +195,20 @@ it('asks nothing when nothing would change, stops the service before custody in 
   const result = await app().apply({ schemaVersion: 2, commandId: 'c3', planDigest: unit.planDigest }, confirm);
   expect(calls).toEqual(['shutdown', 'disable:deckent-fixture.service', 'custody:false', 'finish:completed']);
   expect(result).toMatchObject({ status: 'completed', unit: { unit: 'deckent-fixture.service', previous: 'enabled' } }); expect(cards).toBe(1);
+  // M7: a restarted instance that accepted work the card did not name (or another unit observation) is never stopped by disable --now.
+  calls.length = 0; answering = true; instance = 'first';
+  const restartedWithWork = await app().preview(query({ disableUnit: true }));
+  const accepting = new UninstallApplication({ ...(app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports,
+    inventory: async () => ({ ...inventory(), work: instance === 'restarted' ? { ...idle, running: [{ scopeId: 's', id: 'new-run', revision: 1 }] } : idle }) });
+  await expect(accepting.apply({ schemaVersion: 2, commandId: 'c3b', planDigest: restartedWithWork.planDigest }, confirm)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
+  expect(calls).toEqual(['shutdown']);
+  calls.length = 0; answering = true; instance = 'first';
+  const changedUnit = await app().preview(query({ disableUnit: true })), unitPorts = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports;
+  const realiased = new UninstallApplication({ ...unitPorts, service: { ...unitPorts.service!, unit: async () => instance === 'restarted'
+    ? { unit: 'deckent-fixture.service', unitDisable: 'command-only', command: 'systemctl --user disable --now deckent-fixture.service' }
+    : { unit: 'deckent-fixture.service', unitDisable: 'eligible', command: 'systemctl --user disable --now deckent-fixture.service' } } });
+  await expect(realiased.apply({ schemaVersion: 2, commandId: 'c3c', planDigest: changedUnit.planDigest }, confirm)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
+  expect(calls).toEqual(['shutdown']); answering = false;
   // K3: force cancels and rejects with the person's authority, names the unknown result and closes nothing; a NEW unknown result after cancelling stops before custody.
   calls.length = 0; answering = false;
   work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 2 }], approvals: [{ scopeId: 's', id: 'approval-1', revision: 0 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 3 }], uncertain: [effect] };

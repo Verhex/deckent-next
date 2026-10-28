@@ -30,7 +30,9 @@ export const uninstallWorkSchema = z.object({ running: z.array(ref), parked: z.a
 /** The runtime service as observed: running is a describe answer; `unit` is the user unit whose main process it is (null: none proven). */
 export const uninstallServiceSchema = z.object({ running: z.boolean(), unit: text.nullable(),
   /** K4: `eligible` only when every condition holds (user unit, main process = this installation's service, nothing else in its group, no Also=/Alias=). */
-  unitDisable: z.enum(['eligible', 'command-only', 'none']), command: text.nullable() }).strict().readonly();
+  unitDisable: z.enum(['eligible', 'command-only', 'none']), command: text.nullable(),
+  /** K4 (i): the unit's exact enablement links (`<link> -> <target>`), bound into the confirmed plan; disable refuses when they changed. */
+  links: z.array(text).max(64).readonly().optional() }).strict().readonly();
 export type UninstallResource = z.infer<typeof uninstallResourceSchema>;
 export type UninstallInstallation = z.infer<typeof uninstallInstallationSchema>;
 export type UninstallWork = z.infer<typeof uninstallWorkSchema>;
@@ -69,7 +71,7 @@ export interface UninstallResult {
   /** K3: unreconciled items are never closed; they are named here (and stay in the backed-up ledger) as unknown. */
   readonly uncertain: UninstallWork['uncertain'];
   /** K4 (d): the user unit this run disabled, its previous state and the exact undo command. */
-  readonly unit?: { readonly unit: string; readonly previous: string; readonly undo: string };
+  readonly unit?: { readonly unit: string; readonly previous: string; readonly undo: string; readonly links?: readonly string[] };
   readonly failureCode?: string;
 }
 export class UninstallError extends Error {

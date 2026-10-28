@@ -84,8 +84,8 @@ export interface UninstallApplicationPorts {
   readonly settle?: { readonly budgetMs: number; wait(ms: number): Promise<unknown> };
   /** The runtime service: its describe answer, the user unit whose main process it is (K4 checks), governed shutdown and `disable --now`. */
   readonly service?: { readonly budgetMs: number; describe(signal: AbortSignal): Promise<RuntimeServiceDescriptor>;
-    unit(processId: number): Promise<{ readonly unit: string; readonly unitDisable: 'eligible' | 'command-only'; readonly command: string } | null>;
-    shutdown(): Promise<unknown>; disable(unit: string): Promise<NonNullable<UninstallResult['unit']>> };
+    unit(processId: number): Promise<{ readonly unit: string; readonly unitDisable: 'eligible' | 'command-only'; readonly command: string; readonly links?: readonly string[] } | null>;
+    shutdown(): Promise<unknown>; disable(unit: string, links: readonly string[]): Promise<NonNullable<UninstallResult['unit']>> };
 }
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const queries = UNINSTALL_TIERS.flatMap(tier => [false, true].flatMap(force => [false, true].map(disableUnit => ({ schemaVersion: 2 as const, tier, force, disableUnit }))));
@@ -99,7 +99,7 @@ export class UninstallApplication {
     const policyBlocker = await this.ports.authorize('purge', principal).then(() => null, (error: unknown) => (error as { code?: string }).code ?? 'POLICY_DENIED');
     const found = service && (await describeRuntimeServiceWithin(service.describe, runtimeMonotonicDeadline(service.budgetMs))).descriptor;
     const unit = found && found.processId !== undefined ? await service.unit(found.processId) : null;
-    return { ...inventory, policyBlocker, service: { running: !!found, unit: unit?.unit ?? null, unitDisable: unit?.unitDisable ?? 'none', command: unit?.command ?? null } };
+    return { ...inventory, policyBlocker, service: { running: !!found, unit: unit?.unit ?? null, unitDisable: unit?.unitDisable ?? 'none', command: unit?.command ?? null, links: unit?.links ?? [] } };
   }
   /** Governed shutdown first; absence (or a manager's new instance) is observed, never assumed; only then K4's `disable --now`; then absence again. */
   private async stopService(plan: UninstallPlan) {
@@ -110,7 +110,17 @@ export class UninstallApplication {
       if (deadline.expired()) throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: plan.service.unit ?? '', command: plan.service.command ?? '' } });
       await settle.wait(this.registry.waitPollMs); } };
     if (first) { await service.shutdown(); await gone(first.instanceId); }
-    const unit = plan.steps.disableUnit && plan.service.unit ? await service.disable(plan.service.unit) : undefined;
+    // M7: a restart is not absence. Before `disable --now` stops a new instance its manager started, that instance is observed afresh: the same
+    // eligible unit with the same links, and no work the confirmation did not name (it may have accepted some); otherwise nothing is disabled.
+    const restarted = await answer(), refused = () => ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: plan.service.unit ?? '', command: plan.service.command ?? '' } });
+    if (restarted && plan.steps.disableUnit) {
+      const fresh = restarted.processId === undefined ? null : await service.unit(restarted.processId), work = (await this.ports.inventory()).work, known = plan.work;
+      const named = (list: readonly { id: string }[], earlier: readonly { id: string }[]) => list.every(item => earlier.some(other => other.id === item.id));
+      if (fresh?.unit !== plan.service.unit || fresh.unitDisable !== 'eligible' || JSON.stringify(fresh.links ?? []) !== JSON.stringify(plan.service.links ?? []) || !work.complete
+        || !named(work.running, known.running) || !named(work.parked, known.parked) || !named(work.approvals, known.approvals) || !named(work.deliveries, known.deliveries)
+        || !named(work.uncertain, known.uncertain)) throw refused();
+    }
+    const unit = plan.steps.disableUnit && plan.service.unit ? await service.disable(plan.service.unit, plan.service.links ?? []) : undefined;
     await gone(null);
     return unit;
   }

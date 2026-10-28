@@ -1,4 +1,7 @@
 {
   "schemaVersion": 1,
-  "ciEnvironment": ["CI"]
+  "ciEnvironment": [
+    "CI"
+  ],
+  "unitReceipt": "unit-{unit}.{phase}.json"
 }

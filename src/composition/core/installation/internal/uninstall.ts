@@ -49,11 +49,11 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
     settle: { budgetMs: config.cancellation?.claimTtlMs ?? terminal.serviceStartTimeoutMs, wait: delay },
     service: { budgetMs: terminal.serviceStartTimeoutMs, describe: signal => client.describeService(signal),
       async unit(pid) { const found = await detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS, env));
-        return found && { unit: found.unit, ...await observeUserUnit(found, pid, exec) }; },
+        return found && { unit: found.unit, ...await observeUserUnit(found, pid, exec, env) }; },
       async shutdown() { const live = await client.describeService(AbortSignal.timeout(terminal.serviceStartTimeoutMs));
         if (!live.identity) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_UNAVAILABLE');
         return client.shutdownService({ schemaVersion: 1, commandId: randomUUID(), serviceId: live.identity.serviceId, instanceId: live.instanceId, reason: 'uninstall' }, AbortSignal.timeout(terminal.serviceStartTimeoutMs)); },
-      disable: unit => disableUserUnit(unit, exec) } });
+      disable: (unit, links) => disableUserUnit(unit, exec, links, uninstallRecoveryDirectory(config, env), env) } });
 }
 async function completed(root: string, options: ConfigLoadOptions, settle = false) {
   const config = await load(root, options), directory = uninstallRecoveryDirectory(config, options.env ?? process.env);
