@@ -41,7 +41,7 @@ export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace'
 export const recoveryEvidenceSchema = z.object({ activity: z.enum(NERVOUS_ACTIVITY_STATES).nullable(), launcher: z.enum(NERVOUS_LAUNCHER_BASES).nullable(),
   launcherPhase: z.enum(DISPATCH_PREPARATION_PHASES).nullable(), absentObservations: counterSchema, absentForMs: counterSchema.nullable(),
   unavailableForMs: counterSchema.nullable(), containerRecorded: z.boolean().nullable(), workerRecorded: z.boolean().nullable(),
-  source: z.object({ kind: z.enum(['dispatch-preparation-aborted', 'policy-turn']), eventId: identitySchema, sequence: counterSchema.positive() }).strict().nullable() }).strict();
+  source: z.object({ kind: z.enum(['dispatch-preparation-aborted', 'policy-turn', 'beuser-target-refusal']), eventId: identitySchema, sequence: counterSchema.positive() }).strict().nullable() }).strict();
 /** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 /**
