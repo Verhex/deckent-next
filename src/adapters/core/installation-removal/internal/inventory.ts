@@ -58,19 +58,26 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   const archived: DataRemovalMember[] = [], taken = new Set(members.map(member => member.path)), rel = (path: string) => relative(layout.root, path).split(sep).join('/');
   const matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
   const conversation = registry.archive.conversation.map(name => productResourcePath(layout, name as ProductResource)); let seen = 0;
-  const leases = new Map<string, Promise<boolean>>(), limits = { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords };
+  const leases = new Map<string, Promise<{ idle: boolean; evidence: string | null }>>(), limits = { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords };
   let broker: Promise<GitWorkspaceBroker> | undefined;
   const owner = () => broker ??= (async () => { if (!config.execution) throw new Error('unconfigured');
     const target = await resolveGitWorkTarget(resolve(config.projectRoot), config.execution, layout);
     return new GitWorkspaceBroker({ ...config.execution.git, ...target.git, workspaceRoot: productResourcePath(layout, 'workspaces') }); })();
-  const idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
-    if (at && !leases.has(at)) leases.set(at, readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => idleAttemptWorkspace(JSON.parse(text), basename(at), base.work,
-      async identity => attemptRecords(productResourcePath(layout, 'ledger'), limits, identity), async record => {
-        const lease = await (await owner()).openRecorded(record.request.identity);
-        return !!lease && lease.baseCommit === record.request.baseCommit && JSON.stringify(lease.sourceBase) === JSON.stringify(record.sourceBase);
-      })).catch(() => false).then(done => done || !unlisted(resolve(layout.root, at), 'workspace-pending'))); return at ? leases.get(at)! : false; };
-  const unlisted = (locator: string, keep?: 'workspace-pending') => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
-    ownership: 'unknown', ownershipEvidence: null, present: true, protected: !!keep, capability: false, backup: 'missing', ...(keep ? { keep } : {}) });
+  // Owner refusal is distinct from pending work: only a verified owner's files can join either removal group.
+  const workspace = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
+    if (at && !leases.has(at)) leases.set(at, (async () => {
+      let evidence: string | null = null;
+      const idle = await readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => idleAttemptWorkspace(JSON.parse(text), basename(at), base.work,
+        async identity => attemptRecords(productResourcePath(layout, 'ledger'), limits, identity), async record => {
+          const lease = await (await owner()).openRecorded(record.request.identity);
+          if (!lease || lease.id !== basename(at) || lease.baseCommit !== record.request.baseCommit || JSON.stringify(lease.sourceBase) !== JSON.stringify(record.sourceBase)) return false;
+          evidence = record.fingerprint; return true;
+        })).catch(() => false);
+      if (!idle) unlisted(resolve(layout.root, at), 'workspace-pending', evidence);
+      return { idle, evidence };
+    })()); return at ? leases.get(at)! : null; };
+  const unlisted = (locator: string, keep?: 'workspace-pending', evidence: string | null = null) => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null,
+    owner: evidence ? installationId : null, ownership: evidence ? 'exclusive' : 'unknown', ownershipEvidence: evidence, present: true, protected: !!keep, capability: false, backup: 'missing', ...(keep ? { keep } : {}) });
   const walk = async (directory: string, depth: number): Promise<void> => {
     for (const entry of (await readdir(directory)).sort()) {
       const path = join(directory, entry);
@@ -78,9 +85,11 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (taken.has(path) || project.caches.some(cache => inside(cache, path))) continue;
       const info = await lstat(path);
       if (info.isDirectory()) { await walk(path, depth + 1); continue; }
+      const custody = await workspace(path);
+      if (custody && !custody.evidence) continue;
       if (kept(path) || matches(registry.archive.transient, path) && !(info.size && path === `${productResourcePath(layout, 'ledger')}-lock`)) continue;
       if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && matches(registry.archive.members, path))
-        archived.push(...(conversation.some(resource => inside(resource, path)) || matches(registry.archive.conversationFiles, path) || await idle(path) ? ['conversation-data', 'global-data'] : ['global-data'])
+        archived.push(...(conversation.some(resource => inside(resource, path)) || matches(registry.archive.conversationFiles, path) || custody?.idle ? ['conversation-data', 'global-data'] : ['global-data'])
           .map(target => ({ resourceId: rel(path), path, directory: null, archivePath: '', target, archived: true })));
       else unlisted(path);
     }

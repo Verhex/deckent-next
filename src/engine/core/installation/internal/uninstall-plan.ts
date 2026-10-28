@@ -62,6 +62,7 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     if (!entry) throw new UninstallError('UNINSTALL_INVALID');
     let action: UninstallItem['action'] = 'keep'; let reason: string;
     if (resource.present === false) reason = 'absent';
+    else if (resource.keep === 'workspace-pending' && resource.ownership === 'unknown') reason = 'ownership';
     else if (UNINSTALL_TIERS.indexOf(tier) < UNINSTALL_TIERS.indexOf(entry.removeFrom)) reason = 'durable';
     else if (resource.keep) reason = resource.keep;
     else if (resource.protected) reason = 'protected';
@@ -126,7 +127,7 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
   const { tier, force, disableUnit } = uninstallPlanQuerySchema.parse(query), installation = uninstallInstallationSchema.parse(inventory.installation);
   const resources = inventory.resources.map(value => uninstallResourceSchema.parse(value)).sort((a, b) => compare(a.resourceId, b.resourceId));
   if (new Set(resources.map(value => value.resourceId)).size !== resources.length) throw new UninstallError('UNINSTALL_INVALID');
-  // F7 (JOURNEY §5.1): a worker workspace the ledger does not prove idle is pending work, counted for every tier (its rows apply to the keep tiers only).
+  // F7 (JOURNEY §5.1): a worker workspace the ledger does not prove idle is pending work, counted for every tier (unverified owners stay in every tier).
   const workspaces = inventory.resources.filter(value => value.keep === 'workspace-pending').length;
   const work = uninstallWorkSchema.parse({ ...inventory.work, ...(workspaces ? { workspaces } : {}) }), service = uninstallServiceSchema.parse(inventory.service);
   const observed = { ...inventory, work, service };

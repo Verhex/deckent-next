@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile, lstat, symlink, chmod, unlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile, lstat, symlink, link, chmod, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FileInstallationIdentityStore, readLocalOsIdentity, openLocalIntegrityAuthority, acquireLedgerLock } from '#adapters/index.js';
 import { clearConfigCache, resolveProductLayout, uninstallHoldPath, loadConfig, getConfigFieldDefault, productResourcePath } from '#platform/index.js';
+import { uninstallPlanLines, uninstallSummaryLines } from '#surfaces/core/cli-installation/index.js';
 import { previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 // The scratch owner's session area shape (`<32 hex>/<32 hex>`); anything else under state/scratch is not its member.
 const AREA = `state/scratch/${'a'.repeat(32)}/${'b'.repeat(32)}`;
@@ -355,7 +356,7 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('keep-work archives and deletes only conversation data and retires the folder; delete everything then leaves no .deckent and backup restore brings every file back', async () => {
+it('keep-work archives conversation data and retires the folder; ALL force preserves unproven workspaces and backup restore brings owned files back', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
@@ -399,13 +400,15 @@ it('keep-work archives and deletes only conversation data and retires the folder
       { backupPassphrase: async () => phrase, confirm: async () => { cards += 1; return true; } }, options).catch((error: { code?: string; message?: string }) => error);
     expect(refusal).toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' }); expect((refusal as Error).message).toContain('--keep-work'); expect(cards).toBe(0);
     expect(await readFile(join(unproven, 'tree/file.txt'), 'utf8')).toBe('WORK');
-    // Governed --force: every owned file, the workspaces included, is archived, verified, then deleted; nothing is left of the project's .deckent.
+    // Force never grants ownership: these unreadable/unverifiable leases and their trees stay out of every removal group.
     const all = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
     expect(all.blockers).toEqual([]); expect(all.work.workspaces).toBe(2);
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'all', planDigest: all.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
-    expect(result.status).toBe('completed'); await expect(lstat(local)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(result.status).toBe('completed'); expect(await lstat(local)).toBeTruthy();
+    expect(await readFile(lease, 'utf8')).toBe('LEASE'); expect(await readFile(join(unproven, 'tree/file.txt'), 'utf8')).toBe('WORK');
+    expect(all.items.filter(item => item.keep === 'workspace-pending')).toHaveLength(2);
     const removed = (JSON.parse(await readFile(`${result.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
-    expect(removed).toContain(hash(join(unproven, 'tree/file.txt'))); // K7: in the encrypted backup before it went
+    expect(removed).not.toContain(hash(join(unproven, 'tree/file.txt'))); // No removal authority and no archive membership
     // `deckent backup restore <set>`: the semantic set and the uninstall archive beside it bring the installation and its files back.
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE'); expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER');
@@ -753,7 +756,7 @@ it('delete everything removes the bridges init wrote (a file init created whole,
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('F7: keep-work preserves a real owner-created clone with only its fingerprint corrupted, despite terminal no-delivery ledger proof', async () => {
+it('F7: ALL + force preserves and reports a rejected real lease and clone while backing up and removing verified pending work', async () => {
   if (process.platform !== 'linux') return;
   const { GitWorkspaceBroker, FileArtifactStore, openSqliteAttemptStore } = await import('#adapters/index.js');
   const { DispatchApplication, TaskEvaluationApplication } = await import('#engine/index.js');
@@ -785,16 +788,61 @@ it('F7: keep-work preserves a real owner-created clone with only its fingerprint
       expect((await store.loadRun('s', identity.runId))!.state.kind).toBe('terminal');
     } finally { store.close(); }
     await chmod(productResourcePath(layout, 'ledger'), 0o600);
+    // The verified idle clone still qualifies for keep-work; an owned clone with no settled Run remains pending.
+    const idle = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
+    expect(idle.items.find(item => item.resourceId === 'conversation-data')!.members).toContain(join(lease.workspace, 'work.txt'));
+    const pending = await broker.allocate({ schemaVersion: 1, identity: { ...identity, runId: 'pending' }, baseCommit });
+    await writeFile(join(pending.workspace, 'pending.txt'), 'OWNED PENDING', { mode: 0o600 });
     const leaseFile = join(dirname(lease.workspace), 'lease.json'), record = JSON.parse(await readFile(leaseFile, 'utf8'));
-    expect(await broker.openRecorded(identity)).toBeTruthy(); record.fingerprint = 'e'.repeat(64); await writeFile(leaseFile, JSON.stringify(record));
+    expect(await broker.openRecorded(identity)).toBeTruthy();
+    const original = await readFile(leaseFile, 'utf8'), observed = async () => {
+      for (const tier of ['keep-data', 'keep-work', 'all'] as const) {
+        const plan = await previewConfiguredUninstall(project, { ...KEEP, tier, force: true }, options);
+        expect(plan.items.find(item => item.locator === dirname(lease.workspace))).toMatchObject({ action: 'keep', reason: 'ownership', ownership: 'unknown' });
+        for (const item of plan.items.filter(item => item.action === 'remove'))
+          expect((item.members ?? [item.locator]).some(path => path.startsWith(dirname(lease.workspace) + '/'))).toBe(false);
+      }
+    };
+    // The same production observer protects options/private-source mismatches and shared/linked lease records.
+    const configFile = join(local, 'config.json'), config = await readFile(configFile, 'utf8');
+    const changed = JSON.parse(config); changed.execution.git.timeoutMs = 9999;
+    await writeFile(configFile, JSON.stringify(changed)); clearConfigCache(); await observed();
+    await writeFile(configFile, config); clearConfigCache();
+    const { gitWorkspaceFingerprint } = await import('#engine/index.js');
+    record.fingerprint = gitWorkspaceFingerprint(record.request, record.sourceBase, { ...gitOptions, sourceRoot: project, workspaceRoot }, { repositoryRoot: project, baseCommit });
+    await writeFile(leaseFile, JSON.stringify(record)); await observed(); await writeFile(leaseFile, original);
+    await link(leaseFile, leaseFile + '.copy'); await observed(); await unlink(leaseFile + '.copy');
+    await rename(leaseFile, leaseFile + '.copy'); await symlink(leaseFile + '.copy', leaseFile); await observed();
+    await unlink(leaseFile); await rename(leaseFile + '.copy', leaseFile);
+    record.fingerprint = 'e'.repeat(64); await writeFile(leaseFile, JSON.stringify(record));
     await expect(broker.openRecorded(identity)).rejects.toMatchObject({ code: 'WORKSPACE_IDENTITY_CONFLICT' });
     await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
-    const plan = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
+    await observed();
+    const preserved = new Map<string, Buffer>();
+    for (const entry of await readdir(dirname(lease.workspace), { recursive: true })) {
+      const path = join(dirname(lease.workspace), entry); if ((await lstat(path)).isFile()) preserved.set(path, await readFile(path));
+    }
+    const plan = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
     expect(plan.items).toContainEqual(expect.objectContaining({ locator: dirname(lease.workspace), action: 'keep', keep: 'workspace-pending' }));
-    expect(plan.items.find(item => item.resourceId === 'conversation-data')!.members).not.toContain(join(lease.workspace, 'work.txt'));
+    expect(plan.items.filter(item => item.action === 'remove').flatMap(item => item.members ?? [item.locator])).not.toContain(join(lease.workspace, 'work.txt'));
+    expect(plan.blockers).toEqual([]); expect(plan.work.workspaces).toBe(2);
+    expect(plan.items.find(item => item.resourceId === 'global-data')!.members).toContain(join(pending.workspace, 'pending.txt'));
+    for (const locale of ['en', 'tr'] as const) {
+      const kept = locale === 'en' ? 'Worker workspaces kept because ownership could not be verified: 1' : 'Sahipliği doğrulanamadığı için korunan işçi çalışma alanı: 1';
+      const removed = locale === 'en' ? 'Worker workspaces this removes after the encrypted backup holds them: 1' : 'Şifreli yedeğe alındıktan sonra kaldırılacak işçi çalışma alanı: 1';
+      expect(uninstallSummaryLines(plan, locale)).toContain(kept); expect(uninstallSummaryLines(plan, locale)).toContain(removed);
+      const lines = uninstallPlanLines(plan, locale); expect(lines).toContain(kept); expect(lines).toContain(removed);
+      expect(lines.join('\n')).toContain(locale === 'en' ? 'not proven to belong only to this installation' : 'yalnız bu kuruluma ait olduğu kanıtlanmadı');
+    }
     let cards = 0;
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'kw-corrupt', planDigest: plan.planDigest }, { confirm: async () => { cards++; return true; }, backupPassphrase: async () => phrase }, options);
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'all-corrupt', planDigest: plan.planDigest }, { confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; }, backupPassphrase: async () => phrase }, options);
     expect(cards).toBe(1); expect(result.status).toBe('completed'); expect(await readFile(join(lease.workspace, 'work.txt'), 'utf8')).toBe('KEEP OUTPUT');
     expect(await readFile(leaseFile, 'utf8')).toBe(JSON.stringify(record));
+    for (const [path, bytes] of preserved) expect(await readFile(path)).toEqual(bytes);
+    for (const path of plan.items.find(item => item.resourceId === 'global-data')!.members!.filter(path => path.startsWith(dirname(pending.workspace) + '/')))
+      await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    const removed = (JSON.parse(await readFile(`${result.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
+    const { sha256 } = await import('#platform/index.js');
+    expect(removed).toContain(sha256(join(pending.workspace, 'pending.txt'))); expect(removed).not.toContain(sha256(join(lease.workspace, 'work.txt')));
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
