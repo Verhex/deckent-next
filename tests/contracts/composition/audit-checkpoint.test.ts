@@ -9,7 +9,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { auditCheckpointFixture } from '../support/audit-checkpoint.js';
 import { verifyAudit, type AuditVerifyQuery } from '../../../src/index.js';
-import { checkpointConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
+import { checkpointConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
@@ -88,6 +88,24 @@ it.skipIf(process.platform !== 'win32')('unsupported Windows policy custody refu
   await expect(verifyAudit(root, { schemaVersion: 1, scopeId: 's' }, { env: { DECKENT_GLOBAL_HOME: join(root, 'home') } }))
     .rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
   expect(await readdir(data)).toEqual([]);
+});
+
+// BeUser S-04: the audit log is readable, not only verifiable: `audit list` pages the scope's verified records (who, what, when; --json is the
+// export), `audit show <n>` one in full, an unknown number names the list command, and a foreign scope is refused like verify.
+it.skipIf(process.platform === 'win32')('audit list and show read the verified log of the scope; a foreign scope is refused', async () => {
+  const f = await auditCheckpointFixture(); roots.push(f.root);
+  expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('match');
+  const listAudit = (root: string, query: unknown) => listConfiguredAudit(root, query, f.options);
+  const run = async (...argv: string[]) => { let out = '', err = ''; const code = await main(['audit', ...argv, '--scope', 's'], { root: f.root, env: f.options.env, listAudit,
+    stdout: { write: value => { out += value; } }, stderr: { write: value => { err += value; } } }); return { code, out, err }; };
+  const json = await run('list', '--json'), view = JSON.parse(json.out) as { records: { sequence: number; event: { eventId: string; subject: { kind: string } } }[]; next: number | null };
+  expect(json.code).toBe(0); expect(view.records.length).toBeGreaterThan(0); expect(view.records.map(record => record.sequence)).toEqual(view.records.map((_, index) => index + 1));
+  const text = await run('list', '--limit', '1');
+  expect(text.out).toContain('Audit log of scope s'); expect(text.out).toContain(`#1 · `); expect(text.out).toContain(view.records[0]!.event.subject.kind);
+  if (view.records.length > 1) expect(text.out).toContain('deckent audit list --scope s --after 1');
+  const shown = await run('show', '1', '--json'); expect(JSON.parse(shown.out).event.eventId).toBe(view.records[0]!.event.eventId);
+  const missing = await run('show', String(view.records.length + 50)); expect(missing.code).not.toBe(0); expect(missing.err).toContain('deckent audit list --scope s');
+  await expect(listAudit(f.root, { schemaVersion: 1, scopeId: 'foreign' })).rejects.toBeDefined();
 });
 
 it('a throwing verifier, an unverified scope and an unavailable result are never healthy: doctor degraded with the reason, audit verify non-zero', async () => {

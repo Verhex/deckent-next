@@ -199,7 +199,7 @@
   "error.SETUP_STAGE_REFUSED": "Kurulum {stage} aşamasında durdu ({code}); ondan sonrası uygulanmadı. Bir kişi isteyen aşama (terminal, kart ya da sudo) yalnız terminalde deckent init içinde çalışır.",
   "setup.reason.profileConfigured": "{profile} kimlik profili kullanıcı yapılandırmanızda zaten kayıtlı.",
   "cli.init.policyModes.preview": "{scope} kapsamı için plan (policy revizyonu {revision}); henüz hiçbir şey yazılmadı. Kendi terminalinizde uygulayın (y/N sorar): deckent init policy --scope {scope} --modes {modes} --apply --expect {revision}{person}",
-  "cli.init.policyModes.applied": "Tamam: policy artık {who} için aşağıdaki modları içeriyor (önceki belgeler arşivlendi, değişiklik denetim kaydında).",
+  "cli.init.policyModes.applied": "Tamam: policy artık {who} için aşağıdaki modları içeriyor (önceki belgeler arşivlendi, değişiklik denetim kaydında: deckent audit list).",
   "cli.init.policyModes.current": "Değişecek bir şey yok: aşağıdaki modlar {who} için zaten istendiği gibi.",
   "cli.init.policyModes.refused": "Yazılmadı: kurulum policy'sindeki bir kural {mode} için hâlâ karar veriyor ({rule}), bu yüzden kapalı kalıyor. Önce o kuralı değiştirin, sonra bunu yeniden çalıştırın.",
   "cli.init.policyModes.ruleConflict": "Yazılmadı: {rule} kuralı başka içerikle zaten var; olduğu gibi bırakıldı. Gözden geçirin, sonra bunu yeniden çalıştırın.",

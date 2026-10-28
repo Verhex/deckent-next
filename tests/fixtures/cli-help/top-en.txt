@@ -85,9 +85,9 @@ Approvals:
 Setup / Maintenance:
   uninstall   Preview or uninstall one installation; keep data by default.
       [--purge] [--dry-run] [--json]
-  audit       Verify audit history and checkpoint evidence
-              (without an action: verify)
-      verify | rebaseline
+  audit       Read and verify the audit log (who did what, when) and its
+              checkpoints (without an action: verify)
+      verify | list | show | rebaseline
       [--scope <id>]
   backup      Create, verify and restore recovery sets
       create | verify | restore

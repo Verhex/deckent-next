@@ -58,6 +58,7 @@ export const CLI_CATALOG = [
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do', args: '--request <text> [--scope <id>]', bare: { requires: ['--request <text>'] } },
   { name: 'audit', group: 'setup', summary: 'cli.audit.summary', detail: 'cli.audit.help', args: '[--scope <id>]', bare: { read: 'verify' }, children: [
     action('verify', 'setup', 'cli.audit.summary', 'cli.audit.help'),
+    action('list', 'setup', 'cli.audit.list.summary', 'cli.audit.help'), action('show', 'setup', 'cli.audit.show.summary', 'cli.audit.help'),
     action('rebaseline', 'setup', 'cli.audit.rebaseline.summary', 'cli.audit.help', { requires: ['--reason <text>'] }),
   ] },
   { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', args: '[<action> --scope <id> --set <path>]', bare: 'handler', children: [

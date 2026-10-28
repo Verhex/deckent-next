@@ -345,5 +345,14 @@
   "cli.uninstall.blocker.authority-relocated": "{path} kayıtlı konumunda değil. Temizleme durdu, hiçbir şey silinmeyecek. Verileri korumak için deckent uninstall komutunu --purge olmadan çalıştırın.",
   "cli.uninstall.blocker.authority-in-project": "Bu kurulum verisini proje klasöründe ({path}) tutuyor; projelerin .deckent klasörleri her zaman korunur, bu yüzden --purge’ün silecek bir şeyi yok. Hiçbir şey silinmeyecek. deckent uninstall komutunu --purge olmadan çalıştırın.",
   "cli.uninstall.blocker.authority-unsafe": "{path} bu kullanıcının özel dosyası olarak doğrulanamadı (bağlantı, sahip, izin ya da okuma hatası). Temizleme durdu, hiçbir şey silinmeyecek. Verileri korumak için deckent uninstall komutunu --purge olmadan çalıştırın.",
-  "cli.uninstall.backupPassphrase": "Yedek parolası"
+  "cli.uninstall.backupPassphrase": "Yedek parolası",
+  "error.AUDIT_RECORD_NOT_FOUND": "{scope} kapsamında {sequence} numaralı denetim kaydı yok. Kayıtları deckent audit list --scope {scope} ile listeleyin.",
+  "cli.audit.list.summary": "Denetim kaydını listele: kim ne yaptı, ne zaman",
+  "cli.audit.show.summary": "Bir denetim kaydını tamamen göster",
+  "cli.audit.list.head": "{scope} kapsamının denetim kaydı (eskiden yeniye; kim ne yaptı, ne zaman):",
+  "cli.audit.list.row": "#{sequence} · {at} · {who} · {what} · politika {policy}",
+  "cli.audit.list.none": "Henüz denetim kaydı yok.",
+  "cli.audit.list.end": "Kaydın sonu. Bir kaydın tamamı: deckent audit show <numara>. Tüm alanlar: --json ekleyin.",
+  "cli.audit.list.next": "Devamı: deckent audit list --scope {scope} --after {after}. Bir kaydın tamamı: deckent audit show <numara>.",
+  "cli.audit.list.command": "deckent audit {action} komutu"
 }
