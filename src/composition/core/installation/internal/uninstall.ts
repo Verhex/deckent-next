@@ -53,7 +53,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
       async shutdown() { const live = await client.describeService(AbortSignal.timeout(terminal.serviceStartTimeoutMs));
         if (!live.identity) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_UNAVAILABLE');
         return client.shutdownService({ schemaVersion: 1, commandId: randomUUID(), serviceId: live.identity.serviceId, instanceId: live.instanceId, reason: 'uninstall' }, AbortSignal.timeout(terminal.serviceStartTimeoutMs)); },
-      disable: (unit, links) => disableUserUnit(unit, exec, links, uninstallRecoveryDirectory(config, env), env) } });
+      disable: confirmed => disableUserUnit(confirmed, exec, uninstallRecoveryDirectory(config, env), env) } });
 }
 async function completed(root: string, options: ConfigLoadOptions, settle = false) { // R11: an already-absent tail completes through the same owner
   const config = await load(root, options), env = options.env ?? process.env, directory = uninstallRecoveryDirectory(config, env);

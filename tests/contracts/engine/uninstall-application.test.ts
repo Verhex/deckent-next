@@ -178,7 +178,7 @@ it('asks nothing when nothing would change, stops the service before custody in 
     service: { budgetMs: 1000, describe: async () => { if (!answering) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); return descriptor(instance); },
       unit: async () => ({ unit: 'deckent-fixture.service', unitDisable: 'eligible', command: 'systemctl --user disable --now deckent-fixture.service' }),
       // A manager restarts the stopped service (a new instance) until the unit is disabled.
-      shutdown: async () => { calls.push('shutdown'); instance = 'restarted'; }, disable: async unit => { calls.push(`disable:${unit}`); answering = false; return { unit, previous: 'enabled', undo: `systemctl --user enable --now ${unit}` }; } } });
+      shutdown: async () => { calls.push('shutdown'); instance = 'restarted'; }, disable: async ({ unit }) => { calls.push(`disable:${unit}`); answering = false; return { unit: unit!, previous: 'enabled', undo: `systemctl --user enable --now ${unit}` }; } } });
   const confirm = { confirm: async () => { cards++; return true; } };
   const query = (extra: object = {}) => ({ schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false, ...extra });
   // Owner 2026-10-27: nothing removed or stopped → no card, no custody.
@@ -186,28 +186,23 @@ it('asks nothing when nothing would change, stops the service before custody in 
   expect(nothing.nothingToRemove).toBe(true);
   expect(await app().apply({ schemaVersion: 2, commandId: 'c1', planDigest: nothing.planDigest }, confirm)).toMatchObject({ status: 'noop' });
   expect(cards).toBe(0); expect(calls).toEqual([]);
-  // A service its unit restarts: refused before any card without --disable-unit; with it, governed shutdown → new instance seen → disable --now → absence → custody.
+  // A service under a unit: refused before any card without --disable-unit; with it, governed shutdown → absence → disable --now → custody.
   answering = true;
   const refused = await app().preview(query());
   await expect(app().apply({ schemaVersion: 2, commandId: 'c2', planDigest: refused.planDigest }, confirm)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
   expect(cards).toBe(0);
-  const unit = await app().preview(query({ disableUnit: true }));
-  const result = await app().apply({ schemaVersion: 2, commandId: 'c3', planDigest: unit.planDigest }, confirm);
+  const unitPorts = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports;
+  const stops = new UninstallApplication({ ...unitPorts, service: { ...unitPorts.service!, shutdown: async () => { calls.push('shutdown'); answering = false; } } });
+  const unit = await stops.preview(query({ disableUnit: true }));
+  const result = await stops.apply({ schemaVersion: 2, commandId: 'c3', planDigest: unit.planDigest }, confirm);
   expect(calls).toEqual(['shutdown', 'disable:deckent-fixture.service', 'custody:false', 'finish:completed']);
   expect(result).toMatchObject({ status: 'completed', unit: { unit: 'deckent-fixture.service', previous: 'enabled' } }); expect(cards).toBe(1);
-  // M7: a restarted instance that accepted work the card did not name (or another unit observation) is never stopped by disable --now.
+  // R4 (lead 2026-10-28): the unit's manager starts a new instance after the governed shutdown (it may already accept work): nothing is
+  // disabled or stopped by --now; the refusal names the exact command.
   calls.length = 0; answering = true; instance = 'first';
-  const restartedWithWork = await app().preview(query({ disableUnit: true }));
-  const accepting = new UninstallApplication({ ...(app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports,
-    inventory: async () => ({ ...inventory(), work: instance === 'restarted' ? { ...idle, running: [{ scopeId: 's', id: 'new-run', revision: 1 }] } : idle }) });
-  await expect(accepting.apply({ schemaVersion: 2, commandId: 'c3b', planDigest: restartedWithWork.planDigest }, confirm)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
-  expect(calls).toEqual(['shutdown']);
-  calls.length = 0; answering = true; instance = 'first';
-  const changedUnit = await app().preview(query({ disableUnit: true })), unitPorts = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports;
-  const realiased = new UninstallApplication({ ...unitPorts, service: { ...unitPorts.service!, unit: async () => instance === 'restarted'
-    ? { unit: 'deckent-fixture.service', unitDisable: 'command-only', command: 'systemctl --user disable --now deckent-fixture.service' }
-    : { unit: 'deckent-fixture.service', unitDisable: 'eligible', command: 'systemctl --user disable --now deckent-fixture.service' } } });
-  await expect(realiased.apply({ schemaVersion: 2, commandId: 'c3c', planDigest: changedUnit.planDigest }, confirm)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
+  const restarting = await app().preview(query({ disableUnit: true }));
+  await expect(app().apply({ schemaVersion: 2, commandId: 'c3b', planDigest: restarting.planDigest }, confirm))
+    .rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING', params: { command: 'systemctl --user disable --now deckent-fixture.service' } });
   expect(calls).toEqual(['shutdown']); answering = false;
   // K3: force cancels and rejects with the person's authority, names the unknown result and closes nothing; a NEW unknown result after cancelling stops before custody.
   calls.length = 0; answering = false;
@@ -268,7 +263,7 @@ it('K3 on the real delivery queue: delete everything refuses a queued delivery n
       force: { cancelRun: async () => {}, rejectApproval: async () => {},
         withdrawDelivery: async ref => { const record = await queue.inspect(ref.scopeId, ref.id, principal); if (record) await queue.cancel(record, principal); } },
       settle: { budgetMs: 1000, wait: async () => {} }, service: { budgetMs: 1000, describe: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); },
-        unit: async () => null, shutdown: async () => {}, disable: async unit => ({ unit, previous: 'enabled', undo: '' }) } });
+        unit: async () => null, shutdown: async () => {}, disable: async ({ unit }) => ({ unit: unit!, previous: 'enabled', undo: '' }) } });
     const query = { schemaVersion: 2, tier: 'all', force: false, disableUnit: false } as const, confirm = { confirm: async () => true, backupPassphrase: async () => 'temporary' };
     // Negative: without --force nothing is touched and the refusal names the next command.
     const refused = await app().preview(query);

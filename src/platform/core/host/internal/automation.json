@@ -3,5 +3,6 @@
   "ciEnvironment": [
     "CI"
   ],
-  "unitReceipt": "unit-{unit}.{phase}.json"
+  "unitReceipt": "unit-{unit}.{phase}.json",
+  "unitLinkEntries": 4096
 }

@@ -32,7 +32,9 @@ export const uninstallServiceSchema = z.object({ running: z.boolean(), unit: tex
   /** K4: `eligible` only when every condition holds (user unit, main process = this installation's service, nothing else in its group, no Also=/Alias=). */
   unitDisable: z.enum(['eligible', 'command-only', 'none']), command: text.nullable(),
   /** K4 (i): the unit's exact enablement links (`<link> -> <target>`), bound into the confirmed plan; disable refuses when they changed. */
-  links: z.array(text).max(64).readonly().optional() }).strict().readonly();
+  links: z.array(text).max(64).readonly().optional(),
+  /** R3: the digest of the unit file (path and bytes) `disable` acts on, read again right before it; a change refuses. */
+  unitFile: digest.nullable().optional() }).strict().readonly();
 export type UninstallResource = z.infer<typeof uninstallResourceSchema>;
 export type UninstallInstallation = z.infer<typeof uninstallInstallationSchema>;
 export type UninstallWork = z.infer<typeof uninstallWorkSchema>;
