@@ -1,7 +1,7 @@
 import { closeSync, openSync, readSync } from 'node:fs';
-import { lstat, readdir, readlink } from 'node:fs/promises';
+import { lstat, readdir, readlink, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { serializeJsonDocument, writePinnedFile } from '#platform/core/utils/index.js';
@@ -56,11 +56,12 @@ export type UserUnitExec = (args: readonly string[]) => Promise<{ readonly stdou
 const showValues = async (exec: UserUnitExec, unit: string, properties: readonly string[]) => Object.fromEntries((await exec(['show',
   ...properties.flatMap(name => ['--property', name]), '--', unit])).stdout.trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
-/** K4 (i), review M8/R5: the unit's enablement links in the person's user unit folders (configuration, then runtime), as `<link> -> <target>`:
- * every link `systemctl disable` matches, walking every subfolder as it does: its name is the unit or its target names it. A folder that
- * cannot be read (other than an absent top folder) is unknown: it throws, never an empty list. */
+/** K4 (i), review M8/R5/F5: the unit's enablement links in the person's user unit folders (configuration, then runtime), as `<link> -> <target>`:
+ * every link `systemctl disable` matches, walking every subfolder as it does (systemd v255 install.c): its name is the unit, its target (written
+ * or chased to the end) names it, or its target is a link already matched, repeated until nothing joins. A folder that cannot be read (other
+ * than an absent top folder) is unknown: it throws, never an empty list. */
 export async function userUnitLinks(unit: string, env: Readonly<Record<string, string | undefined>>): Promise<readonly string[]> {
-  const home = env['HOME'], config = env['XDG_CONFIG_HOME'] || (home && join(home, '.config')), found: string[] = [];
+  const home = env['HOME'], config = env['XDG_CONFIG_HOME'] || (home && join(home, '.config')), found: { path: string; target: string; to: string; chased: string }[] = [];
   let seen = 0;
   const walk = async (folder: string, top: boolean): Promise<void> => {
     const entries = await readdir(folder, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => { if (top && error.code === 'ENOENT') return []; throw error; });
@@ -68,19 +69,43 @@ export async function userUnitLinks(unit: string, env: Readonly<Record<string, s
       if (++seen > AUTOMATION.unitLinkEntries) throw new Error('UNIT_LINKS_UNBOUNDED');
       const path = join(folder, entry.name);
       if (entry.isDirectory()) await walk(path, false);
-      else if (entry.isSymbolicLink()) { const target = await readlink(path); if (entry.name === unit || basename(target) === unit) found.push(`${path} -> ${target}`); }
+      else if (entry.isSymbolicLink()) { const target = await readlink(path); found.push({ path, target, to: resolve(folder, target), chased: await realpath(path).catch(() => '') }); }
     }
   };
   for (const folder of [config && join(config, 'systemd/user'), env['XDG_RUNTIME_DIR'] && join(env['XDG_RUNTIME_DIR'], 'systemd/user')]) if (folder) await walk(folder, true);
-  return found;
+  const matched = new Set<string>(), joins = (link: typeof found[number]) => basename(link.path) === unit || basename(link.target) === unit || basename(link.chased) === unit || matched.has(link.to);
+  for (let grew = true; grew;) { grew = false; for (const link of found) if (!matched.has(link.path) && joins(link)) { matched.add(link.path); grew = true; } }
+  return found.filter(link => matched.has(link.path)).map(link => `${link.path} -> ${link.target}`);
 }
 const runtimeLinked = (links: readonly string[], env: Readonly<Record<string, string | undefined>>) =>
   !!env['XDG_RUNTIME_DIR'] && links.some(entry => entry.startsWith(join(env['XDG_RUNTIME_DIR']!, 'systemd/user/')));
-/** R3: the unit file evidence `disable` acts on, read without its process: a regular fragment, its only name, no drop-in, no Also=/Alias=;
- * the digest binds its path and bytes. Null when any of that does not hold. */
-export async function userUnitFile(unit: string, exec: UserUnitExec) {
+/** F2: the user unit search path of systemd.unit(5) (v255), in precedence order (earlier entries override later files of the same name). */
+function userUnitSearchPath(env: Readonly<Record<string, string | undefined>>, home: string) {
+  const config = env['XDG_CONFIG_HOME'] || join(home, '.config'), run = env['XDG_RUNTIME_DIR'], at = (...parts: string[]) => run ? [join(run, 'systemd', ...parts)] : [];
+  const each = (value: string | undefined, fallback: string) => (value || fallback).split(':').filter(Boolean).map(dir => join(dir, 'systemd/user'));
+  return [join(config, 'systemd/user.control'), ...at('user.control'), ...at('transient'), ...at('generator.early'), join(config, 'systemd/user'), ...each(env['XDG_CONFIG_DIRS'], '/etc/xdg'),
+    '/etc/systemd/user', ...at('user'), '/run/systemd/user', ...at('generator'), join(env['XDG_DATA_HOME'] || join(home, '.local/share'), 'systemd/user'),
+    ...each(env['XDG_DATA_DIRS'], '/usr/local/share:/usr/share'), '/usr/local/lib/systemd/user', '/usr/lib/systemd/user', ...at('generator.late')];
+}
+/** F2: the unit file `systemctl disable` resolves from disk (not the manager's loaded copy): the first entry named after the unit along the search
+ * path, only when it is a regular file and no drop-in folder (`<unit>.d`, its `-` prefixes, `service.d`) exists anywhere; else null. A read error throws. */
+async function effectiveUnitFile(unit: string, env: Readonly<Record<string, string | undefined>>): Promise<string | null> {
+  const home = env['HOME'], parts = unit.slice(0, -'.service'.length).split('-');
+  if (!home || unit.includes('@') || !unit.endsWith('.service')) return null; // an instance's template resolution is not modelled: command only
+  const dropIns = [`${unit}.d`, 'service.d', ...parts.slice(1).map((_, index) => `${parts.slice(0, index + 1).join('-')}-.service.d`)];
+  let first: string | null | undefined;
+  for (const dir of userUnitSearchPath(env, home)) for (const name of [unit, ...dropIns]) {
+    const info = await lstat(join(dir, name)).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null; throw error; });
+    if (info && name !== unit) return null;
+    if (info && first === undefined) first = info.isFile() ? join(dir, name) : null;
+  }
+  return first ?? null;
+}
+/** R3, F2: the unit file evidence `disable` acts on, read without its process: the manager's fragment is the one resolved from disk, a regular file,
+ * its only name, no drop-in, no Also=/Alias=; the digest binds its path and bytes. Null when any of that does not hold. */
+export async function userUnitFile(unit: string, exec: UserUnitExec, env: Readonly<Record<string, string | undefined>> = process.env) {
   const values = await showValues(exec, unit, ['FragmentPath', 'Names', 'DropInPaths']).catch(() => null), text = values && readProcessFile(values['FragmentPath'] ?? '');
-  const file = text && await lstat(values['FragmentPath']!).catch(() => null);
+  const file = text && await effectiveUnitFile(unit, env).catch(() => null) === values['FragmentPath'] && await lstat(values['FragmentPath']!).catch(() => null);
   return file && file.isFile() && file.size === Buffer.byteLength(text) && !/^\s*(?:Also|Alias)\s*=\s*\S/mu.test(text) && !values['DropInPaths'] && values['Names']?.trim() === unit
     ? createHash('sha256').update(`${values['FragmentPath']}\0${text}`).digest('hex') : null;
 }
@@ -90,7 +115,7 @@ export async function userUnitFile(unit: string, exec: UserUnitExec) {
 export async function observeUserUnit(found: { readonly scope: 'user' | 'system'; readonly unit: string }, processId: number, exec: UserUnitExec,
   env: Readonly<Record<string, string | undefined>> = process.env) {
   const command = `systemctl ${found.scope === 'user' ? '--user ' : ''}disable --now ${found.unit}`, user = found.scope === 'user' && process.platform === 'linux';
-  const values = user ? await showValues(exec, found.unit, ['MainPID', 'ControlGroup']).catch(() => null) : null, file = values && await userUnitFile(found.unit, exec);
+  const values = user ? await showValues(exec, found.unit, ['MainPID', 'ControlGroup']).catch(() => null) : null, file = values && await userUnitFile(found.unit, exec, env);
   const links = file ? await userUnitLinks(found.unit, env).catch(() => null) : null;
   const eligible = !!links && !runtimeLinked(links, env) && Number(values!['MainPID']) === processId
     && readProcessFile(join('/sys/fs/cgroup', values!['ControlGroup'] ?? '', 'cgroup.procs'))?.trim() === String(processId);
@@ -106,7 +131,7 @@ export async function disableUserUnit(expected: { readonly unit: string | null; 
   exec: UserUnitExec, receipts: string, env: Readonly<Record<string, string | undefined>> = process.env) {
   const unit = expected.unit ?? '', command = `systemctl --user disable --now ${unit}`, refuse = () => ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit, command } });
   const links = await userUnitLinks(unit, env).catch(() => null);
-  if (!links || runtimeLinked(links, env) || JSON.stringify(links) !== JSON.stringify(expected.links ?? []) || !expected.unitFile || await userUnitFile(unit, exec) !== expected.unitFile) throw refuse();
+  if (!links || runtimeLinked(links, env) || JSON.stringify(links) !== JSON.stringify(expected.links ?? []) || !expected.unitFile || await userUnitFile(unit, exec, env) !== expected.unitFile) throw refuse();
   const values = await showValues(exec, unit, ['UnitFileState', 'ActiveState']), previous = values['UnitFileState'] ?? 'unknown', active = values['ActiveState'] ?? 'unknown';
   if (!['inactive', 'failed'].includes(active)) throw refuse(); // F4: an instance that started since the last absence check is never stopped by --now
   const undoOf = (gone: readonly string[]) => [...gone.map(entry => { const [path = '', target = ''] = entry.split(' -> ');
@@ -118,8 +143,9 @@ export async function disableUserUnit(expected: { readonly unit: string | null; 
   await receipt('intent', { links, undo: undoOf(links) });
   const outcome = await exec(['disable', '--now', '--', unit]).then(out => ({ ok: true, stderr: out.stderr }),
     (error: { stderr?: unknown; message?: string }) => ({ ok: false, stderr: String(error.stderr ?? error.message ?? '') }));
-  const after = await userUnitLinks(unit, env).catch(() => null), gone = after ? links.filter(entry => !after.includes(entry)) : links, undo = undoOf(gone);
+  // F5: only a successful re-read says which links went; otherwise the result is unknown (no links counted gone, no undo) and refused.
+  const after = await userUnitLinks(unit, env).catch(() => null), gone = after && links.filter(entry => !after.includes(entry)), undo = gone && undoOf(gone);
   await receipt('result', { ...outcome, links: gone, linksAfter: after, undo });
-  if (!outcome.ok) throw refuse();
+  if (!outcome.ok || !gone || !undo) throw refuse();
   return { unit, previous, undo, links: gone };
 }

@@ -25,7 +25,7 @@ it.skipIf(process.platform !== 'linux')('disables a user unit only with the conf
       // systemd removes the persistent links it matched (here: all three) and reports them.
       for (const entry of links) await unlink(entry.split(' -> ')[0]!);
       return { stdout: '', stderr: `Removed "${join(units, 'mine.service')}".\n` }; };
-    const confirmed = { unit: 'deckent.service', links, unitFile: await userUnitFile('deckent.service', exec) };
+    const confirmed = { unit: 'deckent.service', links, unitFile: await userUnitFile('deckent.service', exec, env) };
     expect(confirmed.unitFile).toMatch(/^[a-f0-9]{64}$/u);
     const refusedWith = async (changed: object) => { calls.length = 0;
       await expect(disableUserUnit({ ...confirmed, ...changed }, exec, receipts, env)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
@@ -69,5 +69,45 @@ it.skipIf(process.platform !== 'linux')('disables a user unit only with the conf
     calls.length = 0;
     await expect(disableUserUnit(confirmed, exec, join(root, 'linked/recovery'), env)).rejects.toMatchObject({ reason: 'unsafe' });
     expect(calls.some(args => args[0] === 'disable')).toBe(false); await expect(lstat(join(outside, 'recovery'))).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it.skipIf(process.platform !== 'linux')('F2/F5: disable acts only on the unit file systemd resolves from disk and records every chained link it removed, or nothing is known', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-unit-f2-'));
+  try {
+    const config = join(root, 'config'), units = join(config, 'systemd/user'), vendor = join(root, 'data/systemd/user'), fragment = join(vendor, 'deckent.service');
+    const env = { HOME: root, XDG_CONFIG_HOME: config, XDG_DATA_HOME: join(root, 'data'), XDG_RUNTIME_DIR: join(root, 'runtime') }, receipts = join(root, 'recovery');
+    await mkdir(join(units, 'default.target.wants'), { recursive: true }); await mkdir(vendor, { recursive: true }); await writeFile(fragment, '[Service]\nExecStart=/bin/true\n');
+    // F5: `second` names `first`, which names the unit: systemd chases both and removes both.
+    await symlink(fragment, join(units, 'default.target.wants/first.service')); await symlink('first.service', join(units, 'default.target.wants/second.service'));
+    const links = await userUnitLinks('deckent.service', env);
+    expect(links).toEqual([`${join(units, 'default.target.wants/first.service')} -> ${fragment}`, `${join(units, 'default.target.wants/second.service')} -> first.service`]);
+    let afterDisable = async () => { for (const entry of links) await unlink(entry.split(' -> ')[0]!); };
+    const calls: string[][] = [], exec = async (args: readonly string[]) => { calls.push([...args]);
+      // The manager still reports the vendor fragment it loaded at start.
+      if (args[0] === 'show') return { stdout: `FragmentPath=${fragment}\nNames=deckent.service\nDropInPaths=\nUnitFileState=enabled\nActiveState=inactive\n`, stderr: '' };
+      await afterDisable(); return { stdout: '', stderr: '' }; };
+    const confirmed = { unit: 'deckent.service', links, unitFile: await userUnitFile('deckent.service', exec, env) };
+    expect(confirmed.unitFile).toMatch(/^[a-f0-9]{64}$/u);
+    const refused = async () => { calls.length = 0;
+      await expect(disableUserUnit(confirmed, exec, receipts, env)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' }); expect(calls.some(args => args[0] === 'disable')).toBe(false); };
+    // F2: a higher-precedence unit of the same name (here with Also=) is what `disable` would read from disk: nothing is disabled.
+    await writeFile(join(units, 'deckent.service'), '[Install]\nAlso=other.service\n'); await refused(); await unlink(join(units, 'deckent.service'));
+    // ...and so is a mask or a linked unit in front of it, and a drop-in folder for it anywhere on the search path.
+    await symlink('/dev/null', join(units, 'deckent.service')); await refused(); await unlink(join(units, 'deckent.service'));
+    await mkdir(join(vendor, 'deckent.service.d')); await refused(); await rm(join(vendor, 'deckent.service.d'), { recursive: true });
+    // F5: a re-read that fails after `disable` leaves the result unknown: no links counted gone, no undo, a typed refusal.
+    if (process.getuid?.() !== 0) {
+      afterDisable = async () => { await mkdir(join(units, 'locked')); await chmod(join(units, 'locked'), 0o000); };
+      await expect(disableUserUnit(confirmed, exec, receipts, env)).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' });
+      expect(JSON.parse(await readFile(join(receipts, 'unit-deckent.service.result.json'), 'utf8'))).toMatchObject({ ok: true, links: null, linksAfter: null, undo: null });
+      await chmod(join(units, 'locked'), 0o700); await rm(join(units, 'locked'), { recursive: true });
+      afterDisable = async () => { for (const entry of links) await unlink(entry.split(' -> ')[0]!); };
+    }
+    // Both chained links are recorded as gone and the undo recreates both.
+    const done = await disableUserUnit(confirmed, exec, receipts, env);
+    expect(done.links).toEqual(links);
+    execFileSync('/bin/sh', ['-c', done.undo.slice(0, done.undo.indexOf(' && systemctl'))]);
+    expect(await userUnitLinks('deckent.service', env)).toEqual(links);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
