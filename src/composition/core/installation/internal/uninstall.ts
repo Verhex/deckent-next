@@ -5,7 +5,7 @@ import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
   uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, querySystemdMainPid, installationScopes } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeApproval, RunPolicyAuthorization, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, type UninstallInteraction } from '#engine/index.js';
-import { ErrorRegistry, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredRuntimeClient, withQueueContext } from '#composition/core/runtime-service/index.js';
 import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
@@ -25,7 +25,8 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   // Like BackupApplication, this installation-wide operation uses explicit all-scopes policy, not project-record admission. The ledger is only read (no sidecars).
   const person = async () => ({ ...readLocalOsIdentity(), scopeIds: scopes(await source.load()) }), exec = nativeServiceExec(config.installation.identityProbe, env);
   return new UninstallApplication({
-    channel: localPrincipalChannel(), witness: { attest: () => { const peer = localPrincipalPeer(); return attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } }, principal: person,
+    // M13: the AI/CI marker floor holds at this boundary too, so an SDK call from an agent or CI is no person's witness either.
+    channel: localPrincipalChannel(), witness: { attest: async () => { const peer = localPrincipalPeer(); return !automationMarker(env, config.cli.agentEnvironment) && attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } }, principal: person,
     // M14: a data tier is decided over every ledger-recorded scope too (as again under custody), before any card.
     async authorize(action, principal) { const document = policySchema.parse(await source.load()), affected = action !== 'purge' ? scopes(document)
       : installationScopes(productResourcePath(layout, 'ledger'), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopes(document));
@@ -67,7 +68,7 @@ export async function applyConfiguredUninstall(root: string, input: unknown, int
   const { previous, directory } = await completed(root, options);
   if (!previous) return (await configuredUninstall(root, options)).apply(input, interaction, signal);
   const witnessed = async () => { const peer = localPrincipalPeer();
-    if (localPrincipalChannel() || !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'uninstall' } }); };
+    if (localPrincipalChannel() || automationMarker(options.env ?? process.env, (await load(root, options)).cli.agentEnvironment) || !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'uninstall' } }); };
   await witnessed();
   const plan = completedUninstallPreview(previous.plan, previous.remaining);
   const command = uninstallApplySchema.safeParse(input); if (!command.success) throw ErrorRegistry.createError('UNINSTALL_INVALID');

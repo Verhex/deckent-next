@@ -308,6 +308,10 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     expect(plan.items.find(item => item.resourceId.startsWith('tracked.'))).toMatchObject({ locator: join(local, 'bindings.json'), action: 'keep', reason: 'vcs-tracked' });
     expect(plan.items.find(item => item.locator === join(local, 'notes.txt'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
+    // M13: an SDK call from an AI agent or CI (marker set, even with a real terminal attested) is no person's witness: refused, nothing deleted.
+    for (const marker of [{ CLAUDECODE: '1' }, { CI: 'true' }]) await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'marked', planDigest: plan.planDigest },
+      { backupPassphrase: async () => phrase, confirm: async () => true }, { ...options, env: { ...options.env, ...marker } })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(join(local, 'state/terminal-history.jsonl'), 'utf8')).toBe('HISTORY\n');
     // M5: a member that cannot be archived stops the removal before its first effect: the cache stays too (archive built before any removal).
     const report = join(local, 'crashes/crash-1-1-33333333-3333-4333-8333-333333333333.json'), cached = join(local, AREA, 'entry');
     for (const path of [cached, report]) { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); await writeFile(path, 'CACHE', { mode: 0o600 }); }
@@ -550,6 +554,10 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     let interrupted; try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'bridges', planDigest: plan.planDigest }, confirm, options); } finally { tail.at = null; }
     expect(interrupted.status).toBe('unknown'); expect((await readFile(claude)).equals(claudeBefore)).toBe(true);
     const second = await previewConfiguredUninstall(project, ALL, options);
+    // M13: the resumed tail holds the same floor: a marked SDK call is refused and deletes nothing more.
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, { ...options, env: { ...options.env, CLAUDECODE: '1' } }))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect((await readFile(claude)).equals(claudeBefore)).toBe(true); expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n');
     // B2: a remaining member Git started tracking after the interruption stops the resumed tail before anything more is deleted.
     git('add', 'AGENTS.md');
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });

@@ -1,5 +1,11 @@
 {
-  "table": { "cellMax": 256 },
-  "shortId": { "minPrefix": 4, "display": 8, "candidatesShown": 10, "inventoryPage": 50 },
-  "ciEnvironment": ["CI"]
+  "table": {
+    "cellMax": 256
+  },
+  "shortId": {
+    "minPrefix": 4,
+    "display": 8,
+    "candidatesShown": 10,
+    "inventoryPage": 50
+  }
 }

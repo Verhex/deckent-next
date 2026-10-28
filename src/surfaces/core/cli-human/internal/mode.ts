@@ -1,5 +1,4 @@
-import { envValue, getConfigFieldDefault } from '#platform/index.js';
-import registry from './human.json' with { type: 'json' };
+import { automationMarker, envValue, getConfigFieldDefault } from '#platform/index.js';
 
 /** How a CLI call talks to its caller: typed JSON, an interactive person on a terminal, or plain lines (pipe, CI, agent, dumb terminal). */
 export type CliMode = 'json' | 'interactive' | 'plain';
@@ -10,8 +9,6 @@ type Stream = { readonly isTTY?: boolean } | undefined;
  * passes the installation's configured list on the context (`agentEnvironment`), so this default is used only when none was read. */
 export const AGENT_ENVIRONMENT: readonly string[] = Object.freeze([...getConfigFieldDefault('cli').agentEnvironment]);
 
-const marked = (env: Readonly<Record<string, string | undefined>>, names: readonly string[]) =>
-  names.some(name => { const value = envValue(env, name)?.trim().toLowerCase(); return value !== undefined && value !== '0' && value !== 'false'; });
 
 /**
  * One decision for every command: `--json` wins; an AI agent, CI or `TERM=dumb` is never asked a question; a pipe on either side is plain;
@@ -21,8 +18,8 @@ export function detectCliMode(input: { readonly json?: boolean; readonly env?: R
   readonly stdout?: Stream; readonly agentEnvironment?: readonly string[] }): Readonly<{ mode: CliMode; reason: CliModeReason }> {
   const env = input.env ?? process.env;
   if (input.json) return { mode: 'json', reason: 'json' };
-  if (marked(env, input.agentEnvironment ?? AGENT_ENVIRONMENT)) return { mode: 'plain', reason: 'agent' };
-  if (marked(env, registry.ciEnvironment)) return { mode: 'plain', reason: 'ci' };
+  const marker = automationMarker(env, input.agentEnvironment ?? AGENT_ENVIRONMENT);
+  if (marker) return { mode: 'plain', reason: marker };
   if (envValue(env, 'TERM')?.trim().toLowerCase() === 'dumb') return { mode: 'plain', reason: 'dumb' };
   if (!(input.stdin ?? process.stdin).isTTY || !(input.stdout ?? process.stdout).isTTY) return { mode: 'plain', reason: 'pipe' };
   return { mode: 'interactive', reason: 'tty' };
