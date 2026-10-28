@@ -27,7 +27,8 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply' }, later];
   // BR1 1b: the first work kind's coding CLI, from the native CLI registry (the card shows the kind, pool and slots before anything is written).
   if (stage.id === WORK_KIND_STAGE_ID) return [...WORK_PROVIDERS.slice(0, registry.windowOptionRows - 1).map((id): Choice => ({ id, label: id, answer: id, action: 'answer' })), later];
-  if (stage.id === 'core:language') return [...LOCALES.map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
+  // BeUser AYSE-01: each language is offered in its own words ("English", "Türkçe"), so a person who cannot read the current one still finds hers.
+  if (stage.id === 'core:language') return [...LOCALES.map((code): Choice => ({ id: code, label: languageName(code, code), answer: code, action: 'answer' })), later];
   // The stage registry default comes first; other registered profiles follow in registry order.
   if (stage.id === 'core:profile') return [...orderedProfiles(observation.profile.available, entry => entry.id).sort((a, b) => Number(b.id === stageRegistry.unattendedProfile) - Number(a.id === stageRegistry.unattendedProfile))
     .slice(0, registry.windowOptionRows - 1)

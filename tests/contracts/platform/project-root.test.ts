@@ -23,8 +23,11 @@ it('walks up only to a guarded installation, refuses an unsafe one and keeps the
   expect(await resolve(`${p}/a/b`, installed(p))).toEqual({ root: p, folder: 'a/b', found: true, gitTop: null });
   expect(await resolve(`${p}/n/x`, { ...installed(p), ...installed(`${p}/n`) })).toMatchObject({ root: `${p}/n`, folder: 'x' });
   // Tracked docs or a tracked config without a policy file are no installation; the Git top is proposed instead.
-  expect(await resolve(`${p}/a`, { [`${p}/.deckent/docs/x.md`]: file(), [`${p}/.deckent/config.json`]: file(), [`${p}/.git`]: dir() }))
+  expect(await resolve(`${p}/a`, { [`${p}/.deckent/docs/x.md`]: file(), [`${p}/.deckent/config.json`]: file(), [`${p}/.git`]: dir(), [`${p}/.git/HEAD`]: file() }))
     .toEqual({ root: `${p}/a`, folder: '', found: false, gitTop: p });
+  // BeUser AYSE-02: an empty `.git` folder above is no repository (the person's own folder stays the proposal); a `.git` file (worktree) is one.
+  expect(await resolve(`${p}/a`, { [`${p}/.git`]: dir() })).toMatchObject({ root: `${p}/a`, found: false, gitTop: null });
+  expect(await resolve(`${p}/a`, { [`${p}/.git`]: file() })).toMatchObject({ found: false, gitTop: p });
   // The global state root is never a project: by default under $HOME, and when relocated.
   expect(await resolve(`${p}/a`, installed('/home/u'), {}, { env: { HOME: '/home/u' } })).toMatchObject({ found: false });
   expect(await resolve('/g/x', installed('/g'))).toMatchObject({ found: false });

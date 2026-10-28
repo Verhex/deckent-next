@@ -55,7 +55,7 @@ export async function resolveProjectRoot(start: string, env: Environment, option
     if (candidate && directory === physical) return { root: start, folder: '', found: true, gitTop: null };
     const adopted = candidate ? await adopt(directory, physical, data, ports) : null;
     if (adopted) return adopted;
-    gitTop ??= await ports.lstat(join(directory, '.git')) ? directory : null;
+    gitTop ??= await gitMarker(directory, ports) ? directory : null;
     // A folder that looks installed but has no identity yet is not an installation, and nothing above it is adopted in its place.
     // $HOME is the discovery ceiling (like Git's): it is examined, nothing above it is.
     if (candidate || directory === home || dirname(directory) === directory) break;
@@ -63,6 +63,12 @@ export async function resolveProjectRoot(start: string, env: Environment, option
   return { root: physical, folder: '', found: false, gitTop };
 }
 
+/** BeUser AYSE-02: a Git work tree's marker, as Git reads it: a `.git` file (linked worktree, submodule) or a `.git` directory holding `HEAD`. An empty
+ * `.git` folder is no repository, so its parent is never proposed in place of the person's own folder. */
+const gitMarker = async (directory: string, ports: ProjectRootPorts): Promise<boolean> => {
+  const git = await ports.lstat(join(directory, '.git'));
+  return !!git && (git.isFile() || (git.isDirectory() && (await ports.lstat(join(directory, '.git', 'HEAD')))?.isFile() === true));
+};
 async function adopt(directory: string, physical: string, data: string, ports: ProjectRootPorts): Promise<ProjectRootResolution | null> {
   // A worker clone under the data root (workspaces) never resolves the installation that holds it.
   if (inside(data, physical)) throw refuse('INSTALLATION_ROOT_INSIDE_DATA_ROOT', { path: data });
