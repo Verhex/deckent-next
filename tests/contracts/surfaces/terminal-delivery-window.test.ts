@@ -348,6 +348,14 @@ describe('delivery window on the real Workline', () => {
       + ' --layout-revision l --command-id <new-id> --delivery-command-id terminal-delivery-1 --target refs/heads/main --verification-run <run>`');
   });
 
+  it('BeUser M-32: a patch conflict never suggests discarding; without a preview its command still names this task (no raw placeholder)', () => {
+    const rows = deliveryLines({ target: { key: 's:r:task', scopeId: 's', runId: 'r', taskId: 'task', title: 'T' } as never, stage: { kind: 'failed', error: 'ERR', code: 'PATCH_CONFLICT' },
+      selected: 0, adopted: null, delivered: null, preview: null }, WORDS);
+    const text = rows.map(row => row.spans.map(part => part.text).join('')).join('\n');
+    expect(text).toContain('nothing of yours is discarded'); expect(text).not.toMatch(/restore them/u); expect(text).toContain('deckent task patch-preview --scope s --run r --task task');
+    expect(text).not.toContain('{run}');
+  });
+
   it('the suggested command keeps every hostile identity one shell word and runs no side command (Astra 2543 P1)', () => {
     const marker = join(mkdtempSync(join(tmpdir(), 'deckent-shell-word-')), 'MARKER');
     const hostile = { scope: "s 1", run: `r;touch ${marker}`, task: `task$(touch ${marker})`, attempt: "a'b", layout: 'l`touch ' + marker + '`', target: 'refs/heads/feat x' };

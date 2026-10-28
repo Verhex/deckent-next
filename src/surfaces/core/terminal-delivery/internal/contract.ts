@@ -34,6 +34,8 @@ export interface TerminalDeliveryPort {
     prepareCurrent(target: DeliveryTarget, commandId: string): Promise<TargetQueueView>;
     /** Read-only: whether `prepareCurrent` would carry the bounded re-attempt intent now (a work target and `targetQueue.reattempts` > 0). */
     reattempt(): Promise<boolean>;
+    /** BeUser M-32: whether a work target exists to re-prepare on (a solo folder without one never offers `r`). */
+    hasTarget?(): Promise<boolean>;
     inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
     /** `ask` also receives each asked ticket's summary, read when the card is asked: shown ABOVE the exact card, never in its place. */
     confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => Promise<boolean>): Promise<TargetBatchExecution>;

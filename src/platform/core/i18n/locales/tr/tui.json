@@ -1095,7 +1095,7 @@
   "terminal.delivery.summaryAdoptFailed": "Dal ilerletilmedi; teslim {ref} referansında kalıyor — {reason}",
   "terminal.delivery.summaryNotAdopted": "Dal ilerletilmedi; teslim {ref} referansında kalıyor.",
   "terminal.delivery.next.PATCH_BASE_ADVANCED": "Sonraki adım: yama yapıldıktan sonra kaynak değişti. Hiçbir şey yazılmadı; güncel taban üzerinde yeni bir yama üret (ya da tabanı geri getir) ve /deliver'ı yeniden aç.",
-  "terminal.delivery.next.PATCH_CONFLICT": "Sonraki adım: etkilenen dosyalar kaynakta değişmiş. Hiçbir şey yazılmadı; onları geri al ya da yeni bir yama üret, sonra /deliver'ı yeniden aç.",
+  "terminal.delivery.next.PATCH_CONFLICT": "Sonraki adım: çalışma ağacınızda bu görevin de değiştirdiği dosyalarda kaydedilmemiş değişiklikler var (örneğin burada, terminalde çalışan bir işten). Hiçbir şey yazılmadı ve sizin hiçbir değişikliğiniz atılmadı. Değişikliklerinizi koruyun: kaydedin (git add, git commit), sonra değişikliği /do ile yeniden isteyin. Bu görevin değişikliği: deckent task patch-preview --scope {scope} --run {run} --task {task}.",
   "terminal.delivery.next.POLICY_DENIED": "Sonraki adım: teslim için prepare-integration ve deliver-integration izinleri (dal için adopt-integration) gerekir. Politika sahibinden iste (/policy), sonra /deliver'ı yeniden aç.",
   "terminal.delivery.next.DELIVERY_INTERACTIVE_REQUIRED": "Sonraki adım: Deckent'i bu makinede gerçek bir etkileşimli terminalde aç (giriş ve çıkış aynı TTY'de) ve /deliver'ı orada kullan; MCP, SDK ve yönlendirilmiş oturumlar onaylayamaz.",
   "terminal.delivery.next.DELIVERY_CONFIRMATION_DECLINED": "Hiçbir şey yazılmadı. Görev hâlâ teslim bekliyor; /deliver yeniden açar.",
