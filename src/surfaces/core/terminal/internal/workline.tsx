@@ -800,4 +800,7 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
       ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.handover ? { handover: context.handover } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}),
       ...(context.clipboard ? { clipboard: context.clipboard } : {}),
       ...(context.notify ? { notify: context.notify } : {}) }) });
+  // BeUser AYSE-22: like Claude Code, closing says how to come back to the saved conversation.
+  const out = stdout ?? process.stdout, hint = props.sessions ? props.labels.sessions?.exitHint : undefined;
+  if (hint && out.isTTY) try { out.write(`${hint}\n`); } catch { /* the terminal is gone */ }
 }

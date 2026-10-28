@@ -65,7 +65,7 @@ export function terminalHandoffLabels(locale: Locale): NonNullable<WorklineLabel
 
 /** Catalog strings of `/resume`, `/context` and `/clear` (terminal.session.*). */
 export function terminalSessionLabels(locale: Locale): ConversationSessionLabels {
-  return { locale, entry: t('terminal.session.entry', {}, locale), hiddenCount: t('terminal.safety.hiddenCount', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
+  return { locale, entry: t('terminal.session.entry', {}, locale), exitHint: t('terminal.session.exitHint', {}, locale), hiddenCount: t('terminal.safety.hiddenCount', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
     unavailable: t('terminal.session.unavailable', {}, locale), saveFailed: t('terminal.session.saveFailed', {}, locale),
     exactRequired: t('terminal.session.exactRequired', {}, locale), listStale: t('terminal.session.listStale', {}, locale),
     resumed: t('terminal.session.resumed', {}, locale), started: t('terminal.session.started', {}, locale),
