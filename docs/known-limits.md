@@ -644,18 +644,24 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   Instruction-trust records tied to a ref that no configured target names stay. This folder's entries in the shared legacy trust
   snapshot are forgotten and a restore does not bring them back: that trust is asked again. The ledger lock file goes only when Git
   does not track it and it is empty. Keep-work keeps earlier ledger backups where they are; it archives and deletes config backups
-  and worker workspaces whose lease names no pending work (an unreadable lease keeps the workspace). Files that worker-image builds
+  and a worker workspace only when the ledger proves it idle: its lease has the workspace owner's form and names this exact attempt,
+  whose Run is terminal, and its delivery is not owed or was adopted. Any other workspace (no such Run, another scope, output not yet
+  delivered, an unreadable lease) is kept, listed and counted as possibly pending work, so the menu offers keep-work. Files that worker-image builds
   and toolchain updates write under `workspaces/toolchains` are members; other files there stay and are listed.
   `deckent backup restore --set <path>` brings files and the bridge line back. It never writes over a file that exists again with
   other content, nor through a link: such a file is kept and named.
   *Workaround:* review the listed files; move a kept file aside and run the same restore again.
 - **Force and the service have bounded reach.** `--force` cancels runs, rejects approvals and withdraws queued deliveries with
   the person's own authority. Every step's owner decision (runs, approvals, each delivery, the removals and their approval) is
-  taken before the card; a policy that names approval ids one by one can still refuse at the broker. A refusal names the scope,
+  taken before the card, without writing anything: a removal approval is refused before the card when the person's decide grant
+  names approval ids one by one, a four-eyes rule applies, or a policy raises its assurance above what the card attests (the
+  peer level). A delivery whose workspace or artifact folder is missing is refused before the card. A refusal names the scope,
   and unknown results are never closed. A unit Deckent did not create is disabled only with `--disable-unit` when every K4 check
-  holds, after the service is gone, and only while its unit file and enablement links are exactly the ones the card bound. A unit
-  with runtime links, or one whose manager starts the service again after the governed stop, gets the printed command instead.
-  Intent and result receipts (with the links actually removed and their undo) stay in the recovery folder. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
+  holds, after the service is gone, and only while its unit file and enablement links are exactly the ones the card bound. The
+  unit file must be the first one systemd finds on disk along the user search path, with no drop-in folder; an instance unit
+  (`name@x.service`), a unit with runtime links, or one whose manager starts the service again after the governed stop, gets the
+  printed command instead. Links that point to other matched links count as well. Intent and result receipts (with the links
+  actually removed and their undo; unknown when the links cannot be read again afterwards) stay in the recovery folder. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
   refuses a `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet. An AI
   agent or CI caller (marker variables) is refused through the SDK as through the CLI.
   *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.

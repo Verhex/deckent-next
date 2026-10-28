@@ -101,6 +101,16 @@ it('offers force for running work before any card and prints a kept image\'s ste
       ownership: 'exclusive', ownershipEvidence: 'b'.repeat(64), present: true, protected: false, capability: true, backup: 'covered', tiers: ['keep-work'] }] }) };
   card.requests.length = 0; card.answers.push('cancel');
   expect((await uninstallCommand(['uninstall'], talk).catch(() => null), card.requests[0]!.options.map(option => option.id))).toEqual(['keep-data', 'keep-work', 'all', 'details', 'cancel']);
+  // F7: a worker workspace not proven idle is possibly pending work: with nothing else waiting the menu still offers keep-work (which keeps it); without it, not.
+  const conversation = { resourceId: 'conversation-data', contribution: 'conversation', locator: '/fixture/.deckent', members: ['/fixture/.deckent/state/terminal-history.jsonl'], version: 'v1', owner: 'temp',
+    ownership: 'exclusive', ownershipEvidence: 'b'.repeat(64), present: true, protected: false, capability: true, backup: 'covered', tiers: ['keep-work'] } as const;
+  const workspace = { resourceId: 'unlisted.w', contribution: 'durable', locator: '/fixture/.deckent/workspaces/w', version: null, owner: null, ownership: 'unknown', ownershipEvidence: null,
+    present: true, protected: true, capability: false, backup: 'missing', keep: 'workspace-pending', tiers: ['keep-data', 'keep-work'] } as const;
+  for (const [rows, offered] of [[[conversation], ['keep-data', 'all']], [[conversation, workspace], ['keep-data', 'keep-work', 'all']]] as const) {
+    const quiet = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, inventory({ resources: [...inventory().resources, ...rows] })) };
+    card.requests.length = 0; card.answers.push('cancel'); await uninstallCommand(['uninstall'], quiet).catch(() => null);
+    expect(card.requests[0]!.options.map(option => option.id)).toEqual([...offered, 'details', 'cancel']);
+  }
   // A policy refusal (legal hold) is the engine's typed decision with its owner, never a generic ownership error from the surface.
   const held = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...inventory(), policyBlocker: 'UNINSTALL_PURGE_DENIED' }),
     applyUninstall: async () => { throw Object.assign(new Error('denied'), { code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold' } }); } };

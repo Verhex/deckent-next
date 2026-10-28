@@ -644,19 +644,25 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   paylaşılan global ev olan kurulum alpha.56 davranışını korur: yalnız yedeklenmiş yetki dosyaları silinir. Yapılandırılmış hiçbir
   hedefin adlandırmadığı bir ref'e bağlı talimat güveni kayıtları kalır. Bu klasörün paylaşılan eski güven anlık görüntüsündeki
   kayıtları unutulur ve geri yükleme onları geri getirmez: o güven yeniden sorulur. Defter kilit dosyası yalnız Git izlemiyorsa ve
-  boşsa silinir. İşi koru seçeneği önceki defter yedeklerini yerinde bırakır; yapılandırma yedeklerini ve kira kaydı bekleyen iş
-  adlandırmayan işçi çalışma alanlarını arşivleyip siler (kira kaydı okunamayan alan korunur). İşçi imajı derlemelerinin ve araç
+  boşsa silinir. İşi koru seçeneği önceki defter yedeklerini yerinde bırakır; yapılandırma yedeklerini arşivleyip siler, bir işçi
+  çalışma alanını ise yalnız defter onun boşta olduğunu kanıtlarsa: kira kaydı alan sahibinin biçimindedir ve bu denemeyi adlandırır,
+  denemenin işi bitmiştir, teslimi gerekmiyordur ya da benimsenmiştir. Başka her alan (böyle bir iş yok, başka kapsam, çıktısı henüz
+  teslim edilmemiş, kira kaydı okunamıyor) korunur, listelenir ve bekleyebilecek iş sayılır; menü bu yüzden işi koru seçeneğini sunar. İşçi imajı derlemelerinin ve araç
   zinciri güncellemelerinin `workspaces/toolchains` altına yazdığı dosyalar üyedir; oradaki diğer dosyalar kalır ve listelenir.
   `deckent backup restore --set <path>` dosyaları ve köprü satırını geri getirir. Başka içerikle yeniden var olan bir dosyanın
   üzerine ya da bir bağlantı üzerinden asla yazmaz: böyle bir dosya korunur ve adıyla söylenir.
   *Yol:* listelenen dosyaları inceleyin; korunan dosyayı kenara alıp aynı geri yüklemeyi yeniden çalıştırın.
 - **Force ve servis sınırlıdır.** `--force` kişinin kendi yetkisiyle işleri iptal eder, onayları reddeder ve kuyruktaki teslimleri
-  geri çeker. Her adımın sahip kararı (işler, onaylar, her teslim, silmeler ve onayları) karttan önce alınır; onay kimliklerini tek
-  tek adlandıran bir politika yine aracıda reddedebilir. Ret kapsamı adıyla söyler; sonucu bilinmeyen işlem kapatılmaz. Deckent'in
+  geri çeker. Her adımın sahip kararı (işler, onaylar, her teslim, silmeler ve onayları) karttan önce ve hiçbir şey yazmadan alınır:
+  kişinin karar izni onay kimliklerini tek tek adlandırıyorsa, dört göz kuralı geçerliyse ya da politika güvence düzeyini kartın
+  kanıtladığından (eş oturum düzeyi) yükseğe çıkarıyorsa silme onayı karttan önce reddedilir. Çalışma alanı ya da çıktı klasörü
+  olmayan bir teslim de karttan önce reddedilir. Ret kapsamı adıyla söyler; sonucu bilinmeyen işlem kapatılmaz. Deckent'in
   kaydetmediği birim yalnız `--disable-unit` ile, bütün K4 koşulları sağlanırsa, servis gittikten sonra ve birim dosyası ile
-  etkinleştirme bağlantıları kartın bağladıklarıyla tam aynıysa kapatılır. Çalışma zamanı bağlantısı olan ya da yöneticisi
-  servisi yönetişimli durdurmadan sonra yeniden başlatan birim için komut yazdırılır. Niyet ve sonuç makbuzları (gerçekten
-  kaldırılan bağlantılar ve geri alma komutlarıyla) kurtarma klasöründe kalır. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
+  etkinleştirme bağlantıları kartın bağladıklarıyla tam aynıysa kapatılır. Birim dosyası, systemd'nin kullanıcı arama yolunda
+  diskte bulduğu ilk dosya olmalı ve hiçbir ek ayar (drop-in) klasörü olmamalıdır; örnek birim (`ad@x.service`), çalışma zamanı
+  bağlantısı olan ya da yöneticisi servisi yönetişimli durdurmadan sonra yeniden başlatan birim için komut yazdırılır. Eşleşen
+  başka bir bağlantıyı gösteren bağlantılar da sayılır. Niyet ve sonuç makbuzları (gerçekten kaldırılan bağlantılar ve geri alma
+  komutlarıyla; bağlantılar sonradan yeniden okunamazsa bilinmiyor) kurtarma klasöründe kalır. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
   Kaldırma `require-approval` politika kararını reddeder (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez. Bir
   yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.

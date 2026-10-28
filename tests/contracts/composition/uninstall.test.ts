@@ -368,23 +368,28 @@ it('keep-work archives and deletes only conversation data and retires the folder
     const lease = join(local, `workspaces/${'c'.repeat(64)}/lease.json`), hook = join(local, `workspaces/${'c'.repeat(64)}/hooks/pre-commit`), earlier = join(local, 'state/backups/ledger-v1-2026-10-27T10-00-00-000Z.db');
     for (const path of [hook, earlier]) await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await writeFile(lease, 'LEASE', { mode: 0o644 }); await writeFile(hook, '#!/bin/sh\n', { mode: 0o755 }); await writeFile(earlier, 'EARLIER LEDGER', { mode: 0o600 });
-    // R10 (JOURNEY §5.2): a config backup and a workspace whose lease names no pending work go with keep-work (archived first); the workspace
-    // above, whose lease cannot be read, stays as possibly pending.
-    const idle = join(local, `workspaces/${'d'.repeat(64)}`), configBackup = join(local, 'config.json.bak.2026-10-27T10-00-00.000Z.11111111-2222-4333-8444-555555555555');
-    await mkdir(join(idle, 'tree'), { recursive: true, mode: 0o700 }); await writeFile(join(idle, 'tree/file.txt'), 'WORK', { mode: 0o600 });
-    await writeFile(join(idle, 'lease.json'), JSON.stringify({ schemaVersion: 2, request: { identity: { scopeId: 's', runId: 'finished-run' } } }), { mode: 0o600 });
+    // R10, F7 (JOURNEY §5.2): a config backup goes with keep-work (archived first). A workspace goes only when its owner proves it idle from the
+    // ledger (engine attempt-custody-release F7); here an owner-shaped lease of a Run the ledger does not have stays as possibly pending, as does
+    // the workspace above whose lease cannot be read: both are kept, listed and counted by the menu.
+    const identity = { runId: 'finished-run', taskId: 't', attemptId: 'a', scopeId: 's', layoutRevision: 'l', generation: 1 } /* the owner's key order: the folder name matches */, source = { schemaVersion: 1, sourceRoot: project, repositoryRoot: project };
+    const { createHash } = await import('node:crypto'), hash = (value: unknown) => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+    const unproven = join(local, `workspaces/${hash(identity)}`), configBackup = join(local, 'config.json.bak.2026-10-27T10-00-00.000Z.11111111-2222-4333-8444-555555555555');
+    await mkdir(join(unproven, 'tree'), { recursive: true, mode: 0o700 }); await writeFile(join(unproven, 'tree/file.txt'), 'WORK', { mode: 0o600 });
+    await writeFile(join(unproven, 'lease.json'), JSON.stringify({ schemaVersion: 2, fingerprint: 'e'.repeat(64), request: { schemaVersion: 1, identity, baseCommit: 'a'.repeat(40) }, status: 'ready',
+      sourceBase: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: hash(source), source, baseCommit: 'a'.repeat(40) } }), { mode: 0o600 });
     await writeFile(configBackup, '{}', { mode: 0o600 });
     const work = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
-    expect([...work.items.find(item => item.resourceId === 'conversation-data')!.members!].sort()).toEqual([configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt'), join(local, 'state/terminal-history.jsonl')].sort());
+    expect([...work.items.find(item => item.resourceId === 'conversation-data')!.members!].sort()).toEqual([configBackup, join(local, 'state/terminal-history.jsonl')].sort());
+    expect(work.items.filter(item => item.keep === 'workspace-pending' && item.action === 'keep').map(item => item.locator).sort()).toEqual([join(local, `workspaces/${'c'.repeat(64)}`), unproven].sort());
     expect(work.items.some(item => item.resourceId === 'global-data')).toBe(false); expect(work.backup.required).toBe(true);
     const kept = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'keep-work', planDigest: work.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(kept.status).toBe('completed'); await expect(lstat(join(local, 'state/terminal-history.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE');
     expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER'); // M10 (JOURNEY §5.2): keep-work keeps earlier backups where they are
-    for (const path of [configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt')]) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
-    // ...archived (verified) in keep-work's own set first: the archive manifest names each of them.
-    const { createHash } = await import('node:crypto'), archivedIds = (JSON.parse(await readFile(`${kept.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
-    for (const path of [configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt')]) expect(archivedIds).toContain(createHash('sha256').update(path).digest('hex'));
+    await expect(lstat(configBackup)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(unproven, 'tree/file.txt'), 'utf8')).toBe('WORK');
+    // ...archived (verified) in keep-work's own set first: the archive manifest names it.
+    const archivedIds = (JSON.parse(await readFile(`${kept.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
+    expect(archivedIds).toContain(hash(configBackup)); expect(archivedIds).not.toContain(hash(join(unproven, 'tree/file.txt')));
     expect(await lstat(join(local, 'installation/retired.json'))).toBeTruthy(); // §5.4: the service stays down until the person reopens the folder
     // Delete everything: every owned file is archived, verified, then deleted; nothing is left of the project's .deckent.
     const all = await previewConfiguredUninstall(project, ALL, options);

@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
-import { dirname, join, relative, isAbsolute, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
 import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
-import { verifyAuditRecord, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
+import { verifyAuditRecord, idleAttemptWorkspace, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY, folderTrustRecords, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 import { listProjectVaults } from '#adapters/core/secret-store/index.js';
 import { ABSENT_FILE_VERSION } from '#adapters/core/workspace-write/index.js';
-import type { ProjectTracking } from './vcs.js';
+import type { ProjectTracking } from './vcs.js'; import { attemptRecords } from './quiescence.js';
 import paths from './paths.json' with { type: 'json' };
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
@@ -61,14 +61,12 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   const archived: DataRemovalMember[] = [], taken = new Set(members.map(member => member.path)), rel = (path: string) => relative(layout.root, path).split(sep).join('/');
   const matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
   const conversation = registry.archive.conversation.map(name => productResourcePath(layout, name as ProductResource)); let seen = 0;
-  // R10 (§5.2): keep-work also archives and deletes config backups and a workspace whose lease names no pending work (an unreadable lease keeps it).
-  const pending = new Set([...base.work.running, ...base.work.parked].map(ref => `${ref.scopeId}\0${ref.id}`)), leases = new Map<string, Promise<boolean>>();
-  const idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
-    if (at && !leases.has(at)) leases.set(at, readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => { const id = (JSON.parse(text) as { request?: { identity?: Record<string, unknown> } }).request?.identity;
-      return base.work.complete && typeof id?.['runId'] === 'string' && !pending.has(`${String(id['scopeId'])}\0${id['runId']}`) && ![...base.work.deliveries, ...base.work.uncertain].some(ref => ref.scopeId === id['scopeId']); }).catch(() => false));
-    return at ? leases.get(at)! : false; };
-  const unlisted = (locator: string) => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
-    ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
+  // R10, F7 (§5.2): keep-work also archives and deletes config backups and a workspace its owner proves idle (lease + ledger); any other stays as possibly pending: kept, listed, counted (`workspace-pending`).
+  const leases = new Map<string, Promise<boolean>>(), limits = { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords }, idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
+    if (at && !leases.has(at)) leases.set(at, readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => idleAttemptWorkspace(JSON.parse(text), basename(at), base.work,
+      async identity => attemptRecords(productResourcePath(layout, 'ledger'), limits, identity))).catch(() => false).then(done => done || !unlisted(resolve(layout.root, at), 'workspace-pending'))); return at ? leases.get(at)! : false; };
+  const unlisted = (locator: string, keep?: 'workspace-pending') => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
+    ownership: 'unknown', ownershipEvidence: null, present: true, protected: !!keep, capability: false, backup: 'missing', ...(keep ? { keep } : {}) });
   const walk = async (directory: string, depth: number): Promise<void> => {
     for (const entry of (await readdir(directory)).sort()) {
       const path = join(directory, entry);

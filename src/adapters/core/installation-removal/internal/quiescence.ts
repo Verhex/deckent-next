@@ -19,15 +19,11 @@ const UNKNOWN: UninstallWork = { running: [], parked: [], approvals: [], deliver
 export function observeUninstallWork(path: string, limits: { readonly busyTimeoutMs: number; readonly maxRecords: number }): UninstallWork {
   if (!existsSync(path)) return { ...UNKNOWN, complete: true };
   let db; try { db = openReadOnly(path, limits.busyTimeoutMs); } catch { return UNKNOWN; }
-  try {
-    requireLedgerVersion(db, EFFECT_PRODUCER_LEDGER_VERSION);
-    let complete = true;
+  try { requireLedgerVersion(db, EFFECT_PRODUCER_LEDGER_VERSION); let complete = true;
     const rows = (sql: string) => { const found = db.prepare(`${sql} ORDER BY 1,2 LIMIT ?`).all(limits.maxRecords + 1); if (found.length > limits.maxRecords) complete = false;
       return found.slice(0, limits.maxRecords).map(row => ({ scopeId: String(row['s']), id: String(row['i']), target: row['t'] == null ? null : String(row['t']), revision: Number(row['v'] ?? 0) })); };
-    const refs = (sql: string) => rows(sql).map(({ scopeId, id, revision }) => ({ scopeId, id, revision }));
-    if (db.prepare('SELECT 1 FROM dispatches WHERE json_valid(record)=0 LIMIT 1').get()) complete = false;
-    const uncertain = (kind: 'effect' | 'invocation' | 'reservation', sql: string) => rows(sql).map(({ scopeId, id, target }) => ({ kind, scopeId, id, target }));
-    return { running: refs(RUNNING), parked: refs(`SELECT scope_id s,run_id i,revision v FROM runs WHERE json_valid(snapshot) AND json_extract(snapshot,'$.state.kind')='parked'`),
+    const refs = (sql: string) => rows(sql).map(({ scopeId, id, revision }) => ({ scopeId, id, revision })); if (db.prepare('SELECT 1 FROM dispatches WHERE json_valid(record)=0 LIMIT 1').get()) complete = false;
+    const uncertain = (kind: 'effect' | 'invocation' | 'reservation', sql: string) => rows(sql).map(({ scopeId, id, target }) => ({ kind, scopeId, id, target })); return { running: refs(RUNNING), parked: refs(`SELECT scope_id s,run_id i,revision v FROM runs WHERE json_valid(snapshot) AND json_extract(snapshot,'$.state.kind')='parked'`),
       approvals: refs(`SELECT scope_id s,approval_id i,revision v FROM approvals WHERE current=1 AND CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status')='pending' ELSE 1 END`),
       deliveries: refs(`SELECT scope_id s,command_id i,revision v FROM target_queue WHERE state NOT IN ('settled','cancelled','expired')`),
       uncertain: [...uncertain('effect', `SELECT scope_id s,command_id i,target_kind||'/'||target_id t FROM effect_intents WHERE state NOT IN ('settled','refused')`),
@@ -35,6 +31,12 @@ export function observeUninstallWork(path: string, limits: { readonly busyTimeou
         ...uncertain('reservation', `SELECT scope_id s,invocation_id i,NULL t FROM model_invocation_spend_reservations WHERE CASE WHEN json_valid(record)=0 THEN 1
           ELSE json_extract(record,'$.disposition.state')='held' AND json_extract(record,'$.reconciliation') IS NULL END`)], complete };
   } catch { return UNKNOWN; } finally { db.close(); }
+}
+/** F7: one attempt's Run snapshot and its Run's delivery tickets (bounded), read only, for the workspace owner's idle decision; an unreadable one throws. */
+export function attemptRecords(path: string, limits: { readonly busyTimeoutMs: number; readonly maxRecords: number }, identity: { readonly scopeId: string; readonly runId: string }) {
+  const db = openReadOnly(path, limits.busyTimeoutMs), json = (row: Record<string, unknown> | undefined) => row ? JSON.parse(String(Object.values(row)[0])) as unknown : null;
+  try { requireLedgerVersion(db, EFFECT_PRODUCER_LEDGER_VERSION); return { run: json(db.prepare('SELECT snapshot FROM runs WHERE scope_id=? AND run_id=?').get(identity.scopeId, identity.runId)),
+    deliveries: db.prepare(`SELECT record FROM target_queue WHERE scope_id=? AND json_extract(record,'$.request.identity.runId')=? LIMIT ?`).all(identity.scopeId, identity.runId, limits.maxRecords).map(json) }; } finally { db.close(); }
 }
 /** Under lifecycle custody: every scope the ledger recorded data for joins the policy-named ones; the union is what the lifecycle decision
  * covers. An unreadable or unbounded scope record keeps the installation (typed refusal). Work itself is compared by the plan (D2). */

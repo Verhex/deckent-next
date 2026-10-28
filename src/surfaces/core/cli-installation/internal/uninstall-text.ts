@@ -104,7 +104,8 @@ export const uninstallResolvable = (blocker: string | null | undefined, plan: Un
  * that it treats differently from keep-data, all always; a tier
  * the same observation refuses for good carries its reason, shown under the card (a resolvable refusal stays selectable). */
 export function uninstallTierChoices(plan: UninstallPlan, locale: Locale): readonly { readonly tier: UninstallTier; readonly label: string; readonly blocked: string | null }[] {
-  const messages = uninstallMessages(locale), pending = plan.work.running.length + plan.work.parked.length + plan.work.approvals.length + plan.work.deliveries.length + plan.work.uncertain.length > 0;
+  const messages = uninstallMessages(locale), pending = plan.work.running.length + plan.work.parked.length + plan.work.approvals.length + plan.work.deliveries.length + plan.work.uncertain.length > 0
+    || plan.items.some(item => item.keep === 'workspace-pending'); // F7: a worker workspace not proven idle is possibly pending work
   return (['keep-data', 'keep-work', 'all'] as const).filter(tier => tier !== 'keep-work' || pending && plan.tiers['keep-work'].removes !== plan.tiers['keep-data'].removes)
     .map(tier => { const blocker = plan.tiers[tier].blocker;
       return { tier, label: messages[`tier.${tier}`]!, blocked: blocker && !uninstallResolvable(blocker, plan) ? uninstallBlockerText(blocker, locale) : null }; });

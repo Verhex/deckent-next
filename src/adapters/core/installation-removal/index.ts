@@ -9,6 +9,6 @@ export { extendUninstallInventory, uninstallRecoveryDirectory, assertNativeUnins
 export { writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease, completeUninstall } from './internal/tombstone.js';
 export { prepareUninstallBackup } from './internal/backup.js';
 export { observeUninstallInventory } from './internal/observed-inventory.js';
-export { observeUninstallWork, installationScopes } from './internal/quiescence.js';
+export { observeUninstallWork, installationScopes, attemptRecords } from './internal/quiescence.js';
 export { projectTracking } from './internal/vcs.js';
 export { createUninstallArchive, restoreUninstallArchive, hasUninstallArchive, uninstallArchiveRoots } from './internal/archive.js';

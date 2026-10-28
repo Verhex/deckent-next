@@ -1,10 +1,10 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore, sealWorkerEventLog, type SqliteAttemptStore } from '#adapters/index.js';
-import { AttemptCustodyReleaseApplication, DispatchApplication, SupervisorError, TaskEvaluationApplication, WorkspacePatchApplication, patchExclusions, type AttemptWorkspaceCustody,
+import { AttemptCustodyReleaseApplication, idleAttemptWorkspace, gitWorkspaceIdentityTarget, DispatchApplication, SupervisorError, TaskEvaluationApplication, WorkspacePatchApplication, patchExclusions, type AttemptWorkspaceCustody,
   type ExecutionSupervisor, type SandboxRequest } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -215,4 +215,37 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
   });
 });
 
+});
+
+it.skipIf(process.platform === 'win32')('F7 (uninstall keep-work): a worker workspace is idle only on the ledger\'s proof: its exact attempt\'s Run is terminal and the delivery it owes is settled or not owed', async () => {
+  const { attemptRecords } = await import('#adapters/core/installation-removal/index.js');
+  const work = { complete: true, running: [], parked: [], deliveries: [], uncertain: [] }, hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const source = { schemaVersion: 1, sourceRoot: '/source', repositoryRoot: '/source' };
+  const lease = (identity: AttemptIdentity) => ({ schemaVersion: 2, fingerprint: 'e'.repeat(64), request: { schemaVersion: 1, identity, baseCommit: 'a'.repeat(40) }, status: 'ready',
+    sourceBase: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: hash(source), source, baseCommit: 'a'.repeat(40) } });
+  // The uninstall adapter's own read of the real ledger the owners wrote.
+  const reader = (root: string) => async (identity: AttemptIdentity) => attemptRecords(join(root, 'ledger.db'), { busyTimeoutMs: 20, maxRecords: 8 }, identity);
+  const f = await fixture(1, 'declared'); await f.execute(f.identity);
+  // The folder is named by the workspace owner (`gitWorkspaceIdentityTarget`), as the broker names it.
+  const folder = (identity: AttemptIdentity) => gitWorkspaceIdentityTarget(identity, '/', { checkout: '', lease: '' }).id;
+  const idle = (identity: AttemptIdentity, at = folder(identity), observed = work, read = reader(f.root)) => idleAttemptWorkspace(lease(identity), at, observed, read);
+  expect(await idle(f.identity)).toBe(false); // executed, not evaluated: the Run is still running
+  await f.settle(f.identity); expect((await f.store.loadRun('s', f.identity.runId))!.state.kind).toBe('terminal');
+  expect(await idle(f.identity)).toBe(true); // declared without delivery (C2) and settled
+  // Absence from the ledger is no proof: another scope or Run; nor is a folder of another attempt, a lease without the owner's shape, open work.
+  for (const identity of [{ ...f.identity, scopeId: 'other' }, { ...f.identity, runId: 'r-absent' }]) expect(await idle(identity)).toBe(false);
+  expect(await idle(f.identity, folder({ ...f.identity, attemptId: randomUUID() }))).toBe(false);
+  expect(await idleAttemptWorkspace({ schemaVersion: 2, request: { identity: f.identity } }, folder(f.identity), work, reader(f.root))).toBe(false);
+  for (const observed of [{ ...work, complete: false }, { ...work, deliveries: [{ scopeId: 's', id: 'ticket' }] }, { ...work, running: [{ scopeId: 's', id: f.identity.runId }] }])
+    expect(await idle(f.identity, folder(f.identity), observed)).toBe(false);
+  // A task that owes its patch: terminal but undelivered stays; only a ticket of this exact attempt settled as adopted proves delivery.
+  const u = await fixture(1, 'unmarked'); await u.execute(u.identity); await u.settle(u.identity);
+  const ticket = (identity: AttemptIdentity, outcome: string) => ({ schemaVersion: 1, key: 'd'.repeat(64), ordinal: 1, revision: 4, state: 'settled', ownerInstance: null, epoch: 0, leaseDeadline: null,
+    candidate: null, verification: null, batchDigest: null, effectCommandIds: [], evidenceRefs: [], outcome, request: { schemaVersion: 1, commandId: 'delivery-1', identity,
+      actor: { id: 'user', issuer: 'test', subject: 'user' }, target: { schemaVersion: 1, installationId: 'i', adapter: { id: 'git', version: 1 }, resourceBinding: 'a'.repeat(64), target: { kind: 'git-ref', id: 'main' } },
+      payloadDigest: 'b'.repeat(64), policyRevision: 'p1', outputDigest: 'c'.repeat(64), acceptedRevision: 1, submittedAt: 1, deadline: 5000 } });
+  const delivered = (tickets: unknown[]) => async (identity: AttemptIdentity) => ({ ...await reader(u.root)(identity), deliveries: tickets });
+  expect(await idle(u.identity, folder(u.identity), work, reader(u.root))).toBe(false);
+  expect(await idle(u.identity, folder(u.identity), work, delivered([ticket(u.identity, 'verification-failed'), ticket({ ...u.identity, attemptId: randomUUID() }, 'adopted')]))).toBe(false);
+  expect(await idle(u.identity, folder(u.identity), work, delivered([ticket(u.identity, 'adopted')]))).toBe(true);
 });

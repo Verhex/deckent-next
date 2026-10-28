@@ -17,7 +17,7 @@ export const uninstallResourceSchema = z.object({
   /** A kept resource's exact removal step for the person, produced by its owner; never run by uninstall. */
   manualCommand: text.optional(),
   /** Why an observed resource stays when no generic reason says it: tracked (or possibly tracked) by the project's VCS, or outside the backup set. */
-  keep: z.enum(['vcs-tracked', 'vcs-unverified', 'not-backed-up', 'unrecorded']).optional(),
+  keep: z.enum(['vcs-tracked', 'vcs-unverified', 'not-backed-up', 'unrecorded', 'workspace-pending']).optional(),
   /** The tiers this observation applies to (absent: every tier); a project's archived files are one resource per data tier. */
   tiers: z.array(z.enum(UNINSTALL_TIERS)).min(1).optional(),
 }).strict().readonly();

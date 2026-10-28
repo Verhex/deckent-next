@@ -4389,7 +4389,8 @@
         "src/engine/core/workspaces",
         "src/adapters/core/project-instructions",
         "src/adapters/core/secret-store",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "INSTALLATION"
     },
