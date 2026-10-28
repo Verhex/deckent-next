@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
+import { DockerSupervisor, landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
+import type { SandboxRequest } from '#engine/index.js';
 import { openNativeConnection, openNativeEgressGateway } from '../../../dist/adapters/core/native-connection/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
 import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
@@ -91,6 +92,70 @@ print('IPC_ISOLATED')`;
   } finally {
     await writeFile(join(f.project, 'src/ipc-go'), 'stop'); await pending.catch(() => undefined);
     await egress?.close(); await Promise.all(connections.map(connection => connection.close()));
+  }
+}, 120_000);
+
+const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
+it.skipIf(!bwrapReady || !imageId)('RC-S1: project A cannot list/read/bootstrap project B short-path gateways before/after spawn; B worker bootstraps', async () => {
+  const f = await openRuntime({ schemaVersion: 1, realm: 'require-sandbox' });
+  await f.writeAuthority([rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', false),
+    rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS], 'full-auto', 'short-ipc-card');
+  const projectB = await mkdtemp('/tmp/db-'), directory = join(projectB, '.deckent/workspaces'), workspace = join(projectB, 'work');
+  const connections: Awaited<ReturnType<typeof openNativeConnection>>[] = [];
+  let pending: ReturnType<typeof f.call> | undefined, supervisor: DockerSupervisor | undefined, request: SandboxRequest | undefined;
+  try {
+    await mkdir(directory, { recursive: true, mode: 0o700 }); await mkdir(workspace);
+    // Both projects' state roots are outside HOME; B exercises the former short-path branch, independently of A's protected roots.
+    expect(f.data.startsWith('/tmp/')).toBe(true); expect(f.data.startsWith(f.home + '/')).toBe(false);
+    expect(Buffer.byteLength(join(f.data, 'workspaces/connection-XXXXXX/gateway.sock'))).toBeLessThanOrEqual(103);
+    expect(directory.startsWith(f.home + '/')).toBe(false); expect(directory.startsWith(f.project + '/')).toBe(false);
+    expect(Buffer.byteLength(join(directory, 'connection-XXXXXX/gateway.sock'))).toBeLessThanOrEqual(103);
+    const open = async () => { const value = await openNativeConnection({ directory, binding: { schemaVersion: 1, provider: 'codex' },
+      credential: { tokens: { access_token: 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic', id_token: 'fixture' } }, deadlineMs: 60_000 }); connections.push(value); return value; };
+    const before = await open();
+    const probe = `import json,os,socket
+rows=json.load(open('src/short-ipc-paths.json')); results=[]
+for row in rows:
+ listed=readable=connected=False; capability='unauthorized'
+ try: listed=bool(os.listdir(os.path.dirname(row['socketPath'])))
+ except OSError: pass
+ try:
+  with open(row['capabilityPath']) as source: capability=source.read(); readable=True
+ except OSError: pass
+ sock=socket.socket(socket.AF_UNIX); sock.settimeout(1)
+ try:
+  sock.connect(row['socketPath']); connected=True
+  sock.sendall(('GET /bootstrap HTTP/1.0\\r\\nAuthorization: '+capability+'\\r\\n\\r\\n').encode()); sock.recv(65536)
+ except OSError: pass
+ finally: sock.close()
+ results.append([listed,readable,connected])
+assert results==[[False,False,False]]*len(rows), results
+assert os.listdir(os.path.dirname(os.path.dirname(rows[0]['socketPath'])))==[]
+print('SHORT_CROSS_PROJECT_IPC_ISOLATED')`;
+    const command = `touch src/short-ipc-ready; while ! test -f src/short-ipc-go; do sleep 0.02; done; python3 -c '${probe.replaceAll("'", "'\"'\"'")}'`;
+    pending = f.call('run_shell', { command }, 'allow', fa);
+    const until = Date.now() + 10_000;
+    while (!await exists(join(f.project, 'src/short-ipc-ready'))) { if (Date.now() > until) throw new Error('sandbox did not start'); await new Promise(resolve => setTimeout(resolve, 20)); }
+    const after = await open();
+    await writeFile(join(f.project, 'src/short-ipc-paths.json'), JSON.stringify([before.descriptor, after.descriptor]));
+    await writeFile(join(f.project, 'src/short-ipc-go'), 'go');
+    const result = await pending;
+    for (const connection of connections) expect(connection.statistics().bootstrapReads).toBe(0);
+    expect(result, f.evidence(result)).toMatchObject({ card: true, status: 'ok' }); expect(result.text).toContain('SHORT_CROSS_PROJECT_IPC_ISOLATED');
+    expect(await readdir(directory)).toEqual([]);
+    // The authorized worker still receives the socket and capability through its private Docker mounts, after A's attacks.
+    supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: projectB, imageId: imageId!,
+      uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1,
+      tmpBytes: 67108864, deadlineMs: 20_000, controlTimeoutMs: 10_000, outputBytes: 65536, connection: after.descriptor });
+    request = { protocolVersion: 1, identity: { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test', generation: 1, layoutRevision: 'layout' },
+      workspace, argv: ['node', '-e', "const fs=require('node:fs');const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.codex/auth.json'));if(!auth.tokens.access_token.endsWith('.synthetic'))process.exit(12);fs.writeFileSync('bootstrapped','yes')"] };
+    expect((await supervisor.execute(request)).result).toEqual({ kind: 'exited', exitCode: 0 });
+    expect(await readFile(join(workspace, 'bootstrapped'), 'utf8')).toBe('yes'); expect(after.statistics().bootstrapReads).toBe(1);
+    expect(before.statistics().bootstrapReads).toBe(0);
+  } finally {
+    await writeFile(join(f.project, 'src/short-ipc-go'), 'stop'); await pending?.catch(() => undefined);
+    if (supervisor && request) { await supervisor.cancel(request); await supervisor.release(request); }
+    await Promise.all(connections.map(connection => connection.close())); await rm(projectB, { recursive: true, force: true });
   }
 }, 120_000);
 

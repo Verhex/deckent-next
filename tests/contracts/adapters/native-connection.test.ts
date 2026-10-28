@@ -49,6 +49,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native credentia
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — delivers auth once over the private socket and closes capability on revocation', async () => {
   const connection = await gateway(await fixture());
+  expect(connection.descriptor.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
+  expect(dirname(connection.descriptor.capabilityPath)).toBe(dirname(connection.descriptor.socketPath));
   expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
   expect(connection.statistics().bootstrapReads).toBe(0);
   const first = await bootstrap(connection.descriptor.socketPath, await readFile(connection.descriptor.capabilityPath, 'utf8'));
@@ -152,6 +154,7 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     const result = await f.supervisor.execute(f.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 }); expect(result.stdout).not.toContain('synthetic-sensitive-output');
     expect(JSON.parse(await readFile(join(f.request.workspace, 'boundary.json'), 'utf8'))).toEqual({ confined: true });
+    expect(f.connection.statistics().bootstrapReads).toBe(1);
     expect(f.connection.statistics().rejected).toBe(1);
   });
   it('refuses a mismatched CLI version before executing a task or using provider egress', async () => {

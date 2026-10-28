@@ -78,20 +78,20 @@ function refusedHosts(max: number) {
     } else { other++; otherReasons[reason] = (otherReasons[reason] ?? 0) + 1; }
   }, view: () => Object.freeze({ hosts: Object.freeze({ ...hosts }), other, reasons: Object.fromEntries(Object.entries(reasons).map(([host, row]) => [host, { ...row }])), otherReasons: { ...otherReasons } }) };
 }
-/** Private per-socket directory; long paths use the short root every open sandbox hides, even before the socket exists. */
-export const privateSocketDirectory = async (parent: string, prefix: string, file: string) => { const directory = await mkdtemp(Buffer.byteLength(join(parent, `${prefix}XXXXXX`, file)) > 103
-  ? join(await privateIpcRoot(), prefix) : join(parent, prefix)); await chmod(directory, 0o700); return directory; };
+/** Every socket lives under the root open sandboxes hide, including endpoints created after spawn and short project paths. */
+export const privateSocketDirectory = async (prefix: string) => { const directory = await mkdtemp(join(await privateIpcRoot(), prefix));
+  await chmod(directory, 0o700); return directory; };
 /** The gateway limits a connection's server applies (`providers.json`), shared with the in-realm relay that feeds it. */
 export const nativeEgressLimits = () => Object.freeze({ connections: catalog.limits.connections, idleMs: catalog.limits.idleMs, headerBytes: catalog.limits.headerBytes,
   refusedHostsMax: catalog.limits.refusedHostsMax });
 /**
- * S3-5: the only way out of an isolated CLI's empty network namespace. A Unix-socket HTTP server in a fresh 0700 directory under `directory`
+ * S3-5: the only way out of an isolated CLI's empty network namespace. A Unix-socket HTTP server in a fresh 0700 directory under the private IPC root
  * that answers nothing but CONNECT to the provider's `providers.json` destinations (the same allowlist, address check and ClientHello check as a
  * worker's gateway), bounded in connections, idle time and traffic; no credential, no bootstrap, no event channel.
  */
 export async function openNativeEgressGateway(input: { readonly provider: NativeSubscription['provider']; readonly directory: string }) {
   const spec = nativeProviderSpec(input.provider), limits = catalog.limits;
-  const directory = await privateSocketDirectory(input.directory, 'egress-', 'gateway.sock');
+  const directory = await privateSocketDirectory('egress-');
   const socketPath = join(directory, 'gateway.sock');
   let closed = false, transferred = 0;
   const sockets = new Set<Socket>(), statistics = { connected: 0, rejected: 0, bytes: 0 }, refused = refusedHosts(limits.refusedHostsMax);

@@ -156,6 +156,7 @@ async function harness(mode: string, options: { approve?: boolean; upstream?: Si
     approve: async request => { approveCalls++; asked.push(request); return options.approve ?? true; }, live: () => true, onRecord: record => records.push(record),
     appServer: { executable: 'node', args: ['/workspace/fake-app-server.mjs', mode] }, ...options.turn, ...(options.audit ? { audit: options.audit } : {}) });
   cleanups.push(relay.close);
+  expect(relay.descriptor.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/siwc-relay-`)).toBe(true);
   const mounted = { ...relay, descriptor: { ...relay.descriptor, bootstrapPath: artifacts['bootstrap']!.path, bootstrapSha256: artifacts['bootstrap']!.sha256,
     helperPath: artifacts['helper']!.path, helperSha256: artifacts['helper']!.sha256 } };
   const docker = { executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),

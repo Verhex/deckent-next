@@ -33,7 +33,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   if (root !== input.directory || !stat.isDirectory() || stat.uid !== process.getuid?.() || (stat.mode & 0o022)
     || !Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0 || input.deadlineMs > 2_147_483_647) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
   const bootstrapPath = fileURLToPath(new URL('./worker.js', import.meta.url)), bootstrapSha256 = createHash('sha256').update(await readFile(bootstrapPath)).digest('hex');
-  const directory = await privateSocketDirectory(root, 'connection-', 'gateway.sock');
+  const directory = await privateSocketDirectory('connection-');
   const socketPath = join(directory, 'gateway.sock');
   if (Buffer.byteLength(socketPath) > 103) { await rm(directory, { recursive: true }); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
   const capabilityPath = join(directory, 'bootstrap.key'), capability = randomBytes(32).toString('hex');

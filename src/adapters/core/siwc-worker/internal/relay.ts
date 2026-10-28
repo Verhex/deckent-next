@@ -102,7 +102,7 @@ export async function openSiwcWorkerRelay(input: SiwcWorkerRelayInput) {
   const hardeningPath = localPeerNativePath();
   const [bootstrap, helper, hardening] = await Promise.all([file('bootstrap'), file('helper'),
     readFile(hardeningPath).then(bytes => ({ path: hardeningPath, sha256: createHash('sha256').update(bytes).digest('hex') }))]);
-  const directory = await privateSocketDirectory(input.directory, 'siwc-relay-', 'relay.sock');
+  const directory = await privateSocketDirectory('siwc-relay-');
   const socketPath = join(directory, 'relay.sock');
   const policySha256 = createHash('sha256').update(JSON.stringify(R)).digest('hex'), bindingSha256 = createHash('sha256').update(JSON.stringify(binding)).digest('hex');
   let containerId: string | null = null, init: Readonly<{ pid: number; startTime: string }> | null = null, capability: string | undefined, issued = false;
