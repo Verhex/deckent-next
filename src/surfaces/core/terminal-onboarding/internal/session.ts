@@ -36,14 +36,16 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
   // A connected model's done stage is absent above; its dependent guide still has the same position before work.
   if (!steps.some(row => row.kind === 'budget') && snapshot.budget.needed && !deferred.has('onboarding:budget')) steps.splice(steps[0]?.kind === 'permissions' ? 1 : 0, 0, { id: 'onboarding:budget', stages: [], kind: 'budget' });
   for (const pending of snapshot.pending.filter(row => row.status !== 'cancelled')) add({ id: `parked:${pending.runId}`, kind: 'parked', stages: [], pending });
-  add({ id: 'onboarding:first-task', stages: [], kind: 'first-task' });
+  if (!deferred.has(FIRST_TASK_DONE)) add({ id: 'onboarding:first-task', stages: [], kind: 'first-task' }); // BeUser M-J6: a chosen first task is not offered at every open
   return steps;
 }
+/** A person's chosen first task (kept like a deferral; /setup still offers the card). */
+export const FIRST_TASK_DONE = 'onboarding:first-task:done';
 /** R18: a deferral whose step is no longer open (settled through /setup, /model or /mode) is not a deferral any more. */
 export const openDeferrals = (snapshot: OnboardingSnapshot): readonly string[] => {
   const steps = onboardingSteps({ ...snapshot, deferred: [] }), open = new Set(steps.map(row => row.id));
   // A deferred image card whose work choice is open again (that answer lives in the session) is still owed, not settled.
-  return snapshot.deferred.filter(id => open.has(id) || id === 'execution:worker' && awaitedImage(snapshot, steps) === 1);
+  return snapshot.deferred.filter(id => open.has(id) || id === FIRST_TASK_DONE || id === 'execution:worker' && awaitedImage(snapshot, steps) === 1);
 };
 /** The image card enters the plan only once the work kind is answered; a pending work card counts it from the start (stable "Adım N"). */
 const awaitedImage = (snapshot: OnboardingSnapshot, steps: readonly OnboardingStep[]) => Number(steps.some(row => row.kind === 'work')
@@ -76,10 +78,10 @@ export function createOnboardingSession(port: OnboardingPort, initial: Onboardin
 }
 
 export function deferredOnboardingNotice(input: OnboardingSnapshot, locale: Locale): string | null {
-  const snapshot = { ...input, deferred: openDeferrals(input) };
+  const snapshot = { ...input, deferred: openDeferrals(input).filter(id => id !== FIRST_TASK_DONE) };
   if (!snapshot.deferred.length) return null;
   const presentationTitles: Readonly<Record<string, string>> = { 'onboarding:budget': 'onboarding.budget.question', 'permissions:start-mode': 'onboarding.permissions.title',
-    'onboarding:first-task': 'onboarding.firstTask.title', 'onboarding:worker-ready': 'onboarding.ready.title' };
+    'onboarding:first-task': 'onboarding.firstTask.title', 'onboarding:worker-ready': 'onboarding.ready.title', 'permissions:owner-rights': 'onboarding.rights.title' };
   const stages = snapshot.deferred.map(id => onboardingMessage(snapshot.plan.stages.find(stage => stage.id === id)?.title ?? presentationTitles[id] ?? (id.startsWith('parked:') ? 'onboarding.parked.title' : id), {}, locale)).join(', ');
   return t('onboarding.deferredLine', { stages }, locale);
 }

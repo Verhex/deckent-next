@@ -79,14 +79,19 @@ type Target = Readonly<{ reference: ModelReference; nativeId: string; maxOutputT
   declare: Readonly<{ provider: Readonly<{ id: string; version: number }>; model: Declared }> | null;
   catalog: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>;
 
+const withoutCapabilities = (model: Declared) => ({ ...model, protocols: model.protocols.map(protocol => ({ ...protocol, capabilities: [] })) });
+const capabilitiesAdded = (before: Declared, after: Declared) => isDeepStrictEqual(withoutCapabilities(before), withoutCapabilities(after))
+  && before.protocols.every((protocol, index) => protocol.capabilities.every(capability => after.protocols[index]!.capabilities.some(row => isDeepStrictEqual(row, capability))));
 /** The catalog with the model declared; null when it already declares exactly this model (a different declaration is a typed conflict). */
 export function declareConnectedModel(current: ProviderCatalog | null, declare: NonNullable<Target['declare']>): ProviderCatalog | null {
   const providers = (current?.providers ?? []).map(provider => ({ ...provider, models: [...provider.models] }));
   const provider = providers.find(item => item.id === declare.provider.id && item.version === declare.provider.version);
   const existing = provider?.models.find(model => model.id === declare.model.id && model.version === declare.model.version);
   const normal = (model: Declared) => parseProviderCatalog({ schemaVersion: 1, revision: 'x', providers: [{ ...declare.provider, models: [model] }] }).providers[0]!.models[0];
-  if (existing) { if (isDeepStrictEqual(normal(existing), normal(declare.model))) return null; throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT'); }
-  if (provider) provider.models.push(declare.model); else providers.push({ ...declare.provider, models: [declare.model] });
+  if (existing && isDeepStrictEqual(normal(existing), normal(declare.model))) return null;
+  // BeUser AYSE-16: a reconnect that only adds capabilities the server now proves (e.g. tool calls) updates the declaration; any other difference stays a conflict.
+  if (existing && !capabilitiesAdded(normal(existing)!, normal(declare.model)!)) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
+  if (existing) provider!.models[provider!.models.indexOf(existing)] = declare.model; else if (provider) provider.models.push(declare.model); else providers.push({ ...declare.provider, models: [declare.model] });
   // The revision names the content (deterministic: a re-run plans the same document).
   return parseProviderCatalog({ schemaVersion: 1, revision: `connect-${createHash('sha256').update(canonical(providers)).digest('hex').slice(0, 16)}`, providers });
 }

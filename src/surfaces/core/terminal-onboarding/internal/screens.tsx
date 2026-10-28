@@ -4,7 +4,7 @@ import { onboardingMessage } from './message.js';
 import { t, ErrorRegistry } from '#platform/index.js';
 import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { FirstTaskIntent, OnboardingPort, OnboardingUi } from './contract.js';
-import { createOnboardingSession, firstSignedInHost } from './session.js';
+import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE } from './session.js';
 import { askOnboardingQuestion, type QuestionAnswer } from './question.js';
 import { firstTaskScreen } from './first-task.js';
 import { guideScreen } from './guides.js';
@@ -22,6 +22,7 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
     if (step.kind === 'first-task') {
       const result = await firstTaskScreen(model, io);
       if (result === 'later') await session.defer(step);
+      if (typeof result === 'object') await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined);
       return typeof result === 'object' ? result : null;
     }
     if (step.kind === 'budget' || step.kind === 'permissions' || step.kind === 'rights') {

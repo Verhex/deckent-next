@@ -61,3 +61,16 @@ it('worker-only connection uses admitted CLI versions, writes no chat config, an
   expect(result).toMatchObject({ status: 'connected', steps: { declaration: 'skipped', profile: 'skipped', activation: 'written' } });
   expect(writes).toEqual(['catalog', 'worker']);
 });
+
+it('BeUser AYSE-16: a reconnect that only adds a proven capability updates the declaration; any other difference stays a conflict', async () => {
+  const { declareConnectedModel } = await import('../../../src/engine/core/model-activation/index.js');
+  const model = (capabilities: unknown[], nativeId = 'n') => ({ id: 'm', version: 1, nativeId, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities }] });
+  const declare = (m: ReturnType<typeof model>) => ({ provider: { id: 'p', version: 1 }, model: m }) as never;
+  const tool = { id: 'tool-calls', version: 1, state: 'supported' };
+  const current = declareConnectedModel(null, declare(model([])))!;
+  const upgraded = declareConnectedModel(current, declare(model([tool])))!;
+  expect(upgraded.providers[0]!.models).toHaveLength(1); expect(upgraded.providers[0]!.models[0]!.protocols[0]!.capabilities).toEqual([tool]);
+  expect(declareConnectedModel(upgraded, declare(model([tool])))).toBeNull();
+  expect(() => declareConnectedModel(upgraded, declare(model([])))).toThrow(expect.objectContaining({ code: 'MODEL_CONNECT_DECLARATION_CONFLICT' }));
+  expect(() => declareConnectedModel(current, declare(model([], 'other')))).toThrow(expect.objectContaining({ code: 'MODEL_CONNECT_DECLARATION_CONFLICT' }));
+});

@@ -155,3 +155,10 @@ it('BeUser ZEY-02/D-04: the management-rights step follows permission mode, is s
   const question = guideQuestion({ schemaVersion: 1, steps: [], completed: 0, total: 3, snapshot: needed }, 'rights', 'en');
   expect(question.body.join('\n')).toContain('9 rules'); expect(question.body.join('\n')).toContain('emergency hold'); expect(question.choices.map(row => row.id)).toEqual(['apply']);
 });
+it('BeUser M-J6: a chosen first task is not offered at every open, is not named as deferred, and /setup still offers it', () => {
+  const done = { ...snapshot, budget: { ...snapshot.budget, needed: false }, deferred: ['onboarding:first-task:done'] };
+  expect(onboardingSteps(done).some(row => row.kind === 'first-task')).toBe(false);
+  expect(onboardingSteps(done, true).some(row => row.kind === 'first-task')).toBe(true);
+  expect(deferredOnboardingNotice(done, 'en')).toBeNull();
+  expect(onboardingSteps({ ...done, deferred: [] }).some(row => row.kind === 'first-task')).toBe(true);
+});
