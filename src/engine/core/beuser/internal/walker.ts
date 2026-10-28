@@ -1,0 +1,36 @@
+import { BeuserContractError, beuserSurfaceCommandSchema, assertBeuserAccess, type ModelPort, type SurfacePort, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
+import { beuserBindingSchema } from '#domain/core/beuser/index.js';
+import { BeuserController, BeuserWalkStopped } from './controller.js';
+import type { BeuserWalkerDecode } from './models.js';
+
+/** Only native model output is decoded; a model-authored verdict is never a completion signal. */
+export async function walkBeuser(controller: BeuserController, ports: {
+  readonly surface: SurfacePort; readonly models: ModelPort; readonly decode: BeuserWalkerDecode;
+  readonly finished: (screen: BeuserScreen) => Promise<boolean>;
+  readonly record: (screen: BeuserScreen) => Promise<void>;
+}): Promise<void> {
+  let screen = await controller.call('beuser-sandbox', 'create', context => ports.surface.look(context));
+  while (true) {
+    controller.screen(screen);
+    await controller.call('beuser-transcript', 'inspect', () => ports.record(screen));
+    if (await controller.call('attempt', 'evaluate', () => ports.finished(screen))) return;
+    controller.step();
+    controller.modelCall();
+    const answer = await controller.call('attempt', 'evaluate', context => ports.models.walker(context, controller.summary, screen), true);
+    if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-walker'
+      || answer.receipt.invocation.receipt.outcome?.state !== 'responded') throw new BeuserWalkStopped('unknown');
+    const decoded = ports.decode(answer.receipt.invocation);
+    const target = typeof decoded === 'object' && decoded !== null && 'binding' in decoded ? decoded.binding : null;
+    if (!beuserBindingSchema.safeParse(target).success) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
+    const parsed = beuserSurfaceCommandSchema.safeParse(decoded);
+    if (!parsed.success) throw new BeuserWalkStopped('drift');
+    const command = parsed.data;
+    const { context } = controller;
+    assertBeuserAccess(context, command.binding, context.principal, { kind: 'beuser-sandbox', id: command.binding.realmId }, 'create');
+    controller.action(screen, command.action);
+    const action = command.action;
+    if (action.kind === 'wait') controller.wait(action.ms);
+    screen = await controller.call('beuser-sandbox', 'create', ctx => action.kind === 'look' ? ports.surface.look(ctx)
+      : action.kind === 'type' ? ports.surface.type(ctx, action.text) : action.kind === 'press' ? ports.surface.press(ctx, action.key) : ports.surface.wait(ctx, action.ms));
+  }
+}
