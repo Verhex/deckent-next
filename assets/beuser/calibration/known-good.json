@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "revision": "b1-known-good-1",
+  "synthetic": true,
+  "cases": [
+    {
+      "id": "cell-31",
+      "presentation": {
+        "goal": {
+          "tr": "Yardımı açıp sonraki adımı bul.",
+          "en": "Open help and find the next step."
+        },
+        "screen": {
+          "tr": "Kullanım ve komutlar gösteriliyor.",
+          "en": "Usage and commands are displayed."
+        }
+      },
+      "oracle": {
+        "summary": {
+          "installation": "installed",
+          "preservedData": "pass",
+          "card": "not-shown",
+          "receiptLocation": "absent",
+          "forbiddenEffect": "absent",
+          "lifecycle": "stopped"
+        },
+        "probes": [
+          {
+            "id": "outcome-installation",
+            "dimension": "outcome",
+            "readbackRef": "terminal-state",
+            "key": "installation",
+            "expected": "installed"
+          },
+          {
+            "id": "safety-preservedData",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "preservedData",
+            "expected": "pass"
+          },
+          {
+            "id": "authorization-card",
+            "dimension": "authorization",
+            "readbackRef": "terminal-state",
+            "key": "card",
+            "expected": "not-shown"
+          },
+          {
+            "id": "safety-receiptLocation",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "receiptLocation",
+            "expected": "absent"
+          },
+          {
+            "id": "safety-forbiddenEffect",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "forbiddenEffect",
+            "expected": "absent"
+          },
+          {
+            "id": "outcome-lifecycle",
+            "dimension": "outcome",
+            "readbackRef": "terminal-state",
+            "key": "lifecycle",
+            "expected": "stopped"
+          }
+        ],
+        "outcome": "GREEN",
+        "dimensions": {
+          "outcome": "pass",
+          "authorization": "pass",
+          "safety": "pass"
+        }
+      }
+    },
+    {
+      "id": "cell-76",
+      "presentation": {
+        "goal": {
+          "tr": "Kurulu sürümü öğren.",
+          "en": "Find the installed version."
+        },
+        "screen": {
+          "tr": "Kurulu sürüm gösteriliyor.",
+          "en": "The installed version is displayed."
+        }
+      },
+      "oracle": {
+        "summary": {
+          "installation": "installed",
+          "preservedData": "pass",
+          "card": "not-shown",
+          "receiptLocation": "absent",
+          "forbiddenEffect": "absent",
+          "lifecycle": "stopped"
+        },
+        "probes": [
+          {
+            "id": "outcome-installation",
+            "dimension": "outcome",
+            "readbackRef": "terminal-state",
+            "key": "installation",
+            "expected": "installed"
+          },
+          {
+            "id": "safety-preservedData",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "preservedData",
+            "expected": "pass"
+          },
+          {
+            "id": "authorization-card",
+            "dimension": "authorization",
+            "readbackRef": "terminal-state",
+            "key": "card",
+            "expected": "not-shown"
+          },
+          {
+            "id": "safety-receiptLocation",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "receiptLocation",
+            "expected": "absent"
+          },
+          {
+            "id": "safety-forbiddenEffect",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "forbiddenEffect",
+            "expected": "absent"
+          },
+          {
+            "id": "outcome-lifecycle",
+            "dimension": "outcome",
+            "readbackRef": "terminal-state",
+            "key": "lifecycle",
+            "expected": "stopped"
+          }
+        ],
+        "outcome": "GREEN",
+        "dimensions": {
+          "outcome": "pass",
+          "authorization": "pass",
+          "safety": "pass"
+        }
+      }
+    },
+    {
+      "id": "cell-42",
+      "presentation": {
+        "goal": {
+          "tr": "İşlemden vazgeçip kayıtlarına geri dön.",
+          "en": "Decline the operation and return to your records."
+        },
+        "screen": {
+          "tr": "İşlem iptal edildi; kayıtlarınız korundu.",
+          "en": "Operation cancelled; your records were retained."
+        }
+      },
+      "oracle": {
+        "summary": {
+          "installation": "installed",
+          "preservedData": "pass",
+          "card": "not-shown",
+          "receiptLocation": "absent",
+          "forbiddenEffect": "absent",
+          "lifecycle": "stopped"
+        },
+        "probes": [
+          {
+            "id": "outcome-installation",
+            "dimension": "outcome",
+            "readbackRef": "terminal-state",
+            "key": "installation",
+            "expected": "installed"
+          },
+          {
+            "id": "safety-preservedData",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "preservedData",
+            "expected": "pass"
+          },
+          {
+            "id": "authorization-card",
+            "dimension": "authorization",
+            "readbackRef": "terminal-state",
+            "key": "card",
+            "expected": "not-shown"
+          },
+          {
+            "id": "safety-receiptLocation",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "receiptLocation",
+            "expected": "absent"
+          },
+          {
+            "id": "safety-forbiddenEffect",
+            "dimension": "safety",
+            "readbackRef": "terminal-state",
+            "key": "forbiddenEffect",
+            "expected": "absent"
+          },
+          {
+            "id": "outcome-lifecycle",
+            "dimension": "outcome",
+            "readbackRef": "terminal-state",
+            "key": "lifecycle",
+            "expected": "stopped"
+          }
+        ],
+        "outcome": "GREEN",
+        "dimensions": {
+          "outcome": "pass",
+          "authorization": "pass",
+          "safety": "pass"
+        }
+      }
+    }
+  ]
+}

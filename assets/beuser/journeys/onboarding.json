@@ -1,0 +1,717 @@
+{
+  "schemaVersion": 1,
+  "revision": "b1-onboarding-1",
+  "journeyId": "onboarding",
+  "limitsProfile": "b1-dogfood-provisional-1",
+  "branches": [
+    {
+      "id": "O-B1",
+      "personaIds": [
+        "ayse",
+        "mert",
+        "selin",
+        "managed-admin",
+        "managed-member",
+        "screen-reader",
+        "narrow-terminal"
+      ],
+      "goal": {
+        "tr": "Kurulumu bul, ilk küçük işini bitir, kapatıp açınca kalıcı sonucu yeniden bul.",
+        "en": "Find the installation, finish a small first task, and reopen it to find the durable result again."
+      }
+    },
+    {
+      "id": "O-B2",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Model bağlantısı olmadan ilk işine başlamayı dene.",
+        "en": "Try starting your first task without model access."
+      }
+    },
+    {
+      "id": "O-B3",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Yerel bağlantıyla küçük ilk işini yapmayı dene.",
+        "en": "Try a small first task using only a local connection."
+      }
+    },
+    {
+      "id": "O-B4",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Dış modele izin verilmeyen kurulumunda işe başlamayı dene.",
+        "en": "Try starting work where external models are not permitted."
+      }
+    },
+    {
+      "id": "O-B5",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Fiyat bilgisi tamamlanmadan ilk işine başlamayı dene.",
+        "en": "Try starting the first task before price information is ready."
+      }
+    },
+    {
+      "id": "O-B6",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Görev için model rolü hazır değilken işe başlamayı dene.",
+        "en": "Try starting work before its model role is ready."
+      }
+    },
+    {
+      "id": "O-B7",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Bütçe tanımlanmamışken ilk işine başlamayı dene.",
+        "en": "Try starting your first task before a budget is configured."
+      }
+    },
+    {
+      "id": "O-B8",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Bütçen bitmişken işinin durumunu ve sonraki adımı bul.",
+        "en": "Find the task status and next step after its budget is exhausted."
+      }
+    },
+    {
+      "id": "O-B9",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "İşçi hazırlanırken ilk işinin durumunu takip et.",
+        "en": "Follow the first task while its worker image is being prepared."
+      }
+    },
+    {
+      "id": "O-B10",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "İşçi altyapısı hazır olmayan kutuda ilk işini başlatmayı dene.",
+        "en": "Try starting the first task where the worker infrastructure is unavailable."
+      }
+    },
+    {
+      "id": "O-B11",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Yalıtılmış işçi ortamı kullanılamazken ilk işini başlatmayı dene.",
+        "en": "Try starting the first task where an isolated worker environment is unavailable."
+      }
+    },
+    {
+      "id": "O-B12",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "İlk işini yaz, sonra devam etmekten vazgeç.",
+        "en": "Type your first task and then choose not to continue."
+      }
+    },
+    {
+      "id": "O-B13",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Bağlantı kesilince ilk işinin durumunu ve güvenli sonraki adımı bul.",
+        "en": "Find the status and safe next step when the connection is interrupted."
+      }
+    },
+    {
+      "id": "O-B14",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "İşçinin sorduğu soruyu bul, cevapla ve kalıcı sonucu kontrol et.",
+        "en": "Find and answer the worker question, then check the durable result."
+      }
+    },
+    {
+      "id": "O-B15",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Önceden kurulu kendi klasörünü yeniden aç ve kaldığın işi bul.",
+        "en": "Reopen your previously installed folder and find the existing work."
+      }
+    },
+    {
+      "id": "O-B16",
+      "personaIds": [
+        "managed-admin",
+        "managed-member"
+      ],
+      "goal": {
+        "tr": "Başka kapsamın göründüğü kurulumda kendi iş alanını seç.",
+        "en": "Choose your own work area where another company or scope is also present."
+      }
+    },
+    {
+      "id": "O-B17",
+      "personaIds": [
+        "ayse"
+      ],
+      "goal": {
+        "tr": "Türkçe yönergelerle küçük ilk işine başla.",
+        "en": "Start a small first task using Turkish guidance."
+      }
+    },
+    {
+      "id": "O-B18",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "İngilizce yönergelerle küçük ilk işine başla.",
+        "en": "Start a small first task using English guidance."
+      }
+    },
+    {
+      "id": "O-B19",
+      "personaIds": [
+        "narrow-terminal"
+      ],
+      "goal": {
+        "tr": "Dar ekranda yönergeleri okuyup küçük ilk işine başla.",
+        "en": "Read the guidance and start a small first task in a narrow terminal."
+      }
+    },
+    {
+      "id": "O-B20",
+      "personaIds": [
+        "ayse",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Düz metin çıktısıyla küçük ilk işin için sonraki adımı bul.",
+        "en": "Find the next step for a small first task using plain line-mode output."
+      }
+    },
+    {
+      "id": "O-B21",
+      "personaIds": [
+        "screen-reader"
+      ],
+      "goal": {
+        "tr": "Ekran okuyucu ve klavyeyle küçük ilk işine başla.",
+        "en": "Start a small first task with a screen reader and keyboard."
+      }
+    }
+  ],
+  "rubric": {
+    "schemaVersion": 1,
+    "journeyId": "onboarding",
+    "version": 1,
+    "digest": "adcf7242c082b1985fc9a1aefb0f76b5d59f5e75ceedc1713e2e03a3f87fbeb8",
+    "parameters": {
+      "phase": "preparation-only",
+      "ownerSteps": 0,
+      "personDecisions": "synthetic-person-decision",
+      "limitsProfile": "b1-dogfood-provisional-1",
+      "branches": [
+        {
+          "id": "O-B1",
+          "initialStates": [
+            "fresh-home",
+            "fresh-session",
+            "no-prefilled-model-or-consent"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin",
+            "reopen"
+          ],
+          "criteria": [
+            "discovery-init-identity-scope-connect-budget-worker-first-task-result-cards-durable-result-reopen",
+            "no-manual-internal-JSON",
+            "masked-person-only-credential",
+            "actual-worker-evidence-required",
+            "same-authority-across-surfaces"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B2",
+          "initialStates": [
+            "fresh-home",
+            "model-unavailable"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "typed-model-unavailable",
+            "safe-next-action"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B3",
+          "initialStates": [
+            "fresh-home",
+            "local-only"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "explicit-loopback-fake-provider-label",
+            "no-vendor-login-claim",
+            "no-terminal-fallback-as-worker-proof"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B4",
+          "initialStates": [
+            "fresh-home",
+            "external-model-denied"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "no-silent-provider-substitution",
+            "policy-reason"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B5",
+          "initialStates": [
+            "fresh-home",
+            "price-pending"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "pending-price-not-zero",
+            "no-unadmitted-call"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B6",
+          "initialStates": [
+            "fresh-home",
+            "role-pending"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "typed-role-pending",
+            "no-implicit-activation"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B7",
+          "initialStates": [
+            "fresh-home",
+            "budget-missing"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "no-unadmitted-spend",
+            "authorized-budget-next-step"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B8",
+          "initialStates": [
+            "fresh-home",
+            "budget-exhausted"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "bounded-wait",
+            "no-unadmitted-spend"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B9",
+          "initialStates": [
+            "fresh-home",
+            "image-preparing"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "visible-owner-timeout-next-action",
+            "no-false-started-worker"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B10",
+          "initialStates": [
+            "fresh-home",
+            "docker-unavailable"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "typed-Docker-unavailable",
+            "no-host-socket-workaround",
+            "terminal-result-not-worker-evidence"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B11",
+          "initialStates": [
+            "fresh-home",
+            "realm-unavailable"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "typed-realm-unavailable",
+            "no-host-fallback"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B12",
+          "initialStates": [
+            "fresh-home",
+            "cancel"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "no-lost-draft",
+            "no-unapproved-work",
+            "cancellation-settlement"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B13",
+          "initialStates": [
+            "fresh-home",
+            "network-interrupted"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "effect-unknown-preserved",
+            "no-blind-retry"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B14",
+          "initialStates": [
+            "fresh-home",
+            "worker-question"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "question-same-terminal",
+            "answer-attributed",
+            "worker-continues",
+            "durable-readback"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B15",
+          "initialStates": [
+            "fresh-home",
+            "existing-folder"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "no-authority-overwrite",
+            "existing-work-preserved"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B16",
+          "initialStates": [
+            "fresh-home",
+            "other-company-scope"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "scope-selection-does-not-grant",
+            "foreign-data-not-visible",
+            "no-cross-scope-effect"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B17",
+          "initialStates": [
+            "fresh-home",
+            "tr"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "catalog-parity",
+            "next-step-readable"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B18",
+          "initialStates": [
+            "fresh-home",
+            "en"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "catalog-parity",
+            "next-step-readable"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B19",
+          "initialStates": [
+            "fresh-home",
+            "narrow-terminal"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "full-card-readable",
+            "stable-focus-footer",
+            "no-hidden-composer-input"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B20",
+          "initialStates": [
+            "fresh-home",
+            "line-mode"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "plain-output-next-action",
+            "person-card-never-bypassed"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "O-B21",
+          "initialStates": [
+            "fresh-home",
+            "screen-reader"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin"
+          ],
+          "criteria": [
+            "labels-focus-order",
+            "no-color-only-meaning",
+            "no-hidden-composer-input"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        }
+      ],
+      "probeSets": [
+        {
+          "id": "probe-set-1",
+          "probes": [
+            {
+              "id": "outcome-installation",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "installation",
+              "expected": "installed"
+            },
+            {
+              "id": "safety-preservedData",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "preservedData",
+              "expected": "pass"
+            },
+            {
+              "id": "authorization-card",
+              "dimension": "authorization",
+              "readbackRef": "terminal-state",
+              "key": "card",
+              "expected": "not-shown"
+            },
+            {
+              "id": "safety-receiptLocation",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "receiptLocation",
+              "expected": "absent"
+            },
+            {
+              "id": "safety-forbiddenEffect",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "forbiddenEffect",
+              "expected": "absent"
+            },
+            {
+              "id": "outcome-lifecycle",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "lifecycle",
+              "expected": "stopped"
+            }
+          ]
+        }
+      ],
+      "constraints": [
+        "own-sealed-disposable-installation-only",
+        "no-host-live-N1-owner-installation",
+        "no-ledger-key-backup-receipt-bytes-export",
+        "secret-step-capture-off-no-values-or-hashes",
+        "approve-the-actual-card-then-assert",
+        "no-safe-command-substitution",
+        "uncertain-effects-reconcile-never-blind-retry",
+        "cleanup-absence-proof-or-quarantine-unknown"
+      ],
+      "source": "BEUSER-PRODUCT-2026-10-27/codex/DESIGN.md:5.2",
+      "successBoundary": "safe-understandable-ending-per-branch-not-every-branch-completes-first-work",
+      "workerBoundary": "actual-worker-execution-and-durable-target-readback-not-terminal-fallback",
+      "providerFixture": {
+        "kind": "loopback-fake-provider",
+        "hostCredentials": false,
+        "browserLogin": false,
+        "realProviderProof": false
+      },
+      "firstResult": {
+        "dogfood": "harmless-git-adapter-result",
+        "business": "harmless-draft-record-in-test-company"
+      }
+    }
+  }
+}
