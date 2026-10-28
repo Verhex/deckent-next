@@ -393,6 +393,8 @@
   "cli.uninstall.blocker.authority-unsafe": "{path} bu kullanıcının özel dosyası olarak doğrulanamadı; hiçbir şey silinmeyecek",
   "cli.uninstall.reopen.title": "Bu klasörde önceki Deckent verisi",
   "cli.uninstall.reopen.body": "Bu klasörde önceki Deckent verisi var. Devam edilsin mi?",
+  "cli.uninstall.reopen.uncertain": "Önceki işlerin {count} sonucu hâlâ bilinmiyor. Devam ettiğinizde Deckent bunları uzlaştırmayı sürdürür; hiçbiri sizin yerinize kapatılmaz.",
+  "cli.uninstall.reopen.unchecked": "Önceki işlerin bilinmeyen sonuç bırakıp bırakmadığı şu an denetlenemedi. Devam ettiğinizde Deckent bunları uzlaştırır.",
   "cli.uninstall.reopen.continue": "Onunla devam et",
   "cli.uninstall.reopen.cancel": "Şimdi değil",
   "cli.uninstall.backupPassphrase": "Yedek parolası"

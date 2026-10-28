@@ -393,6 +393,8 @@
   "cli.uninstall.blocker.authority-unsafe": "{path} could not be verified as a private file of this user; nothing will be deleted",
   "cli.uninstall.reopen.title": "Earlier Deckent data in this folder",
   "cli.uninstall.reopen.body": "This folder has earlier Deckent data. Continue with it?",
+  "cli.uninstall.reopen.uncertain": "{count} results of earlier work are still unknown. Deckent keeps reconciling them once you continue; nothing is closed for you.",
+  "cli.uninstall.reopen.unchecked": "Whether earlier work left unknown results could not be checked now. Deckent reconciles them once you continue.",
   "cli.uninstall.reopen.continue": "Continue with it",
   "cli.uninstall.reopen.cancel": "Not now",
   "cli.uninstall.backupPassphrase": "Backup passphrase"

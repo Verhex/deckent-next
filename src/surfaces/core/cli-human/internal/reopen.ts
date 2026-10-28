@@ -1,10 +1,15 @@
-import { t, uninstallRetired, reopenInstallation, type Locale } from '#platform/index.js';
+import { t, uninstallRetired, reopenInstallation, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { askCliCard } from './card.js';
-/** §5.4 (owner 2026-10-27): a folder whose installation was removed keeping its data reopens only on the person's own card (Continue); false: not now. */
-export async function reopenRetiredFolder(config: unknown, locale: Locale, env: NodeJS.ProcessEnv): Promise<boolean> {
-  const root = (config as { productLayout?: { root: string } }).productLayout?.root;
+/** §5.4 (owner 2026-10-27): a folder whose installation was removed keeping its data reopens only on the person's own card (Continue); false: not now.
+ * m3: the host's uninstall preview (a fresh, authorized observation, never the marker's word) counts the unknown results of earlier work. */
+export async function reopenRetiredFolder(config: unknown, locale: Locale, env: NodeJS.ProcessEnv, host?: unknown, options?: ConfigLoadOptions): Promise<boolean> {
+  const { productLayout, projectRoot } = config as { productLayout?: { root: string }; projectRoot?: string }, root = productLayout?.root;
   if (!root || !await uninstallRetired(root)) return true;
-  const answer = await askCliCard({ title: t('cli.uninstall.reopen.title', {}, locale), body: [t('cli.uninstall.reopen.body', {}, locale)], initial: 'continue',
+  const preview = (host as { previewUninstall?: (root: string, query: object, options: ConfigLoadOptions) => Promise<{ readonly work: { readonly uncertain: readonly unknown[] } }> } | undefined)?.previewUninstall;
+  const count = preview && projectRoot ? await preview(projectRoot, { schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false }, options ?? {})
+    .then(plan => plan.work.uncertain.length, () => null) : undefined;
+  const open = count === undefined || count === 0 ? [] : [count === null ? t('cli.uninstall.reopen.unchecked', {}, locale) : t('cli.uninstall.reopen.uncertain', { count: String(count) }, locale)];
+  const answer = await askCliCard({ title: t('cli.uninstall.reopen.title', {}, locale), body: [t('cli.uninstall.reopen.body', {}, locale), ...open], initial: 'continue',
     options: [{ id: 'continue', label: t('cli.uninstall.reopen.continue', {}, locale) }, { id: 'cancel', label: t('cli.uninstall.reopen.cancel', {}, locale) }] }, { locale, env });
   if (answer === 'continue') await reopenInstallation(root);
   return answer === 'continue';

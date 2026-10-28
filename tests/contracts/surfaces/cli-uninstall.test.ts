@@ -113,3 +113,20 @@ it('offers force for running work before any card and prints a kept image\'s ste
   for (const text of [en, tr]) { expect(text).toContain(command); expect(text).toContain('/fixture/bindings.json'); }
   expect(tr).toContain('Sizin yapmanız gereken');
 });
+
+it('the reopen card counts unknown results from a fresh preview, says when it could not check, and "Not now" keeps the folder retired', async () => {
+  const { mkdtemp, rm, lstat } = await import('node:fs/promises'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
+  const { retireInstallation } = await import('#platform/index.js'), card = await import('#surfaces/core/cli-human/internal/card.js');
+  const asked: { body?: readonly string[] }[] = [], ask = vi.spyOn(card, 'askCliCard').mockImplementation(async request => { asked.push(request); return 'cancel'; });
+  const { reopenRetiredFolder } = await import('#surfaces/core/cli-human/internal/reopen.js'), project = await mkdtemp(join(tmpdir(), 'deckent-reopen-'));
+  try {
+    const data = join(project, '.deckent'), config = { productLayout: { root: data }, projectRoot: project };
+    await retireInstallation(data, { installationId: 'i', planDigest: 'd', tier: 'keep-data' });
+    const uncertain = { kind: 'effect', scopeId: 's', id: 'erp-1', target: null };
+    expect(await reopenRetiredFolder(config, 'en', {}, { previewUninstall: async () => ({ work: { uncertain: [uncertain, { ...uncertain, id: 'erp-2' }] } }) })).toBe(false);
+    expect(asked[0]!.body!.join('\n')).toContain('2 results of earlier work are still unknown');
+    expect(await reopenRetiredFolder(config, 'tr', {}, { previewUninstall: async () => { throw new Error('unreadable'); } })).toBe(false);
+    expect(asked[1]!.body!.join('\n')).toContain('denetlenemedi');
+    expect(await lstat(join(data, 'installation/retired.json'))).toBeTruthy();
+  } finally { ask.mockRestore(); await rm(project, { recursive: true, force: true }); }
+});
