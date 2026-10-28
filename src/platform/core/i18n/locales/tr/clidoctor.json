@@ -86,6 +86,7 @@
   "doctor.check.secretStore.problem": "Secret deposu: {backend} şu an kullanılamıyor ({code})",
   "doctor.check.secretStore.leftover": "Bazı secret referansları ya da eski anahtar kopyaları ilgi bekliyor",
   "doctor.check.secretUse.grant": "{name} anahtarını buradaki bir model kullanıyor ama bu projeye izin verilmemiş: model çağrılamaz",
+  "doctor.check.secretUse.grantMcp": "{name} anahtarını buradaki MCP sunucusu {servers} kullanıyor ama bu projeye izin verilmemiş: izin verilene kadar sunucu başlamaz",
   "doctor.check.secretUse.undeclared": "{name} anahtarı bu projenin kasasında ama .deck onu bildirmiyor: kullanılmaz",
   "doctor.check.secretUse.undeclared.next": ".deck dosyasına {name}=project ekleyin",
   "doctor.check.secretUse.declaredMissing": "{name} anahtarı .deck'te bildirilmiş ama saklı değil",

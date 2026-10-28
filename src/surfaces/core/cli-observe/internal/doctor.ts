@@ -33,7 +33,9 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     ? await context.inspectWorkerImage({ executable: docker.executable, imageId: docker.imageId, timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes }).catch(() => 'unknown' as const) : null;
   // PRE-8 v2: the one inventory (names only): used keys without a grant, undeclared project keys, declared keys not stored, used keys stored nowhere.
   const inventory = context.inspectSecretInventory && scopeId ? await context.inspectSecretInventory(root, { scopeId, all: false }, options).catch(() => null) : null;
-  const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name })),
+  // KER-17: a grant finding names the MCP servers that need the key (personal-file `$DECK:`), so the next step is the one grant command.
+  const mcpUsers = (name: string) => inventory?.rows.find(row => row.name === name && row.vault === 'main')?.usedBy.filter(user => user.startsWith('mcp:')).map(user => user.slice(4)) ?? [];
+  const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
     providerSpending, budgetPeriodText,

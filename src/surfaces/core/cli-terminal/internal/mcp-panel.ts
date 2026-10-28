@@ -23,7 +23,7 @@ const digest12 = (value: unknown) => typeof value === 'string' ? value.slice(0, 
  * a record trusted before alpha.48 (SEC-2 D6, `trust-moved`) is approved again on its card; an unknown status stays its typed name. */
 export function mcpServerStateWord(server: { readonly status: string; readonly reason?: string | undefined }, locale: Locale): string {
   if (server.reason === 'trust-moved') return t('climodels.mcp.state.moved', {}, locale);
-  if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale);
+  if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale); if (server.reason?.startsWith('secret-refused:')) return t('terminal.mcp.status.secretRefused', { key: server.reason.slice(15) }, locale); // KER-17
   switch (server.status) {
     case 'trusted': return t('terminal.mcp.status.trusted', {}, locale);
     case 'pending-approval': return t('terminal.mcp.status.pending', {}, locale);

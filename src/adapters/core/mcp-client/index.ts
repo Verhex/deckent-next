@@ -11,7 +11,7 @@ export { expandMcpEntry, isMcpHttpEntry, mcpEndpointRefusal, mcpEntryDisplay, MC
   readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistry, type McpRegistryEntry, type McpRegistryProblem, type McpScope,
   type McpServerEntry } from './internal/registry.js';
 export { findMcpTrust, MCP_PROJECT_TRUST_DIR, MCP_TRUST_FILE, mcpProjectTrustDirectory, readMcpTrust, updateMcpTrust, type McpTrustRecord, type McpTrustState } from '#adapters/core/mcp-trust/index.js';
-export { loadMcpRegistry, mcpClientSettings, mcpGlobalRoot, mcpSendAuthority, mcpTrustContext, mcpTrustDirectory, openTurnMcp, runMcpCommand, type McpCommandContext, type McpCommandRequest,
+export { loadMcpRegistry, mcpClientSettings, mcpGlobalRoot, mcpSecretUsers, mcpSendAuthority, mcpTrustContext, mcpTrustDirectory, openTurnMcp, runMcpCommand, type McpCommandContext, type McpCommandRequest,
   type McpRegistryContext, type McpRegistryView, type McpServerStatus, type McpServerView } from './internal/manage.js';
 export { MCP_PROPOSAL_SECRETS_REFUSED, planMcpProposal, PROPOSE_MCP_SERVER_TOOL, PROPOSE_MCP_SERVER_TOOL_SPEC, type McpProposal, type McpProposalPlan } from './internal/propose.js';
 export { decideMcpTrust, describeMcpTrustCard, mcpCardApprovalAsker, MCP_TRUST_CARD_TOOL, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpCardAskerInput, type McpTrustAsk, type McpTrustAudit, type McpTrustCard, type McpTrustChange, type McpTrustContext,

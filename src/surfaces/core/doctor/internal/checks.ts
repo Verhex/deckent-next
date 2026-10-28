@@ -59,7 +59,7 @@ export interface DoctorCheckFacts {
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
-export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string }>;
+export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
@@ -141,8 +141,8 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   }
   // PRE-8 v2: one row per key a profile uses that this project cannot read now, with the exact next command (names only).
   for (const use of f.secretUse ?? []) {
-    const params = { name: use.name };
-    rows.push(use.kind === 'grant-required' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.grant', params, l), scoped(`deckent secret grant ${use.name}`, f))
+    const params = { name: use.name, servers: use.servers ?? '' };
+    rows.push(use.kind === 'grant-required' ? row('security', 'security.secretUse', 'warning', (use.servers ? t('doctor.check.secretUse.grantMcp', params, l) : t('doctor.check.secretUse.grant', params, l)), scoped(`deckent secret grant ${use.name}`, f))
       : use.kind === 'undeclared-project-key' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.undeclared', params, l), t('doctor.check.secretUse.undeclared.next', params, l))
       : use.kind === 'declared-missing' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.declaredMissing', params, l), scoped(`deckent secret set ${use.name} --project`, f))
       : row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.notStored', params, l), scoped(`deckent secret set ${use.name} --main`, f)));
