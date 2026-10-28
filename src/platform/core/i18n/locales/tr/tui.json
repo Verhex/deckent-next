@@ -365,7 +365,7 @@
   "terminal.approval.window.risk.shell-read-low": "Alışılmış kümenin dışını okur",
   "terminal.approval.window.risk.shell-narrow-mutating": "Proje dosyalarını değiştirir",
   "terminal.approval.window.risk.shell-destructive": "Silme içeriyor (geri alınamaz)",
-  "terminal.approval.window.risk.shell-always-ask": "Yüksek etkili komut",
+  "terminal.approval.window.risk.shell-always-ask": "Etkisini Deckent'in önceden göremediği bir program ya da betik çalıştırır (örneğin npm run, make)",
   "terminal.approval.window.risk.shell-other-modify": "Dosyaları ya da ayarları değiştirebilir",
   "terminal.approval.window.risk.fetch-listed": "İnternete bağlanır; sayfa modele gider",
   "terminal.approval.window.risk.fetch-unlisted": "İzin listesinde olmayan bir siteye bağlanır; sayfa modele gider",

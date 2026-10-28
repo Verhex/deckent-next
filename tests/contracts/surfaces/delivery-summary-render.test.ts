@@ -52,7 +52,7 @@ describe('renderDeliverySummary', () => {
       risk: { class: 'other', workClass: null, protectedTarget: true, sizeBucket: null, flags: ['out-of-scope', 'protected-target'] },
       change: { state: 'available', adapter: 'workspace-patch', files: 1, added: 1, removed: 0, topPaths: ['x.ts'], topPathsOmitted: 0, scope: 'out-of-scope', outOfScope: ['x.ts'], outOfScopeCount: 4 } }), 'en').join('\n');
     expect(lines).toContain('Outside the allowed scope (4): x.ts (+3 more)'); expect(lines).toContain('Accepted, but the content was not independently verified · 0 criteria · on: no evidence recorded');
-    expect(lines).toContain('Risk: not a small change · protected target · changes outside scope · protected target');
+    expect(lines).toContain('Risk: not in the small-change class (by the kind of files, not their size) · protected target · changes outside scope · protected target');
     expect(renderDeliverySummary(summary({ change: { state: 'available', adapter: 'workspace-patch', files: 1, added: 0, removed: 0, topPaths: [], topPathsOmitted: 0, scope: 'unscoped', outOfScope: [], outOfScopeCount: 0 } }), 'en')).toContain('No scope was declared for this work');
   });
   it('renders every model verdict (incl. start-name-matched and provider-chosen), operation and flag in both locales without unresolved keys or placeholders', () => {

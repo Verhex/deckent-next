@@ -365,7 +365,7 @@
   "terminal.approval.window.risk.shell-read-low": "Reads outside the usual set",
   "terminal.approval.window.risk.shell-narrow-mutating": "Changes project files",
   "terminal.approval.window.risk.shell-destructive": "Deletes (cannot be undone)",
-  "terminal.approval.window.risk.shell-always-ask": "High-impact command",
+  "terminal.approval.window.risk.shell-always-ask": "Runs a program or script whose effect Deckent cannot see in advance (for example npm run, make)",
   "terminal.approval.window.risk.shell-other-modify": "May change files or settings",
   "terminal.approval.window.risk.fetch-listed": "Connects to the internet; the page goes to the model",
   "terminal.approval.window.risk.fetch-unlisted": "Connects to a site that is not allowlisted; the page goes to the model",
