@@ -2532,7 +2532,9 @@
         "src/engine/core/approval",
         "src/adapters/core/local-runtime-socket",
         "src/engine/core/runtime",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/platform/core/redaction",
+        "src/platform/core/i18n"
       ],
       "plan": "EXECUTION"
     },

@@ -61,12 +61,14 @@ export function approvalTable(records: readonly ApprovalRecord[], nowMs: number,
 export function approvalLines(record: ApprovalRecord, nowMs: number, locale: Locale, verbose = false): readonly string[] {
   const facts = approvalFacts(record.request), unset = t('cli.approval.notDeclared', {}, locale);
   const risk = facts?.risk ? (facts.risk.source === 'cell' ? facts.risk.cell : `${facts.risk.effectClass}${facts.risk.authority ? ' · authority' : ''}`) : unset;
-  const undo = facts?.reversibility ? (facts.reversibility.kind === 'compensation' ? `${facts.reversibility.operation.id}@${facts.reversibility.operation.version}` : facts.reversibility.kind) : unset;
+  const undo = facts?.reversibility ? (facts.reversibility.kind === 'compensation' ? `${facts.reversibility.operation.id}@${facts.reversibility.operation.version}`
+    : facts.reversibility.kind === 'none' ? t('terminal.approval.window.undo.none', {}, locale) : facts.reversibility.kind) : unset;
   const decision = record.decision, decider = decision ? approvalDecisionClass(decision) : null;
   return Object.freeze([
     t('cli.approval.line.head', { id: terminalSafeText(record.request.approvalId), state: approvalState(record, nowMs, locale) }, locale),
     t('cli.approval.line.what', { what: approvalWhat(record, locale) }, locale),
-    t('cli.approval.line.summary', { summary: safeCell(record.request.summary) }, locale),
+    // BeUser: the binding line, then each described input field on its own line (an operation card shows what the command changes).
+    ...record.request.summary.split('\n').map((line, index) => index === 0 ? t('cli.approval.line.summary', { summary: safeCell(line) }, locale) : `  ${safeCell(line)}`),
     t('cli.approval.line.requester', { requester: actor(record), scope: terminalSafeText(record.request.scopeId), at: formatClock(record.request.createdAt, locale) }, locale),
     t('cli.approval.line.risk', { risk: terminalSafeText(risk), undo: terminalSafeText(undo) }, locale),
     ...(onHardFloor(record) ? [t('cli.approval.line.floor', {}, locale)] : []),

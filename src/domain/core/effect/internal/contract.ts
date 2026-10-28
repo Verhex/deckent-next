@@ -27,6 +27,9 @@ export const operationDescriptorSchema = z.object({
    * (the key never derives from the Attempt), so a settled effect of a lost Attempt need not block a new one. Absent or `command` = not
    * declared (a settled intent then hands the task to a human). No default, like `admitWithinMs`. */
   idempotencyScope: z.enum(['task', 'command']).optional(),
+  /** BeUser (lead 2026-10-28): how the approval card names each top-level input field (`field → label`, the catalog author's words). Absent:
+   * the field's own name. No default (byte-for-byte re-parse); presentation only, never authority. */
+  inputLabels: z.record(z.string().min(1).max(128), z.string().min(1).max(128)).refine(value => Object.keys(value).length <= 64).optional(),
 }).strict().superRefine((value, context) => {
   if (value.effectClass === 'irreversible' && value.approval !== 'required') context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_REQUIRES_APPROVAL' });
   if (value.effectClass === 'irreversible' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_NOT_COMPENSABLE' });

@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { effectRecordSchema, type EffectCommand, type EffectRecord, type OperationDescriptor } from '#domain/index.js';
-import { ApprovalApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, operationApprovalActionDigest, type EffectApprovalContext } from '#engine/index.js';
+import { ApprovalApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, operationApprovalActionDigest, operationInputDescriber, type EffectApprovalContext } from '#engine/index.js';
 import { MAX_WALL_SKEW_MS, createHmacIntegrity } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -183,4 +183,19 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
     expect(await app.submit('execute', command('cmd-2'))).toMatchObject({ status: 'settled' });
     expect(claims).toBe(1); expect(applied).toBe(1);
   } finally { f.close(); }
+});
+
+it('BeUser: the operation card names each input field under the catalog label, redacts credentials and counts what does not fit; the digest line stays first', async () => {
+  const labelled = { ...descriptor, inputLabels: { status: 'New status' } };
+  const describe = operationInputDescriber({ resolve: async () => labelled }, text => text.replace('sk-live-secret', '[secret]'), key => key === 'apiToken', count => `+${count} more`);
+  const root = await mkdtemp(join(tmpdir(), 'dn-op-describe-')); roots.push(root); const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close();
+  const journal = openSqliteApprovalStore(path, options), clock = { sample: () => ({ wallMs: 1_000, monotonicMs: 1_000 }) };
+  try {
+    const broker = new OperationApprovalBroker(journal.store, integrity, { load: async () => policy }, clock, { requestTtlMs: 60_000, defaultAdmitWithinMs: 30_000, describe });
+    const principal = { id: 'p', issuer: 'host', subject: 'u', assurance: 'os-user' as const, scopeIds: ['scope'] };
+    const opened = await broker.admit(labelled, 'require-approval', command('cmd-d', { input: { status: 'approved', note: 'key sk-live-secret', apiToken: 'x' } }), principal, context());
+    if (!opened || !('pending' in opened)) throw new Error('expected pending');
+    expect(opened.pending.summary.split('\n')).toEqual(['post-order@1 · records/PO-1 · ' + digest('input').slice(0, 12), 'New status: approved', 'note: key [secret]', 'apiToken: [redacted]']);
+    expect(await describe(command('cmd-e', { input: { a: 'x'.repeat(30), b: 'y' } }), 40)).toBe('+2 more');
+  } finally { journal.close(); }
 });

@@ -426,7 +426,7 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   (`deckent operation` alone lists the configured operation catalog, not the commands that ran.)
 - **`deckent operation execute` takes the command as JSON on a terminal too.** There is no guided flow yet (catalog operation →
   target → parameters from a schema → preview → approval → wait on one screen); `--schema` prints the contract and a bad document
-  names its field. *Impact:* a person writes the command document by hand or uses a script.
+  names its field; `--example` writes a starting command for this catalog. *Impact:* a person edits a JSON document.
 - **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
   retry it by itself and the record keeps the target busy. When the target can confirm afterwards, resend the same command id and
   its evidence settles the record; if it cannot, the record stays unresolved. `EFFECT_OUTCOME_UNKNOWN` names this next step and
@@ -434,13 +434,14 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   record must settle first, but it cannot name that earlier command: you must know its command id. *Impact:* a person cannot close
   an unresolved record yet. Closing
   it with a human declaration (with attached evidence, not counted as acceptance) is planned.
-- **The approval card for an operation shows the operation, the target and a 12-character input digest,** not the fields it will
-  write. *Impact:* the approver cannot see an amount or status. *Workaround:* inspect the input file before approving.
+- **The approval card for an operation lists the input fields as sent, not the target's resulting record.** Each top-level
+  field is one line (named by the catalog's optional `inputLabels`, credentials redacted, long inputs counted); the input digest
+  stays on the first line. *Impact:* you see what is sent, not a computed before/after of the ERP record.
 - **Ten of the seventeen reasons an ERP result may be not accepted have no readable text** (six about evidence, four
   about compensation); you see the code.
 - **A read operation returns only the record version,** not the business data.
-- **Each operation is a hand-written JSON command** with its own command id, idempotency key and expected version, and the
-  operation catalog and target configuration are not described in user documents.
+- **Each operation is a hand-written JSON command** with its own command id, idempotency key and expected version, . `deckent operation --example`
+  prints a filled catalog and target with every field explained, and `deckent operation execute --example` a command for it.
 - **ERP effect results are not yet written to the audit trail as their own events.** Authority and policy changes are audited;
   the generic effect path records its result in the ledger.
 - **Enterprise SSO, fleet management and the central policy service are not available.** The policy module's remaining

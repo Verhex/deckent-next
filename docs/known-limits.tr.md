@@ -427,7 +427,7 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   (Tek başına `deckent operation` yapılandırılmış işlem kataloğunu listeler, çalışmış komutları değil.)
 - **`deckent operation execute` terminalde de komutu JSON olarak alır.** Adım adım akış henüz yok (katalogdan işlem → hedef →
   şemadan parametreler → önizleme → onay → aynı ekranda bekleme); `--schema` sözleşmeyi basar ve hatalı belge alanını adıyla
-  söyler. *Etki:* kişi komut belgesini elle ya da bir betikle yazar.
+  söyler; `--example` bu katalog için başlangıç komutu yazar. *Etki:* kişi bir JSON belgesini düzenler.
 - **Belirsiz bir ERP yazımından yeniden göndermeden başka çıkış yok.** Hedef yazımın olup olmadığını söyleyemiyorsa Deckent onu
   kendiliğinden yeniden denemez ve kayıt hedefi meşgul tutar. Hedef sonradan doğrulayabiliyorsa aynı komut kimliğini yeniden
   gönderin, kanıtı kaydı kesinleştirir; doğrulayamıyorsa kayıt çözümsüz kalır. `EFFECT_OUTCOME_UNKNOWN` bu sonraki adımı söyler ve
@@ -435,13 +435,14 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   işlemin önce sonuçlanması gerektiğini söyler ama o önceki komutu adlandıramaz: komut kimliğini sizin bilmeniz gerekir. *Etki:* bir
   kişi çözümsüz kaydı henüz kapatamaz.
   İnsan beyanıyla (kanıt eki zorunlu, kabul sayılmaz) kapatma planlı.
-- **Bir operasyonun onay kartı operasyonu, hedefi ve 12 karakterlik girdi özetini gösterir,** yazacağı alanları değil.
-  *Etki:* onaylayan tutarı ya da durumu göremez. *Yol:* onaylamadan önce girdi dosyasını inceleyin.
+- **Bir operasyonun onay kartı girdi alanlarını gönderildiği gibi listeler, hedef kaydın sonucunu değil.** Her üst düzey alan
+  bir satırdır (katalogdaki isteğe bağlı `inputLabels` ile adlandırılır, kimlik bilgileri gizlenir, uzun girdiler sayılır); girdi
+  özeti ilk satırda kalır. *Etki:* gönderileni görürsünüz, ERP kaydının hesaplanmış önce/sonrasını değil.
 - **Bir ERP sonucunun kabul edilmemesinin on yedi nedeninden onunun okunabilir metni yok** (altısı kanıtla, dördü telafiyle
   ilgili); kodu görürsünüz.
 - **Okuma operasyonu yalnız kayıt sürümünü döndürür,** iş verisini değil.
-- **Her operasyon elle yazılmış bir JSON komutudur;** kendi komut kimliği, idempotency anahtarı ve beklenen sürümü vardır;
-  operasyon kataloğu ve hedef yapılandırması kullanıcı belgelerinde anlatılmıyor.
+- **Her operasyon elle yazılmış bir JSON komutudur;** kendi komut kimliği, idempotency anahtarı ve beklenen sürümü vardır. `deckent operation --example`
+  her alanı açıklanmış doldurulmuş bir katalog ve hedef, `deckent operation execute --example` onun için bir komut yazar.
 - **ERP etki sonuçları henüz denetim izine kendi olayları olarak yazılmıyor.** Yetki ve policy değişiklikleri denetlenir;
   genel etki yolu sonucunu ledger'a yazar.
 - **Enterprise SSO, filo yönetimi ve merkezi policy hizmeti yok.** Policy modülünün kalan parçaları (kartlı kurucu admin
