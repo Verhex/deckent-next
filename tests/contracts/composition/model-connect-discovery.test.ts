@@ -119,7 +119,11 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, { env: f.env }, f.host);
     f.setIds(['other']); const before = await readFile(f.path, 'utf8');
     const rows = f.rows('SELECT COUNT(*) AS n FROM model_catalog_models');
-    await expect(connectConfiguredModel(f.project, f.command, { env: f.env }, f.host)).rejects.toMatchObject({ code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
+    // BeUser KER-07: the refusal names the requested model and connection and what the server lists (EN/TR); an empty list says so.
+    const refused = await connectConfiguredModel(f.project, f.command, { env: f.env }, f.host).then(() => null, (error: { code: string; params?: Record<string, unknown>; localize?: (l: 'en' | 'tr') => { message: string } }) => error);
+    expect(refused).toMatchObject({ code: 'MODEL_CONNECT_MODEL_UNKNOWN', params: { models: 'other', connection: 'local-openai' } });
+    expect(refused!.localize!('en').message).toContain('local-openai at this address; it lists: other.'); expect(refused!.localize!('tr').message).toContain('listedekiler: other.');
+    f.setIds([]); expect((await connectConfiguredModel(f.project, f.command, { env: f.env }, f.host).catch((error: { localize: (l: 'en') => { message: string } }) => error.localize('en').message))).toContain('listed no models');
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect(f.rows('SELECT COUNT(*) AS n FROM model_catalog_models')).toEqual(rows);
     expect(f.state.requests).toEqual([]);

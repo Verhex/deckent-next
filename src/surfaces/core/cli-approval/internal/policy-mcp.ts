@@ -1,5 +1,5 @@
 import { mcpCapabilityPreviewLines, mcpCapabilityWords } from '#surfaces/core/work-labels/index.js';
-import { ErrorRegistry, emit, loadConfig } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, terminalSafeText } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
 import type { ApprovalCommandContext } from './context.js';
@@ -30,7 +30,7 @@ export async function policyMcpCommand(argv: readonly string[], context: Approva
   const locale = commandLocale(context, language);
   if (bare && !json && cliMode(context).mode === 'interactive') return toggleMcp(context, locale, scope, (await loadConfig(root, options)).approvals.sessionTtlMs);
   const words = mcpCapabilityWords(locale), scopes = await host.listMcpCapabilityScopes(root, options);
-  if (scope && !scopes.includes(scope)) throw ErrorRegistry.createError('SCOPE_UNKNOWN');
+  if (scope && !scopes.includes(scope)) throw ErrorRegistry.createError('SCOPE_UNKNOWN', { params: { scope: terminalSafeText(scope) } });
   const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (action === 'list') {
     const views = await Promise.all((scope ? [scope] : scopes).map(id => host.inspectMcpCapabilities(root, id, options)));

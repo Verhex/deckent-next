@@ -275,7 +275,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CONNECT_NOT_CONNECTABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NOT_CONNECTABLE', p, l) }) },
   MODEL_CONNECT_ENDPOINT_FIXED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_FIXED', p, l) }) },
   MODEL_CONNECT_ENDPOINT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_INVALID', p, l) }) },
-  MODEL_CONNECT_MODEL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_MODEL_UNKNOWN', p, l) }) },
+  // KER-07: the requested model and connection are named; the models the server listed are shown, or that it listed none.
+  MODEL_CONNECT_MODEL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: typeof p['model'] !== 'string' ? t('error.MODEL_CONNECT_MODEL_UNKNOWN', p, l)
+    : p['models'] ? t('error.MODEL_CONNECT_MODEL_UNKNOWN.listed', p, l) : t('error.MODEL_CONNECT_MODEL_UNKNOWN.none', p, l) }) },
   MODEL_CONNECT_DECLARATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DECLARATION_CONFLICT', p, l) }) },
   MODEL_CONNECT_KEY_NAME_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE', p, l) }) },
   MODEL_CONNECT_SEED_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_SEED_UNAVAILABLE', p, l) }) },
@@ -711,7 +713,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   POLICY_DELEGATION_STEP_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_STEP_INVALID', p, l) }) },
   POLICY_DELEGATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_CONFLICT', p, l) }) },
   POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
-  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SCOPE_UNKNOWN', p, l) }) },
+  // KER-03: a refusal that knows the requested scope names it; both say where the usable scopes are listed.
+  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: typeof p['scope'] === 'string' ? t('error.SCOPE_UNKNOWN.named', p, l) : t('error.SCOPE_UNKNOWN', p, l) }) },
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
