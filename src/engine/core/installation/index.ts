@@ -23,7 +23,7 @@ export type { InstallationPublicationPorts, InstallationPublishTarget, Installat
 export { FIRST_RUN_TOOL_NAMES, FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES, FIRST_RUN_SCRATCH_WRITE_OPERATION_ID,
   FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_FIRST_COMMIT_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_RECOVERY_RULES,
   inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, firstRunServiceIdentity, settleFirstRunServiceIdentity, SKIPPED_SERVICE_IDENTITY, upgradeInstalledPolicyTemplate,
-  PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation, policyTemplateReplayTargets, upgradePolicyTemplate } from './internal/policy-template.js';
+  PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation, upgradePolicyTemplate } from './internal/policy-template.js';
 export { setInstallerPermissionModes, type InstallerPermissionModesResult } from './internal/policy-modes.js';
 export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, InstalledPolicyTemplateUpgrade, FirstRunToolNames, PolicyTemplateDocumentWriter, PolicyTemplateUpgradeResult, PolicyTemplateInstallationPorts, PolicyTemplatePreview, PolicyTemplatePublishTarget, PolicyTemplateResource, PolicyTemplateSource,
   PreparedPolicyTemplateInstallation, PreparePolicyTemplateInput } from './internal/policy-template.js';

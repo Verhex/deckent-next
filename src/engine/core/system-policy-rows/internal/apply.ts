@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { verifiedPrincipalSchema, isAiPrincipal } from '#domain/index.js';
 import { AUDIT_EVENT_SCHEMA_VERSION, auditEventSchema, type AuditEvent } from '#domain/index.js';
-import { resolvePolicyBindings } from '#domain/index.js';
+import { authorityDocuments, type Policy, resolvePolicyBindings } from '#domain/index.js';
 import { governedPolicyDigest } from '#engine/core/policy/index.js';
 import { CORE_SYSTEM_POLICY_ROWS, loadSystemPolicyRows, systemPolicyDigest, systemPolicyCanonical } from './registry.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, type SystemPolicyRowsStore, type SystemPolicyRowsTarget, type SystemPolicyRowsPlan } from './plan.js';
@@ -47,13 +47,21 @@ export async function reconcileSystemPolicyRows(store: SystemPolicyRowsStore, in
     const next = plan.next!;
     const before = governedPolicyDigest(current.policy, current.bindings), after = governedPolicyDigest(next.policy, next.bindings);
     if (!before || !after) return { write: null, result: result('unavailable', 'invalid-authority', plan) };
-    const event = (): AuditEvent => auditEventSchema.parse({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(),
-      scopeId: bound.scopeId, principal: { issuer: caller.data.issuer, subject: caller.data.subject }, policyRevision: revision, atMs: input.now(),
-      subject: { kind: 'authority-change', installer: { basis: 'system-policy-rows', packageId: bound.data.id, dataRevision: bound.data.revision, packageDigest: bound.digest, person: bound.person },
-        action: input.action, commandId: key, inputDigest: systemPolicyDigest(next),
-        revision: { before: revision, after: resolvePolicyBindings(next.policy, next.bindings).revision }, policyDigestBefore: before, policyDigest: after } });
+    const event = () => systemPolicyRowsPublicationEvent(bound.data, input.target, current, next, caller.data, key, input.now(), input.action);
     return { write: { policy: next.policy, bindings: next.bindings, order: input.action === 'apply' ? 'policy-first' : 'bindings-first',
       beforePublish: () => input.audit(event()) }, result: Object.freeze({ ...result(input.action === 'apply' ? 'applied' : 'rolled-back', null, plan),
         key, revision: resolvePolicyBindings(next.policy, next.bindings).revision }) };
   }, key);
+}
+
+/** Sealed before the containing installer publication, using the same data identity as the standalone reconciler. */
+export function systemPolicyRowsPublicationEvent(data: import('./registry.js').SystemPolicyRows, target: SystemPolicyRowsTarget,
+  before: { policy: unknown; bindings: unknown } | Policy, after: { policy: unknown; bindings: unknown },
+  caller: { issuer: string; subject: string }, commandId: string, atMs: number, action: 'apply' | 'rollback' = 'apply'): AuditEvent {
+  const pack = bindSystemPolicyRows(data, target), initial = 'policy' in before ? before : authorityDocuments(before);
+  return auditEventSchema.parse({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: target.scopeId,
+    principal: { issuer: caller.issuer, subject: caller.subject }, policyRevision: resolvePolicyBindings(initial.policy, initial.bindings).revision, atMs,
+    subject: { kind: 'authority-change', installer: { basis: 'system-policy-rows', packageId: data.id, dataRevision: data.revision, packageDigest: pack.digest, person: target.person },
+      action, commandId, inputDigest: systemPolicyDigest(after), revision: { before: resolvePolicyBindings(initial.policy, initial.bindings).revision,
+        after: resolvePolicyBindings(after.policy, after.bindings).revision }, policyDigestBefore: governedPolicyDigest(initial.policy, initial.bindings), policyDigest: governedPolicyDigest(after.policy, after.bindings) } });
 }

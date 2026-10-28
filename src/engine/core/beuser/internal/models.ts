@@ -80,3 +80,5 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
   };
 }
 export type BeuserWalkerDecode = (result: ModelInvocationResult) => unknown;
+
+export const beuserSourceMakers = (models: readonly unknown[]) => models.map(canonicalModelMaker);

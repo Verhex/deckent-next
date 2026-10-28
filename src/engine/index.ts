@@ -26,7 +26,7 @@ export * from '#engine/core/runs/index.js';
 export * from '#engine/core/run-proposal/index.js';
 export * from '#engine/core/runtime/index.js';
 export { getPolicyVocabulary } from '#engine/core/policy/index.js';
-export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
+export { verifyDispatchEvaluationEvidence, readBeuserDispatchEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
 export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
 export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/supervisor/index.js';
 export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody, criterionEvidenceDigest, bindUsedOperationEvidence } from '#engine/core/task-evaluation/index.js';

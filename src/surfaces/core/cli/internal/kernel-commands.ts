@@ -1,3 +1,4 @@
+import type { BeuserCommandContext } from '#surfaces/core/cli-beuser/index.js';
 import type { IdentityCommandContext } from '#surfaces/core/cli-identity/index.js';
 import type { InstallationCommandContext } from '#surfaces/core/cli-installation/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -23,7 +24,7 @@ export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js
 /** Every host operation a CLI command may use; each command unit's narrower context is part of it. */
 export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
-export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, MemoryCommandContext, AgentsCommandContext, HubCommandContext, TerminalLaunchContext,
+export interface CommandContext extends BeuserCommandContext, InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, MemoryCommandContext, AgentsCommandContext, HubCommandContext, TerminalLaunchContext,
   RunCommandContext, TaskCommandContext, ApprovalCommandContext, AdminCommandContext, KernelCommandContext {
   runMcpCommand?: McpCommandHandler;
   initialize?: () => void;

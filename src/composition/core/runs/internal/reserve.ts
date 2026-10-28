@@ -6,7 +6,7 @@ import { assertApprovalPolicyCurrent, TaskApprovalAdmission, authenticate, polic
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-export async function reserveConfiguredRunTasks(projectRoot: string, input: RunReservationCommand, options: ConfigLoadOptions = {}) {
+export async function reserveConfiguredRunTasks(projectRoot: string, input: RunReservationCommand, options: ConfigLoadOptions = {}, attemptId: (taskId: string) => string = () => randomUUID()) {
   try {
     const command = runReservationCommandSchema.parse(input);
     const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
@@ -29,7 +29,7 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
       }
       const clock = new SystemTrustedClock();
       const application = new RunReservationApplication(store, verifier, authorization, poolAuthorization,
-        { now: () => clock.sample().wallMs, attemptId: randomUUID }, admission);
+        { now: () => clock.sample().wallMs, attemptId }, admission);
       return Object.freeze({ schemaVersion: 1 as const, layout, reservation: await application.reserve(command) });
     } finally { approvalJournal?.close(); store.close(); }
   } catch (error) { throw queryFailure(error); }

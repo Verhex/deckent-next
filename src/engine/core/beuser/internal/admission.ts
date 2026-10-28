@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection } from '#domain/index.js';
+import { identitySchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/index.js';
 import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, type BeuserContext } from '#engine/core/beuser-contract/index.js';
@@ -52,3 +52,11 @@ export async function reserveBeuserAttempts(campaign: BeuserCampaign, commandInp
     || !campaign.cells.some(cell => cell.taskId === identity.taskId))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
   return result;
 }
+
+/** Code-only composition identity, following the installed person's workload reference; never a wire input. */
+export function beuserEvaluatorFor(owner: { readonly issuer: string; readonly subject: string }, scopeId: string) {
+  const ref = beuserEvaluatorPrincipalRef(owner);
+  return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [scopeId] });
+}
+
+export const beuserPersonaDigest = (summary: unknown) => sha256(encodeCommandProjection('beuser-persona:1', pinBeuserWalkerSummary(summary)));

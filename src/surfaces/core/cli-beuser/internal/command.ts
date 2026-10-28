@@ -4,7 +4,7 @@ import type { BeuserReport } from '#engine/index.js';
 import { formatBeuserReport } from './report.js';
 export interface BeuserCommandContext extends CliBaseContext {
   walkBeuser?: (root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate: string }, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<BeuserReport>;
-  readBeuserReport?: (root: string, scopeId: string, runId: string, options: ConfigLoadOptions) => Promise<BeuserReport>;
+  readBeuserReport?: (root: string, scopeId: string, runId: string | undefined, options: ConfigLoadOptions) => Promise<BeuserReport>;
 }
 export function parseBeuserArguments(argv: readonly string[]) {
   const action = argv[1]; if (argv[0] !== 'beuser' || !['walk', 'report'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -17,7 +17,7 @@ export function parseBeuserArguments(argv: readonly string[]) {
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   const help = flags.has('--help') || flags.has('-h');
-  if (!help && (action === 'walk' ? !values.has('--journey') || !values.has('--candidate') : !values.has('--run'))) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!help && action === 'walk' && (!values.has('--journey') || !values.has('--candidate'))) throw ErrorRegistry.createError('CLI_USAGE');
   return { action: action as 'walk' | 'report', help, json: flags.has('--json'), language: values.get('--lang'), scope: values.get('--scope'),
     journey: values.get('--journey'), candidate: values.get('--candidate'), runId: values.get('--run') };
 }
@@ -27,7 +27,7 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(args.action === 'walk' ? t('beuser.help.walk', {}, locale) : t('beuser.help.report', {}, locale), sinks); return; }
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
-  const terminal = !args.scope && args.action === 'report' ? (await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined : undefined;
+  const terminal = !args.scope ? (await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined : undefined;
   const scopeId = args.scope ?? terminal?.scopeId;
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED', { params: { command: argv.slice(0, 2).join(' '), scopes: '' } });
   let report;
@@ -36,7 +36,7 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
     report = await context.walkBeuser(root, { scopeId, journey: args.journey!, candidate: args.candidate! }, options, context.signal);
   } else {
     if (!context.readBeuserReport) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    report = await context.readBeuserReport(root, scopeId, args.runId!, options);
+    report = await context.readBeuserReport(root, scopeId, args.runId, options);
   }
   emit(formatBeuserReport(report, { json: args.json, locale }), sinks);
 }

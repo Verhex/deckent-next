@@ -16,7 +16,8 @@ import { configuredAgentSelection } from '#composition/core/agent-catalog/index.
 import { configuredSiwcWorkerConnections } from '#composition/core/siwc/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
-  work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>) {
+  work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>,
+  validateProfile?: (profile: import('#domain/index.js').ExecutionProfileDefinition) => undefined) {
   let warnings: readonly WorkerAdmissionWarning[] = [], compiled = false;
   const { config, layout, document, principal, path } = context, instructions = await readWorkerInstructions(projectRoot, config, options);
   const siwc = await configuredSiwcWorkerConnections(projectRoot, context, options), [scopeId] = principal.scopeIds; // U9-7 producer facts (none while held)
@@ -29,6 +30,7 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
     memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
       refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: dockerTaskSilenceDeadline, agents,
       validation: { profile(value) {
+        if (value.adapter.id === 'beuser' && validateProfile) return validateProfile(value);
         try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
         try { validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
         if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(value).options, config.execution.docker); return undefined;

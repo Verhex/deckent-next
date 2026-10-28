@@ -8,9 +8,10 @@ import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTe
 import { main } from '#surfaces/index.js';
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 
+import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
@@ -108,7 +109,7 @@ it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
-  const templateFixture = await previewPolicyTemplateInstallation(root, 'installation');
+  const templateFixture = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
   await writeFile(join(root, '.deckent/bindings.json'), `${JSON.stringify(templateFixture.bindings)}\n`);
   const v5 = templateFixture.policy as { revision: string; grants: { id: string; resource: { ids: unknown } }[] };
   // The bytes alpha.10 `init policy` wrote: v5 without the MCP rules, read tools without the proposal tool, the v4 revision.
@@ -135,7 +136,7 @@ it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and e
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
-  const templateFixture = await previewPolicyTemplateInstallation(root, 'installation');
+  const templateFixture = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
   await writeFile(join(root, '.deckent/bindings.json'), `${JSON.stringify(templateFixture.bindings)}\n`);
   const v5 = templateFixture.policy as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
   const person = v5.grants[0]!.principals;
@@ -170,7 +171,7 @@ it('security (lead 2026-10-07): only the installation owner may use the direct u
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   const policyPath = join(root, '.deckent/policy.json');
-  const templateFixture = await previewPolicyTemplateInstallation(root, 'installation');
+  const templateFixture = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
   await writeFile(join(root, '.deckent/bindings.json'), `${JSON.stringify(templateFixture.bindings)}\n`);
   const v5 = templateFixture.policy as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
   const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !V13.includes(grant.id) && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
@@ -244,11 +245,11 @@ it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires ins
 it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v13 delta for v10, applies it on the previewed revision and preserves bindings', async () => {
   const root = await project(); await applyPolicyTemplateInstallation(root, 'installation');
   const path = join(root, '.deckent/policy.json'), bindingPath = join(root, '.deckent/bindings.json');
-  const current = (await previewPolicyTemplateInstallation(root, 'installation')).policy as { grants: { id: string }[] };
+  const current = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).policy as { grants: { id: string }[] };
   const ids = ['first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', ...V13];
   const older = { ...current, revision: 'first-run-template-v10', grants: current.grants.filter(rule => !ids.includes(rule.id)) };
   await writeFile(path, JSON.stringify(older), { mode: 0o600 });
-  const oldBindings = { ...(await previewPolicyTemplateInstallation(root, 'installation')).bindings as object, revision: 'first-run-template-v10-bindings' };
+  const oldBindings = { ...firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).bindings, revision: 'first-run-template-v10-bindings' };
   await writeFile(bindingPath, JSON.stringify(oldBindings), { mode: 0o600 });
   const before = await readFile(path, 'utf8'), bindings = await readFile(bindingPath, 'utf8');
   const output: string[] = [], errors: string[] = [];

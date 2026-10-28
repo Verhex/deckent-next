@@ -12,7 +12,7 @@ Ayrıntılı sıra, dilimler, bağımlılıklar ve açık sorular [2026-10-15 yo
 
 ## BeUser B1 — alpha.57 entegrasyonu (owner 27–29 Ekim 2026)
 
-C1–C5 kaynak dilimleri bu yan dalda birleşti; C6 author entegrasyonu sürüyor, kabul/kapanış değildir. R1 create→admission, R2 harness-readback metadata ve R3 explicit installer/replay soy kontrolü düzeltildi; silinen izin korunur. EN/TR walk/report yardımı ve provisional sonlu profil eklendi. Üretim walk/report host bağı, genel Run/Attempt rezervasyon kimliği, kalıcı custody/private channel/supervisor/collector ve C7 gerçek paket yürüyüşü açıktır. Adapter I/O gövdeleri composition'a taşınmadı; exact dosya devri lead'de.
+C1–C5 bu yan dalda birleşti; C6 author entegrasyonu kabul/kapanış değildir. R3-B: sistem satırları ilk init/upgrade yayınının içindedir; replay'in özgün byte denetimi korunur, aynı veri revision'ında silinen izin geri verilmez. Üretim host callback'leri, genel Run/Task-bound Attempt rezervasyonu, kalıcı adapter custody/private channel, C4→C5→TaskEvaluation ve özel kalıcı rapor/sorgu kaynakta bağlıdır. Dry admission gerçek SQLite/pool üzerinde doğrulanır; gerçek realm/model çağrısı yapılmaz. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; unknown/null başarıya dönüştürülmez. C7 birleşik paket yürüyüşü, bağımsız inceleme ve owner kabulü bekler. Tavanlar adapters 40000/composition 12000 değişmez.
 
 Core template 18 kalır; tavan artırımı yapılmaz. O-1 mutlak sealed backup/restore yasağı; backup bağımlı dallar unknown. Systemd unknown sürümü bekletmez. Author kontrolü, bağımsız review, hosted CI ve owner kabulü ayrı kapılardır. [Modül notu](.deckent/docs/architecture/modules/beuser.md).
 

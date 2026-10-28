@@ -4,10 +4,10 @@ import { lstat, readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
-  upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, policyTemplateReplayTargets, installSystemPolicyRows, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
+  upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
 import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import type { AuditEvent } from '#domain/index.js';
+import { policySchema, type AuditEvent } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -27,7 +27,7 @@ async function prepare(projectRoot: string, scopeId: string, options: ConfigLoad
   const held = observed.record?.recovery as { firstSessionTargets?: unknown } | undefined;
   const targets = observed.record && !held?.firstSessionTargets ? [] : await firstSessionTargets(layout, scopeId, maxBytes, held?.firstSessionTargets, service);
   const prepared = preparePolicyTemplateInstallation({ scopeId, principal: { issuer: identity.issuer, subject: identity.subject },
-    paths: { policy: productResourcePath(layout, 'policy'), bindings: productResourcePath(layout, 'bindings') }, toolNames: FIRST_RUN_TOOL_NAMES, serviceId: service.serviceId, firstSessionTargets: targets });
+    paths: { policy: productResourcePath(layout, 'policy'), bindings: productResourcePath(layout, 'bindings') }, toolNames: FIRST_RUN_TOOL_NAMES, serviceId: service.serviceId, firstSessionTargets: targets, systemRows: CORE_SYSTEM_POLICY_ROWS.data });
   return { prepared, service, configured, layout, maxBytes: Math.min(installation.profileMaxBytes, inspection.policyMaxBytes), timeoutMs: installation.writeLockTimeoutMs };
 }
 export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) { const { prepared, service } = await prepare(projectRoot, scopeId, options); return Object.freeze({ ...prepared.preview, serviceIdentity: await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, false) }); }
@@ -38,7 +38,7 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
   await installationIdentity.admitWrite(); await projectIdentity.read();
   // The first-session config is the project's bootstrap file: its own directory is its root, also when the data root moved.
   const file = (target: PolicyTemplatePublishTarget) => ({ root: target.resource === 'config' ? dirname(target.path) : layout.root, path: target.path, maxBytes });
-  const firstSession = firstSessionPublication(layout, maxBytes);
+  const firstSession = firstSessionPublication(layout, maxBytes), config = await loadComposedConfig(projectRoot, { ...options, heal: false, force: true });
   const result = await withInstallationJournal(projectRoot, { timeoutMs }, async journal => {
     const current = await prepare(projectRoot, scopeId, options, layout);
     if (current.prepared.preview.planDigest !== prepared.preview.planDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
@@ -47,29 +47,28 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
     async inspectPreimage(target) { return (await inspectInstallationFile(file(target))).digest; },
     async publish(target, transactionId) {
       if (target.resource === 'config' || target.resource === 'ledger') await firstSession.publish(target, transactionId);
-      else await publishInstallationFile({ ...file(target), transactionId }, target.content);
+      else {
+        if (target.resource === 'policy' && prepared.preview.systemRows) {
+          const ledger = prepared.targets.find(item => item.resource === 'ledger');
+          if (ledger) await firstSession.publish(ledger, transactionId);
+          const audit = await installerAudit(layout, config);
+          const rows = prepared.preview.systemRows;
+          try { audit.record(systemPolicyRowsPublicationEvent(CORE_SYSTEM_POLICY_ROWS.data, { scopeId, person: prepared.preview.principal },
+            rows.before,
+            { policy: prepared.preview.policy, bindings: prepared.preview.bindings }, prepared.preview.principal, rows.key, clock.sample().wallMs)); } finally { audit.close(); }
+        }
+        await publishInstallationFile({ ...file(target), transactionId }, target.content);
+      }
     },
     async verify(target) {
       if (target.resource === 'config' || target.resource === 'ledger') await firstSession.verify(target);
       else if ((await inspectInstallationFile(file(target))).digest !== target.digest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     },
-    async verifyAuthorityReplay(plan) {
-      const source = createLayoutPolicySource(layout, userInfo().uid, maxBytes);
-      const history = await source.authorityHistory();
-      await source.updateAuthority(snapshot => ({ write: null, result: (async () => {
-        for (const target of policyTemplateReplayTargets(plan, history, snapshot)) {
-          if ((await inspectInstallationFile(file(target))).digest !== target.digest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
-        }
-      })() }));
-    },
     now: () => clock.sample().wallMs,
   }).apply(prepared); });
   await installationIdentity.loadOrCreate(); await projectIdentity.loadOrCreate();
-  // Explicit installer only: the committed data key survives deletion; replay never restores a removed permission.
-  const systemRows = await installerSystemRows(createLayoutPolicySource(layout, userInfo().uid, maxBytes), layout,
-    await loadComposedConfig(projectRoot, { ...options, heal: false, force: true }), scopeId, prepared.preview.principal, clock);
   const journaled = result.status === 'installed' && prepared.targets.some(target => target.resource === 'config' && (JSON.parse(target.content) as { service?: unknown }).service);
-  return Object.freeze({ ...result, systemRows, serviceIdentity: journaled ? Object.freeze({ status: 'written' as const, identity: service }) : await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, true, configured) });
+  return Object.freeze({ ...result, systemRows: { status: result.status === 'installed' ? 'applied' as const : 'replayed' as const, key: prepared.preview.systemRows?.key }, serviceIdentity: journaled ? Object.freeze({ status: 'written' as const, identity: service }) : await settleFirstRunServiceIdentity(identityPort(projectRoot, scopeId, options), service, true, configured) });
 }
 /** `deckent init policy --upgrade [--apply] [--person <issuer>/<subject>]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's
  * policy, as the local person the template names (or, for a hand-built policy, the person its file owner names: lead 2026-10-08), through the
@@ -89,20 +88,14 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   const writer = createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes);
   const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply,
     peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) };
-  const result = await upgradeInstalledPolicyTemplate(writer, identityPort(projectRoot, scopeId, options), { ...input, openAudit: () => installerAudit(layout, config) });
-  if (!apply || !owner || !['current', 'upgraded'].includes(result.status)) return result;
-  return Object.freeze({ ...result, systemRows: await installerSystemRows(writer, layout, config, scopeId, result.principal, clock) });
-}
-/** Only explicit fresh/upgrade installer callers reach this data writer. A committed replay opens no audit/key and re-grants nothing. */
-async function installerSystemRows(source: ReturnType<typeof createLayoutPolicySource>, layout: ProductLayout, config: Awaited<ReturnType<typeof loadComposedConfig>>,
-  scopeId: string, person: { readonly issuer: string; readonly subject: string }, clock: SystemTrustedClock) {
-  const document = await source.load(), input = { owner: true, caller: { ...readLocalOsIdentity(), scopeIds: [scopeId] }, target: { scopeId, person },
-    expect: document.revision, action: 'apply' as const, now: () => clock.sample().wallMs };
-  const planned = await installSystemPolicyRows(source, { ...input, apply: false, audit: () => { throw new Error('INSTALLER_PREVIEW_WRITE'); } });
-  if (planned.status !== 'preview') return planned;
-  const audit = await installerAudit(layout, config);
-  try { return await installSystemPolicyRows(source, { ...input, apply: true, audit: event => audit.record(event) }); }
-  finally { audit.close(); }
+  const observed = await observeBootstrapState(projectRoot), seeded = observed.record?.phase === 'committed' ? observed.record.recovery['systemRows'] : null;
+  const history = await writer.authorityHistory();
+  if (history === null) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+  // The original publication retains its own data revision, not a reconstruction from today's registry seed.
+  const initial = seeded && typeof seeded === 'object' && 'key' in seeded && 'before' in seeded && 'after' in seeded
+    ? [{ key: String(seeded.key), before: policySchema.parse(seeded.before), after: policySchema.parse(seeded.after) }] : [];
+  return upgradeInstalledPolicyTemplate(writer, identityPort(projectRoot, scopeId, options), { ...input,
+    systemRows: { data: CORE_SYSTEM_POLICY_ROWS.data, history: [...initial, ...history], lookup: key => writer.lookupAuthority(key) }, openAudit: () => installerAudit(layout, config) });
 }
 /** The sealed audit store of this installation, opened for one authority write (the installer's own record precedes the publication). */
 async function installerAudit(layout: ProductLayout, config: Awaited<ReturnType<typeof loadComposedConfig>>) {
@@ -149,10 +142,8 @@ export async function inspectPolicyTemplate(projectRoot: string, options: Config
     const exact = await inspectFirstRunPolicyTemplate(source); if (exact) return exact;
     const observed = await observeBootstrapState(projectRoot), scopeId = observed.record?.recovery['scopeId'];
     if (observed.record?.phase !== 'committed' || typeof scopeId !== 'string') return null;
-    const { prepared, layout, maxBytes } = await prepare(projectRoot, scopeId, options);
-    if (prepared.preview.transactionId !== observed.record.transactionId || prepared.preview.planDigest !== observed.record.planDigest) return null;
-    const authority = createLayoutPolicySource(layout, userInfo().uid, maxBytes);
-    return inspectFirstRunPolicyTemplate(source, { prepared, policy: await authority.load(), history: await authority.authorityHistory() });
+    const { prepared } = await prepare(projectRoot, scopeId, options);
+    return `${JSON.stringify(await source.load())}\n` === prepared.targets.find(target => target.resource === 'policy')?.content ? prepared.preview.template : null;
   } catch { return null; }
 }
 /** Setup-only, read-soft: a first-run policy whose revision a governed edit rewrote (U4E full-auto) stays installed when its anchor names this person. */

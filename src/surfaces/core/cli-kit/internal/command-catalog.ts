@@ -50,7 +50,7 @@ const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revis
 export const CLI_CATALOG = [
   { name: 'beuser', group: 'work', summary: 'beuser.help.summary', detail: 'beuser.help.family', args: '<walk|report>', bare: {}, children: [
     action('walk', 'work', 'beuser.help.walk.summary', 'beuser.help.walk', { requires: ['--journey <id>', '--candidate <path>'] }),
-    action('report', 'observe', 'beuser.help.report.summary', 'beuser.help.report', { requires: ['--run <id>'] }),
+    action('report', 'observe', 'beuser.help.report.summary', 'beuser.help.report'),
   ] },
   { name: 'uninstall', group: 'setup', summary: 'cli.uninstall.help.summary', detail: 'cli.uninstall.help', installation: 'owned', args: '[--purge] [--dry-run] [--json]', bare: 'handler' },
   { name: 'hub', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', args: '[--scope <id>] [--input <file|->]', children: [

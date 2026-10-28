@@ -6,3 +6,6 @@ export { inspectBeuserRealm, BEUSER_INSPECTION_SCRIPT } from './internal/admissi
 export { probeBeuserSystemd } from './internal/systemd.js';
 export type { BeuserSystemdCapability } from './internal/systemd.js';
 export type { BeuserRealmEvidence, BeuserEvidenceRetention } from './internal/admission.js';
+
+export { readBeuserInstallationSummary, createBeuserRealmCustody, createBeuserRealm, createBeuserChannel, createBeuserRemovalReadback, verifyBeuserDistribution, retainBeuserJson } from './internal/custody.js';
+export { beuserPrivateRecord } from './internal/records.js';

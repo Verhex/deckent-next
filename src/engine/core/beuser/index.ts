@@ -1,10 +1,10 @@
 export { BeuserApplication } from './internal/application.js';
 export type { BeuserWalkPorts, BeuserWalkResult } from './internal/application.js';
-export { pinBeuserCampaign, admitBeuserCampaign, admitBeuserAttempt, assertBeuserRequestIdentity, reserveBeuserAttempts } from './internal/admission.js';
+export { beuserEvaluatorFor, beuserPersonaDigest, pinBeuserCampaign, admitBeuserCampaign, admitBeuserAttempt, assertBeuserRequestIdentity, reserveBeuserAttempts } from './internal/admission.js';
 export type { BeuserCampaign, BeuserExecutionProfile } from './internal/admission.js';
 export { BeuserController, BeuserWalkStopped, BeuserExecutionBudget } from './internal/controller.js';
 export { walkBeuser } from './internal/walker.js';
-export { createBeuserModelPort, BeuserCallBudget, beuserIndependentRows } from './internal/models.js';
+export { beuserSourceMakers, createBeuserModelPort, BeuserCallBudget, beuserIndependentRows } from './internal/models.js';
 export type { BeuserModelComposition, BeuserWalkerDecode } from './internal/models.js';
 export { beuserCalibrationSchema, beuserReliabilityPolicySchema, assessBeuserReliability, runBeuserReliability } from './internal/reliability.js';
 export type { BeuserCalibration, BeuserReliabilitySample, BeuserRerunChoice } from './internal/reliability.js';

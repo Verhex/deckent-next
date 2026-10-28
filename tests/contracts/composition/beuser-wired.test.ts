@@ -1,7 +1,7 @@
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir, userInfo } from 'node:os';
-import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { evaluatorEvidence } from '#capabilities/index.js';
@@ -28,7 +28,7 @@ it('carries the installed harness-readback evidence label through delivery consu
   expect(evaluatorEvidence({ id: 'beuser' })).toEqual({ kind: 'harness-readback', independent: true });
   expect(deliveryEvidenceKindSchema.parse('harness-readback')).toBe('harness-readback');
 });
-it('replays the committed installer through its system-row lineage, preserves deletion and refuses foreign edits', async () => {
+it('publishes rows inside the original digest, refuses changed bytes on replay and preserves revocation on same-data upgrade', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-c6-r3-'));
   try {
     expect(await applyPolicyTemplateInstallation(root, 'scope')).toMatchObject({ status: 'installed', systemRows: { status: 'applied' } });
@@ -42,7 +42,9 @@ it('replays the committed installer through its system-row lineage, preserves de
     await store.updateAuthority(snapshot => ({ write: { policy: { ...(snapshot.policy as object), revision: 'deleted-permission',
       roles: policy.roles.map(role => role.id === systemRole.id ? { ...role, permissions: role.permissions.slice(1) } : role) }, bindings: null, order: 'policy-first' }, result: null }), 'test-delete-permission');
     const path = join(root, '.deckent', 'policy.json'), deleted = await readFile(path, 'utf8');
-    await expect(applyPolicyTemplateInstallation(root, 'scope')).resolves.toMatchObject({ status: 'replayed' });
+    await expect(applyPolicyTemplateInstallation(root, 'scope')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
+    const preview = await upgradePolicyTemplateInstallation(root, 'scope', false);
+    expect(await upgradePolicyTemplateInstallation(root, 'scope', true, preview.expect ?? undefined, {}, userInfo().uid, undefined, { attest: async () => true })).toMatchObject({ status: 'current' });
     expect(await readFile(path, 'utf8')).toBe(deleted);
     // A manual edit with the same revision has no archived edge and must never be adopted on replay.
     const foreign = JSON.parse(deleted); foreign.grants[0].resource.ids = ['foreign-target'];
