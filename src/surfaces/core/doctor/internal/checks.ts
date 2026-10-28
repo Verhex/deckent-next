@@ -11,7 +11,7 @@ import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recov
 import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
-export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
+export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools' | 'data';
 /** A row's verdict as a word, never colour alone: tamam / uyarı / hata / sınanmadı. */
 export type DoctorCheckState = 'ok' | 'warning' | 'error' | 'untested';
 /** One row: what was measured in plain words, and for a warning or error the one next command (or step) that resolves it. `fix` names a
@@ -58,7 +58,11 @@ export interface DoctorCheckFacts {
   readonly recoveryRollout?: RecoveryRolloutView | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
+  /** BeUser S-11: where data can leave this machine, read from configuration (hosts and names only, never a path, key or value). */
+  readonly egress?: DoctorEgress | null;
 }
+export type DoctorEgress = Readonly<{ models: readonly Readonly<{ name: string; host: string | null; local: boolean }>[]; fetch: Readonly<{ mode: string; hosts: readonly string[] }>;
+  toolchainCheck: string | null; mcp: readonly Readonly<{ name: string; host: string | null; realm: string | null }>[] | null }>;
 export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
@@ -255,8 +259,23 @@ function toolChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
 }
 
 /** Every doctor row in group order (pure: the same report and facts always give the same rows). */
+/** BeUser S-11: "Where your data can go", a truthful read-only inventory of the configured outbound routes (no new behaviour); each row is a fact. */
+function dataChecks(f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
+  const e = f.egress; if (!e) return [];
+  const info = (text: string, next?: string) => row('data', 'data.egress', 'ok', text, next);
+  return [...(e.models.length ? e.models.map(model => info(model.host === null ? t('doctor.data.modelCli', { name: model.name }, l)
+    : model.local ? t('doctor.data.modelLocal', { name: model.name, host: model.host }, l) : t('doctor.data.modelRemote', { name: model.name, host: model.host }, l)))
+    : [info(t('doctor.data.noModels', {}, l))]),
+  info(e.fetch.mode === 'none' ? t('doctor.data.fetchOff', {}, l) : e.fetch.mode === 'approval' ? t('doctor.data.fetchApproval', { hosts: e.fetch.hosts.join(', ') || '-' }, l)
+    : t('doctor.data.fetchAllowlist', { hosts: e.fetch.hosts.join(', ') || '-' }, l)),
+  ...(e.mcp === null ? [] : e.mcp.length ? e.mcp.map(server => info(server.host ? t('doctor.data.mcpHttp', { name: server.name, host: server.host }, l)
+    : t('doctor.data.mcpLocal', { name: server.name, realm: server.realm ?? '-' }, l))) : [info(t('doctor.data.noMcp', {}, l))]),
+  info(e.toolchainCheck ? t('doctor.data.toolchains', { host: e.toolchainCheck }, l) : t('doctor.data.toolchainsOff', {}, l)),
+  info(t('doctor.data.workers', {}, l)), info(t('doctor.data.hub', {}, l)), info(t('doctor.data.telemetry', {}, l))];
+}
 export function doctorChecks(report: DoctorRenderInput, facts: DoctorCheckFacts, locale: Locale): readonly DoctorCheck[] {
-  return Object.freeze([...setupChecks(report, facts, locale), ...securityChecks(report, facts, locale), ...workChecks(report, facts, locale), ...toolChecks(report, facts, locale)]);
+  return Object.freeze([...setupChecks(report, facts, locale), ...securityChecks(report, facts, locale), ...workChecks(report, facts, locale), ...toolChecks(report, facts, locale),
+    ...dataChecks(facts, locale)]);
 }
 
 /** The registry fixes, in order; a hard-floor item is listed so the rule is data, and is never offered. */
@@ -268,7 +287,7 @@ export const DOCTOR_BACKUP_PASSPHRASE_SECRET: string = registry.backupPassphrase
 const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doctor.mark.ok', {}, l) : state === 'warning' ? t('doctor.mark.warning', {}, l)
   : state === 'error' ? t('doctor.mark.error', {}, l) : t('doctor.mark.untested', {}, l);
 const groupWord = (group: DoctorGroup, l: Locale) => group === 'setup' ? t('doctor.group.setup', {}, l) : group === 'security' ? t('doctor.group.security', {}, l)
-  : group === 'work' ? t('doctor.group.work', {}, l) : t('doctor.group.tools', {}, l);
+  : group === 'work' ? t('doctor.group.work', {}, l) : group === 'data' ? t('doctor.group.data', {}, l) : t('doctor.group.tools', {}, l);
 
 /** "Durum: hazır · 2 uyarı": the summary line; any error row reads as needing attention. Every condition behind the JSON report's
  * `degraded` verdict is an error row, except an audit chain with no checkpoint yet (a new installation), which is "not tested". */

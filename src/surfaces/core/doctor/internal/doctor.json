@@ -3,7 +3,8 @@
     "setup",
     "security",
     "work",
-    "tools"
+    "tools",
+    "data"
   ],
   "retirementStates": [
     "deprecated",
