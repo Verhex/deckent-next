@@ -939,3 +939,13 @@ Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `L
 - K8: owner kararı + ARCHITECTURE karar günlüğü satırı; Deniz/Mert/Ayşe r3 yürüyüşü bu koşullarla exact binary'de (ret kodu başına bir yol,
   bekletme altında, Team standart'ta Esc). Bu yürüyüş kapanış kanıtıdır; yazılmadan K8 kapanmış sayılmaz.
 
+<a id="ilke-tasima-2026-10-28"></a>
+
+## Owner kararları — 2026-10-28: lead kişisel hafızasındaki ürün/mühendislik ilkeleri core-memory'ye taşındı, Kanun 11
+
+Kaynak: ana oturum AskUserQuestion turu ve owner mesajı, 2026-10-28; Jev `713fc4c9` (yerleşim A 0,84; eşik 0,85 altı olduğu için owner seçti, yeterlilik 0,68).
+
+- **Neden:** 16 ilke yalnız lead'in kişisel otomatik hafızasındaydı; Codex, Cursor ve yan oturumlar bunları hiç yüklemiyordu ve bir kopya repoyla çelişiyordu (MIT ↔ Apache-2.0). Owner her ilkeyi tek tek onayladı; "MVP yok" ilkesini "kesin" diye teyit etti.
+- **Yerleşim (owner seçimi A):** yeri olan ilkeler ilgili kanuna tarihli ek satır olarak girdi: Kanun 1 (gerçek kurulum şekliyle göç, güvenlik testi uyarlama, CLI'yi çalıştırarak doğrulama), Kanun 2 (güncel kaynak), Kanun 4 (README ürün tanıtımı, skill kullanımı zorunlu), Kanun 5 (MVP yok, karar verilen iş bitirilir), Kanun 6 (model bağımsızlığı), Kanun 7 (test disiplini). Yeri olmayan beş ürün tasarımı ilkesi (altı madde; önce ürün ve bütüncül yolculuk ayrı yazıldı) yeni Kanun 11 "Ürün tasarımı ve kullanıcı yolculuğu"nda toplandı: önce ürün, kanıtlanmış UX'i kopyala, kontrol ≠ tıkanma, CLI hem AI hem insan, insanın okuyabildiği izleme, bütüncül yolculuk = bitti.
+- **Değişmeyenler:** Enterprise öncelikli katmanlama ve Apache-2.0 Kanun 10'da, tam model kimlikleri Kanun 6'da, "No MVP ceiling" north star'da zaten vardı ve north star korundu; Kanun 5'e yalnız "karar verilen iş bitirilir" süreç kuralı eklendi. North star değişmedi; CLAUDE.md ve AGENTS.md değişmedi.
+- **Kanun denetimi (temiz bağlam, 2026-10-28):** ilk aday HOLD (Kanun 2↔5 istisnası yazılı değildi; iki skill'in kanun kontrol tablosunda Kanun 11 yoktu); ikisi ve MINOR bulgular düzeltildi.
