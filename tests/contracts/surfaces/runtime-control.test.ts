@@ -42,6 +42,15 @@ describe('runtime control surfaces', () => {
     expect(restarts).toBe(1);
   });
 
+  it('BeUser M-09: CLI restart of a service that is not running starts it and says so (no stop card)', async () => {
+    const output = sink(); let restarts = 0;
+    const base = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output, initialize() {} };
+    const readiness = { mode: 'started' as const, instanceId: 'instance-c', pid: 4343, logPath: null, shutdownAvailable: true, build: null };
+    expect(await main(['runtime', 'restart'], { ...base, async describeRuntimeService() { throw Object.assign(new Error('absent'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
+      async restartRuntimeService() { restarts++; return readiness; } })).toBe(0);
+    expect(restarts).toBe(1); expect(output.values.join('')).toContain('was not running; started it in the background (pid 4343');
+  });
+
   it('CLI rejects incomplete or wire-forged shutdown input before invoking the handler', async () => {
     let invoked = 0; const output = sink();
     const context = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output,

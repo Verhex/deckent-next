@@ -195,7 +195,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     if (registered) host.running.set(key, { principalKey, controller: cancel });
     const ports: AgentTurnPorts = {
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
-        ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null,
+        ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
       async invokeRound({ round, messages, tools: declared }, onDelta, roundSignal): Promise<AgentRoundOutcome> {
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);

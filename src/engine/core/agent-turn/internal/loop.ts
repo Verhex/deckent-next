@@ -27,6 +27,8 @@ export type AgentRoundOutcome =
 export interface AgentTurnPorts {
   /** Delivery failure reported by the host, retained in the same durable outcome rather than mislabeled as user cancellation. */
   contextFailure?(): AgentContextFailure | null;
+  /** BeUser M-10: true when the runtime service itself is stopping (not the person's cancel); such a turn ends as an error that says so. */
+  serviceStopping?(): boolean;
   invokeRound(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`, and the
@@ -253,6 +255,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     return message;
   };
   const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
+    if (value === 'cancelled' && ports.serviceStopping?.()) { value = 'error'; closure = t('agent.turn.outcome.serviceStopped', { summary: summary() }, input.language); }
     const deliveryFailure = ports.contextFailure?.();
     if (deliveryFailure) { value = 'error'; closure = agentContextFailureNote(deliveryFailure, input.language); }
     if ((value === 'stop' || value === 'length') && input.admission?.requestMaxBytes !== undefined
@@ -342,7 +345,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     if (outcome.status === 'failed') {
       if (signal.aborted || outcome.state === 'cancelled') {
         // The user already saw the streamed text: keep it in the history so the next turn sees it too.
-        if (streamed) push({ role: 'assistant', content: `${streamed}\n${cancelledMidAnswer(input.language)}`, toolCalls: [] });
+        if (streamed) push({ role: 'assistant', content: `${streamed}\n${ports.serviceStopping?.() ? `[deckent] ${t('agent.turn.outcome.serviceStoppedMidAnswer', {}, input.language)}` : cancelledMidAnswer(input.language)}`, toolCalls: [] });
         return finish('cancelled', cancelled());
       }
       const spendNote = agentSpendFailureNote(outcome.state, input.language);

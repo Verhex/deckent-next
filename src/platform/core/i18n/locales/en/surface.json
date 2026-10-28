@@ -623,6 +623,8 @@
   "agent.turn.outcome.tools": "{calls} tool call(s) ran in {rounds} round(s); their results are above",
   "agent.turn.outcome.cancelled": "Cancelled. {summary}.",
   "agent.turn.outcome.cancelledMidAnswer": "cancelled mid-answer",
+  "agent.turn.outcome.serviceStopped": "The runtime service stopped during this turn (it was shut down; you did not cancel). {summary}. Your next message starts it again.",
+  "agent.turn.outcome.serviceStoppedMidAnswer": "runtime service stopped mid-answer",
   "agent.turn.outcome.mechanical": "Earlier messages were compacted without a model summary (its summary could not be read): they are kept as a shortened excerpt, and details from them may be missing. Repeat what still matters, or start a new conversation.",
   "agent.turn.outcome.limit": " ({tokens} tokens)",
   "agent.turn.outcome.truncatedCalls": "{count} tool calls were cut at the model's output limit{limit} and not run; the model was asked to write in smaller parts.",

@@ -10,7 +10,7 @@ import { afterEach, expect, it } from 'vitest';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
 import { encodeServiceFrame, ServiceFrameDecoder } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
-import { awaitRuntimeServiceRestart, runtimeMonotonicDeadline } from '#engine/index.js';
+import { awaitRuntimeServiceRestart, runtimeMonotonicDeadline, RUNTIME_SERVICE_AUTOSTART_ENV } from '#engine/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
 
 const roots: string[] = [], peers: Server[] = [], sockets: Socket[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
@@ -73,6 +73,14 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] t
     .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
   expect(performance.now() - started).toBeLessThan(3_000);
   expect(launched).toBe(0);
+});
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] BeUser M-09: restart of a service that is not running starts it (one launch, marked automatic), never LOCAL_RUNTIME_UNAVAILABLE', async () => {
+  const f = await fixture({ serviceStartTimeoutMs: 1_000 });
+  const launches: Array<{ env: Record<string, string> }> = [];
+  await expect(restartConfiguredRuntimeService(f.project, f.options, async input => { launches.push(input); return { pid: 1 }; }, fileURLToPath(import.meta.url)))
+    .rejects.toMatchObject({ code: 'RUNTIME_AUTOSTART_FAILED' });
+  expect(launches).toHaveLength(1); expect(launches[0]!.env[RUNTIME_SERVICE_AUTOSTART_ENV]).toBe('1');
 });
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats a crashed host\'s stale socket (nothing listening) as no service and launches once', async () => {

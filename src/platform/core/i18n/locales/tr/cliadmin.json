@@ -4,6 +4,7 @@
   "cli.runtime.reconciliation": "Uzlaştırma sayfası tamamlandı: {count} sonuç. Görev kabulü değişmedi.",
   "cli.runtime.reconciliationFailed": "Uzlaştırma kurtarması başarısız: {code}.",
   "cli.runtime.restarted": "Çalışma servisi yeniden başlatıldı (pid {pid}, örnek {instanceId}).",
+  "cli.runtime.startedAbsent": "Çalışma servisi çalışmıyordu; arka planda başlatıldı (pid {pid}, örnek {instanceId}).",
   "cli.runtime.idleShutdown": "{duration} (ss:dd:ss) boyunca istek veya yürütme yok: otomatik başlatılan bu servis kapanıyor.",
   "cli.runtime.socketHealed": "Runtime soket dizininin izni yanlıştı ve boştu; yalnız sahibine açık olarak yeniden oluşturuldu.",
   "cli.runtime.shutdownAdmitted": "Çalışma servisi {serviceId} (örnek {instanceId}): durdurma kabul edildi; şimdi duruyor.",

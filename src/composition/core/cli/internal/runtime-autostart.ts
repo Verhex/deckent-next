@@ -60,9 +60,9 @@ export const managerRunning = (pid: number | undefined) => detectServiceManager(
  * build — all within one monotonic budget. A new service is launched only after absence is observed. */
 export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
   launch = launchDetachedRuntimeService, entry = ENTRY, managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null> = managerRunning): Promise<RuntimeServiceReadiness> {
-  const deadline = await lifecycleDeadline(projectRoot, options);
-  // A service run by a service manager is restarted by that manager: stopping it here would only race the manager's own restart with a second launch.
-  const managed = await managerOf((await createConfiguredRuntimeClient(projectRoot, options).describeService(within(deadline))).processId);
+  const deadline = await lifecycleDeadline(projectRoot, options), first = await describeWithin(createConfiguredRuntimeClient(projectRoot, options), deadline, startableFor(projectRoot, options));
+  if (!first.descriptor) return ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, true); // BeUser M-09: absent (positive evidence) → started like the autostart; no origin to carry on
+  const managed = await managerOf(first.descriptor.processId); // a service its manager runs is restarted by that manager (stopping it here would race a second launch)
   if (managed) throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerRestartCommand(managed) } });
   const stopped = await stopConfiguredRuntimeService(projectRoot, options, 'managed restart onto the current build and configuration', deadline);
   const client = createConfiguredRuntimeClient(projectRoot, options);

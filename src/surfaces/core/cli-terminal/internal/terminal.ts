@@ -508,7 +508,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     } } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
       ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'warning' as const, text: configLine }] : [])] } : {}),
-    ...(context.restartRuntimeService ? { restartService: async () => {
+    ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await context.ensureRuntimeService!(root, options)).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
     } } : {}),

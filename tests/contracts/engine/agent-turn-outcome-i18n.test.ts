@@ -61,6 +61,15 @@ describe('terminal turn-outcome catalog guard', () => {
       expect(result.note).toContain(locale === 'tr' ? 'İptal edildi' : 'Cancelled');
       expect(agentTurnTruncatedCallsNote(2, 8192, locale)).toContain(locale === 'tr' ? 'çalıştırılmadı' : 'not run');
     });
+    it(`${locale}: BeUser M-10 a service stop mid-answer is an error that says so, never the person's cancel`, async () => {
+      const controller = new AbortController(), events: { kind: string; message?: { content: string } }[] = [];
+      const ports: AgentTurnPorts = { invokeRound: async (_input, onDelta) => { onDelta({ kind: 'text', text: 'Once upon' }); controller.abort(); return { status: 'failed', state: 'cancelled' }; },
+        authorize: async () => 'allow', describe: () => null, execute: async () => { throw new Error('must not execute'); }, now: () => 1, serviceStopping: () => true };
+      const result = await runAgentTurn({ language: locale, messages: [{ role: 'user', content: 'story' }], tools: [], signal: controller.signal, emit: event => events.push(event as never) }, ports);
+      expect(result.finish).toBe('error'); expect(result.note).toContain(locale === 'tr' ? 'Runtime servisi bu tur sırasında durdu' : 'The runtime service stopped during this turn');
+      expect(result.note).not.toMatch(/^(Cancelled|İptal edildi)/);
+      expect(events.find(event => event.kind === 'message')?.message?.content).toContain(locale === 'tr' ? 'yanıtın ortasında durdu' : 'stopped mid-answer');
+    });
   }
 });
 

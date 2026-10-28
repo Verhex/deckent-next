@@ -116,6 +116,7 @@ export interface WorklineProps {
   readonly approvalPollMs?: number;
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
   readonly restartService?: () => Promise<string>;
+  readonly startService?: () => Promise<string>; // BeUser M-09: starts the absent runtime service (the terminal's autostart, never a stop); returns the line
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
   readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>;
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
@@ -180,18 +181,14 @@ export interface WorklineProps {
   readonly attention?: boolean;
 }
 
-
-
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
   const owner = useFocusOwner();
   return <Composer {...props} active={(props.active ?? true) && owner.composing} acceptsInput={() => owner.inputAllowed() && !elsewhere?.()} />;
 }
-
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
   return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'chat' as const, id: 'chat', role, text });
 }
-
 function useLedgerBuffer(historyLimit: number) {
   const [buffer, setBuffer] = useState<LedgerBuffer>(EMPTY_LEDGER);
   const held = useRef<WorkLedgerEntry[] | null>(null);
@@ -360,6 +357,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
+  const serviceStarted = useRef(false); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -417,11 +415,14 @@ export function WorklineApp(props: WorklineProps) {
         push(await session.save(history.current));
         // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
         push(assistantLedgerEntries(renderCompleteReply(humanRecordText(reply, props.knownSecrets), startedAtMs, Date.now())));
-      }
+      } serviceStarted.current = false;
     } catch (error) {
       history.current = messages;
-      push([notice('error', errorText(error))]);
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+      if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
+        const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
+        if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
+      push([notice('error', errorText(error))]);
       if (props.spending && props.info && !signal.aborted && (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN')) {
         try { await infoWindow.show(await props.spending(), props.info.labels, signal); }
         catch (failure) { push([notice('error', errorText(failure))]); }
@@ -432,7 +433,7 @@ export function WorklineApp(props: WorklineProps) {
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
   const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] }), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.

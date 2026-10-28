@@ -165,9 +165,11 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
   if (action === 'restart') {
     // Managed restart: the governed stop (waits for drain and the endpoint's absence), then a start from the current build and configuration.
     if (!context.restartRuntimeService || Object.keys(shutdown).length) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-    if (interactive && !await confirmStop(context, root, options, locale, true)) return cancelled();
+    // BeUser M-09: a service that is not running has no work to confirm stopping; the restart starts it (detached).
+    const absent = context.describeRuntimeService ? await context.describeRuntimeService(root, options).then(() => false, (error: { code?: unknown } | null) => error?.code === 'LOCAL_RUNTIME_UNAVAILABLE') : false;
+    if (!absent && interactive && !await confirmStop(context, root, options, locale, true)) return cancelled();
     const restarted = await context.restartRuntimeService(root, options);
-    output(restarted, () => t('cli.runtime.restarted', { pid: restarted.pid ?? '-', instanceId: restarted.instanceId.slice(0, 8) }, locale));
+    output(restarted, () => (params => absent ? t('cli.runtime.startedAbsent', params, locale) : t('cli.runtime.restarted', params, locale))({ pid: restarted.pid ?? '-', instanceId: restarted.instanceId.slice(0, 8) }));
     return;
   }
   const { reason, ...ids } = shutdown;
