@@ -642,16 +642,21 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   Bu klasörün paylaşılmayan kasa dilimi (kendi dosyaları) ve talimat güveni deposundaki kayıtları da gider. Bir Deckent klasöründeki
   başka her dosya ile Git'in izlediği, bağlantılı ya da değiştirilmiş dosyalar kalır ve listelenir (klasörleri de kalır). Veri kökü
   paylaşılan global ev olan kurulum alpha.56 davranışını korur: yalnız yedeklenmiş yetki dosyaları silinir. Yapılandırılmış hiçbir
-  hedefin adlandırmadığı bir ref'e bağlı talimat güveni kayıtları kalır. İşi koru seçeneği önceki yedekleri yerinde bırakır.
+  hedefin adlandırmadığı bir ref'e bağlı talimat güveni kayıtları kalır. Bu klasörün paylaşılan eski güven anlık görüntüsündeki
+  kayıtları unutulur ve geri yükleme onları geri getirmez: o güven yeniden sorulur. Defter kilit dosyası yalnız Git izlemiyorsa ve
+  boşsa silinir. İşi koru seçeneği önceki defter yedeklerini yerinde bırakır; yapılandırma yedeklerini ve kira kaydı bekleyen iş
+  adlandırmayan işçi çalışma alanlarını arşivleyip siler (kira kaydı okunamayan alan korunur). İşçi imajı derlemelerinin ve araç
+  zinciri güncellemelerinin `workspaces/toolchains` altına yazdığı dosyalar üyedir; oradaki diğer dosyalar kalır ve listelenir.
   `deckent backup restore --set <path>` dosyaları ve köprü satırını geri getirir. Başka içerikle yeniden var olan bir dosyanın
   üzerine ya da bir bağlantı üzerinden asla yazmaz: böyle bir dosya korunur ve adıyla söylenir.
   *Yol:* listelenen dosyaları inceleyin; korunan dosyayı kenara alıp aynı geri yüklemeyi yeniden çalıştırın.
 - **Force ve servis sınırlıdır.** `--force` kişinin kendi yetkisiyle işleri iptal eder, onayları reddeder ve kuyruktaki teslimleri
-  geri çeker. İşler ve onaylar karttan önce karara bağlanır; teslimin sahibi çağrı anında ve ilk olarak karar verir. Ret kapsamı
-  adıyla söyler; sonucu bilinmeyen işlem kapatılmaz. Deckent'in kaydetmediği birim yalnız `--disable-unit` ile, bütün K4 koşulları
-  sağlanırsa kapatılır. Bunun için etkinleştirme bağlantılarının kartın bağladıklarıyla tam aynı olması gerekir; yeniden başlayan
-  örnek yeni iş tutuyorsa birim asla kapatılmaz. Niyet ve sonuç makbuzları geri alma komutuyla birlikte kurtarma klasöründe kalır;
-  aksi halde komut yazdırılır. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
+  geri çeker. Her adımın sahip kararı (işler, onaylar, her teslim, silmeler ve onayları) karttan önce alınır; onay kimliklerini tek
+  tek adlandıran bir politika yine aracıda reddedebilir. Ret kapsamı adıyla söyler; sonucu bilinmeyen işlem kapatılmaz. Deckent'in
+  kaydetmediği birim yalnız `--disable-unit` ile, bütün K4 koşulları sağlanırsa, servis gittikten sonra ve birim dosyası ile
+  etkinleştirme bağlantıları kartın bağladıklarıyla tam aynıysa kapatılır. Çalışma zamanı bağlantısı olan ya da yöneticisi
+  servisi yönetişimli durdurmadan sonra yeniden başlatan birim için komut yazdırılır. Niyet ve sonuç makbuzları (gerçekten
+  kaldırılan bağlantılar ve geri alma komutlarıyla) kurtarma klasöründe kalır. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
   Kaldırma `require-approval` politika kararını reddeder (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez. Bir
   yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.

@@ -641,16 +641,21 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   byte stays. This folder's unshared vault slice (its own files) and its records in the instruction-trust store go too. Any
   other file under a Deckent folder, and Git-tracked, linked or changed files, stay and are listed (and keep their folder). An
   installation whose data root is the shared global home keeps the alpha.56 behaviour: only the backed-up authority files go.
-  Instruction-trust records tied to a ref that no configured target names stay. Keep-work keeps earlier backups where they are.
+  Instruction-trust records tied to a ref that no configured target names stay. This folder's entries in the shared legacy trust
+  snapshot are forgotten and a restore does not bring them back: that trust is asked again. The ledger lock file goes only when Git
+  does not track it and it is empty. Keep-work keeps earlier ledger backups where they are; it archives and deletes config backups
+  and worker workspaces whose lease names no pending work (an unreadable lease keeps the workspace). Files that worker-image builds
+  and toolchain updates write under `workspaces/toolchains` are members; other files there stay and are listed.
   `deckent backup restore --set <path>` brings files and the bridge line back. It never writes over a file that exists again with
   other content, nor through a link: such a file is kept and named.
   *Workaround:* review the listed files; move a kept file aside and run the same restore again.
 - **Force and the service have bounded reach.** `--force` cancels runs, rejects approvals and withdraws queued deliveries with
-  the person's own authority. Runs and approvals are decided before the card; a delivery's owner decides at the call, first. A
-  refusal names the scope, and unknown results are never closed. A unit Deckent did not create is disabled only with
-  `--disable-unit` when every K4 check holds, only while its enablement links are exactly the ones the card bound, and never when
-  a restarted instance holds new work. Intent and result receipts with the undo command stay in the recovery folder; otherwise the
-  command is printed. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
+  the person's own authority. Every step's owner decision (runs, approvals, each delivery, the removals and their approval) is
+  taken before the card; a policy that names approval ids one by one can still refuse at the broker. A refusal names the scope,
+  and unknown results are never closed. A unit Deckent did not create is disabled only with `--disable-unit` when every K4 check
+  holds, after the service is gone, and only while its unit file and enablement links are exactly the ones the card bound. A unit
+  with runtime links, or one whose manager starts the service again after the governed stop, gets the printed command instead.
+  Intent and result receipts (with the links actually removed and their undo) stay in the recovery folder. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
   refuses a `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet. An AI
   agent or CI caller (marker variables) is refused through the SDK as through the CLI.
   *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.

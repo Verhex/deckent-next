@@ -16,7 +16,7 @@ export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readon
 export const removalRegistry = z.object({ schemaVersion: z.literal(5), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
   recoveryRoot: z.record(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.object({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) }).strict()),
   systemctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
-  archive: z.object({ conversation: z.array(z.string()), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
+  archive: z.object({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.object({ pattern: z.string(), lease: z.string() }).strict(), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
   purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
   treeMembers: z.record(z.object({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }).strict())
@@ -24,8 +24,7 @@ export const removalRegistry = z.object({ schemaVersion: z.literal(5), initialBa
   cacheMembers: z.record(z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
 const registry = removalRegistry;
 export function assertNativeUninstallSupport(platform: string) { if (platform !== 'linux') throw ErrorRegistry.createError('UNINSTALL_NATIVE_UNSUPPORTED', { params: { platform } }); }
-/** §5.5: one person-private recovery root from the registry (XDG state on Linux), outside every deletion root; one directory per installation.
- * The alpha.56 location beside the data root is used only while it alone exists (an earlier interrupted purge finishes where it started). */
+/** §5.5: one person-private recovery root from the registry (XDG state on Linux), one directory per installation; the alpha.56 one beside the data root only while it alone exists. */
 export function uninstallRecoveryDirectory(config: { readonly productLayout: { readonly root: string }; readonly installation: { readonly uninstallRecoveryRoot: string | null } },
   env: Readonly<Record<string, string | undefined>>, platform: string = process.platform) {
   const root = config.productLayout.root, entry = registry.recoveryRoot[normalizeGlobalScopePlatform(platform, env)], home = env['HOME'] ?? env['USERPROFILE'];
@@ -34,9 +33,8 @@ export function uninstallRecoveryDirectory(config: { readonly productLayout: { r
   const current = join(base, sha256(root)), legacy = join(dirname(root), registry.recoveryDirectory, sha256(root));
   return existsSync(legacy) && !existsSync(current) ? legacy : current;
 }
-/** Native records and portable canonical layout resources are owner observations, never paths supplied by an uninstall request. Data members are
- * observed for every tier (the plan decides); a relocated or unsafe authority file refuses only the data-deleting tier. K1: an in-project
- * installation's `.deckent` members qualify like global ones; a file the project's VCS tracks is never a member (kept and listed). */
+/** Owner observations, never request paths. Data members are observed for every tier (the plan decides); a relocated or unsafe authority file refuses only the
+ * data-deleting tier. K1: an in-project installation's `.deckent` members qualify like global ones; a file the project's VCS tracks is kept and listed. */
 export async function extendUninstallInventory(config: ResolvedConfig, base: UninstallInventory, integrity: IntegrityAuthority | null,
   env: Readonly<Record<string, string | undefined>>, globalRoot: string, tracked: ProjectTracking, project: { readonly own: boolean; readonly caches: readonly string[] }) {
   const layout = config.productLayout, installationId = base.installation.id, resources = [...base.resources];
@@ -58,12 +56,17 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     if (blockers.length) members = [];
     else if (integrity) members.push(...(await treeMembers(layout, integrity, bounds)).filter(member => !kept(member.path)));
   }
-  // K1, K7, review B3: in a project's own `.deckent` a regular single-link file of this user is a member only when its name is one its Deckent
-  // owner writes (registry `archive.members`); it is archived and deleted by its data tier: conversation for keep-work, all of them for all.
-  // Location alone is no ownership: links, other owners, unknown names and tracked files stay and are listed; caches keep their own owner.
+  // K1, K7, B3: in a project's own `.deckent` a regular single-link file of this user is a member only under a name its owner writes (`archive.members`),
+  // archived and deleted by its data tier; location is no ownership: links, other owners, unknown names and tracked files stay and are listed.
   const archived: DataRemovalMember[] = [], taken = new Set(members.map(member => member.path)), rel = (path: string) => relative(layout.root, path).split(sep).join('/');
   const matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
   const conversation = registry.archive.conversation.map(name => productResourcePath(layout, name as ProductResource)); let seen = 0;
+  // R10 (§5.2): keep-work also archives and deletes config backups and a workspace whose lease names no pending work (an unreadable lease keeps it).
+  const pending = new Set([...base.work.running, ...base.work.parked].map(ref => `${ref.scopeId}\0${ref.id}`)), leases = new Map<string, Promise<boolean>>();
+  const idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
+    if (at && !leases.has(at)) leases.set(at, readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => { const id = (JSON.parse(text) as { request?: { identity?: Record<string, unknown> } }).request?.identity;
+      return base.work.complete && typeof id?.['runId'] === 'string' && !pending.has(`${String(id['scopeId'])}\0${id['runId']}`) && ![...base.work.deliveries, ...base.work.uncertain].some(ref => ref.scopeId === id['scopeId']); }, () => false));
+    return at ? leases.get(at)! : false; };
   const unlisted = (locator: string) => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
     ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
   const walk = async (directory: string, depth: number): Promise<void> => {
@@ -76,15 +79,14 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       // R2: tracking is read per file, before the transient rule; a custody lock with bytes in it is someone's file (kept and listed).
       if (kept(path) || matches(registry.archive.transient, path) && !(info.size && path === `${productResourcePath(layout, 'ledger')}-lock`)) continue;
       if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && matches(registry.archive.members, path))
-        archived.push(...(conversation.some(resource => inside(resource, path)) ? ['conversation-data', 'global-data'] : ['global-data'])
+        archived.push(...(conversation.some(resource => inside(resource, path)) || matches(registry.archive.conversationFiles, path) || await idle(path) ? ['conversation-data', 'global-data'] : ['global-data'])
           .map(target => ({ resourceId: rel(path), path, directory: null, archivePath: '', target, archived: true })));
       else unlisted(path);
     }
   };
   if (project.own && !blockers.length) await walk(layout.root, 0).catch(() => { archived.length = 0; blockers.push('archive-limit'); });
-  // K1(f): the instruction bridges init wrote (its committed write journal names their bytes): DECKENT.md exactly as written and the exact bridge
-  // line in CLAUDE.md/AGENTS.md (the rest stays byte for byte). This folder's own vault slice in the global home (its record names exactly this
-  // installation and folder, outside a repository that worktrees could share) goes too. Changed, tracked, shared or foreign ones stay.
+  // K1(f): the bridges init wrote (its committed journal names the bytes): DECKENT.md as written, the exact bridge line in CLAUDE.md/AGENTS.md; and this
+  // folder's own vault slice (its record names this installation and folder, no shared repository). Changed, tracked, shared or foreign ones stay.
   const outside: DataRemovalMember[] = [], add = (path: string, extra: Partial<DataRemovalMember> = {}) => outside.push({ resourceId: 'project', path, directory: null, archivePath: '', target: 'global-data', archived: true, ...extra });
   if (project.own && archived.length) {
     const written = new Map<string, string[]>(), earlier = new Map<string, string[]>(), created = new Set<string>();
@@ -95,9 +97,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (entry.expected === ABSENT_FILE_VERSION) created.add(`${entry.rel}\0${entry.next}`);
     }
     const bridge = async (name: string) => { const path = join(config.projectRoot, name); return await memberStat(path, true).catch(() => null) && written.has(name) && !kept(path) ? path : null; };
-    // A DECKENT.md that stays (changed, tracked or not init's) keeps the bridge lines that point to it.
     const skeleton = await bridge(PROJECT_INSTRUCTION_REGISTRY.files[0]!), stays = !skeleton && !!await lstat(join(config.projectRoot, PROJECT_INSTRUCTION_REGISTRY.files[0]!)).catch(() => null);
-    const changed = stays || !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton));
+    const changed = stays || !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton)); // a kept DECKENT.md keeps its bridge lines
     if (skeleton) { if (changed) unlisted(skeleton); else add(skeleton); }
     // A bridge file init created whole that still holds exactly those bytes goes whole; otherwise only its exact line goes.
     for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), bytes = path && !changed ? await readFile(path) : null;

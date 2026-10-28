@@ -298,6 +298,15 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     await writeFile(join(local, 'notes.txt'), 'UNKNOWN KEEP', { mode: 0o600 }); await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
     // B3: a file under a Deckent resource folder whose name no owner writes is the person's (location is no ownership): kept and listed.
     const record = join(local, 'workspaces/customer-record.txt'); await mkdir(dirname(record), { mode: 0o700 }); await writeFile(record, 'CUSTOMER', { mode: 0o600 });
+    // R9: the files a real worker-image build and toolchain update write in this project's workspaces/toolchains (their owners' own name
+    // builders) are members; a person's file beside them is not.
+    const { prepareWorkerImageBuildContext } = await import('#adapters/core/worker-image/index.js'), { refreshAuditName } = await import('#engine/index.js');
+    const toolchains = join(local, 'workspaces/toolchains'), built = await prepareWorkerImageBuildContext({ packageRoot: process.cwd(), parent: join(toolchains, 'builds'),
+      imageVersion: 'r1-20261027', dockerfile: 'FROM scratch\n', recipe: { schemaVersion: 1 }, plan: { buildTimeoutMs: 1000 } });
+    const produced = [...built.files.map(name => join(built.context, name)), join(toolchains, 'receipts/r1-20261027.json'), join(toolchains, 'plans/r2-20261028-2026-10-28T10-00-00-000Z.json'),
+      join(toolchains, 'proposals/r2-20261028.json'), join(toolchains, 'refreshes', refreshAuditName('2026-10-28T10:00:00.000Z', 'startup')), join(toolchains, 'acquisitions/11111111-2222-4333-8444-555555555555.json')];
+    for (const path of produced.slice(built.files.length)) { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); await writeFile(path, '{}\n', { mode: 0o600 }); }
+    const beside = join(toolchains, 'receipts/customer-notes.txt'); await writeFile(beside, 'CUSTOMER', { mode: 0o600 });
     // B4: a regular file at the layout's runtime.sock name (no Deckent code writes one there) is the person's: kept, even by the final cleanup.
     const sock = join(local, 'state/runtime.sock'); await writeFile(sock, 'MINE', { mode: 0o600 });
     // Dogfood: the team commits a Deckent file; Git tracking makes it the team's, never a member.
@@ -310,6 +319,7 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     expect(plan.blockers).toEqual([]); expect(plan).toMatchObject({ purge: true, backup: { required: true } });
     expect(members).toEqual(expect.arrayContaining([ledger, join(local, 'policy.json'), join(local, 'installation-identity/identity.json'), join(local, 'state/terminal-history.jsonl'), join(local, 'config.json')]));
     expect(members).not.toContain(join(local, 'bindings.json')); expect(members).not.toContain(join(local, 'notes.txt')); expect(members).not.toContain(record);
+    expect(members).toEqual(expect.arrayContaining(produced)); expect(members).not.toContain(beside); expect(plan.items.find(item => item.locator === beside)).toMatchObject({ action: 'keep' });
     expect(plan.items.find(item => item.locator === record)).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.items.find(item => item.resourceId.startsWith('tracked.') && item.locator === join(local, 'bindings.json'))).toMatchObject({ action: 'keep', reason: 'vcs-tracked' });
     expect(plan.items.find(item => item.locator === join(local, 'notes.txt'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
@@ -335,6 +345,7 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');
     expect(await readFile(record, 'utf8')).toBe('CUSTOMER'); expect(await readFile(sock, 'utf8')).toBe('MINE'); expect(await readFile(lockFile, 'utf8')).toBe('TEAM LOCK');
+    for (const path of produced) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(beside, 'utf8')).toBe('CUSTOMER');
     expect(plan.items.find(item => item.locator === sock)).toMatchObject({ action: 'keep', ownership: 'unknown' });
     (await verifyBackupSet(result.backup.destination!, phrase, getConfigFieldDefault('installation').packageMeasurement)).close();
     expect(await lstat(`${result.backup.destination!}.archive`)).toBeTruthy(); expect(result.backup.destination!.startsWith(project)).toBe(false);
@@ -357,14 +368,20 @@ it('keep-work archives and deletes only conversation data and retires the folder
     const lease = join(local, `workspaces/${'c'.repeat(64)}/lease.json`), hook = join(local, `workspaces/${'c'.repeat(64)}/hooks/pre-commit`), earlier = join(local, 'state/backups/ledger-v1-2026-10-27T10-00-00-000Z.db');
     for (const path of [hook, earlier]) await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await writeFile(lease, 'LEASE', { mode: 0o644 }); await writeFile(hook, '#!/bin/sh\n', { mode: 0o755 }); await writeFile(earlier, 'EARLIER LEDGER', { mode: 0o600 });
-    // A pending run makes keep-work a real choice: work records stay, conversation data goes (archived first).
+    // R10 (JOURNEY §5.2): a config backup and a workspace whose lease names no pending work go with keep-work (archived first); the workspace
+    // above, whose lease cannot be read, stays as possibly pending.
+    const idle = join(local, `workspaces/${'d'.repeat(64)}`), configBackup = join(local, 'config.json.bak.2026-10-27T10-00-00.000Z.11111111-2222-4333-8444-555555555555');
+    await mkdir(join(idle, 'tree'), { recursive: true, mode: 0o700 }); await writeFile(join(idle, 'tree/file.txt'), 'WORK', { mode: 0o600 });
+    await writeFile(join(idle, 'lease.json'), JSON.stringify({ schemaVersion: 2, request: { identity: { scopeId: 's', runId: 'finished-run' } } }), { mode: 0o600 });
+    await writeFile(configBackup, '{}', { mode: 0o600 });
     const work = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
-    expect(work.items.find(item => item.resourceId === 'conversation-data')).toMatchObject({ action: 'remove', members: [join(local, 'state/terminal-history.jsonl')] });
+    expect([...work.items.find(item => item.resourceId === 'conversation-data')!.members!].sort()).toEqual([configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt'), join(local, 'state/terminal-history.jsonl')].sort());
     expect(work.items.some(item => item.resourceId === 'global-data')).toBe(false); expect(work.backup.required).toBe(true);
     const kept = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'keep-work', planDigest: work.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(kept.status).toBe('completed'); await expect(lstat(join(local, 'state/terminal-history.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE');
     expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER'); // M10 (JOURNEY §5.2): keep-work keeps earlier backups where they are
+    for (const path of [configBackup, join(idle, 'lease.json'), join(idle, 'tree/file.txt')]) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await lstat(join(local, 'installation/retired.json'))).toBeTruthy(); // §5.4: the service stays down until the person reopens the folder
     // Delete everything: every owned file is archived, verified, then deleted; nothing is left of the project's .deckent.
     const all = await previewConfiguredUninstall(project, ALL, options);
@@ -374,7 +391,7 @@ it('keep-work archives and deletes only conversation data and retires the folder
     // `deckent backup restore <set>`: the semantic set and the uninstall archive beside it bring the installation and its files back.
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE'); expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER');
-    expect((await lstat(hook)).mode & 0o777).toBe(0o755);
+    expect((await lstat(hook)).mode & 0o777).toBe(0o755); expect(await readFile(join(idle, 'tree/file.txt'), 'utf8')).toBe('WORK'); expect(await readFile(configBackup, 'utf8')).toBe('{}');
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 

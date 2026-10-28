@@ -96,8 +96,7 @@ async function reconcileFinalTail(directory: string, root: string, actor: Verifi
   }
   return { plan: intent.plan, result: intent.result, ...(remaining.length ? { remaining } : {}), intent };
 }
-type Env = Readonly<Record<string, string | undefined>>;
-/** The installation's ledger custody (never stolen: a holder is a running service); `optional`: a missing folder means there is none to take. */
+type Env = Readonly<Record<string, string | undefined>>; // custody: the ledger lock (never stolen: a holder is a running service; `optional`: none to take)
 function custody(config: ResolvedConfig, optional = false): LedgerLock | undefined { try { return acquireLedgerLock(`${productResourcePath(config.productLayout, 'ledger')}-lock`); }
   catch (error) { if ((error as { code?: string }).code === 'LOCAL_RUNTIME_ALREADY_RUNNING') throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); if (!optional) throw error; } }
 /** R11: the one completion of a finished removal (normal step, resumed tail, already-absent reconcile). Keep tiers leave the retired marker (R1),

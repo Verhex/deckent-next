@@ -87,7 +87,8 @@ any of them with `--dry-run` or `--json` (for example `deckent uninstall --all -
 Every check runs before the one confirmation, and nothing is asked when there is nothing to remove. A refusal names its
 cause and next step: running work (`--force` cancels it with the person's own authority and never closes an unknown result),
 a service manager that restarts the service (`--disable-unit` disables a user unit Deckent did not create, only when it
-provably runs this service), policy, retention or legal hold, or a moved or unsafe authority file. When Git tracking cannot be
+provably runs this service and the service stays down after the governed stop; otherwise the exact command is printed), policy,
+retention or legal hold, or a moved or unsafe authority file. When Git tracking cannot be
 read, every project file is treated as possibly tracked and kept.
 `--yes` skips only the final card; the plan is still printed. Worker images stay; use only the exact command on the card.
 macOS/Windows service removal is manual. A partial deletion resumes only after the remaining bytes and authority are verified again.
