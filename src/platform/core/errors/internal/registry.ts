@@ -882,7 +882,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_PURGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_DENIED', p, l) }) },
   UNINSTALL_LIFECYCLE_HOLD: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_LIFECYCLE_HOLD', p, l) }) },
   UNINSTALL_RECOVERY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_INVALID', p, l) }) },
-  UNINSTALL_WORK_ACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_WORK_ACTIVE', p, l) }) },
+  UNINSTALL_WORK_ACTIVE: { category: 'error', render: (p, l) => ({ message: p['workspaces'] && p['workspaces'] !== '0' ? t('error.UNINSTALL_WORK_ACTIVE_WORKSPACES', p, l) : t('error.UNINSTALL_WORK_ACTIVE', p, l) }) },
   UNINSTALL_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_MANAGED', p, l) }) },
   UNINSTALL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_INVALID', p, l) }) },
   UNINSTALL_PLAN_CHANGED: { category: 'error', render: (p, l) => ({ message: p['diff'] ? t('error.UNINSTALL_PLAN_CHANGED_DIFF', p, l) : t('error.UNINSTALL_PLAN_CHANGED', p, l) }) },

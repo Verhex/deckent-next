@@ -26,7 +26,9 @@ const ref = z.object({ scopeId: text, id: text, revision: z.number().int().nonne
 export const uninstallWorkSchema = z.object({ running: z.array(ref), parked: z.array(ref), approvals: z.array(ref), deliveries: z.array(ref),
   uncertain: z.array(z.object({ kind: z.enum(['effect', 'invocation', 'reservation']), scopeId: text, id: text, target: text.nullable() }).strict().readonly()),
   /** False when a category exceeded its bound or the ledger could not be read: unknown work is never zero work. */
-  complete: z.boolean() }).strict().readonly();
+  complete: z.boolean(),
+  /** F7: worker workspaces the ledger does not prove idle (possibly undelivered work); kept by keep-work, removed by delete-everything only under --force. */
+  workspaces: z.number().int().positive().safe().optional() }).strict().readonly();
 /** The runtime service as observed: running is a describe answer; `unit` is the user unit whose main process it is (null: none proven). */
 export const uninstallServiceSchema = z.object({ running: z.boolean(), unit: text.nullable(),
   /** K4: `eligible` only when every condition holds (user unit, main process = this installation's service, nothing else in its group, no Also=/Alias=). */

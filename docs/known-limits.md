@@ -646,7 +646,9 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   does not track it and it is empty. Keep-work keeps earlier ledger backups where they are; it archives and deletes config backups
   and a worker workspace only when the ledger proves it idle: its lease has the workspace owner's form and names this exact attempt,
   whose Run is terminal, and its delivery is not owed or was adopted. Any other workspace (no such Run, another scope, output not yet
-  delivered, an unreadable lease) is kept, listed and counted as possibly pending work, so the menu offers keep-work. Files that worker-image builds
+  delivered, an unreadable lease) is kept, listed and counted as possibly pending work, so the menu offers keep-work.
+  Delete everything treats it as pending work: refused without `--force`; with `--force` it is archived in the encrypted backup,
+  then deleted, and the card names how many. Files that worker-image builds
   and toolchain updates write under `workspaces/toolchains` are members; other files there stay and are listed.
   `deckent backup restore --set <path>` brings files and the bridge line back. It never writes over a file that exists again with
   other content, nor through a link: such a file is kept and named.

@@ -112,6 +112,13 @@ it('offers force for running work before any card and prints a kept image\'s ste
     expect(card.requests[0]!.options.map(option => option.id)).toEqual([...offered, 'details', 'cancel']);
     expect(card.requests[0]!.body!.includes('Worker workspaces kept as possibly pending work: 1')).toBe(rows.length === 2); // the card says why
   }
+  // F7: delete-everything counts it as pending work: refused without --force; under --force its card names how many it removes after the backup.
+  const pendingAll = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, inventory({ resources: [...inventory().resources, workspace] })) };
+  card.requests.length = 0; card.answers.push('cancel');
+  await expect(uninstallCommand(['uninstall', '--all'], pendingAll)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE', params: { workspaces: '1' } });
+  expect(card.requests[0]!.options.map(option => option.id)).toEqual(['force', 'cancel']);
+  expect(uninstallPlanLines(createUninstallPlan({ ...query('all'), force: true }, inventory({ resources: [...inventory().resources, workspace] })), 'en'))
+    .toContain('Worker workspaces this removes after the encrypted backup holds them: 1');
   // A policy refusal (legal hold) is the engine's typed decision with its owner, never a generic ownership error from the surface.
   const held = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...inventory(), policyBlocker: 'UNINSTALL_PURGE_DENIED' }),
     applyUninstall: async () => { throw Object.assign(new Error('denied'), { code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold' } }); } };

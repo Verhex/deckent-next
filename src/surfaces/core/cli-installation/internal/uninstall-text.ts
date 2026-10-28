@@ -57,8 +57,8 @@ const names = (items: readonly UninstallItem[], locale: Locale) => { const messa
 const workLine = (plan: UninstallPlan, locale: Locale) => { const work = plan.work, total = work.running.length + work.parked.length + work.approvals.length + work.deliveries.length + work.uncertain.length;
   const line = total ? t('cli.uninstall.work.some', { running: String(work.running.length), parked: String(work.parked.length), approvals: String(work.approvals.length),
     deliveries: String(work.deliveries.length), uncertain: String(work.uncertain.length) }, locale) : t('cli.uninstall.work.none', {}, locale),
-    workspaces = plan.items.filter(item => item.keep === 'workspace-pending').length; // F7: the menu's count of possibly pending worker workspaces, shown with it
-  return workspaces ? [line, t('cli.uninstall.work.workspaces', { count: String(workspaces) }, locale)] : [line]; };
+    workspaces = work.workspaces ?? 0; // F7: possibly pending worker workspaces: kept by the keep tiers, removed by delete-everything (under --force, after the backup)
+  return workspaces ? [line, plan.purge ? t('cli.uninstall.work.workspacesRemoved', { count: String(workspaces) }, locale) : t('cli.uninstall.work.workspaces', { count: String(workspaces) }, locale)] : [line]; };
 
 /** The menu card (owner 2026-10-27): what runs, what is pending, what this folder and the shared places hold; absent entries are not named. */
 export function uninstallSummaryLines(plan: UninstallPlan, locale: Locale): readonly string[] {
@@ -81,6 +81,8 @@ export function uninstallPlanLines(plan: UninstallPlan, locale: Locale): readonl
     ...(plan.steps.disableUnit && plan.service.unit ? [t('cli.uninstall.unit', { unit: safe(plan.service.unit) }, locale)] : []),
     ...(plan.steps.cancelRuns.length || plan.steps.rejectApprovals.length || plan.steps.withdrawDeliveries.length ? [t('cli.uninstall.force', { runs: String(plan.steps.cancelRuns.length),
       approvals: String(plan.steps.rejectApprovals.length), deliveries: String(plan.steps.withdrawDeliveries.length) }, locale)] : []),
+    // F7: delete-everything under --force removes the possibly pending worker workspaces too, after the encrypted backup holds them: the card says how many.
+    ...(plan.purge && plan.force && plan.work.workspaces ? [t('cli.uninstall.work.workspacesRemoved', { count: String(plan.work.workspaces) }, locale)] : []),
     ...[...new Set(kept.map(item => item.reason))].map(reason => t('cli.uninstall.kept', { groups: names(kept.filter(item => item.reason === reason), locale), reason: messages[`reason.${reason}`] ?? safe(reason) }, locale)),
     ...(absent.length ? [t('cli.uninstall.absent', { count: String(absent.length) }, locale)] : []),
     ...plan.blockers.map(blocker => t('cli.uninstall.blocked', { reason: uninstallBlockerText(blocker, locale) }, locale)),
@@ -107,7 +109,7 @@ export const uninstallResolvable = (blocker: string | null | undefined, plan: Un
  * the same observation refuses for good carries its reason, shown under the card (a resolvable refusal stays selectable). */
 export function uninstallTierChoices(plan: UninstallPlan, locale: Locale): readonly { readonly tier: UninstallTier; readonly label: string; readonly blocked: string | null }[] {
   const messages = uninstallMessages(locale), pending = plan.work.running.length + plan.work.parked.length + plan.work.approvals.length + plan.work.deliveries.length + plan.work.uncertain.length > 0
-    || plan.items.some(item => item.keep === 'workspace-pending'); // F7: a worker workspace not proven idle is possibly pending work
+    || !!plan.work.workspaces; // F7: a worker workspace not proven idle is possibly pending work
   return (['keep-data', 'keep-work', 'all'] as const).filter(tier => tier !== 'keep-work' || pending && plan.tiers['keep-work'].removes !== plan.tiers['keep-data'].removes)
     .map(tier => { const blocker = plan.tiers[tier].blocker;
       return { tier, label: messages[`tier.${tier}`]!, blocked: blocker && !uninstallResolvable(blocker, plan) ? uninstallBlockerText(blocker, locale) : null }; });

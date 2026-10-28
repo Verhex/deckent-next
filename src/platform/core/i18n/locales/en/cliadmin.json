@@ -311,6 +311,7 @@
   "cli.uninstall.work.none": "Pending work: none",
   "cli.uninstall.work.some": "Pending work: {running} running, {parked} parked, {approvals} approvals, {deliveries} deliveries, {uncertain} with an unknown result",
   "cli.uninstall.work.workspaces": "Worker workspaces kept as possibly pending work: {count}",
+  "cli.uninstall.work.workspacesRemoved": "Worker workspaces this removes after the encrypted backup holds them: {count}",
   "cli.uninstall.here": "In this folder: {groups}",
   "cli.uninstall.shared": "Shared: {groups} (kept)",
   "cli.uninstall.remove": "Will be removed: {groups}",

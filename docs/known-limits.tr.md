@@ -647,7 +647,9 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   boşsa silinir. İşi koru seçeneği önceki defter yedeklerini yerinde bırakır; yapılandırma yedeklerini arşivleyip siler, bir işçi
   çalışma alanını ise yalnız defter onun boşta olduğunu kanıtlarsa: kira kaydı alan sahibinin biçimindedir ve bu denemeyi adlandırır,
   denemenin işi bitmiştir, teslimi gerekmiyordur ya da benimsenmiştir. Başka her alan (böyle bir iş yok, başka kapsam, çıktısı henüz
-  teslim edilmemiş, kira kaydı okunamıyor) korunur, listelenir ve bekleyebilecek iş sayılır; menü bu yüzden işi koru seçeneğini sunar. İşçi imajı derlemelerinin ve araç
+  teslim edilmemiş, kira kaydı okunamıyor) korunur, listelenir ve bekleyebilecek iş sayılır; menü bu yüzden işi koru seçeneğini sunar.
+  Her şeyi sil bunu bekleyen iş sayar: `--force` olmadan reddedilir; `--force` ile önce şifreli yedeğe arşivlenir, sonra silinir ve
+  kart kaç tane olduğunu söyler. İşçi imajı derlemelerinin ve araç
   zinciri güncellemelerinin `workspaces/toolchains` altına yazdığı dosyalar üyedir; oradaki diğer dosyalar kalır ve listelenir.
   `deckent backup restore --set <path>` dosyaları ve köprü satırını geri getirir. Başka içerikle yeniden var olan bir dosyanın
   üzerine ya da bir bağlantı üzerinden asla yazmaz: böyle bir dosya korunur ve adıyla söylenir.

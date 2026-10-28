@@ -108,7 +108,7 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
   const work = inventory.work, service = inventory.service;
   if (!work.complete) blockers.push('work-unverified');
   if (work.running.length && !force) blockers.push('work-active');
-  if (purge && (work.parked.length || work.approvals.length) && !force) blockers.push('work-pending');
+  if (purge && (work.parked.length || work.approvals.length || work.workspaces) && !force) blockers.push('work-pending'); // F7: a possibly pending workspace too
   if (purge && work.deliveries.length && !force) blockers.push('delivery-queued');
   // M9: an unknown external result blocks every tier that deletes data (keep-work too), not only delete-everything.
   if (archived && work.uncertain.length) {
@@ -129,7 +129,9 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
   const { tier, force, disableUnit } = uninstallPlanQuerySchema.parse(query), installation = uninstallInstallationSchema.parse(inventory.installation);
   const resources = inventory.resources.map(value => uninstallResourceSchema.parse(value)).sort((a, b) => compare(a.resourceId, b.resourceId));
   if (new Set(resources.map(value => value.resourceId)).size !== resources.length) throw new UninstallError('UNINSTALL_INVALID');
-  const work = uninstallWorkSchema.parse(inventory.work), service = uninstallServiceSchema.parse(inventory.service);
+  // F7 (JOURNEY §5.1): a worker workspace the ledger does not prove idle is pending work, counted for every tier (its rows apply to the keep tiers only).
+  const workspaces = inventory.resources.filter(value => value.keep === 'workspace-pending').length;
+  const work = uninstallWorkSchema.parse({ ...inventory.work, ...(workspaces ? { workspaces } : {}) }), service = uninstallServiceSchema.parse(inventory.service);
   const observed = { ...inventory, work, service };
   const { items, blockers, steps, archived } = decide({ tier, force, disableUnit }, installation, resources, observed, registry);
   const tiers = Object.fromEntries(UNINSTALL_TIERS.map(other => { const plan = decide({ tier: other, force, disableUnit }, installation, resources, observed, registry);
@@ -150,7 +152,7 @@ export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'wo
   if (authority) return ErrorRegistry.createError('UNINSTALL_AUTHORITY_UNVERIFIED', { params: { path: authority.slice(authority.indexOf(':') + 1) } });
   const known = plan.blockers.find(value => BLOCKER_ERRORS[value]), work = plan.work;
   if (known) return ErrorRegistry.createError(BLOCKER_ERRORS[known]! as 'UNINSTALL_WORK_ACTIVE', { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)),
-    approvals: String(plan.purge ? work.approvals.length : 0), count: String(known === 'delivery-queued' ? work.deliveries.length : work.uncertain.length),
+    approvals: String(plan.purge ? work.approvals.length : 0), workspaces: String(plan.purge ? work.workspaces ?? 0 : 0), count: String(known === 'delivery-queued' ? work.deliveries.length : work.uncertain.length),
     list: work.uncertain.slice(0, 5).map(item => `${item.kind} ${item.id}`).join(', '), owner: work.uncertain.find(item => item.scopeId)?.scopeId ?? '',
     unit: plan.service.unit ?? '', command: plan.service.command ?? '', path: plan.installation.root, recovery: plan.backup?.destination ?? '' } });
   return plan.blockers.length ? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP') : null;

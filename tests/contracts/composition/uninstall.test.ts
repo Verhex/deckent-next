@@ -391,15 +391,25 @@ it('keep-work archives and deletes only conversation data and retires the folder
     const archivedIds = (JSON.parse(await readFile(`${kept.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
     expect(archivedIds).toContain(hash(configBackup)); expect(archivedIds).not.toContain(hash(join(unproven, 'tree/file.txt')));
     expect(await lstat(join(local, 'installation/retired.json'))).toBeTruthy(); // §5.4: the service stays down until the person reopens the folder
-    // Delete everything: every owned file is archived, verified, then deleted; nothing is left of the project's .deckent.
-    const all = await previewConfiguredUninstall(project, ALL, options);
-    expect(all.blockers).toEqual([]);
+    // F7 (K3, JOURNEY §5.1): the two possibly pending workspaces are pending work for delete-everything: without --force it is refused before
+    // any card, naming them and keep-work; nothing changes.
+    const unforced = await previewConfiguredUninstall(project, ALL, options);
+    expect(unforced.work.workspaces).toBe(2); expect(unforced.blockers).toEqual(['work-pending']); let cards = 0;
+    const refusal = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'all-unforced', planDigest: unforced.planDigest },
+      { backupPassphrase: async () => phrase, confirm: async () => { cards += 1; return true; } }, options).catch((error: { code?: string; message?: string }) => error);
+    expect(refusal).toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' }); expect((refusal as Error).message).toContain('--keep-work'); expect(cards).toBe(0);
+    expect(await readFile(join(unproven, 'tree/file.txt'), 'utf8')).toBe('WORK');
+    // Governed --force: every owned file, the workspaces included, is archived, verified, then deleted; nothing is left of the project's .deckent.
+    const all = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
+    expect(all.blockers).toEqual([]); expect(all.work.workspaces).toBe(2);
     const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'all', planDigest: all.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(result.status).toBe('completed'); await expect(lstat(local)).rejects.toMatchObject({ code: 'ENOENT' });
+    const removed = (JSON.parse(await readFile(`${result.backup.destination!}.archive.json`, 'utf8')) as { resources: { resourceId: string }[] }).resources.map(row => row.resourceId);
+    expect(removed).toContain(hash(join(unproven, 'tree/file.txt'))); // K7: in the encrypted backup before it went
     // `deckent backup restore <set>`: the semantic set and the uninstall archive beside it bring the installation and its files back.
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE'); expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER');
-    expect((await lstat(hook)).mode & 0o777).toBe(0o755);
+    expect((await lstat(hook)).mode & 0o777).toBe(0o755); expect(await readFile(join(unproven, 'tree/file.txt'), 'utf8')).toBe('WORK');
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
