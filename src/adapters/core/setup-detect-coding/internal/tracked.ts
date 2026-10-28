@@ -1,6 +1,5 @@
 import { findExecutable, runDetectCommand, type DetectEnvironment } from '#adapters/core/setup-detect-execution/index.js';
 import registry from './coding.json' with { type: 'json' };
-
 /**
  * U7 (audit C): whether Git tracks any of `paths` in the work tree holding `directory`, under the registry's read-only Git argv (no hooks, no
  * fsmonitor, no user/system config, bounded). `ls-files -z` lists exactly the tracked ones (`--error-unmatch` would fail on the first untracked

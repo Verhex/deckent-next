@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engine/index.js';
-
 const state = z.enum(['present', 'none', 'unknown', 'not-run']), count = z.number().int().nonnegative().max(64), cli = z.enum(['found', 'absent', 'unknown']);
 /** The coding/git family's facts (I-S2); locale-free and secret-free: sign-ins are present or absent, never read. `gitPath` (BR1): the Git the
  * execution settings name, the first on PATH. */
@@ -10,7 +9,6 @@ export const codingFactsSchema = z.object({ schemaVersion: z.literal(1), git: cl
   hosts: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), cli, login: cli }).strict()).max(16) }).strict();
 export type CodingFacts = z.infer<typeof codingFactsSchema>;
 export const CODING_REPOSITORY_STAGE_ID = 'coding:repository', CODING_HOSTS_STAGE_ID = 'coding:hosts';
-
 const reason = (code: string, params: Record<string, string | number> = {}) => ({ code: `setup.coding.${code}`, params });
 /** No Git or not a repository: coding work is not set up here (settled; chat, MCP and governed tools do not need it). */
 function repository({ facts }: SetupStageContext): SetupDecision {

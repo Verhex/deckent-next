@@ -141,6 +141,19 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     await writeFile(join(plain, 'a.txt'), 'changed'); // BeUser M-32: uncommitted work in the tree is observed (read-only `git status --porcelain`)
     expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'present' });
     git(plain, 'checkout', '--', 'a.txt');
+    // Security review (M-32 probe): the repository's own config/attributes never run a program — an fsmonitor hook and a clean/process filter
+    // that write a marker stay silent, and the probe still sees the change.
+    const marker = join(plain, '..', `marker-${Date.now()}`), hook = join(plain, '..', `hook-${Date.now()}.sh`);
+    await writeFile(hook, `#!/bin/sh\ntouch ${marker}\ncat\n`, { mode: 0o755 });
+    git(plain, 'config', 'core.fsmonitor', hook); git(plain, 'config', 'filter.evil.clean', hook); git(plain, 'config', 'filter.evil.process', hook);
+    git(plain, 'config', 'filter.evil.required', 'true'); git(plain, 'config', 'diff.external', hook);
+    await writeFile(join(plain, '.gitattributes'), '* filter=evil diff=evil\n'); await writeFile(join(plain, 'a.txt'), 'changed again');
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'present' });
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    // A folder this user does not own (or others may write) is not inspected.
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false, owned: async () => false } })).toMatchObject({ changes: 'unknown' });
+    for (const key of ['core.fsmonitor', 'filter.evil.clean', 'filter.evil.process', 'filter.evil.required', 'diff.external']) git(plain, 'config', '--unset', key);
+    await rm(join(plain, '.gitattributes')); git(plain, 'checkout', '--', 'a.txt');
     expect(coding(full, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.repository', params: { targets: 1 } } });
     const self = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => true } });
     expect(coding(self, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.productSource' } });
