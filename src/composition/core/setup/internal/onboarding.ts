@@ -1,11 +1,10 @@
-import { previewFirstCommit, observeFirstCommitRecovery } from '#adapters/index.js';
+import { previewFirstCommit, observeFirstCommitRecovery, openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { userInfo } from 'node:os';
 import { planSetup, affectedToolchainProfiles, assertAuthorityWitness, RunPolicyAuthorization, type SetupStage, type RunIntentRecord } from '#engine/index.js';
 import { ErrorRegistry, sha256, loadConfig, productResourcePath, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { openOnboardingDeferrals, openSqliteRunProposalReader, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { loadModelsSurface } from '#surfaces/index.js';
 import type { TerminalLaunchContext } from '#surfaces/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';

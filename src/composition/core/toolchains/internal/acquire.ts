@@ -1,11 +1,10 @@
 import limits from './limits.json' with { type: 'json' };
-import { readWorkerImageState, writeWorkerImageState, recoverWorkerImageContext, observeWorkerImageProgress, watchWorkerImageRequests } from '#adapters/index.js';
+import { readWorkerImageState, writeWorkerImageState, recoverWorkerImageContext, observeWorkerImageProgress, watchWorkerImageRequests, buildWorkerImageInHome, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { interruptedWorkerImage, matchingWorkerConsent, workerConsentBinding, workerImageBudget, insertHistoryLine, type WorkerImageState } from '#engine/index.js';
-import { buildWorkerImageInHome, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import type { NpmLatestVersionFetcher } from './currency.js';
 import { configuredWorkerBuilder } from './builder.js';
 import { writeArtifact } from './update.js';

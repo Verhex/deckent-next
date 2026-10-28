@@ -1,6 +1,5 @@
-import { firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/index.js';
+import { firstCommitTarget, FIRST_COMMIT_OPERATION, attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { assertAuthorityWitness } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, localPrincipalChannel } from '#adapters/index.js';
 import { sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { applyConfirmedEffects } from '#composition/core/approvals/index.js';

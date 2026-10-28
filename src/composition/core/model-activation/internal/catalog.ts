@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
-import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced } from '#adapters/index.js';
+import { PROVIDER_CONNECT_REGISTRY, providerConnectModelPriced, openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
 import { admitConfiguredChatActivation } from './admit.js';
 import { inspectModelBinding, inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { ModelCatalogError, modelCatalogCommandSchema, type ModelCatalogQuery } from '#domain/index.js';
 import { planCatalogStateCascade, ModelCatalogApplication, ModelCatalogPolicyAuthorization } from '#engine/index.js';
-import { openSqliteModelCatalogReader, openSqliteModelCatalogStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredModelActivation } from './inspect.js';

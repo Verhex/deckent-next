@@ -3,9 +3,7 @@ import { prepareProductDirectory, getConfigKnownSecrets, redactForRecord, type C
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { applyConfirmedEffects } from '#composition/core/approvals/index.js';
-import { openHostProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY } from '#adapters/index.js';
-import { createWorkspaceScope } from '#adapters/index.js';
-import { WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
+import { openHostProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY, createWorkspaceScope, WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { ProjectInstructionPort, InstructionInitPreview } from '#engine/index.js';
 import type { EffectCommand } from '#domain/index.js';
 

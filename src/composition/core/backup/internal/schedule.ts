@@ -1,10 +1,9 @@
-import { CURRENT_LEDGER_VERSION } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION, openConfiguredSecretStore, inspectScheduledSets, pruneScheduledSets } from '#adapters/index.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { openConfiguredSecretStore, inspectScheduledSets, pruneScheduledSets } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { ErrorRegistry, productResourcePath, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { executeConfiguredBackup } from './application.js';
