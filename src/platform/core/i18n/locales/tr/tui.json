@@ -1104,5 +1104,9 @@
   "terminal.jobs.parked.environment-not-ready": "ortam hazır değil",
   "terminal.info.scope.modeRevoked": "{mode} · kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil",
   "terminal.delivery.deliveredTitle": "{title} (teslim edildi, benimsenmedi)",
-  "terminal.delivery.adoptNone": "Benimseme hedefi ayarlı değil, bu yüzden sonuç teslim referansında kalıyor. Bir dalı ona taşımak için önce o dalı listeleyin (asla main ya da varsayılan dal değil): deckent config set execution.adoption.targets '[\"refs/heads/<dal>\"]', sonra yeniden /deliver."
+  "terminal.delivery.adoptNone": "Benimseme hedefi ayarlı değil, bu yüzden sonuç teslim referansında kalıyor. Bir dalı ona taşımak için önce o dalı listeleyin (asla main ya da varsayılan dal değil): deckent config set execution.adoption.targets '[\"refs/heads/<dal>\"]', sonra yeniden /deliver.",
+  "terminal.delivery.dismissHint": "x kenara koy (saklanır; /deliver listeler)",
+  "terminal.delivery.dismissed": "Kenara kondu: {title} ({run} işi, {task} görevi). /deliver ve monitor artık önermiyor; yaması korunuyor. /deliver içindeki kenara konanlar satırından ya da şununla geri getirin: deckent task integration-restore --scope {scope} --run {run} --task {task}",
+  "terminal.delivery.dismissedTitle": "{title} — kenara kondu; Enter geri getirir",
+  "terminal.delivery.restored": "Geri getirildi: {title} yeniden /deliver içinde."
 }

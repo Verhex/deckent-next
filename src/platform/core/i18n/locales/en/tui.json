@@ -1104,5 +1104,9 @@
   "terminal.jobs.parked.environment-not-ready": "environment not ready",
   "terminal.info.scope.modeRevoked": "{mode} · stored full-auto is no longer granted here, so it is not in effect",
   "terminal.delivery.deliveredTitle": "{title} (delivered, not adopted)",
-  "terminal.delivery.adoptNone": "No adoption target is configured, so this result stays at its delivery ref. To move a branch onto it, list that branch first (never main or the default branch): deckent config set execution.adoption.targets '[\"refs/heads/<branch>\"]', then /deliver again."
+  "terminal.delivery.adoptNone": "No adoption target is configured, so this result stays at its delivery ref. To move a branch onto it, list that branch first (never main or the default branch): deckent config set execution.adoption.targets '[\"refs/heads/<branch>\"]', then /deliver again.",
+  "terminal.delivery.dismissHint": "x set aside (kept; /deliver lists it)",
+  "terminal.delivery.dismissed": "Set aside: {title} (run {run}, task {task}). /deliver and the monitor no longer offer it; its patch is kept. Bring it back from the set-aside rows in /deliver or: deckent task integration-restore --scope {scope} --run {run} --task {task}",
+  "terminal.delivery.dismissedTitle": "{title} — set aside; Enter brings it back",
+  "terminal.delivery.restored": "Brought back: {title} is offered in /deliver again."
 }

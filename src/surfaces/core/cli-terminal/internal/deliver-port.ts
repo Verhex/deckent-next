@@ -81,7 +81,7 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
     },
     ...(describe ? { async summary(view: TargetQueueView) { return (await summaries([queueSummaryRequest(view, DELIVERY_RENDER_LIMITS.cardTopPaths)]))[0] ?? null; } } : {}),
   } : undefined;
-  return { ...(queue ? { queue } : {}),
+  const { changeDeliveryDismissal: change, listDismissedDeliveries: listed } = context; /* BeUser M-33: set aside / bring back (person card in the composition) */ return { ...(queue ? { queue } : {}), ...(change && listed ? { async dismiss(target: Parameters<TerminalDeliveryPort['preview']>[0], action: 'dismiss' | 'restore') { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options); await change(root, { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: identity.attemptId, action }, options); }, dismissed: (scopeId: string, limit: number) => listed(root, scopeId, limit, options) } : {}),
     async preview(target) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
       const preview = await previewWorkspacePatch(root, identity, options);

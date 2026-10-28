@@ -2156,7 +2156,9 @@
         "src/adapters/core/git-workspace",
         "src/capabilities/core/evaluation-evidence",
         "src/engine/core/effect",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/engine/core/audit",
+        "src/engine/core/runtime"
       ],
       "plan": "ISOLATION"
     },
@@ -2805,7 +2807,8 @@
         "src/engine/core/policy",
         "src/composition/core/agent-catalog",
         "src/platform/core/managed-files",
-        "src/adapters/core/brain-wait-store"
+        "src/adapters/core/brain-wait-store",
+        "src/composition/core/workspace-patch"
       ],
       "plan": "MONITOR"
     },

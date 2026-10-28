@@ -916,3 +916,14 @@ Kaynak: dış `proof/BEUSER-SWEEP-2026-10-27/LAW-AUDIT-E05.md` (temiz bağlam ka
 - **hub-read (lead kararı, Jev bfba048a):** `inspect`, `search`, `export` aynı kurallarla. Yayıncı eylemleri (`publish`, `yank`, `revoke`)
   hiçbir kurucu ailesine girmez. Varsayılan kaynak ve halka açılma (H9) bu kararın dışındadır.
 - Şablon değişmez (v18 kalır); aileler `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` kartıyla verilir.
+
+## Owner kararları — 2026-10-28: BeUser teslim ve proje talimatı
+
+Kaynak: lead'in BEUSER-FIX-2 atama mesajları (Jev c10e0946, c6c1182a).
+
+- **AYSE-19 proje talimatı güven penceresi (owner, 2026-10-28, Jev c6c1182a):** pencere kalır, ama dosya içeriği (digest) başına bir kez
+  sorulur ve kişinin cevabı, ret de dahil, içerik değişene kadar hatırlanır; otomatik güven yok; sözleşme değişmez.
+- **M-33 teslim bekleyen sonucu bırakma (owner, 2026-10-28, Jev c10e0946):** Seçenek 1. Ek ve yalnız kişiye ait audit konusu
+  `delivery-dismissed {runId, taskId, attemptId, action: dismiss|restore}`, terminal tanığıyla. /deliver ve monitor bırakılan görevi
+  gizler; /deliver içindeki "bırakılanlar" listesi ve `deckent task integration-restore` geri getirir. Yama ve gözetim (custody)
+  değişmez; ledger/run şeması ve göç yok.

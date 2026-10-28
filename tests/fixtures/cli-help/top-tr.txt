@@ -53,7 +53,8 @@ Başlarken:
       integration-inspect | integration-queue-enqueue | integration-queue-list |
       integration-queue-inspect | integration-queue-confirm |
       integration-queue-rollback | integration-deliver | integration-adopt |
-      integration-rollback | transcript
+      integration-rollback | integration-dismiss | integration-restore |
+      transcript
       --scope <id> --run <id> --task <id>
   pool        Havuzu incele, beklet veya sürdür (eylemsiz: status)
       status | set-capacity | hold | resume | quota-release

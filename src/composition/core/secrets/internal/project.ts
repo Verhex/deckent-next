@@ -8,7 +8,6 @@ import { assertPublicSecretName, assertAuthorityWitness, AuditApplication, Autho
   type CredentialSource, type ProjectCredentialResolver, type ProjectVaultAnchor } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 /** What the project credential path needs of a verified scope context (the invocation and scoped-request contexts both carry it). */
 export type ProjectSecretContext = Pick<ScopeContext, 'config' | 'layout' | 'installationId' | 'projectId'>;
@@ -19,7 +18,6 @@ const globalRoot = (options: ConfigLoadOptions) => {
   if (root === null) throw ErrorRegistry.createError('SECRET_STORE_UNAVAILABLE', { params: { backend: 'project-vault' } });
   return root;
 };
-
 /**
  * The project a vault belongs to (owner decision 5, lead 2026-10-21): a verified linked worktree resolves to its repository's main working tree
  * (one project, one vault, one grant record); any other project to itself. A `.git` file that is not a worktree of its repository (a copied
@@ -41,7 +39,6 @@ export async function resolveProjectVaultAnchor(context: ProjectSecretContext, o
   if (installationId === null || projectId === null || binding === null) return null;
   return projectVaultAnchorSchema.parse({ installationId, projectId, binding, repository: repository.kind === 'none' ? null : repository.repository, projectRoot: anchorRoot });
 }
-
 /** The project's vault, read-only (also the inventory's current project): its anchor, directory (null: never written), `.deck`, store and grants. An existing vault of another owner is refused. */
 export async function openProjectSecrets(context: ProjectSecretContext, options: ConfigLoadOptions) {
   const anchor = await resolveProjectVaultAnchor(context, options);
@@ -53,7 +50,6 @@ export async function openProjectSecrets(context: ProjectSecretContext, options:
     store: directory ? openProjectVaultStore(directory, anchor, env, platform) : null,
     grants: directory ? await openSecretGrantStore(root, anchor, lockMs(context)).read() : null };
 }
-
 /**
  * The one provider credential entry point (PRE-8 v2 §1.5): every provider read (model invocation and its invocable-now check, model
  * discovery, provider workspaces) goes through `.deck` → ownership → project vault or main vault through a grant → typed refusal, before any
@@ -78,7 +74,6 @@ export function projectCredentialResolver(context: ProjectSecretContext, scopeId
     },
   });
 }
-
 /** Typed refusal before send (headless, Brain, runtime and terminal turns alike): the decision, never a transport error. */
 export async function assertProjectCredential(context: ProjectSecretContext, scopeId: string, name: string, options: ConfigLoadOptions): Promise<void> {
   const decision = await projectCredentialResolver(context, scopeId, options).check(name);
@@ -86,7 +81,6 @@ export async function assertProjectCredential(context: ProjectSecretContext, sco
   const anchor = await resolveProjectVaultAnchor(context, options).catch(() => null);
   throw credentialSourceError(decision.code, { name, project: anchor?.projectRoot ?? context.config.projectRoot, scopeId });
 }
-
 /** The same decision for a project root and scope (the terminal `/provider` window, after storing a key). */
 export async function assertConfiguredProjectCredential(projectRoot: string, scopeId: string, name: string, options: ConfigLoadOptions = {}): Promise<void> {
   await assertProjectCredential(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, name, options);

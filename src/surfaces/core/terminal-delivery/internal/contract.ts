@@ -7,7 +7,8 @@ import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView,
  * existing integration applications and the TESLIM-GUVENLIK confirmation port that the trusted CLI composition binds to this verified TTY.
  */
 /** `delivered` (BeUser M-25/DR2-07): the task's result is already at its delivery ref and not adopted; the window offers the adoption step only. */
-export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome }>;
+/** `setAside` (BeUser M-33): a set-aside row in /deliver carrying its own title; opening it brings the result back first. */
+export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome; setAside?: string }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /**
  * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
@@ -44,6 +45,9 @@ export interface TerminalDeliveryPort {
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
   previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card), and the scope's set-aside tasks. */
+  dismiss?(target: DeliveryTarget, action: 'dismiss' | 'restore'): Promise<void>;
+  dismissed?(scopeId: string, limit: number): Promise<readonly Readonly<{ runId: string; taskId: string; atMs: number }>[]>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
   deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
   /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. A verification Run is named like the CLI's

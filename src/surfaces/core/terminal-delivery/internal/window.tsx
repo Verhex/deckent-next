@@ -23,6 +23,8 @@ export interface DeliveryWindowLabels {
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
   /** BeUser M-25: an already-delivered task in the /deliver list (`{title}`), and the adoption step with no adoption target configured. */
   readonly deliveredTitle: string; readonly adoptNone: string;
+  /** BeUser M-33: the x hint, the set-aside summary, a set-aside row in /deliver (`{title}`) and the brought-back summary. */
+  readonly dismissHint: string; readonly dismissed: string; readonly dismissedTitle: string; readonly restored: string;
   readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string; readonly summaryNotAdopted: string;
   readonly next: Readonly<Record<string, string>>; readonly nextDefault: string; readonly pickerTitle: string; readonly none: string; readonly fallbackTitle: string;
   /** Y1: choosing the verification Run of an adoption (`execution.adoption.verification`), and how an adoption names its verification. */
@@ -55,6 +57,8 @@ interface Entry {
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
   reattempt?: boolean; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
+/** How many dismissal records one /deliver read looks at (newest first). */
+const DISMISSED_READ_MAX = WINDOW.dismissedRead;
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
 
@@ -101,7 +105,10 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       });
   }, [changed, summarize]);
   const open = useCallback((target: DeliveryTarget, opening: DeliveryOpening) => {
-    if (!latest.current.port || !latest.current.labels) return;
+    const port = latest.current.port, words = latest.current.labels; if (!port || !words) return;
+    if (target.setAside !== undefined) { const { setAside: title, ...rest } = target, back = Object.freeze({ ...rest, title });
+      port.dismiss?.(back, 'restore').then(() => { latest.current.summary(fillTemplate(words.restored, { title: humanRecordText(back.title, latest.current.known) })); openRef.current(back, opening); },
+        error => latest.current.summary(latest.current.errorText(error), 'error')); return; }
     seen.current.add(target.key);
     let entry = entries.current.get(target.key);
     if (!entry) {
@@ -114,6 +121,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       : order.current.includes(target.key) ? order.current : [...order.current, target.key];
     changed();
   }, [changed, load]);
+  const openRef = useRef(open); openRef.current = open;
   // A Run this session admitted reaching "awaiting delivery" opens its window once, in the background; a refreshed snapshot never reopens it.
   const targets = useMemo(() => labels ? awaitingDeliveryTargets(input.runs, labels.fallbackTitle) : [], [input.runs, labels]);
   useEffect(() => { for (const target of targets) if (!seen.current.has(target.key)) open(target, 'background'); }, [targets, open]);
@@ -226,7 +234,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const visible = order.current.map(key => entries.current.get(key)).find((entry): entry is Entry => Boolean(entry && !entry.closed)) ?? null;
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
-      body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels, Boolean(port?.queue))} position={input.position} decision
+      body={deliveryLines(visible, labels, input.known)} hints={withDismiss(visible, labels, hintsOf(visible, labels, Boolean(port?.queue)), Boolean(port?.dismiss))} position={input.position} decision
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
@@ -236,6 +244,13 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
           return true;
         }
         if (stage.kind === 'queue') { if (decision === 'yes') { confirmQueue(visible); return true; } if (decision === 'no') { close(visible); return true; } return false; }
+        // BeUser M-33: x sets this result aside (person card in the composition, reversible); it stays retained and /deliver lists it under "set aside".
+        if (text === 'x' && !key.ctrl && !key.meta && DISMISSABLE.has(stage.kind) && latest.current.port?.dismiss) {
+          const entry = visible, words = latest.current.labels!; latest.current.port.dismiss(entry.target, 'dismiss').then(() => {
+            latest.current.summary(fillTemplate(words.dismissed, { title: humanRecordText(entry.target.title, latest.current.known), scope: entry.target.scopeId, run: entry.target.runId, task: entry.target.taskId }));
+            entry.closed = true; entries.current.delete(entry.target.key); order.current = order.current.filter(key => key !== entry.target.key); changed(); },
+          error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return true;
+        }
         if (stage.kind === 'confirm') {
           if (decision !== null) stage.waiting.resolve(decision === 'yes');
           return decision !== null;
@@ -295,8 +310,17 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     return [...awaiting, ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
       && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
-    target: (key: string) => entries.current.get(key)?.target ?? null };
+    target: (key: string) => entries.current.get(key)?.target ?? null,
+    /** BeUser M-33: the candidates with the set-aside ones moved last as their own rows (newest dismissal records of the same scopes). */
+    async offered(targets: readonly DeliveryTarget[]): Promise<readonly DeliveryTarget[]> { const read = latest.current.port?.dismissed; if (!read || !labels) return targets;
+      const aside = new Set((await Promise.all([...new Set(targets.map(target => target.scopeId))].map(scopeId => read(scopeId, DISMISSED_READ_MAX).catch(() => [])) /* an unreadable record keeps every result offered (the monitor names the failure) */)).flat().map(row => `${row.runId}\0${row.taskId}`));
+      const isAside = (target: DeliveryTarget) => aside.has(`${target.runId}\0${target.taskId}`);
+      return [...targets.filter(target => !isAside(target)), ...targets.filter(isAside).map(target => Object.freeze({ ...target, setAside: target.title, title: fillTemplate(labels.dismissedTitle, { title: target.title }) }))]; } };
 }
+
+/** BeUser M-33: x is offered wherever it acts (the same stages as the key handler). */
+const DISMISSABLE = new Set(['ready', 'delivered', 'failed']);
+const withDismiss = (entry: Entry, labels: DeliveryWindowLabels, hints: string, available: boolean) => available && DISMISSABLE.has(entry.stage.kind) ? `${hints} · ${labels.dismissHint}` : hints;
 
 function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boolean): string {
   switch (entry.stage.kind) {

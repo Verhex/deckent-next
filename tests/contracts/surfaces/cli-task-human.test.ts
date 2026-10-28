@@ -335,3 +335,13 @@ it('BeUser M-25/DR2-07: `task integration-adopt --scope --run --target` finds th
   const refused = await run(args, handlers('adopted'), root);
   expect(refused.code).not.toBe(0); expect(refused.err).toContain('ADOPTION_NOT_DELIVERED'); expect(calls).toHaveLength(1);
 });
+
+it('BeUser M-33: setting a result aside or bringing it back is the person\'s terminal act; a pipe or agent is refused before anything is recorded', async () => {
+  const root = await project(), identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a1', layoutRevision: 'l', generation: 1 }, calls: unknown[] = [];
+  const handlers = { async inspectInventory() { return { page: { entries: [{ identity }], nextAfter: null } }; }, async changeDeliveryDismissal(_root: string, input: unknown) { calls.push(input); } };
+  for (const action of ['integration-dismiss', 'integration-restore']) {
+    const refused = await run(['task', action, '--scope', 's', '--run', 'r', '--task', 't', '--json'], handlers, root);
+    expect(refused.code).not.toBe(0); expect(refused.err).toContain('AUTHORITY_WITNESS_REQUIRED');
+  }
+  expect(calls).toEqual([]);
+});

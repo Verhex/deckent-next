@@ -52,6 +52,12 @@ describe('delivery outlook of an accepted Run (M2)', () => {
     expect(project(evidence(work, [done('w', {}, { patchRecorded: true })])).deliveryOutlook).toBe('awaiting-delivery');
     expect(project(evidence(accepted([{ id: 'v', work: false }]), [done('v', {}, { patchRecorded: false })])).deliveryOutlook).toBe('none');
   });
+  it('BeUser M-33: a set-aside task owes no delivery; the Run still awaits delivery for its other retained patch', () => {
+    const two = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]), attempts = [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true })];
+    expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w']) }).deliveryOutlook).toBe('awaiting-delivery');
+    expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w', 's\0r\0x']) }).deliveryOutlook).toBe('none');
+    expect(project({ ...evidence(two, attempts), dismissed: new Set(['other\0r\0w', 'other\0r\0x']) }).deliveryOutlook).toBe('awaiting-delivery');
+  });
   it('negative: a missing patch on any accepted work task wins, a receipt suppresses the outlook, unknown evidence and unaccepted Runs give none', () => {
     const two = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]);
     expect(project(evidence(two, [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: false })])).deliveryOutlook).toBe('patch-not-prepared');

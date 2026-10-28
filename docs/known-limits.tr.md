@@ -383,8 +383,8 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
 - **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
   kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
   dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın.
-- **Teslimden sonra terminal penceresi o görev için yeniden açılmaz;** bazı mesajlar `/deliver`'ın yeniden açtığını söylese de.
-  *Yol:* önceki maddedeki gibi komut satırından dala alın.
+- **Kenara konan sonuç yalnız `/deliver`'dan ve monitor'ün teslim sütunundan gizlenir.** `/runs`, `run inspect` ve Run
+  raporu yamasının teslim beklediğini söylemeye devam eder. *Yol:* `/deliver` onu kenara konan satırında listeler.
 - **Dala alma penceresi doğrulama Run'larını commit'e göre önceden süzemez.** Yapılandırılmış türdeki kabul edilmiş
   doğrulama Run'larını listeler; başka bir commit'i doğrulamış olan dala almada reddedilir ve pencere seçime döner.
 - **Doğrulama Run'ı terminalden oluşturulamaz.** *Yol:* pencerenin gösterdiği `deckent run create ... --delivery-command-id

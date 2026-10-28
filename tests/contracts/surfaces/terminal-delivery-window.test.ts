@@ -38,11 +38,11 @@ const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 
 
 type PortOptions = { diffs?: readonly DeliveryFileDiff[]; targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
   /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
-  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>> };
+  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>>; dismissable?: boolean };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
 function recordingPort(options: PortOptions = {}) {
   const calls: string[] = [], views: EffectConfirmationView[] = [], adoptions: { commandId: string; verificationRunId: string | undefined }[] = [];
-  let reads = 0;
+  let reads = 0; const aside = new Set<string>();
   const card = (preview: DeliveryPreview, commandId: string, extra: Partial<EffectConfirmationView>): EffectConfirmationView => ({ operation: 'deliver-integration',
     scopeId: preview.identity.scopeId, commandId, actor: { id: 'owner', issuer: 'host', subject: '1000' }, resource: REF, from: BASE, to: COMMIT,
     runId: preview.identity.runId, taskId: preview.identity.taskId, title: 'Ship order', files: options.viewFiles ?? ['note.txt'], added: 1, removed: 1, ...extra });
@@ -79,6 +79,10 @@ function recordingPort(options: PortOptions = {}) {
       calls.push('verification-runs'); const all = options.candidates ?? [[]];
       return all[Math.min(reads++, all.length - 1)]!;
     },
+    // BeUser M-33: the person's set-aside records, latest wins (as the audit reader).
+    ...(options.dismissable ? { async dismiss(target: { runId: string; taskId: string }, action: 'dismiss' | 'restore') { calls.push(`${action}:${target.runId}/${target.taskId}`);
+      if (action === 'dismiss') aside.add(`${target.runId}/${target.taskId}`); else aside.delete(`${target.runId}/${target.taskId}`); },
+    async dismissed() { return [...aside].map(key => ({ runId: key.split('/')[0]!, taskId: key.split('/')[1]!, atMs: 1 })); } } : {}),
   };
   return { port, calls, views, adoptions };
 }
@@ -293,6 +297,21 @@ describe('delivery window on the real Workline', () => {
     expect(frame(h)).toContain('WINDOW-FOCUS'); // a person-opened window takes focus
     await press(h, ESC, 100);
     expect(frame(h)).not.toContain(windowTitle); expect(h.calls.filter(call => call !== 'preview:r')).toEqual([]);
+  });
+
+  it('BeUser M-33: x sets the result aside (patch kept, restore named); /deliver lists it as set aside and Enter brings it back to its window', async () => {
+    const h = harness({ dismissable: true }); await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
+    await press(h, CTRL_O); await until(() => frame(h).includes(WORDS.dismissHint), 'x offered'); await press(h, 'x', 120);
+    expect(frame(h)).not.toContain(windowTitle); expect(h.calls).toEqual(['preview:r', 'dismiss:r/task']);
+    expect(squeeze(transcript(h))).toContain(squeeze('Set aside: ORDER-TASK (run r, task task).'));
+    expect(squeeze(transcript(h))).toContain(squeeze('deckent task integration-restore --scope s --run r --task task'));
+    expect(frame(h)).not.toContain(`ORDER-TASK · ${EN.activeWork!.deliveryWaiting}`);
+    await press(h, '/deliver\r', 150);
+    await until(() => frame(h).includes('ORDER-TASK — set aside; Enter brings it back'), 'set-aside row');
+    await press(h, '\r', 150);
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'restored window');
+    expect(h.calls).toContain('restore:r/task'); expect(transcript(h)).toContain('Brought back: ORDER-TASK is offered in /deliver again.');
   });
 
   it('a stale base is refused in human words with the next step; nothing is prepared or written', async () => {

@@ -205,7 +205,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   // BeUser M-25/DR2-07: `integration-adopt --scope --run [--task] --target` finds the delivered task, its attempt and delivery command itself.
   const lightAdopt = action === 'integration-adopt' && !attemptId && !layoutRevision && !generation;
   if (lightAdopt && scopeId && runId) { await fillDelivered(values, context); taskId = values.get('--task'); }
-  const resolveLatest = (['patch-preview', 'transcript', 'integration-inspect'].includes(action) || lightAdopt) && !attemptId && !layoutRevision && !generation;
+  const resolveLatest = (['patch-preview', 'transcript', 'integration-inspect', 'integration-dismiss', 'integration-restore'].includes(action) || lightAdopt) && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity, resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
   if (action === 'inspect') {
     if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
@@ -225,6 +225,16 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   const locale = commandLocale(context, values.get('--lang'));
   const options = { env: context.env ?? process.env };
   if (resolvedNotice) (json ? context.stderr ?? process.stderr : context.stdout ?? process.stdout).write(`${t('cli.task.resolvedAttempt', resolvedNotice, locale)}\n`);
+  if (action === 'integration-dismiss' || action === 'integration-restore') {
+    // BeUser M-33 (owner 2026-10-28): a person's terminal act; the composition checks the witness again and seals it. Patch and custody stay.
+    if (cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: argv.slice(0, 2).join(' ') } });
+    if (!context.changeDeliveryDismissal) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const dismiss = action === 'integration-dismiss';
+    await context.changeDeliveryDismissal(context.root ?? process.cwd(), { scopeId: identity.scopeId, runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId,
+      action: dismiss ? 'dismiss' : 'restore' }, options);
+    emit({ schemaVersion: 1, action: dismiss ? 'dismiss' : 'restore', ...identity }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: () =>
+      dismiss ? t('cli.task.dismissed', { scope: identity.scopeId, run: identity.runId, task: identity.taskId }, locale) : t('cli.task.restored', { run: identity.runId, task: identity.taskId }, locale) }); return;
+  }
   if (action === 'integration-deliver') {
     const commandId = values.get('--command-id'), integrationCommandId = values.get('--candidate-command-id');
     if (!commandId || !integrationCommandId) throw usage(!commandId ? '--command-id' : '--candidate-command-id');

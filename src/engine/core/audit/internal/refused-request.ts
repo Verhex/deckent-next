@@ -24,3 +24,21 @@ export function listRefusedRunRequests(audit: AuditApplication, scopeId: string,
     return { atMs: record.event.atMs, commandId: subject.commandId, code: subject.code, title: subject.title };
   });
 }
+
+type Dismissal = Extract<AuditEvent['subject'], { kind: 'delivery-dismissed' }>;
+/** BeUser M-33: the sealed event of a person setting a task's undelivered result aside, or bringing it back. */
+export function deliveryDismissalEvent(input: { readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly policyRevision: string;
+  readonly runId: string; readonly taskId: string; readonly attemptId: string; readonly action: Dismissal['action']; readonly atMs: number }): AuditEvent {
+  const subject: Dismissal = { kind: 'delivery-dismissed', runId: input.runId, taskId: input.taskId, attemptId: input.attemptId, action: input.action };
+  return auditEventSchema.parse({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId,
+    principal: { issuer: input.principal.issuer, subject: input.principal.subject }, policyRevision: input.policyRevision, atMs: input.atMs, subject });
+}
+/** The tasks of one scope whose latest dismissal record is `dismiss` (newest records first, at most `limit` read). */
+export function dismissedDeliveries(audit: AuditApplication, scopeId: string, limit: number): readonly Readonly<{ runId: string; taskId: string; atMs: number }>[] {
+  const latest = new Map<string, Readonly<{ runId: string; taskId: string; atMs: number; action: string }>>();
+  for (const record of audit.listRecentKind(scopeId, 'delivery-dismissed', 0, limit)) {
+    const subject = record.event.subject as Dismissal, key = `${subject.runId}\0${subject.taskId}`;
+    if (!latest.has(key)) latest.set(key, { runId: subject.runId, taskId: subject.taskId, atMs: record.event.atMs, action: subject.action });
+  }
+  return [...latest.values()].filter(row => row.action === 'dismiss').map(({ runId, taskId, atMs }) => ({ runId, taskId, atMs }));
+}

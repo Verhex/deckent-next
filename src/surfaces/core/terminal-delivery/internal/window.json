@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
   "maxFiles": 50,
-  "diffViewLines": 18
+  "diffViewLines": 18,
+  "dismissedRead": 200
 }

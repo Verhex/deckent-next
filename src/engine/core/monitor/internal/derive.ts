@@ -12,6 +12,8 @@ import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, Mo
 export interface MonitorRunEvidence {
   readonly run: MonitorLedgerRun; readonly approvals: readonly MonitorLedgerApproval[]; readonly pool: MonitorLedgerPool | null;
   readonly workers: ReadonlyMap<string, WorkerObservation>; readonly observedAt: number;
+  /** BeUser M-33: set-aside `scope\0run\0task` keys; such a task owes no delivery in the outlook. */
+  readonly dismissed?: ReadonlySet<string>;
 }
 /**
  * The one blocker precedence (MONITOR-DATA): repair/human conditions outrank progress; equal codes keep graph order. `unknown` (no
@@ -148,7 +150,7 @@ function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): Monit
   const snapshot = e.run.snapshot; let ready = false, unknown = false;
   for (const task of snapshot.graph.tasks) {
     const progress = snapshot.progress.find(value => value.taskId === task.id);
-    if (!task.workInput || progress?.phase !== 'accepted') continue;
+    if (!task.workInput || progress?.phase !== 'accepted' || e.dismissed?.has(`${snapshot.identity.scopeId}\0${snapshot.identity.runId}\0${task.id}`)) continue;
     const recorded = attemptOf(e.run, task.id)?.dispatch?.patchRecorded;
     if (recorded === false) return 'patch-not-prepared';
     if (recorded === true) ready = true; else unknown = true;

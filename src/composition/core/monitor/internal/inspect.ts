@@ -9,6 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
+import { inspectConfiguredDismissedDeliveries } from '#composition/core/workspace-patch/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
@@ -43,7 +44,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   const scope = async (path: string, scopeId: string) => (await recall(path))(`context\0${scopeId}\0${path}`, () => loadConfiguredScopeContext(path, scopeId, options, 'read'));
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadComposedConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
-    readImageRefresh: target => inspectToolchainRefresh(target.path, options),
+    readImageRefresh: target => inspectToolchainRefresh(target.path, options), readDismissed: (target, scopeId, limit) => inspectConfiguredDismissedDeliveries(target.path, scopeId, limit, options),
     // f4: active Brain quota waits (state/brain-waits) of this install; the reader creates nothing, a missing store is no wait.
     readBrainWaits: async target => { const layout = (await installed(target.path)).config.productLayout;
       return new FileBrainQuotaWaitStore(async () => inspectProductDirectory(layout, 'brainWaits').catch((error: unknown) => {

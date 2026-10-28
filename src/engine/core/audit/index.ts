@@ -10,4 +10,4 @@ export { recordAuditSummary } from './internal/record-text.js';
 export { AuthorityDecisionRecords } from './internal/authority-decision.js';
 export { AuditFollow } from './internal/follow.js';
 export { PolicyTurnRecord } from './internal/policy-turn.js';
-export { runRequestRefusedEvent, listRefusedRunRequests, type RefusedRunRequest } from './internal/refused-request.js';
+export { runRequestRefusedEvent, listRefusedRunRequests, deliveryDismissalEvent, dismissedDeliveries, type RefusedRunRequest } from './internal/refused-request.js';
