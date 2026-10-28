@@ -109,6 +109,9 @@ async function forgetLegacy(directory: string, name: string) {
 
 /** Review M12: this folder's own records in the trust store, named by their owner rule: folder + content records, and ref records for the
  * given refs. Another folder's records (or a ref this caller does not name) are never in the list. */
+/** The trust store is this user's private folder, never a link (`exact`: not through a linked ancestor either), outside the project folder. */
+async function trustRoot(directory: string, root: string, exact = false) { const info = await lstat(directory), real = await realpath(directory).catch(() => ''), rel = relative(root, real);
+  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700 || exact && real !== directory || !rel || (rel !== '..' && !rel.startsWith(`..${sep}`))) throw new Error('unsafe'); }
 const folderDigest = async (rootInput: string) => { const root = await realpath(rootInput), identity = await stat(root); return instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`); };
 export async function folderTrustRecords(rootInput: string, trustDirectory: string, refs: readonly string[]): Promise<readonly string[]> {
   const rootDigest = await folderDigest(rootInput), found: string[] = [];
@@ -121,7 +124,8 @@ export async function folderTrustRecords(rootInput: string, trustDirectory: stri
 /** R6 (lead 2026-10-28): delete-everything forgets this folder's entries in the shared legacy snapshot through its owner; a restore does not bring
  * them back (that trust is asked again). Other folders' entries stay. */
 export async function forgetFolderLegacyTrust(rootInput: string, trustDirectory: string) {
-  const rootDigest = await folderDigest(rootInput);
+  if (!await lstat(trustDirectory).catch(() => null)) return; // F3: no store, nothing to forget; otherwise the same root check, a real path too
+  await trustRoot(trustDirectory, await realpath(rootInput), true); const rootDigest = await folderDigest(rootInput);
   for (const [name, digest] of await legacyEntries(trustDirectory).catch(() => null) ?? []) if (name === instructionDigest(`${rootDigest}\0${digest}`)) await forgetLegacy(trustDirectory, name);
 }
 /** The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
@@ -139,11 +143,7 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
   const rootDigest = instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`);
   const sessionTrusted = new Set<string>();
   if (trustDirectory) {
-    const info = await lstat(trustDirectory);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700) throw new Error('unsafe');
-    const trustRoot = await realpath(trustDirectory), rel = relative(root, trustRoot);
-    if (!rel || (rel !== '..' && !rel.startsWith(`..${sep}`))) throw new Error('unsafe');
-    await captureLegacy(trustDirectory);
+    await trustRoot(trustDirectory, root); await captureLegacy(trustDirectory);
   }
   // A record's name binds what it trusts; its content names its kind (the bare digest is the folder + content form, never written for a ref).
   const ref = committed?.ref ?? null;

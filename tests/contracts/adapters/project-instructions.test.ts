@@ -106,3 +106,22 @@ describe('instruction init previews', () => {
     expect(selected.changes.find(change => change.path === 'AGENTS.md')?.after).toBe('Read DECKENT.md\n');
   });
 });
+
+describe.skipIf(process.platform !== 'linux')('F3: forgetting this folder\'s legacy trust validates the trust root first', () => {
+  it('a trust store reached through a link is refused and the snapshot behind it keeps its bytes; the real store forgets only this folder', async () => {
+    const { forgetFolderLegacyTrust } = await import('#adapters/index.js'), { chmod, rm: remove } = await import('node:fs/promises');
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'deckent-forget-trust-'))); roots.push(base);
+    const project = join(base, 'project'), store = join(base, 'store'), linked = join(base, 'linked');
+    await mkdir(project); await mkdir(store); await chmod(store, 0o700); await writeFile(join(project, 'DECKENT.md'), '# rules\n');
+    const reader = await openProjectInstructionReader(project, store), view = await reader.inspect();
+    if (view.status !== 'trust-required') throw new Error(view.status); await reader.trust(view.source.digest);
+    // A store from an earlier release: its folder record is in the legacy snapshot.
+    await remove(join(store, PROJECT_INSTRUCTION_REGISTRY.legacyTrust.file)); await openProjectInstructionReader(project, store);
+    const snapshot = await readFile(join(store, PROJECT_INSTRUCTION_REGISTRY.legacyTrust.file));
+    await symlink(store, linked);
+    await expect(forgetFolderLegacyTrust(project, linked)).rejects.toThrow('unsafe');
+    expect((await readFile(join(store, PROJECT_INSTRUCTION_REGISTRY.legacyTrust.file))).equals(snapshot)).toBe(true);
+    await forgetFolderLegacyTrust(project, store);
+    expect((await readFile(join(store, PROJECT_INSTRUCTION_REGISTRY.legacyTrust.file))).length).toBeLessThan(snapshot.length);
+  });
+});
