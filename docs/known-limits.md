@@ -11,6 +11,11 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 Deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
+
+## BeUser B1 integration candidate (unreleased alpha.57)
+
+The source candidate contains the isolated-realm/controller/evidence foundations and a typed report renderer. Public `beuser walk/report` commands and the production custody/transport join are unfinished; do not use an external script or passing fixture as product acceptance. Installer replay and create/admission integration, evidence-kind consumers, a measured finite registry profile and C7 assembled-package proof remain open. A sealed BeUser ledger can never be backed up, restored or exported: backup-dependent uninstall/restore branches are named unknown, with no bypass. Private systemd branches also remain unknown when unsupported and do not hold alpha.57. There is no host socket/bus workaround. Native adoption and the full protocol/surface remain later B2/B4 scope.
+
 ## Platforms: tried and not tried
 
 - **Tried:** Linux and Windows through WSL2 (the supported execution path). Hosted checks run on Ubuntu with Node 24 and

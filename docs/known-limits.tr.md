@@ -11,6 +11,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
+
+## BeUser B1 entegrasyon adayı (yayımlanmamış alpha.57)
+
+Kaynak adayında yalıtılmış kutu/controller/kanıt temelleri ve tipli rapor renderer'ı var. Ürün `beuser walk/report` komutları ve kalıcı sahiplik/transport birleşimi tamamlanmadı; dış script veya geçen fixture ürün kabulü değildir. Installer replay ve create/admission entegrasyonu, kanıt türü consumer'ları, ölçülmüş sonlu registry profili ve C7 birleşik paket kanıtı açık. Mühürlü BeUser ledger hiçbir yolda yedeklenemez, geri yüklenemez veya dışarı aktarılamaz: yedek bağımlı kaldırma/restore dalları adıyla unknown kalır, atlama yolu yoktur. Desteklenmeyen private systemd dalları da unknown kalır ve alpha.57'yi bekletmez. Host soketi/bus açmak çözüm değildir. Native adoption ve tam protokol/yüzey sonraki B2/B4 kapsamıdır.
+
 ## Platformlar: denenenler ve denenmeyenler
 
 - **Denenen:** Linux ve WSL2 üzerinden Windows (desteklenen yürütme yolu). Barındırılan (hosted) kontroller Ubuntu'da Node 24 ve

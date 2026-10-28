@@ -939,3 +939,7 @@ Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `L
 - K8: owner kararı + ARCHITECTURE karar günlüğü satırı; Deniz/Mert/Ayşe r3 yürüyüşü bu koşullarla exact binary'de (ret kodu başına bir yol,
   bekletme altında, Team standart'ta Esc). Bu yürüyüş kapanış kanıtıdır; yazılmadan K8 kapanmış sayılmaz.
 
+
+## BeUser B1 uygulama sınırları — owner 2026-10-29
+
+Owner'ın B1 planına son eki: O-1 mutlak yasağı korunur; sealed BeUser ledger yedeklenmez/restore edilmez/export edilmez, yedek gerektiren uninstall dalları adıyla unknown kalır. Private systemd yetki genişletmeden çalışmazsa unknown'dur, alpha.57'yi bekletmez. Paket tavanlarının kesin değeri birleştirmede ölçülen ihtiyaç + küçük pay olarak owner'a rakamla bildirilir; author tavan yükseltmez. Bu kararlar implementation/gerçek realm/bağımsız kabul sonucu değildir. Kaynak: dış proof BEUSER-B1-2026-10-28/OPEN-DECISIONS.md, son “Owner kararları — 2026-10-29” eki.
