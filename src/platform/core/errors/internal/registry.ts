@@ -700,8 +700,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
   POLICY_DELEGATION_STEP_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_STEP_INVALID', p, l) }) },
   POLICY_DELEGATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_CONFLICT', p, l) }) },
-  // BeUser ZEY-02: an operation refusal from the CLI carries the missing cell (operation, action, scope) and its founder-baseline next step; the code stays.
-  POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: p['operation'] === undefined ? t('error.POLICY_DENIED', p, l) : t('error.POLICY_DENIED.operation', p, l) }) },
+  // BeUser ZEY-02/D-04/E-05: a CLI refusal may carry the missing cell (operation, or cell + founder family) and its founder-baseline next step; the code stays.
+  POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: p['operation'] !== undefined ? t('error.POLICY_DENIED.operation', p, l) : p['cell'] !== undefined ? t('error.POLICY_DENIED.founder', p, l) : t('error.POLICY_DENIED', p, l) }) },
   SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SCOPE_UNKNOWN', p, l) }) },
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },

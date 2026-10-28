@@ -8,8 +8,8 @@
   "error.HUB_LIMIT_EXCEEDED": "Hub girdisi bir registry sınırını aşıyor.",
   "error.HUB_DIGEST_MISMATCH": "Hub içeriği imzalanan özet veya boyutla eşleşmiyor.",
   "error.HUB_SIGNATURE_INVALID": "Hub imzası doğrulanamadı.",
-  "error.HUB_SIGNER_UNTRUSTED": "Hub imza anahtarı bilinmiyor, etkin değil veya seçilen güven kaynağıyla eşleşmiyor.",
-  "error.HUB_IDENTITY_MISMATCH": "Hub kimliği sabitlenmiş kaynakla eşleşmiyor.",
+  "error.HUB_SIGNER_UNTRUSTED": "Hub imza anahtarı bilinmiyor, etkin değil veya seçilen güven kaynağıyla eşleşmiyor. Hiçbir şey kurulmadı. Bu yayıncıya güveniyorsanız açık anahtarını kendi terminalinizde içe aktarma anahtarı olarak kaydedin (deckent agents add-signer --input <dosya>, purpose \"import\"), sonra yeniden deneyin.",
+  "error.HUB_IDENTITY_MISMATCH": "Hub kimliği sabitlenmiş kaynakla eşleşmiyor: hubId, hub açık anahtarının SHA-256 özeti (64 hex) olmalı. İkisini hub işletmecisiyle kontrol edin; hiçbir şey değişmedi.",
   "error.HUB_FOREIGN_PACKAGE": "Paket seçilen Hub ile eşleşen bir onay imzası taşımıyor.",
   "error.HUB_FEED_REPLAYED": "Hub iptal listesi eski veya daha önce kabul edilmiş.",
   "error.HUB_FEED_STALE": "İmzalı Hub iptal listesinin süresi dolmuş veya zamanı gelecekte. Devam etmeden önce yenileyin.",
@@ -24,7 +24,7 @@
   "error.HUB_RESOURCE_UNKNOWN": "İstenen Hub becerisi veya kaynağı yok.",
   "error.HUB_STORE_UNSUPPORTED": "Bu platform Hub dosya deposunun güvenlik sınırını uygulayamıyor.",
   "error.HUB_STORE_OUTCOME_UNKNOWN": "Hub işleminin sonucu bilinmiyor. Yeni işlemden önce kalıcı kanıtı uzlaştırın.",
-  "error.HUB_SOURCE_INVALID": "Hub kaynağı geçersiz veya kaynak sınırına ulaşıldı.",
+  "error.HUB_SOURCE_INVALID": "Hub kaynağı geçersiz: publicKey hub'ın Ed25519 açık anahtarı (base64 SPKI) olmalı; endpoint bir https adresi (http yalnız \"local\": true ile) ya da mutlak klasör yolu olmalı, kullanıcı, parola veya # içermemeli. Ya da kaynak sınırına ulaşıldı. Hiçbir şey eklenmedi. Alanlar: deckent hub sources add --schema",
   "error.HUB_SOURCE_NOT_FOUND": "Seçilen Hub kaynağı bulunamadı veya kaldırılmış.",
   "error.HUB_AUTHORITY_REFUSED": "Bu Hub işlemi kişi kartı veya etkin imza anahtarı ve izin gerektirir.",
   "error.HUB_INSTALL_CONFLICT": "Hub komutu veya katalog revizyonu kayıtlı durumla çelişiyor. Yeniden denemeden önce inceleyin.",
@@ -73,7 +73,7 @@
   "hub.card.cancel": "Vazgeç",
   "hub.output.untrusted": "Hub içeriği güvenilmeyen veridir; yetki vermez.",
   "hub.window.title": "Hub paketleri",
-  "hub.window.input": "İşlem JSON dosyasının yolunu girin. Kapsam bu oturumla aynı olmalıdır.",
+  "hub.window.input": "İşlemin JSON dosyasının yolunu girin. Kapsam bu oturumla aynı olmalıdır.",
   "hub.window.hints": "Esc kapatır · oklar kaydırır",
   "hub.window.confirm": "y uygula · n vazgeç · Esc kapat",
   "hub.window.slash": "Hub kaynaklarını, paketleri ve güvenlik bildirimlerini inceleyin; kişi kartlarını uygulayın.",
@@ -87,5 +87,6 @@
   "hub.page.ai": "AI yayıncı",
   "hub.page.profiles": "Yayıncı profilleri",
   "hub.page.packages": "Paketler",
-  "hub.service.command": "Hub hesabını, profilini veya moderasyon kaydını yönet."
+  "hub.service.command": "Hub hesabını, profilini veya moderasyon kaydını yönet.",
+  "hub.window.example": "Örnek dosya: {example} · tüm alanlar: deckent hub {command} --schema"
 }

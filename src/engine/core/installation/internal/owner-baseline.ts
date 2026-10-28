@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { chainAuthorityRevision, governedPolicyDigest } from '#engine/core/policy/index.js';
 import { FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,  identitySchema, immutableJsonObjectSchema,
-  mcpCapabilityIdChunks, getDecisionSteps, policySchema, authorityDocuments, planOwnerBaseline, type McpCapabilityGroup, type OperationDescriptor, type AuditEvent, type OwnerBaselineState, type OwnerBaselineCell, type PolicyGrant } from '#domain/index.js';
+  mcpCapabilityIdChunks, getDecisionSteps, personOnlyBaselineCells, OWNER_BASELINE_DEFAULT_FAMILIES, OWNER_BASELINE_FAMILIES, policySchema, authorityDocuments, planOwnerBaseline, type McpCapabilityGroup, type OperationDescriptor, type AuditEvent, type OwnerBaselineState, type OwnerBaselineCell, type PolicyGrant } from '#domain/index.js';
 import { installerAuthorityChangeEvent } from './authority-audit.js';
 import type { PolicyTemplateDocumentWriter } from './policy-template.js';
 
@@ -76,6 +76,8 @@ export async function setInstallerOwnerBaseline(writer: PolicyTemplateDocumentWr
   } finally { audit.close(); }
 }
 
+/** Whether a surface's family name is one the domain registry declares (surfaces hold no family literals). */
+export const ownerBaselineFamilyKnown = (name: string): boolean => (OWNER_BASELINE_FAMILIES as readonly string[]).includes(name);
 /** Catalog-derived person cells. Floors are filtered by the pure planner, never by profile or evaluator exceptions. */
 export function ownerBaselineCells(groups: readonly McpCapabilityGroup[], descriptors: readonly OperationDescriptor[]): readonly OwnerBaselineCell[] {
   const operations = descriptors.filter(descriptor => descriptor.surface !== 'authority').map(descriptor => descriptor.operation.id).sort();
@@ -87,12 +89,12 @@ export function ownerBaselineCells(groups: readonly McpCapabilityGroup[], descri
   }
   for (const step of getDecisionSteps().filter(step => ['run-decision', 'task-decision'].includes(step.kind)))
     cells.push({ family: 'decision-steps', kind: step.kind, actions: [step.action], ids: 'all', scope: 'selected' });
-  return cells;
+  return [...cells, ...personOnlyBaselineCells()];
 }
 
 /** Read-only doctor projection. Counts the missing registry-derived cells without invoking the conditional writer. */
 export function describeOwnerBaseline(document: unknown, person: Person, scopeId: string, candidates: readonly OwnerBaselineCell[]) {
   const files = authorityDocuments(policySchema.parse(document));
-  const plan = planOwnerBaseline(files.policy, files.bindings, { person, explicit: true, scopeId, families: ['mcp-delegable', 'decision-steps'], candidates, peopleLimit: 1, digest: digestOf });
+  const plan = planOwnerBaseline(files.policy, files.bindings, { person, explicit: true, scopeId, families: OWNER_BASELINE_DEFAULT_FAMILIES, candidates, peopleLimit: 1, digest: digestOf });
   return { status: plan.status, missing: plan.added.length + plan.remaining, digest: digestOf(JSON.stringify(plan.cells)) };
 }

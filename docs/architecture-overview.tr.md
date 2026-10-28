@@ -227,7 +227,11 @@ Kişi yazmaları etkileşimli terminal gerektirir; `--json`, pipe ve AI ortamlar
 kartı onaylayamaz. SDK `executeHub(root, request, options)` sunar; `request`,
 `operation` (örneğin `hub.verify`) ve tipli `input` alanlarını taşır.
 `hub` kaynak türü için açık kapsam politikası izni gerekir. Yüzeyi kullanmak izin
-oluşturmaz. AI yazması ayrıca kendi etkin imza anahtarını gerektirir; Hub sunucusu
+oluşturmaz. Kurulumun kurucusu bunu kendine bir kartla verir:
+`deckent init policy --scope <id> --owner-baseline hub-read --apply` (inceleme, arama,
+dışa aktarma) ve `hub-trust` (kaynaklar, beslemeler, kurma/güncelleme/kaldırma); ret
+eksik hücreyi ve bu komutu adlandırır. Yayıncının anahtarı da paketleri kurulmadan önce
+içe aktarma anahtarı olmalıdır (`deckent agents add-signer`). AI yazması ayrıca kendi etkin imza anahtarını gerektirir; Hub sunucusu
 yayıncı imzasını ve yetkiyi bağımsız denetler. MCP kaynak güveni değişikliklerini
 ve kişi güvenlik kartlarını sunmaz. Yayıncı anahtarı yönetimi mevcut kişi signer
 kartlarından devam eder.

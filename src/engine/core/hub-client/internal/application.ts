@@ -161,7 +161,9 @@ export class HubClientApplication {
   }
   async addSource(input: unknown, credential?: unknown) {
     const command = sourceCommand.parse(input);
-    if (ed25519KeyId(Buffer.from(command.publicKey, 'base64')) !== command.hubId) throw new HubError('HUB_IDENTITY_MISMATCH');
+    // BeUser E-05: a public key that is not an Ed25519 SPKI is an invalid source (typed), never an unexpected failure.
+    let keyId: string; try { keyId = ed25519KeyId(Buffer.from(command.publicKey, 'base64')); } catch { throw new HubClientError('HUB_SOURCE_INVALID'); }
+    if (keyId !== command.hubId) throw new HubError('HUB_IDENTITY_MISMATCH');
     try {
       if (!command.endpoint.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(command.endpoint)) {
         const url = new URL(command.endpoint);

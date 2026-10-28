@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HUB_LIMITS, hubDigestSchema, hubPackageIdSchema, hubVersionSchema, hubRevocationFeedSchema, hubRevocationEntrySchema, hubFeedSignatureSchema, identitySchema, signerPublicKeySchema, HUB_TRUST_POLICIES } from '#domain/index.js';
+import { OWNER_BASELINE_FAMILY_REGISTRY, HUB_LIMITS, hubDigestSchema, hubPackageIdSchema, hubVersionSchema, hubRevocationFeedSchema, hubRevocationEntrySchema, hubFeedSignatureSchema, identitySchema, signerPublicKeySchema, HUB_TRUST_POLICIES } from '#domain/index.js';
 import { hubClientCommandSchema, type HubClientApplication, type HubSource } from '#engine/core/hub-client/index.js';
 import type { Locale, KnownSecretSnapshot } from '#platform/index.js';
 
@@ -45,6 +45,18 @@ export const hubOperationSchema = z.discriminatedUnion('operation', Object.entri
 export function parseHubOperation(input: unknown): ParsedHubOperation { return hubOperationSchema.parse(input) as ParsedHubOperation; }
 export const hubOperationWrites = (name: HubOperationName): boolean => !['hub.sources.list', 'hub.search', 'hub.inspect', 'hub.verify', 'hub.export', 'hub.cards'].includes(name);
 export const hubPersonOnlyOperation = (name: HubOperationName): boolean => name === 'hub.sources.add' || name === 'hub.sources.remove' || name === 'hub.cards';
+/** The policy cell action a Hub operation is admitted under (the client's own admit: local reads `inspect`, a source read `search`). Wording only. */
+export function hubPolicyAction(request: Readonly<{ operation: HubOperationName; input: unknown }>): string {
+  const name = request.operation.slice(4), location = (request.input as { location?: unknown } | null)?.location;
+  return ['sources.list', 'verify', 'cards'].includes(name) || name === 'inspect' && location !== 'source' ? 'inspect' : name === 'inspect' ? 'search' : name;
+}
+/** The founder-baseline families whose card grants this Hub action (writes also need the read family); null when no family holds it (publish, yank, revoke). */
+export function hubFounderFamilies(action: string): string | null {
+  const holds = OWNER_BASELINE_FAMILY_REGISTRY.filter(family => 'cells' in family && family.cells.some(cell => cell.kind === 'hub' && (cell.actions as readonly string[]).includes(action)));
+  if (!holds.length) return null;
+  const read = OWNER_BASELINE_FAMILY_REGISTRY.find(family => 'cells' in family && family.cells.some(cell => cell.kind === 'hub' && (cell.actions as readonly string[]).includes('inspect')));
+  return [...new Set([...(read ? [read.id] : []), ...holds.map(family => family.id)])].join(',');
+}
 export type HubRemoteOperation = Extract<ParsedHubOperation, { operation: 'hub.inspect' | 'hub.search' | 'hub.publish' | 'hub.yank' | 'hub.revoke' }>;
 /** Composition supplies only an H4 governed transport, never raw fetch. H3/H5 remain signature and transition owners. */
 export interface HubOperationPorts {

@@ -1,13 +1,13 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { OWNER_BASELINE_DEFAULT_FAMILIES } from '#domain/index.js';
 import { delegationWords, delegationLines, mcpCapabilityWords, mcpCapabilityPreviewLines, type DelegationHandlers, type McpCapabilityHandlers } from '#surfaces/core/work-labels/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import type { PolicyPanelPort } from '#surfaces/core/terminal-panels/index.js';
-
 export function policyPanelPort(root: string, host: McpCapabilityHandlers, options: ConfigLoadOptions, locale: Locale, delegation?: DelegationHandlers, baseline?: TerminalLaunchContext['openOwnerBaselineInstallation']): PolicyPanelPort {
   const words = mcpCapabilityWords(locale), delegated = delegationWords(locale);
   return {
     ...(baseline ? { async ownerBaseline(scopeId: string) {
-      const result = await baseline(root, scopeId, { families: ['mcp-delegable', 'decision-steps'], apply: false });
+      const result = await baseline(root, scopeId, { families: OWNER_BASELINE_DEFAULT_FAMILIES, apply: false });
       return { scopeId, groupId: ':owner-baseline', action: 'grant' as const, digest: result.expect ?? '', ownerBaseline: true, applicable: result.status === 'preview',
         lines: [{ label: '', text: t('cli.init.ownerBaseline.summary', { status: result.status, reason: result.reason ?? '-', scope: scopeId, who: `${result.principal.issuer}/${result.principal.subject}`, added: result.added.length, removed: result.removed.length, remaining: result.remaining }, locale) }, { label: '', text: t('cli.init.ownerBaseline.notice', {}, locale) }, ...result.cells.map(cell => ({ label: cell.kind,
           text: `${cell.actions.join(', ')} / ${cell.ids === 'all' ? '*' : cell.ids.join(', ')} / ${cell.scopes === 'all' ? '*' : cell.scopes.join(', ')}: ${cell.before} → ${cell.after}` }))] };
@@ -38,7 +38,7 @@ export function policyPanelPort(root: string, host: McpCapabilityHandlers, optio
     },
     async apply(preview) {
       if (preview.ownerBaseline && baseline) {
-        const result = await baseline(root, preview.scopeId, { families: ['mcp-delegable', 'decision-steps'], apply: true, expect: preview.digest });
+        const result = await baseline(root, preview.scopeId, { families: OWNER_BASELINE_DEFAULT_FAMILIES, apply: true, expect: preview.digest });
         return [{ level: result.status === 'applied' || result.status === 'current' ? 'info' as const : 'warning' as const, text: t('cli.init.ownerBaseline.summary', { status: result.status, reason: result.reason ?? '-', scope: preview.scopeId, who: `${result.principal.issuer}/${result.principal.subject}`, added: result.added.length, removed: result.removed.length, remaining: result.remaining }, locale) }];
       }
       if (delegation && preview.delegation) {

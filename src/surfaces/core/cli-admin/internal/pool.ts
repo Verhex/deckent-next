@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, EXIT_CODES, emit, getSystemProfile, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import type { QuotaReleaseCommand, QuotaReleaseReceipt, PoolCapacityCommand, PoolCapacityReceipt, PoolCapacityView, PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldView } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { formatAgo, resolveCommandScope, scopeLister, scopeNotice, type CliCardOption } from '#surfaces/core/cli-human/index.js';
+import { formatAgo, resolveCommandScope, scopeLister, scopeNotice, withFounderStep, type CliCardOption } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 
@@ -13,6 +13,8 @@ export type PoolCapacityInspectHandler = (root: string, query: PoolHoldQuery, op
 export type PoolHoldApplyHandler = (root: string, command: PoolHoldCommand, options: ConfigLoadOptions) => Promise<PoolHoldReceipt>;
 export type PoolHoldInspectHandler = (root: string, query: PoolHoldQuery, options: ConfigLoadOptions) => Promise<PoolHoldView>;
 
+/** The founder-baseline family whose card holds the pool hold/resume/capacity cells (engine-derived from the MCP capability registry). */
+const FOUNDER_FAMILY = 'mcp-delegable';
 const actorText = (actor: Readonly<{ issuer: string; subject: string }>) => terminalSafeText(`${actor.issuer}/${actor.subject}`);
 /** Owner CLI review 2026-10-19 (`pool`): the status in human words; empty fields are left out, never printed as `-`. */
 function renderStatus(view: PoolHoldView, capacity: PoolCapacityView | undefined, locale: Locale, nowMs: number): string {
@@ -121,7 +123,8 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
       execution = picked; inFlight = values.has('--in-flight-slots') ? slots('--in-flight-slots') : Math.max(picked, current?.capacity.inFlightSlots ?? picked);
     }
     if (!await confirmed(t('cli.pool.card.setCapacity', { slots: execution, inFlight }, locale), [t('cli.pool.card.setCapacityWhat', {}, locale)])) return cancelled();
-    const resized = await context.applyPoolCapacity(root, { schemaVersion: 1, scopeId, commandId, ...(pool ? { poolId: pool } : {}), capacity: { executionSlots: execution, inFlightSlots: inFlight } }, options);
+    const resized = await context.applyPoolCapacity(root, { schemaVersion: 1, scopeId, commandId, ...(pool ? { poolId: pool } : {}), capacity: { executionSlots: execution, inFlightSlots: inFlight } }, options)
+      .catch(error => { throw withFounderStep(error, { cell: 'pool/set-capacity', scope: scopeId, family: FOUNDER_FAMILY }); });
     notice();
     emit(resized, { ...sinks, render: receipt => receipt.changed ? t('cli.pool.capacityChanged', { pool: terminalSafeText(receipt.poolId), oldExecution: receipt.previous.executionSlots,
         oldInFlight: receipt.previous.inFlightSlots, execution: receipt.next.executionSlots, inFlight: receipt.next.inFlightSlots }, locale)
@@ -140,7 +143,8 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
   if (!await confirmed(action === 'hold' ? t('cli.pool.card.hold', {}, locale) : t('cli.pool.card.resume', {}, locale),
     [action === 'hold' ? t('cli.pool.card.holdWhat', {}, locale) : t('cli.pool.card.resumeWhat', {}, locale),
       reason ? t('cli.pool.view.reason', { reason: poolReasonText(reason, locale) }, locale) : t('cli.pool.card.noReason', {}, locale)])) return cancelled();
-  const receipt = await context.applyPoolHold(root, { schemaVersion: 1, scopeId, commandId, action, ...(pool ? { poolId: pool } : {}), ...(reason ? { reason } : {}) }, options);
+  const receipt = await context.applyPoolHold(root, { schemaVersion: 1, scopeId, commandId, action, ...(pool ? { poolId: pool } : {}), ...(reason ? { reason } : {}) }, options)
+    .catch(error => { throw withFounderStep(error, { cell: `pool/${action}`, scope: scopeId, family: FOUNDER_FAMILY }); });
   notice();
   emit(receipt, { ...sinks, render: receipt => renderReceipt(receipt, locale) });
 }

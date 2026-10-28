@@ -619,8 +619,9 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Hub networking needs distribution wiring.** Alpha.56 supplies signed packages, local source/trust cards,
   cached offline verification and governed transport ports. Search, remote inspection and publication refuse
   `HUB_CONNECTION_UNAVAILABLE` without the bound first-use, authentication and trust services. No public Hub/source is
-  enabled by default; public opening remains a separate owner gate. *Workaround:* use verified offline bundles and the
-  [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
+  enabled by default; public opening remains a separate owner gate. *Workaround:* grant yourself the Hub cells with
+  `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` (a card), then use verified offline bundles
+  and the [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
 - **Hub online keys need a root-signed delegation.** Bundles and revocation feeds carry `hub-key-delegation:1`, scoped
   to attestation/feed purpose and a validity window (registry defaults: at most 90 days and 5 min clock skew). New content
   needs the trusted clock inside that window; skew does not extend it, and a yanked/revoked key cannot sign new content.

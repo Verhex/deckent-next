@@ -28,7 +28,7 @@ export { setInstallerPermissionModes, type InstallerPermissionModesResult } from
 export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, InstalledPolicyTemplateUpgrade, FirstRunToolNames, PolicyTemplateDocumentWriter, PolicyTemplateUpgradeResult, PolicyTemplateInstallationPorts, PolicyTemplatePreview, PolicyTemplatePublishTarget, PolicyTemplateResource, PolicyTemplateSource,
   PreparedPolicyTemplateInstallation, PreparePolicyTemplateInput } from './internal/policy-template.js';
 
-export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';
+export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, ownerBaselineFamilyKnown, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';
 
 export { createUninstallPlan, assertUninstallPlanCurrent, uninstallAuthorityBlocker, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
 export type { UninstallInventory, UninstallContribution } from './internal/uninstall-plan.js';

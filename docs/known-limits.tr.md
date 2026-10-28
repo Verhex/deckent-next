@@ -620,8 +620,10 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Hub ağı dağıtım bağlantılarını bekler.** Alpha.56 imzalı paketleri, yerel kaynak/güven kartlarını,
   çevrimdışı önbellek doğrulamasını ve yönetilen taşıma portlarını sağlar. İlk kullanım, kimlik doğrulama ve güven
   hizmetleri bağlanmadan arama, uzak inceleme ve yayın `HUB_CONNECTION_UNAVAILABLE` verir. Varsayılan açık Hub/kaynak
-  yoktur; halka açılma ayrı owner kapısıdır. *Yol:* doğrulanmış çevrimdışı paketleri ve
-  [imzalı Hub rehberini](architecture-overview.tr.md#imzali-hub-paketleri) kullanın; paket kurmak araç/politika izni vermez.
+  yoktur; halka açılma ayrı owner kapısıdır. *Yol:* Hub hücrelerini
+  `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` kartıyla kendinize verin, sonra doğrulanmış
+  çevrimdışı paketleri ve [imzalı Hub rehberini](architecture-overview.tr.md#imzali-hub-paketleri) kullanın; paket kurmak
+  araç/politika izni vermez.
 - **Hub online anahtarları kökten imzalı delegasyon ister.** Paketler ve iptal akışları attestation/feed amacına ve
   geçerlilik aralığına bağlı `hub-key-delegation:1` taşır (registry varsayılanı en çok 90 gün, saat sapması 5 dk). Yeni içerikte
   güvenilir saat aralığın içinde olmalıdır; sapma aralığı genişletmez, geri çekilmiş/iptal anahtar yeni içerik imzalayamaz.

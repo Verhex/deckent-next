@@ -905,3 +905,14 @@ Kaynak: DOCS-A56 owner kartı, dış `proof/ALPHA56-2026-10-24/PLAN-B-OWNER-TEST
 - **Koşullu birleştirme ve geçiş (2026-10-27 ~01:05 yerel):** owner “Okeydir o zaman her şey yeşilse birleştirme canlı/n1 geçişleri onay verildi.” dedi. Exact aday bağımsız PASS, yerel tam verify ve hosted CI yeşili koşuluyla PR #117 ve bu sürümün canlı/N1 geçişidir; sonraki sürümlere sürekli yetki değildir.
 - **Politika yükseltmesi (2026-10-27):** güncel DOCS-A56 ataması owner'ın canlı ve N1'de v16–v18 yükseltmesini uyguladığını bildirir; eski “owner yükseltmesi bekleniyor” notunun yerini alır. Recovery-rule/template versioning sorusu v17/v18 sonrasında da AÇIK; ürün kurulumlarının geneline otomatik yükseltme sonucu çıkarılmaz.
 - **Lead kararları owner cevabı değildir:** FIX9 imaj kartının hazır imajı/arka plan build'ini önseçmesi ve tek kurulu scope'u `init --yes` ile yeniden kullanması; FIX11 kökten imzalı online anahtar delegasyonu (90 gün/5 dk registry varsayılanı, yank yeni içeriği de durdurur); bubblewrap 0.13.0'da kalma ve 0.13.1 imzalayan değişikliğinin ayrı güven kararını beklemesi. Ayrıntı ve kaynak [mimari karar günlüğünde](../architecture/decisions.md).
+
+## Owner kararları — 2026-10-28: BeUser E-05 Hub kurucu aileleri
+
+Kaynak: dış `proof/BEUSER-SWEEP-2026-10-27/LAW-AUDIT-E05.md` (temiz bağlam kanun denetimi, K1–K8) ve lead'in BEUSER-FIX-2 atama mesajı.
+
+- **hub-trust (owner, 2026-10-28):** “yalnız kişiye” — evet. Kişi kartla `hub-trust` ailesini alabilir: `hub` kaynağında `sources.add`,
+  `sources.remove`, `refresh`, `install`, `update`, `uninstall`; yalnız adı verilen kişiye, `ids`/`scopes` = seçilen scope, `allow`.
+  Her komutun kendi kişi kartı kalır; AI/MCP'ye asla (`sources.*` AI tabanında).
+- **hub-read (lead kararı, Jev bfba048a):** `inspect`, `search`, `export` aynı kurallarla. Yayıncı eylemleri (`publish`, `yank`, `revoke`)
+  hiçbir kurucu ailesine girmez. Varsayılan kaynak ve halka açılma (H9) bu kararın dışındadır.
+- Şablon değişmez (v18 kalır); aileler `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` kartıyla verilir.

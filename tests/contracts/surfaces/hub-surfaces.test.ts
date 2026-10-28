@@ -1,7 +1,8 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vitest';
-import { hubCommand, parseHubArguments, hubCardLines } from '#surfaces/core/cli-hub/index.js';
+import { hubCommand, parseHubArguments, hubCardLines, hubRefusal, hubRequest } from '#surfaces/core/cli-hub/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { hubWindowRequest } from '#surfaces/core/terminal-hub/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { encodeHubBundle } from '#engine/core/hub-client/index.js';
@@ -48,4 +49,15 @@ it('Hub schemas stay strict and MCP inventory omits every person-only operation'
   // The search cursor is only the hub's own `<packageId>@<version>` page key; free text never rides it to the hub.
   expect(hubOperationSchemas['hub.search'].safeParse({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, after: 'acme/invoice@1.0.0' }).success).toBe(true);
   expect(hubOperationSchemas['hub.search'].safeParse({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, after: 'Review invoice.' }).success).toBe(false);
+});
+
+it('E-05: a Hub refusal names the missing cell and the founder family; a bad input names its field, never a raw schema dump', () => {
+  const request = hubRequest('hub.sources.list', { schemaVersion: 1, scopeId: 's' }), denied = ErrorRegistry.createError('POLICY_DENIED');
+  expect(hubRefusal(denied, request)).toMatchObject({ code: 'POLICY_DENIED', params: { cell: 'hub/inspect', scope: 's', family: 'hub-read' } });
+  expect(hubRefusal(denied, hubRequest('hub.sources.remove', { schemaVersion: 1, scopeId: 's', commandId: 'c', hubId: hub.keyId, expectedRevision: 1 })))
+    .toMatchObject({ params: { cell: 'hub/sources.remove', family: 'hub-read,hub-trust' } });
+  // Publisher actions belong to no founder family: the refusal stays as it was.
+  expect(hubRefusal(denied, { operation: 'hub.publish', input: { scopeId: 's' } } as never)).toBe(denied);
+  expect(() => hubRequest('hub.search', { schemaVersion: 1, scopeId: 's' })).toThrow(expect.objectContaining({ code: 'CLI_INPUT_FIELD_INVALID',
+    params: expect.objectContaining({ field: 'hubId', problem: 'missing' }) }));
 });
