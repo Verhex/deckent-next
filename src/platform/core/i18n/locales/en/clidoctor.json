@@ -86,6 +86,7 @@
   "doctor.check.secretStore.problem": "Secret store: {backend} cannot be used now ({code})",
   "doctor.check.secretStore.leftover": "Some secret references or old key copies need attention",
   "doctor.check.secretUse.grant": "Key {name} is used by a model here but not granted to this project: the model cannot be called",
+  "doctor.check.secretUse.grantMcp": "Key {name} is used here by MCP server {servers} but not granted to this project: the server does not start until it is granted",
   "doctor.check.secretUse.undeclared": "Key {name} is in this project's vault but .deck does not declare it: it is not used",
   "doctor.check.secretUse.undeclared.next": "add {name}=project to .deck",
   "doctor.check.secretUse.declaredMissing": "Key {name} is declared in .deck but not stored",

@@ -452,6 +452,10 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
 
 ## Recovery and upgrades
 
+- **After the alpha.56.1 upgrade, a personal MCP server whose entry names a main-vault key (`$DECK:NAME`) needs that key granted to each
+  project** (KER-17, 2026-10-28): the key is now used under the same project grant as a provider key, so the server does not start in a
+  project without it and the turn says which key. *Workaround:* `deckent doctor` lists each such key with its command; run
+  `deckent secret grant NAME --scope <id>` once per project at your own terminal (a card; AI sessions cannot answer it).
 - **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
   (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set
   stopped by the cancellation can be partly applied. The result text lists what was written. *Workaround:* before running a cancelled

@@ -22,7 +22,7 @@ function connectionWord(server: McpListedServer, checked: boolean, locale: Local
   if (server.health === 'connected') return t('climodels.mcp.connection.connected', {}, locale);
   if (server.health === 'tools-changed') return t('climodels.mcp.connection.toolsChanged', {}, locale);
   if (server.health === 'failed') return t('climodels.mcp.connection.failed', { reason: mcpSafe(server.failure ?? '-') }, locale);
-  return waiting(server) ? t('climodels.mcp.connection.untrusted', {}, locale) : t('climodels.mcp.connection.notStarted', {}, locale);
+  return waiting(server) && server.status !== 'invalid-launch' ? t('climodels.mcp.connection.untrusted', {}, locale) : t('climodels.mcp.connection.notStarted', {}, locale);
 }
 export const mcpLaunchText = (server: Pick<McpListedServer, 'command' | 'args'>): string => [server.command ?? '', ...(server.args ?? [])].map(mcpSafe).join(' ');
 

@@ -34,6 +34,9 @@ export interface McpRegistryContext {
 export const mcpGlobalRoot = (environment: Readonly<Record<string, string | undefined>>) =>
   resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, environment), environment).configDir;
 
+/** KER-17: which personal-file servers (user scope, and this project's local scope) name which `$DECK:` key; nothing is resolved (secret list, doctor, card). */
+export async function mcpSecretUsers(projectRoot: string, environment: Readonly<Record<string, string | undefined>>): Promise<readonly { readonly server: string; readonly name: string }[]> { const key = await realpath(projectRoot).catch(() => projectRoot), file = await readMcpRegistryFile(mcpRegistryPaths(key, mcpGlobalRoot(environment)).personal, 'personal', key);
+  return file.ok ? Object.entries({ ...file.user, ...file.local }).flatMap(([server, entry]) => [...new Set([...JSON.stringify(entry).matchAll(/\$DECK:([A-Z_][A-Z0-9_]*)/gu)].map(match => match[1]!))].map(name => ({ server, name }))) : []; }
 /** `trusted`: approved definition, launchable; `pending-approval`: never decided (reason `trust-moved`: a record in the alpha.47 place, the
  * project's data root, waits for its one re-approval by card, owner A48-D6); `changed`: the entry changed since it was decided; `declined`: the
  * owner said no to this definition; `invalid-launch`: its values cannot be expanded; `trust-store-unavailable`: a trust record cannot be read. */
@@ -90,13 +93,9 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
   return { projectKey, paths, servers, problems: [...problems, ...registry.problems] };
 }
 /**
- * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right
- * before a call is handed to the SDK — after its approval wait — the current registry files and the scope's trust record are read again
- * (user trust in the global root, project and local trust in that root's project directory) and the call is admitted only while the server is still
- * trusted as exactly the scope and definition the turn offered it under and the tool's pin is still that digest. The check runs under the
- * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before the check is
- * always seen; a later change can race the actual send (the lock is released before the SDK sends; a revocation never recalls a call
- * already sent). Fails closed.
+ * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right before a call is handed to the SDK — after its approval wait — the current registry files and the scope's trust record are read again
+ * (user trust in the global root, project and local trust in that root's project directory) and the call is admitted only while the server is still trusted as exactly the scope and definition the turn offered it under and the tool's pin is still that digest. The check runs under the
+ * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before the check is always seen; a later change can race the actual send (the lock is released before the SDK sends; a revocation never recalls a call already sent). Fails closed.
  */
 export function mcpSendAuthority(registry: McpRegistryContext) {
   return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null }): Promise<McpSendRefusal | null> => {
@@ -363,6 +362,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     view = await loadMcpRegistry(registry);
     pool.retain(trustedIds(view));
   }
+  for (const server of view.servers) if (server.reason?.startsWith('secret-refused:')) notices.push({ kind: 'secret-refused', name: server.name, key: server.reason.slice(15), scope: scopeId }); // KER-17
   const settings = mcpClientSettings(view, { resultMaxBytes: input.resultMaxBytes, inputMaxBytes: input.inputMaxBytes });
   const byName = new Map(view.servers.map(server => [server.name, server])), outcomes: [McpServerView, McpServerOpen][] = [];
   const offered = settings ? await openMcpAgentTools(pool, settings, { cwd: input.cwd, environment: registry.environment, sandboxes: input.sandboxes, homeRoot: mcpServerHomes(registry.layout), homeScope: scopeId },

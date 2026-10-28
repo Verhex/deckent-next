@@ -57,8 +57,8 @@ export async function openProjectSecrets(context: ProjectSecretContext, options:
 /**
  * The one provider credential entry point (PRE-8 v2 §1.5): every provider read (model invocation and its invocable-now check, model
  * discovery, provider workspaces) goes through `.deck` → ownership → project vault or main vault through a grant → typed refusal, before any
- * value is read. An injected `options.secretResolver` (tests, SDK) substitutes only the final main-vault read. Installation-level secrets
- * (backup passphrase, `$DECK:` in global config, MCP server secrets) never come here.
+ * value is read. An injected `options.secretResolver` (tests, SDK) substitutes only the final main-vault read. A personal-file MCP server's `$DECK:` key
+ * comes here too (KER-17 amendment 2026-10-28); installation-level secrets (backup passphrase, `$DECK:` in global config) never do.
  */
 export function projectCredentialResolver(context: ProjectSecretContext, scopeId: string, options: ConfigLoadOptions): ProjectCredentialResolver {
   const decide = async (name: string): Promise<{ readonly decision: CredentialSource; readonly opened: Awaited<ReturnType<typeof openProjectSecrets>> }> => {

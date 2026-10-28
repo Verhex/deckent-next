@@ -21,14 +21,23 @@ export function requirePersonTerminal(context: AdminCommandContext, operation: s
   if (cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation } });
 }
 
+/** KER-17: one user of a key in words: `mcp:<server>` is a personal-file MCP server naming it as `$DECK:`, anything else a provider profile. */
+export const secretUserText = (user: string, locale: Locale): string => user.startsWith('mcp:')
+  ? t('cli.secret.usedBy.mcp', { server: terminalSafeText(user.slice(4)) }, locale) : t('cli.secret.usedBy.profile', { profile: terminalSafeText(user) }, locale);
+/** KER-17: who uses main key NAME in this project (provider profiles, MCP servers), from the one inventory; empty when it cannot be read. */
+export async function projectKeyUsers(context: AdminCommandContext, root: string, scopeId: string, name: string, options: ConfigLoadOptions, locale: Locale): Promise<string[]> {
+  const view = await context.inspectSecretInventory?.(root, { scopeId, all: false }, options).catch(() => null);
+  return (view?.rows.find(row => row.name === name && row.vault === 'main')?.usedBy ?? []).map(user => secretUserText(user, locale));
+}
 /** `deckent secret grant|revoke <NAME> --scope <S>`: lend (or take back) a main-vault key to this project. A person's card on a terminal first. */
 export async function secretGrantCommand(context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, sinks: Sinks,
   input: { readonly scope: ScopeResolution; readonly name: string; readonly action: 'grant' | 'revoke' }): Promise<'cancelled' | void> {
   if (!context.changeSecretGrant) throw ErrorRegistry.createError('CLI_USAGE');
   if (adminInteractive(context, sinks.json)) {
-    const params = { name: input.name, project: terminalSafeText(root) };
+    const params = { name: input.name, project: terminalSafeText(root) }, users = input.action === 'revoke' ? await projectKeyUsers(context, root, input.scope.scopeId, input.name, options, locale) : [];
+    const revokeUsers = async () => users.length ? [t('cli.secret.card.revokeUsers', { users: users.join(', ') }, locale)] : [];
     const answer = await askAdminCard(context, locale, { title: input.action === 'grant' ? t('cli.secret.card.grantTitle', params, locale) : t('cli.secret.card.revokeTitle', params, locale),
-      body: [t('cli.secret.card.grantBody', {}, locale)], options: confirmOptions(locale) });
+      body: [t('cli.secret.card.grantBody', {}, locale), ...await revokeUsers()], options: confirmOptions(locale) });
     if (answer !== 'apply') return 'cancelled';
   }
   const view = await context.changeSecretGrant(root, { scopeId: input.scope.scopeId, name: input.name, action: input.action }, options);
@@ -62,7 +71,7 @@ const findingLine = (finding: SecretInventoryFinding, locale: Locale) => {
 /** name · vault · project · used by · .deck · grant · stored, then the sync findings with their next command. Never a value. */
 export function renderSecretInventory(view: SecretInventoryView, installationUsers: ReadonlyMap<string, readonly string[]>, locale: Locale, style: ReturnType<typeof cliTableStyle>): string {
   const rows = view.rows.map(row => [row.name, vaultCell(row.vault, locale), row.project === null ? '-' : terminalSafeText(row.project),
-    [...row.usedBy.map(user => t('cli.secret.usedBy.profile', { profile: terminalSafeText(user) }, locale)), ...(row.vault === 'main' ? installationUsers.get(row.name) ?? [] : [])].join(', ')
+    [...row.usedBy.map(user => secretUserText(user, locale)), ...(row.vault === 'main' ? installationUsers.get(row.name) ?? [] : [])].join(', ')
       || t('cli.secret.usedBy.none', {}, locale), deckCell(row.deck, locale), grantCell(row.grant, locale), presenceCell(row.presence, locale)]);
   const columns = [t('cli.secret.list.column.name', {}, locale), t('cli.secret.inventory.column.vault', {}, locale), t('cli.secret.inventory.column.project', {}, locale),
     t('cli.secret.list.column.usedBy', {}, locale), t('cli.secret.inventory.column.deck', {}, locale), t('cli.secret.inventory.column.grant', {}, locale),

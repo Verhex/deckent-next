@@ -262,6 +262,7 @@
   "terminal.mcp.status.changed": "onaydan sonra değişti, yeniden onay gerekir",
   "terminal.mcp.status.declined": "reddedildi",
   "terminal.mcp.status.invalidLaunch": "başlatılamaz: başlatma değerleri geçersiz",
+  "terminal.mcp.status.secretRefused": "başlayamaz: {key} anahtarı bu projeye açılmamış (deckent secret grant {key})",
   "terminal.mcp.status.trustUnreadable": "güven kaydı okunamıyor",
   "terminal.mcp.scope.local": "yerel",
   "terminal.mcp.scope.project": "proje",

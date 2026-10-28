@@ -453,6 +453,10 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
 
 ## Kurtarma ve yükseltme
 
+- **alpha.56.1 yükseltmesinden sonra kaydında ana kasa anahtarı (`$DECK:AD`) geçen kişisel bir MCP sunucusu, bu anahtarın her projeye
+  açılmasını ister** (KER-17, 2026-10-28): anahtar artık bir sağlayıcı anahtarıyla aynı proje izniyle kullanılır; izin olmayan projede
+  sunucu başlamaz ve tur hangi anahtar olduğunu söyler. *Yol:* `deckent doctor` her anahtarı komutuyla listeler; her proje için bir kez
+  kendi terminalinizde `deckent secret grant AD --scope <kimlik>` çalıştırın (bir kart; AI oturumları cevaplayamaz).
 - **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan
   bir araç çağrısı bittikten sonra tur iptal edilirse (bağlantı kopması, açık iptal, kapanış) çağrı yine `cancelled` bildirilir;
   iptalle durdurulan bir yazma kümesi kısmen uygulanmış kalabilir. Sonuç metni yazılanları listeler. *Yol:* iptal görünen bir

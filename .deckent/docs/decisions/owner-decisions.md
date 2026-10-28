@@ -905,3 +905,18 @@ Kaynak: DOCS-A56 owner kartı, dış `proof/ALPHA56-2026-10-24/PLAN-B-OWNER-TEST
 - **Koşullu birleştirme ve geçiş (2026-10-27 ~01:05 yerel):** owner “Okeydir o zaman her şey yeşilse birleştirme canlı/n1 geçişleri onay verildi.” dedi. Exact aday bağımsız PASS, yerel tam verify ve hosted CI yeşili koşuluyla PR #117 ve bu sürümün canlı/N1 geçişidir; sonraki sürümlere sürekli yetki değildir.
 - **Politika yükseltmesi (2026-10-27):** güncel DOCS-A56 ataması owner'ın canlı ve N1'de v16–v18 yükseltmesini uyguladığını bildirir; eski “owner yükseltmesi bekleniyor” notunun yerini alır. Recovery-rule/template versioning sorusu v17/v18 sonrasında da AÇIK; ürün kurulumlarının geneline otomatik yükseltme sonucu çıkarılmaz.
 - **Lead kararları owner cevabı değildir:** FIX9 imaj kartının hazır imajı/arka plan build'ini önseçmesi ve tek kurulu scope'u `init --yes` ile yeniden kullanması; FIX11 kökten imzalı online anahtar delegasyonu (90 gün/5 dk registry varsayılanı, yank yeni içeriği de durdurur); bubblewrap 0.13.0'da kalma ve 0.13.1 imzalayan değişikliğinin ayrı güven kararını beklemesi. Ayrıntı ve kaynak [mimari karar günlüğünde](../architecture/decisions.md).
+
+<a id="ker17-mcp-deck-grant-2026-10-28"></a>
+
+## PRE-8 değişikliği — 2026-10-28: MCP `$DECK:` anahtarı proje iznine bağlı (KER-17)
+
+Kaynak: BeUser taraması (Kerem, KER-17). `secret revoke` sonrası (izin yok) kişisel bir MCP sunucusu `$DECK:` anahtarıyla bağlanmaya devam ediyordu.
+Sebebi PRE-8'deki "MCP sunucu sırları buraya gelmez" istisnasıydı. Temiz bağlamlı kanun denetimi (`LAW-AUDIT-KER17`, koşullu PASS) ve
+Jev b3561803 (0,95) sonrasında lead GO verdi (seçenek b). Gerekçe owner'ın PRE-8 modeli: "Yönetici o projede izin vermediyse proje ana kasadaki
+anahtarı kullanamaz."
+- Kişisel dosyadaki (user ve local kapsam) MCP sunucusunun `$DECK:AD` anahtarı, sağlayıcı anahtarıyla aynı tek proje kimlik bilgisi kararından geçer.
+  Bu karar tur başlangıcında, `mcp` komutunda ve güven kartında uygulanır. Ana kasa anahtarı yalnız bu projenin izniyle kullanılır.
+- İzni olmayan sunucu başlamaz; çalışan sunucu bir sonraki turda emekliye ayrılır. Tur, anahtarı ve `deckent secret grant AD --scope S` komutunu söyler.
+  `secret list` "kullanan", silme ve geri alma kartları ve doctor bu MCP sunucularını adlandırır.
+- Reddedilenler: yalnız local kapsamda izin istemek; yalnız metin düzeltmesi.
+- Yükseltme bedeli: her anahtar için her projede bir izin (doctor komutu söyler). Bilinen sınırlar belgesinde EN/TR yükseltme notu var.
