@@ -2308,7 +2308,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/effect/index.ts`: `a0de61e4c13a1c6aafbf0011a2afefa5823ce3ae306d23e9a56af0af8c559f52`
 - `src/domain/core/effect/internal/candidate.ts`: `350152c8473d63f5ea9abed7f4afe7f30f4399997a18a6feb8e7b74238bac806`
 - `src/domain/core/effect/internal/contract.ts`: `5096c1027026e46a27cee1d12be953391d467a8710bfedc043dcfe2b7d1e0c14`
-- `src/domain/core/effect/internal/operation-input.ts`: `5cd0bb0fe35845622c78799e7dc1f9c3e00b2306652659027965c6cc0973e842`
+- `src/domain/core/effect/internal/operation-input.ts`: `a70ab4e9d030af5576ea27c068213cbf594736f3cbef5c296304cc7ca5447504`
 - `src/domain/core/effect/internal/queue.ts`: `5bc5b04b4e6f9964af821800aa70625447499c120b89df8a9f242bbc1dff9f60`
 - `src/domain/core/policy/index.ts`: `a6071fa8860fddfeaf4bb47c3ae7ce114aed4759fd2bca245e2db91e7ba1eb76`
 - `src/domain/core/policy/internal/administer.ts`: `630a4f0a578b8fbd061d2c2ee1f97b87265824863e648e05c360ade40e6e4778`

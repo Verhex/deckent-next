@@ -18,7 +18,7 @@ export { redactSensitive, unexpectedQueryFailure, takeQueryErrorRecord, reportQu
 export { EMPTY_KNOWN_SECRETS, REDACTION_CONFIG_SECRET, REDACTION_GATE_PATTERNS, REDACTION_PATTERNS, snapshotKnownSecrets, redactForRecord, redactForDecision, hasSecret } from '#platform/core/redaction/index.js';
 export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionMatch, RedactionResult } from '#platform/core/redaction/index.js';
 export { getConfigKnownSecrets } from '#platform/core/config/index.js';
-export { formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal } from '#platform/core/crash-reporting/index.js';
+export { formatHumanError, buildCrashArtifact, writeCrashArtifact, writeDiagnosticRecord, reportFatal } from '#platform/core/crash-reporting/index.js';
 export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
 export { ENVIRONMENT_KEYS, envValue, adoptProductionReact, callerEnvironment } from '#platform/core/host/index.js';
 export { isMainModule } from '#platform/core/host/index.js';

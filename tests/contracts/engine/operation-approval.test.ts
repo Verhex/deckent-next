@@ -187,7 +187,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
 
 it('BeUser: the operation card names each input field under the catalog label, redacts credentials and counts what does not fit; the digest line stays first', async () => {
   const labelled = { ...descriptor, inputLabels: { status: 'New status' } };
-  const describe = operationInputDescriber({ resolve: async () => labelled }, text => text.replace('sk-live-secret', '[secret]'), key => key === 'apiToken', count => `+${count} more`);
+  const describe = operationInputDescriber({ resolve: async () => labelled }, text => text.replace('sk-live-secret', '[secret]'), key => ['apiToken', 'password'].includes(key), count => `+${count} more`);
   const root = await mkdtemp(join(tmpdir(), 'dn-op-describe-')); roots.push(root); const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close();
   const journal = openSqliteApprovalStore(path, options), clock = { sample: () => ({ wallMs: 1_000, monotonicMs: 1_000 }) };
   try {
@@ -197,5 +197,8 @@ it('BeUser: the operation card names each input field under the catalog label, r
     if (!opened || !('pending' in opened)) throw new Error('expected pending');
     expect(opened.pending.summary.split('\n')).toEqual(['post-order@1 · records/PO-1 · ' + digest('input').slice(0, 12), 'New status: approved', 'note: key [secret]', 'apiToken: [redacted]']);
     expect(await describe(command('cmd-e', { input: { a: 'x'.repeat(30), b: 'y' } }), 40)).toBe('+2 more');
+    // Security review 810c25538: a credential under a nested key, in an object or inside an array, never reaches the card.
+    const nested = await describe(command('cmd-f', { input: { order: { id: 'PO-1', auth: { apiToken: 'tok-123' } }, lines: [{ sku: 'A', password: 'pw-9' }] } }), 2048);
+    expect(nested).not.toContain('tok-123'); expect(nested).not.toContain('pw-9'); expect(nested).toContain('PO-1'); expect(nested).toContain('"sku":"A"');
   } finally { journal.close(); }
 });

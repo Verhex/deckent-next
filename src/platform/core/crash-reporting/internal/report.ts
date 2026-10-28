@@ -7,6 +7,7 @@ import { colorTier, type ColorOptions } from '#platform/core/output/index.js';
 import { emit, type OutputSink } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
 import { resolveProductPaths, productResourcePath } from '#platform/core/host/index.js';
+import { getConfigKnownSecrets, loadConfig } from '#platform/core/config/index.js';
 import type { Environment } from '#platform/core/host/index.js';
 
 export function formatHumanError(error: DeckentError, options: ColorOptions & { locale?: Locale } = {}): string {
@@ -75,15 +76,17 @@ export async function writeCrashArtifact(error: unknown, root: string, argv: rea
 }
 /**
  * BeUser E-05 (lead 2026-10-28): an unexpected query failure of a local command is findable by its diagnostic id. One crash artifact named after the
- * id (same private 0700/0600 directory, same retention), its message the redacted diagnostic record the runtime service logs (`takeQueryErrorRecord`).
- * Best effort: no record when there is no detail or the directory is unsafe; the path is returned for the error line.
+ * id (same private 0700/0600 directory, same retention), its message the diagnostic record the runtime service logs (`takeQueryErrorRecord` with the
+ * installation's known secrets); when they cannot be read the record keeps code, time, command and id only. The path is returned for the error line.
  */
-export async function writeDiagnosticRecord(failure: DeckentError, root: string, argv: readonly string[] = process.argv, env: Environment = process.env): Promise<string | null> {
+export async function writeDiagnosticRecord(failure: DeckentError, root: string, argv: readonly string[] = process.argv, env: Environment = process.env,
+  configOptions: Omit<Parameters<typeof loadConfig>[1] & object, 'env' | 'heal'> = {}): Promise<string | null> {
   const diagnosticId = failure.params?.['diagnosticId'];
   if (failure.code !== 'QUERY_UNEXPECTED_FAILURE' || typeof diagnosticId !== 'string' || !/^[a-f0-9-]{36}$/.test(diagnosticId)) return null;
-  const detail = takeQueryErrorRecord(failure);
-  if (detail === undefined) return null;
-  const record = Object.assign(new Error(detail), { name: failure.code, stack: undefined });
+  // The installation's own known-secret snapshot (the one the service redacts with); unresolved → the record keeps no detail (fail closed).
+  const known = await loadConfig(root, { ...configOptions, env, heal: false }).then(getConfigKnownSecrets, () => null);
+  const detail = known ? takeQueryErrorRecord(failure, known) : undefined;
+  const record = Object.assign(new Error(detail ?? ''), { name: failure.code, stack: undefined });
   try {
     const directory = productResourcePath(resolveProductPaths(root, { env }), 'crashes');
     await mkdir(directory, { recursive: true, mode: 0o700 });

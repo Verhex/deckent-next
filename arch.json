@@ -967,7 +967,8 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/i18n",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/platform/core/config"
       ],
       "plan": "FOUNDATION"
     },
@@ -3469,7 +3470,8 @@
         "src/surfaces/core/cli-human",
         "src/domain/core/work-cost",
         "src/platform/core/common",
-        "src/surfaces/core/recovery-text"
+        "src/surfaces/core/recovery-text",
+        "src/engine/core/config"
       ],
       "plan": "SURFACES"
     },
