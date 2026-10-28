@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "core-2026-10-23",
+  "revision": "core-2026-10-29",
   "tracking": { "maxAttempts": 4096, "feedPageSize": 256, "maxApplications": 3 },
   "rules": [
     { "id": "container-gone", "version": 1, "status": "provisional", "action": "fence-attempt", "consecutiveAbsent": 3, "minAbsentMs": 60000 },
@@ -9,6 +9,7 @@
     { "id": "daemon-unavailable", "version": 1, "status": "provisional", "action": "alert-brain", "graceMs": 120000 },
     { "id": "daemon-unavailable-escalate", "version": 1, "status": "provisional", "action": "hand-to-human", "afterMs": 900000 },
     { "id": "crash-loop", "version": 1, "status": "provisional", "action": "hand-to-human" },
-    { "id": "policy-refusal-flood", "version": 1, "status": "provisional", "action": "alert-brain" }
+    { "id": "policy-refusal-flood", "version": 1, "status": "provisional", "action": "alert-brain" },
+    { "id": "beuser-target-refusal", "version": 1, "status": "provisional", "action": "alert-brain" }
   ]
 }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { DISPATCH_PREPARATION_PHASES, NERVOUS_ACTIVITY_STATES, NERVOUS_RULE_STATUSES, NERVOUS_LAUNCHER_BASES, attemptIdentitySchema, counterSchema, recoveryEvidenceSchema, encodeCommandProjection,
   identitySchema, recoveryActionSchema, type AuditEvent } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
-import type { NervousRule, NervousRules } from './rules.js';
+import { NervousError, type NervousRule, type NervousRules } from './rules.js';
 
 /**
  * S6R-2 detection input, gathered read-only by composition from existing signals: the supervisor's activity sample of one granted, unsettled,
@@ -65,12 +65,16 @@ export function detectNervousOutage(rules: NervousRules, scopeId: string, sinceM
     .filter(rule => elapsed >= (rule.id === 'daemon-unavailable' ? rule.graceMs : rule.afterMs))
     .map(rule => nervousProposal(scopeId, rules, rule, { kind: 'scope' }, evidence, sinceMs));
 }
-export type NervousFeedKind = 'dispatch-preparation-aborted' | 'policy-turn';
+export type NervousFeedKind = 'dispatch-preparation-aborted' | 'policy-turn' | 'beuser-target-refusal';
 /** Audit feed rules: a crash-loop breaker at its bound (diagnosis for a person; resume stays human, s5b), a policy-turn past its refusal ceiling. */
 export function detectNervousFeed(rules: NervousRules, record: Readonly<{ sequence: number; event: AuditEvent }>): NervousProposal | null {
   const { event, sequence } = record, subject = event.subject, source = { kind: subject.kind as NervousFeedKind, eventId: event.eventId, sequence };
   if (subject.kind === 'dispatch-preparation-aborted' && subject.aborts >= subject.bound) return nervousProposal(event.scopeId, rules, rules.rule('crash-loop'),
     { kind: 'task', runId: subject.runId, taskId: subject.taskId, attemptId: subject.attemptId }, { launcherPhase: subject.phase, source }, event.eventId);
   if (subject.kind === 'policy-turn' && subject.ceiling) return nervousProposal(event.scopeId, rules, rules.rule('policy-refusal-flood'), { kind: 'scope' }, { source }, event.eventId);
+  if (subject.kind === 'beuser-target-refusal') {
+    if (subject.identity.scopeId !== event.scopeId) throw new NervousError('NERVOUS_SIGNAL_INVALID');
+    return nervousProposal(event.scopeId, rules, rules.rule('beuser-target-refusal'), { kind: 'attempt', identity: subject.identity }, { source }, event.eventId);
+  }
   return null;
 }
