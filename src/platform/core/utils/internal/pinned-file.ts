@@ -126,21 +126,28 @@ export async function restorePinnedFile(path: string, bytes: Uint8Array, mode: n
 /** The deepest folder of `path` that exists (a pinned write may create the missing ones below it, each through the pinned walk). */
 const existing = async (path: string): Promise<string> => await lstat(path).then(() => path, () => dirname(path) === path ? path : existing(dirname(path)));
 /**
- * R1/R14: a small private file (a marker, a receipt) written through its pinned parent, never through a link: missing folders are created one
- * level at a time below `root` (default: the deepest existing folder), the bytes go to an exclusive no-follow temporary beside it and are renamed
- * into place inside that descriptor. A linked folder anywhere on the path is `unsafe` and nothing is written; an existing file is replaced only
- * when `replaceable` accepts its bytes (`changed` otherwise) and only when it is this user's regular single-link file.
+ * R1/R14, F1: a small private file (a marker, a receipt) published through its pinned parent, never through a link and never over a file it
+ * did not check: missing folders are created one level at a time below `root` (default: the deepest existing folder); the bytes go to an
+ * exclusive no-follow temporary and are linked into place (link never replaces). An existing file is replaced only when it is this user's
+ * regular single-link file whose bytes `replaceable` accepts, checked again on a moved-aside name; anything that appears meanwhile stays.
  */
 export async function writePinnedFile(path: string, bytes: Uint8Array, root?: string, replaceable: (current: Buffer) => boolean = () => false) {
   const dir = await openPinnedParent(path, root ?? await existing(dirname(path)));
   if (!dir) throw new PinnedFileError('unsafe');
-  const name = basename(path), temp = `.${name}.${randomUUID()}.tmp`;
+  const name = basename(path), temp = `.${name}.${randomUUID()}.tmp`, aside = `.${name}.${randomUUID()}.replacing`;
   try {
     const current = await readAt(dir, name);
     if (current && !replaceable(current.bytes)) throw new PinnedFileError('changed');
     const handle = await open(at(dir, temp), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
-    await rename(at(dir, temp), at(dir, name)).catch(async (error: unknown) => { await unlink(at(dir, temp)).catch(() => undefined); throw error; });
+    try {
+      const back = () => link(at(dir, aside), at(dir, name)).then(() => unlink(at(dir, aside)), () => undefined);
+      if (current) { await rename(at(dir, name), at(dir, aside)).catch(() => { throw new PinnedFileError('changed'); });
+        const moved = await readAt(dir, aside).catch(() => null);
+        if (!moved || !same(moved.identity, current.identity) || !replaceable(moved.bytes)) { await back(); throw new PinnedFileError('changed'); } }
+      await link(at(dir, temp), at(dir, name)).catch(async () => { if (current) await back(); throw new PinnedFileError('changed'); });
+      if (current) await unlink(at(dir, aside));
+    } finally { await unlink(at(dir, temp)).catch(() => undefined); }
     await dir.sync();
   } finally { await dir.close(); }
 }

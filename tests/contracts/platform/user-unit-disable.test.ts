@@ -19,8 +19,9 @@ it.skipIf(process.platform !== 'linux')('disables a user unit only with the conf
     const links = await userUnitLinks('deckent.service', env);
     expect(links).toEqual([`${join(units, 'default.target.wants/deckent.service')} -> ${fragment}`, `${join(units, 'default.target.wants/other.service')} -> ../deckent.service`,
       `${join(units, 'mine.service')} -> ${fragment}`]);
+    let activeState = 'inactive';
     const calls: string[][] = [], exec = async (args: readonly string[]) => { calls.push([...args]);
-      if (args[0] === 'show') return { stdout: `FragmentPath=${fragment}\nNames=deckent.service\nDropInPaths=\nUnitFileState=enabled\nActiveState=active\n`, stderr: '' };
+      if (args[0] === 'show') return { stdout: `FragmentPath=${fragment}\nNames=deckent.service\nDropInPaths=\nUnitFileState=enabled\nActiveState=${activeState}\n`, stderr: '' };
       // systemd removes the persistent links it matched (here: all three) and reports them.
       for (const entry of links) await unlink(entry.split(' -> ')[0]!);
       return { stdout: '', stderr: `Removed "${join(units, 'mine.service')}".\n` }; };
@@ -40,13 +41,20 @@ it.skipIf(process.platform !== 'linux')('disables a user unit only with the conf
     await mkdir(join(units, 'timers.target.wants')); await chmod(join(units, 'timers.target.wants'), 0o000);
     if (process.getuid?.() !== 0) { await expect(userUnitLinks('deckent.service', env)).rejects.toThrow(); await refusedWith({}); }
     await chmod(join(units, 'timers.target.wants'), 0o700);
+    // F4: an instance that started after the last absence check (active, activating, unknown) is never stopped by --now.
+    for (const state of ['active', 'activating', 'unknown']) { activeState = state; await refusedWith({}); } activeState = 'inactive';
+    // F1: a file of someone else's at a receipt's name stays byte for byte and nothing is disabled.
+    await mkdir(receipts, { mode: 0o700 }); await writeFile(join(receipts, 'unit-deckent.service.intent.json'), 'PERSON DATA', { mode: 0o600 }); calls.length = 0;
+    await expect(disableUserUnit(confirmed, exec, receipts, env)).rejects.toMatchObject({ reason: 'changed' });
+    expect(calls.some(args => args[0] === 'disable')).toBe(false); expect(await readFile(join(receipts, 'unit-deckent.service.intent.json'), 'utf8')).toBe('PERSON DATA');
+    await unlink(join(receipts, 'unit-deckent.service.intent.json'));
     calls.length = 0;
     const done = await disableUserUnit(confirmed, exec, receipts, env);
     expect(done).toMatchObject({ unit: 'deckent.service', previous: 'enabled', links });
-    expect(JSON.parse(await readFile(join(receipts, 'unit-deckent.service.intent.json'), 'utf8'))).toMatchObject({ links, previous: 'enabled', active: 'active' });
+    expect(JSON.parse(await readFile(join(receipts, 'unit-deckent.service.intent.json'), 'utf8'))).toMatchObject({ links, previous: 'enabled', active: 'inactive' });
     expect(JSON.parse(await readFile(join(receipts, 'unit-deckent.service.result.json'), 'utf8'))).toMatchObject({ ok: true, links, linksAfter: [], stderr: expect.stringContaining('Removed') });
     // The undo recreates exactly the links that went (shell-quoted, idempotent); the systemctl steps after it are the person's.
-    expect(done.undo.endsWith(' && systemctl --user daemon-reload && systemctl --user start deckent.service')).toBe(true);
+    expect(done.undo.endsWith(' && systemctl --user daemon-reload')).toBe(true);
     const relink = done.undo.slice(0, done.undo.indexOf(' && systemctl'));
     execFileSync('/bin/sh', ['-c', relink]); execFileSync('/bin/sh', ['-c', relink]);
     expect(await userUnitLinks('deckent.service', env)).toEqual(links);

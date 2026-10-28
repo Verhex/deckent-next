@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile, lstat, symlink, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile, lstat, symlink, chmod, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -559,6 +559,25 @@ it('R13: an unknown result recorded in a scope the configuration no longer names
       expect(plan.work.uncertain).toEqual([expect.objectContaining({ scopeId: 'historical', id: 'erp-1' })]); expect(plan.blockers).toContain('uncertain-managed');
     }
     expect((await previewConfiguredUninstall(project, { ...KEEP, force: true }, options)).blockers).not.toContain('uncertain-managed');
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('F8: an admitted keep-data whose only cache vanished after the card still completes through the common owner: the folder is retired', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const root = await mkdtemp(join(tmpdir(), 'deckent-admitted-noop-'));
+  try {
+    const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+    const { project, local, options, install } = await projectInstallation(root), ledger = productResourcePath(await install(), 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const entry = join(local, AREA, 'entry'); await mkdir(dirname(entry), { recursive: true, mode: 0o700 }); await writeFile(entry, 'CACHE', { mode: 0o600 });
+    const plan = await previewConfiguredUninstall(project, KEEP, options);
+    expect(plan.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'remove' });
+    // Another cleanup takes the cache while the person reads the card: D1/D2 see it absent, nothing is left to remove.
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'vanished', planDigest: plan.planDigest },
+      { confirm: async () => { await unlink(entry); await rm(join(local, 'state/scratch', 'a'.repeat(32)), { recursive: true }); return true; } }, options);
+    expect(result.status).toBe('noop');
+    const { assertNotRetired } = await import('#platform/index.js');
+    await expect(assertNotRetired(local)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' }); await expect(lstat(uninstallHoldPath(local))).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 

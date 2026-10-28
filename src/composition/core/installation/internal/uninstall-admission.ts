@@ -75,8 +75,8 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         async prepareBackup(phrase) { if (!phrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED'); passphrase = phrase;
           const initial = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, phrase, false, options, approved); backup = { ...plan.backup, destination: initial.set }; },
         async approvePlan() { /* The immutable witnessed plan is retained; each command is decided through the broker above. */ },
-        async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); passphrase = ''; // R11: one completion owner
-          await (result.status === 'completed' ? completeUninstall(config, plan, options.env ?? process.env, () => recovery.finish(result), lock) : recovery.finish(result)); },
+        async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); passphrase = ''; // R11, F8: one completion owner (an admitted noop too)
+          await (['completed', 'noop'].includes(result.status) ? completeUninstall(config, plan, options.env ?? process.env, () => recovery.finish(result), lock) : recovery.finish(result)); },
       });
     } catch (error) {
       const items = []; // One store transaction at a time: its custody lock is exclusive even within this process.

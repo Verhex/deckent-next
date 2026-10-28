@@ -108,11 +108,13 @@ export async function disableUserUnit(expected: { readonly unit: string | null; 
   const links = await userUnitLinks(unit, env).catch(() => null);
   if (!links || runtimeLinked(links, env) || JSON.stringify(links) !== JSON.stringify(expected.links ?? []) || !expected.unitFile || await userUnitFile(unit, exec) !== expected.unitFile) throw refuse();
   const values = await showValues(exec, unit, ['UnitFileState', 'ActiveState']), previous = values['UnitFileState'] ?? 'unknown', active = values['ActiveState'] ?? 'unknown';
+  if (!['inactive', 'failed'].includes(active)) throw refuse(); // F4: an instance that started since the last absence check is never stopped by --now
   const undoOf = (gone: readonly string[]) => [...gone.map(entry => { const [path = '', target = ''] = entry.split(' -> ');
-    return `mkdir -p ${quote(dirname(path))} && ln -sfn ${quote(target)} ${quote(path)}`; }), 'systemctl --user daemon-reload', ...(active === 'active' ? [`systemctl --user start ${unit}`] : [])].join(' && ');
-  // R14: receipts go through their pinned parent (a linked recovery folder is refused before anything is disabled).
+    return `mkdir -p ${quote(dirname(path))} && ln -sfn ${quote(target)} ${quote(path)}`; }), 'systemctl --user daemon-reload'].join(' && ');
+  // R14, F1: receipts go through their pinned parent; only an earlier receipt of this unit is replaced, any other file there stays (refusal).
+  const own = (bytes: Buffer) => { try { const body = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; return body['schemaVersion'] === 1 && body['unit'] === unit; } catch { return false; } };
   const receipt = (phase: string, body: object) => writePinnedFile(join(receipts, AUTOMATION.unitReceipt.replace('{unit}', unit).replace('{phase}', phase)),
-    Buffer.from(serializeJsonDocument({ schemaVersion: 1, unit, previous, active, ...body })), undefined, () => true);
+    Buffer.from(serializeJsonDocument({ schemaVersion: 1, unit, previous, active, ...body })), undefined, own);
   await receipt('intent', { links, undo: undoOf(links) });
   const outcome = await exec(['disable', '--now', '--', unit]).then(out => ({ ok: true, stderr: out.stderr }),
     (error: { stderr?: unknown; message?: string }) => ({ ok: false, stderr: String(error.stderr ?? error.message ?? '') }));

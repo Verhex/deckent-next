@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { lineCut, readPinnedFile, removePinnedFile, restorePinnedFile } from '#platform/index.js';
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -82,5 +82,12 @@ it.skipIf(process.platform !== 'linux')('R1: the retired marker is written and r
     await expect(retireInstallation(data, body)).rejects.toMatchObject({ reason: 'changed' });
     await expect(reopenInstallation(data)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' });
     expect(await readFile(join(data, 'installation/retired.json'), 'utf8')).toBe('NOT A MARKER');
+    // F1: a file placed at the marker name while the new bytes are being synced is never replaced (no-replace publish).
+    await unlink(join(data, 'installation/retired.json'));
+    const { open } = await import('node:fs/promises'), probe = await open(join(root, 'probe'), 'w'), proto = Object.getPrototypeOf(probe) as { sync(): Promise<void> }; await probe.close();
+    const sync = proto.sync, spy = vi.spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
+      spy.mockRestore(); await writeFile(join(data, 'installation/retired.json'), 'PERSON DATA', { mode: 0o600 }); return sync.call(this); });
+    await expect(retireInstallation(data, body)).rejects.toMatchObject({ reason: 'changed' });
+    expect(await readFile(join(data, 'installation/retired.json'), 'utf8')).toBe('PERSON DATA');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
