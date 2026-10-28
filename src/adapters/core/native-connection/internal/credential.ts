@@ -2,9 +2,8 @@ import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { workerEffortSchema } from '#domain/index.js';
+import { workerEffortSchema, nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape, workspaceHiddenPathsSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape, workspaceHiddenPathsSchema } from '#domain/index.js';
 import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 

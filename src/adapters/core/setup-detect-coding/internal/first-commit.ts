@@ -5,13 +5,12 @@ import { lstat, mkdtemp, open, readFile, readlink, realpath, rename, rm } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workerTreeDenyForms } from '#engine/index.js';
-import { ErrorRegistry, redactForRecord, callerEnvironment } from '#platform/index.js';
+import { ErrorRegistry, redactForRecord, callerEnvironment, sha256 } from '#platform/index.js';
 import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY } from '#adapters/core/workspace-read/index.js';
 import { configSecretHit, isConfigFile, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 import { findExecutable, type DetectEnvironment } from '#adapters/core/setup-detect-execution/index.js';
 import registry from './coding.json' with { type: 'json' };
 import { inspectFirstCommitRecovery, recoveryNames } from './first-commit-recovery.js';
-import { sha256 } from '#platform/index.js';
 
 /** The typed operation id a setup stage or card names (U3U4U7 §3.8); the stage itself and its card belong to U3-1/U4-1. */
 export const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;

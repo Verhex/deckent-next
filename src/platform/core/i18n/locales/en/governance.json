@@ -387,7 +387,7 @@
   "error.EVALUATION_EVIDENCE_CORRUPT": "Evidence integrity could not be verified. Task acceptance was not recorded.",
   "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Evaluation evidence is unavailable. Task acceptance was not recorded.",
   "error.CLI_GRAPH_INPUT_LIMIT": "Graph input exceeds cli.graphInputMaxBytes: {limit} bytes.",
-  "error.CLI_GRAPH_INPUT_INVALID": "Invalid Graph input at {path}: {reason}.",
+  "error.CLI_GRAPH_INPUT_INVALID": "Invalid Graph input at {path}: {reason}. Every field: deckent run create --schema",
   "error.CLI_GRAPH_INPUT_TTY": "Pipe graph JSON to stdin or provide a graph file. Interactive stdin is not supported.",
   "error.CLI_GRAPH_INPUT_UNAVAILABLE": "The graph input could not be read.",
   "error.CANCELLATION_DELIVERY_CONFLICT": "Cancellation delivery changed or no longer matches the recorded intent.",

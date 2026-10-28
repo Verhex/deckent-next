@@ -1,16 +1,14 @@
-import { openAiChatDialectSchema, type OpenAiChatDialect } from '#domain/index.js';
+import { openAiChatDialectSchema, type OpenAiChatDialect, parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest } from '#domain/index.js';
 export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from '#domain/index.js';
 import { nativeJsonHttpCertificateSchema as certificate } from '#adapters/core/provider-http-json/index.js';
-import { parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest } from '#domain/index.js';
 export const openAiChatWireObjectSchema = protocolWireObjectSchema;
 export { openAiChatUsageSchema, parseOpenAiChatHttpLimits, type OpenAiChatHttpLimits } from '#domain/index.js';
-import { OpenAiChatHttpError as ProtocolHttpError } from '#domain/index.js';
+import { OpenAiChatHttpError as ProtocolHttpError, wellFormedModelJson, type JsonObject } from '#domain/index.js';
 export const OpenAiChatHttpError = ProtocolHttpError;
 export type OpenAiChatHttpError = InstanceType<typeof ProtocolHttpError>;
 export { OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOLS, OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatHttpErrorCode, type OpenAiReasoningEffort, type OpenAiChatToolCall, type OpenAiChatTextMessage, type OpenAiChatToolDefinition } from '#domain/index.js';
 import { openAiCompatiblePublishedTariffSchema, type OpenAiCompatiblePublishedTariff } from './pricing-catalog.js';
 import { z } from 'zod';
-import { wellFormedModelJson, type JsonObject } from '#domain/index.js';
 
 export const OPENAI_CHAT_HTTP_ADAPTER_ID = 'openai-chat-http' as const;
 /** v5 (T4-B K1, owner 2026-10-08, Jev d69089cf): the definition carries the provider's request dialect (`dialect`, required); v4 profiles keep

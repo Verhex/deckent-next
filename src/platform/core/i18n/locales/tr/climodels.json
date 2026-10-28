@@ -260,5 +260,7 @@
   "models.catalog.lifecycle.retired": "emekli",
   "models.catalog.lifecycle.deprecated": "kullanımdan kaldırılıyor",
   "climodels.budget.usdRange": "Tutar {min} ile {max} arasında tam ABD dolarıdır: kapsamın tüm API sağlayıcıları için aylık sınır.",
-  "climodels.budget.command": "deckent models {action} komutu"
+  "climodels.budget.command": "deckent models {action} komutu",
+  "climodels.roles.pendingFooter.filled": "Yeni model: rol bekliyor ({count}). Siz rol verene kadar hiçbir rol bu modelleri kullanamaz, örneğin:\n  deckent models roles set --channel {channel} --model {model} --tier worker --roles <{roles} içinden bir ya da birkaçı>\n--tier worker ya da frontier alır; --roles virgülle ayrılmış bir liste.",
+  "climodels.roles.tierMeaning": "Kademeler: işçi (worker) sıradan görevleri yürütür; üst düzey (frontier), planlama ve inceleme rollerinde (Brain, kurtarma kararları) güvendiğiniz en yetenekli modeli işaretler. Bir rol kendi kademesini ya da üstünü alır; verdiğiniz kademe sizin yargınızdır, ölçüm değildir."
 }

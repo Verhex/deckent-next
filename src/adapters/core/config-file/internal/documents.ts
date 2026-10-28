@@ -1,8 +1,7 @@
 import { ConfigApplicationError, configFieldView, type ConfigLayer, type ConfigSnapshot, type ConfigDocumentPort } from '#engine/index.js';
 import { loadConfig, productResourcePath, resolveProductLayout, resolveGlobalConfigPaths,
   readJsonFile, versionedConfig, withConfigWriteLock, writeJsonAtomic, serializeJsonDocument, type ConfigLoadOptions } from '#platform/index.js';
-import { isRecord, digestText } from '#platform/index.js';
-import { assertConfigPreimage, backupConfig, pruneConfigBackups, ErrorRegistry } from '#platform/index.js';
+import { isRecord, digestText, assertConfigPreimage, backupConfig, pruneConfigBackups, ErrorRegistry } from '#platform/index.js';
 /** Filesystem adapter: fixed bootstrap paths, guarded preimages, durable backups and atomic publication. */
 export function createConfigFileDocuments(projectRoot: string, options: ConfigLoadOptions = {}): ConfigDocumentPort {
   const env = options.env ?? process.env;

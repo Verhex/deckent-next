@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
-import { decisionCaseSchema } from '#domain/index.js';
+import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, decisionCaseSchema } from '#domain/index.js';
 import { NativeJsonHttpError, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits, type NativeJsonHttpDefinition, type NativeJsonHttpLimits } from '#adapters/core/provider-http-json/index.js';
 import protocolJson from '../assets/protocol.json' with { type: 'json' };
 /** Explicit shape so published declarations never reference the JSON asset module (self-contained .d.ts). */

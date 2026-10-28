@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, PACKAGE_NAME } from '#platform/index.js';
 import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
 import { isSensitiveConfigKey, MESSAGE_REGISTRY, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
@@ -54,7 +54,9 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   const options: ConfigLoadOptions = { env, heal: false, onWarning: warning => emit(warning, { ...sinks, level: 'warning', render: value => value.message }) };
   const style = () => cliTableStyle(context), person = () => cliMode(context, parsed.json).mode === 'interactive';
   if (parsed.help) { emit(t('config.surface.help', {}, locale), { ...sinks, json: false }); return; }
-  if (!isWrite && (parsed.expect || parsed.scope || parsed.commandId)) throw ErrorRegistry.createError('CLI_USAGE');
+  // BeUser E-11: name the flag and say it belongs to set/unset, instead of a bare "invalid arguments".
+  if (!isWrite && (parsed.expect || parsed.scope || parsed.commandId)) throw ErrorRegistry.createError('CLI_USAGE', { locale, params: { command: [PACKAGE_NAME, argv[0], action].filter(Boolean).join(' '),
+    flag: parsed.scope ? '--scope' : parsed.expect ? '--expect' : '--command-id', usage: t('config.surface.writeOnlyFlag', {}, locale) } });
   if (parsed.verbose && action !== 'explain') throw ErrorRegistry.createError('CLI_USAGE');
   // alpha.55.1: a write of a protected root is refused off a person's terminal before anything is read (`set <key>` alone writes nothing).
   if (isWrite && keyPath && parsed.args.length === (action === 'set' ? 3 : 2)) assertConfigPerson(context, action as 'set' | 'unset', keyPath, parsed.json);

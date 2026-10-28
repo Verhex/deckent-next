@@ -55,6 +55,16 @@ describe('workspace-root project instructions', () => {
     expect(await f.reader.trust(first.source.digest)).toMatchObject({ status: 'trust-required', source: { content: 'two' } });
     expect(await f.reader.inspect()).toMatchObject({ status: 'trust-required' });
   });
+  it.skipIf(process.platform === 'win32')('[unsupported on Windows: project instruction trust cache] AYSE-19: a decline is remembered for exactly this content, grants nothing, and a changed file asks again', async () => {
+    const f = await fixture(); await writeFile(join(f.root, 'DECKENT.md'), 'one');
+    const first = await f.reader.inspect(); if (!('source' in first)) throw new Error('source');
+    await f.reader.decline(first.source.digest);
+    const again = await openProjectInstructionReader(f.root, f.trust);
+    expect(await again.declined(first.source.digest)).toBe(true); expect(await again.inspect()).toMatchObject({ status: 'trust-required' });
+    await writeFile(join(f.root, 'DECKENT.md'), 'two');
+    const changed = await again.inspect(); if (!('source' in changed)) throw new Error('source');
+    expect(await again.declined(changed.source.digest)).toBe(false);
+  });
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: project instruction trust cache] a cloned workspace with identical instructions cannot inherit consent or use its own trust record', async () => {
     const f = await fixture(); await writeFile(join(f.root, 'DECKENT.md'), 'same content');
     const first = await f.reader.inspect(); if (!('source' in first)) throw new Error('source'); await f.reader.trust(first.source.digest);

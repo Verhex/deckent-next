@@ -91,5 +91,6 @@
   "cli.coding.instructions.done.trusted": "Güvenildi (SHA-256 {digest}); buradaki sonraki iş dosyayı içerir.",
   "cli.coding.instructions.done.revoked": "Güven geri alındı (SHA-256 {digest}); buradaki sonraki iş dosya olmadan çalışır.",
   "cli.coding.instructions.done.already": "Bu içerik zaten güvenilir; hiçbir şey değiştirilmedi.",
-  "cli.coding.instructions.done.notTrusted": "Bu içerik güvenilir değil; hiçbir şey değiştirilmedi."
+  "cli.coding.instructions.done.notTrusted": "Bu içerik güvenilir değil; hiçbir şey değiştirilmedi.",
+  "config.surface.writeOnlyFlag": "--scope, --expect ve --command-id deckent config set ve unset içindir; okumalar (get, explain) bu projenin yapılandırmasını kullanır."
 }

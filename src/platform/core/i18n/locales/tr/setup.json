@@ -166,7 +166,7 @@
   "setup.state.ready": "uygulanmaya hazır",
   "setup.state.answered": "yanıtlandı; izinlerden sonra kaydedilecek",
   "setup.state.needsAnswer": "cevabınızı bekliyor",
-  "setup.state.blocked": "engelli",
+  "setup.state.blocked": "engellendi",
   "setup.state.skipped": "atlandı",
   "setup.state.unsupported": "desteklenmiyor",
   "setup.language.en": "İngilizce",

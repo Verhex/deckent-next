@@ -97,5 +97,6 @@
   "agentsevo.help.action.retire": "bir ajan sürümünü bir iş türünde emekliye ayır (kişinin kartı)",
   "agentsevo.help.action.dismiss": "açık bir öneriyi reddet (kişinin kartı)",
   "agentsevo.help.action.standing": "iş türünü sıfırla: tüm ajanları adaya döner (kişinin kartı)",
-  "agentsevo.monitor.unsignedUnknownAction": "İmza kimliklerini inceleyin: deckent agents signers"
+  "agentsevo.monitor.unsignedUnknownAction": "İmza kimliklerini inceleyin: deckent agents signers",
+  "agentsevo.card.zeroEvidence": "Uyarı: bu yükseltmeyi destekleyen ölçülmüş iş yok (kabul edilmiş görevlerden mühürlü öneri yok). Bu sizin yargınızdır; ajan bu WorkClass için seçilen ajan olur."
 }

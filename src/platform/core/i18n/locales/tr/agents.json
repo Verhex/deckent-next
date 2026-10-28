@@ -24,7 +24,7 @@
   "agents.view.parent": "Bağlı olduğu: {id}",
   "agents.view.parent.none": "Bağlı olduğu: kimse (ağacın tepesi)",
   "agents.view.identity": "Revizyon {revision} · skill kümesi {skillSet}",
-  "agents.view.tier": "Kademe: boş (kademe yetki vermez; owner daha sonra kayıtlı sonuçlardan belirler)",
+  "agents.view.tier": "Kademe: boş (kademe yetki vermez; sahibi daha sonra kayıtlı sonuçlardan belirler)",
   "agents.view.history": "Revizyonlar:",
   "agents.view.revision": "  {revision} · {by} · {at}",
   "agents.view.author.ai": "AI",
@@ -84,5 +84,8 @@
   "agents.example.workClasses": "workClasses: bu kurulumun WorkClass'larından bir ya da daha fazlası: {list}\nskills: burada tanımlı skill'ler (deckent agents skills); revision isteğe bağlı (en son). parentAgentId: bir ajan kimliği ya da null.\nBunu dosyaya kaydedin, düzenleyin, sonra: deckent agents define --input <dosya>",
   "agents.example.skill": "{\n  \"skillId\": \"fatura-kontrol\",\n  \"name\": \"Fatura kontrolü\",\n  \"text\": \"Tutarı, KDV'yi ve vade tarihini satın alma siparişiyle karşılaştır; her uyuşmazlığı alan adıyla listele.\"\n}\nBunu dosyaya kaydedin, düzenleyin, sonra: deckent agents define-skill --input <dosya>",
   "agents.example.import": "{\n  \"skillId\": \"fatura-kontrol\",\n  \"name\": \"Fatura kontrolü\",\n  \"text\": \"Tutarı, KDV'yi ve vade tarihini satın alma siparişiyle karşılaştır.\",\n  \"source\": {\n    \"ref\": \"hub:acme/invoice@1.0.0\"\n  },\n  \"pin\": \"<yayıncının verdiği 64 hex içerik özeti>\",\n  \"signature\": {\n    \"algorithm\": \"ed25519\",\n    \"keyId\": \"<içe aktarma anahtarı kimliği: deckent agents signers>\",\n    \"value\": \"<yayıncının verdiği base64 imza>\"\n  }\n}\npin ve signature'ı yayıncı verir; anahtarı burada içe aktarma anahtarı olmalı (deckent agents add-signer). Sonra: deckent agents import-skill --input <dosya>",
-  "error.AGENT_WORK_CLASS_UNKNOWN.known": "Bir WorkClass bu kurulumun kayıt defterinde yok. Şunlardan birini kullanın: {known}. Örnek: deckent agents define --example"
+  "error.AGENT_WORK_CLASS_UNKNOWN.known": "Bir WorkClass bu kurulumun kayıt defterinde yok. Şunlardan birini kullanın: {known}. Örnek: deckent agents define --example",
+  "agents.card.diff": "{field} değişir: {before} → {after}",
+  "agents.card.diff.persona": "Persona metni değişir (yukarıda).",
+  "agents.card.diff.none": "Şu anki revizyona göre hiçbir şey değişmiyor."
 }

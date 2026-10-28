@@ -248,26 +248,27 @@ aşağıdaki iş adımları Deckent'in kendi geliştirmesinde her gün kullanıl
 ### Bir kez yapılan kurulum
 
 İş bir işçi konteynerinde çalışır; bu yüzden Deckent'in bir işçi imajına, işin nerede çalışacağını söyleyen ayarlara, ilk
-iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` dördünü de kendi terminalinizde hazırlar. Her adımdan önce bir
-kartla sorar ve siz onaylamadan hiçbir şey yazmaz.
+iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` kurar; `deckent`i ilk açtığınızda kurulum adımları (`/setup`)
+dördünü de kendi terminalinizde hazırlar. Her adım bir kartla sorar ve siz onaylamadan hiçbir şey yazmaz.
 
 ```sh
-# 1. Projenizde: işçi imajını derleyin, yürütme ayarlarını yazın, ilk iş türünü tanımlayın ve işçi havuzunu
-#    kurun. Her adım önce bir kartla sorar.
+# 1. Projenizde: kurun, sonra terminali açıp kurulum adımlarını izleyin (işçi imajını derleyin ya da seçin, yürütme
+#    ayarları, ilk iş türü, işçi havuzu). /setup bunları sonra yeniden açar.
 deckent init
-#    Ya da yeni imaj derlemek yerine bu Docker'da zaten olan bir imajı kullanın:
-deckent init --image-id sha256:<imaj kimliği>
+deckent
+#    Terminal olmadan doctor eksik her adımı tam komutuyla yazar (aşağıya bakın):
+deckent doctor
 
 # 2. Servis zaten çalışıyorduysa yeni ayarları okusun diye yeniden başlatın
 deckent runtime restart
 ```
 
 İmaj derlemesi Docker ve ağ kullanır (temel imaj ve kodlama CLI'ları); kartı, bir şey başlamadan önce boyutu ve süre
-sınırını söyler. Yürütme ayarları `deckent init`'in bulduğu Docker ve Git'i ve yeni imajı yazar; diğer değerler
+sınırını söyler. Yürütme ayarları kurulum adımının bulduğu Docker ve Git'i ve imajı yazar; diğer değerler
 varsayılanında kalır (`deckent config explain execution`). İlk iş türü, seçtiğiniz kodlama CLI'ı üzerinde `coding`'dir
 (`codex`, `claude` ya da `cursor`; Cursor işçisi bir katalog adımı daha ister, işletim başvurusuna bakın); havuzu
-`workers`, bir çalışma yuvasıyla. Başka bir iş türü, havuz adı ya da kapasite için veya terminal olmadan, `deckent init`
-ve `deckent doctor` eksik adımları tam komutlarıyla yazar, örneğin:
+`workers`, bir çalışma yuvasıyla. Başka bir iş türü, havuz adı ya da kapasite için veya terminal olmadan,
+`deckent doctor` eksik adımları tam komutlarıyla yazar, örneğin:
 
 ```sh
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \

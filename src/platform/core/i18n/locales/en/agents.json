@@ -84,5 +84,8 @@
   "agents.example.workClasses": "workClasses: one or more of this installation's WorkClasses: {list}\nskills: skills already defined here (deckent agents skills); revision is optional (latest). parentAgentId: an agent id or null.\nSave this as a file, edit it, then: deckent agents define --input <file>",
   "agents.example.skill": "{\n  \"skillId\": \"invoice-check\",\n  \"name\": \"Invoice check\",\n  \"text\": \"Compare amount, VAT and due date with the purchase order; list every mismatch with the field name.\"\n}\nSave this as a file, edit it, then: deckent agents define-skill --input <file>",
   "agents.example.import": "{\n  \"skillId\": \"invoice-check\",\n  \"name\": \"Invoice check\",\n  \"text\": \"Compare amount, VAT and due date with the purchase order.\",\n  \"source\": {\n    \"ref\": \"hub:acme/invoice@1.0.0\"\n  },\n  \"pin\": \"<64-hex content digest from the publisher>\",\n  \"signature\": {\n    \"algorithm\": \"ed25519\",\n    \"keyId\": \"<import key id: deckent agents signers>\",\n    \"value\": \"<base64 signature from the publisher>\"\n  }\n}\nThe publisher supplies pin and signature; its key must be an import key here (deckent agents add-signer). Then: deckent agents import-skill --input <file>",
-  "error.AGENT_WORK_CLASS_UNKNOWN.known": "A WorkClass is not in this installation's registry. Use one of: {known}. Example: deckent agents define --example"
+  "error.AGENT_WORK_CLASS_UNKNOWN.known": "A WorkClass is not in this installation's registry. Use one of: {known}. Example: deckent agents define --example",
+  "agents.card.diff": "Changes {field}: {before} → {after}",
+  "agents.card.diff.persona": "Changes the persona text (shown above).",
+  "agents.card.diff.none": "Nothing changes compared with the current revision."
 }

@@ -187,7 +187,7 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       'fetch-listed': t('terminal.approval.window.rule.fetch-listed', {}, locale),
       'fetch-unlisted': t('terminal.approval.window.rule.fetch-unlisted', {}, locale),
       'mcp-call': t('terminal.approval.window.rule.mcp-call', {}, locale),
-      'mcp-floor': t('terminal.approval.window.rule.mcp-floor', {}, locale),
+      'mcp-floor': t('terminal.approval.window.rule.mcp-floor', {}, locale), 'effect-operation': t('terminal.approval.window.rule.effect-operation', {}, locale),
       unknown: t('terminal.approval.window.rule.unknown', {}, locale) },
     mode: {
       standart: t('terminal.approval.window.mode.standart', {}, locale),

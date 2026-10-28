@@ -43,7 +43,8 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: CLI JSON file 
   await expect(runCommand(['run', 'propose', '--proposal', file, '--approve'], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   await expect(runCommand(['run', 'propose', '--proposal', file, '--proposal', file], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   await writeFile(file, JSON.stringify({ ...proposal, standingAdmission: true }));
-  await expect(runCommand(['run', 'propose', '--proposal', file], context)).rejects.toMatchObject({ code: 'RUN_PROPOSAL_INVALID' });
+  // BeUser D-12: an unknown field is named (with --schema) before anything is sent.
+  await expect(runCommand(['run', 'propose', '--proposal', file], context)).rejects.toMatchObject({ code: 'CLI_INPUT_FIELD_INVALID', params: { field: 'standingAdmission', problem: 'unknown' } });
   expect(calls).toHaveLength(before);
 });
 it('MCP wire submits and inspects the same contract, rejects forged fields and exposes no approval mutator', async () => {

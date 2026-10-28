@@ -387,7 +387,7 @@
   "error.EVALUATION_EVIDENCE_CORRUPT": "Kanıt bütünlüğü doğrulanamadı. Görev kabulü kaydedilmedi.",
   "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Değerlendirme kanıtı kullanılamıyor. Görev kabulü kaydedilmedi.",
   "error.CLI_GRAPH_INPUT_LIMIT": "Graph girdisi cli.graphInputMaxBytes sınırını aşıyor: {limit} bayt.",
-  "error.CLI_GRAPH_INPUT_INVALID": "Graph girdisinde {path} geçersiz: {reason}.",
+  "error.CLI_GRAPH_INPUT_INVALID": "Graph girdisinde {path} geçersiz: {reason}. Tüm alanlar: deckent run create --schema",
   "error.CLI_GRAPH_INPUT_TTY": "Graph JSON verisini stdin üzerinden pipe ile gönderin veya bir Graph dosyası belirtin. Etkileşimli stdin desteklenmiyor.",
   "error.CLI_GRAPH_INPUT_UNAVAILABLE": "Graph girdisi okunamadı.",
   "error.CANCELLATION_DELIVERY_CONFLICT": "İptal teslimi değişti veya artık kayıtlı iptal isteğiyle eşleşmiyor.",

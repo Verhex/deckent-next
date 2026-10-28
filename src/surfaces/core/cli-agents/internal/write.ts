@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve as resolvePath } from 'node:path';
 import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
-import type { SkillRef } from '#domain/index.js';
+import type { AgentDefinition, SkillRef } from '#domain/index.js';
 import { agentDefinitionFileSchema as agentFileSchema, skillDefinitionFileSchema as skillFileSchema, skillImportFileSchema, configuredWorkClassIds } from '#engine/index.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { safeCell, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
@@ -13,6 +13,15 @@ interface WriteContext { readonly root: string; readonly options: ConfigLoadOpti
   readonly ask: (request: CliCardRequest) => Promise<string | null>;
   /** S8-4: the open `revise-agent` suggestion this new revision decides (`--suggestion`, full id). */
   readonly suggestion?: string }
+/** BeUser E-09: what a revision changes, field by field (a long persona is named, not repeated); "no change" when the file equals the current one. */
+function agentDiff(before: AgentDefinition['content'], after: AgentDefinition['content'], locale: Locale): string[] {
+  const skills = (rows: readonly SkillRef[]) => rows.map(row => `${row.skillId}@${row.revision}`).join(', ') || '-';
+  const pairs: [string, string, string][] = [['name', before.name, after.name], ['workClasses', before.workClasses.join(', '), after.workClasses.join(', ')],
+    ['skills', skills(before.skills), skills(after.skills)], ['parentAgentId', before.parentAgentId ?? '-', after.parentAgentId ?? '-']];
+  const lines = pairs.filter(([, a, b]) => a !== b).map(([field, a, b]) => t('agents.card.diff', { field, before: safeCell(a), after: safeCell(b) }, locale));
+  if (before.persona !== after.persona) lines.push(t('agents.card.diff.persona', {}, locale));
+  return lines.length ? lines : [t('agents.card.diff.none', {}, locale)];
+}
 export type InputAction = 'define' | 'define-skill' | 'import-skill';
 const FILE_SCHEMAS = { define: agentFileSchema, 'define-skill': skillFileSchema, 'import-skill': skillImportFileSchema } as const;
 /** BeUser E-02: the WorkClasses an agent may name here (Core seed + this installation's registry). */
@@ -67,7 +76,8 @@ export async function agentsWrite(action: 'define' | 'define-skill', input: stri
   const content = { ...rest, skills }, current = await context.inspectAgent!(io.root, { schemaVersion: 1, scopeId, agentId }, io.options);
   const previous = current.status === 'ok' ? current.item.revision : null;
   if (!await ask(previous === null ? t('agents.card.agent.new', {}, locale) : t('agents.card.agent.revise', {}, locale),
-    [...agentLines(agentId, content, locale), '', revisionLine(previous, locale), t('agents.card.agent.body', {}, locale)])) return cancelled();
+    [...agentLines(agentId, content, locale), '', revisionLine(previous, locale), ...(current.status === 'ok' ? agentDiff(current.item.content, content, locale) : []),
+      t('agents.card.agent.body', {}, locale)])) return cancelled();
   const result = await context.defineAgent!(io.root, { schemaVersion: 1, commandId: randomUUID(), scopeId, agentId, expectedRevision: previous, content,
     ...(io.suggestion ? { fromSuggestion: io.suggestion } : {}) }, io.options);
   emit(t('agents.done.agent', { id: result.item.agentId, revision: result.item.revision }, locale), sinks);

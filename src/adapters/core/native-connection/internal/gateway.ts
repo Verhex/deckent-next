@@ -1,10 +1,9 @@
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
-import { chmod, mkdtemp, realpath, lstat, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, realpath, lstat, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, projectNativeCredential, type NativeSubscription } from './credential.js';
 import { scrubWorkerEvent } from './event-guard.js';

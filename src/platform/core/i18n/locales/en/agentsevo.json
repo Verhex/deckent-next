@@ -97,5 +97,6 @@
   "agentsevo.help.action.retire": "retire an agent revision in one work class (a person's card)",
   "agentsevo.help.action.dismiss": "dismiss an open suggestion (a person's card)",
   "agentsevo.help.action.standing": "reset a work class: all its agents back to candidate (a person's card)",
-  "agentsevo.monitor.unsignedUnknownAction": "Inspect signer identities: deckent agents signers"
+  "agentsevo.monitor.unsignedUnknownAction": "Inspect signer identities: deckent agents signers",
+  "agentsevo.card.zeroEvidence": "Warning: no measured work backs this promotion (no sealed suggestion from accepted tasks). It is your own judgement; the agent becomes the one picked for this WorkClass."
 }

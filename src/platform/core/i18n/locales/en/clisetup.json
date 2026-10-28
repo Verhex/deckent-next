@@ -91,5 +91,6 @@
   "cli.coding.instructions.done.trusted": "Trusted (SHA-256 {digest}); the next Run here includes the file.",
   "cli.coding.instructions.done.revoked": "Trust taken back (SHA-256 {digest}); the next Run here works without the file.",
   "cli.coding.instructions.done.already": "Already trusted for this content; nothing was changed.",
-  "cli.coding.instructions.done.notTrusted": "This content is not trusted; nothing was changed."
+  "cli.coding.instructions.done.notTrusted": "This content is not trusted; nothing was changed.",
+  "config.surface.writeOnlyFlag": "--scope, --expect and --command-id belong to deckent config set and unset; reads (get, explain) use this project's configuration."
 }

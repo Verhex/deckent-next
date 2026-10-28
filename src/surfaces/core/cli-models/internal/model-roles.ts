@@ -68,7 +68,12 @@ export function renderModelRoleInspection(view: ModelRoleInspection, locale: Loc
     { header: t('climodels.roles.table.maker', {}, locale) }, { header: t('climodels.roles.table.tier', {}, locale) },
     { header: t('climodels.roles.table.roles', {}, locale) }, { header: t('climodels.roles.table.state', {}, locale) }], rows, style), '',
   t('climodels.roles.legend', { roles: view.roles.map(role => `${terminalSafeText(role.id)} (${tierWord(role.minimumTier, locale)})`).join(', ') }, locale)];
-  if (view.pending) lines.push(t('climodels.roles.pendingFooter', { count: view.pending }, locale));
+  // BeUser E-08: the command a person can copy (the first pending model's real ids), the values each flag takes, and what a tier means.
+  const first = view.models.find(entry => entry.state === 'pending');
+  if (view.pending && first) lines.push(t('climodels.roles.pendingFooter.filled', { count: view.pending, channel: terminalSafeText(first.channelId), model: terminalSafeText(first.modelId),
+    roles: view.roles.map(role => terminalSafeText(role.id)).join(',') }, locale));
+  else if (view.pending) lines.push(t('climodels.roles.pendingFooter', { count: view.pending }, locale));
+  lines.push(t('climodels.roles.tierMeaning', {}, locale));
   return lines.join('\n');
 }
 
