@@ -91,7 +91,7 @@ it('BeUser: pool hold on a terminal with no pool says there is nothing to hold a
   const { err, context } = io(f, { ...poolHandlers(calls), inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
   expect(await main(['pool', 'hold'], context)).toBe(1);
   expect(calls).toEqual([]); expect(card.asked).toHaveLength(1); // only the scope picker
-  expect(err.text()).toContain('nothing to hold'); expect(err.text()).toContain('/setup (First work kind, then Worker pool)');
+  expect(err.text()).toContain('nothing to hold'); expect(err.text()).toContain('/setup (First work kind, Worker image, Worker pool)'); expect(err.text()).toContain('deckent init --phase onboarding --json');
 });
 
 it('pool hold on a terminal: scope picker, then the reason by selection, then what / which pool / why; cancel writes nothing', async () => {
@@ -340,7 +340,7 @@ it('BeUser alpha.56.1 (Selin): describe names the service manager and why work i
   const noPool = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
   expect(await main(['runtime'], noPool.context)).toBe(0);
   // BeUser re-walk: with no admission pool in the settings the first step is the work kind (/setup), never `init pool` (it would refuse).
-  expect(noPool.out.text()).toContain('Running work: cannot be counted, no work kind or worker pool is set up for scope live yet; set them up in `deckent` with /setup');
+  expect(noPool.out.text()).toContain('Running work: none in the background, background workers are not set up for scope live (they do coding work in a Git project: /setup there)');
   const declared = await project({ terminal: { scopeId: 'live' }, admission: { registry: {}, poolId: 'p1', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } });
   const withKind = io(declared, { ...runtimeHandlers(calls), inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
   expect(await main(['runtime'], withKind.context)).toBe(0);

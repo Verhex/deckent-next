@@ -30,7 +30,10 @@ export async function guideScreen(model: OnboardingPresentation, kind: 'budget' 
   const question = guideQuestion(current, kind, io.locale), picked = await askOnboardingQuestion(question, io);
   if (picked.id === 'later' || picked.id === 'exit') return picked.id;
   await port.assertPerson();
-  if (kind === 'rights') { if (picked.id !== 'apply' || !port.rights || !current.snapshot.rights?.digest) return 'later'; await port.rights(current.snapshot.rights.digest); }
+  if (kind === 'rights') { if (picked.id !== 'apply' || !port.rights || !current.snapshot.rights?.digest) return 'later';
+    const result = await port.rights(current.snapshot.rights.digest), given = result.status === 'applied' || result.status === 'current'; // AYSE-R2-02 / D11-M1: only applied/current count
+    if ((await askOnboardingQuestion({ ...question, body: [given ? t('onboarding.rights.applied', {}, io.locale) : t('onboarding.rights.notApplied', { status: result.status }, io.locale)], choices: [{ id: 'apply', label: t('onboarding.session.continue', {}, io.locale) }], initial: 'apply' }, io)).id === 'exit') return 'exit';
+    if (!given) return 'later'; }
   else if (kind === 'permissions') { if (picked.id !== 'apply' || !port.permissions || !current.snapshot.permissions.digest) return 'later'; await port.permissions(current.snapshot.permissions.digest, current.snapshot.permissions.selectedProfile ?? undefined); }
   else {
     const usd = model.snapshot.budget.presetsUsd.find(value => String(value) === picked.id);

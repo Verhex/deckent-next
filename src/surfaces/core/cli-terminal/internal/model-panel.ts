@@ -74,7 +74,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       const title = t('tui.model.title', { scope: scopeId }, locale), notes: string[] = [];
       const declared = host.inspectDeclaredModels ? await host.inspectDeclaredModels(root, options) : null;
       if (!declared || declared.status !== 'declared' || declared.catalog.providers.every(provider => provider.models.length === 0)) {
-        return { title, choices: [], notes: [t('tui.model.noneDeclared', {}, locale)], defaultBlocked: defaultBlocked() };
+        return { title, choices: [], notes: [host.providerConnect ? t('tui.model.noneDeclared', {}, locale) : t('tui.model.noneDeclaredNoConnect', {}, locale)], defaultBlocked: defaultBlocked() };
       }
       const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));

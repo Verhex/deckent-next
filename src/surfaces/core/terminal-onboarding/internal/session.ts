@@ -78,7 +78,7 @@ export function createOnboardingSession(port: OnboardingPort, initial: Onboardin
 }
 
 export function deferredOnboardingNotice(input: OnboardingSnapshot, locale: Locale): string | null {
-  const snapshot = { ...input, deferred: openDeferrals(input).filter(id => id !== FIRST_TASK_DONE) };
+  const done = input.deferred.includes(FIRST_TASK_DONE), snapshot = { ...input, deferred: openDeferrals(input).filter(id => id !== FIRST_TASK_DONE && !(done && id === 'onboarding:first-task')) }; // AYSE-R2-04
   if (!snapshot.deferred.length) return null;
   const presentationTitles: Readonly<Record<string, string>> = { 'onboarding:budget': 'onboarding.budget.question', 'permissions:start-mode': 'onboarding.permissions.title',
     'onboarding:first-task': 'onboarding.firstTask.title', 'onboarding:worker-ready': 'onboarding.ready.title', 'permissions:owner-rights': 'onboarding.rights.title' };

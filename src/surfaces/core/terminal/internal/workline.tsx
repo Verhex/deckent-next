@@ -180,7 +180,6 @@ export interface WorklineProps {
   /** T2: ask for terminal focus reports and ring BEL when work finishes or a card waits while the window is unfocused (`terminal.notify`). */
   readonly attention?: boolean;
 }
-
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
   const owner = useFocusOwner();
@@ -357,7 +356,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
-  const serviceStarted = useRef(false); // BeUser M-09: one automatic start per absence, until a turn completes
+  const serviceStarted = useRef(false), fallbackShown = useRef(false); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -417,8 +416,8 @@ export function WorklineApp(props: WorklineProps) {
         push(assistantLedgerEntries(renderCompleteReply(humanRecordText(reply, props.knownSecrets), startedAtMs, Date.now())));
       } serviceStarted.current = false;
     } catch (error) {
-      history.current = messages;
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+      history.current = code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
       if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
         const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
         if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
@@ -476,7 +475,8 @@ export function WorklineApp(props: WorklineProps) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
         if (!execution.signal.aborted && LOCAL_FALLBACK.has(String((error as { code?: unknown })?.code)) && props.doPlan.localFallback) {
           onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; /* lead 2026-10-27 (owner İ-1/İ-6/İ-7, Jev 70b89253): runs here via the agent's governed tools */ const tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
-          push([notice('info', `${errorText(error)}\n${tools === false && props.doPlan.localNoTools ? props.doPlan.localNoTools : props.doPlan.localFallback}`)]); await runTurn(slash.args.trim(), mentioned, execution); return true;
+          const line = tools === false && props.doPlan.localNoTools ? props.doPlan.localNoTools : props.doPlan.localFallback, calm = (error as { code?: unknown }).code === 'RUN_ADMISSION_NOT_CONFIGURED'; // AYSE-12: nothing set up → one calm line per session; a worker that cannot run keeps its reason
+          if (!calm || !fallbackShown.current) { fallbackShown.current ||= calm; push([notice('info', calm ? line : `${errorText(error)}\n${line}`)]); } await runTurn(slash.args.trim(), mentioned, execution); return true;
         }
         if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }

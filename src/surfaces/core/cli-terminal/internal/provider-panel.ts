@@ -75,7 +75,7 @@ const referenceKey = (reference: ModelReference) => `${reference.providerId}@${r
  * models to the key stays the governed catalog/profile path (open owner decision): the result names the next step instead.
  */
 /** Model connections of this terminal waiting for an approval: the same choice continues under its command id (display state, never authority). */
-const pendingConnections = new Map<string, string>(), PENDING_CONNECTIONS_KEPT = 32;
+const pendingConnections = new Map<string, string>(), PENDING_CONNECTIONS_KEPT = 32, answered = new Set<string>(); // AYSE-R2-05: providers whose server answered this session
 type DeclaredConnectionModel = Readonly<{ id: string; label: string; detail: string; family: readonly string[] }>;
 async function connectionModelRows(kind: ProviderConnectKindView, connect: NonNullable<Host['providerConnect']>, enabled: boolean,
   declared: readonly DeclaredConnectionModel[], locale: Locale): Promise<ProviderPanelKind['models']> {
@@ -107,7 +107,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       if (workspaceRequired && !workspaces.length) { lines.push({ label: '', text: t('tui.workspace.required', {}, locale), tone: 'warning' }); return; }
       const result = await host.connectModel(root, { schemaVersion: 1, commandId: `provider-${randomUUID()}`, scopeId, connection: kind.id, endpoint,
         model: { pull: 'available' }, ...(workspaces[0] ? { workspaceId: workspaces[0].id } : {}) }, options);
-      lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale).filter(row => row.text !== t('tui.provider.model.next', {}, locale)));
+      lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale).filter(row => row.text !== t('tui.provider.model.next', {}, locale))); for (const model of result.models ?? []) if (model.reference) answered.add(model.reference.providerId);
       const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       const usable = reading?.models.find(row => row.availability.invocable && result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference)));
       const worker = usable ? null : await workerReadiness(host, root, scopeId, options, result.reference.providerId, locale);
@@ -175,7 +175,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
         const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
-        const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
+        const detail = !kind.available ? '' : keyName === null ? '-' : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
@@ -200,7 +200,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-      for (const model of reading?.models ?? []) notes.push(`${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${modelInvocabilityText(model.availability, locale)}`);
+      for (const model of reading?.models ?? []) notes.push(`${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale) : modelInvocabilityText(model.availability, locale)}`);
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
     },
     endpoint(kind, text) {

@@ -79,6 +79,9 @@ it('BeUser re-walk (3t): an environment-variable store that cannot list names is
     const notes = (await port.inspect()).notes.join('\n');
     expect(notes).toContain(locale === 'en' ? 'This does not block anything; a local server needs no key.' : 'Bu hiçbir şeyi engellemez; yerel sunucu anahtar istemez.');
     expect(notes).not.toContain('core.secret-store.env@1');
+    // AYSE-R2-05: the keyless local server row never shows the key store's listing problem.
+    const local = (await port.inspect()).kinds.find(kind => kind.id === 'local-openai')!;
+    expect(local.detail).toBe(t('tui.provider.state.notConnected', {}, locale));
   }
 });
 
@@ -480,9 +483,12 @@ describe('/model source', () => {
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});
-    const view = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'not-configured', availability: 'not-observed', catalog: null }) }, options, 'tr')
-      .inspect();
+    const empty = { inspectDeclaredModels: async () => ({ schemaVersion: 1 as const, status: 'not-configured' as const, availability: 'not-observed' as const, catalog: null }) };
+    const view = await modelPanelSource(root, 'scope', { ...empty, providerConnect: connectHost('ok') } as never, options, 'tr').inspect();
     expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('Henüz bağlı bir model yok'); expect(view.notes[0]).toContain('/provider');
+    // Astra D10-M1: without a provider port there is no "Connect a model…" row, so the note names the CLI instead.
+    const bare = await modelPanelSource(root, 'scope', empty as never, options, 'en').inspect();
+    expect(bare.notes[0]).toContain('deckent models connect'); expect(bare.notes[0]).not.toContain('Connect a model…');
   });
 });
 

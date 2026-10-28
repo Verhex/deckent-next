@@ -8,7 +8,7 @@ export async function firstTaskScreen(model: OnboardingPresentation, io: CliCard
   const snapshot = model.snapshot, rows = registry.select(snapshot.folderFacts), locale = io.locale;
   const question = { title: t('onboarding.firstTask.title', {}, locale), step: model.completed + 1, total: model.total,
     // Lead 2026-10-27 (owner İ-1): without a worker pool the task still runs, here in the terminal; the screen says which path it takes.
-    body: [t('onboarding.firstTask.body', {}, locale), ...(snapshot.plan.stages.some(stage => stage.id === 'work:pool' && stage.state !== 'done') ? [t('onboarding.firstTask.local', {}, locale)] : [])], choices: [...rows.map(row => ({ id: row.id,
+    body: [t('onboarding.firstTask.body', {}, locale), ...(snapshot.plan.stages.some(stage => stage.id === 'work:pool' && stage.state !== 'done') ? [snapshot.folderFacts.kind === 'coding' ? t('onboarding.firstTask.local', {}, locale) : t('onboarding.firstTask.localNoGit', {}, locale)] : [])], choices: [...rows.map(row => ({ id: row.id,
       label: `${onboardingMessage(row.labelKey, {}, locale)} · ${onboardingMessage(row.effectKey, {}, locale)}` })), { id: 'free', label: t('onboarding.firstTask.freeText', {}, locale) }] };
   const picked = await askOnboardingQuestion(question, io);
   if (picked.id === 'later' || picked.id === 'exit') return picked.id;

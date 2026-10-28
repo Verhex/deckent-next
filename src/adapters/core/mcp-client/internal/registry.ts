@@ -175,9 +175,9 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
     missing ??= name; return '';
   });
   const secrets: string[] = [];
-  let denied = false; const unresolved = (reference: string) => ({ ok: false as const, reason: `secret-${denied ? 'refused' : 'unresolved'}:${reference}` }); // KER-17: PRE-8 refusal vs no value
+  let denied: string | null = null; const unresolved = (reference: string) => ({ ok: false as const, reason: denied ? `secret-refused:${denied}:${reference}` : `secret-unresolved:${reference}` }); // KER-17/D11-R1: the refusal kind is kept
   const resolve = async (reference: string): Promise<string | null> => {
-    const resolved = await secret(reference).catch((error: unknown) => { denied = /^(?:SECRET_GRANT_REQUIRED|DECK_DECLARATION_REQUIRED|SECRET_PROJECT_IDENTITY_REQUIRED|SECRET_PROJECT_MISSING)$/u.test(String((error as { code?: unknown } | null)?.code)); return undefined; });
+    const resolved = await secret(reference).catch((error: unknown) => { const code = String((error as { code?: unknown } | null)?.code); denied = /^(?:SECRET_GRANT_REQUIRED|DECK_DECLARATION_REQUIRED|SECRET_PROJECT_IDENTITY_REQUIRED|SECRET_PROJECT_MISSING)$/u.test(code) ? code : null; return undefined; });
     if (resolved === undefined || resolved === '') return null;
     secrets.push(resolved); return resolved;
   };

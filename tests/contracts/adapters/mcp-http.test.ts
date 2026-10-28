@@ -111,9 +111,9 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'answered' });
     granted = false;
     const after = await open();
-    expect(after.offered.size).toBe(0); expect(after.notices).toEqual([JSON.stringify({ kind: 'secret-refused', name: 'web-docs', key: 'GH', scope: 'scope' })]);
+    expect(after.offered.size).toBe(0); expect(after.notices).toEqual([JSON.stringify({ kind: 'secret-refused', name: 'web-docs', code: 'SECRET_GRANT_REQUIRED', key: 'GH', scope: 'scope' })]);
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'refused', reason: 'not-connected' });
-    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:GH' }] });
+    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH' }] });
     granted = true;
     expect((await open()).offered.size).toBe(2);
   }, 60_000);
@@ -141,4 +141,14 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     await expect(mcpCommand(['mcp', 'add', '--transport', 'sse', 'web', 'https://x'], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
     await expect(mcpCommand(['mcp', 'add', '--header', 'A: b', 'web', '--', 'node', 'srv.js'], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
+});
+
+it('Astra D11-R1: every project-vault refusal keeps its own kind through stdio env and HTTP headers (never collapsed into "not granted")', async () => {
+  for (const code of ['SECRET_GRANT_REQUIRED', 'SECRET_PROJECT_MISSING', 'DECK_DECLARATION_REQUIRED', 'SECRET_PROJECT_IDENTITY_REQUIRED']) {
+    const secret = async () => { throw Object.assign(new Error('refused'), { code }); };
+    const stdio = await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, secret);
+    const http = await expandMcpEntry({ type: 'http', url: 'https://mcp.example/v1', headers: { authorization: 'Bearer $DECK:KEY' } } as never, 'user', {}, secret);
+    expect([stdio, http]).toEqual([{ ok: false, reason: `secret-refused:${code}:KEY` }, { ok: false, reason: `secret-refused:${code}:KEY` }]);
+  }
+  expect(await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, async () => undefined)).toEqual({ ok: false, reason: 'secret-unresolved:KEY' });
 });

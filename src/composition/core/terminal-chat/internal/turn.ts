@@ -60,7 +60,7 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
   const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
   const configuredChat = readTerminalChatConfig(config);
   if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const reference = pinned ?? (await terminalModelHere(input.projectRoot, input.options)).choice?.reference ?? configuredChat.reference;
+  const reference = pinned ?? (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? configuredChat.reference; // SDK/Brain contract: the configured model only (the terminal passes its own choice explicitly)
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: settings.maxCompletionTokens ?? effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);

@@ -266,7 +266,7 @@ export interface ProviderPanelPort {
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
-  readonly actions: Readonly<Record<'connect' | 'connectNoKey' | 'replace' | 'disconnect' | 'model' | 'grant' | 'signIn', string>>;
+  readonly actions: Readonly<Record<'connect' | 'connectNoKey' | 'connectKeyOptional' | 'replace' | 'disconnect' | 'model' | 'grant' | 'signIn', string>>;
   /** T4-B: the model list's title (`{kind}`), its empty note, and the key-name row the key step shows. */
   readonly modelTitle: string; readonly modelEmpty: string; readonly keyName: string;
   readonly endpointTitle: string; readonly endpointHint: string;

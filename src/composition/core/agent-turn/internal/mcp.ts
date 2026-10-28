@@ -20,7 +20,7 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   if (notice.kind === 'tools-changed') return t('mcp.start.toolsChanged', { name, count: notice.count }, locale);
   if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
   if (notice.kind === 'not-decided') return t('mcp.start.notDecided', { name, code: notice.code }, locale);
-  if (notice.kind === 'grant-refused') return t('mcp.start.grantRefused', { name, reason: mcpGrantReasonText(notice.reason, locale) }, locale); if (notice.kind === 'secret-refused') return t('mcp.start.secretRefused', { name, key: notice.key, scope: notice.scope }, locale);
+  if (notice.kind === 'grant-refused') return t('mcp.start.grantRefused', { name, reason: mcpGrantReasonText(notice.reason, locale) }, locale); if (notice.kind === 'secret-refused') { const params = { name, key: notice.key, scope: notice.scope }; return notice.code === 'SECRET_PROJECT_MISSING' ? t('mcp.start.secretProjectMissing', params, locale) : notice.code === 'DECK_DECLARATION_REQUIRED' ? t('mcp.start.secretUndeclared', params, locale) : notice.code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? t('mcp.start.secretNoIdentity', params, locale) : t('mcp.start.secretRefused', params, locale); }
   const { failure } = notice, diagnosis = failure.diagnosis;
   const why = diagnosis?.kind === 'path-hidden'
     ? t('mcp.start.failed.pathHidden', { name, path: diagnosis.path, targetSuffix: diagnosis.target ? ` -> ${diagnosis.target}` : '',

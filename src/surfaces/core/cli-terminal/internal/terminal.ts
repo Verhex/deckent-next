@@ -48,7 +48,6 @@ function ttyState(context: TerminalLaunchContext) {
   const rows = stdoutTty ? (stdout as { rows?: number }).rows ?? null : null;
   return { stdin: Boolean(stdin.isTTY), stdout: stdoutTty, columns, rows };
 }
-
 /** Typed errors render through the catalog; untyped failures never echo provider or transport detail. */
 function errorText(error: unknown, locale: Locale): string {
   if (error instanceof DeckentError && ErrorRegistry.has(error.code)) {
@@ -290,6 +289,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  const hereModel = async (pinned?: ModelReference) => pinned ?? await context.describeTerminalChatPlan?.(root, options).then(plan => plan.source === 'connected' || plan.skippedDefault ? plan.reference ?? undefined : undefined, () => undefined); // M-08/AYSE-13: the model this terminal shows is the person's choice; /do passes it
   if (parsed.action !== 'session' && (!tty.stdin || !tty.stdout)) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
@@ -467,7 +467,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
       plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) =>
-        pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal)) : context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe),
+        pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal)) : hereModel(reference).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)),
       lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),

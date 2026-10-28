@@ -139,15 +139,17 @@ it.each(['tr', 'en'] as const)('CACHE-SLICE1 /usage: raw read, 5m and 1h writes 
   expect(partial).toMatch(locale === 'tr' ? /ölçülen raporlarda 0,1700 USD, tahmin \(1\/2\)/u : /0\.1700 USD, estimate, in measured reports \(1\/2\)/u);
 });
 it.each([true, false])('BeUser M-09: a turn that finds the runtime service absent starts it once and sends the line again (start port %s)', async withPort => {
-  let calls = 0, starts = 0;
+  let calls = 0, starts = 0; const users: number[] = [];
   const view = mountWorkline({ ...(withPort ? { startService: async () => { starts++; return 'SERVICE STARTED'; } } : {}),
     errorText: error => `ERR ${(error as { code?: string }).code}`,
-    streamTurn: async function* () { if (calls++ === 0) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE');
+    streamTurn: async function* (messages: readonly { role: string; content: string }[]) { users.push(messages.filter(row => row.role === 'user' && row.content.startsWith('hello')).length);
+      if (calls++ === 0) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE');
       yield { kind: 'text' as const, text: 'answered\n' }; yield { kind: 'done' as const, finish: 'stop' as const }; } } as never); views.push(view);
   await settle(40); view.stdin.write('hello\r');
   await until(() => view.stdout.text.includes(withPort ? 'answered' : 'ERR LOCAL_RUNTIME_UNAVAILABLE'), 'turn outcome');
   expect([calls, starts]).toEqual(withPort ? [2, 1] : [1, 0]); expect(view.stdout.text.includes('SERVICE STARTED')).toBe(withPort);
-  expect(view.stdout.text.includes('ERR LOCAL_RUNTIME_UNAVAILABLE')).toBe(!withPort); // a started service sends the line again as a new turn
+  expect(view.stdout.text.includes('ERR LOCAL_RUNTIME_UNAVAILABLE')).toBe(!withPort);
+  if (withPort) expect(users).toEqual([1, 1]); // D11-M2: the resent line reaches the model once, not twice // a started service sends the line again as a new turn
 });
 
 it('BeUser D-05: the open terminal says once per absence that the runtime service stopped under it, never for a service it never reached', async () => {

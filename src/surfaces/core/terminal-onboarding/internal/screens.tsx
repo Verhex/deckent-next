@@ -21,7 +21,7 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
     if (!step) return null;
     if (step.kind === 'first-task') {
       const result = await firstTaskScreen(model, io);
-      if (result === 'later') await session.defer(step);
+      if (result === 'later' && !model.snapshot.deferred.includes(FIRST_TASK_DONE)) await session.defer(step); // AYSE-R2-04: after a first task, Esc only closes
       if (typeof result === 'object') await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined);
       return typeof result === 'object' ? result : null;
     }

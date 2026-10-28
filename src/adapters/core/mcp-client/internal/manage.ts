@@ -362,7 +362,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     view = await loadMcpRegistry(registry);
     pool.retain(trustedIds(view));
   }
-  for (const server of view.servers) if (server.reason?.startsWith('secret-refused:')) notices.push({ kind: 'secret-refused', name: server.name, key: server.reason.slice(15), scope: scopeId }); // KER-17
+  for (const server of view.servers) if (server.reason?.startsWith('secret-refused:')) notices.push({ kind: 'secret-refused', name: server.name, code: server.reason.slice(15).split(':')[0]!, key: server.reason.slice(15).split(':').slice(1).join(':'), scope: scopeId }); // KER-17/D11-R1
   const settings = mcpClientSettings(view, { resultMaxBytes: input.resultMaxBytes, inputMaxBytes: input.inputMaxBytes });
   const byName = new Map(view.servers.map(server => [server.name, server])), outcomes: [McpServerView, McpServerOpen][] = [];
   const offered = settings ? await openMcpAgentTools(pool, settings, { cwd: input.cwd, environment: registry.environment, sandboxes: input.sandboxes, homeRoot: mcpServerHomes(registry.layout), homeScope: scopeId },

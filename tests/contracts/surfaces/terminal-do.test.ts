@@ -90,10 +90,13 @@ it.each([['RUN_ADMISSION_NOT_CONFIGURED', true], ['BRAIN_TIER_REFUSED', true], [
     doPlan: { ...words, localFallback: 'RUNS HERE', localNoTools: 'NO TOOLS', lines: () => [],
       plan: async () => { throw new DeckentError(code, code); } } }); mounted.push(view);
   await settle(40); view.stdin.write('/do Read package.json\r');
-  await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown');
-  if (local) await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn answer'); else await settle(80);
+  if (local) await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn answer'); else await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown');
   expect(asked).toEqual(local ? ['Read package.json'] : []);
   expect(view.stdout.text.includes('RUNS HERE')).toBe(local); expect(view.stdout.frame).not.toContain('PLANNING');
+  // AYSE-12: with nothing set up the screen shows one calm line (no error code), once per session; other reasons stay visible.
+  expect(view.stdout.text.includes(`REFUSED ${code}`)).toBe(code !== 'RUN_ADMISSION_NOT_CONFIGURED');
+  if (code === 'RUN_ADMISSION_NOT_CONFIGURED') { await settle(40); view.stdin.write('/do Again\r'); await until(() => asked.length === 2, 'second local turn');
+    expect(view.stdout.frame.split('RUNS HERE').length - 1).toBe(1); }
 });
 it('BeUser M-07: a plan rejected because no worker can run it shows the reason and runs here', async () => {
   const pending = pendingBrainFixture(), asked: string[] = [];
