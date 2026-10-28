@@ -34,7 +34,8 @@ it('BeUser re-walk: a fresh install without an admission pool names the missing 
     const context = { root: '/fixture-project', stdout: { write(text: string) { output += text; } },
       async installConfiguredExecutionPool(): Promise<InstallationPoolResult> { return { schemaVersion: 1, scopeId: 's', status: 'unavailable', reason: 'invalid-admission', configured: null }; } };
     expect(await main(['init', 'pool', '--scope', 's', '--preview', '--lang', language], context)).toBe(0);
-    expect(output).toContain('admission.poolId'); expect(output).toContain('/setup'); expect(output).toContain('deckent init registry --scope s');
-    expect(output.indexOf('deckent init registry')).toBeLessThan(output.indexOf('deckent init pool --scope s --preview'));
+    // AYSE-R2: the person reads the managed step (/setup); the exact commands come from the onboarding plan; the fields stay named for the CLI/AI.
+    for (const word of ['admission.poolId', 'executionSlots', 'inFlightSlots', '/setup', 'deckent init --phase onboarding --json']) expect(output).toContain(word);
+    expect(output).not.toContain('deckent init pool --scope s --preview');
   }
 });

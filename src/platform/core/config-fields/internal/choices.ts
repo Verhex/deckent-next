@@ -248,6 +248,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'brain_planner.quotaWait.maxWaitMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [0, 300000, 900000, 1800000, 3600000] },
   'brain_planner.quotaWait.marginMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [0, 5000, 15000, 60000] },
   'brain_planner.quotaWait.maxAttempts': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 3] },
+  'brain_planner.correctionRetries': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 1] },
   'brain_planner.context.tokenFramingAllowance': { kind: 'numeric', unit: 'count', step: 1, presets: [0, 256, 512, 1024, 2048, 4096] },
   'provider_invocation_profiles.schemaVersion': { kind: 'schema' },
   'provider_invocation_profiles.profiles': { kind: 'document' },
