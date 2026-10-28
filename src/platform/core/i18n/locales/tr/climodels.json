@@ -167,6 +167,7 @@
   "climodels.models.card.activate": "{model} açılsın mı?",
   "climodels.models.card.deactivate": "{model} kapatılsın mı?",
   "climodels.models.card.connect": "{model} bağlansın mı?",
+  "climodels.models.card.connectAll": "Şu an kullanılabilen ücretli tüm modeller bağlansın mı?",
   "climodels.models.card.connectWhat": "Modeli beyan eder, kapsamın çağrı profilini yazar ve etkinleştirir; her adım kendi yönetilen yolunda.",
   "climodels.models.card.where": "Kapsam {scope} · sağlayıcı {provider}",
   "climodels.models.card.whereCatalog": "Kapsam {scope} · kanal {channel}",

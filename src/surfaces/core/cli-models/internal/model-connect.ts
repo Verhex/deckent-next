@@ -12,6 +12,7 @@ const FLAGS = ['--scope', '--connection', '--endpoint', '--model', '--reference'
 /** `provider@version/model@version`: the exact catalog reference the terminal and `models binding` show. */
 const REFERENCE = /^([^@/\s]+)@([1-9]\d*)\/([^@/\s]+)@([1-9]\d*)$/u;
 
+const usage = (flag: string) => ErrorRegistry.createError('CLI_USAGE', { params: { command: t('climodels.budget.command', { action: 'connect' }), flag } });
 function parse(argv: readonly string[]) {
   const values = new Map<string, string>(); let json = false, help = false;
   for (let index = 2; index < argv.length; index++) {
@@ -19,13 +20,13 @@ function parse(argv: readonly string[]) {
     if ((flag === '--json' && !json)) { json = true; continue; }
     if (flag === '--no-color') continue;
     if ((flag === '--help' || flag === '-h') && !help) { help = true; continue; }
-    if (!(FLAGS as readonly string[]).includes(flag) || values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
-    const value = argv[++index]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!(FLAGS as readonly string[]).includes(flag) || values.has(flag)) throw usage(flag); // BeUser M-26: the refusal names the argument
+    const value = argv[++index]; if (!value || value.startsWith('-')) throw usage(flag);
     values.set(flag, value);
   }
   if (help) return { help, json, values };
-  for (const flag of ['--scope', '--connection', '--command-id']) if (!values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
-  if (values.has('--model') && values.has('--reference')) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!values.has('--connection')) throw usage('--connection'); // --scope defaults to this folder's scope, --command-id is generated (M-26)
+  if (values.has('--model') && values.has('--reference')) throw usage('--reference');
   return { help, json, values };
 }
 const stepWord = (state: string, locale: Locale) => state === 'written' ? t('models.connect.step.written', {}, locale)
@@ -68,12 +69,16 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
   if (value('--reference') && !exact) throw ErrorRegistry.createError('CLI_USAGE');
   const delegate = value('--delegate'), cli = { ...(value('--executable') ? { executable: value('--executable') } : {}), ...(value('--config-dir') ? { configDir: value('--config-dir') } : {}) };
   if (delegate !== undefined && !/^(none|ai|system|ai,system|system,ai)$/u.test(delegate)) throw ErrorRegistry.createError('CLI_USAGE');
-  const command = modelConnectCommandSchema.safeParse({ schemaVersion: 1, commandId: value('--command-id'), scopeId: value('--scope'), connection: value('--connection'),
+  const root = context.root ?? process.cwd(), configured = await loadConfig(root, { env, heal: false }).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const scope = await resolveCommandScope({ command: 'deckent models connect', locale, explicit: value('--scope'), configured: typeof configured === 'string' ? configured : undefined, mutating: true,
+    interactive: modelsInteractive(context, parsed.json), listScopes: () => scopeLister(context as never, root, { env })().catch(() => []), pick: request => askModelsCard(context, locale, request) });
+  if (!scope) { reportModelsCancelled(context, locale); return EXIT_CODES.error; }
+  const command = modelConnectCommandSchema.safeParse({ schemaVersion: 1, commandId: value('--command-id') ?? `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: value('--connection'),
     ...(Object.keys(cli).length ? { cli } : {}), ...(delegate === undefined ? {} : { delegate: delegate === 'none' ? [] : delegate.split(',') }),
     endpoint: value('--endpoint') ?? null, model: exact ? { reference: { providerId: exact[1], providerVersion: Number(exact[2]), modelId: exact[3], modelVersion: Number(exact[4]) } }
       : value('--model') ? { nativeId: value('--model') } : { pull: 'available' } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');
-  emit(await context.connectModel(context.root ?? process.cwd(), command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale) });
+  emit(await context.connectModel(root, command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale) });
 }
 
 /** The connection kinds and their seeded models the host binds for the terminal's `/provider` window (registry data, exact ids). */
@@ -117,7 +122,7 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
     options: models.map(model => ({ id: model.nativeId, label: model.displayName && model.displayName !== model.nativeId
       ? `${terminalSafeText(model.nativeId)} · ${terminalSafeText(model.displayName)}` : terminalSafeText(model.nativeId) })) });
   if (nativeId === null || !pull && !models.some(model => model.nativeId === nativeId)) return cancelled();
-  const answer = await askModelsCard(context, locale, { title: t('climodels.models.card.connect', { model: pull ? t('tui.provider.pull', {}, locale) : terminalSafeText(nativeId) }, locale),
+  const answer = await askModelsCard(context, locale, { title: pull ? t('climodels.models.card.connectAll', {}, locale) : t('climodels.models.card.connect', { model: terminalSafeText(nativeId) }, locale), // M-27: no "Connect Connect"
     body: [t('climodels.models.card.where', { scope: terminalSafeText(scope.scopeId), provider: catalog[kind.labelKey] ?? kind.id }, locale), t('climodels.models.card.connectWhat', {}, locale)],
     options: modelsConfirmOptions(locale) });
   if (answer !== 'apply') return cancelled();

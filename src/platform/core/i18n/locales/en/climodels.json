@@ -167,6 +167,7 @@
   "climodels.models.card.activate": "Switch on {model}?",
   "climodels.models.card.deactivate": "Switch off {model}?",
   "climodels.models.card.connect": "Connect {model}?",
+  "climodels.models.card.connectAll": "Connect all available priced models?",
   "climodels.models.card.connectWhat": "Declares the model, writes the scope's invocation profile and activates it; each step on its governed path.",
   "climodels.models.card.where": "Scope {scope} · provider {provider}",
   "climodels.models.card.whereCatalog": "Scope {scope} · channel {channel}",

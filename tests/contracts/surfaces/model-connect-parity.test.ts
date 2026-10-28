@@ -37,6 +37,16 @@ describe('models.connect surface parity', () => {
       env: {}, connectModel: async () => result })).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
 
+  it('BeUser M-26: --scope defaults to an explicit flag or this folder\'s scope and --command-id is generated; a refusal names the argument', async () => {
+    const seen: ModelConnectCommand[] = [], context = { root: '/project', env: {}, stdout: { write: () => true } as never, connectModel: async (_root: string, input: ModelConnectCommand) => { seen.push(input); return result; } };
+    await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'codex-cli-subscription', '--model', 'gpt-6.1-sol', '--json'], context);
+    expect(seen[0]).toMatchObject({ scopeId: 'scope', connection: 'codex-cli-subscription', model: { nativeId: 'gpt-6.1-sol' } }); expect(seen[0]!.commandId).toMatch(/^connect-[0-9a-f-]{36}$/u);
+    for (const [argv, flag] of [[['--model', 'x'], '--connection'], [['--connection', 'openai-api', '--bogus', 'x'], '--bogus']] as const) {
+      const error = await modelsCommand(['models', 'connect', '--scope', 'scope', ...argv], context).catch((caught: { code?: string; message?: string }) => caught);
+      expect(error).toMatchObject({ code: 'CLI_USAGE' }); expect(String((error as Error).message)).toContain(flag);
+    }
+  });
+
   it('BeUser alpha.56.1 (Ayşe): the person\'s text leads with the model and its state; the reference, key and bookkeeping steps follow', async () => {
     const out: string[] = [];
     await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'local-openai', '--command-id', 'c-3', '--lang', 'tr'], { root: '/project', env: {},

@@ -187,7 +187,7 @@ export const CLI_CATALOG = [
     action('create-budget', 'models', 'cli.help.action.create-budget', 'cli.help.modelsBudget', { requires: ['--usd <amount>'] }),
     action('revise-budget', 'models', 'cli.help.action.revise-budget', 'cli.help.modelsBudget', { requires: ['--input <file|-> | --usd <amount>'] }),
     action('audit-spending', 'models', 'cli.help.action.audit-spending', 'cli.help.modelsAuditSpending', { requires: ['--input <file|->'] }),
-    action('connect', 'models', 'cli.help.action.models.connect', 'cli.help.modelsConnect', { requires: ['--connection <id>', '--command-id <id>', '--model <id> | --reference <ref>'] }),
+    action('connect', 'models', 'cli.help.action.models.connect', 'cli.help.modelsConnect', { requires: ['--connection <id>'] }),
     action('login', 'models', 'headless.help.action.login', 'headless.help.login', { requires: ['--connection <id>'] }),
     action('logout', 'models', 'siwc.help.action.logout', 'siwc.help', { requires: ['--connection <id>'] }),
     { name: 'catalog', group: 'models', summary: 'cli.help.action.catalog', detail: 'cli.help.modelsCatalog', children: [
