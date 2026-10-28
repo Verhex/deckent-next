@@ -48,6 +48,8 @@ export interface TerminalDeliveryPort {
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
   previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** BeUser M-32: the retained patch's read-only per-file diffs without the integration check, so a refused check still shows what the worker changed. */
+  patchOnly?(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card); the Run view then says `set-aside`. */
   dismiss?(target: DeliveryTarget, action: 'dismiss' | 'restore'): Promise<void>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */

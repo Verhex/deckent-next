@@ -32,6 +32,8 @@ export interface DeliveryWindowLabels {
   readonly verifyHow: string; readonly verifyCheck: string; readonly verifyHints: string; readonly verifyNoneHints: string;
   readonly verifiedBy: string; readonly notVerified: string;
   /** Read-only per-file diff view inside the window: key hints, header, why a body is absent, cut lines and the scroll position. */
+  /** BeUser M-32: the refused window's list of the worker's changes (`{count}`, `{added}`, `{removed}`) and its keys. */
+  readonly patchChanged: string; readonly failedDiffHints: string;
   readonly diffListHints: string; readonly diffHints: string; readonly diffHeader: string; readonly diffUnavailable: string;
   readonly diffEmpty: string; readonly diffHidden: string; readonly diffPosition: string;
 }
@@ -55,7 +57,7 @@ interface Entry {
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
-  reattempt?: boolean; queueBlocked?: string; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
+  reattempt?: boolean; queueBlocked?: string; patch?: DeliveryPreview; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -90,7 +92,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
     if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
-    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false; delete entry.queueBlocked;
+    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false; delete entry.queueBlocked; delete entry.patch;
     // BeUser M-25/DR2-07: an already-delivered result opens on its adoption step (no second delivery, no integration check).
     const delivered = entry.target.delivered;
     if (delivered && current.previewDelivered) { current.previewDelivered(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.delivered = delivered;
@@ -98,6 +100,8 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
       error => {
         const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
+        // BeUser M-32: a refused check still shows the worker's changes (read-only diffs of the retained patch); a failed read shows nothing more.
+        current.patchOnly?.(entry.target).then(patch => { if (entry.stage.kind === 'failed') { entry.patch = patch; entry.fileSel = 0; changed(); } }, () => undefined);
         // A refused preview that offers `r` (queue preparation on the current base) shows the re-attempt line first when that enqueue carries the intent.
         if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) Promise.all([current.queue.reattempt(), current.queue.blocked?.() ?? null]).then(([yes, blocked]) => { entry.reattempt = yes;
           if (blocked) entry.queueBlocked = codeOf(blocked) === 'QUEUE_WORK_TARGET_REQUIRED' ? '' : latest.current.errorText(blocked); show(); }, show); else show(); // no work target: no queue, no line
@@ -256,8 +260,8 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         }
         // Read-only diff of the changed files (ready step only): ↑↓/j/k choose a file, Enter opens its hunks, ↑↓/j/k scroll them, the page keys scroll the
         // window, Esc goes back. No key here delivers, adopts or declines.
-        const diffs = stage.kind === 'ready' ? visible.preview?.diffs : undefined;
-        if (diffs?.length && visible.preview && !key.ctrl && !key.meta) {
+        const source = stage.kind === 'ready' ? visible.preview : stage.kind === 'failed' && !visible.preview ? visible.patch : undefined, diffs = source?.diffs;
+        if (diffs?.length && source && !key.ctrl && !key.meta) {
           const up = key.upArrow || text === 'k', down = key.downArrow || text === 'j', file = visible.fileSel ?? 0;
           if (visible.diffScroll !== null && visible.diffScroll !== undefined) {
             // The page keys stay the Window's own scroll, so a short terminal still reaches the page's last rows; every other key stays here and never decides.
@@ -268,7 +272,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
             else if (down) visible.diffScroll = Math.min(room, visible.diffScroll + 1);
             changed(); return true;
           }
-          const count = Math.min(visible.preview.files.length, WINDOW.maxFiles);
+          const count = Math.min(source.files.length, WINDOW.maxFiles);
           if ((up || down) && count) { visible.fileSel = (file + (up ? count - 1 : 1)) % count; changed(); return true; }
           if (key.return) { visible.diffScroll = 0; changed(); return true; }
         }
@@ -329,14 +333,15 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
     // The re-prepare key is offered only where `r` acts (the same rule as the key handler); closing stays visible on every failure.
-    case 'failed': return labels.queue && queueAvailable && !entry.queue && entry.queueBlocked === undefined && QUEUE_REPREPARE.has(entry.stage.code ?? '')
+    case 'failed': if (!entry.preview && entry.patch?.diffs?.length) return entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : labels.failedDiffHints;
+      return labels.queue && queueAvailable && !entry.queue && entry.queueBlocked === undefined && QUEUE_REPREPARE.has(entry.stage.code ?? '')
       ? `${labels.queue.reprepare} · ${labels.failedHints}` : labels.failedHints;
     default: return '';
   }
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'queueSummary' | 'fileSel' | 'diffScroll' | 'reattempt' | 'queueBlocked'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'queueSummary' | 'fileSel' | 'diffScroll' | 'reattempt' | 'queueBlocked' | 'patch'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
@@ -384,7 +389,12 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   if (adopted) rows.push(exact(fillTemplate(labels.adopted, { target: adopted.targetRef, from: adopted.fromCommit, to: adopted.toCommit, command: adopted.commandId,
     verification: adopted.verifiedBy ? fillTemplate(labels.verifiedBy, { run: adopted.verifiedBy }) : labels.notVerified }), { role: 'success' }));
   if (stage.kind === 'failed') {
+    const patch = !preview ? entry.patch : undefined; // BeUser M-32: the worker's changes stay viewable when the check refused
+    if (patch?.diffs?.length && entry.diffScroll !== null && entry.diffScroll !== undefined) return [...rows, ...diffLines(patch, entry.fileSel ?? 0, entry.diffScroll, labels, text)];
     rows.push(...stage.error.split('\n').map(value => line(value, { role: 'error' })));
+    if (patch?.diffs?.length) rows.push(line(fillTemplate(labels.patchChanged, { count: patch.files.length, added: patch.added, removed: patch.removed }), { bold: true }),
+      ...patch.files.slice(0, WINDOW.maxFiles).map((file, index) => exact(`${index === (entry.fileSel ?? 0) ? '›' : ' '} ${fillTemplate(labels.file, { path: file.path, added: file.added, removed: file.removed })}`,
+        index === (entry.fileSel ?? 0) ? { role: 'accent', bold: true } : {})));
     if (!preview && !entry.queue && entry.reattempt && entry.queueBlocked === undefined && QUEUE_REPREPARE.has(stage.code ?? '')) rows.push(line(labels.reattempt, { role: 'muted' }));
     if (entry.queueBlocked) rows.push(line(entry.queueBlocked, { role: 'warning' })); // BeUser DR2-06: why `r` (the queue) is not offered
     // A next step may name the exact command for this attempt, delivery and selected branch (ADOPTION_NOT_VERIFIED: the CLI with --verification-run).

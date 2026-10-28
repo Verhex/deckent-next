@@ -1085,6 +1085,8 @@
   "terminal.delivery.diffPosition": "diff lines {from}-{to} of {total}",
   "terminal.delivery.doneHints": "Enter/Esc close",
   "terminal.delivery.failedHints": "Enter/Esc close · /deliver opens it again",
+  "terminal.delivery.patchChanged": "What the worker changed (read-only; nothing was written): {count} file(s), +{added} / -{removed}",
+  "terminal.delivery.failedDiffHints": "↑↓/j/k choose a file · Enter view its diff (read-only) · Esc close · /deliver opens it again",
   "terminal.delivery.summaryDelivered": "Delivered {title}: commit {commit} at {ref}; branches and working tree unchanged. Delivery command {command}.",
   "terminal.delivery.summaryAdopted": "Adopted into {target}: {from} → {to} ({verification}). Adoption command {command} (deckent task integration-rollback --adoption-command-id), delivery command {delivery}.",
   "terminal.delivery.summaryLeft": "Delivery left waiting: {title}. /deliver opens it again.",

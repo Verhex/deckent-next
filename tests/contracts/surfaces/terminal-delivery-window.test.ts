@@ -38,7 +38,7 @@ const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 
 
 type PortOptions = { diffs?: readonly DeliveryFileDiff[]; targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
   /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
-  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>>; dismissable?: boolean };
+  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>>; dismissable?: boolean; failPreview?: { code: string; message: string } };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
 function recordingPort(options: PortOptions = {}) {
   const calls: string[] = [], views: EffectConfirmationView[] = [], adoptions: { commandId: string; verificationRunId: string | undefined }[] = [];
@@ -53,6 +53,7 @@ function recordingPort(options: PortOptions = {}) {
   const port: TerminalDeliveryPort = {
     async preview(target) {
       calls.push(`preview:${target.runId}`);
+      if (options.failPreview) throw Object.assign(new Error(options.failPreview.message), { code: options.failPreview.code });
       return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 },
         files: options.diffs ? options.diffs.map(diff => ({ path: diff.path, added: 1, removed: 1 })) : [{ path: 'note.txt', added: 1, removed: 1 }], ...(options.diffs ? { diffs: options.diffs } : {}), added: 1, removed: 1, source: 'SOURCE-FINGERPRINT', base: BASE, proposal: 'P'.repeat(20), outOfScope: [],
         adoptionTargets: options.targets ?? [], verification: options.verification ?? null };
@@ -79,6 +80,10 @@ function recordingPort(options: PortOptions = {}) {
       calls.push('verification-runs'); const all = options.candidates ?? [[]];
       return all[Math.min(reads++, all.length - 1)]!;
     },
+    // BeUser M-32: the retained patch alone (read-only), offered when the check refused.
+    ...(options.failPreview ? { async patchOnly(target: { scopeId: string; runId: string; taskId: string }) { calls.push('patch-only');
+      return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 }, files: [{ path: 'src.js', added: 1, removed: 1 }],
+        diffs: [{ path: 'src.js', lines: ['@@ -1 +1 @@', '-old line', '+WORKER LINE'], hidden: 0, unavailable: null }], added: 1, removed: 1, source: '', base: BASE, proposal: '', outOfScope: [], adoptionTargets: [], verification: null } as never; } } : {}),
     // BeUser M-33: the person's set-aside records; the harness Run view then says `set-aside`, as inspection does.
     ...(options.dismissable ? { async dismiss(target: { runId: string; taskId: string }, action: 'dismiss' | 'restore') { calls.push(`${action}:${target.runId}/${target.taskId}`);
       if (action === 'dismiss') aside.add(`${target.runId}/${target.taskId}`); else aside.delete(`${target.runId}/${target.taskId}`); } } : {}),
@@ -313,6 +318,16 @@ describe('delivery window on the real Workline', () => {
     await press(h, '\r', 150);
     await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'restored window');
     expect(h.calls).toContain('restore:r/task'); expect(transcript(h)).toContain('Brought back: ORDER-TASK is offered in /deliver again.');
+  });
+
+  it('BeUser M-32: a refused check still lists what the worker changed; Enter shows the read-only diff, Esc goes back; nothing is prepared', async () => {
+    const h = harness({ failPreview: { code: 'PATCH_CONFLICT', message: 'Workspace snapshot conflicts.' } }); await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('What the worker changed'), 'refusal with the changes');
+    expect(squeeze(frame(h))).toContain(squeeze('› src.js')); expect(h.calls).toEqual(['preview:r', 'patch-only']);
+    await press(h, CTRL_O); await until(() => frame(h).includes(WORDS.failedDiffHints), 'diff keys');
+    await press(h, '\r', 100); await until(() => frame(h).includes('+WORKER LINE'), 'diff body');
+    await press(h, ESC, 100); expect(frame(h)).not.toContain('+WORKER LINE'); expect(frame(h)).toContain('What the worker changed');
+    expect(h.calls).toEqual(['preview:r', 'patch-only']);
   });
 
   it('a stale base is refused in human words with the next step; nothing is prepared or written', async () => {

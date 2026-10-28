@@ -113,6 +113,13 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
         ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef,
           ...(config.targetQueue.reattempts > 0 ? { reattempt: true as const } : {}) } : {}) });
     },
+    // BeUser M-32: what the worker changed, read from the retained patch alone (no integration check, nothing written).
+    async patchOnly(target) {
+      const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
+      const patch = (await previewWorkspacePatch(root, identity, options)).patch;
+      return Object.freeze({ target, identity, ...patchStat(patch.changes, renderUnifiedDiff), diffs: patchDiffs(patch.changes, renderUnifiedDiff), source: '', base: patch.baseCommit,
+        proposal: '', outOfScope: [], adoptionTargets: [], verification: null });
+    },
     // BeUser M-25/DR2-07: an already-delivered result needs only its attempt, its changed files and the configured adoption step.
     async previewDelivered(target) { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const stat = await previewWorkspacePatch(root, identity, options).then(preview => patchStat(preview.patch.changes, renderUnifiedDiff), () => ({ files: [], added: 0, removed: 0 })), bar = config.execution?.adoption.verification;

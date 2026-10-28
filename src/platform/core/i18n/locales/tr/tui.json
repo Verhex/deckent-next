@@ -1085,6 +1085,8 @@
   "terminal.delivery.diffPosition": "fark satırları {from}-{to} / {total}",
   "terminal.delivery.doneHints": "Enter/Esc kapat",
   "terminal.delivery.failedHints": "Enter/Esc kapat · /deliver yeniden açar",
+  "terminal.delivery.patchChanged": "İşçinin değiştirdikleri (yalnız okuma; hiçbir şey yazılmadı): {count} dosya, +{added} / -{removed}",
+  "terminal.delivery.failedDiffHints": "↑↓/j/k dosya seç · Enter farkını gör (yalnız okuma) · Esc kapat · /deliver yeniden açar",
   "terminal.delivery.summaryDelivered": "{title} teslim edildi: commit {commit}, {ref}; dallar ve çalışma ağacı değişmedi. Teslim komutu {command}.",
   "terminal.delivery.summaryAdopted": "{target} dalı ilerletildi: {from} → {to} ({verification}). Dalı ilerletme komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}.",
   "terminal.delivery.summaryLeft": "Teslim bekletiliyor: {title}. /deliver yeniden açar.",
