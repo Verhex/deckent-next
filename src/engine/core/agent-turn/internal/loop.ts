@@ -96,6 +96,8 @@ function outcomeState(state: string, language: Locale = LOCALES[0]): string {
   const labels: Readonly<Record<string, string>> = {
     rejected: t('agent.turn.outcome.rejected', {}, language), unknown: t('agent.turn.outcome.unknown', {}, language),
     prevented: t('agent.turn.outcome.prevented', {}, language),
+    // BeUser KER-15: a switched-off model says how to switch it on or pick another (never a silent substitute).
+    MODEL_NOT_ACTIVATED: t('agent.turn.outcome.notActivated', {}, language),
   };
   return name && labels[name] ? labels[name] + state.slice(name.length) : state;
 }
