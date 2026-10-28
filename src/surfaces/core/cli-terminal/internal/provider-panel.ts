@@ -215,9 +215,11 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       let probe: ProviderConnectProbeView;
       try { probe = await connect.probe({ kind: request.kind, endpoint: request.endpoint, key: request.key }); }
       catch (error) {
-        const code = String((error as { code?: unknown })?.code), reason = String((error as { reason?: unknown })?.reason ?? '');
-        return refused([{ label: t('tui.provider.field.check', {}, locale), text: code === 'PROVIDER_ENDPOINT_INVALID' ? endpointWord(reason, locale)
-          : code === 'PROVIDER_KEY_REQUIRED' ? t('tui.panel.provider.keyRequired', {}, locale) : code === 'PROVIDER_KEY_INSECURE' ? t('models.connect.keyInsecure', {}, locale) : errorText(error), tone: 'warning' }]); // BeUser M-01: the typed cause and its next step, never "Not available yet"
+        const code = String((error as { code?: unknown })?.code), reason = String((error as { reason?: unknown })?.reason ?? ''), lines: PanelLine[] = [];
+        if (code === 'PROVIDER_KIND_UNAVAILABLE' && !kind.secretName && kind.pull === 'available' && kind.connectFamily && host.connectModel) { await pullModels(kind, request.endpoint, lines, false); // BeUser M-01: a key-less CLI subscription's Connect is its model connection (its own check names the cause)
+          return lines.some(row => row.tone === 'success') ? { stored: false, title: t('tui.provider.result.ok', { kind: label }, locale), lines } : refused(lines); }
+        return refused([{ label: t('tui.provider.field.check', {}, locale), text: code === 'PROVIDER_ENDPOINT_INVALID' ? endpointWord(reason, locale) : code === 'PROVIDER_KEY_REQUIRED' ? t('tui.panel.provider.keyRequired', {}, locale)
+          : code === 'PROVIDER_KEY_INSECURE' ? t('models.connect.keyInsecure', {}, locale) : ErrorRegistry.has(code) ? errorText(ErrorRegistry.createError(code)) : t('tui.provider.unavailable', {}, locale), tone: 'warning' }]); // BeUser M-01: the typed cause and its next step, never "Not available yet"
       }
       const check: PanelLine = { label: t('tui.provider.field.check', {}, locale), text: providerOutcomeWord(probe, locale), tone: probe.outcome === 'ok' ? 'success' : 'warning' };
       const where: PanelLine[] = request.endpoint ? [{ label: t('tui.provider.field.endpoint', {}, locale), text: request.endpoint }] : [];

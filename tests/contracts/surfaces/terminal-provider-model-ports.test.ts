@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, ErrorRegistry, t } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -536,4 +536,15 @@ it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-i
   const text = outcome.lines.map(line => line.text).join('\n');
   expect(text).toContain('Connected as a codex worker channel'); expect(text).toContain('Channel on: yes'); expect(text).toContain('signed in on this machine: yes');
   expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
+});
+
+it('BeUser M-01: Connect on a key-less CLI subscription runs its model connection and shows that check\'s cause, not "The chat turn failed"', async () => {
+  const { root, options } = await project({});
+  const claude = { ...connectHost('ok').kinds[2]!, id: 'claude-cli-subscription', available: true, pull: 'available' as const, connectFamily: 'claude-code-stream-json', secretName: null };
+  const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [claude], probe: async () => { throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE'); } },
+    connectModel: async () => { throw ErrorRegistry.createError('HEADLESS_LOGIN_REQUIRED'); } }, options, 'en', error => formatHumanError(error, { locale: 'en', noColor: true }));
+  const outcome = await port.connect({ kind: 'claude-cli-subscription', endpoint: null, key: null });
+  const text = outcome.lines.map(line => line.text).join('\n');
+  expect(text).toContain('deckent models login --connection claude-cli-subscription'); expect(outcome.stored).toBe(false);
 });

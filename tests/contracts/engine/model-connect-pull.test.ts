@@ -74,3 +74,22 @@ it('BeUser AYSE-16: a reconnect that only adds a proven capability updates the d
   expect(() => declareConnectedModel(upgraded, declare(model([])))).toThrow(expect.objectContaining({ code: 'MODEL_CONNECT_DECLARATION_CONFLICT' }));
   expect(() => declareConnectedModel(current, declare(model([], 'other')))).toThrow(expect.objectContaining({ code: 'MODEL_CONNECT_DECLARATION_CONFLICT' }));
 });
+
+it('BeUser M-01: a headless CLI pull connects the models with an admitted CLI version and lists the others, never refusing the whole pull', async () => {
+  const model = (id: string, minCliVersion: string | null) => ({ id, version: 1, nativeId: id, protocols: [{ family: 'stream', version: 'v1', capabilities: [] }], minCliVersion, efforts: [], aliases: [],
+    lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null } });
+  const seed = parseProviderCatalogDocument({ schemaVersion: 2, revision: 'cli', providers: [{ id: 'brain', version: 1, channel: { kind: 'native-cli', cli: 'claude', aliases: [] },
+    models: [model('new', '2.1.0'), model('old', null)] }] });
+  const adapted: string[] = [], project: Record<string, unknown> = {};
+  const ports = { kind: () => ({ id: 'brain', available: true, endpoint: { default: null, editable: false }, keyRequired: false, connect: { seed: 'brain', chatPath: null, pull: 'available' } }),
+    defaults: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000, maxInFlight: 1, maxOutputTokens: 100, currency: 'USD', deliveryHeadroomBytes: 512 },
+    endpoint: () => null, secretName: () => null, seed: async () => seed, priced: () => true,
+    adapter: async (_kind: string, value: { nativeId: string }) => { adapted.push(value.nativeId); return { adapter: { id: 'cli', version: 1, definition: {} }, protocol: { family: 'stream', version: 'v1' }, tariff: 'unmetered' }; },
+    principal: async () => ({ id: 'person', issuer: 'host', subject: 'alice', assurance: 'os-user', scopeIds: ['s'] }), layers: async () => ({ global: {}, project, effective: project }),
+    write: async (change: { keyPath: string; value: unknown }) => { project[change.keyPath] = change.value; return null; }, catalogHas: async () => true, register: async () => {},
+    binding: async (reference: { modelId: string }) => ({ status: 'declared', catalogRevision: 'r', definition: { provider: { id: 'brain', version: 1 }, model: { id: reference.modelId, version: 1, nativeId: reference.modelId, protocols: [{ family: 'stream', version: 'v1', capabilities: [] }] } }, binding: { digest: 'd'.repeat(64) } }),
+    activation: async () => null, activate: async () => {}, delivers: () => true, audit: async () => {}, policyRevision: async () => 'p', keyStored: async () => null, service: async () => null } as unknown as ModelConnectPorts;
+  const result = await new ModelConnectApplication(ports).connect({ schemaVersion: 1, commandId: 'pull', scopeId: 's', connection: 'brain', model: { pull: 'available' } });
+  expect(adapted).toEqual(['new']);
+  expect(result.models).toEqual(expect.arrayContaining([{ nativeId: 'old', state: 'notInCatalog', code: 'MODEL_CONNECT_MODEL_UNKNOWN' }, expect.objectContaining({ nativeId: 'new', state: 'connected' })]));
+});

@@ -137,7 +137,10 @@ export class ModelConnectApplication {
       if (kind.connect.pull === 'pick') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       const seed = kind.connect.seed ? await ports.seed(kind.connect.seed) : null;
       const live = ports.available ? await ports.available(kind.id, base ?? '') : null;
-      const candidates = seed ? seed.providers.flatMap(provider => provider.models.filter(model => model.lifecycle.state === 'active').map(model => model.nativeId)) : live ?? [];
+      // BeUser M-01: a headless CLI pull connects the models with an admitted CLI version; the others are listed, never a refusal of the whole pull.
+      const ready = (provider: { channel?: { kind?: string } | null }, model: { minCliVersion?: string | null }) => kind.connect!.catalogOnly === true || provider.channel?.kind !== 'native-cli' || Boolean(model.minCliVersion); // a headless CLI model needs its admitted CLI version
+      for (const provider of seed?.providers ?? []) for (const model of provider.models) if (model.lifecycle.state === 'active' && !ready(provider, model)) models.push({ nativeId: model.nativeId, state: 'notInCatalog', code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
+      const candidates = seed ? seed.providers.flatMap(provider => provider.models.filter(model => model.lifecycle.state === 'active' && ready(provider, model)).map(model => model.nativeId)) : live ?? [];
       for (const nativeId of candidates) {
         const state = live && !live.includes(nativeId) ? 'notOnKey' : ports.priced && !ports.priced(kind.id, nativeId, base ?? '') ? 'unpriced' : null;
         if (state) models.push({ nativeId, state }); else commands.push({ ...command, model: { nativeId } });

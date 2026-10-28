@@ -40,8 +40,6 @@ const ADMISSION_DEFERRED = {
   ATTEMPT_STORE_VERSION: (locale: Locale) => t('terminal.admission.ledgerUpgrade', {}, locale),
 } as const;
 const UNADMITTED_CUSTODY_LABEL = 'unadmitted';
-
-
 function ttyState(context: TerminalLaunchContext) {
   const stdin = context.stdin ?? process.stdin;
   const stdout: unknown = context.stdout ?? process.stdout;
