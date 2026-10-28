@@ -54,6 +54,12 @@ const connect = (nativeId: string, commandId: string, connection = 'anthropic-ap
   ({ schemaVersion: 1, commandId, scopeId: 'scope', connection, endpoint, model: { nativeId } });
 
 describe.skipIf(process.platform !== 'linux')('models.connect from a registered catalog row', () => {
+  it('BeUser M-24: a CLI worker channel without a worker image says the image comes first (never "check the key"), nothing written', async () => {
+    const f = await harness(true), before = JSON.stringify(await f.config());
+    await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'codex-first', scopeId: 'scope', connection: 'codex-cli-subscription', endpoint: null, model: { pull: 'available' } }, f.options))
+      .rejects.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED', params: { cli: 'codex' } });
+    expect(JSON.stringify(await f.config())).toBe(before);
+  });
   it('a new Anthropic model connects with the price its row states (sealed to the row); a row without terms is refused before any write', async () => {
     const f = await harness(true);
     // The person's path, through the built `deckent` binary: `models catalog register --file`, then `models connect --model`.

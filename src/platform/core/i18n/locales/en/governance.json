@@ -1174,6 +1174,7 @@
   "tui.provider.kind.codexCli": "Codex subscription workers",
   "tui.provider.kind.cursorCli": "Cursor subscription workers",
   "error.MODEL_CONNECT_NO_AVAILABLE": "No currently usable priced models were found. Unavailable candidates: {models}. Check the key, tariff or admitted worker CLI version.",
+  "error.MODEL_CONNECT_WORKER_IMAGE_REQUIRED": "No {cli} model can be connected yet: they are connected for the {cli} version in this installation's worker image, and there is none (or it is older than these models need). Build or refresh it in /setup (Worker image), then connect again. Nothing was changed.",
   "policy.mcp.completeBaseline": "Complete your missing founder permissions",
   "policy.mcp.remaining": "{count} changes remain for the next card.",
   "error.UNINSTALL_INVALID": "The uninstall request is invalid.",

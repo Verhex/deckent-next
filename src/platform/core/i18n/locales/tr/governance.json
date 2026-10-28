@@ -1174,6 +1174,7 @@
   "tui.provider.kind.codexCli": "Codex abonelik işçileri",
   "tui.provider.kind.cursorCli": "Cursor abonelik işçileri",
   "error.MODEL_CONNECT_NO_AVAILABLE": "Şu anda kullanılabilir fiyatlı model bulunamadı. Kullanılamayan adaylar: {models}. Anahtarı, tarifeyi veya kabul edilmiş işçi CLI sürümünü kontrol edin.",
+  "error.MODEL_CONNECT_WORKER_IMAGE_REQUIRED": "Henüz hiçbir {cli} modeli bağlanamaz: bu modeller, kurulumun işçi imajındaki {cli} sürümü için bağlanır ve böyle bir imaj yok (ya da modellerin istediğinden eski). /setup içinde (İşçi imajı) derleyin ya da yenileyin, sonra yeniden bağlayın. Hiçbir şey değişmedi.",
   "policy.mcp.completeBaseline": "Eksik kurucu yetkilerinizi tamamlayın",
   "policy.mcp.remaining": "Sonraki karta {count} değişiklik kaldı.",
   "error.UNINSTALL_INVALID": "Kaldırma isteği geçersiz.",
