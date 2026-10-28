@@ -350,7 +350,7 @@
   "error.DISPATCH_CONFLICT": "Atama eşzamanlı olarak değişti veya kayıtlı durumuyla çakışıyor. Kayıtlı durumu yeniden okuyup tekrar deneyin.",
   "error.DISPATCH_NOT_ADMITTED": "Atama bu Attempt, kapsam veya iş durumu için kabul edilmedi.",
   "error.DISPATCH_PROFILE_VALIDATION_REQUIRED": "Yürütme profili doğrulanamadı; atama başlatılmadı.",
-  "error.RUN_ADMISSION_NOT_CONFIGURED": "Bu kapsam için arka plan işçileri kurulmadı; bu yüzden iş burada, terminalde çalışır. Arka plan işçileri bir Git projesinde kodlama işi yapar: o projede `deckent` açıp /setup kullanın (İlk iş türü, İşçi imajı, İşçi havuzu). `deckent init --phase onboarding --json` kalan kurulum adımlarını tam komutlarıyla listeler.",
+  "error.RUN_ADMISSION_NOT_CONFIGURED": "Bu kapsam için arka plan işçileri kurulmadı. Arka plan işçileri bir Git projesinde kodlama işi yapar: o projede `deckent` açıp /setup kullanın (İlk iş türü, İşçi imajı, İşçi havuzu). `deckent init --phase onboarding --json` kalan kurulum adımlarını tam komutlarıyla listeler.",
   "error.RUN_STORE_CORRUPT": "İş kayıtları tutarsız; başarılı güncelleme iddia edilmiyor.",
   "error.RUN_STORE_CONFLICT": "İş değişti veya mevcut değil. Kayıtlı durumunu yeniden okuyun.",
   "error.RUN_NOT_FOUND": "Kayıtlı iş bulunamadı: {run}.",
