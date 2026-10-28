@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { link, open, readdir, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
+import { link, mkdir, open, readdir, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, normalize } from 'node:path';
 /** The exact file a removal was bound to: inode identity, size, modification time and content digest (ctime is not compared: a move changes it). */
 export interface PinnedFileIdentity { readonly dev: number; readonly ino: number; readonly size: number; readonly mtimeMs: number; readonly digest: string }
@@ -17,13 +17,20 @@ const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest(
  * (`/proc/self/fd/<fd>/<name>`), never following a symlink. Every later operation names the file through this descriptor, so a parent
  * swapped for a link or moved after the check cannot redirect it. Null when a component does not exist.
  */
-export async function openPinnedParent(path: string): Promise<FileHandle | null> {
+export async function openPinnedParent(path: string, createBelow?: string): Promise<FileHandle | null> {
   if (process.platform !== 'linux' || !isAbsolute(path) || normalize(path) !== path) throw new PinnedFileError('unsafe');
-  let dir = await open('/', constants.O_RDONLY | constants.O_DIRECTORY);
+  let dir = await open('/', constants.O_RDONLY | constants.O_DIRECTORY), walked = '';
   try {
     for (const part of dirname(path).split('/').filter(Boolean)) {
-      const next = await open(at(dir, part), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW).catch((error: unknown) => {
-        if (missing(error)) return null; throw new PinnedFileError('unsafe'); });
+      walked += `/${part}`;
+      // `createBelow`: a missing folder strictly below that root is created here, one level at a time (mkdir never follows a link).
+      const opened = () => open(at(dir, part), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+      const next = await opened().catch(async (error: unknown) => {
+        if (!missing(error)) throw new PinnedFileError('unsafe');
+        if (!createBelow || walked === createBelow || !walked.startsWith(`${createBelow}/`)) return null;
+        await mkdir(at(dir, part), 0o700).catch((made: unknown) => { if ((made as NodeJS.ErrnoException).code !== 'EEXIST') throw new PinnedFileError('unsafe'); });
+        return opened().catch(() => { throw new PinnedFileError('unsafe'); });
+      });
       await dir.close();
       if (!next) return null;
       dir = next;
@@ -88,6 +95,31 @@ export async function removePinnedFile(path: string, expected: PinnedFileIdentit
     }
     await unlink(at(dir, aside)); await dir.sync();
     return 'removed';
+  } finally { await dir.close(); }
+}
+/**
+ * Restores one file's earlier bytes, never writing through a link: missing folders are created one level at a time below `root`, a missing file
+ * is created exclusively, and an existing one is replaced only while it holds exactly `replace` (uninstall's result): it is moved aside, checked
+ * on the moved name and the earlier bytes are linked into place, never over a file that appeared meanwhile. Anything else (another file, an
+ * unreadable, linked or foreign one, a linked folder) is `kept` as it is.
+ */
+export async function restorePinnedFile(path: string, bytes: Uint8Array, mode: number, root: string, replace?: string): Promise<'restored' | 'kept'> {
+  const dir = await openPinnedParent(path, root).catch(() => null);
+  if (!dir) return 'kept';
+  const name = basename(path), write = async (target: string) => { const handle = await open(at(dir, target), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode);
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); } };
+  try {
+    const current = await readAt(dir, name).catch(() => 'kept' as const);
+    if (current === 'kept') return current;
+    if (!current) return await write(name).then(() => dir.sync()).then(() => 'restored' as const, () => 'kept' as const);
+    if (!replace || current.identity.digest !== replace) return 'kept';
+    const aside = `.${name}.${randomUUID()}.restoring`, next = `.${name}.${randomUUID()}.next`;
+    if (!await rename(at(dir, name), at(dir, aside)).then(() => true, () => false)) return 'kept';
+    const moved = await readAt(dir, aside).catch(() => null), back = () => link(at(dir, aside), at(dir, name)).then(() => unlink(at(dir, aside)), () => undefined);
+    if (!moved || !same(moved.identity, current.identity) || !await write(next).then(() => true, () => false)) { await back(); return 'kept'; }
+    if (!await link(at(dir, next), at(dir, name)).then(() => true, () => false)) { await unlink(at(dir, next)); await back(); return 'kept'; }
+    await unlink(at(dir, next)); await unlink(at(dir, aside)); await dir.sync();
+    return 'restored';
   } finally { await dir.close(); }
 }
 /** An emptied folder goes through its pinned parent; a non-empty or missing one stays as it is. */

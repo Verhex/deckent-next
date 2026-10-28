@@ -892,6 +892,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_PATH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PATH_UNSAFE', p, l) }) },
   UNINSTALL_SCOPE_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_SCOPE_UNVERIFIED', p, l) }) },
   UNINSTALL_FINAL_TAIL_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_FINAL_TAIL_UNKNOWN', p, l) }) },
+  UNINSTALL_RESTORE_KEPT: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RESTORE_KEPT', p, l) }) },
   UNINSTALL_AUTHORITY_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_AUTHORITY_UNVERIFIED', p, l) }) },
   UNINSTALL_SERVICE_RUNNING: { category: 'error', render: (p, l) => ({ message: p['unit'] ? t('error.UNINSTALL_SERVICE_RUNNING', p, l) : t('error.UNINSTALL_SERVICE_RUNNING_UNMANAGED', p, l) }) },
   UNINSTALL_UNCERTAIN_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_EFFECTS', p, l) }) },

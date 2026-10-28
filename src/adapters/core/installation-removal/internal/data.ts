@@ -16,7 +16,9 @@ export interface DataRemovalMember { readonly resourceId: string; readonly path:
   /** K1(f): remove only this exact whole line (a bridge line Deckent appended; `before`: the receipt's earlier file digests); the rest stays byte for byte. */
   readonly line?: string; readonly before?: readonly string[] }
 /** One member bound to the verified final backup: its exact identity and bytes and the exact operation (whole file, or the bound byte range). */
-export type BoundMember = PinnedFileIdentity & { readonly path: string; readonly directory?: string | null; readonly archived?: boolean; readonly cut?: readonly [number, number]; readonly after?: string };
+export type BoundMember = PinnedFileIdentity & { readonly path: string; readonly directory?: string | null; readonly archived?: boolean; readonly cut?: readonly [number, number]; readonly after?: string;
+  /** The standard backup set restores this file too (config): the archive yields to it on restore. */
+  readonly standard?: boolean };
 /** The verified final backup's exact content of every present member, bound immediately before deletion. `root`: emptied folders go up to it. */
 export interface DataRemovalSnapshot { readonly set: string; readonly manifestDigest: string; readonly members: readonly BoundMember[]; readonly root?: string | undefined;
   /** The uninstall archive beside the set: its manifest's digest and the folders it may restore into (none when nothing was archived). */

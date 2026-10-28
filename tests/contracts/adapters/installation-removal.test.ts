@@ -193,7 +193,8 @@ it('archives members into the encrypted companion bound to D0, never deletes one
   const request = { target: ref, operation: { id: 'installation.remove-data', version: 1 }, idempotencyKey: 'archive', expectedVersion: (await target.observe(ref)).version, input: null };
   await writeFile(history, 'NEWER'); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
   expect(await readFile(script, 'utf8')).toBe('#!/bin/sh\n');
-  // Restore writes what is missing (mode kept) and never overwrites what exists again.
-  await rm(script); await restoreUninstallArchive(set, [project], phrase, limits);
+  // Restore writes what is missing (mode kept) and never overwrites what exists again: that file is kept and reported.
+  await rm(script);
+  await expect(restoreUninstallArchive(set, [project], phrase, limits)).rejects.toMatchObject({ code: 'UNINSTALL_RESTORE_KEPT', params: { paths: history } });
   expect((await lstat(script)).mode & 0o777).toBe(0o755); expect(await readFile(history, 'utf8')).toBe('NEWER');
 });

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { BackupApplication, EffectTargetError, policyBackupAuthorization, type UninstallPlan } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { FileBackupStorage, recordBackupAudit, readBackupConfig, verifyBackupSet, ledgerFingerprint, type VerifiedBackup } from '#adapters/core/backup-store/index.js';
-import { resolveGlobalConfigReadPath, productResourcePath, sha256, readPinnedFile, DECKENT_DIR, type ResolvedConfig, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
+import { resolveGlobalConfigReadPath, productResourcePath, sha256, readPinnedFile, DECKENT_DIR, type ResolvedConfig, type ProductResource, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
 import { fileDigest, memberStat, type BoundMember, type DataRemovalMember, type DataRemovalSnapshot } from './data.js';
 import { writeUninstallIntent } from './tombstone.js';
 import { configuredTracking } from './vcs.js';
@@ -55,7 +55,8 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
     const tracked = await configuredTracking(config); // B2: a member the project's VCS tracks now (git add after the card) is never deleted
     if (own.some(member => tracked(member.path))) unbound();
     const archived = own.some(member => member.archived) ? await createUninstallArchive(set, uninstallArchiveRoots(config.projectRoot, dirname(globalPath)), own.filter(member => member.archived),
-      { installationId: plan.installation.id, approved, plan: plan.planDigest }, passphrase, limits) : null, bound = [...archived?.members ?? []];
+      { installationId: plan.installation.id, approved, plan: plan.planDigest }, passphrase, limits,
+      path => verified.state.entries.some(entry => join(productResourcePath(layout, entry.resource as ProductResource), entry.path) === path)) : null, bound = [...archived?.members ?? []];
     for (const member of own.filter(member => !member.archived)) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
     const snapshot: DataRemovalSnapshot = { set: verified.set, manifestDigest: digest(await readFile(join(verified.set, 'MANIFEST.sha256'))), members: bound,
       root: layout.root === join(config.projectRoot, DECKENT_DIR) ? layout.root : undefined, archive: archived?.archive };
