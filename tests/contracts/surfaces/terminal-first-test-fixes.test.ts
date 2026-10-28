@@ -6,7 +6,7 @@ import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION } from '#platform/inde
 import { registerProviderConfig, terminalConfigSchema } from '#adapters/index.js';
 import { createProviderSpendCheckpoint, runAgentTurn, agentTurnAdmission, agentCompactionExpected } from '#engine/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
-import { EMPTY_SESSION_USAGE, addSessionUsage } from '#surfaces/core/terminal-kit/index.js';
+import { EMPTY_SESSION_USAGE, addSessionUsage, serviceAbsenceWatch } from '#surfaces/core/terminal-kit/index.js';
 import { infoModelText } from '#surfaces/core/terminal-window/index.js';
 import { terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -148,4 +148,18 @@ it.each([true, false])('BeUser M-09: a turn that finds the runtime service absen
   await until(() => view.stdout.text.includes(withPort ? 'answered' : 'ERR LOCAL_RUNTIME_UNAVAILABLE'), 'turn outcome');
   expect([calls, starts]).toEqual(withPort ? [2, 1] : [1, 0]); expect(view.stdout.text.includes('SERVICE STARTED')).toBe(withPort);
   expect(view.stdout.text.includes('ERR LOCAL_RUNTIME_UNAVAILABLE')).toBe(!withPort); // a started service sends the line again as a new turn
+});
+
+it('BeUser D-05: the open terminal says once per absence that the runtime service stopped under it, never for a service it never reached', async () => {
+  const answers: boolean[] = [], heard: string[] = [];
+  const describe = async () => { if (!answers.shift()) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); };
+  const never = serviceAbsenceWatch(describe, false, () => 'STOPPED'); never.subscribe(text => heard.push(`never ${text}`));
+  answers.push(false); await never.tick(); expect(heard).toEqual([]);
+  const watch = serviceAbsenceWatch(describe, true, () => 'STOPPED'), stop = watch.subscribe(text => heard.push(text));
+  answers.push(false, false, true, false); for (let beat = 0; beat < 4; beat++) await watch.tick();
+  expect(heard).toEqual(['STOPPED', 'STOPPED']); stop(); answers.push(true, false); await watch.tick(); await watch.tick(); expect(heard).toHaveLength(2);
+  // The workline shows the line in the error tone when the host's watch reports it.
+  let report: ((text: string) => void) | undefined;
+  const view = mountWorkline({ serviceLost: (listener: (text: string) => void) => { report = listener; return () => { report = undefined; }; } } as never); views.push(view);
+  await settle(40); report!('SERVICE STOPPED UNDER YOU'); await until(() => view.stdout.text.includes('SERVICE STOPPED UNDER YOU'), 'service lost line');
 });

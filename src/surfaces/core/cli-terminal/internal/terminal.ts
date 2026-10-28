@@ -1,7 +1,7 @@
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
-import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+import { serviceAbsenceWatch, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -316,7 +316,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
-  let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null, configLine: string | null = null, idleStops = false;
+  let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null, configLine: string | null = null;
   if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {
     try {
       const service = await context.ensureRuntimeService(root, options);
@@ -327,7 +327,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       // A service started from another build answers with that build's code; say so instead of failing later (Jev 8bb2a0c7).
       const skew = runtimeBuildSkew(readBuildIdentity(), service.build);
       // A restart-apply section changed since the service started (measured against the service's own fingerprint, never assumed).
-      if (runtimeConfigFreshness(service.configDigest, config) === 'stale') configLine = t('terminal.service.configStale', {}, locale); idleStops = service.idleStopMs != null;
+      if (runtimeConfigFreshness(service.configDigest, config) === 'stale') configLine = t('terminal.service.configStale', {}, locale);
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
@@ -445,8 +445,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
-  // K6 = A: a service that stops itself when idle counts this open terminal as a client only through this beat (clients connect per request).
-  const beat = idleStops && context.describeRuntimeService ? setInterval(() => { void context.describeRuntimeService!(root, options).catch(() => undefined); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
+  // K6 = A: a service that stops itself when idle counts this open terminal as a client only through this beat (clients connect per request). BeUser D-05: the beat also tells the person, once per absence, that the service stopped under this terminal.
+  const serviceWatch = serviceAbsenceWatch(() => context.describeRuntimeService!(root, options), !!serviceLine && !serviceFailed, () => t('terminal.service.lost', {}, locale)), beat = context.describeRuntimeService && tty.stdin && tty.stdout ? setInterval(() => { void serviceWatch.tick(); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
   try { await runTerminalWorkline({
     context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
@@ -508,7 +508,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     } } : {}),
     ...(serviceLine || accessNotices.length || chat?.skippedDefault ? { openingNotices: [...accessNotices, ...(chat?.skippedDefault ? [{ level: 'warning' as const, text: t('terminal.model.defaultNotHere', {}, locale) }] : []), ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
       ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'warning' as const, text: configLine }] : [])] } : {}),
-    ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await context.ensureRuntimeService!(root, options)).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
+    serviceLost: serviceWatch.subscribe, ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await context.ensureRuntimeService!(root, options)).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
       const building = await context.runningImageBuild?.(root, options).catch(() => false) === true, restarted = await context.restartRuntimeService!(root, options);
       return [t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale), ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n');
     }, restartNotes: async () => await context.runningImageBuild?.(root, options).catch(() => false) === true ? [t('cli.runtime.card.imageBuild', {}, locale)] : [] } : {}),

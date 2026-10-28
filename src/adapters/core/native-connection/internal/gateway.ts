@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
-import { chmod, mkdtemp, realpath, lstat, rm } from 'node:fs/promises';
+import { chmod, realpath, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -10,7 +10,7 @@ import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, pr
 import { scrubWorkerEvent } from './event-guard.js';
 import { secretValues, type QuotaPolicy } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
-import { tunnelNativeConnect } from './egress.js';
+import { privateSocketDirectory, tunnelNativeConnect } from './egress.js';
 import { workerReportLimits, verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 /** One source for the gateway's NDJSON retention budget and the config-load artifact check. */
@@ -37,7 +37,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     || !Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0 || input.deadlineMs > 2_147_483_647) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
   const bootstrapPath = fileURLToPath(new URL('./worker.js', import.meta.url));
   const bootstrapSha256 = createHash('sha256').update(await readFile(bootstrapPath)).digest('hex');
-  const directory = await mkdtemp(join(root, 'connection-')); await chmod(directory, 0o700);
+  const directory = await privateSocketDirectory(root, 'connection-', 'gateway.sock');
   const socketPath = join(directory, 'gateway.sock');
   if (Buffer.byteLength(socketPath) > 103) { await rm(directory, { recursive: true }); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
   let credential: Record<string, unknown> | undefined = projected;

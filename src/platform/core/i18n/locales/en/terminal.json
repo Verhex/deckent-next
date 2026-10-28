@@ -115,6 +115,7 @@
   "terminal.service.restarted": "Runtime service restarted onto this build (pid {pid}, instance {instance}).",
   "terminal.model.defaultNotHere": "Your default model was chosen in another folder and is not connected here, so it is not used here. Connect it with /provider or choose a model with /model.",
   "terminal.service.startedForTurn": "The runtime service had stopped; started it again in the background (pid {pid}). Your message is sent now.",
+  "terminal.service.lost": "The runtime service stopped while this terminal was open: running work does not advance, even where the work list still says it is running. Start it again with /service-restart.",
   "terminal.service.restartUnavailable": "Restarting the runtime service is not available in this terminal.",
   "terminal.slash.serviceRestart": "Restart the runtime service from this build (asks first)",
   "terminal.workline.queued": "Queued (runs after the current turn)",

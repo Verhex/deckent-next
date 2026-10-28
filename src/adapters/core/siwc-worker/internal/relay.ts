@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns';
 import type { Socket } from 'node:net';
-import { chmod, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -11,7 +11,7 @@ import { attemptIdentitySchema, type AuditSubject } from '#domain/index.js';
 import type { OAuthAccessTokenLease } from '#engine/index.js';
 import { SIWC_WORKER_RELAY as R } from '#adapters/core/provider-siwc/index.js';
 import { listenForContainerPeer, localPeerNativePath } from '#adapters/core/local-runtime-socket/index.js';
-import { finalReportJsonSchema, isPublicNativeAddress, readFinalReportText } from '#adapters/core/native-connection/index.js';
+import { finalReportJsonSchema, isPublicNativeAddress, privateSocketDirectory, readFinalReportText } from '#adapters/core/native-connection/index.js';
 import { containerInitPeer } from './proc.js';
 import { siwcWorkerRequestBody, secretScrubber, type SiwcRelayRefusal } from './request.js';
 import { createAppServerTurn, type SiwcNativeApproval } from './client.js';
@@ -102,7 +102,7 @@ export async function openSiwcWorkerRelay(input: SiwcWorkerRelayInput) {
   const hardeningPath = localPeerNativePath();
   const [bootstrap, helper, hardening] = await Promise.all([file('bootstrap'), file('helper'),
     readFile(hardeningPath).then(bytes => ({ path: hardeningPath, sha256: createHash('sha256').update(bytes).digest('hex') }))]);
-  const directory = await mkdtemp(join(input.directory, 'siwc-relay-')); await chmod(directory, 0o700);
+  const directory = await privateSocketDirectory(input.directory, 'siwc-relay-', 'relay.sock');
   const socketPath = join(directory, 'relay.sock');
   const policySha256 = createHash('sha256').update(JSON.stringify(R)).digest('hex'), bindingSha256 = createHash('sha256').update(JSON.stringify(binding)).digest('hex');
   let containerId: string | null = null, init: Readonly<{ pid: number; startTime: string }> | null = null, capability: string | undefined, issued = false;
