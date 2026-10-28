@@ -23,8 +23,7 @@ async function bindMember(verified: VerifiedBackup, member: DataRemovalMember, b
     const db = new DatabaseSync(member.path, { timeout: busyTimeoutMs }); try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } finally { db.close(); }
     for (const suffix of ['-wal', '-shm', '-journal']) if (await lstat(member.path + suffix).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; })) unbound();
   }
-  const before = await memberStat(member.path) && await readPinnedFile(member.path);
-  if (!before) return unbound();
+  const before = await memberStat(member.path) && await readPinnedFile(member.path); if (!before) return unbound();
   const current = before.identity.digest, state = verified.state;
   const backed = member.resourceId === 'ledger' ? ledgerFingerprint(member.path) === await readFile(join(verified.set, 'ledger.fingerprint.json'), 'utf8')
     : member.resourceId === 'approvals' ? sha256(before.bytes.toString('hex')) === verified.integrity().keyId
@@ -54,7 +53,7 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
     const removing = new Set(plan.items.filter(item => item.action === 'remove').map(item => item.resourceId)), own = members.filter(member => removing.has(member.target ?? 'global-data'));
     const tracked = await configuredTracking(config); // B2: a member the project's VCS tracks now (git add after the card) is never deleted
     if (own.some(member => tracked(member.path))) unbound();
-    const archived = own.some(member => member.archived) ? await createUninstallArchive(set, uninstallArchiveRoots(config.projectRoot, dirname(globalPath)), own.filter(member => member.archived),
+    const archived = own.some(member => member.archived) ? await createUninstallArchive(set, uninstallArchiveRoots(config.projectRoot, dirname(globalPath), options.env), own.filter(member => member.archived),
       { installationId: plan.installation.id, approved, plan: plan.planDigest }, passphrase, limits,
       path => verified.state.entries.some(entry => join(productResourcePath(layout, entry.resource as ProductResource), entry.path) === path)) : null, bound = [...archived?.members ?? []];
     // M5: the initial set already carries a verified archive of every member (limits, paths, coverage, passphrase) before the first removal.

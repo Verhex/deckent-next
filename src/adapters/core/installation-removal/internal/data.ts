@@ -26,8 +26,7 @@ export interface DataRemovalSnapshot { readonly set: string; readonly manifestDi
 const same = (a: PinnedFileIdentity, b: PinnedFileIdentity) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.digest === b.digest;
 /** Bound: the exact verified file; done: a bound cut already applied (its result's bytes); anything else is not this purge's member. */
 export async function boundState(member: BoundMember): Promise<'absent' | 'bound' | 'changed'> {
-  const read = await readPinnedFile(member.path).catch(() => 'changed' as const);
-  if (read === 'changed') return read;
+  const read = await readPinnedFile(member.path).catch(() => 'changed' as const); if (read === 'changed') return read;
   if (!read) return member.cut ? 'changed' : 'absent';
   return same(read.identity, member) ? 'bound' : member.cut && read.identity.digest === member.after ? 'absent' : 'changed';
 }

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 import { InstallationDataRemovalTarget, fileDigest, memberStat, type DataRemovalMember } from './data.js';
-import { PROJECT_INSTRUCTION_REGISTRY } from '#adapters/core/project-instructions/index.js';
+import { PROJECT_INSTRUCTION_REGISTRY, folderTrustRecords, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 import { listProjectVaults } from '#adapters/core/secret-store/index.js';
 import { ABSENT_FILE_VERSION } from '#adapters/core/workspace-write/index.js';
 import type { ProjectTracking } from './vcs.js';
@@ -101,6 +101,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), bytes = path && !changed ? await readFile(path) : null;
       if (path && bytes && created.has(`${row.path}\0${await fileDigest(path)}`)) add(path);
       else if (path && bytes && lineCut(bytes, row.line)) add(path, { line: row.line, before: earlier.get(row.path)! }); else if (path) unlisted(path); }
+    // M12: this folder's own records in the global instruction-trust store (its owner names them); other folders' records stay.
+    for (const path of await folderTrustRecords(config.projectRoot, instructionTrustDirectory(env), config.execution?.adoption.targets ?? []).catch(() => [])) add(path, { directory: dirname(path) });
     for (const { directory, record } of await listProjectVaults(globalRoot).catch(() => []))
       if (record?.anchor.installationId !== installationId || record.anchor.projectRoot !== config.projectRoot) continue;
       else if (record.anchor.repository !== null) unlisted(directory);

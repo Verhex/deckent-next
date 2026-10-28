@@ -536,6 +536,14 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     const edited = await previewConfiguredUninstall(project, ALL, options);
     expect(removed(edited)).not.toContain(agents); expect(listed(edited, agents)).toBeTruthy();
     // AGENTS.md as init created it goes whole; CLAUDE.md init created but the person added to loses only its bridge line.
+    // M12: this folder's record in the global instruction-trust store (written by its owner) goes with delete-everything; another folder's stays.
+    const { openHostProjectInstructionReader, instructionTrustDirectory } = await import('#adapters/index.js'), elsewhere = join(root, 'elsewhere');
+    await mkdir(elsewhere); await writeFile(join(elsewhere, 'DECKENT.md'), '# elsewhere\n');
+    const trusted = async (folder: string) => { const reader = await openHostProjectInstructionReader(folder, options.env as NodeJS.ProcessEnv), view = await reader.inspect();
+      if (view.status !== 'trust-required') throw new Error(view.status); await reader.trust(view.source.digest); };
+    await trusted(project); await trusted(elsewhere);
+    const trustStore = instructionTrustDirectory(options.env), records = (await readdir(trustStore)).filter(name => /^[a-f0-9]{64}$/u.test(name));
+    expect(records).toHaveLength(2);
     const claudeBefore = Buffer.concat([Buffer.from('@DECKENT.md\n'), team]);
     await writeFile(agents, 'Read DECKENT.md\n'); await writeFile(claude, claudeBefore);
     // B2: a root bridge the team's Git tracks is theirs: kept and listed, never cut.
@@ -545,7 +553,8 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     expect(removed(tracked)).not.toContain(claude); expect(tracked.items.find(item => item.locator === claude)).toMatchObject({ action: 'keep', reason: 'vcs-tracked' });
     git('rm', '-q', '--cached', 'CLAUDE.md');
     const plan = await previewConfiguredUninstall(project, ALL, options);
-    expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'secrets.json'), join(own, 'project.json')])); expect(removed(plan)).not.toContain(join(own, 'notes.txt'));
+    expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'secrets.json'), join(own, 'project.json')]));
+    const ownRecord = removed(plan).filter(path => path.startsWith(trustStore)); expect(ownRecord).toHaveLength(1); expect(removed(plan)).not.toContain(join(own, 'notes.txt'));
     expect(listed(plan, join(own, 'notes.txt'))).toBeTruthy();
     expect(listed(plan, other)).toBeTruthy(); expect(removed(plan).some(path => path.startsWith(other))).toBe(false);
     // B1: the process dies while removing DECKENT.md, before the bridges; the resumed tail keeps every byte of CLAUDE.md but its bound line.
@@ -569,10 +578,11 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     await expect(lstat(agents)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(join(own, 'secrets.json'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(own, 'notes.txt'), 'utf8')).toBe('MINE');
     expect(await readFile(join(other, 'secrets.json'), 'utf8')).toBe('{}');
+    await expect(lstat(ownRecord[0]!)).rejects.toMatchObject({ code: 'ENOENT' }); expect((await readdir(trustStore)).filter(name => records.includes(name))).toHaveLength(1);
     // M11: `deckent backup restore` brings back DECKENT.md, the init-created AGENTS.md, the vault slice and CLAUDE.md's bridge line, byte for byte.
     const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect((await readFile(claude)).equals(claudeBefore)).toBe(true); expect((await readFile(deck)).equals(original)).toBe(true);
-    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect(await readFile(join(own, 'secrets.json'), 'utf8')).toBe('{}');
+    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect(await readFile(join(own, 'secrets.json'), 'utf8')).toBe('{}'); expect(await lstat(ownRecord[0]!)).toBeTruthy();
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

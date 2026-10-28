@@ -88,6 +88,6 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'BACKUP_SET_NOT_FOUND') throw error; });
     const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority);
     // Lead 2026-10-27: a set an uninstall archived files beside also brings those files back (never over a file that exists again).
-    const result = await app.execute(command, passphrase); if (command.action === 'restore') await restoreUninstallArchive(command.set, uninstallArchiveRoots(resolve(projectRoot), dirname(globalConfigPath)), passphrase, limits); await release?.(); return result;
+    const result = await app.execute(command, passphrase); if (command.action === 'restore') await restoreUninstallArchive(command.set, uninstallArchiveRoots(resolve(projectRoot), dirname(globalConfigPath), options.env), passphrase, limits); await release?.(); return result;
   } finally { recovered?.close(); }
 }

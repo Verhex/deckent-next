@@ -6,6 +6,7 @@ import { pathWithin, sha256, readPinnedFile, restorePinnedFile, lineCut, ErrorRe
 import { PROJECT_VAULT, type BackupContributionOwner, type BackupCoverageManifest } from '#engine/index.js';
 import { memberStat, type BoundMember, type DataRemovalMember } from './data.js';
 import { removalRegistry } from './inventory.js';
+import { instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 const { owner: OWNER, companionSuffix, manifestSuffix } = removalRegistry.archive;
 const absent = (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; };
 /** One archived file: `<mode>:<result digest of its cut, or empty>:<1 when the standard set restores it too>:<absolute path>\0<bytes>`; the resource id is the path's digest, its version the
@@ -19,28 +20,23 @@ function owner(roots: readonly string[], members: ReadonlyMap<string, BoundMembe
     async export(resource) {
       const member = members.get(resource.resourceId)!, read = await readPinnedFile(member.path);
       if (!read || read.identity.digest !== resource.version) throw new Error('UNINSTALL_ARCHIVE_CHANGED');
-      return Buffer.concat([Buffer.from(`${read.mode.toString(8)}:${member.after ?? ''}:${member.standard ? 1 : ''}:${member.path}\0`), read.bytes]);
-    },
+      return Buffer.concat([Buffer.from(`${read.mode.toString(8)}:${member.after ?? ''}:${member.standard ? 1 : ''}:${member.path}\0`), read.bytes]); },
     async validateRestore(resource, bytes) { if (sha256(open(resource.resourceId, bytes).content) !== resource.version) throw new Error('UNINSTALL_ARCHIVE_INVALID'); },
     // Restore never writes over a file the person has, nor through a link: a missing file comes back, a file whose line uninstall cut gets its
     // earlier bytes back only while it still holds exactly uninstall's result; anything else (other bytes, unreadable, linked) is kept and reported.
     async restore(resource, bytes) {
       const { path, content, mode, after, standard } = open(resource.resourceId, bytes);
       // A file the standard set restored first (config) is that restore's own: it is not reported as kept.
-      if (await restorePinnedFile(path, content, mode, roots.find(root => pathWithin(root, path) && root !== path)!, after || undefined) === 'kept' && !(standard && await readPinnedFile(path).catch(() => null))) kept.push(path);
-    } };
+      if (await restorePinnedFile(path, content, mode, roots.find(root => pathWithin(root, path) && root !== path)!, after || undefined) === 'kept' && !(standard && await readPinnedFile(path).catch(() => null))) kept.push(path); } };
 }
-/**
- * K7 uninstall archive (lead 2026-10-27): every file a tier deletes outside the semantic backup set goes into the backup owner's encrypted
- * coverage companion of the verified final set (same passphrase and envelope), bound to the confirmed plan D0, then verified by re-reading
- * and decrypting it with each file's digest checked; the returned members bind every file (and a bridge's exact cut) to those bytes.
- */
+/** K7 uninstall archive (lead 2026-10-27): every file a tier deletes outside the semantic set goes into the backup owner's encrypted coverage
+ * companion of the set (same passphrase and envelope), bound to D0, verified by re-reading and decrypting it with each file's digest checked;
+ * the returned members bind every file (and a bridge's exact cut) to those bytes. */
 export async function createUninstallArchive(set: string, roots: readonly string[], members: readonly DataRemovalMember[], ids: { installationId: string; approved: string; plan: string },
   passphrase: string, limits: BackupLimits, standard: (path: string) => boolean = () => false) {
   const byId = new Map<string, BoundMember>(), resources: BackupCoverageManifest['resources'][number][] = [];
   for (const member of members) {
-    const read = await memberStat(member.path, true) && await readPinnedFile(member.path);
-    if (!read) continue;
+    const read = await memberStat(member.path, true) && await readPinnedFile(member.path); if (!read) continue;
     const cut = member.line ? lineCut(read.bytes, member.line, member.before) : null;
     if (member.line && !cut) throw new Error('UNINSTALL_ARCHIVE_CHANGED');
     byId.set(sha256(member.path), { path: member.path, ...read.identity, directory: member.directory, archived: true, ...(standard(member.path) ? { standard: true } : {}), ...(cut ? { cut: cut.cut, after: cut.after } : {}) });
@@ -62,14 +58,12 @@ export async function verifyUninstallArchive(set: string, archive: { readonly di
 }
 /** `deckent backup restore <set>` brings back the archive written beside that set: only files that do not exist again are written. */
 export async function restoreUninstallArchive(set: string, roots: readonly string[], passphrase: string, limits: BackupLimits) {
-  const text = await readFile(set + manifestSuffix, 'utf8').catch(absent);
-  if (text === null) return false;
-  const input = { set, companion: set + companionSuffix, manifest: JSON.parse(text) as BackupCoverageManifest, deletionRoots: roots };
-  const kept: string[] = [];
+  const text = await readFile(set + manifestSuffix, 'utf8').catch(absent); if (text === null) return false;
+  const input = { set, companion: set + companionSuffix, manifest: JSON.parse(text) as BackupCoverageManifest, deletionRoots: roots }, kept: string[] = [];
   await (await verifyBackupCoverage(input, passphrase, limits, [owner(roots, new Map(), kept)])).restore();
-  if (kept.length) throw ErrorRegistry.createError('UNINSTALL_RESTORE_KEPT', { params: { paths: kept.join(', ') } });
-  return true;
+  if (kept.length) throw ErrorRegistry.createError('UNINSTALL_RESTORE_KEPT', { params: { paths: kept.join(', ') } }); return true;
 }
 export const hasUninstallArchive = (set: string) => existsSync(set + manifestSuffix);
-/** The folders an uninstall archive may write back into: the project folder and the vault folder of the person's global home. */
-export const uninstallArchiveRoots = (projectRoot: string, globalRoot: string) => [projectRoot, join(globalRoot, PROJECT_VAULT.directory)];
+/** The folders an uninstall archive may write back into: the project folder, the vault folder of the person's global home and the trust store. */
+export const uninstallArchiveRoots = (projectRoot: string, globalRoot: string, env: Readonly<Record<string, string | undefined>> = process.env) =>
+  [projectRoot, join(globalRoot, PROJECT_VAULT.directory), instructionTrustDirectory(env)];
