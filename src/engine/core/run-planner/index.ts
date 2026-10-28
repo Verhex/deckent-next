@@ -3,7 +3,7 @@ import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSc
   parseModelInvocationCommand, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
   type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
-  prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
+  BRAIN_CORRECTION_TEMPLATE, prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
@@ -13,6 +13,8 @@ import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQ
 export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 /** f3: the configured `brain_planner.quotaWait` bounds (registry defaults when unset). */
 export const brainQuotaWaitPolicy = (config: unknown): BrainQuotaWaitPolicy => brainPlannerConfigSchema.parse(config).quotaWait;
+/** D-02: the configured corrective re-plans (`brain_planner.correctionRetries`, registry default 1, 0 disables). */
+export const brainCorrectionRetries = (config: unknown): number => brainPlannerConfigSchema.parse(config).correctionRetries;
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
@@ -59,7 +61,8 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
 }
 export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
   /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote;
-  /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy }
+  /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy;
+  /** D-02: corrective re-plans after a correctable validation refusal; absent or 0: none. */ readonly correctionRetries?: number }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
   inspect(query: RunProposalQuery): Promise<RunPlanningResult | null>;
@@ -120,11 +123,65 @@ function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvi
     default: return create('BRAIN_PROVIDER_REJECTED', { params: { reason: body?.refusal ?? evidence.reason, status: evidence.httpStatus ?? 'unknown' } });
   }
 }
-/** One model step; no tool loop, retry, Run writer or approval decision. */
+/** The refused answer travels with its typed refusal inside this module only (never a wire field or an error parameter). */
+const ANSWER = Symbol('brain-answer');
+/** A receipt answers exactly this invocation of this proposer in this scope, or the proposal has no source. */
+function assertBrainReceipt(invocation: ModelInvocationCommand, result: ModelInvocationResult, command: BrainPlanCommand, proposer: { id: string; issuer: string; subject: string }): void {
+  const receipt = result.receipt;
+  if (receipt.request.requestDigest !== modelInvocationRequestDigest(invocation) || receipt.request.commandId !== invocation.commandId
+    || encodeCommandProjection('model-ref', receipt.request.reference) !== encodeCommandProjection('model-ref', invocation.reference)
+    || receipt.request.expectedBinding.digest !== invocation.expectedBinding.digest
+    || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
+      !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+}
+/** D-02: the corrective request for a correctable refusal (an unregistered kind; unparsable or off-schema JSON), or null (anything else, or a request
+ * whose last message is not the one user text every Brain adapter takes): the previous answer (secrets redacted, bounded) and the refusal appended to
+ * that user message, under a command id derived from the refused call. */
+function correctedInvocation(command: BrainPlanCommand, invocation: ModelInvocationCommand, receipt: ModelInvocationResult['receipt'], error: unknown,
+  kinds: readonly string[], known?: KnownSecretSnapshot): ModelInvocationCommand | null {
+  const failure = error as { code?: unknown; params?: { stage?: unknown; rule?: unknown; kinds?: unknown }; [ANSWER]?: string };
+  const correctable = (failure.code === 'BRAIN_OUTPUT_INVALID' && (failure.params?.stage === 'json' || failure.params?.stage === 'schema'))
+    || (failure.code === 'BRAIN_GRAPH_INVALID' && failure.params?.rule === 'TASK_KIND_NOT_REGISTERED');
+  const messages = invocation.nativeRequest['messages'], last = Array.isArray(messages) ? messages.at(-1) as { role?: unknown; content?: unknown } | undefined : undefined;
+  if (!correctable || typeof failure[ANSWER] !== 'string' || last?.role !== 'user' || typeof last.content !== 'string') return null;
+  const reason = failure.code === 'BRAIN_GRAPH_INVALID' ? `unregistered task kind ${String(failure.params?.kinds ?? '')}` : `invalid ${String(failure.params?.stage)}`;
+  const correction = BRAIN_CORRECTION_TEMPLATE.replace('{error}', () => reason).replace('{answer}', () => redactForRecord(failure[ANSWER]!.slice(0, 8_000), known))
+    .replace('{kinds}', () => kinds.join(', ') || '-');
+  return { ...invocation, commandId: sha256(encodeCommandProjection('brain-invocation-correction:1', { scopeId: command.scopeId, commandId: command.commandId,
+    after: { commandId: invocation.commandId, invocationId: receipt.claim.invocationId } })),
+    nativeRequest: { ...invocation.nativeRequest, messages: [...(messages as readonly unknown[]).slice(0, -1), { ...last, content: `${last.content}\n\n${correction}` }] } as unknown as ModelInvocationCommand['nativeRequest'] };
+}
+/** One model step (a correctable refusal may re-plan within `correctionRetries`, D-02); no tool loop, Run writer or approval decision. */
 export class BrainPlanApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly ports: BrainPlanPorts) {}
   /** `observe`: the surface that shows progress. Only a caller that shows the wait gets one (owner Q-H4: a short VISIBLE wait); without it a
    * quota refusal is the typed refusal at once. */
+  /** The responded answer as a checked draft: content, truncation, JSON and schema, the assignment rule and the registered kinds (typed refusals). */
+  private validated(prepared: BrainPreparation, result: ModelInvocationResult, invocation: ModelInvocationCommand): ReturnType<typeof parseBrainDraft> {
+    if (result.receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
+    const text = this.ports.text(result);
+    const outputCap = invocation.nativeRequest['max_completion_tokens'];
+    if (!text) throw this.ports.stoppedAtLength(result)
+      ? ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED', { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } })
+      : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
+    let draft: ReturnType<typeof parseBrainDraft>;
+    // A JSON answer cut at the output limit is truncated, not invalid (2026-10-14 finding): the person raises the limit, not the template.
+    try { draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }); } catch (error) {
+      const failure = error as { code?: unknown; params?: { stage?: unknown } };
+      if (failure.code === 'BRAIN_OUTPUT_INVALID' && failure.params?.stage === 'json' && this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED',
+        { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } });
+      throw Object.assign(error as object, { [ANSWER]: text });
+    }
+    if (prepared.prompt.modelAssignment === 'system') assertBrainLeavesAssignment(draft);
+    if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
+      // BeUser D-02: the refusal names the kinds the model used that this scope has not registered, and the registered ones (bounded, names only);
+      // the rejected draft's tasks (`plan`: id and kind, names only) are its detail.
+      const unknown = [...new Set(draft.graph.tasks.map(task => task.kind).filter(kind => !prepared.kinds!.includes(kind)))].slice(0, 8);
+      throw Object.assign(ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED', kinds: unknown.join(', '),
+        registered: prepared.kinds.slice(0, 16).join(', ') || '-', plan: draft.graph.tasks.slice(0, 8).map(task => `${task.id} (${task.kind})`).join(', ') } }), { [ANSWER]: text });
+    }
+    return draft;
+  }
   async plan(input: unknown, credential?: unknown, signal?: AbortSignal, observe?: BrainPlanObserver): Promise<RunProposalResult> {
     const parsed = brainPlanCommandInputSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('BRAIN_INPUT_INVALID');
@@ -152,12 +209,7 @@ export class BrainPlanApplication {
       try { result = await this.ports.invoke(invocation, signal); }
       catch (error) { assertActive(signal); throw error; }
       assertActive(signal);
-      const receipt = result.receipt;
-      if (receipt.request.requestDigest !== modelInvocationRequestDigest(invocation) || receipt.request.commandId !== invocation.commandId
-        || encodeCommandProjection('model-ref', receipt.request.reference) !== encodeCommandProjection('model-ref', invocation.reference)
-        || receipt.request.expectedBinding.digest !== invocation.expectedBinding.digest
-        || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
-          !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+      const receipt = result.receipt; assertBrainReceipt(invocation, result, command, proposer);
       if (receipt.outcome?.state !== 'rejected') break;
       const continuation = observe ? await this.ports.continueBilling?.(invocation, result, reference => observe({ kind: 'billing-switch', reference }), signal) : null;
       if (continuation) {
@@ -183,28 +235,22 @@ export class BrainPlanApplication {
       invocation = { ...prepared.invocation, commandId: brainQuotaAttemptCommandId(command, attempt + 1, after) };
       observe!({ kind: 'planning', attempt: attempt + 1 });
     }
-    const receipt = result.receipt;
-    if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
-    const text = this.ports.text(result);
-    const outputCap = invocation.nativeRequest['max_completion_tokens'];
-    if (!text) throw this.ports.stoppedAtLength(result)
-      ? ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED', { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } })
-      : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
-    let draft: ReturnType<typeof parseBrainDraft>;
-    // A JSON answer cut at the output limit is truncated, not invalid (2026-10-14 finding): the person raises the limit, not the template.
-    try { draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }); } catch (error) {
-      const failure = error as { code?: unknown; params?: { stage?: unknown } };
-      if (failure.code === 'BRAIN_OUTPUT_INVALID' && failure.params?.stage === 'json' && this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED',
-        { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } });
-      throw error;
+    // D-02 (lead GO 2026-10-28, Jev c97aa511; amends "one model step"): a correctable refusal (an unregistered task kind, unparsable or
+    // off-schema JSON) re-plans at most `correctionRetries` times under a derived command id, the previous answer and the refusal appended to the
+    // one user message (the shape every Brain adapter takes); each call is spent and budget-gated as any Brain call; the last receipt is sealed.
+    let receipt = result.receipt, draft: ReturnType<typeof parseBrainDraft>;
+    for (let correction = 0; ; correction++) {
+      try { draft = this.validated(prepared, result, invocation); break; } catch (error) {
+        const next = correction < (prepared.correctionRetries ?? 0) ? correctedInvocation(command, invocation, receipt, error, prepared.kinds ?? [], this.ports.knownSecrets) : null;
+        if (!next) throw error;
+        invocation = next; observe?.({ kind: 'planning', attempt: correction + 2 });
+        result = await this.ports.invoke(invocation, signal); assertActive(signal); assertBrainReceipt(invocation, result, command, proposer);
+        if (result.receipt.outcome?.state === 'rejected') throw brainRejection(result.receipt.outcome.evidence, await this.ports.rejectionBody?.(result).catch(() => null) ?? null, this.ports.subscriptionAdapterIds);
+        receipt = result.receipt;
+      }
     }
+    if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN'); // narrowed; validated() already refused otherwise
     const usage = openAiChatUsageSchema.safeParse(result.response?.usage);
-    if (prepared.prompt.modelAssignment === 'system') assertBrainLeavesAssignment(draft);
-    if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
-      // BeUser D-02: the refusal names the kinds the model used that this scope has not registered, and the registered ones (bounded, names only).
-      const unknown = [...new Set(draft.graph.tasks.map(task => task.kind).filter(kind => !prepared.kinds!.includes(kind)))].slice(0, 8);
-      throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED', kinds: unknown.join(', '), registered: prepared.kinds.slice(0, 16).join(', ') || '-' } });
-    }
     const prompt = prepared.prompt, limit = prompt.summaryChars;
     // The system, not the model, bounds the declared ceiling: at most the money left after this planning call (live 2026-10-17: a copied
     // 100 USD limit refused every plan once 12.17 USD was spent). The model's number can only narrow it; the source check enforces that.

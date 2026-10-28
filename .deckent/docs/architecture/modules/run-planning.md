@@ -16,7 +16,13 @@ The existing connected-model invocation owns activation, binding, credentials,
 spending, claim and response custody. Planning has one model step, no tool loop
 and no blind retry; a subscription quota refusal with a known reset within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes) waits visibly and plans once more
-under a new derived command id (at most two attempts). Before metered invocation, the ledger-first scope budget
+under a new derived command id (at most two attempts). A correctable refusal (an unregistered
+task kind; unparsable or off-schema JSON) re-plans at most `brain_planner.correctionRetries`
+times (registry default 1, ceiling 1, 0 disables; D-02 amendment 2026-10-28): the previous answer
+(secrets redacted, bounded) and the refusal are appended to the one user message (the shape every
+Brain adapter, the headless CLI included, takes) under a command id derived from the refused call;
+each call is spent and budget-gated as any Brain call and the last receipt is sealed. A second
+failure is the typed refusal naming the kinds, with the rejected draft's tasks as its detail. Before metered invocation, the ledger-first scope budget
 (with configured fallback) must exist and have available capacity. A literal-zero
 tariff on exclusively literal-loopback endpoints needs no money budget; the
 invocation still owns validation, quote, freeze checks and reservations.
