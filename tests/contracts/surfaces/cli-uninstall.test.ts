@@ -95,6 +95,12 @@ it('offers force for running work before any card and prints a kept image\'s ste
   card.requests.length = 0; card.answers.push('all', 'cancel');
   await expect(uninstallCommand(['uninstall'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' });
   expect(card.requests[0]!.options.map(option => option.id)).toEqual(['keep-data', 'all', 'details', 'cancel']); expect(card.requests[1]!.options[0]).toMatchObject({ id: 'force' });
+  // m2: running work alone is waiting work too: when keep-work deletes something keep-data keeps (conversation), the menu offers it as the CLI does.
+  const talk = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...busy, resources: [...busy.resources,
+    { resourceId: 'conversation-data', contribution: 'conversation', locator: '/fixture/.deckent', members: ['/fixture/.deckent/state/terminal-history.jsonl'], version: 'v1', owner: 'temp',
+      ownership: 'exclusive', ownershipEvidence: 'b'.repeat(64), present: true, protected: false, capability: true, backup: 'covered', tiers: ['keep-work'] }] }) };
+  card.requests.length = 0; card.answers.push('cancel');
+  expect((await uninstallCommand(['uninstall'], talk).catch(() => null), card.requests[0]!.options.map(option => option.id))).toEqual(['keep-data', 'keep-work', 'all', 'details', 'cancel']);
   // A policy refusal (legal hold) is the engine's typed decision with its owner, never a generic ownership error from the surface.
   const held = { ...context, previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, { ...inventory(), policyBlocker: 'UNINSTALL_PURGE_DENIED' }),
     applyUninstall: async () => { throw Object.assign(new Error('denied'), { code: 'UNINSTALL_PURGE_DENIED', params: { owner: 'legal-hold' } }); } };

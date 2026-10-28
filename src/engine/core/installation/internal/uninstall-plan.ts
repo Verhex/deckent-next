@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { isAbsolute, relative, resolve, parse, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, parse, sep } from 'node:path';
 import { z } from 'zod';
 import { operationDescriptorSchema, type OperationDescriptor } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
@@ -46,6 +46,10 @@ export interface UninstallInventory {
   readonly managedScopes: readonly string[];
   /** The current principal's `installation/purge` refusal code, so the menu shows the data tiers as not possible before any card. */
   readonly policyBlocker?: string | null;
+  /** M6: folders the recovery location may never be in or contain besides the deletion roots (the project folder). */
+  readonly recoveryForbidden?: readonly string[];
+  /** M6: the recovery location is not canonical and private (a link on its path, another owner, open permissions). */
+  readonly recoveryUnsafe?: boolean;
 }
 type Query = { readonly tier: UninstallTier; readonly force: boolean; readonly disableUnit: boolean };
 /** Item actions and blockers of one tier over one observation; pure. */
@@ -97,17 +101,20 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
       }
     }
   }
-  // K7: every tier that deletes data (not only caches) archives it first, to a destination outside every deleted folder.
-  const archived = items.some(item => item.action === 'remove' && registry.entries.find(entry => entry.id === item.contribution)!.removeFrom !== 'keep-data');
-  if (archived && (!inventory.backupDestination || !isAbsolute(inventory.backupDestination)
-    || inventory.deletionRoots.some(root => within(root, inventory.backupDestination!) || within(inventory.backupDestination!, root)))) blockers.push('backup-destination');
+  // K7: every tier that deletes data (not only caches) archives it first. M6: on every tier that removes anything the recovery location
+  // (its custody, hold and backups) lies outside every deletion root, the project folder and every removed path, before any card.
+  const removing = items.filter(item => item.action === 'remove'), recovery = inventory.backupDestination && dirname(inventory.backupDestination);
+  const archived = removing.some(item => registry.entries.find(entry => entry.id === item.contribution)!.removeFrom !== 'keep-data');
+  if (removing.length && (!recovery || !isAbsolute(recovery) || inventory.recoveryUnsafe || [...inventory.deletionRoots, ...inventory.recoveryForbidden ?? [], ...removing.flatMap(item => item.members ?? [item.locator])]
+    .some(root => within(root, recovery) || within(recovery, root)))) blockers.push('backup-destination');
   // Work and service are checked before any card (owner 2026-10-27): a running service is stopped, never reported as work.
   const work = inventory.work, service = inventory.service;
   if (!work.complete) blockers.push('work-unverified');
   if (work.running.length && !force) blockers.push('work-active');
   if (purge && (work.parked.length || work.approvals.length) && !force) blockers.push('work-pending');
   if (purge && work.deliveries.length && !force) blockers.push('delivery-queued');
-  if (purge && work.uncertain.length) {
+  // M9: an unknown external result blocks every tier that deletes data (keep-work too), not only delete-everything.
+  if (archived && work.uncertain.length) {
     if (!force) blockers.push('uncertain-effects');
     else if (work.uncertain.some(item => inventory.managedScopes.includes(item.scopeId))) blockers.push('uncertain-managed');
   }
@@ -136,16 +143,16 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
 }
 const BLOCKER_ERRORS: Readonly<Record<string, string>> = { 'work-active': 'UNINSTALL_WORK_ACTIVE', 'work-pending': 'UNINSTALL_WORK_ACTIVE', 'delivery-queued': 'UNINSTALL_DELIVERY_QUEUED',
   'uncertain-effects': 'UNINSTALL_UNCERTAIN_EFFECTS', 'uncertain-managed': 'UNINSTALL_UNCERTAIN_MANAGED', 'service-managed': 'UNINSTALL_SERVICE_RUNNING',
-  'work-unverified': 'UNINSTALL_SCOPE_UNVERIFIED', 'backup-destination': 'UNINSTALL_BACKUP_COVERAGE', 'archive-limit': 'UNINSTALL_BACKUP_COVERAGE' };
+  'work-unverified': 'UNINSTALL_SCOPE_UNVERIFIED', 'backup-destination': 'UNINSTALL_RECOVERY_LOCATION', 'archive-limit': 'UNINSTALL_BACKUP_COVERAGE' };
 /** The typed refusal of a plan's first blocker, with the counts and next step its message names; null when the plan has none. */
-export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'work' | 'service' | 'purge' | 'installation'>) {
+export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'work' | 'service' | 'purge' | 'installation'> & { readonly backup?: { readonly destination: string | null } }) {
   const authority = plan.blockers.find(value => /^authority-(relocated|unsafe):/u.test(value));
   if (authority) return ErrorRegistry.createError('UNINSTALL_AUTHORITY_UNVERIFIED', { params: { path: authority.slice(authority.indexOf(':') + 1) } });
   const known = plan.blockers.find(value => BLOCKER_ERRORS[value]), work = plan.work;
   if (known) return ErrorRegistry.createError(BLOCKER_ERRORS[known]! as 'UNINSTALL_WORK_ACTIVE', { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)),
     approvals: String(plan.purge ? work.approvals.length : 0), count: String(known === 'delivery-queued' ? work.deliveries.length : work.uncertain.length),
     list: work.uncertain.slice(0, 5).map(item => `${item.kind} ${item.id}`).join(', '), owner: work.uncertain.find(item => item.scopeId)?.scopeId ?? '',
-    unit: plan.service.unit ?? '', command: plan.service.command ?? '', path: plan.installation.root } });
+    unit: plan.service.unit ?? '', command: plan.service.command ?? '', path: plan.installation.root, recovery: plan.backup?.destination ?? '' } });
   return plan.blockers.length ? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP') : null;
 }
 export function assertUninstallPlanCurrent(approved: UninstallPlan, current: UninstallPlan) {
@@ -155,13 +162,17 @@ export function assertUninstallPlanCurrent(approved: UninstallPlan, current: Uni
  * by work force finished and by uncertain items the confirmation already named. Anything else is returned as a difference: stop, delete nothing. */
 export function uninstallPlanDrift(approved: UninstallPlan, current: UninstallPlan): readonly string[] {
   // A resource the confirmation removes may already be gone (a replay, or removed meanwhile); any other change of the resource list is drift.
-  const named = new Set(approved.work.uncertain.map(item => `${item.kind}:${item.id}`)), same = current.items.length === approved.items.length && current.items.every(item => {
-    const was = approved.items.find(other => other.resourceId === item.resourceId); return !!was && (was.action === item.action || was.action === 'remove' && item.present === false); });
+  // M1: every item binds its action, location, version, owner evidence and exact members; the uncertain items their scope and target.
+  const bound = (item: UninstallItem) => JSON.stringify([item.action, item.locator, item.version, item.owner, item.ownership, item.ownershipEvidence, [...item.members ?? []].sort()]);
+  const key = (item: UninstallWork['uncertain'][number]) => `${item.kind}:${item.scopeId}:${item.id}:${item.target ?? ''}`, named = new Set(approved.work.uncertain.map(key));
+  const same = current.items.length === approved.items.length && current.items.every(item => {
+    const was = approved.items.find(other => other.resourceId === item.resourceId); return !!was && (bound(was) === bound(item) || was.action === 'remove' && item.present === false); });
   return [...current.blockers.map(value => `blocker:${value}`), ...current.work.running.map(item => `running:${item.id}`),
     ...(current.purge ? [...current.work.parked, ...current.work.approvals, ...current.work.deliveries].map(item => `pending:${item.id}`) : []),
-    ...current.work.uncertain.filter(item => !named.has(`${item.kind}:${item.id}`)).map(item => `uncertain:${item.kind}:${item.id}`),
-    ...(!same || current.installation.id !== approved.installation.id || current.policyRevision !== approved.policyRevision
-      || current.layoutRevision !== approved.layoutRevision ? ['resources'] : []), ...(current.service.running ? ['service-running'] : [])];
+    ...current.work.uncertain.filter(item => !named.has(key(item))).map(item => `uncertain:${item.kind}:${item.id}`),
+    ...(!same || current.installation.id !== approved.installation.id || current.policyRevision !== approved.policyRevision || current.layoutRevision !== approved.layoutRevision
+      || current.registryDigest !== approved.registryDigest || JSON.stringify(current.scopeSummary) !== JSON.stringify(approved.scopeSummary) ? ['resources'] : []),
+    ...(current.backup.destination !== approved.backup.destination ? ['backup-location'] : []), ...(current.service.running ? ['service-running'] : [])];
 }
 
 /** S22: a launcher the person made (observed by the host) stays: the card names it and its exact removal step. */

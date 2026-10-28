@@ -48,7 +48,7 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
     const inventory: UninstallInventory = { installation: { id: 'fixture-installation', root }, scopeSummary: ['s'],
       layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: 'i1', resources: [{ resourceId: 'cache', contribution: 'scratch', locator: cache,
         version, owner: 'fixture-installation', ownership: 'exclusive', ownershipEvidence: 'a'.repeat(64), present: true, protected: false, capability: true, backup: 'covered' }],
-      blockers: [], protectedPaths: [ledger], deletionRoots: [root], backupDestination: join(root, 'backup'), packageRemoval: { command: null, shared: true },
+      blockers: [], protectedPaths: [ledger], deletionRoots: [root], backupDestination: join(`${root}-recovery`, 'backup'), packageRemoval: { command: null, shared: true },
       dataBlockers: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true }, service: { running: false, unit: null, unitDisable: 'none', command: null }, managedScopes: [] };
     let retained: UninstallPlan | null = null, observed = inventory;
     const ports = (): UninstallApplicationPorts => ({ channel, witness: { attest: async () => witness }, principal: async () => principal,
@@ -89,7 +89,7 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
     // Purge cancellation and backup failure run against a fresh data resource, before its generic effect may be claimed.
     await mkdir(cache, { mode: 0o700 }); await writeFile(join(cache, 'retained'), 'DATA', { mode: 0o600 });
     // K7: a tier that deletes data (here an archived file group) backs it up first; caches alone need no backup.
-    const purgeInventory = { ...inventory, backupDestination: join(root, '..', 'external-backup'), resources: [{ ...inventory.resources[0]!, contribution: 'conversation', version: (await cacheTarget.observe({ kind: cacheTarget.kind, id: 'cache' })).version }] };
+    const purgeInventory = { ...inventory, backupDestination: join(`${root}-external`, 'backup'), resources: [{ ...inventory.resources[0]!, contribution: 'conversation', version: (await cacheTarget.observe({ kind: cacheTarget.kind, id: 'cache' })).version }] };
     observed = purgeInventory; retained = createUninstallPlan({ schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, purgeInventory);
     const purgeCommand = { ...command, planDigest: retained.planDigest };
     covered = false; await expect(new UninstallApplication(ports()).apply(purgeCommand, interaction)).rejects.toMatchObject({ code: 'UNINSTALL_BACKUP_COVERAGE' });
@@ -201,7 +201,7 @@ it('asks nothing when nothing would change, stops the service before custody in 
   const forced = await app().preview(query({ tier: 'all', force: true }));
   const named = await app().apply({ schemaVersion: 2, commandId: 'c4', planDigest: forced.planDigest }, { ...confirm, backupPassphrase: async () => 'temporary' });
   // Nothing here deletes data, so no backup is asked; force's own steps and the unknown result are named.
-  expect(calls).toEqual(['cancel:run-1', 'reject:approval-1', 'withdraw:ticket-1', 'custody:false', 'finish:completed']);
+  expect(calls).toEqual(['withdraw:ticket-1', 'cancel:run-1', 'reject:approval-1', 'custody:false', 'finish:completed']);
   expect(named.uncertain).toEqual([effect]);
   calls.length = 0;
   work = { ...idle, running: [{ scopeId: 's', id: 'run-2', revision: 1 }], uncertain: [effect] };
@@ -211,6 +211,19 @@ it('asks nothing when nothing would change, stops the service before custody in 
   await expect(raced.apply({ schemaVersion: 2, commandId: 'c5', planDigest: drifting.planDigest }, confirm))
     .rejects.toMatchObject({ code: 'UNINSTALL_PLAN_CHANGED', params: { diff: 'uncertain:effect:erp-credit-note' } });
   expect(calls).toEqual(['cancel:run-2']);
+  // M14: a force step the person may not take is refused before the card: no card, no service stop, no cancel.
+  calls.length = 0; cards = 0; work = { ...idle, running: [{ scopeId: 's', id: 'run-3', revision: 1 }] };
+  const ports = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports, denied = new UninstallApplication({ ...ports,
+    force: { ...ports.force!, authorize: async () => { throw ErrorRegistry.createError('POLICY_DENIED'); } } });
+  const forcedRun = await denied.preview(query({ force: true }));
+  await expect(denied.apply({ schemaVersion: 2, commandId: 'c6', planDigest: forcedRun.planDigest }, confirm)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(cards).toBe(0); expect(calls).toEqual([]);
+  // M14: deleting data needs the backup grant too; without it the data tiers are refused by the same decision the menu shows before any card.
+  const owner = { id: 'owner', effect: 'allow', principals: 'all', actions: 'all', scopes: 'all' } as const;
+  const noBackup = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [{ ...owner, resource: { kind: 'installation', ids: 'all' } }] };
+  expect(() => authorizeUninstall(noBackup, principal, 'installation', ['s'], 'purge')).toThrow(expect.objectContaining({ code: 'UNINSTALL_BACKUP_DENIED' }));
+  expect(authorizeUninstall(noBackup, principal, 'installation', ['s'], 'uninstall')).toBe('p1');
+  expect(authorizeUninstall({ ...noBackup, grants: [...noBackup.grants, { ...owner, id: 'backup', resource: { kind: 'backup', ids: 'all' } }] }, principal, 'installation', ['s'], 'purge')).toBe('p1');
 });
 
 it('K3 on the real delivery queue: delete everything refuses a queued delivery naming the next command; --force withdraws it through the queue owner', async () => {

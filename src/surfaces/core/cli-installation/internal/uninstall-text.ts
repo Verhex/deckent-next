@@ -100,10 +100,11 @@ export function uninstallDetailLines(plan: UninstallPlan, locale: Locale, verbos
 /** A blocker the person can resolve on the next card (running or pending work, unknown results, an eligible unit), offered with its flag twin. */
 export const uninstallResolvable = (blocker: string | null | undefined, plan: UninstallPlan) => !!blocker
   && (['work-active', 'work-pending', 'uncertain-effects', 'delivery-queued'].includes(blocker) || blocker === 'service-managed' && plan.service.unitDisable === 'eligible');
-/** The menu's tiers: keep-data always (recommended), keep-work only with pending work it treats differently from keep-data, all always; a tier
+/** The menu's tiers: keep-data always (recommended), keep-work only with waiting work (running included, as the CLI's `--keep-work --force`)
+ * that it treats differently from keep-data, all always; a tier
  * the same observation refuses for good carries its reason, shown under the card (a resolvable refusal stays selectable). */
 export function uninstallTierChoices(plan: UninstallPlan, locale: Locale): readonly { readonly tier: UninstallTier; readonly label: string; readonly blocked: string | null }[] {
-  const messages = uninstallMessages(locale), pending = plan.work.parked.length + plan.work.approvals.length + plan.work.deliveries.length + plan.work.uncertain.length > 0;
+  const messages = uninstallMessages(locale), pending = plan.work.running.length + plan.work.parked.length + plan.work.approvals.length + plan.work.deliveries.length + plan.work.uncertain.length > 0;
   return (['keep-data', 'keep-work', 'all'] as const).filter(tier => tier !== 'keep-work' || pending && plan.tiers['keep-work'].removes !== plan.tiers['keep-data'].removes)
     .map(tier => { const blocker = plan.tiers[tier].blocker;
       return { tier, label: messages[`tier.${tier}`]!, blocked: blocker && !uninstallResolvable(blocker, plan) ? uninstallBlockerText(blocker, locale) : null }; });

@@ -33,7 +33,8 @@ async function bindMember(verified: VerifiedBackup, member: DataRemovalMember, b
   return { path: member.path, ...before.identity, directory: member.directory };
 }
 /** The existing backup application owns create/verify/audit of the standard set that `deckent backup restore` restores. The final set is
- * re-verified, every member is bound to its exact verified content and a durable final-tail intent is written before any deletion. */
+ * re-verified, every member is bound to its exact verified content and a durable final-tail intent is written before any deletion. The initial
+ * set (before any effect) is archived and verified the same way, so a member that cannot be archived stops the plan before anything goes. */
 export async function prepareUninstallBackup(config: ResolvedConfig, plan: UninstallPlan, scopeId: string, principal: VerifiedPrincipal,
   policy: unknown, integrity: IntegrityAuthority, members: readonly DataRemovalMember[], passphrase: string, final: boolean, options: ConfigLoadOptions, approved = plan.planDigest) {
   if (!plan.backup.destination) throw new Error('UNINSTALL_BACKUP_COVERAGE');
@@ -46,7 +47,6 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
     { principal, installationId: plan.installation.id, integrity });
   await app.execute({ schemaVersion: 1, action: 'create', scopeId, set }, passphrase);
   await app.execute({ schemaVersion: 1, action: 'verify', scopeId, set }, passphrase);
-  if (!final) return { set, snapshot: null };
   const verified = await verifyBackupSet(set, passphrase, limits);
   try {
     if (verified.state.installationId !== plan.installation.id) unbound();
@@ -57,6 +57,8 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
     const archived = own.some(member => member.archived) ? await createUninstallArchive(set, uninstallArchiveRoots(config.projectRoot, dirname(globalPath)), own.filter(member => member.archived),
       { installationId: plan.installation.id, approved, plan: plan.planDigest }, passphrase, limits,
       path => verified.state.entries.some(entry => join(productResourcePath(layout, entry.resource as ProductResource), entry.path) === path)) : null, bound = [...archived?.members ?? []];
+    // M5: the initial set already carries a verified archive of every member (limits, paths, coverage, passphrase) before the first removal.
+    if (!final) return { set, snapshot: null };
     for (const member of own.filter(member => !member.archived)) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
     const snapshot: DataRemovalSnapshot = { set: verified.set, manifestDigest: digest(await readFile(join(verified.set, 'MANIFEST.sha256'))), members: bound,
       root: layout.root === join(config.projectRoot, DECKENT_DIR) ? layout.root : undefined, archive: archived?.archive };

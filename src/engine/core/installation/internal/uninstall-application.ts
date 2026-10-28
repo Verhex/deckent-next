@@ -24,6 +24,12 @@ export function authorizeUninstall(input: unknown, principal: VerifiedPrincipal,
       if (action === 'uninstall' && decision.reason === 'DENIED') throw ErrorRegistry.createError('UNINSTALL_MANAGED', { params: { owner: decision.ruleId ?? scopeId } });
       throw new PolicyAuthorizationError('POLICY_DENIED');
     }
+    // M14: deleting data first creates and verifies a backup under the same installation-wide grant; a person without it is told before any card.
+    for (const backup of action === 'purge' ? ['create', 'verify'] as const : []) {
+      const allowed = evaluatePolicy(document, { principal, scopeId, action: backup, resource: { kind: 'backup', id: installationId } });
+      if (allowed.decision !== 'allow' || principalGrants(document, principal).find(grant => grant.id === allowed.ruleId)?.scopes !== 'all')
+        throw ErrorRegistry.createError('UNINSTALL_BACKUP_DENIED', { params: { owner: allowed.ruleId ?? scopeId } });
+    }
   }
   return document.revision;
 }
@@ -71,7 +77,9 @@ export interface UninstallApplicationPorts {
   /** `approved`: the confirmed digest D0 that the archive binds to (the admitted plan is the fresh D1 that matched it). */
   withAdmission?: <T>(plan: UninstallPlan, approved: string, work: (admission: UninstallAdmission) => Promise<T>) => Promise<T>;
   /** K3: the existing run cancellation and approval decision owners, as the witnessed person; nothing is closed, released or killed. */
-  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: Ref): Promise<void> };
+  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: Ref): Promise<void>;
+    /** M14: the person's authority for each force step, decided before the card (no effect); a refusal is a typed error. */
+    authorize?(steps: Pick<UninstallPlan['steps'], 'cancelRuns' | 'rejectApprovals'>, principal: VerifiedPrincipal): Promise<void> };
   /** Configured wait for cancelled work: its budget and poll interval; a timeout leaves the work, and the fresh plan names it. */
   readonly settle?: { readonly budgetMs: number; wait(ms: number): Promise<unknown> };
   /** The runtime service: its describe answer, the user unit whose main process it is (K4 checks), governed shutdown and `disable --now`. */
@@ -151,15 +159,16 @@ export class UninstallApplication {
       planDigest: plan.planDigest, status, items: states.map(item => ({ ...item })), recoveryLocation, backup: admitted?.verifiedBackup?.() ?? plan.backup,
       packageRemoval: plan.packageRemoval, uncertain: plan.work.uncertain, ...(unit ? { unit } : {}), ...(failureCode ? { failureCode } : {}) });
     if (approved.nothingToRemove) return result('noop', null);
+    const { steps } = approved, forced = steps.cancelRuns.length + steps.rejectApprovals.length + steps.withdrawDeliveries.length;
+    if (forced && !this.ports.force) throw new UninstallError('UNINSTALL_UNSUPPORTED');
+    if (forced) await this.ports.force!.authorize?.(steps, await this.ports.principal());
     if (signal?.aborted || !await interaction.confirm(approved)) return result('cancelled', null);
     await this.person(gated); // a card answer grants no authority and may have outlived its session
     if (signal?.aborted) return result('cancelled', null);
-    const { steps } = approved;
-    const forced = steps.cancelRuns.length + steps.rejectApprovals.length + steps.withdrawDeliveries.length;
-    if (forced && !this.ports.force) throw new UninstallError('UNINSTALL_UNSUPPORTED');
+    // Deliveries first: their owner decides its own authority at the call, so a refusal there comes before any other force effect.
+    for (const ref of steps.withdrawDeliveries) await this.ports.force!.withdrawDelivery(ref);
     for (const ref of steps.cancelRuns) await this.ports.force!.cancelRun(ref);
     for (const ref of steps.rejectApprovals) await this.ports.force!.rejectApproval(ref);
-    for (const ref of steps.withdrawDeliveries) await this.ports.force!.withdrawDelivery(ref);
     if (forced && this.ports.settle) {
       const { budgetMs, wait } = this.ports.settle, deadline = runtimeMonotonicDeadline(budgetMs);
       for (let current = await this.replan(approved); ; current = await this.replan(approved)) {

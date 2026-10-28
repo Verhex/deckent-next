@@ -308,7 +308,14 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     expect(plan.items.find(item => item.resourceId.startsWith('tracked.'))).toMatchObject({ locator: join(local, 'bindings.json'), action: 'keep', reason: 'vcs-tracked' });
     expect(plan.items.find(item => item.locator === join(local, 'notes.txt'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
-    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    // M5: a member that cannot be archived stops the removal before its first effect: the cache stays too (archive built before any removal).
+    const report = join(local, 'crashes/crash-1-1-33333333-3333-4333-8333-333333333333.json'), cached = join(local, AREA, 'entry');
+    for (const path of [cached, report]) { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); await writeFile(path, 'CACHE', { mode: 0o600 }); }
+    const withCache = await previewConfiguredUninstall(project, ALL, options); await chmod(report, 0o000);
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'archive-fails', planDigest: withCache.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options)).rejects.toThrow();
+    await chmod(report, 0o600); expect(await readFile(cached, 'utf8')).toBe('CACHE'); expect(await readFile(report, 'utf8')).toBe('CACHE');
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'in-project', planDigest: (await previewConfiguredUninstall(project, ALL, options)).planDigest },
+      { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(result.status).toBe('completed');
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');

@@ -1,4 +1,4 @@
-import { realpath, stat } from 'node:fs/promises';
+import { lstat, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, sep } from 'node:path';
 /** Owner-only file mode: a private file or directory has none of these bits. */
 export const PRIVATE_PERMISSION_MASK = 0o077;
@@ -19,4 +19,14 @@ export async function pathsShareTree(a: string, b: string): Promise<boolean> {
     }
   };
   try { const [left, right] = await Promise.all([chain(a), chain(b)]); return left.includes(right[0]!) || right.includes(left[0]!); } catch { return true; }
+}
+/** A location whose existing part is canonical (no link anywhere on its real path) and which, when it exists, is a directory private to this
+ * user; the deepest existing ancestor of a missing one is canonical too. */
+export async function privateLocationSafe(path: string): Promise<boolean> {
+  for (let current = path; ; current = dirname(current)) {
+    const info = await lstat(current).catch(() => null);
+    if (info) return info.isDirectory() && await realpath(current).catch(() => '') === current
+      && (current !== path || info.uid === process.getuid?.() && !(info.mode & PRIVATE_PERMISSION_MASK));
+    if (dirname(current) === current) return false;
+  }
 }

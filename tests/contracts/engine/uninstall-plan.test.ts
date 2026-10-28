@@ -72,3 +72,24 @@ it('checks work and the service before any card: nothing to do asks nothing, a r
   expect(uninstallPlanDrift(forced, after({ running: [{ scopeId: 'company-a', id: 'run-1', revision: 4 }] }))).toEqual(['running:run-1']);
   expect(forced.tiers).toMatchObject({ 'keep-data': { removes: 1, blocker: null }, all: { removes: 2 } });
 });
+
+it('binds D0 to every member, location, version and owner evidence; guards the recovery location on every tier; stops data tiers on a managed unknown', () => {
+  const data = resource('conversation-data', 'conversation', '/fixture/data', { members: ['/fixture/data/history.jsonl'] }), base = { ...inventory, resources: [data, resource('scratch', 'scratch', '/fixture/data/scratch')] };
+  const approved = createUninstallPlan(query('keep-work'), base);
+  expect(approved.blockers).toEqual([]); expect(uninstallPlanDrift(approved, createUninstallPlan(query('keep-work'), base))).toEqual([]);
+  // M1: a new member, another version or owner evidence, a new recovery location or an unknown item of another scope is never covered by D0.
+  for (const changed of [{ ...data, members: [...data.members!, '/fixture/data/new-session.json'] }, { ...data, version: 'v2' }, { ...data, ownershipEvidence: 'b'.repeat(64) }])
+    expect(uninstallPlanDrift(approved, createUninstallPlan(query('keep-work'), { ...base, resources: [changed, base.resources[1]!] }))).toContain('resources');
+  expect(uninstallPlanDrift(approved, createUninstallPlan(query('keep-work'), { ...base, backupDestination: '/fixture/elsewhere/set' }))).toContain('backup-location');
+  const effect = { kind: 'effect' as const, scopeId: 's', id: 'erp-1', target: 'erp/invoice-1' }, named = createUninstallPlan(query('all', { force: true }), { ...base, work: { ...idle, uncertain: [effect] } });
+  expect(uninstallPlanDrift(named, createUninstallPlan(query('all', { force: true }), { ...base, work: { ...idle, uncertain: [{ ...effect, scopeId: 'other' }] } }))).toContain('uncertain:effect:erp-1');
+  // M6: the recovery location inside a removed path, the project folder, or not canonical and private blocks even keep-data before any card.
+  for (const unsafe of [{ backupDestination: '/fixture/data/scratch/recovery/set' }, { backupDestination: '/project/recovery/set', recoveryForbidden: ['/project'] }, { recoveryUnsafe: true }])
+    expect(createUninstallPlan(query('keep-data'), { ...base, ...unsafe }).blockers).toContain('backup-destination');
+  expect(createUninstallPlan(query('keep-data'), { ...base, resources: [], recoveryUnsafe: true }).blockers).toEqual([]); // nothing removed: nothing asked
+  // M9: an unknown result in a managed scope stops keep-work's data deletion too (force included); keep-data keeps the data and may go on.
+  const managed = { ...base, managedScopes: ['s'], work: { ...idle, uncertain: [effect] } };
+  expect(createUninstallPlan(query('keep-work', { force: true }), managed).blockers).toContain('uncertain-managed');
+  expect(createUninstallPlan(query('keep-work'), managed).blockers).toContain('uncertain-effects');
+  expect(createUninstallPlan(query('keep-data'), managed).blockers).toEqual([]);
+});

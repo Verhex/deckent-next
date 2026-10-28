@@ -56,8 +56,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
           interactive: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) });
       let passphrase = '', backup = plan.backup;
       const close = () => { if (!authorityClosed) { audit?.close(); audit = undefined; approvals.close(); authorityClosed = true; } };
-      current.dataTarget.prepare(async () => {
-        close();
+      current.dataTarget.prepare(async () => { close();
         const final = await prepareUninstallBackup(config, plan, scopeId, { ...principal, scopeIds: affected }, await policy.load(), integrity, current.portable, passphrase, true, options, approved); backup = { ...plan.backup, destination: final.set }; return final.snapshot!;
       });
       return await work({ scopeId, recoveryLocation,
@@ -74,13 +73,9 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
             if (!record && (!target || target.version !== item.version || target.ownershipEvidence !== item.ownershipEvidence
               || target.ownership !== 'exclusive' || target.protected || !target.capability)) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
           }
-        },
-        verifiedBackup: () => backup,
-        async prepareBackup(phrase) {
-          if (!phrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED');
-          passphrase = phrase;
-          const initial = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, phrase, false, options); backup = { ...plan.backup, destination: initial.set };
-        },
+        }, verifiedBackup: () => backup,
+        async prepareBackup(phrase) { if (!phrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED'); passphrase = phrase;
+          const initial = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, phrase, false, options, approved); backup = { ...plan.backup, destination: initial.set }; },
         async approvePlan() { /* The immutable witnessed plan is retained; each command is decided through the broker above. */ },
         async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); await recovery.finish(result); passphrase = '';
           if (!plan.purge && result.status === 'completed') await retireInstallation(config.productLayout.root, { installationId: plan.installation.id, planDigest: approved, tier: plan.tier }); },

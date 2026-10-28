@@ -1489,6 +1489,7 @@
     },
     "src/composition/core/installation": {
       "dependencies": [
+        "src/engine/core/policy",
         "src/adapters/core/contract",
         "src/engine/core/runtime",
         "src/adapters/core/secret-store",

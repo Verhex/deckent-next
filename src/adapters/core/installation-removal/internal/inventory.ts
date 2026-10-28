@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
-import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
+import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 import { InstallationDataRemovalTarget, fileDigest, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY } from '#adapters/core/project-instructions/index.js';
@@ -141,7 +141,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   // A missing/foreign key disables native record inspection; it never opens an unverified record or creates a key on preview.
   const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths, dataBlockers: [...base.dataBlockers, ...blockers],
     deletionRoots: [...base.deletionRoots, ...new Set(outside.map(member => member.directory ?? config.projectRoot))],
-    inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: join(uninstallRecoveryDirectory(config, env), 'backup') };
+    inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: join(uninstallRecoveryDirectory(config, env), 'backup'),
+    recoveryForbidden: project.own ? [config.projectRoot] : [], recoveryUnsafe: !await privateLocationSafe(uninstallRecoveryDirectory(config, env)) };
   return { inventory, targets, dataTarget: target, portable: all };
 }
 /** Signed per-file records of a tree owner: a private regular file whose content verifies as a sealed audit record with this installation's
