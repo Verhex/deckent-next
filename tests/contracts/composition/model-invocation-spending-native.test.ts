@@ -1,5 +1,5 @@
 import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
-import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -450,7 +450,8 @@ it.skipIf(process.platform !== 'linux')('governed runtime SDK revisions reach re
   }] }), { mode: 0o600 });
   const service = await startTestRuntimeService(f.project, f.env);
   try {
-    const client = createConfiguredRuntimeClient(f.project, { env: f.env }), first = await client.invokeModel(f.command);
+    // S-05: the budget revision and the held-spend reconciliation are the person's: a real PTY peer (the service-held terminal witness).
+    const client = createTerminalRuntimeClient(f.project, { env: f.env }), first = await client.invokeModel(f.command);
     const current = (await client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 })).checkpoint!;
     const revision = await client.manageProviderSpend({ schemaVersion: 1, kind: 'budget-revision', commandId: 'raise', scopeId: 'scope', budgetId: 'budget',
       budgetRevision: 1, expectedCheckpointDigest: current.digest, budget: { ...current.account.budget, revision: 2, limitMinorUnits: 2000 },
