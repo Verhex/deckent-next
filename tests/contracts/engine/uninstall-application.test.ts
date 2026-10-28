@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, lstat } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { UninstallApplication, authorizeUninstall, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
+import { UninstallApplication, authorizeUninstall, authorizeUninstallSteps, createUninstallPlan, uninstallOperationDescriptors, EffectApplication, OperationPolicyAuthorization,
   EffectTargetError, type UninstallAdmission, type UninstallApplicationPorts, type UninstallInventory, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
 import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
@@ -220,13 +220,23 @@ it('asks nothing when nothing would change, stops the service before custody in 
   await expect(raced.apply({ schemaVersion: 2, commandId: 'c5', planDigest: drifting.planDigest }, confirm))
     .rejects.toMatchObject({ code: 'UNINSTALL_PLAN_CHANGED', params: { diff: 'uncertain:effect:erp-credit-note' } });
   expect(calls).toEqual(['cancel:run-2']);
-  // M14: a force step the person may not take is refused before the card: no card, no service stop, no cancel.
-  calls.length = 0; cards = 0; work = { ...idle, running: [{ scopeId: 's', id: 'run-3', revision: 1 }] };
-  const ports = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports, denied = new UninstallApplication({ ...ports,
-    force: { ...ports.force!, authorize: async () => { throw ErrorRegistry.createError('POLICY_DENIED'); } } });
-  const forcedRun = await denied.preview(query({ force: true }));
+  // M14, R8: any step an owner would refuse after the card (here the second of two deliveries) is refused before it: no card, no service
+  // stop, no cancel, no withdrawal, no custody.
+  calls.length = 0; cards = 0; answering = false;
+  work = { ...idle, running: [{ scopeId: 's', id: 'run-3', revision: 1 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 1 }, { scopeId: 's', id: 'ticket-2', revision: 1 }] };
+  const ports = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports, decided: string[] = [];
+  const denied = new UninstallApplication({ ...ports, preflight: async plan => { for (const ref of plan.steps.withdrawDeliveries) { decided.push(ref.id); if (ref.id === 'ticket-2') throw ErrorRegistry.createError('POLICY_DENIED'); } } });
+  const forcedRun = await denied.preview(query({ tier: 'all', force: true }));
   await expect(denied.apply({ schemaVersion: 2, commandId: 'c6', planDigest: forcedRun.planDigest }, confirm)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-  expect(cards).toBe(0); expect(calls).toEqual([]);
+  expect(cards).toBe(0); expect(calls).toEqual([]); expect(decided).toEqual(['ticket-1', 'ticket-2']); work = idle;
+  // R8: the owners' own rules from one policy document: a run cancel, the removal's operation and the person's approval decision are each refused.
+  const base = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'backup', 'run', 'operation', 'approval'].map(kind => ({ id: kind, effect: 'allow', principals: 'all', actions: 'all', scopes: 'all', resource: { kind, ids: 'all' } })) };
+  const removing = { ...forcedRun, items: [{ action: 'remove', operation: { id: 'installation.remove-data', version: 1 } }], steps: { ...forcedRun.steps, cancelRuns: [{ scopeId: 's', id: 'run-3', revision: 1 }], rejectApprovals: [] } } as unknown as UninstallPlan;
+  await expect(authorizeUninstallSteps(base, removing, principal, 's')).resolves.toBeUndefined();
+  for (const kind of ['run', 'operation', 'approval']) {
+    const without = { ...base, grants: [...base.grants.filter(grant => grant.id !== kind), { ...base.grants[0]!, id: `deny-${kind}`, effect: 'deny', resource: { kind, ids: 'all' } }] };
+    await expect(authorizeUninstallSteps(without, removing, principal, 's')).rejects.toMatchObject({ code: kind === 'approval' ? 'APPROVAL_DENIED' : 'POLICY_DENIED' });
+  }
   // M14: deleting data needs the backup grant too; without it the data tiers are refused by the same decision the menu shows before any card.
   const owner = { id: 'owner', effect: 'allow', principals: 'all', actions: 'all', scopes: 'all' } as const;
   const noBackup = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [{ ...owner, resource: { kind: 'installation', ids: 'all' } }] };

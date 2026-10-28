@@ -3,13 +3,16 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile, lstat, symlink, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FileInstallationIdentityStore, readLocalOsIdentity, openLocalIntegrityAuthority, acquireLedgerLock } from '#adapters/index.js';
 import { clearConfigCache, resolveProductLayout, uninstallHoldPath, loadConfig, getConfigFieldDefault, productResourcePath } from '#platform/index.js';
 import { previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 // The scratch owner's session area shape (`<32 hex>/<32 hex>`); anything else under state/scratch is not its member.
 const AREA = `state/scratch/${'a'.repeat(32)}/${'b'.repeat(32)}`;
 const KEEP = { schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false } as const, ALL = { ...KEEP, tier: 'all' } as const;
+// R7: the AI/CI floor reads the real process too; these fixtures stand for a person, so the test runner's own markers are cleared (CI, agent shells).
+const MARKERS = [...getConfigFieldDefault('cli').agentEnvironment, 'CI'];
+beforeEach(() => { for (const name of MARKERS) vi.stubEnv(name, ''); }); afterEach(() => { vi.unstubAllEnvs(); });
 
 it('previews real recorded global caches without writing or exposing an installation name, and always preserves project/unknown global data', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: installation identity positive requires POSIX binding'); return; }
@@ -314,6 +317,11 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     // M13: an SDK call from an AI agent or CI (marker set, even with a real terminal attested) is no person's witness: refused, nothing deleted.
     for (const marker of [{ CLAUDECODE: '1' }, { CI: 'true' }]) await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'marked', planDigest: plan.planDigest },
       { backupPassphrase: async () => phrase, confirm: async () => true }, { ...options, env: { ...options.env, ...marker } })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    // R7: the real process is marked (CI) while the SDK supplies a HOME-only env: the supplied env never lowers the floor.
+    vi.stubEnv('CI', 'true');
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'marked', planDigest: plan.planDigest },
+      { backupPassphrase: async () => phrase, confirm: async () => true }, options)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    vi.stubEnv('CI', '');
     expect(await readFile(join(local, 'state/terminal-history.jsonl'), 'utf8')).toBe('HISTORY\n');
     // M5: a member that cannot be archived stops the removal before its first effect: the cache stays too (archive built before any removal).
     const report = join(local, 'crashes/crash-1-1-33333333-3333-4333-8333-333333333333.json'), cached = join(local, AREA, 'entry');
@@ -510,6 +518,30 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
+it('R13: an unknown result recorded in a scope the configuration no longer names stays under an all-scopes company restriction: force cannot delete data', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { DatabaseSync } = await import('node:sqlite');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-managed-history-'));
+  try {
+    const { project, local, options, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
+    // Company control over every scope (an ERP posting restriction, not an uninstall rule) and an ERP effect of an earlier scope, result unknown.
+    const policy = JSON.parse(await readFile(join(local, 'policy.json'), 'utf8')) as { restrictions: unknown[] };
+    policy.restrictions = [{ id: 'company-erp', actions: ['execute'], scopes: 'all', principals: 'all', resource: { kind: 'operation', ids: ['erp.post-invoice'] } }];
+    await writeFile(join(local, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
+    const db = new DatabaseSync(ledger);
+    try { db.prepare('INSERT INTO effect_intents(scope_id,command_id,target_kind,target_id,sequence,idempotency_key_hash,state,record) VALUES(?,?,?,?,?,?,?,?)')
+      .run('historical', 'erp-1', 'erp', 'invoice-1', 1, 'h'.repeat(64), 'unknown', '{}'); } finally { db.close(); }
+    for (const tier of ['keep-work', 'all'] as const) {
+      const plan = await previewConfiguredUninstall(project, { ...KEEP, tier, force: true }, options);
+      expect(plan.work.uncertain).toEqual([expect.objectContaining({ scopeId: 'historical', id: 'erp-1' })]); expect(plan.blockers).toContain('uncertain-managed');
+    }
+    expect((await previewConfiguredUninstall(project, { ...KEEP, force: true }, options)).blockers).not.toContain('uncertain-managed');
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
 it('delete everything removes the bridges init wrote (a file init created whole, else only its line) and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed', async () => {
   if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: bridge purge needs Linux custody and /usr/bin/git'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
@@ -586,6 +618,9 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     // M13: the resumed tail holds the same floor: a marked SDK call is refused and deletes nothing more.
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, { ...options, env: { ...options.env, CLAUDECODE: '1' } }))
       .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    vi.stubEnv('CLAUDECODE', '1'); // R7: a marked real process with a clean supplied env
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, options)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    vi.stubEnv('CLAUDECODE', '');
     expect((await readFile(claude)).equals(claudeBefore)).toBe(true); expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n');
     // B2: a remaining member Git started tracking after the interruption stops the resumed tail before anything more is deleted.
     git('add', 'AGENTS.md');

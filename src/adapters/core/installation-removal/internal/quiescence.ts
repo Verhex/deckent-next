@@ -39,8 +39,8 @@ export function observeUninstallWork(path: string, limits: { readonly busyTimeou
 /** Under lifecycle custody: every scope the ledger recorded data for joins the policy-named ones; the union is what the lifecycle decision
  * covers. An unreadable or unbounded scope record keeps the installation (typed refusal). Work itself is compared by the plan (D2). */
 export function installationScopes(path: string, limits: { readonly busyTimeoutMs: number; readonly maxScopes: number }, scopeIds: readonly string[]): readonly string[] {
-  let recorded: string[] | null = null;
-  try { const db = openReadOnly(path, limits.busyTimeoutMs); try { recorded = db.prepare('SELECT scope_id FROM scope_registry ORDER BY scope_id LIMIT ?').all(limits.maxScopes + 1).map(row => String(row['scope_id'])); } finally { db.close(); } }
+  let recorded: string[] | null = existsSync(path) ? null : []; // no ledger records no scope (a fresh installation)
+  if (!recorded) try { const db = openReadOnly(path, limits.busyTimeoutMs); try { recorded = db.prepare('SELECT scope_id FROM scope_registry ORDER BY scope_id LIMIT ?').all(limits.maxScopes + 1).map(row => String(row['scope_id'])); } finally { db.close(); } }
   catch { /* unreadable: refused below */ }
   if (!recorded || recorded.length > limits.maxScopes) throw ErrorRegistry.createError('UNINSTALL_SCOPE_UNVERIFIED', { params: { path } });
   return Object.freeze([...new Set([...scopeIds, ...recorded])]);

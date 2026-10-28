@@ -2,11 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { effectCommandSchema, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
-import type { ApprovalApplication } from '#engine/core/approval/index.js';
-import type { EffectApplication } from '#engine/core/effect/index.js';
+import { authorizeApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
+import { OperationPolicyAuthorization, type EffectApplication } from '#engine/core/effect/index.js';
 import { uninstallApplySchema, UninstallError, UNINSTALL_TIERS, type UninstallItem, type UninstallPlan, type UninstallResult } from './uninstall-contract.js';
 import { createUninstallPlan, uninstallRegistry, uninstallBlockerError, uninstallPlanDrift, type UninstallInventory } from './uninstall-plan.js';
-import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, RunPolicyAuthorization } from '#engine/core/policy/index.js';
 
 /** Every scope the lifecycle decision covers: configured, every policy-named (deny/legal hold included) and every ledger-recorded scope. */
 export const uninstallAffectedScopes = (policy: unknown, configured: readonly string[], recorded: readonly string[] = []): readonly string[] =>
@@ -41,8 +41,7 @@ export const uninstallManagedScopes = (policy: unknown, affected: readonly strin
 };
 /** Trusted, local interaction. Neither answers nor a witness are fields in UninstallApply. */
 export interface UninstallInteraction {
-  confirm(plan: UninstallPlan): Promise<boolean>;
-  backupPassphrase?(): Promise<string>;
+  confirm(plan: UninstallPlan): Promise<boolean>; backupPassphrase?(): Promise<string>;
   /** A bounded wait's visible state: what is awaited and the time left (its owner is the configured cancellation budget). */
   progress?(event: { readonly remaining: number; readonly leftMs: number }): void;
 }
@@ -73,20 +72,18 @@ export interface UninstallApplicationPorts {
   inventory(): Promise<UninstallInventory>;
   /** Authenticated manifest owner, read only; null if no retained command exists. */
   retainedPlan(digest: string): Promise<UninstallPlan | null>;
-  /** Missing broker/hold/resource owners/final-tail → undefined, never a permissive default. */
-  /** `approved`: the confirmed digest D0 that the archive binds to (the admitted plan is the fresh D1 that matched it). */
+  /** Missing owners → undefined, never a permissive default. `approved`: the confirmed digest D0 the archive binds to (the admitted plan is the fresh D1). */
   withAdmission?: <T>(plan: UninstallPlan, approved: string, work: (admission: UninstallAdmission) => Promise<T>) => Promise<T>;
   /** K3: the existing run cancellation and approval decision owners, as the witnessed person; nothing is closed, released or killed. */
-  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: Ref): Promise<void>;
-    /** M14: the person's authority for each force step, decided before the card (no effect); a refusal is a typed error. */
-    authorize?(steps: Pick<UninstallPlan['steps'], 'cancelRuns' | 'rejectApprovals'>, principal: VerifiedPrincipal): Promise<void> };
+  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: Ref): Promise<void> };
+  /** M14, R8: every decision an owner takes after the card (force steps, deliveries, removals, their approval) taken before it, writing nothing. */
+  preflight?(plan: UninstallPlan, principal: VerifiedPrincipal): Promise<void>;
   /** Configured wait for cancelled work: its budget and poll interval; a timeout leaves the work, and the fresh plan names it. */
   readonly settle?: { readonly budgetMs: number; wait(ms: number): Promise<unknown> };
   /** The runtime service: its describe answer, the user unit whose main process it is (K4 checks), governed shutdown and `disable --now`. */
   readonly service?: { readonly budgetMs: number; describe(signal: AbortSignal): Promise<RuntimeServiceDescriptor>;
     unit(processId: number): Promise<{ readonly unit: string; readonly unitDisable: 'eligible' | 'command-only'; readonly command: string; readonly links?: readonly string[]; readonly unitFile?: string | null } | null>;
-    /** `disable --now` of the confirmed unit; its owner reads the unit file and links again right before and refuses any change (R3). */
-    shutdown(): Promise<unknown>; disable(confirmed: UninstallPlan['service']): Promise<NonNullable<UninstallResult['unit']>> };
+    shutdown(): Promise<unknown>; /** `disable --now` of the confirmed unit; its owner re-reads unit file and links right before (R3). */ disable(confirmed: UninstallPlan['service']): Promise<NonNullable<UninstallResult['unit']>> };
 }
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const queries = UNINSTALL_TIERS.flatMap(tier => [false, true].flatMap(force => [false, true].map(disableUnit => ({ schemaVersion: 2 as const, tier, force, disableUnit }))));
@@ -113,8 +110,7 @@ export class UninstallApplication {
       if (deadline.expired()) throw refused();
       await settle.wait(this.registry.waitPollMs); } };
     if (first) { await service.shutdown(); await gone(first.instanceId); }
-    // R4 (lead 2026-10-28): a new instance after the governed shutdown may already have accepted work: nothing is disabled or stopped by
-    // `--now`; the person gets the exact command (K4 keeps the owner's absence rule).
+    // R4 (lead 2026-10-28): a new instance after the shutdown may have accepted work: no `--now`, the person gets the command (K4 absence rule).
     if (await answer()) throw refused();
     const unit = plan.steps.disableUnit && plan.service.unit ? await service.disable(plan.service) : undefined;
     await gone(null);
@@ -167,11 +163,11 @@ export class UninstallApplication {
     if (approved.nothingToRemove) return result('noop', null);
     const { steps } = approved, forced = steps.cancelRuns.length + steps.rejectApprovals.length + steps.withdrawDeliveries.length;
     if (forced && !this.ports.force) throw new UninstallError('UNINSTALL_UNSUPPORTED');
-    if (forced) await this.ports.force!.authorize?.(steps, await this.ports.principal());
+    await this.ports.preflight?.(approved, await this.ports.principal());
     if (signal?.aborted || !await interaction.confirm(approved)) return result('cancelled', null);
     await this.person(gated); // a card answer grants no authority and may have outlived its session
     if (signal?.aborted) return result('cancelled', null);
-    // Deliveries first: their owner decides its own authority at the call, so a refusal there comes before any other force effect.
+    // Deliveries first (their owner decides again at the call; preflight already decided each one).
     for (const ref of steps.withdrawDeliveries) await this.ports.force!.withdrawDelivery(ref);
     for (const ref of steps.cancelRuns) await this.ports.force!.cancelRun(ref);
     for (const ref of steps.rejectApprovals) await this.ports.force!.rejectApproval(ref);
@@ -253,6 +249,16 @@ export class UninstallApplication {
   }
 }
 
+/** M14, R8: the owners' decisions of a plan's steps from one policy, writing nothing: force's cancels and rejections, each removal's operation and approval. */
+export async function authorizeUninstallSteps(policy: unknown, plan: UninstallPlan, principal: VerifiedPrincipal, scopeId: string) {
+  const source = { load: async () => policy }, runs = new RunPolicyAuthorization(source), operations = new OperationPolicyAuthorization(source);
+  for (const ref of plan.steps.cancelRuns) await runs.authorize('cancel', { scopeId: ref.scopeId, runId: ref.id }, principal);
+  for (const ref of plan.steps.rejectApprovals) authorizeApproval(policy, 'decide', ref.scopeId, ref.id, principal);
+  for (const id of new Set(plan.items.filter(item => item.action === 'remove').map(item => item.operation.id))) {
+    for (const action of ['inspect', 'execute'] as const) await operations.authorize(action, scopeId, { id, version: 1 }, principal);
+    authorizeApproval(policy, 'decide', scopeId, plan.planDigest, principal);
+  }
+}
 /** One witnessed plan supplies only its exact commands to the existing broker. Required approvals remain durable and separate. */
 export function approvedUninstallEffects(plan: UninstallPlan, scopeId: string, app: EffectApplication, decider: ApprovalApplication): UninstallAdmission['effects'] {
   return { inspect: (scope, id) => app.inspect(scope, id), async execute(input) {

@@ -119,8 +119,7 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
   if (unit && !(disableUnit && service.unitDisable === 'eligible')) blockers.push('service-managed');
   const steps = { stopService: service.running, disableUnit: unit && disableUnit && service.unitDisable === 'eligible',
     cancelRuns: force ? [...work.running, ...(purge ? work.parked : [])] : [], rejectApprovals: force && purge ? [...work.approvals] : [], withdrawDeliveries: force && purge ? [...work.deliveries] : [] };
-  // M6, R14: on every tier that does anything (a removal, a service stop or disable, a force step: each writes its custody, hold, receipts or
-  // backups there) the recovery location is private and canonical and lies outside every deletion root, the project folder and every removed path.
+  // M6, R14: whatever the plan does writes custody, receipts or backups there: private, canonical, outside every deletion root and removed path.
   if ((removing.length || Object.values(steps).some(step => step === true || Array.isArray(step) && step.length)) && (!recovery || !isAbsolute(recovery) || inventory.recoveryUnsafe
     || [...inventory.deletionRoots, ...inventory.recoveryForbidden ?? [], ...removing.flatMap(item => item.members ?? [item.locator])].some(root => within(root, recovery) || within(recovery, root)))) blockers.push('backup-destination');
   return { items, blockers: [...new Set(blockers)].sort(), steps, archived };
