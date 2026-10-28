@@ -21,7 +21,7 @@ import { createMcpProposals } from './mcp-propose.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredFeatureModel, loadPeerInvocationContext, measurePeerConfiguredModel, inspectPeerConfiguredModelInvocation, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { configuredTerminalModel } from '#composition/core/config/index.js';
+import { terminalModelHere } from '#composition/core/terminal-chat/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
@@ -82,7 +82,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   // v23 (T4 MODEL-SWITCH, S19): the session's pinned model, else the configured one. A pinned model that is not declared, has no profile or is
   // not active is refused typed by the same checks below; the configured model is never used in its place (no silent fallback).
   // T4-B D1: without a pin the one precedence decides (project model > the user's default > the user's configured model).
-  const reference = command.reference ?? (await configuredTerminalModel(projectRoot, options))?.reference ?? configuredChat.reference;
+  const reference = command.reference ?? (await terminalModelHere(projectRoot, options)).choice?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, command.scopeId, reference) };
   const binding = await inspectModelBinding(projectRoot, reference, options);
@@ -195,7 +195,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     if (registered) host.running.set(key, { principalKey, controller: cancel });
     const ports: AgentTurnPorts = {
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
-        ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null,
+        ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
       async invokeRound({ round, messages, tools: declared }, onDelta, roundSignal): Promise<AgentRoundOutcome> {
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);

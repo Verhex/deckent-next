@@ -8,7 +8,7 @@ import { parseProviderSpendManagementCommand, type ProviderSpendManagementComman
 import type { ProviderSpendManagementResult, ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
-import { scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUsd } from './budget.js';
+import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUsd } from './budget.js';
 
 export type ProviderSpendAccountInspectionHandler = (root: string, query: ProviderSpendAccountQuery,
   options: ConfigLoadOptions) => Promise<ProviderSpendAccountInspection>;
@@ -75,6 +75,11 @@ export async function modelSpendingCommand(argv: readonly string[], context: Mod
   const args = parse(argv), locale = commandLocale(context, args.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(args.action === 'create-budget' || args.action === 'revise-budget' ? t('cli.help.modelsBudget', {}, locale) : args.action === 'reconcile-spending' ? t('cli.help.modelsManageSpending', {}, locale) : args.action === 'spending' ? t('cli.help.modelsSpending', {}, locale) : t('cli.help.modelsAuditSpending', {}, locale), sinks); return; }
+  // S-05 (owner GO 2026-10-27): a budget change (create, revise, unfreeze) or a held-spend reconciliation is a person's act at their own terminal:
+  // an AI marker, CI, a pipe or `--json` is refused here before any input is read; the runtime service then asks the peer's terminal witness.
+  if (args.action === 'create-budget' || args.action === 'revise-budget' || args.action === 'reconcile-spending') {
+    if (!modelsInteractive(context, args.json)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.' + args.action } });
+  }
   if (args.source === undefined && args.action === 'spending') return spendingSummary(args, context, locale, sinks);
   if (args.source === undefined) return budgetCommand(args, context, locale, sinks);
   if (args.action === 'spending' && !context.inspectProviderSpendAccount) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
@@ -105,7 +110,9 @@ export async function modelSpendingCommand(argv: readonly string[], context: Mod
 /** Stage 1 `models create-budget|revise-budget --scope --usd`: the same governed command the terminal window sends, built from the flags. */
 async function budgetCommand(args: Parsed, context: ModelCommandContext, locale: Locale, sinks: Parameters<typeof emit>[1]): Promise<void> {
   const usd = scopeBudgetUsd(args.usd);
-  if (usd === null) throw ErrorRegistry.createError('CLI_USAGE');
+  // BeUser S-05: an amount out of range names the flag and the allowed whole-dollar range (a monthly limit), not a bare usage error.
+  if (usd === null) throw ErrorRegistry.createError('CLI_USAGE', { params: { command: t('climodels.budget.command', { action: args.action }, locale), flag: '--usd',
+    usage: t('climodels.budget.usdRange', { min: SCOPE_BUDGET_CHOICES.minUsd, max: SCOPE_BUDGET_CHOICES.maxUsd }, locale) } });
   if (!context.manageProviderSpend || (args.action === 'revise-budget' && !context.inspectProviderSpendAccount)) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env, heal: false }, scopeId = args.scope!;
   // A malformed scope or command id is a usage error (the domain parser refuses it before anything is sent).

@@ -79,14 +79,19 @@ type Target = Readonly<{ reference: ModelReference; nativeId: string; maxOutputT
   declare: Readonly<{ provider: Readonly<{ id: string; version: number }>; model: Declared }> | null;
   catalog: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>;
 
+const withoutCapabilities = (model: Declared) => ({ ...model, protocols: model.protocols.map(protocol => ({ ...protocol, capabilities: [] })) });
+const capabilitiesAdded = (before: Declared, after: Declared) => isDeepStrictEqual(withoutCapabilities(before), withoutCapabilities(after))
+  && before.protocols.every((protocol, index) => protocol.capabilities.every(capability => after.protocols[index]!.capabilities.some(row => isDeepStrictEqual(row, capability))));
 /** The catalog with the model declared; null when it already declares exactly this model (a different declaration is a typed conflict). */
 export function declareConnectedModel(current: ProviderCatalog | null, declare: NonNullable<Target['declare']>): ProviderCatalog | null {
   const providers = (current?.providers ?? []).map(provider => ({ ...provider, models: [...provider.models] }));
   const provider = providers.find(item => item.id === declare.provider.id && item.version === declare.provider.version);
   const existing = provider?.models.find(model => model.id === declare.model.id && model.version === declare.model.version);
   const normal = (model: Declared) => parseProviderCatalog({ schemaVersion: 1, revision: 'x', providers: [{ ...declare.provider, models: [model] }] }).providers[0]!.models[0];
-  if (existing) { if (isDeepStrictEqual(normal(existing), normal(declare.model))) return null; throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT'); }
-  if (provider) provider.models.push(declare.model); else providers.push({ ...declare.provider, models: [declare.model] });
+  if (existing && isDeepStrictEqual(normal(existing), normal(declare.model))) return null;
+  // BeUser AYSE-16: a reconnect that only adds capabilities the server now proves (e.g. tool calls) updates the declaration; any other difference stays a conflict.
+  if (existing && !capabilitiesAdded(normal(existing)!, normal(declare.model)!)) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
+  if (existing) provider!.models[provider!.models.indexOf(existing)] = declare.model; else if (provider) provider.models.push(declare.model); else providers.push({ ...declare.provider, models: [declare.model] });
   // The revision names the content (deterministic: a re-run plans the same document).
   return parseProviderCatalog({ schemaVersion: 1, revision: `connect-${createHash('sha256').update(canonical(providers)).digest('hex').slice(0, 16)}`, providers });
 }
@@ -132,13 +137,18 @@ export class ModelConnectApplication {
       if (kind.connect.pull === 'pick') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       const seed = kind.connect.seed ? await ports.seed(kind.connect.seed) : null;
       const live = ports.available ? await ports.available(kind.id, base ?? '') : null;
-      const candidates = seed ? seed.providers.flatMap(provider => provider.models.filter(model => model.lifecycle.state === 'active').map(model => model.nativeId)) : live ?? [];
+      // BeUser M-01: a headless CLI pull connects the models with an admitted CLI version; the others are listed, never a refusal of the whole pull.
+      const ready = (provider: { channel?: { kind?: string } | null }, model: { minCliVersion?: string | null }) => kind.connect!.catalogOnly === true || provider.channel?.kind !== 'native-cli' || Boolean(model.minCliVersion); // a headless CLI model needs its admitted CLI version
+      for (const provider of seed?.providers ?? []) for (const model of provider.models) if (model.lifecycle.state === 'active' && !ready(provider, model)) models.push({ nativeId: model.nativeId, state: 'notInCatalog', code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
+      const candidates = seed ? seed.providers.flatMap(provider => provider.models.filter(model => model.lifecycle.state === 'active' && ready(provider, model)).map(model => model.nativeId)) : live ?? [];
       for (const nativeId of candidates) {
         const state = live && !live.includes(nativeId) ? 'notOnKey' : ports.priced && !ports.priced(kind.id, nativeId, base ?? '') ? 'unpriced' : null;
         if (state) models.push({ nativeId, state }); else commands.push({ ...command, model: { nativeId } });
       }
       for (const nativeId of live ?? []) if (!candidates.includes(nativeId)) models.push({ nativeId, state: 'notInCatalog' });
-    } else commands.push(command);
+    } else { // Mert M-35: a single-model catalog-only connect passes the same worker-image gate as the pull form (the port refuses without one)
+      const live = kind.connect.catalogOnly && ports.available ? await ports.available(kind.id, base ?? '') : null, nativeId = 'nativeId' in command.model ? command.model.nativeId : command.model.reference.modelId;
+      if (live && !live.includes(nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN'); commands.push(command); }
     const targets = await Promise.all(commands.map(item => this.target(kind, item, effective(), base ?? '')));
     const target = targets[0];
     if (!target) throw new ModelConnectError('MODEL_CONNECT_NO_AVAILABLE', models);

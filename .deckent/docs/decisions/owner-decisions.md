@@ -918,3 +918,37 @@ Neden: alpha.56 `deckent uninstall` ~12 bin test ve güvenlik incelemesinden ge�
 - Paketteki bir yüzeyde bulunan eksik aynı pakette düzeltilir, ertelenmez.
 - Owner düzeltmesi (aynı akşam, bağlayıcı): “BeUser bunun adı bu, baştan sona AI yürüyecek ki o bana feedback versin; ben zaten uğraşmadan o fark etsin.” Yürüyücü, kendi kurduğu atılabilir BeUser sandbox kurulumunda kişi adımları dahil her dalı persona olarak yürür (`synthetic-person` etiketi; gerçek onay kanıtı değildir); canlı, N1, owner projeleri ve müşteri sistemlerinde kişi ve AI tabanları aynen geçerlidir. Owner adım yürümez, raporu okur.
 - Yöntem `deckent-beuser` skill'idir. BeUser'ın Deckent ürününe alınması (persona popülasyonları, teslim kabulüne yerleşme) ayrı bir ürün paketidir; owner aynı gün tasarımını istedi, owner kararlarından sonra planlanır.
+
+<a id="ker17-mcp-deck-grant-2026-10-28"></a>
+
+## PRE-8 değişikliği — 2026-10-28: MCP `$DECK:` anahtarı proje iznine bağlı (KER-17)
+
+Kaynak: BeUser taraması (Kerem, KER-17). `secret revoke` sonrası (izin yok) kişisel bir MCP sunucusu `$DECK:` anahtarıyla bağlanmaya devam ediyordu.
+Sebebi PRE-8'deki "MCP sunucu sırları buraya gelmez" istisnasıydı. Temiz bağlamlı kanun denetimi (`LAW-AUDIT-KER17`, koşullu PASS) ve
+Jev b3561803 (0,95) sonrasında lead GO verdi (seçenek b). Gerekçe owner'ın PRE-8 modeli: "Yönetici o projede izin vermediyse proje ana kasadaki
+anahtarı kullanamaz."
+- Kişisel dosyadaki (user ve local kapsam) MCP sunucusunun `$DECK:AD` anahtarı, sağlayıcı anahtarıyla aynı tek proje kimlik bilgisi kararından geçer.
+  Bu karar tur başlangıcında, `mcp` komutunda ve güven kartında uygulanır. Ana kasa anahtarı yalnız bu projenin izniyle kullanılır.
+- İzni olmayan sunucu başlamaz; çalışan sunucu bir sonraki turda emekliye ayrılır. Tur, anahtarı ve `deckent secret grant AD --scope S` komutunu söyler.
+  `secret list` "kullanan", silme ve geri alma kartları ve doctor bu MCP sunucularını adlandırır.
+- Reddedilenler: yalnız local kapsamda izin istemek; yalnız metin düzeltmesi.
+- Yükseltme bedeli: her anahtar için her projede bir izin (doctor komutu söyler). Bilinen sınırlar belgesinde EN/TR yükseltme notu var.
+
+## Owner kararı — 2026-10-28: terminalde çalıştırma yalnız "hiçbir şey kurulmamış" iken ve kartla (seçenek A)
+
+Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `LAW-AUDIT-DR2-01` (HOLD). Owner seçenek A'yı seçti (Jev 46317275).
+- K1: `/do` reddinden sonra terminalde çalıştırma yalnız `RUN_ADMISSION_NOT_CONFIGURED` (iş türü/havuz hiç yok) için önerilir. Brain kademesi
+  (tüm varyantlar), etkin olmayan işçi kanalı ve işçi ataması kendi reddini ve sonraki adımını gösterir; asla burada çalışmaz.
+- K2: havuz bekletmede ise (ya da şirket politikası arka plan işini durdurmuşsa) hangi kod önce gelirse gelsin geçiş yok; bekletme okunamazsa da yok.
+- K3: uygun kodlar kayıt verisidir (`engine/core/run-proposal/internal/local-run.json`); profil/şirket politikası geçişi kapatabilir
+  (`permission-defaults` satırında `localRunFallback: "closed"`). Terminal kartı, CLI/MCP/SDK ve onboarding ön duyurusu aynı host cevabını okur
+  (`configuredLocalRunOffer`); kapalıyken onboarding yerel çalışma vaat etmez.
+- K4/K5/K6: her seferinde, her profilde etkiden önce kart: neden · "değişiklikler doğrudan bu klasöre yazılır; arka plan işi, teslim kartı ve geri
+  alma yok"; seçenekler Burada çalıştır · İşçileri kur (/setup'ı işçi adımlarında açar; klasör işçi alamıyorsa nedeniyle kapalı) · İptal; Esc = İptal (hiçbir şey çalışmaz). Team/Enterprise varsayılanını owner sonra belirler.
+- K7: `setup.question.policy` EN/TR MODES-3'e hizalandı; `WORKER_ASSIGNMENT_NONE` metninden terminal vaadi çıkarıldı.
+- K5: her geçişte şimdiki zaman satırı; tur sonunda değişen dosyalar listesi gerçek çalışma ağacı farkından (önce/sonra, sertleştirilmiş Git),
+  modelin kendi sözünden değil; okunamazsa "okunamadı" denir, "değişiklik yok" denmez.
+- Çalışma olağan yönetilen terminal turudur (aynı araçlar, mod, sandbox alanı, onaylar ve denetim kaydı).
+- K8: owner kararı + ARCHITECTURE karar günlüğü satırı; Deniz/Mert/Ayşe r3 yürüyüşü bu koşullarla exact binary'de (ret kodu başına bir yol,
+  bekletme altında, Team standart'ta Esc). Bu yürüyüş kapanış kanıtıdır; yazılmadan K8 kapanmış sayılmaz.
+

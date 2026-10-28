@@ -63,7 +63,7 @@ export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
     disconnectClients() { for (const socket of clients) socket.destroy(); },
     removeEndpoint() {
       try { listener.removeEndpoint(); }
-      catch (cause) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause }); }
+      catch (cause) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause }, undefined, 'endpoint-remove'); }
     },
     drained, settled,
   });

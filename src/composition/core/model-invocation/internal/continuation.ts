@@ -8,11 +8,12 @@ import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { inspectionApplication } from './inspect.js';
 import type { loadInvocationContext } from './context.js';
-
 type Context = Awaited<ReturnType<typeof loadInvocationContext>>;
 // A host-only capability follows the exact returned command. It is never serialized or selected by a wire field.
 const continuationPins = new WeakMap<ModelInvocationCommand, (profile: import('#domain/index.js').ModelInvocationProfile) => Promise<void>>();
 export const configuredContinuationPin = (command: ModelInvocationCommand) => continuationPins.get(command);
+/** Astra R2: a command derived from a pinned continuation (Brain correction) keeps the same re-validating pin; an unpinned one stays unpinned. */
+export const carryContinuationPin = (from: ModelInvocationCommand, to: ModelInvocationCommand) => { const pin = continuationPins.get(from); if (pin) continuationPins.set(to, pin); };
 /** Only a complete, trusted SIWC 429 body can select the person's exact API reference. Transient/unknown/Claude never enter. */
 export function siwcLimitContinuation(adapterId: string, httpStatus: number | null, data: string | null): boolean {
   if (adapterId !== SIWC_INFERENCE.adapter.id || httpStatus !== SIWC_USAGE_LIMIT_STATUS || !data) return false;

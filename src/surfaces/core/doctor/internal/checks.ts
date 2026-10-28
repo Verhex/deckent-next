@@ -58,8 +58,10 @@ export interface DoctorCheckFacts {
   readonly recoveryRollout?: RecoveryRolloutView | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
+  /** BeUser D-05: this install's Runs parked after a failure, with the typed failure code (monitor snapshot); null or absent when not read. */
+  readonly stuckRuns?: readonly Readonly<{ runId: string; code: string }>[] | null;
 }
-export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string }>;
+export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string; /** KER-17: MCP servers naming it */ servers?: string }>;
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
@@ -82,9 +84,12 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
     : node.status === 'unsupported' ? row('setup', 'setup.node', 'error', t('doctor.check.node.old', { version: node.version, floor: node.floor ?? '-' }, l), t('doctor.check.node.next', { floor: node.floor ?? '-' }, l))
       : row('setup', 'setup.node', 'untested', t('doctor.check.node.unknown', { version: node.version }, l)));
   rows.push(row('setup', 'setup.host', 'ok', t('doctor.check.host', { platform: r.platform, cpu: r.host.cpuCores, memory: gigabytes(r.host.totalMemMB), workers: r.host.recommendedMaxWorkers }, l)));
-  if (r.startability) rows.push(r.startability.status === 'ready' ? row('setup', 'setup.startability', 'ok', t('doctor.check.startability.ok', {}, l))
+  const healable = r.startability?.status === 'ready' ? r.startability.checks.find(check => check.code === 'DOCTOR_SOCKET_HEALABLE') : undefined;
+  if (healable) rows.push(row('setup', 'setup.startability', 'warning', healable.message, 'deckent runtime serve'));
+  else if (r.startability) rows.push(r.startability.status === 'ready' ? row('setup', 'setup.startability', 'ok', t('doctor.check.startability.ok', {}, l))
     : row('setup', 'setup.startability', 'error', t('doctor.check.startability.blocked', { reason: r.startability.checks[0]?.message ?? '-' }, l), 'deckent doctor --verbose'));
-  if (r.serviceConfig === 'stale') rows.push(row('setup', 'setup.service', 'warning', t('doctor.check.service.stale', {}, l), 'deckent runtime restart'));
+  if (r.serviceConfig === 'stale') rows.push(r.imageBuilding ? row('setup', 'setup.service', 'warning', t('doctor.check.service.staleBuilding', {}, l), '/setup') // D-01: never prescribe a restart that stops the build
+    : row('setup', 'setup.service', 'warning', t('doctor.check.service.stale', {}, l), 'deckent runtime restart'));
   else if (r.serviceConfig === 'current') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.current', {}, l)));
   else if (r.serviceConfig === 'stopped') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.stopped', {}, l)));
   else if (r.serviceConfig === 'unknown') rows.push(row('setup', 'setup.service', 'untested', t('doctor.check.service.unknown', {}, l)));
@@ -139,8 +144,8 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
   }
   // PRE-8 v2: one row per key a profile uses that this project cannot read now, with the exact next command (names only).
   for (const use of f.secretUse ?? []) {
-    const params = { name: use.name };
-    rows.push(use.kind === 'grant-required' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.grant', params, l), scoped(`deckent secret grant ${use.name}`, f))
+    const params = { name: use.name, servers: use.servers ?? '' };
+    rows.push(use.kind === 'grant-required' ? row('security', 'security.secretUse', 'warning', (use.servers ? t('doctor.check.secretUse.grantMcp', params, l) : t('doctor.check.secretUse.grant', params, l)), scoped(`deckent secret grant ${use.name}`, f))
       : use.kind === 'undeclared-project-key' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.undeclared', params, l), t('doctor.check.secretUse.undeclared.next', params, l))
       : use.kind === 'declared-missing' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.declaredMissing', params, l), scoped(`deckent secret set ${use.name} --project`, f))
       : row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.notStored', params, l), scoped(`deckent secret set ${use.name} --main`, f)));
@@ -163,6 +168,10 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
       f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
+  // BeUser D-05: a Run the crash-loop breaker or the bounded failure path parked waits for the person; DISPATCH_PREPARATION_ABORTED means the
+  // runtime service stopped repeatedly while starting its work. Each names the inspect step; resume follows once the cause is fixed.
+  for (const { runId, code } of f.stuckRuns ?? []) { const run = runId.slice(0, 12);
+    rows.push(row('work', 'work.stuckRun', 'warning', code === 'DISPATCH_PREPARATION_ABORTED' ? t('doctor.check.run.crashLoop', { run, code }, l) : t('doctor.check.run.parked', { run, code }, l), scoped(`deckent run inspect --id ${run}`, f))); }
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
     ? row('work', 'work.image', 'warning', t('doctor.check.image.failed', {}, l), 'deckent toolchains update', f.toolchainUpdateEnabled ? fix : undefined)

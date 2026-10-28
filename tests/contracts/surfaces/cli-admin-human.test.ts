@@ -85,6 +85,15 @@ it('pool changes off a terminal need --scope (owner-accepted change): CLI_SCOPE_
   expect(calls).toEqual([expect.objectContaining({ scopeId: 'live', action: 'hold', reason: 'deploy' })]);
 });
 
+it('BeUser: pool hold on a terminal with no pool says there is nothing to hold and the next step, before any reason or confirmation card', async () => {
+  const f = await project(), calls: unknown[] = [];
+  card.interactive = true; card.answers = ['live', 'maintenance', 'apply']; card.asked.length = 0;
+  const { err, context } = io(f, { ...poolHandlers(calls), inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
+  expect(await main(['pool', 'hold'], context)).toBe(1);
+  expect(calls).toEqual([]); expect(card.asked).toHaveLength(1); // only the scope picker
+  expect(err.text()).toContain('nothing to hold'); expect(err.text()).toContain('/setup (First work kind, Worker image, Worker pool)'); expect(err.text()).toContain('deckent init --phase onboarding --json');
+});
+
 it('pool hold on a terminal: scope picker, then the reason by selection, then what / which pool / why; cancel writes nothing', async () => {
   const f = await project(), calls: unknown[] = [];
   card.interactive = true; card.answers = ['live', 'maintenance', 'cancel'];
@@ -318,6 +327,29 @@ it('bare runtime: build, configuration, running work and socket from what v29 ca
   const stoppedJson = io(f, { ...runtimeHandlers(calls), describeRuntimeService: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); } });
   expect(await main(['runtime', 'describe', '--json'], stoppedJson.context)).not.toBe(0);
   expect(stoppedJson.err.text()).toContain('LOCAL_RUNTIME_UNAVAILABLE');
+});
+
+it('BeUser alpha.56.1 (Selin): describe names the service manager and why work is unreadable; shutdown of a managed service defers to it unless --force', async () => {
+  const f = await project(), calls: unknown[] = [], unit = { manager: 'systemd' as const, scope: 'user' as const, unit: 'deckent-live.service' };
+  const managed = (extra: Record<string, unknown> = {}) => io(f, { ...runtimeHandlers(calls), runtimeServiceManager: async (pid: number | undefined) => (pid === 4242 ? unit : null), ...extra });
+  const described = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('POLICY_DENIED'); } });
+  expect(await main(['runtime'], described.context)).toBe(0);
+  expect(described.out.text()).toContain('· run by systemd (deckent-live.service)'); expect(described.out.text()).not.toContain('started');
+  expect(described.out.text()).toContain(`Running work: cannot be read now: ${ErrorRegistry.get('POLICY_DENIED', 'en')!.message}`);
+  // BeUser round 2 (SM4): a scope without a pool says so in words, with its next step.
+  const noPool = managed({ inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
+  expect(await main(['runtime'], noPool.context)).toBe(0);
+  // BeUser re-walk: with no admission pool in the settings the first step is the work kind (/setup), never `init pool` (it would refuse).
+  expect(noPool.out.text()).toContain('Running work: none in the background, background workers are not set up for scope live (they do coding work in a Git project: /setup there)');
+  const declared = await project({ terminal: { scopeId: 'live' }, admission: { registry: {}, poolId: 'p1', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } });
+  const withKind = io(declared, { ...runtimeHandlers(calls), inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
+  expect(await main(['runtime'], withKind.context)).toBe(0);
+  expect(withKind.out.text()).toContain('no worker pool is set up for scope live in this folder\'s settings; set one up with `deckent init pool --scope live --preview`');
+  const refused = managed();
+  expect(await main(['runtime', 'shutdown', '--reason', 'maintenance'], refused.context)).toBe(1);
+  expect(refused.err.text()).toContain('Stop it through its manager: systemctl --user stop deckent-live.service'); expect(calls).toEqual([]);
+  expect(await main(['runtime', 'shutdown', '--reason', 'maintenance', '--force'], managed().context)).toBe(0);
+  expect(calls).toEqual(['maintenance']);
 });
 
 it('runtime shutdown: any caller off a terminal names its reason (audited); a person confirms on a card showing the affected work', async () => {

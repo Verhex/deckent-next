@@ -47,7 +47,7 @@ export interface DoctorRenderInput {
   readonly shellRealm: ShellRealmDoctorView | null;
   readonly recoveryFiles?: RecoveryFilesDoctorView | null;
   /** Running service vs. the restart-apply configuration now in effect; absent/null when not asked. */
-  readonly serviceConfig?: 'current' | 'stale' | 'unknown' | 'stopped' | null;
+  readonly serviceConfig?: 'current' | 'stale' | 'unknown' | 'stopped' | null; readonly imageBuilding?: boolean; // D-01: a worker image build runs in the service
 }
 
 /** PRE-34: a refresh that built nothing names no image version; the configured worker image is then the evidence (short id), never "(-)". */
@@ -109,7 +109,7 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
     ? [t('doctor.installationDirectoryOpen', result.recoveryFiles.installationDirectory, locale)] : []),
   ...(result.recoveryFiles?.leftovers.length ? [t('doctor.recoveryLeftovers', { paths: result.recoveryFiles.leftovers.join(', ') }, locale)] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale, options.imageId) }, locale)] : []),
-  ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
+  ...(result.serviceConfig === 'stale' ? [result.imageBuilding ? t('doctor.check.service.staleBuilding', {}, locale) : t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),
   ...(result.policyAdministration ? [t('doctor.policyAdministration', { count: result.policyAdministration.usableAdminCount,
     status: result.policyAdministration.bootstrapRequired ? t('cli.policy.status.bootstrap', {}, locale) : result.policyAdministration.recoveryRequired ? t('cli.policy.status.recovery', {}, locale) : t('cli.policy.status.ready', {}, locale) }, locale)] : result.policyAdministration === null ? [t('doctor.policyAdministration.unavailable', {}, locale)] : []),

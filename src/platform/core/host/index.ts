@@ -13,3 +13,4 @@ export * from './internal/node-support.js';
 export * from './internal/wsl-detect.js';
 export * from './internal/service-manager.js';
 export * from './internal/process-liveness.js';
+export { privateIpcRoot } from './internal/private-ipc.js';

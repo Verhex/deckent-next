@@ -8,7 +8,7 @@ import { WorkspaceWindow } from './workspace-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
 import type { BudgetPanelView, CachePanelView, ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
 
-const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', WORKSPACE = ':workspace', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
+const SESSION = 'session', DEFAULT = 'default', CONNECT = ':connect', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', WORKSPACE = ':workspace', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
 /** Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed). */
 const BODY_ROWS = 2;
 const keyOf = (reference: ModelPanelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
@@ -79,11 +79,14 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   if (protocolOpen && protocol && port.protocol && labels.protocol) return <CacheWindow port={port.protocol} view={protocol} words={labels.protocol} labels={labels}
     push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   const entry = budgetEntry(budget, labels.budget), cacheRow = cacheEntry(cache, labels.cache), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault), tokens !== null);
-  const tree: PickerTree = { ...listed, items: [...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }] : []),
+  // BeUser alpha.56.1 (3t): with nothing to pick, the first row is the way to connect a model (the same `/provider` flow), like an empty state's action.
+  const connect = !view.choices.length && port.provider && words.connect ? [{ id: CONNECT, label: words.connect, unscoped: true }] : [];
+  const tree: PickerTree = { ...listed, items: [...connect, ...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }] : []),
     ...(workspaces.length && labels.workspace ? [{ id: WORKSPACE, label: labels.workspace.entry, unscoped: true }] : []),
     ...(protocol && labels.protocol ? [{ id: PROTOCOL, label: labels.protocol.entry, detail: protocol.detail, unscoped: true }] : []),
     ...(cacheRow ? [{ id: CACHE, label: cacheRow.label, detail: cacheRow.detail, unscoped: true }] : []), ...listed.items] };
   const chosen = (result: PickerResult) => {
+    if (result.kind === 'selected' && result.id === CONNECT) { setProviderOpen(true); return; }
     if (result.kind === 'selected' && result.id === BUDGET) { setBudgetOpen(true); return; }
     if (result.kind === 'selected' && result.id === CACHE) { setCacheOpen(true); return; }
     if (result.kind === 'selected' && result.id === WORKSPACE) { setWorkspaceOpen(true); return; }

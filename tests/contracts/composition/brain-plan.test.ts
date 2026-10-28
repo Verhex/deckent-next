@@ -46,11 +46,39 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     for (let i = 0; i < 2; i++) await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_PROVIDER_REJECTED', params: { reason: 'http-status', status: rejectStatus } });
     expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
-  it('keeps the unknown kind rule before proposal storage', async () => {
+  // D-02 (lead GO 2026-10-28, Jev c97aa511): an unregistered kind re-plans once (previous answer + refusal appended to the one user message, a derived
+  // command id, spent like any Brain call); a second failure is the typed refusal naming the kinds and carrying the rejected plan; 0 disables it.
+  it('NEGATIVE: an unregistered kind twice is refused after one correction, naming the kinds, with the rejected plan as detail', async () => {
     const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
     const f = await fixture({ response: JSON.stringify({ graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'invented-kind' }] }, budgetCeiling, requiredPermissions }) });
-    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
-    expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+    const refused = await planRun(f.project, command, f.options).then(() => null, (error: { code: string; params?: Record<string, unknown>; localize: (l: 'en' | 'tr') => { message: string } }) => error);
+    expect(refused).toMatchObject({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_KIND_NOT_REGISTERED', kinds: 'invented-kind', registered: 'purchase', plan: `${graph.tasks[0]!.id} (invented-kind)` } });
+    expect(refused!.localize('en').message).toContain('task kind invented-kind'); expect(refused!.localize('tr').message).toContain('/setup (İlk iş türü)');
+    expect(f.posts).toBe(2); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+    const second = JSON.parse(f.bodies[1]!) as { messages: { role: string; content: string }[] }, first = JSON.parse(f.bodies[0]!) as typeof second;
+    expect(second.messages.map(message => message.role)).toEqual(first.messages.map(message => message.role));
+    expect(second.messages.at(-1)!.content.startsWith(first.messages.at(-1)!.content)).toBe(true);
+    expect(second.messages.at(-1)!.content).toContain('unregistered task kind invented-kind'); expect(second.messages.at(-1)!.content).toContain('Use only these task kinds: purchase.');
+  });
+  it('Astra R4: the Brain byte bound applies to the corrective request too: refused typed before a second provider call', async () => {
+    const answer = `not json ${'x'.repeat(7_900)}`, probe = await fixture({ response: answer });
+    await planRun(probe.project, command, probe.options).catch(() => undefined);
+    const limit = Buffer.byteLength(JSON.stringify(JSON.parse(probe.bodies[0]!).messages)) + 2_000; // the first request fits; the correction (+answer) does not
+    const f = await fixture({ response: answer });
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ ...f.config, brain_planner: { context: { requestMaxBytes: limit } } })); clearConfigCache();
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_CONTEXT_TOO_LARGE' }); expect(f.posts).toBe(1);
+  });
+  it('RED→GREEN: a plan with an unregistered kind is corrected once and proposed; correctionRetries 0 keeps one call', async () => {
+    const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
+    const good = JSON.stringify({ graph, budgetCeiling, requiredPermissions }), bad = JSON.stringify({ graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'invented-kind' }] }, budgetCeiling, requiredPermissions });
+    const f = await fixture({ response: body => body.includes('refused by validation') ? good : bad });
+    const planned = await planRun(f.project, command, f.options);
+    expect(f.posts).toBe(2); expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
+    expect(planned.proposal.proposal.source).toMatchObject({ kind: 'model' });
+    expect((planned.proposal.proposal.source as { receipt: { commandId: string } }).receipt.commandId).not.toBe(JSON.parse(f.bodies[0]!).commandId);
+    const off = await fixture({ response: body => body.includes('refused by validation') ? good : bad });
+    await writeFile(join(off.project, '.deckent/config.json'), JSON.stringify({ ...off.config, brain_planner: { correctionRetries: 0 } })); clearConfigCache();
+    await expect(planRun(off.project, command, off.options)).rejects.toMatchObject({ code: 'BRAIN_GRAPH_INVALID' }); expect(off.posts).toBe(1);
   });
   it('projects the actual scoped template worker model and billing through SDK without any prepared task prompt', async () => {
     const f = await fixture({ subscription: true, template: true, response: '{}' });
@@ -66,7 +94,7 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(projection).not.toHaveProperty('registry'); expect(projection.scopePaths.state).toBe('not-inspected');
     await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify(f.config)); clearConfigCache();
     await expect(planRun(f.project, { ...command, commandId: 'brain-v3' }, f.options)).rejects.toMatchObject({ code: 'BRAIN_OUTPUT_INVALID' });
-    const v3 = JSON.parse(JSON.parse(f.bodies.at(-1)!).messages[1].content).context.context;
+    const v3 = JSON.parse(JSON.parse(f.bodies.at(-2)!).messages[1].content).context.context; // D-02: the last body is the correction
     expect(v3.kinds).toEqual(projection.kinds); expect(v3.workerModels).toEqual([]);
   });
   it('records a masked contribution and charged invocation; replay reads the same pending proposal without POST or Run', async () => {
@@ -128,7 +156,8 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
   it.each([['bad-json', 'json'], ['{}', 'schema']] as const)('retains %s failure without Run; invocation replay makes no second POST', async (response, stage) => {
     const f = await fixture({ response });
     for (let i = 0; i < 2; i++) await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_OUTPUT_INVALID', params: { stage } });
-    expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
+    // D-02: the first plan spends the call and its one correction; the replay re-reads both receipts and makes no further POST.
+    expect(f.posts).toBe(2); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
   it('aborting while the provider is waiting creates neither proposal nor Run; remote charge certainty is not fabricated', async () => {
     const f = await fixture({ hold: true }), controller = new AbortController(), pending = planRun(f.project, command, f.options, controller.signal);
@@ -263,3 +292,4 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   expect(refused.proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); expect(refused.run).toBeNull();
   expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
 });
+

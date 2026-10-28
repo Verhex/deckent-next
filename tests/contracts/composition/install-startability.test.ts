@@ -1,9 +1,10 @@
-import { mkdtemp, rm, readFile, writeFile, chmod, mkdir, readdir, symlink } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile, chmod, mkdir, readdir, symlink, lstat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
-import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { prepareRuntimeSocket, runtimeSocketLocation } from '#adapters/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 
@@ -44,12 +45,48 @@ it.skipIf(process.platform !== 'linux')('uses distinct short private endpoints a
   const layout = resolveProductLayout({ projectRoot: root }), otherLayout = resolveProductLayout({ projectRoot: other });
   const endpoint = runtimeSocketLocation(layout), parent = dirname(endpoint); roots.push(parent);
   expect(runtimeSocketLocation(otherLayout)).not.toBe(endpoint);
+  // alpha.56.1: each refusal names the check that refused (a closed token, never the path), so a full-suite failure is diagnosable.
   await mkdir(parent, { mode: 0o755 });
-  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
-  await chmod(parent, 0o700); await writeFile(endpoint, 'not a socket', { mode: 0o600 });
-  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
-  await rm(parent, { recursive: true }); await symlink(other, parent);
-  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+  // RESTART-HUNT: a reader never repairs; a non-empty directory with the wrong mode is refused even at the service start (nothing removed).
+  const modeOnly = queryFailure(await prepareRuntimeSocket(layout, false).catch((error: unknown) => error));
+  expect(modeOnly).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode' } });
+  // BeUser alpha.56.1 (Mert): it names the directory and the next step, never the path; doctor reports it as fixable by the start, not a blocker.
+  expect(modeOnly.message).toContain('runtime socket directory has the wrong permissions'); expect(modeOnly.message).toContain('`deckent runtime serve`');
+  expect(modeOnly.message).not.toContain('/tmp/dk-');
+  const doctor = await inspectInstallationStartability(root, { env: { HOME: join(root, 'home') } });
+  expect(doctor.checks.find(check => check.code === 'DOCTOR_SOCKET_HEALABLE')?.message).toBe(modeOnly.message);
+  expect(doctor.checks.map(check => check.code)).not.toContain('DOCTOR_SOCKET_UNAVAILABLE');
+  await writeFile(join(parent, 'keep'), 'kept', { mode: 0o600 });
+  const healed: string[] = [], onHealed = (reason: string) => { healed.push(reason); };
+  const kept = queryFailure(await prepareRuntimeSocket(layout, true, onHealed).catch((error: unknown) => error));
+  // BeUser round 2: the start itself refusing never tells the person to run the start; it says why it could not re-create the directory.
+  expect(kept).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode-kept' } });
+  expect(kept.message).toContain('not empty or not yours'); expect(kept.message).not.toContain('deckent runtime serve');
+  expect(await readFile(join(parent, 'keep'), 'utf8')).toBe('kept'); expect(healed).toEqual([]);
+  // Its own empty directory with only the mode wrong is re-created owner-only at the service start, once, and reported (no path).
+  await rm(join(parent, 'keep'));
+  expect(await prepareRuntimeSocket(layout, true, onHealed)).toBe(endpoint);
+  expect(healed).toEqual(['parent-mode']); expect((await lstat(parent)).mode & 0o777).toBe(0o700);
+  // A restrictive umask (0177 masks mkdir's 0700 to 0600) still gives the start an owner-only directory; a reader still refuses such a one.
+  await rm(parent, { recursive: true });
+  const umask = process.umask(0o177);
+  try { await mkdir(parent, { mode: 0o700 }); } finally { process.umask(umask); }
+  expect((await lstat(parent)).mode & 0o777).toBe(0o600);
+  await expect(prepareRuntimeSocket(layout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });
+  await rm(parent, { recursive: true });
+  const restrictive = process.umask(0o177);
+  try { expect(await prepareRuntimeSocket(layout)).toBe(endpoint); } finally { process.umask(restrictive); }
+  expect((await lstat(parent)).mode & 0o777).toBe(0o700);
+  await writeFile(endpoint, 'not a socket', { mode: 0o600 });
+  await expect(prepareRuntimeSocket(layout)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'socket-type' });
+  await rm(parent, { recursive: true }); await chmod(other, 0o755); await symlink(other, parent);
+  const refused = await prepareRuntimeSocket(layout, true, onHealed).catch((error: unknown) => error);
+  expect(healed).toEqual(['parent-mode']); expect((await lstat(other)).mode & 0o777).toBe(0o755); // a link is never followed or healed
+  expect(refused).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-link' });
+  const failure = queryFailure(refused);
+  expect(failure).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-link' } });
+  expect(ErrorRegistry.get('LOCAL_RUNTIME_ENDPOINT_UNSAFE', 'en', (failure as { params: Record<string, string> }).params)!.message).toMatch(/\(check: parent-link\)\.$/u);
+  expect(failure.message).not.toContain('/tmp/dk-');
 });
 
 it.skipIf(process.platform !== 'linux')('init keeps a pre-existing project config; preview stays read-only and conflicting policy refuses before ledger creation', async () => {

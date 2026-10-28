@@ -27,13 +27,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const audit = async (event: unknown) => { const ledger = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(ledger, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { ledger.close(); } };
-    const crashes = await prepareProductDirectory(layout, 'crashes');
-    const preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
+    const crashes = await prepareProductDirectory(layout, 'crashes'), preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
       launchers: jsonRecordDirectory(join(crashes, 'dispatch-launcher')),
       now: Date.now, record: audit, parked: async commandId => !!await store.loadRunReceipt(identity.scopeId, commandId), loadRun: () => store.loadRun(identity.scopeId, identity.runId), park: command => parkConfiguredRunProgression(projectRoot, command, options) });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
-    let dispatching = false;
+    let dispatching = false, kept = false;
     // REVISE 2695: set while the ledger holds this attempt's probe custody that no closure below may transition (only its proven end releases it).
     let custody = false;
     try {
@@ -97,15 +96,15 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       custody = false; if (ended) throw ended.error;
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
-      // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
-      const events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
-      // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
-      const connection = profile.nativeSubscription && !relayed ? await openNativeConnection({ binding: profile.nativeSubscription,
-        directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
-        deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
-      let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome;
+      let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome, events: Awaited<ReturnType<typeof openWorkerEventSink>> | undefined, connection: Awaited<ReturnType<typeof openNativeConnection>> | undefined;
       let relay: Awaited<ReturnType<typeof openConfiguredSiwcWorker>> | undefined;
-      try { await preparation.enter('dispatch');
+      try { // D-05: the sink's file handle and the connection open inside the try whose finally closes both (Node 26 ends the service for a collected unclosed FileHandle).
+      // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
+      events = profile.nativeSubscription && !relayed ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
+      // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt. A relay worker never reads a native credential.
+      connection = profile.nativeSubscription && !relayed ? await openNativeConnection({ binding: profile.nativeSubscription,
+        directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
+        deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events?.accept(batch) } : {}) }) : undefined; await preparation.enter('dispatch');
       relay = relayed ? await openConfiguredSiwcWorker(projectRoot, options, { identity, principal, connection: profile.siwcWorker!, model: relayed.model!.modelId, imageId: profile.options.imageId,
         codexVersion: relayed.preflight!.cliVersion, turn: { ...siwcWorkerTurn(profile.argv, relayed.promptDelivery!, start.dependencyContext), finalReport: !!relayed.finalReport },
         deadlineMs: profile.options.deadlineMs, directory: workspaceRoot, policyRevision: document.revision, audit,
@@ -151,8 +150,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
       if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, actor);
       else if (!dispatching && !custody) {
-        // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
-        const refusal = classifyLaunchRefusal(error);
+        // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff and (D-05) the
+        // breaker record, so a process that dies after the refusal is counted at the next start in another instance (a same-instance retry counts nothing).
+        const refusal = classifyLaunchRefusal(error); kept = refusal.disposition === 'transient';
         if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);
         // E1: a held refusal (no answer) holds a running Run through the existing progression park. Only a Run another transition already
         // parked, ended or changed keeps the typed refusal (the runtime's bounded failure path then parks it with the same code); any other
@@ -163,6 +163,6 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           .catch((failure: unknown) => { if (!HELD_PARK_SUPERSEDED.has(queryFailure(failure).code)) throw failure; });
       }
       throw error;
-    } finally { await preparation.settle(); store.close(); }
+    } finally { if (!kept) await preparation.settle(); store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

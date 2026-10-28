@@ -148,3 +148,20 @@ it('N2: a discovered model reads as its own name and its connection kind, never 
   expect(shown.label).toBe('fixture-small'); expect(shown.providerLabel).not.toMatch(/[0-9a-f]{32}/u); expect(shown.providerLabel).toBeTruthy();
   expect(shown.exact).toContain(model);
 });
+
+// BeUser re-walk on the built binary (3t RED): the workline rebuilt the `/model` port without `provider`, so the empty list's "Connect a model…" row
+// never appeared in the real terminal although the panel-only test passed. Through `useWorklineSettings` here.
+it('an empty /model in the workline offers "Connect a model…" first and Enter opens the provider window', async () => {
+  const empty: ModelPanelView = { title: 'Models · scope', notes: ['No model is connected yet.'], defaultBlocked: null, choices: [] };
+  const provider = { inspect: async () => ({ title: 'PROVIDERS-WINDOW', kinds: [], notes: [] }), endpoint: () => ({ ok: false as const, reason: '-' }), connect: async () => ({ stored: false, title: '-', lines: [] }),
+    disconnect: async () => [], transparency: [] } as unknown as NonNullable<ModelPanelSource['provider']>;
+  const view = open({ inspect: async () => empty, provider, budget: source().model.budget! });
+  await settle(40);
+  view.stdin.write(`/model${ENTER}`);
+  await until(() => view.stdout.frame.includes('Connect a model…'), 'connect row');
+  expect(view.stdout.frame.indexOf('Connect a model…')).toBeLessThan(view.stdout.frame.indexOf('Create budget'));
+  await settle(60);
+  view.stdin.write(ENTER);
+  await until(() => view.stdout.frame.includes('PROVIDERS-WINDOW'), 'provider window');
+  expect(view.stdout.frame).not.toContain('25 USD');
+});

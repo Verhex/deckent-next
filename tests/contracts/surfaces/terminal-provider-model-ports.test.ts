@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, ErrorRegistry, t } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -69,6 +69,20 @@ it.each(['en', 'tr'] as const)('a multi-workspace key result gives the selection
   expect(result.stored).toBe(true); expect(result.lines.at(-1)!.text).toContain('/model');
   expect(result.lines.at(-1)!.text).toContain(locale === 'en' ? 'Select provider workspace' : 'Sağlayıcı workspace seç');
   expect(JSON.stringify(result)).not.toContain(CANARY);
+});
+
+it('BeUser re-walk (3t): an environment-variable store that cannot list names is said plainly as non-blocking, never as a failure', async () => {
+  const { root, options } = await project({}), store = secrets();
+  for (const locale of ['en', 'tr'] as const) {
+    const port = providerPanelPort(root, 'scope', { ...store.host, listSecretNames: async () => { throw ErrorRegistry.createError('SECRET_STORE_UNSUPPORTED', { params: { backend: 'core.secret-store.env@1' } }); },
+      providerConnect: connectHost('ok') }, options, locale, errorText);
+    const notes = (await port.inspect()).notes.join('\n');
+    expect(notes).toContain(locale === 'en' ? 'This does not block anything; a local server needs no key.' : 'Bu hiçbir şeyi engellemez; yerel sunucu anahtar istemez.');
+    expect(notes).not.toContain('core.secret-store.env@1');
+    // AYSE-R2-05: the keyless local server row never shows the key store's listing problem.
+    const local = (await port.inspect()).kinds.find(kind => kind.id === 'local-openai')!;
+    expect(local.detail).toBe(t('tui.provider.state.notConnected', {}, locale));
+  }
 });
 
 describe('/provider port', () => {
@@ -469,9 +483,12 @@ describe('/model source', () => {
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});
-    const view = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'not-configured', availability: 'not-observed', catalog: null }) }, options, 'tr')
-      .inspect();
-    expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('buradan eklenmez');
+    const empty = { inspectDeclaredModels: async () => ({ schemaVersion: 1 as const, status: 'not-configured' as const, availability: 'not-observed' as const, catalog: null }) };
+    const view = await modelPanelSource(root, 'scope', { ...empty, providerConnect: connectHost('ok') } as never, options, 'tr').inspect();
+    expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('Henüz bağlı bir model yok'); expect(view.notes[0]).toContain('/provider');
+    // Astra D10-M1: without a provider port there is no "Connect a model…" row, so the note names the CLI instead.
+    const bare = await modelPanelSource(root, 'scope', empty as never, options, 'en').inspect();
+    expect(bare.notes[0]).toContain('deckent models connect'); expect(bare.notes[0]).not.toContain('Connect a model…');
   });
 });
 
@@ -494,4 +511,57 @@ it('U1 provider port blocks unknown/grantless keys and renders custody refusal o
   const connected = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: false });
   expect(connected.stored).toBe(true); expect(connected.title).toContain('proje izni yok'); expect(connected.lines.at(-1)!.text).toContain('yönetici izni');
   expect(JSON.stringify(connected)).not.toContain(CANARY); expect(store.sets).toEqual([]);
+});
+
+it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothing usable says so and never leaks an internal id', async () => {
+  const { root, options } = await project({});
+  const local = { ...connectHost('ok').kinds[1]!, pull: 'available' as const, connectFamily: 'openai-chat-completions' };
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [local],
+    probe: async () => { throw ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE'); } },
+    connectModel: async () => { throw ErrorRegistry.createError('MODEL_CONNECT_NO_AVAILABLE', { params: { models: '-' } }); } }, options, 'en', errorText);
+  const checked = await port.connect({ kind: 'local-openai', endpoint: 'http://127.0.0.1:18777', key: null });
+  expect(checked.lines[0]!.text).toBe('ERR:HEADLESS_ISOLATION_UNAVAILABLE'); expect(JSON.stringify(checked)).not.toContain('Not available yet');
+  const pulled = await port.connectModel!({ kind: 'local-openai', endpoint: 'http://127.0.0.1:18777', model: 'pull:available' });
+  const text = JSON.stringify(pulled);
+  expect(text).toContain('Nothing to connect: '); expect(text).toContain('ERR:MODEL_CONNECT_NO_AVAILABLE'); expect(text).not.toContain(':available');
+});
+
+it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-in, image), never "Connected, unusable"', async () => {
+  const { root, options } = await project({});
+  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false };
+  const ref = { providerId: 'codex-cli-subscription', providerVersion: 1, modelId: 'gpt-x', modelVersion: 1 };
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
+    connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'codex-cli-subscription', status: 'connected', reference: ref,
+      models: [{ nativeId: 'gpt-x', state: 'connected', reference: ref }], credentialRef: null, keyStored: null,
+      steps: { catalog: 'present', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' }) as never,
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [] }) as never,
+    inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', channel: { kind: 'native-cli', cli: 'codex' },
+      activation: { state: 'active', revision: 1 }, models: [] }] }) as never,
+    observeSetup: async () => ({ observation: { families: { coding: { hosts: [{ id: 'codex', cli: 'found', login: 'found' }] }, execution: { worker: { image: 'missing', acquisition: null } } } } }) }, options, 'en', errorText);
+  const outcome = await port.connect({ kind: 'codex-cli-subscription', endpoint: null, key: null });
+  const text = outcome.lines.map(line => line.text).join('\n');
+  expect(text).toContain('Connected as a codex worker channel'); expect(text).toContain('Channel on: yes'); expect(text).toContain('signed in on this machine: yes');
+  expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
+});
+
+it('BeUser M-01: Connect on a key-less CLI subscription runs its model connection and shows that check\'s cause, not "The chat turn failed"', async () => {
+  const { root, options } = await project({});
+  const claude = { ...connectHost('ok').kinds[2]!, id: 'claude-cli-subscription', available: true, pull: 'available' as const, connectFamily: 'claude-code-stream-json', secretName: null };
+  const { ProviderProbeError } = await import('#adapters/core/provider-connect/index.js');
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [claude], probe: async () => { throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE'); } },
+    connectModel: async () => { throw ErrorRegistry.createError('HEADLESS_LOGIN_REQUIRED'); } }, options, 'en', error => formatHumanError(error, { locale: 'en', noColor: true }));
+  const outcome = await port.connect({ kind: 'claude-cli-subscription', endpoint: null, key: null });
+  const text = outcome.lines.map(line => line.text).join('\n');
+  expect(text).toContain('deckent models login --connection claude-cli-subscription'); expect(outcome.stored).toBe(false);
+});
+
+it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models instead of "-"', async () => {
+  const { root, options } = await project({});
+  const codex = { ...connectHost('ok').kinds[2]!, id: 'codex-cli-subscription', available: true, secretName: null, keyRequired: false };
+  const models = (count: number) => Array.from({ length: count }, (_, index) => ({ modelId: `m${index}`, activation: { state: index < 7 ? 'active' : 'inactive', revision: 1 } }));
+  const view = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
+    inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', models: models(8) }] }) as never }, options, 'en', errorText).inspect();
+  expect(view.kinds[0]!.detail).toBe('7 model(s) connected');
+  const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
+  expect(none.kinds[0]!.detail).toBe('-');
 });

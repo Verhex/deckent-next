@@ -1,8 +1,9 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, rmdir } from 'node:fs/promises';
+import { createServer as createNetServer, type Server as NetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, type ShellSandboxLayout } from '#adapters/index.js';
@@ -26,6 +27,14 @@ const landlockAbi = (() => {
     { encoding: 'utf8' })).landlockAbi) : 0; } catch { return 0; }
 })();
 const owned: string[] = [];
+// RESTART-HUNT (alpha.56.1): the kernel's bound-socket table can be made unreadable for one call; every other read is the real one.
+const procTable = vi.hoisted(() => ({ unreadable: false }));
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  const readFile = ((path: unknown, ...rest: unknown[]) => procTable.unreadable && path === '/proc/net/unix'
+    ? Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })) : (actual.readFile as (...args: unknown[]) => unknown)(path, ...rest)) as typeof actual.readFile;
+  return { ...actual, readFile, default: { ...actual, readFile } };
+});
 const servers: LocalRuntimeSocketServer[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => server.dispose().catch(() => undefined)));
@@ -138,5 +147,49 @@ describe.skipIf(process.platform !== 'linux')('SEC-1: an agent shell cannot reac
     expect(ran.output).toMatch(/PermissionError|Operation not permitted|Permission denied/u);
     expect(ran.output).not.toContain('connected');
     expect(seen).toEqual([]);
+  });
+
+  it.skipIf(!launcher)('(e) RESTART-HUNT: a listed runtime directory that is already gone is not masked, so bwrap never creates it on the host; a live one stays hidden; the residual window is healed only by the service start', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-gone-')); owned.push(root);
+    const project = join(root, 'project'), home = join(root, 'home'), global = join(root, 'global');
+    await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(home, { recursive: true }), mkdir(global, { recursive: true })]);
+    const live = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: project })); owned.push(dirname(live));
+    await serve(live);
+    // A stopping service: its socket file and empty directory are removed while its listener is still open, so /proc/net/unix still lists it.
+    const goneLayout = resolveProductLayout({ projectRoot: join(root, 'other') }), gone = await prepareRuntimeSocket(goneLayout), goneDir = dirname(gone); owned.push(goneDir);
+    const listeners: NetServer[] = [];
+    const bind = async () => { const server = createNetServer(); listeners.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(gone, resolve); }); };
+    const stop = async () => { await rm(gone); await rmdir(goneDir); };
+    const credentials = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)).map(createGlobMatcher);
+    const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project, DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern))),
+      scratchDir: null, writeFloor: () => false, repositoryWritable: true,
+      hardFloor: { roots: [join(project, '.deckent'), global], homeDenied: path => credentials.some(match => match(path)) } };
+    const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const openView = () => resolveBubblewrapView(layout, env, {}, { floorReadOnly: true, open: true });
+    try {
+      await bind(); await stop();
+      expect(await readFile('/proc/net/unix', 'utf8')).toContain(gone);
+      const view = await openView(); if (!view.ok) throw new Error(view.reason);
+      expect(view.view.maskedDirectories).toContain(dirname(live));
+      expect(view.view.maskedDirectories).not.toContain(goneDir);
+      const ran = await run(launcher!, [...bubblewrapArguments(view.view), '--', '/bin/true'], env);
+      expect(ran.status, ran.stderr).toBe(0);
+      await expect(lstat(goneDir)).rejects.toMatchObject({ code: 'ENOENT' });
+      // The residual window (listed and present at build, gone before bwrap mounts): bwrap leaves a 0755 directory on the host. A reader
+      // still refuses it; only the service start re-creates it owner-only.
+      await prepareRuntimeSocket(goneLayout); await bind();
+      const racing = await openView(); if (!racing.ok) throw new Error(racing.reason);
+      expect(racing.view.maskedDirectories).toContain(goneDir);
+      await stop();
+      expect((await run(launcher!, [...bubblewrapArguments(racing.view), '--', '/bin/true'], env)).status).toBe(0);
+      expect((await lstat(goneDir)).mode & 0o777).toBe(0o755);
+      await expect(prepareRuntimeSocket(goneLayout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });
+      const healed: string[] = [];
+      expect(await prepareRuntimeSocket(goneLayout, true, reason => healed.push(reason))).toBe(gone);
+      expect(healed).toEqual(['parent-mode']); expect((await lstat(goneDir)).mode & 0o777).toBe(0o700);
+      // An unreadable bound-socket table still refuses the open view.
+      procTable.unreadable = true;
+      expect(await openView()).toMatchObject({ ok: false, reason: expect.stringContaining('cannot be listed') });
+    } finally { procTable.unreadable = false; for (const server of listeners) server.close(); }
   });
 });

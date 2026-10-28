@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planSetup, SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
-import { MESSAGE_REGISTRY } from '#platform/index.js';
+import { MESSAGE_REGISTRY, t } from '#platform/index.js';
 import { HOST_EXECUTION_PORTS, detectExecutionFacts, executionSetupFamily, parseExecutionRuntimes, type ExecutionDetectPorts,
   type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-import { firstCommitTarget, observeFirstCommitRecovery, applyFirstCommit, codingSetupFamily, detectCodingFacts, firstCommitGit, previewFirstCommit, type CodingFacts, type FirstCommitGit } from '#adapters/core/setup-detect-coding/index.js';
+import { firstCommitTarget, observeFirstCommitRecovery, applyFirstCommit, codingSetupFamily, detectCodingFacts, workingTreeChanges, firstCommitGit, previewFirstCommit, type CodingFacts, type FirstCommitGit } from '#adapters/core/setup-detect-coding/index.js';
+import { treeChangeLine } from '#surfaces/core/terminal-kit/index.js';
 import { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { observeSetup, setupMessage } from '#surfaces/core/setup/index.js';
 
@@ -137,7 +138,27 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     await writeFile(join(plain, 'a.txt'), 'a'); git(plain, 'add', '.'); git(plain, 'commit', '-q', '-m', 'first');
     const clone = await temp('clone'); await mkdir(join(clone, '.git'));
     const full = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, workTargets: [clone, plain, '/nonexistent/target'], ports: { selfSource: async () => false } });
-    expect(full).toMatchObject({ repository: 'present', commits: 'present', productSource: false, workTargets: { configured: 2, present: 1 } });
+    expect(full).toMatchObject({ repository: 'present', commits: 'present', changes: 'none', productSource: false, workTargets: { configured: 2, present: 1 } });
+    await writeFile(join(plain, 'a.txt'), 'changed'); // BeUser M-32: uncommitted work in the tree is observed (read-only `git status --porcelain`)
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'present' });
+    git(plain, 'checkout', '--', 'a.txt');
+    // Security review (M-32 probe): the repository's own config/attributes never run a program — an fsmonitor hook and a clean/process filter
+    // that write a marker stay silent, and the probe still sees the change.
+    const marker = join(plain, '..', `marker-${Date.now()}`), hook = join(plain, '..', `hook-${Date.now()}.sh`);
+    await writeFile(hook, `#!/bin/sh\ntouch ${marker}\ncat\n`, { mode: 0o755 });
+    git(plain, 'config', 'core.fsmonitor', hook); git(plain, 'config', 'filter.evil.clean', hook); git(plain, 'config', 'filter.evil.process', hook);
+    git(plain, 'config', 'filter.evil.required', 'true'); git(plain, 'config', 'diff.external', hook);
+    await writeFile(join(plain, '.gitattributes'), '* filter=evil diff=evil\n'); await writeFile(join(plain, 'a.txt'), 'changed again');
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'present' });
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    // Security follow-up: a driver named with '=' (a `-c` override would set another key) fails closed before any comparison runs.
+    git(plain, 'config', 'filter.a=b.clean', hook); await writeFile(join(plain, '.gitattributes'), '* filter=a=b\n');
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'unknown' });
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' }); git(plain, 'config', '--remove-section', 'filter.a=b');
+    // A folder this user does not own (or others may write) is not inspected.
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false, owned: async () => false } })).toMatchObject({ changes: 'unknown' });
+    for (const key of ['core.fsmonitor', 'filter.evil.clean', 'filter.evil.process', 'filter.evil.required', 'diff.external']) git(plain, 'config', '--unset', key);
+    await rm(join(plain, '.gitattributes')); git(plain, 'checkout', '--', 'a.txt');
     expect(coding(full, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.repository', params: { targets: 1 } } });
     const self = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => true } });
     expect(coding(self, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.productSource' } });
@@ -399,4 +420,20 @@ it('U4C: first-commit is onboarding only, skipped for business folders and resum
   expect(decide({ repository: 'present', commits: 'none' })).toMatchObject({ state: 'ready', operation: { id: 'coding.first-commit' } });
   expect(decide({ repository: 'present', commits: 'present' }).state).toBe('done');
   expect(decide({ repository: 'present', commits: 'present', firstCommitRecovery: 'pending' })).toMatchObject({ state: 'ready', operation: { id: 'coding.first-commit-recovery' } });
+});
+
+it.skipIf(process.platform === 'win32')('RC-C2: ignored writes and submodule edits never become a claim that no file changed', async () => {
+  const root = await temp('partial-git'), sub = join(root, 'module'); await mkdir(sub);
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd, encoding: 'utf8' });
+  for (const cwd of [root, sub]) { git(cwd, 'init', '-q'); await writeFile(join(cwd, 'file.txt'), 'base'); git(cwd, 'add', 'file.txt'); git(cwd, 'commit', '-qm', 'base'); }
+  await writeFile(join(root, '.gitignore'), 'reports/\n'); git(root, 'add', '.gitignore', 'module'); git(root, 'commit', '-qm', 'submodule');
+  const env = { PATH: process.env.PATH, HOME: root }, before = await workingTreeChanges(root, env);
+  await mkdir(join(root, 'reports')); await writeFile(join(root, 'reports/monthly.csv'), 'changed');
+  await writeFile(join(sub, 'file.txt'), 'submodule changed'); const after = await workingTreeChanges(root, env);
+  expect(after.state).toBe('none');
+  for (const locale of ['en', 'tr'] as const) {
+    const line = treeChangeLine(before, after, { changed: t('brain.here.changed', {}, locale), unchanged: t('brain.here.unchanged', {}, locale), unread: t('brain.here.unread', {}, locale) });
+    expect(line).toContain(locale === 'en' ? 'unknown' : 'bilinmiyor'); expect(line).toContain('submodule');
+    expect(line).not.toContain(locale === 'en' ? 'No file in this folder changed' : 'hiçbir dosyayı değiştirmedi');
+  }
 });

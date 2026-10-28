@@ -44,7 +44,7 @@
     "src/engine/core/policy/internal/permission-mode.ts": { "sites": 3, "class": "sealed", "kind": "policy-turn", "note": "agent tool call decisions incl. shell write-set entries: refusals (policy/cell/effect stage) and plain allows in policy-turn; relaxations keep their own events; MCP-proposal tool calls (proposals.apply) are not noted as allows" },
     "src/engine/core/policy/internal/pool.ts": { "sites": 2, "class": "partial", "kind": "pool-hold", "note": "hold/resume/capacity/quota sealed; pool/use at reservation unsealed" },
     "src/engine/core/policy/internal/provider-spend.ts": { "sites": 1, "class": "unsealed", "note": "audit/reconcile/budget-revision; inspect is a read-gate" },
-    "src/engine/core/policy/internal/run.ts": { "sites": 1, "class": "unsealed", "note": "run cancel/reserve; inspect is a read-gate" },
+    "src/engine/core/policy/internal/run.ts": { "sites": 2, "class": "unsealed", "note": "run cancel/reserve; inspect is a read-gate; creationPaused reads run/create for the local-run offer (alpha.56.1 RC-C1, read-only, no decision is sealed)" },
     "src/engine/core/policy/internal/service.ts": { "sites": 1, "class": "unsealed", "note": "service/shutdown" },
     "src/engine/core/policy/internal/work-target.ts": { "sites": 1, "class": "unsealed", "note": "work-target use/adopt" },
     "src/engine/core/project-instructions/internal/worker-trust.ts": { "sites": 1, "class": "sealed", "kind": "authority-decision" },

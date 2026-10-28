@@ -83,6 +83,7 @@ into an unconditional allow or lift the administrator's own restriction.
 | Ordinary approval | Explicit `approval` / approval id / `decide`, with current policy, session, request digest, expiry, separation of duties and assurance. Protected/unknown-risk cards remain on the floor. |
 | Hold / resume an operator hold | Ordinary operator control uses `run/cancel` or `run/reserve`; resuming failure is a separate decision step. |
 | Reconcile held provider spend (settle, release, write-off) | `provider-spend-account/reconcile` is a code floor for every AI actor, including earlier v1 spend grants (owner Q-SPEND (b), 2026-10-26). A person uses the governed reconciliation path; normal call settlement continues internally. |
+| Create, change or unfreeze the API budget; reconcile held spend | `provider-spend-account/budget-revision` (and `reconcile`) are policy cells, and every non-MCP caller (CLI, terminal, SDK) also needs the person's terminal witness at the runtime service (2026-10-27): an AI tool in a shell, CI, a pipe or `--json` is refused with `AUTHORITY_WITNESS_REQUIRED` and nothing changes. An MCP client is decided by its policy grant (budget revision is not on the floor). |
 | Admission, operations, pools, models, other spending actions, work targets | Ordinary cells from `deckent policy vocabulary --json`. Not on the floor does not guarantee every transport exposes the action or that its application allows it. |
 
 For decision steps, the allow must name the actor and action explicitly: `principals: "all"`

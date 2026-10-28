@@ -5,10 +5,10 @@ import net from 'node:net';
 import { Duplex } from 'node:stream';
 import { tunnelNativeConnect } from '#adapters/core/native-connection/index.js';
 // f5: the realm gateway names its refusals by host (counts only, bounded by providers.json), never the request text.
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { nativeEgressLimits, openNativeEgressGateway } from '#adapters/core/native-connection/index.js';
 import { headlessEgressSchema, headlessEgressReasons } from '#domain/index.js';
@@ -32,6 +32,20 @@ it.skipIf(process.platform === 'win32')('counts refused CONNECT targets by valid
     expect(egress.hosts[`h${max}.example`]).toBeUndefined(); expect(egress.other).toBe(3);
     expect(JSON.stringify(egress)).not.toMatch(/secret|token|::1/u);
   } finally { await gateway.close(); }
+});
+
+// BeUser M-01: an installation whose state path is too long for a Unix socket (sun_path, 104 bytes) still opens the gateway, in a private short
+// directory under /tmp (0700) that is removed on close; before the fix this refused HEADLESS_ISOLATION_UNAVAILABLE (gateway).
+it.skipIf(process.platform === 'win32')('NEGATIVE: a long state directory still opens a private gateway socket and removes it on close', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-egress-')); roots.push(root);
+  const deep = join(root, 'a'.repeat(60), 'b'.repeat(40)); await mkdir(deep, { recursive: true });
+  const gateway = await openNativeEgressGateway({ provider: 'claude', directory: deep });
+  try {
+    expect(Buffer.byteLength(gateway.socketPath)).toBeLessThanOrEqual(103); expect(gateway.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/egress-`)).toBe(true);
+    expect((await stat(dirname(gateway.socketPath))).mode & 0o777).toBe(0o700);
+    await send(gateway.socketPath, 'GET / HTTP/1.1\r\nHost: x\r\n\r\n'); expect(gateway.egress().refused).toBe(1);
+  } finally { await gateway.close(); }
+  await expect(stat(dirname(gateway.socketPath))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 

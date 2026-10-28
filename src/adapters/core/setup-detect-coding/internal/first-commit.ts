@@ -12,7 +12,6 @@ import { findExecutable, type DetectEnvironment } from '#adapters/core/setup-det
 import registry from './coding.json' with { type: 'json' };
 import { inspectFirstCommitRecovery, recoveryNames } from './first-commit-recovery.js';
 import { sha256 } from '#platform/index.js';
-
 /** The typed operation id a setup stage or card names (U3U4U7 §3.8); the stage itself and its card belong to U3-1/U4-1. */
 export const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;
 export type FirstCommitFlag = 'secret-name' | 'secret-content' | 'size' | 'nested-repository';
@@ -29,7 +28,6 @@ export type FirstCommitGitResult = Readonly<{ code: number | null; stdout: strin
  * writes the repository's objects). The port the focused test wraps to inject a ref race. */
 export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string | Uint8Array; index?: string; objects?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;
 type Request = Readonly<{ root: string; env: DetectEnvironment; message: string; include?: readonly string[]; signal?: AbortSignal; git?: FirstCommitGit; effectKey?: string }>;
-
 const { git: gitRegistry, limits: detectLimits, firstCommit: policy } = registry, limits = policy.limits;
 const denied = CREDENTIAL_WORKSPACE_DENY.map(pattern => createGlobMatcher(pattern.toLowerCase()));
 const shapes = WORKER_TREE_PATTERN_RULES.map(rule => new RegExp(rule.source, rule.flags));
@@ -40,7 +38,6 @@ const step = (name: string, result: FirstCommitGitResult) => result.code === 0 ?
   { step: name, detail: redactForRecord(lastLine(result.stderr)).slice(0, limits.detailChars) });
 /** A file-system step that failed: typed, with the errno code only (never a path or content). */
 const io = (name: string) => (error: NodeJS.ErrnoException): never => refuse('SETUP_FIRST_COMMIT_FAILED', { step: name, detail: error.code ?? 'io' });
-
 /** The person's Git (their config, identity and signing), with the repository-redirecting variables removed and the safety ones set. */
 export async function firstCommitGit(root: string, env: DetectEnvironment, signal?: AbortSignal): Promise<FirstCommitGit> {
   const executable = await findExecutable(gitRegistry.executable, env, detectLimits.pathDirectories, signal ?? AbortSignal.timeout(detectLimits.totalTimeoutMs));
@@ -61,7 +58,6 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
   directory = await realpath(step('root', top).trim());
   return run;
 }
-
 type Candidate = Readonly<{ bytes: Buffer; executable: boolean; link: boolean }>;
 type Staged = Readonly<{ mode: '100644' | '100755' | '120000'; digest: string; size: number }>;
 /** The bytes of one candidate, read once and never through a link: a regular file's whole content or a symbolic link's target, of exactly the
@@ -111,7 +107,6 @@ async function storedForm(git: FirstCommitGit, path: string, file: Candidate, co
   step('cat-file', read);
   return read.bytes ?? Buffer.from(read.stdout);
 }
-
 type Observed = Readonly<{ preview: FirstCommitPreview; selection: readonly string[]; message: string; root: string; fileMode: boolean; staged: ReadonlyMap<string, Staged>;
   converts: ReadonlySet<string> }>;
 async function observe(request: Request, git: FirstCommitGit, objects: string): Promise<Observed> {
@@ -154,7 +149,6 @@ async function observe(request: Request, git: FirstCommitGit, objects: string): 
   return { preview: { state: 'offered', operation: FIRST_COMMIT_OPERATION_ID, identity, sign, hooks: 'not-run', total: rows.length, selected: selection.length,
     flagged: flagged.length, rows: shown, more: rows.length - shown.length, digest: digestOf(staged, message) }, selection, message, root, fileMode, staged, converts };
 }
-
 /** A private object directory for the stored-form reads of an observation, removed afterwards: observing never writes the repository. */
 async function scratchObjects<T>(work: (objects: string) => Promise<T>): Promise<T> {
   const objects = await mkdtemp(join(tmpdir(), 'deckent-first-commit-objects-'));
@@ -165,7 +159,6 @@ export async function previewFirstCommit(request: Request): Promise<FirstCommitP
   const git = request.git ?? await firstCommitGit(request.root, request.env, request.signal);
   return (await scratchObjects(objects => observe(request, git, objects))).preview;
 }
-
 /**
  * The atomic first commit. Steps 1-5 never touch the real index or HEAD: a temporary index under the Git dir, `write-tree`, `commit-tree`
  * (signing explicit, no hooks). Then Git's lockfile protocol: `index.lock` created exclusively, the real index re-checked empty under it,
@@ -235,6 +228,5 @@ export async function applyFirstCommit(request: Request & Readonly<{ digest: str
     if (!committed && !refSent) { if (receiptOwned) await rm(receiptFile, { force: true }); if (pathsOwned) await rm(pathsFile, { force: true }); }
   }
 }
-
 export const observeFirstCommitRecovery = async (root: string, env: DetectEnvironment, signal?: AbortSignal) =>
   inspectFirstCommitRecovery(await firstCommitGit(root, env, signal), limits.files, limits.pathBytes);

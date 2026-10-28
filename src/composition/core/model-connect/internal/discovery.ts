@@ -2,7 +2,7 @@ import { SIWC_INFERENCE, listSiwcModels } from '#adapters/index.js';
 import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { recordConfiguredProviderFailure } from '#composition/core/provider-catalog/index.js';
 import { ModelCatalogPolicyAuthorization, ModelConnectError } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, providerConnectSecretName,
+import { PROVIDER_CONNECT_REGISTRY, discoverProviderModels, discoveredProviderCatalog, probeLocalToolCalls, providerDiscoveryChannel, providerConnectSecretName,
   providerProbeBase, connectionAdapter, providerConnectModelPriced, ProviderModelListError, ProviderConnectError, ProviderProbeError, listKindProviderWorkspaces,
   type ProviderConnectRegistry, type ProviderProbeOptions } from '#adapters/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -39,7 +39,7 @@ export async function listConfiguredConnectionModels(projectRoot: string, scopeI
     return ids.map(nativeId => ({ nativeId, displayName: nativeId, priced: providerConnectModelPriced(kind, nativeId, base) }));
   } catch (error) {
     if (error instanceof ProviderModelListError) { await recordConfiguredProviderFailure(projectRoot, 'model-discovery', error, options);
-      throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '' } }); }
+      throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '', address: error.address ?? '' } }); }
     if (error instanceof ModelConnectError || error instanceof ProviderConnectError || error instanceof ProviderProbeError) {
       throw ErrorRegistry.createError(error.code);
     }
@@ -55,7 +55,7 @@ export async function discoverConfiguredConnectionModel(projectRoot: string, sco
     maxOutputTokens: registry.profileDefaults.maxOutputTokens, currency: registry.profileDefaults.currency });
   const models = await listConfiguredConnectionModels(projectRoot, scopeId, connection, endpoint, options, host);
   if (!models.some(model => model.nativeId === nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
-  return discoveredProviderCatalog(kind, endpoint, nativeId);
+  return discoveredProviderCatalog(kind, endpoint, nativeId, await probeLocalToolCalls(kind, endpoint, nativeId, host.discoveryOptions)); // AYSE-16: tools only when the server accepts them
 }
 
 /** Same catalog inspection gate and credential custody as model discovery; no key reaches the surface. */

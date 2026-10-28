@@ -2,7 +2,7 @@
 import { get, request as httpRequest } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createServer, connect, type Socket } from 'node:net';
-import { lstat, mkdir, open, readdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
@@ -753,12 +753,12 @@ export function flushUnmapped(state: NormalizerState, now = Date.now()): BridgeE
   return events;
 }
 /** Best-effort, bounded delivery of event batches to the attempt gateway. Observation never changes execution. */
-function eventChannel(socketPath: string, maxQueued = 4000, batch = 64) {
+function eventChannel(socketPath: string, capability: string, maxQueued = 4000, batch = 64) {
   const queue: BridgeEvent[] = []; let dropped = 0, sending: Promise<void> = Promise.resolve();
   const post = (events: BridgeEvent[]) => new Promise<void>(resolve => {
     const body = events.map(event => JSON.stringify(event)).join('\n') + '\n';
     const request = httpRequest({ socketPath, path: '/events', method: 'POST', timeout: 5000,
-      headers: { 'content-type': 'application/x-ndjson', 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); response.on('error', () => resolve()); });
+      headers: { authorization: capability, 'content-type': 'application/x-ndjson', 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); response.on('error', () => resolve()); });
     request.on('error', () => resolve()); request.on('timeout', () => { request.destroy(); resolve(); }); request.end(body);
   });
   const flush = () => { sending = sending.then(async () => { while (queue.length) { const next = queue.splice(0, batch); await post(next); } }); return sending; };
@@ -829,8 +829,10 @@ export function nativeReportInstruction(capabilities: NativeWorkerCapabilities, 
 
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
+  const capability = await readFile('/run/deckent-bootstrap.key', 'utf8');
+  if (!/^[a-f0-9]{64}$/u.test(capability)) throw new Error();
   const payload = await new Promise<string>((resolve, reject) => {
-    const request = get({ socketPath, path: '/bootstrap', timeout: 10000 }, response => {
+    const request = get({ socketPath, path: '/bootstrap', headers: { authorization: capability }, timeout: 10000 }, response => {
       let text = '';
       response.setEncoding('utf8');
       response.on('data', (part: string) => { text += part; if (Buffer.byteLength(text) > 131072) request.destroy(new Error()); });
@@ -920,7 +922,7 @@ async function main() {
   // Native events can contain tool output and request headers. Never forward raw events: only redacted contract events leave.
   let tail = ''; let bytes = 0;
   const state = createNormalizerState([...secretValues(setup.credential), proxy], Date.now(), setup.quotaPolicy);
-  const channel = eventChannel(socketPath);
+  const channel = eventChannel(socketPath, capability);
   const codex = createCodexState();
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const clientModel = setup.capabilities.modelUsageEvidence === 'client-reported' ? createClientModelReport(setup.capabilities.eventStream, setup.provider, authRoot,

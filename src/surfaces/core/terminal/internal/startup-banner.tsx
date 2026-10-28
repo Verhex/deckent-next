@@ -20,7 +20,6 @@ export interface WorklineStartup {
   /** The one-line form: narrow terminals and `banner: compact`. */
   readonly compact: string;
 }
-
 /** CUP home + ED 2 (erase the visible display). The opening frame never sends ED 3 (the person's shell history above Deckent stays). */
 export const CLEAR_VISIBLE_SCREEN = '\u001b[H\u001b[2J';
 /**
@@ -39,7 +38,6 @@ export function clearVisibleScreen(rows: number): string {
 }
 /** Below this width the mark and its facts do not fit side by side: the one-line form is shown. */
 export const STARTUP_BANNER_MIN_COLUMNS = 60;
-
 export function StartupBanner({ startup, columns }: { readonly startup: WorklineStartup; readonly columns: number }) {
   const palette = useWorklinePalette();
   if (startup.banner === 'compact' || columns < STARTUP_BANNER_MIN_COLUMNS) return <Text {...palette.accent} wrap="truncate-end">{startup.compact}</Text>;
@@ -56,7 +54,6 @@ export function StartupBanner({ startup, columns }: { readonly startup: Workline
     </Box>
   );
 }
-
 /** The opening frame, printed once before the live view starts (it goes into the main-screen scrollback like any finished output). */
 export function startupFrame(startup: WorklineStartup, palette: WorklineInkPalette, columns: number, rows: number): string {
   const clear = startup.clear ? clearVisibleScreen(rows) : '';
@@ -64,7 +61,6 @@ export function startupFrame(startup: WorklineStartup, palette: WorklineInkPalet
   const banner = renderToString(createElement(WorklinePaletteProvider, { palette, children: createElement(StartupBanner, { startup, columns }) }), { columns });
   return `${clear}${banner}\n`;
 }
-
 /** Writes the opening frame on an interactive terminal only: a pipe or redirect never receives a clear sequence or the banner. */
 export function writeStartup(stdout: Pick<NodeJS.WriteStream, 'write' | 'isTTY' | 'columns' | 'rows'>, startup: WorklineStartup, palette: WorklineInkPalette): void {
   if (stdout.isTTY !== true) return;

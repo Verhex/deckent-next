@@ -5,6 +5,12 @@
 // The turn's own outcome is printed as one JSON line; a killed process prints nothing.
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { advanceConfiguredRun } from '#composition/core/run-progression/index.js';
+import { GitWorkspaceBroker } from '#adapters/index.js';
+
+// 'refuse-die' (BeUser D-05): the attempt is refused typed and transient before any claim (workspace), the turn prints its outcome, then the
+// process is killed — standing in for Node 26 ending the service for a FileHandle collected after the refusal had settled.
+const refuseDie = process.argv[2] === 'refuse-die';
+if (refuseDie) GitWorkspaceBroker.prototype.allocate = async () => { throw Object.assign(new Error('fixture workspace refusal'), { code: 'FIXTURE_WORKSPACE_REFUSED' }); };
 
 const killAt = { abort: 1, 'abort-2': 2 }[process.argv[2]] ?? 0;
 if (killAt) {
@@ -23,3 +29,4 @@ try {
   const typed = error?.cause?.code ? error.cause : error;
   process.stdout.write(JSON.stringify({ ok: false, code: typed?.code ?? null, params: typed?.params ?? null }) + '\n');
 }
+if (refuseDie) process.kill(process.pid, 'SIGKILL');

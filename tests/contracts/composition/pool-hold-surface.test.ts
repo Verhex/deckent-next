@@ -7,7 +7,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { releaseQuota, applyPoolHold, inspectPoolHold } from '../../../src/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
-import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
+import { createConfiguredRun, reserveConfiguredRunTasks, configuredLocalRunOffer } from '../../../src/composition/core/runs/index.js';
+import { PermissionDefaultsRegistry, localRunFallbackClosed, localRunOffered } from '#engine/index.js';
 import { advanceConfiguredRun } from '../../../src/composition/core/run-progression/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { main } from '../../../src/surfaces/index.js';
@@ -54,6 +55,20 @@ async function mcp(applications: Partial<McpApplications>) {
 }
 
 describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surface', () => {
+  it('owner option A K2/K3 (Astra 2761 R1): a really held pool closes the run-here offer whatever the code; profile defaults close it; a scope with no pool is offered', async () => {
+    const f = await fixture(), offer = (code?: string) => configuredLocalRunOffer(f.project, 's', f.options, code);
+    expect(await offer()).toBe(true); expect(await offer('RUN_POOL_HELD')).toBe(false); expect(await offer('BRAIN_TIER_REFUSED')).toBe(false);
+    expect((await f.cli('hold', '--command-id', 'k2-hold', '--reason', 'release', '--json')).code).toBe(0);
+    expect(await offer('RUN_ADMISSION_NOT_CONFIGURED')).toBe(false); // the real hold row, not a mocked code, wins over "nothing set up"
+    expect((await f.cli('resume', '--command-id', 'k2-resume', '--json')).code).toBe(0); expect(await offer()).toBe(true);
+    const bare = await mkdtemp(join(tmpdir(), 'dn-local-run-')); roots.push(bare); await mkdir(join(bare, '.deckent'), { recursive: true, mode: 0o700 });
+    await writeFile(join(bare, '.deckent/config.json'), JSON.stringify({ layout: { root: join(bare, 'data') } })); clearConfigCache();
+    expect(await configuredLocalRunOffer(bare, 's', f.options)).toBe(false); // unreadable policy closes the alternate path
+    const company = new PermissionDefaultsRegistry(), team = { id: 'acme:team', version: 1 };
+    company.register([{ profile: team, openModes: [], startMode: 'standart', ownerBaseline: { families: [] }, localRunFallback: 'closed' }]);
+    expect(localRunFallbackClosed(team, company)).toBe(true); expect(localRunFallbackClosed({ id: 'core:solo', version: 1 }, company)).toBe(false);
+    expect(localRunOffered('RUN_ADMISSION_NOT_CONFIGURED', { closed: localRunFallbackClosed(team, company) })).toBe(false);
+  });
   it('holds through the CLI; reservation and the runtime progression wait quietly with no write; status and the sealed audit show it; resume re-enables', async () => {
     const f = await fixture();
     await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'create', graph }, f.options);
@@ -130,4 +145,20 @@ it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited
     expect(JSON.stringify(await session.client.callTool({ name: 'release_quota', arguments: { ...command, commandId: 'mcp-release' } }))).toContain('MCP_TOOL_UNKNOWN'); }
   finally { await session.close(); }
   expect(f.rows("SELECT count(*) n FROM quota_release_receipts")[0]!.n).toBe(2);
+});
+
+it.skipIf(process.platform === 'win32')('RC-C1: company run.create denial closes the shared offer before missing admission; inspect/tool grants do not bypass it', async () => {
+  const f = await fixture(), configPath = join(f.project, '.deckent/config.json');
+  await writeFile(configPath, JSON.stringify({ layout: { root: join(f.project, '../data') } })); clearConfigCache();
+  const policyPath = join(f.project, '../data/policy.json'), document = JSON.parse(await (await import('node:fs/promises')).readFile(policyPath, 'utf8'));
+  document.grants.push({ id: 'tools', effect: 'allow', actions: ['invoke'], scopes: ['s'], principals: 'all', resource: { kind: 'agent-tool', ids: 'all' } });
+  document.restrictions = [{ id: 'company-stop', actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: 'all' } }];
+  await writeFile(policyPath, JSON.stringify(document), { mode: 0o600 });
+  expect(await configuredLocalRunOffer(f.project, 's', f.options, 'RUN_ADMISSION_NOT_CONFIGURED')).toBe(false);
+  document.restrictions = []; document.revision = 'open'; await writeFile(policyPath, JSON.stringify(document), { mode: 0o600 });
+  expect(await configuredLocalRunOffer(f.project, 's', f.options, 'RUN_ADMISSION_NOT_CONFIGURED')).toBe(true);
+  document.grants[0].actions = ['inspect']; document.revision = 'no-create-grant'; await writeFile(policyPath, JSON.stringify(document), { mode: 0o600 });
+  expect(await configuredLocalRunOffer(f.project, 's', f.options)).toBe(false);
+  await writeFile(policyPath, 'unreadable policy');
+  expect(await configuredLocalRunOffer(f.project, 's', f.options)).toBe(false);
 });

@@ -452,6 +452,19 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
 
 ## Recovery and upgrades
 
+- **After the alpha.56.1 upgrade, a personal MCP server whose entry names a main-vault key (`$DECK:NAME`) needs that key granted to each
+  project** (KER-17, 2026-10-28): the key is now used under the same project grant as a provider key, so the server does not start in a
+  project without it and the turn says which key. *Workaround:* `deckent doctor` lists each such key with its command; run
+  `deckent secret grant NAME --scope <id>` once per project at your own terminal (a card; AI sessions cannot answer it).
+- **A local model connected before alpha.56.1 has no tool-call declaration, so the terminal offers it no file tools** (AYSE-16,
+  2026-10-28): the connect step now asks a keyless local server once whether it accepts a tool call and declares it. *Workaround:*
+  reconnect the server once in `deckent` → /provider (the same address); a vLLM started without `--enable-auto-tool-choice
+  --tool-call-parser <parser>` stays without tools, and the terminal says so.
+- **Without a work kind and worker pool, `/do` and the first task can run in the terminal, not as a background Run** (owner option A,
+  2026-10-28): only when nothing is set up, and only after a card you confirm every time (changes go straight to the folder: no
+  delivery card, no rollback; Esc cancels). Any other refusal (Brain tier, worker channel, assignment, a held pool, policy) shows its
+  own next step and never runs here. *Workaround:* for background workers set up /setup → First work kind → Worker image → Worker pool. `pool hold` and
+  `pool set-capacity` say there is no pool yet until then.
 - **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
   (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set
   stopped by the cancellation can be partly applied. The result text lists what was written. *Workaround:* before running a cancelled
@@ -517,7 +530,7 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
   affected.
 - **Restart fingerprint.** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); changing them never reports a stale service. A member is added only after proving no start-time capture.
-- **`runtime restart` refuses a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>`, only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
+- **`runtime restart`, the terminal's `/service-restart` and `runtime shutdown` (unless `--force`) refuse a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>` (a shutdown names `systemctl [--user] stop <unit>`), only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). A user unit is asked through the caller's `XDG_RUNTIME_DIR`, or `/run/user/<uid>` when a launcher cleared the environment (alpha.56.1). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
 - **The local runtime socket's peer liveness witness** observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call: a handled signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported `cancelled`; its result text carries the applied write set (the owner decision on a completeness flag or a new status is open).
 - **MCP and terminal processes started before a switch to a new release keep running the previous build.** A switch replaces the
   installed build, but an MCP server or a `deckent` terminal that a client started earlier keeps the code it loaded until that client

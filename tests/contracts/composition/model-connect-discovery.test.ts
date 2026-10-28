@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { connectConfiguredModel, listConfiguredConnectionModels } from '#composition/core/model-connect/index.js';
 import { probeProviderConnection } from '#adapters/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
@@ -39,14 +39,15 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     expect(f.reads()).toBe(2);
     const config = JSON.parse(await readFile(f.path, 'utf8'));
     const model = config.provider_catalog.providers.find((row: { id: string }) => row.id === result.reference.providerId).models[0];
-    expect(model.nativeId).toBe(f.command.model.nativeId); expect(model.protocols[0].capabilities).toEqual([]);
+    expect(model.nativeId).toBe(f.command.model.nativeId); // AYSE-16: the loopback chat server accepted the connect-time one-tool check (keyless POST), so tools are declared
+    expect(model.protocols[0].capabilities).toEqual([{ id: 'tool-calls', version: 1, state: 'supported' }]);
     const stored = f.rows('SELECT record FROM model_catalog_models').map(row => String(row.record)).join('');
     expect(stored).toContain(f.command.model.nativeId);
-    f.state.script = [{ content: 'Exact model.' }];
+    f.state.script = [...f.state.requests.map(() => ({ content: 'tool check' })), { content: 'Exact model.' }]; // the scripted server answers by request index; the connect's tool check came first
     const answer = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'discovered-turn', reference: result.reference,
       messages: [{ role: 'user', content: 'hi' }] }, () => undefined);
     expect(answer).toMatchObject({ answer: 'Exact model.', finish: 'stop' });
-    expect(f.state.requests[0]).toMatchObject({ model: f.command.model.nativeId });
+    expect(f.state.requests.at(-1)).toMatchObject({ model: f.command.model.nativeId });
     const audit = f.rows('SELECT record FROM audit_events').map(row => String(row.record)).join('');
     expect(audit).toContain('model-connect');
     const again = await connectConfiguredModel(f.project, f.command, { env: f.env });
@@ -76,7 +77,8 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     const invoked = await invokeConfiguredModel(f.project, { schemaVersion: 1, commandId: 'plain-http-call', scopeId: 'scope', reference: result.reference,
       catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, nativeRequest: { model: f.command.model.nativeId, messages: [{ role: 'user', content: 'hi' }], max_completion_tokens: 8, stream: true, stream_options: { include_usage: true } } }, options);
     expect(invoked.receipt.outcome, JSON.stringify(invoked.receipt.outcome)).toMatchObject({ state: 'responded' });
-    expect(f.state.requests).toHaveLength(1); expect(f.state.authorization.length).toBeGreaterThanOrEqual(4); // probe, list, connect's list, the call
+    // AYSE-16: connect's one-tool check is a second keyless chat request; neither carries a key.
+    expect(f.state.requests).toHaveLength(2); expect(f.state.authorization.length).toBeGreaterThanOrEqual(5); // probe, list, connect's list, the tool check, the call
     expect(f.state.authorization.every(header => header === null)).toBe(true);
     expect(await readFile(f.path, 'utf8')).not.toContain(KEY);
   }, 60_000);
@@ -96,7 +98,7 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     const again = await connectConfiguredModel(f.project, f.command, { env: f.env }, f.host);
     expect(again.reference).toEqual(result.reference);
     expect(again.steps).toMatchObject({ catalog: 'present', declaration: 'present', profile: 'present', activation: 'present' });
-    expect(f.reads()).toBe(3); expect(f.state.requests).toEqual([]);
+    expect(f.reads()).toBe(5); expect(f.state.requests).toEqual([]); // each connect also runs the one-tool check through the same injected transport (AYSE-16)
   });
 
   it('a generic remote endpoint with an exact shipped published tariff binds, using only the configured secret in the HTTPS header', async () => {
@@ -123,6 +125,26 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect(f.rows('SELECT COUNT(*) AS n FROM model_catalog_models')).toEqual(rows);
     expect(f.state.requests).toEqual([]);
+  });
+
+  it('alpha.56.1: an unreachable server names the exact address tried and, for a loopback server, the port-mapping hint; never a credential', async () => {
+    const f = await fixture(), unreachable = { discoveryOptions: { fetch: async () => { throw new TypeError('fetch failed'); } } };
+    const error = await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, { env: f.env }, unreachable).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', params: { cause: 'network', address: `${f.endpoint}/v1/models` } });
+    const params = (error as { params: Record<string, string> }).params;
+    // BeUser alpha.56.1 (Ayşe): a local server that did not answer is named as such; the plain steps first, then the container/VM hint.
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', params)!.message).toBe(`The model list could not be read: the server at ${f.endpoint}/v1/models did not answer. `
+      + 'Check that the server is running and that this is the port it listens on. If it runs in a container or a VM, also check that this port is published to this computer (port mapping).');
+    const tr = ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'tr', params)!.message;
+    expect(tr).toContain(`${f.endpoint}/v1/models adresindeki sunucu yanıt vermedi. Sunucunun açık olduğunu`); expect(tr).not.toContain('ağa ulaşılamadı');
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, cause: 'timeout' })!.message).toContain('did not answer in time');
+    expect(ErrorRegistry.createError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE').category).toBe('error'); // a server condition: the error exit, not usage
+    // A remote address is named without the local hint; a non-network cause names no address.
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, address: 'https://llm.example/v1/models' })!.message).toBe('The model list could not be read: network unavailable (tried https://llm.example/v1/models).');
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, cause: 'http-status', status: 503 })!.message).toBe('The model list could not be read: HTTP status 503.');
+    // Astra R2: the renderer shows only the display form of any address it is given.
+    expect(ErrorRegistry.get('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'en', { ...params, address: 'https://u:secret-canary@llm.example/v1/models?api_key=secret-canary#secret-canary' })!.message)
+      .toBe('The model list could not be read: network unavailable (tried https://llm.example/v1/models).');
   });
 
   it('inspect policy denial precedes network and preserves configuration', async () => {

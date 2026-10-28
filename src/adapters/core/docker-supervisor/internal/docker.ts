@@ -202,6 +202,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     }
     const connectionMounts = o.connection ? await dockerConnectionMounts(o.connection, o.uid) : [];
     if (o.connection) expected.push({ source: o.connection.socketPath, target: '/run/deckent-connection.sock', writable: false },
+      { source: o.connection.capabilityPath!, target: '/run/deckent-bootstrap.key', writable: false },
       { source: o.connection.bootstrapPath, target: '/run/deckent-bootstrap.mjs', writable: false });
     const relayMounts = o.relay ? await dockerRelayMounts(o.relay, o.uid) : [];
     if (o.relay) expected.push({ source: o.relay.socketPath, target: DOCKER_RELAY_TARGETS.socket, writable: false }, { source: o.relay.bootstrapPath, target: DOCKER_RELAY_TARGETS.bootstrap, writable: false },

@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, sandboxHardFloored, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
-import { DECKENT_DIR, resolveLocale, t } from '#platform/index.js';
+import { DECKENT_DIR, privateIpcRoot, resolveLocale, t } from '#platform/index.js';
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
 export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
@@ -122,6 +122,7 @@ async function sealedRoots(project: string, roots: readonly string[], home: stri
 async function maskHostSockets(environment: Readonly<Record<string, string | undefined>>, project: string,
   directories: string[], files: string[]): Promise<string | null> {
   const runtime = environment['XDG_RUNTIME_DIR'] ?? process.env['XDG_RUNTIME_DIR'];
+  try { directories.push(await privateIpcRoot()); } catch { return 'the private IPC root cannot be hidden'; }
   const dirs = ['/run', '/var/run', ...(runtime && isAbsolute(runtime) ? [runtime] : [])];
   for (const path of dirs) {
     const real = await realpath(path).catch(() => null);
@@ -145,9 +146,11 @@ async function maskHostSockets(environment: Readonly<Record<string, string | und
   const runtimeSocket = new RegExp(`^(/tmp/dk-${process.getuid?.() ?? -1}-[0-9a-f]{64})/`, 'u');
   const bound = await readFile('/proc/net/unix', 'utf8').catch(() => null);
   if (bound === null) return 'the bound host sockets cannot be listed; the runtime socket directory cannot be hidden';
+  // RESTART-HUNT (alpha.56.1): bwrap creates a missing mask target on the HOST /tmp here (0755), which later starts refused. A listed directory already
+  // gone (a stopping service removed it) hides nothing and is not masked; any other lstat outcome masks. The service start heals the remaining window.
   for (const line of bound.split('\n')) {
     const at = line.indexOf(' /'), directory = at < 0 ? undefined : runtimeSocket.exec(line.slice(at + 1))?.[1];
-    if (directory && !directories.includes(directory)) directories.push(directory);
+    if (directory && !directories.includes(directory) && await lstat(directory).then(() => true, (error: NodeJS.ErrnoException) => error.code !== 'ENOENT')) directories.push(directory);
   }
   for (const path of configured) {
     if (!isAbsolute(path)) return 'a configured host socket path is not absolute';

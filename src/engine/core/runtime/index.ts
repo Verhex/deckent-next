@@ -38,7 +38,7 @@ export { runtimeServiceReadiness, runtimeMonotonicDeadline, runtimeDeadlineSigna
 export { awaitRuntimeServiceStart, awaitRuntimeServiceRestart } from './internal/readiness.js';
 export { prepareRuntimeClientRequest, acceptRuntimeClientResponse } from './internal/client.js';
 export { runtimeTargetQueueTerminal } from './internal/queue-client.js';
-export { describeRuntimeServiceWithin } from './internal/readiness.js';
+export { describeRuntimeServiceWithin, type RuntimeStartable } from './internal/readiness.js';
 
 export { createTargetQueueService, selectQueueActor } from './internal/queue-service.js';
 export type { QueueServiceContext, QueueServicePorts } from './internal/queue-service.js';
@@ -46,4 +46,4 @@ export { createRuntimeModelCalls } from './internal/model-client-calls.js';
 export { createRuntimeSpendCalls } from './internal/provider-spend-client-calls.js';
 export { bindRuntimeApplicationMethods, executeRuntimeApplicationOperation } from './internal/application-operations.js';
 export { createRuntimeRequestTransport } from './internal/request-transport.js';
-export { RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS, assertAuthorityWitness, isRuntimeServiceAuthorityWriteOperation, requireAuthorityWitness, type AuthorityWitness } from './internal/authority-witness.js';
+export { RUNTIME_SERVICE_AUTHORITY_WRITE_OPERATIONS, RUNTIME_SERVICE_PERSON_WRITE_OPERATIONS, assertAuthorityWitness, isRuntimeServiceAuthorityWriteOperation, requireAuthorityWitness, type AuthorityWitness } from './internal/authority-witness.js';

@@ -45,3 +45,5 @@ export async function detectServiceManager(pid: number | undefined, mainPid: Ser
 /** The operator command that restarts the unit through its manager. */
 export const serviceManagerRestartCommand = (found: ServiceManagerUnit): string =>
   `systemctl ${found.scope === 'user' ? '--user ' : ''}restart ${found.unit}`;
+/** The operator command that stops the unit through its manager (a stop elsewhere leaves the manager believing it simply finished). */
+export const serviceManagerStopCommand = (found: ServiceManagerUnit): string => `systemctl ${found.scope === 'user' ? '--user ' : ''}stop ${found.unit}`;

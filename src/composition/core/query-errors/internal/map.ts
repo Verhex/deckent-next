@@ -69,7 +69,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof ScopeRegistrationError) return registeredFailure(error.code, { params: { scopeIds: error.scopeIds.join(',') } });
   if (error instanceof TaskGraphError && GRAPH_INPUT_CODES.has(error.code)) return registeredFailure('TASK_GRAPH_INVALID', {
     params: { reason: error.code, path: ['graph', ...(error.issues[0]?.path ?? [])].join('.') } });
-  if (error instanceof LocalRuntimeSocketError && error.path) return registeredFailure(error.code, { params: { path: error.path } });
+  if (error instanceof LocalRuntimeSocketError && (error.path || error.reason)) return registeredFailure(error.code, { params: { ...(error.path ? { path: error.path } : {}), ...(error.reason ? { reason: error.reason } : {}) } });
   if (error instanceof ZodError) return registeredFailure('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return registeredFailure('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) return registeredFailure(error.code, { params: reservationDiagnosticParams(error.diagnostic) });

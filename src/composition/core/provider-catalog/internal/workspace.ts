@@ -19,5 +19,5 @@ export async function openConfiguredProviderWorkspaces(root: string, scopeId: st
       return name ? projectCredentialResolver(current, scopeId, options).resolve(name) : undefined; },
     async discover(profile, key) { try { return await listProviderWorkspaces(profile, key); }
       catch (error) { if (error instanceof ProviderModelListError) { await recordConfiguredProviderFailure(root, 'workspace-discovery', error, options);
-        throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '' } }); } throw error; } }, offer: providerProfileWorkspaceOffer, snapshots: async () => [await snapshotConfiguredConfig(root, options, 'global'), await snapshotConfiguredConfig(root, options, 'project')],
+        throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '', address: error.address ?? '' } }); } throw error; } }, offer: providerProfileWorkspaceOffer, snapshots: async () => [await snapshotConfiguredConfig(root, options, 'global'), await snapshotConfiguredConfig(root, options, 'project')],
   }); }

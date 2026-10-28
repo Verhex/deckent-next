@@ -81,7 +81,7 @@ export interface ConfigPanelLabels {
 
 export type McpScopeId = 'local' | 'project' | 'user';
 export type McpPanelServer = Readonly<{ name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
-  trusted: boolean }>;
+  trusted: boolean; grantKey?: string }>; // KER-17: a main-vault key this project has not granted (the person-only first-use card answers it)
 export type McpPanelList = Readonly<{ servers: readonly McpPanelServer[]; problems: readonly string[] }>;
 /** One trust question of the wizard or a re-approval (the launch card, then the tools card): the window shows it, y says yes, n/Esc say no. */
 export type McpTrustQuestion = Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>;
@@ -96,6 +96,7 @@ export interface McpPanelPort {
   /** Revoke this server's trust (it asks again before it starts); re-approve with the trust windows; restart on next use; remove its entry. */
   revoke(name: string): Promise<readonly string[]>;
   approve(name: string, ask: McpTrustAsk): Promise<readonly string[]>;
+  grantKey?(name: string, key: string, ask: McpTrustAsk): Promise<readonly string[]>;
   reconnect(name: string): Promise<readonly string[]>;
   remove(name: string): Promise<readonly string[]>;
   /** The wizard's engine: the same registry command as `deckent mcp add` (its trust decision through `ask`). It checks the name before any card:
@@ -107,7 +108,7 @@ export interface McpPanelPort {
 }
 export interface McpPanelLabels {
   readonly title: string; readonly hints: string; readonly add: string; readonly addDetail: string; readonly none: string;
-  readonly actions: Readonly<Record<'detail' | 'revoke' | 'approve' | 'reconnect' | 'remove', string>>;
+  readonly actions: Readonly<Record<'detail' | 'revoke' | 'approve' | 'reconnect' | 'remove' | 'grant', string>>;
   /** Wizard steps: titles of the transport, realm and scope pickers, and the prompts of the text steps (`{step}` of `{steps}` in `step`). */
   readonly step: string;
   readonly steps: Readonly<Record<'transport' | 'name' | 'command' | 'url' | 'args' | 'env' | 'headers' | 'realm' | 'scope', string>>;
@@ -155,6 +156,8 @@ export interface ModelPanelSource {
   /** Current session preference, rechecked before pinning. */
   reasoning?(): 'off' | undefined;
   reasoningOffSupported?(reference: ModelPanelReference | null): Promise<boolean>;
+  /** BeUser AYSE-16: whether the exact model declares tool calls (false), or null when it is not declared (unknown). */
+  toolsDeclared?(reference: ModelPanelReference | null): Promise<boolean | null>;
   makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
@@ -195,6 +198,8 @@ export interface ModelPanelLabels {
   /** T4-B shadow window: `{model}` the project's model; its two governed choices and "keep as it is". */
   readonly shadowTitle: string; readonly shadowRemove: string; readonly shadowAlign: string; readonly shadowKeep: string;
   readonly switch: ModelSwitchLabels;
+  /** BeUser alpha.56.1 (3t): the empty list's action row that opens the `/provider` connect flow. */
+  readonly connect?: string;
 }
 
 /** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */
@@ -262,7 +267,7 @@ export interface ProviderPanelPort {
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
-  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model' | 'grant' | 'signIn', string>>;
+  readonly actions: Readonly<Record<'connect' | 'connectNoKey' | 'connectKeyOptional' | 'replace' | 'disconnect' | 'model' | 'grant' | 'signIn', string>>;
   /** T4-B: the model list's title (`{kind}`), its empty note, and the key-name row the key step shows. */
   readonly modelTitle: string; readonly modelEmpty: string; readonly keyName: string;
   readonly endpointTitle: string; readonly endpointHint: string;

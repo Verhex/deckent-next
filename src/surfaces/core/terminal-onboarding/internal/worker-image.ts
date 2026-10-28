@@ -14,10 +14,10 @@ export function workerImageQuestion(preview: Readonly<{ providers: readonly stri
       ...(preview.previousMs != null ? [t('setup.workerImage.progress.previous', { elapsed: formatDuration(preview.previousMs, locale) }, locale)]
         : preview.referenceMs != null ? [t('setup.workerImage.card.reference', { elapsed: formatDuration(preview.referenceMs, locale) }, locale)] : [t('setup.workerImage.progress.unmeasured', {}, locale)]),
       ...preview.sources, preview.baseRef, t('setup.workerImage.card.proxy', { proxy: preview.proxy ?? '-' }, locale),
-      ...(repair ? [t('setup.workerImage.card.repair', { image: repair }, locale)] : []),
+      ...(repair ? [t('setup.workerImage.card.repair', { image: repair }, locale)] : []), // BeUser M-05: unusable images are a line, never a row Enter cannot act on
+      ...(images.some(image => !image.ready) ? [t('setup.workerImage.card.unusable', { count: images.filter(image => !image.ready).length, tags: images.filter(image => !image.ready).map(image => image.tag).join(', ') }, locale)] : []),
       t('setup.workerImage.card.foreground', {}, locale), t('setup.workerImage.card.next', {}, locale)],
-    choices: [...images.map(image => ({ id: image.imageId, disabled: !image.ready,
-      label: image.ready ? t('setup.workerImage.card.useExisting', { tag: image.tag, image: image.imageId }, locale) : t('setup.workerImage.card.lineageUnknown', { tag: image.tag, image: image.imageId }, locale) })),
+    choices: [...images.filter(image => image.ready).map(image => ({ id: image.imageId, label: t('setup.workerImage.card.useExisting', { tag: image.tag, image: image.imageId }, locale) })),
       { id: 'consent', label: t('setup.workerImage.card.buildInBackground', {}, locale) }, { id: 'later', label: t('setup.workerImage.card.later', {}, locale) }] };
 }
 /** No invented ETA: phase, elapsed time and the last durable update are the observable progress. */

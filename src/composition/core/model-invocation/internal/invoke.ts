@@ -42,7 +42,7 @@ export async function measureConfiguredModel(projectRoot: string, input: ModelIn
 async function measure(input: ModelInvocationCommand, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal: AbortSignal | undefined, entry: 'raw' | 'feature') {
   try {
     const command = parsedCommand(input);
-    return await application(await loadContext(command.scopeId), options, undefined, false, entry).measure(command, undefined, signal);
+    return await application(await loadContext(command.scopeId), options, undefined, false, entry, configuredContinuationPin(input)).measure(command, undefined, signal);
   } catch (error) { throw queryFailure(error); }
 }
 function parsedCommand(input: ModelInvocationCommand) {

@@ -17,7 +17,10 @@ const BUS_ENVIRONMENT = ['PATH', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS'] 
 export async function querySystemdMainPid(unit: Readonly<{ scope: 'user' | 'system'; unit: string }>, bounds: Readonly<{ timeoutMs: number; outputBytes: number }>,
   env: Readonly<Record<string, string | undefined>> = process.env, exec: SystemdQueryExec = execBounded): Promise<number | null> {
   if (!UNIT.test(unit.unit)) return null;
-  const busEnv = Object.fromEntries(BUS_ENVIRONMENT.flatMap(name => (typeof env[name] === 'string' ? [[name, env[name]]] : [])));
+  const busEnv: Record<string, string> = Object.fromEntries(BUS_ENVIRONMENT.flatMap(name => (typeof env[name] === 'string' ? [[name, env[name]]] : [])));
+  // alpha.56.1: a launcher that clears the environment (`env -i`) drops the user bus path; the user manager's standard runtime directory stands in.
+  const uid = process.getuid?.();
+  if (unit.scope === 'user' && busEnv['XDG_RUNTIME_DIR'] === undefined && uid !== undefined) busEnv['XDG_RUNTIME_DIR'] = `/run/user/${uid}`;
   const answer = await exec('systemctl', [...(unit.scope === 'user' ? ['--user'] : []), 'show', '-p', 'MainPID', '--value', '--', unit.unit],
     { env: busEnv, timeout: bounds.timeoutMs, maxBuffer: bounds.outputBytes }).catch(() => null);
   const text = answer?.trim() ?? '';

@@ -1,5 +1,5 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
-import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
+import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, displayAddress } from '#platform/core/common/index.js';
 import { DeckentError } from './error.js';
 import type { ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
@@ -35,6 +35,27 @@ function discoveryCause(p: Params, l: Locale): string {
     case 'not-listable': return t('models.connect.cause.not-listable', { status: p['status'] ?? '-' }, l);
     default: return t('models.connect.cause.unexpected', {}, l);
   }
+}
+/** alpha.56.1: a network or timeout failure names the address it tried (credential-free by construction); a loopback one adds the port hint. */
+function discoveryUnavailable(p: Params, l: Locale): string {
+  const address = (p['cause'] === 'network' || p['cause'] === 'timeout' ? displayAddress(p['address']) : undefined) ?? '';
+  let local = false;
+  // The provider locality invariant's literal loopback hosts (`isLiteralLoopbackHostname`; importing it here would close a unit cycle).
+  try { local = address !== '' && ['127.0.0.1', '[::1]'].includes(new URL(address).hostname); } catch { /* not an address: no hint */ }
+  // BeUser alpha.56.1 (Ayşe): a local server that did not answer is not "the network"; the plain steps come first, then the container/VM hint.
+  if (local) return p['cause'] === 'timeout' ? t('models.connect.localSlow', { address }, l) : t('models.connect.localSilent', { address }, l);
+  const cause = address ? t('models.connect.cause.tried', { cause: discoveryCause(p, l), address }, l) : discoveryCause(p, l);
+  return t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause }, l);
+}
+/** BeUser alpha.56.1 (Mert): the refusal names which thing failed (the runtime socket directory, the socket, the ledger lock file) and, for the
+ * directory whose only fault is its mode, the next step (the service start re-creates its own empty directory). Never a path. */
+function runtimeEndpointUnsafe(p: Params, l: Locale): string {
+  const reason = typeof p['reason'] === 'string' && /^[a-z]+(?:-[a-z]+)*$/u.test(p['reason']) ? p['reason'] : null;
+  if (reason === 'parent-mode') return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode', {}, l);
+  if (reason === 'parent-mode-kept') return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentModeKept', {}, l);
+  if (!reason) return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l);
+  const thing = reason.startsWith('parent-') ? t('runtime.socket.thing.directory', {}, l) : reason === 'ledger-lock' ? t('runtime.socket.thing.lock', {}, l) : t('runtime.socket.thing.socket', {}, l);
+  return t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.reason', { ...p, thing }, l);
 }
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
@@ -235,11 +256,12 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
-  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause: discoveryCause(p, l) }, l) }) },
+  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: discoveryUnavailable(p, l) }) },
   MODEL_CONNECT_DISCOVERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_INVALID', p, l) }) },
   MODEL_CONNECT_DISCOVERY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_LIMIT', p, l) }) },
   MODEL_CONNECT_PRICE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_PRICE_REQUIRED', p, l) }) },
   MODEL_CONNECT_NO_AVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NO_AVAILABLE', p, l) }) },
+  MODEL_CONNECT_WORKER_IMAGE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_WORKER_IMAGE_REQUIRED', p, l) }) },
   MODEL_CONNECT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_INVALID', p, l) }) },
   MODEL_CONNECT_NOT_CONNECTABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NOT_CONNECTABLE', p, l) }) },
   MODEL_CONNECT_ENDPOINT_FIXED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_FIXED', p, l) }) },
@@ -404,17 +426,18 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG: { category: 'config', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', p, l) }) },
   DOCTOR_CONFIG_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_CONFIG_INCOMPLETE', p, l) }) },
   DOCTOR_LEDGER_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_LEDGER_UNAVAILABLE', p, l) }) },
+  DOCTOR_SOCKET_HEALABLE: { category: 'config', render: (_p, l) => ({ message: t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE.parentMode', {}, l) }) },
   DOCTOR_SOCKET_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_SOCKET_UNAVAILABLE', p, l) }) },
   DOCTOR_POLICY_UNREADABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_POLICY_UNREADABLE', p, l) }) },
   DOCTOR_BUBBLEWRAP_NOT_STAGED: { category: 'config', render: (p, l) => ({ message: t('error.DOCTOR_BUBBLEWRAP_NOT_STAGED', p, l) }) },
   INSTALLATION_NOT_STARTABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_NOT_STARTABLE', p, l) }) },
   LOCAL_RUNTIME_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_OPTIONS', p, l) }) },
   RUNTIME_SHUTDOWN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SHUTDOWN_UNAVAILABLE', p, l) }) },
-  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
+  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: p['action'] === 'stop' ? t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED.stop', p, l) : t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
   RUNTIME_AUTOSTART_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_AUTOSTART_FAILED', p, l) }) },
   TERMINAL_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_SCOPE_REQUIRED', p, l) }) },
   LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },
-  LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l) }) },
+  LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: runtimeEndpointUnsafe(p, l) }) },
   LOCAL_RUNTIME_ALREADY_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ALREADY_RUNNING', p, l) }) },
   LOCAL_RUNTIME_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_TRANSPORT', p, l) }) },
   RUNTIME_SERVICE_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_TRANSPORT', p, l) }) },
@@ -606,7 +629,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BRAIN_OUTPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTPUT_INVALID', p, l) }) },
   BRAIN_OUTPUT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTPUT_TRUNCATED', p, l) }) },
   BRAIN_CONTEXT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_CONTEXT_TOO_LARGE', p, l) }) },
-  BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_GRAPH_INVALID', p, l) }) },
+  // BeUser D-02: an unregistered task kind names the kinds used and the registered ones, with the person's next step.
+  BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: p['rule'] === 'TASK_KIND_NOT_REGISTERED' && typeof p['kinds'] === 'string' ? t('error.BRAIN_GRAPH_INVALID.kind', p, l) : t('error.BRAIN_GRAPH_INVALID', p, l) }) },
   BRAIN_PROVIDER_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_PROVIDER_REJECTED', p, l) }) },
   BRAIN_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTCOME_UNKNOWN', p, l) }) },
   BRAIN_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_CANCELLED', p, l) }) },

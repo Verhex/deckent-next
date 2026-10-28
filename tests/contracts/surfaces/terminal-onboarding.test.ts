@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
+import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstTaskBody, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
 import { planSetup, SetupStageRegistry, type SetupStage } from '#engine/index.js';
 const observation = { schemaVersion: 2 as const, environment: { platform: 'linux' as const, node: 'supported' as const },
   language: { configured: 'en' as const, requested: null, system: null }, folder: { installation: 'present' as const, homeRoot: false, configuredScope: 's', suggestedScope: null },
@@ -110,10 +110,10 @@ it('U6-S4: image consent immediately follows work choice, offers verified adopti
   expect(onboardingSteps(current).map(row => row.id)).toEqual(['work:kind', 'execution:worker', 'execution:runtime', 'onboarding:first-task']);
   const question = workerImageQuestion({ providers: ['selected-cli'], sources: ['https://mirror.invalid/prefix'], proxy: 'http://proxy.invalid:8080', baseRef: 'base@sha256:pin',
     sizeGigabytes: 1, buildTimeoutMs: 20000, images: [{ imageId: missing, tag: 'worker:unknown', ready: false }, { imageId: id, tag: 'worker:r32-selected', ready: true }] }, 'en', missing);
-  expect(question.initial).toBe(id); expect(question.choices.map(row => row.id)).toEqual([id, missing, 'consent', 'later']);
+  expect(question.initial).toBe(id); expect(question.choices.map(row => row.id)).toEqual([id, 'consent', 'later']); // BeUser M-05: no row Enter cannot act on
   // No ready image: the recommended answer is the background build of the shown sources (still only on Enter).
   expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000 }, 'en').initial).toBe('consent');
-  expect(question.choices[1]).toMatchObject({ disabled: true });
+  expect(question.body.join('\n')).toContain('1 older Deckent worker image(s) on this machine cannot be used here'); expect(question.body.join('\n')).toContain('worker:unknown');
   expect(question.body.join('\n')).toContain('https://mirror.invalid/prefix'); expect(question.body.join('\n')).toContain(missing);
   expect(question.body.join('\n')).toContain('No task starts');
   expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000, previousMs: 3000, referenceMs: 70000 }, 'en').body.join('\n')).toContain('Previous measured preparation');
@@ -145,4 +145,28 @@ it('FIX9: an empty repository explains that there is nothing to commit and Enter
   const result = await firstCommitScreen(port, { completed: 0, total: 3 } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
   expect(result).toBe('later');
   expect(frame).toContain('no files to commit yet'); expect(frame).toContain('Skip for now'); expect(frame).not.toMatch(/0 of 0|of 0 files/u);
+});
+it('BeUser ZEY-02/D-04: the management-rights step follows permission mode, is skippable, comes back in /setup and applies only the previewed digest', async () => {
+  const needed = { ...snapshot, permissions: { state: 'needs-confirmation' as const, reason: '' }, rights: { state: 'needed' as const, digest: 'd'.repeat(64), rules: 9 } };
+  expect(onboardingSteps(needed).slice(0, 3).map(row => row.id)).toEqual(['permissions:start-mode', 'onboarding:budget', 'permissions:owner-rights']);
+  expect(onboardingSteps({ ...needed, rights: { state: 'current', rules: 0 } }).some(row => row.kind === 'rights')).toBe(false);
+  expect(onboardingSteps({ ...needed, deferred: ['permissions:owner-rights'] }).some(row => row.kind === 'rights')).toBe(false);
+  expect(onboardingSteps({ ...needed, deferred: ['permissions:owner-rights'] }, true).some(row => row.kind === 'rights')).toBe(true);
+  const question = guideQuestion({ schemaVersion: 1, steps: [], completed: 0, total: 3, snapshot: needed }, 'rights', 'en');
+  expect(question.body.join('\n')).toContain('pause and resume them in an emergency'); expect(question.body.join('\n')).not.toMatch(/rules|deckent init|owner-baseline/u); expect(question.choices.map(row => row.id)).toEqual(['apply']);
+});
+it('BeUser M-J6: a chosen first task is not offered at every open, is not named as deferred, and /setup still offers it', () => {
+  const done = { ...snapshot, budget: { ...snapshot.budget, needed: false }, deferred: ['onboarding:first-task:done'] };
+  expect(onboardingSteps(done).some(row => row.kind === 'first-task')).toBe(false);
+  expect(onboardingSteps(done, true).some(row => row.kind === 'first-task')).toBe(true);
+  expect(deferredOnboardingNotice(done, 'en')).toBeNull();
+  expect(deferredOnboardingNotice({ ...done, deferred: [...done.deferred, 'onboarding:first-task'] }, 'en')).toBeNull(); // AYSE-R2-04: Esc on Ready! after a first task
+  expect(onboardingSteps({ ...done, deferred: [] }).some(row => row.kind === 'first-task')).toBe(true);
+});
+it('Astra 2761 R1 (K3): the first-task screen reads the host run-here answer; when it is closed it promises no local run', () => {
+  const pool: SetupStage = { id: 'work:pool', namespace: 'work', title: 'setup.work.kindTitle', phase: 'onboarding', state: 'ready' } as SetupStage;
+  const open = { ...snapshot, plan: { ...snapshot.plan, stages: [pool] } };
+  expect(firstTaskBody({ ...open, localRun: true }, 'en').join(' ')).toContain('runs here in the terminal');
+  const closed = firstTaskBody({ ...open, localRun: false }, 'en').join(' ');
+  expect(closed).toContain('closed for this setup'); expect(closed).not.toContain('runs here in the terminal');
 });

@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.56`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.56.1`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 

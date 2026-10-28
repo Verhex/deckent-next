@@ -7,7 +7,7 @@ import { cliMode, cliTableStyle, renderCliTable, resolveCommandScope, scopeListe
 import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 import { secretStoreCommand, storeLabel } from './secret-store.js';
-import { renderSecretInventory, requirePersonTerminal, secretGrantCommand, secretHandoverCommand } from './secret-project.js';
+import { projectKeyUsers, renderSecretInventory, requirePersonTerminal, secretGrantCommand, secretHandoverCommand } from './secret-project.js';
 
 /** The installation's secret store as `doctor` shows it (SECRET-K1, owner S1): the active backend and whether it can be read now. */
 export interface SecretStoreDoctorView {
@@ -186,7 +186,8 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
     : view.removed ? t('cli.secret.done.deletedProject', { name: view.name, project: terminalSafeText(view.project) }, locale) : t('cli.secret.done.absent', { name: view.name }, locale);
   if (action === 'delete') {
     if (interactive) {
-      const users = (await secretUsers(root, options, locale)).get(name!) ?? [];
+      // KER-17: the installation's users (config, backup) and this project's (provider profiles, MCP servers naming it as `$DECK:`).
+      const users = [...(await secretUsers(root, options, locale)).get(name!) ?? [], ...vault === 'project' ? [] : await projectKeyUsers(context, root, resolved.scopeId, name!, options, locale)];
       const answer = await askAdminCard(context, locale, { title: t('cli.secret.card.deleteTitle', { name: name! }, locale),
         body: [users.length ? t('cli.secret.card.deleteUsers', { users: users.join(', ') }, locale) : t('cli.secret.card.deleteUnused', {}, locale)], options: confirmOptions(locale) });
       if (answer !== 'apply') return cancelled();

@@ -69,13 +69,15 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       }
     } finally { reader.close(); }
     return { configBasis, plan: planned, observation: observed.observation, answers: values, deferred: (await store.list(principal, folder)).map(row => row.stageId),
-      modelUsable, folder, folderFacts: { kind, entries: visible }, scopeId,
+      modelUsable, localRun: await terminal.localRunOffer?.(root, scopeId, options).catch(() => false) ?? false, folder, folderFacts: { kind, entries: visible }, scopeId,
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
       hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
-        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending };
+        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending, ...await rights() };
   };
-  return { observe, assertPerson,
+  const baseline = (apply: boolean, expect?: string) => terminal.openOwnerBaselineInstallation!(root, scopeId, { families: ['mcp-delegable'], apply, ...(expect ? { expect } : {}) }); // BeUser ZEY-02/D-04: the existing founder card
+  const rights = async () => { const view = terminal.openOwnerBaselineInstallation ? await baseline(false).catch(() => null) : null; return view ? { rights: { state: view.status === 'preview' ? 'needed' as const : view.status === 'current' ? 'current' as const : 'unavailable' as const, ...(view.expect ? { digest: view.expect } : {}), rules: view.added.length } } : {}; };
+  return { observe, assertPerson, async rights(digest: string) { await assertPerson(); return { status: (await baseline(true, digest)).status }; },
     async previewFirstCommit(message: string, include: readonly string[] = []) {
       await assertPerson(); return previewFirstCommit({ root: directory, env: options.env ?? process.env, message, include });
     },

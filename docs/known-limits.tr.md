@@ -453,6 +453,20 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
 
 ## Kurtarma ve yükseltme
 
+- **alpha.56.1 yükseltmesinden sonra kaydında ana kasa anahtarı (`$DECK:AD`) geçen kişisel bir MCP sunucusu, bu anahtarın her projeye
+  açılmasını ister** (KER-17, 2026-10-28): anahtar artık bir sağlayıcı anahtarıyla aynı proje izniyle kullanılır; izin olmayan projede
+  sunucu başlamaz ve tur hangi anahtar olduğunu söyler. *Yol:* `deckent doctor` her anahtarı komutuyla listeler; her proje için bir kez
+  kendi terminalinizde `deckent secret grant AD --scope <kimlik>` çalıştırın (bir kart; AI oturumları cevaplayamaz).
+- **alpha.56.1'den önce bağlanan yerel bir modelin araç çağrısı bildirimi yoktur; terminal ona dosya araçlarını sunmaz** (AYSE-16,
+  2026-10-28): bağlanma adımı artık anahtarsız yerel sunucuya bir kez araç çağrısını kabul edip etmediğini sorar ve bildirir. *Yol:*
+  sunucuyu `deckent` → /provider içinde (aynı adresle) bir kez yeniden bağlayın; `--enable-auto-tool-choice --tool-call-parser <ayrıştırıcı>`
+  olmadan başlatılan bir vLLM araçsız kalır ve terminal bunu söyler.
+- **İş türü ve işçi havuzu yokken `/do` ve ilk görev arka plan işi olarak değil, terminalde çalışabilir** (owner seçenek A, 2026-10-28):
+  yalnız hiçbir şey kurulmamışken ve her seferinde onayladığınız bir karttan sonra (değişiklikler doğrudan klasöre yazılır: teslim kartı ve
+  geri alma yok; Esc iptal eder). Diğer her ret (Brain kademesi, işçi kanalı, atama, bekletilen havuz, politika) kendi sonraki adımını
+  gösterir ve burada çalışmaz.
+  *Yol:* arka plan işçileri için /setup → İlk iş türü → İşçi imajı → İşçi havuzu. O zamana kadar `pool hold` ve `pool set-capacity`
+  henüz havuz olmadığını söyler.
 - **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan
   bir araç çağrısı bittikten sonra tur iptal edilirse (bağlantı kopması, açık iptal, kapanış) çağrı yine `cancelled` bildirilir;
   iptalle durdurulan bir yazma kümesi kısmen uygulanmış kalabilir. Sonuç metni yazılanları listeler. *Yol:* iptal görünen bir
@@ -517,7 +531,7 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   devam etmez:** yeniden gönderilince park edilir (`APPROVAL_CONFLICT`). *Yol:* yeni bir /do başlatın; görev onayı bu kez görev
   çalışmadan hemen önce bir kez sorulur. Politikasında `task` kuralı olmayan kurulumlar etkilenmez.
 - **Yeniden başlatma parmak izi.** `restart-exempt.json`, her istekte yeniden okunan yeniden başlatma bölümü üyelerini listeler (`admission.registry`); bunları değiştirmek hizmeti asla eski göstermez. Üye ancak başlangıçta yakalanmadığı kanıtlandıktan sonra eklenir.
-- **`runtime restart`, systemd'nin çalıştırdığı hizmeti yalnız systemd bunu doğrularsa reddeder** (Linux): hizmet sürecinin control group'u aday bir `.service` unit'i gösterir; yeniden başlatma, yalnız systemd bu süreci unit'in MainPID'i olarak bildirirse reddedilir ve `systemctl [--user] restart <unit>` komutu söylenir (`systemctl show -p MainPID`, 2 sn sınır; hedef servis sürecinin ortamı hiç okunmaz). Erişilebilir bir systemd bus'ı yoksa ya da yanıt gelmezse denetim kapalıdır ve yeniden başlatma yapılır; ExecStart sarmalayıcısı runtime'ı `exec` etmeyen bir unit algılanmaz. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz. *Yol:* systemd'nin çalıştırdığı hizmeti `systemctl [--user] restart <unit>` ile yeniden başlatın.
+- **`runtime restart`, terminalin `/service-restart` komutu ve `runtime shutdown` (`--force` olmadan), systemd'nin çalıştırdığı hizmeti yalnız systemd bunu doğrularsa reddeder** (Linux): hizmet sürecinin control group'u aday bir `.service` unit'i gösterir; yeniden başlatma, yalnız systemd bu süreci unit'in MainPID'i olarak bildirirse reddedilir ve `systemctl [--user] restart <unit>` komutu söylenir (durdurmada `systemctl [--user] stop <unit>`) (`systemctl show -p MainPID`, 2 sn sınır; hedef servis sürecinin ortamı hiç okunmaz). Kullanıcı unit'i çağıranın `XDG_RUNTIME_DIR` değeriyle, başlatıcı ortamı temizlemişse `/run/user/<uid>` ile sorulur (alpha.56.1). Erişilebilir bir systemd bus'ı yoksa ya da yanıt gelmezse denetim kapalıdır ve yeniden başlatma yapılır; ExecStart sarmalayıcısı runtime'ı `exec` etmeyen bir unit algılanmaz. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz. *Yol:* systemd'nin çalıştırdığı hizmeti `systemctl [--user] restart <unit>` ile yeniden başlatın.
 - **Yerel runtime soketinin eş canlılık tanığı** HUP/ERR/NVAL'i, çağrı süresince yakalanabilir sinyalleri bloklayan sıfır süreli tek bir `ppoll` ile gözler: SIGCHLD gibi ele alınmış bir sinyal artık kopmuş istemci gibi okunmaz. Gerçek bir tur iptalinden önce biten araç çağrısı yine `cancelled` bildirilir; sonuç metni uygulanan yazım kümesini taşır (tamlık bayrağı ya da yeni durum kararı owner'da açık).
 - **Yeni sürüme geçişten önce başlatılan MCP ve terminal süreçleri önceki derlemeyle çalışmayı sürdürür.** Geçiş kurulu derlemeyi
   değiştirir, ama bir istemcinin daha önce başlattığı MCP sunucusu ya da `deckent` terminali, istemci onu yeniden başlatana kadar

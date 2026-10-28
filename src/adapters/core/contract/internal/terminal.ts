@@ -136,7 +136,7 @@ export function readTerminalResponseStyle(config: Record<string, unknown>): Term
 
 /** Which setting chose the terminal's model: the session's pin, the project's `terminal.chat.reference`, the user's `terminal.defaultModel`, or the
  * user layer's own `terminal.chat.reference` (the installation-configured model). */
-export type TerminalModelSource = 'session' | 'project' | 'user-default' | 'user';
+export type TerminalModelSource = 'session' | 'project' | 'user-default' | 'user' | 'connected'; // 'connected': the only model this project declares (BeUser AYSE-13)
 export type TerminalModelChoice = Readonly<{ reference: ModelReference; source: TerminalModelSource }>;
 const authoredReference = (value: unknown): ModelReference | null => { const parsed = modelReferenceSchema.safeParse(value); return parsed.success ? parsed.data : null; };
 const authoredTerminal = (layer: unknown): Record<string, unknown> => isRecord(layer) && isRecord(layer['terminal']) ? layer['terminal'] : {};
@@ -145,12 +145,12 @@ const authoredTerminal = (layer: unknown): Record<string, unknown> => isRecord(l
  * project choice) > the user's `terminal.defaultModel` > the user layer's `terminal.chat.reference`. Pure over the two authored layer documents
  * (never the merged config: a merged value cannot say which layer wrote it). Null: no layer names a model.
  */
-export function resolveTerminalModel(layers: Readonly<{ global: unknown; project: unknown }>, pin?: ModelReference | null): TerminalModelChoice | null {
+export function resolveTerminalModel(layers: Readonly<{ global: unknown; project: unknown }>, pin?: ModelReference | null, skipDefault = false): TerminalModelChoice | null {
   if (pin) return Object.freeze({ reference: pin, source: 'session' });
   const project = authoredTerminal(layers.project), global = authoredTerminal(layers.global);
   const projectChat = authoredReference(isRecord(project['chat']) ? project['chat']['reference'] : undefined);
   if (projectChat) return Object.freeze({ reference: projectChat, source: 'project' });
-  const preferred = authoredReference(global['defaultModel']);
+  const preferred = skipDefault ? null : authoredReference(global['defaultModel']); // skipped where the project does not declare it (BeUser M-08)
   if (preferred) return Object.freeze({ reference: preferred, source: 'user-default' });
   const userChat = authoredReference(isRecord(global['chat']) ? global['chat']['reference'] : undefined);
   return userChat ? Object.freeze({ reference: userChat, source: 'user' }) : null;

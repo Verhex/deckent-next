@@ -324,7 +324,9 @@ person's stored full-auto entry in bindings, but every call re-checks the grant,
 Main vault = the installation store. Project vault = encrypted-file store under `<global>/project-secrets/<sha256(salt, installationId, projectId)>` of the
 project's anchor (a linked worktree's main working tree), bound to the anchor's data root and git common dir. `.deck` (references only) selects `project`
 per name; a main key is used in a project only with a grant decided on `secret`/`set` and sealed as `authority-decision` before `grants.json`. One resolver
-serves every provider read; one inventory serves `secret list [--all]`. The terminal turn checks the provider credential locally before binding;
+serves every provider read and, since the KER-17 amendment (2026-10-28), every personal-file MCP `$DECK:` key (turn start, `mcp` command, trust card): a
+server whose key is not granted here does not start (`secret-refused:NAME`, start notice with `deckent secret grant NAME --scope S`) and a running one is retired
+at the next turn; the inventory, `secret list`, the delete/revoke cards and doctor name the MCP servers using a key. One inventory serves `secret list [--all]`. The terminal turn checks the provider credential locally before binding;
 `SECRET_GRANT_REQUIRED` on a solo attested terminal opens one approval-priority card; yes = `secret grant` (source card); the turn restarts once. A recognised agent-shell
 authority call keeps the edit-authority card in every mode; the text/argv classifier is defense in depth, so `false` never means safe — the boundary is
 semantic policy/approval for the principal plus enforced sandbox/socket custody (host fallback does not isolate; a TTY witness does not prove a person on the same OS account). Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).

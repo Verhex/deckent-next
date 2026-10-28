@@ -1,4 +1,4 @@
-export { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/core/common/index.js';
+export { PACKAGE_NAME, PACKAGE_VERSION, displayAddress } from '#platform/core/common/index.js';
 export { resolveLocale, t, currencyAmountText, clockText } from '#platform/core/i18n/index.js';
 export type { Locale, MessageKey } from '#platform/core/i18n/index.js';
 export { PRODUCT_LAYOUT_REGISTRY, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -28,8 +28,9 @@ export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/
 export { resolveProductPaths, resolveProjectRoot, type ProjectRootPorts, type ProjectRootResolution } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
-export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
+export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, serviceManagerStopCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
 export { readBuildIdentity, isSourceCheckout, type BuildIdentity } from '#platform/core/host/index.js';
+export { privateIpcRoot } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
 export { isLiteralLoopbackHostname } from '#platform/core/validate/index.js';
 // Library-independent schema contract (Standard Schema 1.1.0) for external boundaries: adapter module options today (DEPS-SCHEMA).

@@ -40,11 +40,11 @@ export async function awaitRuntimeServiceStart(deadline: LifecycleDeadline, pid:
   throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } });
 }
 export async function awaitRuntimeServiceRestart(deadline: LifecycleDeadline,
-  ports: RuntimeWaitPorts & { readonly describe: () => Promise<unknown>; readonly start: () => Promise<RuntimeServiceReadiness> }): Promise<RuntimeServiceReadiness> {
+  ports: RuntimeWaitPorts & { readonly describe: () => Promise<unknown>; readonly start: () => Promise<RuntimeServiceReadiness>; readonly startable?: RuntimeStartable }): Promise<RuntimeServiceReadiness> {
   while (!deadline.expired()) {
     try { await ports.describe(); }
     catch (error) {
-      if (error instanceof DeckentError && error.code === 'LOCAL_RUNTIME_UNAVAILABLE') return ports.start();
+      if (error instanceof DeckentError && error.code === 'LOCAL_RUNTIME_UNAVAILABLE' || await ports.startable?.(error)) return ports.start();
       // The stopping service may close connections while it drains; keep waiting for absence until the deadline.
       if (!(error instanceof DeckentError && (error.code === 'LOCAL_RUNTIME_TRANSPORT' || error.code === 'RUNTIME_SERVICE_TRANSPORT'))) throw error;
     }
@@ -55,13 +55,18 @@ export async function awaitRuntimeServiceRestart(deadline: LifecycleDeadline,
 
 /** Only positive evidence of absence starts a service: no endpoint (or its never-created state directory) or a refused
  * connection (nothing listens). A peer that accepts but fails or stays silent may be a live incompatible or unhealthy
- * service, so it is reported, never replaced; ownership/unsafe failures are never auto-repaired (Astra 2054 R2). */
+ * service, so it is reported, never replaced; ownership/unsafe failures are never auto-repaired by a reader (Astra 2054 R2).
+ * Single exception (RESTART-HUNT, LAW-AUDIT-2 K1–K5, Jev ed1f54d8): `startable` names this installation's own empty socket directory whose
+ * only fault is the mode; the terminal autostart and `runtime restart` launch the ordinary service start for it once (the start re-creates it,
+ * fix A). The describe itself still refuses it; the predicate is read-only and never yields an endpoint; any other unsafe state throws. */
+export type RuntimeStartable = (error: unknown) => Promise<boolean>;
 const ABSENT = new Set(['LOCAL_RUNTIME_UNAVAILABLE']);
-export async function describeRuntimeServiceWithin(describe: (signal: AbortSignal) => Promise<RuntimeServiceDescriptor>, deadline: LifecycleDeadline) {
+export async function describeRuntimeServiceWithin(describe: (signal: AbortSignal) => Promise<RuntimeServiceDescriptor>, deadline: LifecycleDeadline,
+  startable?: RuntimeStartable) {
   try { return { descriptor: await describe(runtimeDeadlineSignal(deadline)), code: null }; }
   catch (error) {
     const code = error instanceof DeckentError ? error.code : null;
-    if (code !== null && ABSENT.has(code)) return { descriptor: null, code };
+    if (code !== null && (ABSENT.has(code) || await startable?.(error))) return { descriptor: null, code };
     throw error;
   }
 }

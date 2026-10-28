@@ -10,7 +10,7 @@ export type TerminalChatPlanView = Readonly<{
   status: 'ready' | 'not-configured' | 'model-not-declared';
   reference: ModelReference | null;
   /** T4-B D1: which setting chose the model (`project`, `user-default`, `user`); absent from an older host. */
-  source?: 'session' | 'project' | 'user-default' | 'user' | null;
+  source?: 'session' | 'project' | 'user-default' | 'user' | 'connected' | null; skippedDefault?: ModelReference; // BeUser M-08: a default not declared here
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
@@ -38,7 +38,6 @@ export type TerminalChatStreamHandler = (
 ) => AsyncIterable<TurnDelta>;
 
 export type TerminalChatPlanHandler = (root: string, options: ConfigLoadOptions) => Promise<TerminalChatPlanView>;
-
 /** Composer `@file` candidates (runtime v15 `findWorkspaceFiles`): paths the service's scoped read port lists for the query. */
 export type TerminalMentionFindHandler = (root: string, input: Readonly<{ scopeId: string; query: string }>, options: ConfigLoadOptions,
   signal?: AbortSignal) => Promise<readonly string[]>;

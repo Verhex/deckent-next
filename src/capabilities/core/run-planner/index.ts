@@ -26,7 +26,11 @@ export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).d
    * wait by definition: both times stay within the registry ceiling (which also keeps one timer delay inside its limit). */
   quotaWait: z.object({ maxWaitMs: z.number().int().nonnegative().max(templates.quotaWaitCeilingMs), marginMs: z.number().int().nonnegative().max(templates.quotaWaitCeilingMs),
     maxAttempts: z.number().int().positive().safe() }).strict().default(templates.quotaWait),
+  /** D-02 (lead GO 2026-10-28, Jev c97aa511): corrective re-plans after a correctable validation refusal (0 disables; registry ceiling). */
+  correctionRetries: z.number().int().min(0).max(templates.correctionRetriesCeiling).default(templates.correctionRetries),
 }).strict();
+/** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
+export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
 export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
 export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
 export { boundBrainContext } from './internal/context.js';
