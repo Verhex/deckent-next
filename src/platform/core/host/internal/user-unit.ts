@@ -7,6 +7,8 @@ import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { openPinnedParent, readPinnedFile, writePinnedFile } from '#platform/core/utils/index.js';
 import { readProcessFile, type ProcessFileReader } from './service-manager.js';
 import AUTOMATION from './automation.json' with { type: 'json' };
+/** Versioned fragment trust invariant: group/other write bits must stay clear. */
+const UNIT_FRAGMENT_UNTRUSTED_WRITE_MASK: number = 0o022;
 /** Absolute executable, no shell, bounded output and duration; manager queries share the same user bus. */
 export type UserUnitExec = (args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 /** GetUnitFileLinks(unit, runtime=false): systemd's own disable dry-run, never a caller-env scan. */
@@ -31,7 +33,7 @@ async function fragmentDigest(path: string) {
     const file = await open(`/proc/self/fd/${parent.fd}/${basename(path)}`, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const before = await file.stat();
-      if (!before.isFile() || before.size > HOST_LIMITS_REGISTRY.processFileReadBytes || before.mode & 0o022) return null;
+      if (!before.isFile() || before.size > HOST_LIMITS_REGISTRY.processFileReadBytes || before.mode & UNIT_FRAGMENT_UNTRUSTED_WRITE_MASK) return null;
       const bytes = Buffer.alloc(before.size + 1), read = await file.read(bytes, 0, bytes.length, 0), after = await file.stat(), named = await lstat(path);
       if (read.bytesRead !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs
         || !named.isFile() || named.dev !== before.dev || named.ino !== before.ino) return null;
