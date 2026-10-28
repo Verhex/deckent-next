@@ -6,7 +6,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
 /** BeUser D-03: a candidate `execution.workTargets` gets the work path's own typed refusal before `/config` writes it. */
 export async function checkConfiguredWorkTarget(root: string, workTargets: unknown, options: ConfigLoadOptions): Promise<void> { const config = await loadConfig(root, { ...options, heal: false });
-  if (config.execution) await resolveGitWorkTarget(resolve(root), { ...config.execution, workTargets } as never, config.productLayout).catch(error => { throw queryFailure(error); }); }
+  if (!config.execution) throw ErrorRegistry.createError('WORK_TARGET_EXECUTION_MISSING');
+  await resolveGitWorkTarget(resolve(root), { ...config.execution, workTargets } as never, config.productLayout).catch(error => { throw queryFailure(error); }); }
 /** Local SDK/CLI producer; paths, principal, session and Git options never come from the wire. */
 export async function deliverWorkspaceIntegrationWithConfirmation(root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions, confirmation?: EffectConfirmation) {
   try {

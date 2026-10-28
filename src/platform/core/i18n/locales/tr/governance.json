@@ -800,6 +800,7 @@
   "error.WORK_TARGET_UNSAFE": "Yapılandırılmış çalışma hedefi, servis kullanıcısına ait ve grup ya da diğerleri tarafından yazılamayan bir dizin olmalı.",
   "error.WORK_TARGET_IN_DATA_ROOT": "Yapılandırılmış çalışma hedefi Deckent'in ürün verisinin içinde. Veri kökü ve yapılandırma dizini dışında bir depo seçin.",
   "error.WORK_TARGET_IS_PROJECT": "Yapılandırılmış çalışma hedefi proje kökünün kendisi. Ayrı bir klon gösterin ya da proje üzerinde çalışmak için execution.workTargets değerini kaldırın.",
+  "error.WORK_TARGET_EXECUTION_MISSING": "İş hedefi kodlama işinin çalıştığı yerdir ve bu projede kodlama işi henüz kurulmadı (yürütme ayarı yok). Hiçbir şey yazılmadı. Önce kurun: deckent coding template (terminalde: /setup, ilk iş türü); sonra hedefi ekleyin.",
   "error.WORK_TARGET_NOT_WORKTREE": "Yapılandırılmış çalışma hedefi, taban dalı olan çıplak olmayan bir Git deposunun en üst dizini olmalı.",
   "error.WORK_TARGET_SHARES_PROJECT_REPOSITORY": "Yapılandırılmış çalışma hedefi Git deposunu çalışan projeyle paylaşıyor (onun worktree'lerinden biri); Deckent çalışan kaynağını asla hedeflemez. Bağımsız bir klon kullanın.",
   "error.WORK_TARGET_ALTERNATES": "Yapılandırılmış çalışma hedefi nesnelerini başka bir depodan ödünç alıyor (objects/info/alternates). --shared veya --reference kullanılmadan alınmış bağımsız bir klon kullanın.",

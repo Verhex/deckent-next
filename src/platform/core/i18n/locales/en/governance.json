@@ -800,6 +800,7 @@
   "error.WORK_TARGET_UNSAFE": "The configured work target must be a directory owned by the service user and not writable by group or others.",
   "error.WORK_TARGET_IN_DATA_ROOT": "The configured work target lies inside Deckent's product data. Choose a repository outside the data root and the configuration directory.",
   "error.WORK_TARGET_IS_PROJECT": "The configured work target is the project root itself. Name a separate clone, or remove execution.workTargets to work on the project.",
+  "error.WORK_TARGET_EXECUTION_MISSING": "A work target is where coding work runs, and coding work is not set up in this project yet (no execution settings). Nothing was written. Set it up first: deckent coding template (in the terminal: /setup, the first work kind); then add the target.",
   "error.WORK_TARGET_NOT_WORKTREE": "The configured work target must be the top directory of a non-bare Git repository with a base branch.",
   "error.WORK_TARGET_SHARES_PROJECT_REPOSITORY": "The configured work target shares its Git repository with the running project (it is one of its worktrees); Deckent never targets its running source. Use an independent clone.",
   "error.WORK_TARGET_ALTERNATES": "The configured work target borrows objects from another repository (objects/info/alternates). Use an independent clone made without --shared or --reference.",

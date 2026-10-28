@@ -543,6 +543,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_TARGET_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_UNSAFE', p, l) }) },
   WORK_TARGET_IN_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IN_DATA_ROOT', p, l) }) },
   WORK_TARGET_IS_PROJECT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IS_PROJECT', p, l) }) },
+  // BeUser D-03: a work target on an installation without coding execution would be written beside no execution settings; set coding up first.
+  WORK_TARGET_EXECUTION_MISSING: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_EXECUTION_MISSING', p, l) }) },
   WORK_TARGET_NOT_WORKTREE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_NOT_WORKTREE', p, l) }) },
   WORK_TARGET_SHARES_PROJECT_REPOSITORY: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_SHARES_PROJECT_REPOSITORY', p, l) }) },
   WORK_TARGET_ALTERNATES: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_ALTERNATES', p, l) }) },
