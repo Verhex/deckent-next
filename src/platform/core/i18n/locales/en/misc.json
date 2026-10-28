@@ -688,7 +688,7 @@
   "mcp.tool.inspectRunProposal": "Read the authorized durable proposal receipt: recorded, pending, admitted, rejected or parked. This observation grants no execution or approval authority.",
   "error.BRAIN_INPUT_INVALID": "The planning request is invalid.",
   "error.BRAIN_TEMPLATE_UNAVAILABLE": "The selected versioned planner template is unavailable.",
-  "error.BRAIN_OUTPUT_INVALID": "The model plan failed validation at stage {stage}. No Run was created.",
+  "error.BRAIN_OUTPUT_INVALID": "The model's plan failed validation at stage {stage}. No Run was created. Next: send the request again in shorter, plainer words, or choose a stronger Brain model in /model.",
   "error.BRAIN_OUTPUT_TRUNCATED": "Planning used its completion budget ({maxCompletionTokens} tokens) without an answer. Increase brain_planner.maxCompletionTokens within the model profile and context limits, or select brain_planner.reasoning=off if the model supports it. Submit a new request. No Run was created.",
   "error.BRAIN_OUTCOME_UNKNOWN": "The planning invocation has no confirmed response. Inspect its receipt before continuing; no automatic retry.",
   "error.BRAIN_CANCELLED": "Planning was cancelled. No Run was admitted. Provider effects remain subject to invocation settlement.",

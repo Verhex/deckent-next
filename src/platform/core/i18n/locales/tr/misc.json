@@ -688,7 +688,7 @@
   "mcp.tool.inspectRunProposal": "Yetkili kalıcı öneri makbuzunu okur: kaydedildi, bekliyor, kabul edildi, ret veya park. Gözlem yürütme veya onay yetkisi vermez.",
   "error.BRAIN_INPUT_INVALID": "Planlama isteği geçersiz.",
   "error.BRAIN_TEMPLATE_UNAVAILABLE": "Seçilen sürümlü planlama şablonu yok.",
-  "error.BRAIN_OUTPUT_INVALID": "Model planı {stage} aşamasında doğrulanamadı. İş oluşturulmadı.",
+  "error.BRAIN_OUTPUT_INVALID": "Model planı {stage} aşamasında doğrulanamadı. İş oluşturulmadı. Sonraki adım: isteği daha kısa ve sade sözlerle yeniden gönderin ya da /model içinde daha güçlü bir Brain modeli seçin.",
   "error.BRAIN_OUTPUT_TRUNCATED": "Planlama, yanıt üretmeden tamamlama bütçesini ({maxCompletionTokens} token) tüketti. Model profili ve bağlam sınırları içinde brain_planner.maxCompletionTokens değerini artırın veya model destekliyorsa brain_planner.reasoning=off seçin. Yeni bir istek gönderin. İş oluşturulmadı.",
   "error.BRAIN_OUTCOME_UNKNOWN": "Planlama çağrısının doğrulanmış yanıtı yok. Devam etmeden makbuzunu inceleyin; otomatik tekrar yapılmaz.",
   "error.BRAIN_CANCELLED": "Planlama iptal edildi. Hiçbir iş başlatılmadı. Sağlayıcı etkileri çağrı uzlaştırmasına tabidir.",
