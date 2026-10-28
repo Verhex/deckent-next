@@ -2083,6 +2083,7 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
+        "src/platform/core/host",
         "src/domain/core/primitives",
         "src/domain/core/worker-event",
         "src/domain/core/model-invocation",
@@ -2624,6 +2625,7 @@
     },
     "src/adapters/core/shell-sandbox-bwrap": {
       "dependencies": [
+        "src/platform/core/host",
         "src/adapters/core/host-shell",
         "src/adapters/core/workspace-read",
         "src/domain/core/agent-tool",

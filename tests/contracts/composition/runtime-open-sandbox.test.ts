@@ -5,6 +5,7 @@ import { createServer, type Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
+import { openNativeConnection, openNativeEgressGateway } from '../../../dist/adapters/core/native-connection/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
 import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
@@ -54,6 +55,45 @@ async function openRuntime(shell: Record<string, unknown>, sandboxes?: ShellSand
   git(f.project, 'init', '-q'); git(f.project, 'add', '-A'); git(f.project, 'commit', '-qm', 'base');
   return { ...f, home };
 }
+
+it.skipIf(!bwrapReady)('RC-S1: an approved open shell cannot see/connect to long-path gateways before or after spawn', async () => {
+  const f = await openRuntime({ schemaVersion: 1, realm: 'require-sandbox' });
+  await f.writeAuthority([rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', false),
+    rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS], 'full-auto', 'ipc-card');
+  const directory = join(f.data, 'state/workspaces', 'a'.repeat(80)); await mkdir(directory, { recursive: true, mode: 0o700 });
+  const connections: Awaited<ReturnType<typeof openNativeConnection>>[] = [];
+  const open = async () => { const value = await openNativeConnection({ directory, binding: { schemaVersion: 1, provider: 'codex' },
+    credential: { tokens: { access_token: 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic', id_token: 'fixture' } }, deadlineMs: 30_000 }); connections.push(value); return value; };
+  const before = await open();
+  const probe = `import json,os,socket
+for row in json.load(open('src/ipc-paths.json')):
+ assert not os.path.exists(row['socketPath'])
+ if 'capabilityPath' in row: assert not os.path.exists(row['capabilityPath'])
+ sock=socket.socket(socket.AF_UNIX); sock.settimeout(1)
+ try: sock.connect(row['socketPath'])
+ except OSError: pass
+ else: raise AssertionError('credential socket reachable')
+ finally: sock.close()
+print('IPC_ISOLATED')`;
+  const command = `touch src/ipc-ready; while ! test -f src/ipc-go; do sleep 0.02; done; python3 -c '${probe.replaceAll("'", "'\"'\"'")}'`;
+  let egress: Awaited<ReturnType<typeof openNativeEgressGateway>> | undefined;
+  const pending = f.call('run_shell', { command }, 'allow', fa);
+  try {
+    const until = Date.now() + 10_000;
+    while (!await exists(join(f.project, 'src/ipc-ready'))) { if (Date.now() > until) throw new Error('sandbox did not start'); await new Promise(resolve => setTimeout(resolve, 20)); }
+    const after = await open(); egress = await openNativeEgressGateway({ provider: 'codex', directory });
+    for (const connection of connections) expect(Buffer.byteLength(connection.descriptor.socketPath)).toBeLessThanOrEqual(103);
+    await writeFile(join(f.project, 'src/ipc-paths.json'), JSON.stringify([before.descriptor, after.descriptor, { socketPath: egress.socketPath }]));
+    await writeFile(join(f.project, 'src/ipc-go'), 'go');
+    const result = await pending;
+    expect(result, f.evidence(result)).toMatchObject({ card: true, status: 'ok' }); expect(result.text).toContain('IPC_ISOLATED');
+    for (const connection of connections) expect(connection.statistics().bootstrapReads).toBe(0);
+  } finally {
+    await writeFile(join(f.project, 'src/ipc-go'), 'stop'); await pending.catch(() => undefined);
+    await egress?.close(); await Promise.all(connections.map(connection => connection.close()));
+  }
+}, 120_000);
+
 
 describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access view of a bubblewrap realm', () => {
   it.skipIf(!bwrapReady)('full access reaches the network and HOME, writes the project and .git; the hard floor is structural', async () => {

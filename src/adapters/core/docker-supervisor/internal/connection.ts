@@ -8,6 +8,7 @@ import { identitySchema } from '#domain/index.js';
 const path = z.string().min(1).refine(value => isAbsolute(value) && !value.includes(String.fromCharCode(0)) && !/[,\r\n]/u.test(value));
 /** Ephemeral capability references only. No credential bytes in custody or task profiles. */
 export const dockerConnectionSchema = z.object({ schemaVersion: z.literal(1), socketPath: path, bootstrapPath: path,
+  capabilityPath: path.optional(), // absent only in historical custody; a fresh launch refuses it below
   bootstrapSha256: z.string().regex(/^[a-f0-9]{64}$/),
   /** alpha.56 D2: the catalog provider whose model hosts the gateway allows (absent only in records written before it; a new dispatch needs it). */
   provider: identitySchema.optional() }).strict().readonly();
@@ -15,12 +16,16 @@ export const dockerConnectionSchema = z.object({ schemaVersion: z.literal(1), so
 export async function dockerConnectionMounts(input: z.infer<typeof dockerConnectionSchema>, uid: number) {
   try {
     const connection = dockerConnectionSchema.parse(input);
+    if (!connection.capabilityPath || dirname(connection.capabilityPath) !== dirname(connection.socketPath)) throw new Error();
+    const key = await lstat(connection.capabilityPath);
+    if (!key.isFile() || key.uid !== uid || (key.mode & 0o077) || key.size !== 64 || await realpath(connection.capabilityPath) !== connection.capabilityPath) throw new Error();
     const [socket, parent, bootstrap] = await Promise.all([lstat(connection.socketPath), lstat(dirname(connection.socketPath)), lstat(connection.bootstrapPath)]);
     if (!socket.isSocket() || socket.uid !== uid || (socket.mode & 0o077) || !parent.isDirectory()
       || parent.uid !== uid || (parent.mode & 0o077) || !bootstrap.isFile() || (bootstrap.mode & 0o022)
       || await realpath(connection.socketPath) !== connection.socketPath || await realpath(connection.bootstrapPath) !== connection.bootstrapPath
       || createHash('sha256').update(await readFile(connection.bootstrapPath)).digest('hex') !== connection.bootstrapSha256) throw new Error();
     return ['--mount', `type=bind,src=${connection.socketPath},dst=/run/deckent-connection.sock,readonly`,
+      '--mount', `type=bind,src=${connection.capabilityPath},dst=/run/deckent-bootstrap.key,readonly`,
       '--mount', `type=bind,src=${connection.bootstrapPath},dst=/run/deckent-bootstrap.mjs,readonly`];
   } catch { throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID'); }
 }

@@ -8,13 +8,12 @@ import catalog from './providers.json' with { type: 'json' };
 import { NativeConnectionError, nativeProviderSpec, type NativeSubscription } from './credential.js';
 import { readNativeClientHello } from './tls-hello.js';
 import { HEADLESS_EGRESS_HOST, type HeadlessEgress, type HeadlessEgressReason } from '#domain/index.js';
-
+import { privateIpcRoot } from '#platform/index.js';
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
   ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16],
   ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]] as const) denied.addSubnet(address, prefix);
 // IPv6 (FETCH S6): only global unicast 2000::/3, without the special-purpose blocks inside it (IETF protocol assignments incl.
-// Teredo, documentation, 6to4). Mapped/compatible IPv4, NAT64, ULA, link-local, multicast and loopback lie outside 2000::/3.
 const globalV6 = new BlockList(), deniedV6 = new BlockList();
 globalV6.addSubnet('2000::', 3, 'ipv6');
 for (const [address, prefix] of [['2001::', 23], ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20]] as const) deniedV6.addSubnet(address, prefix, 'ipv6');
@@ -23,7 +22,6 @@ export function isPublicNativeAddress(address: string) {
   const routable = isIPv4(address) ? !denied.check(address) : isIPv6(address) && globalV6.check(address, 'ipv6') && !deniedV6.check(address, 'ipv6');
   return routable && !Object.values(networkInterfaces()).flat().some(row => row?.address === address);
 }
-
 /** What one CONNECT tunnel shares with the gateway that owns it: the destination allowlist, its lifetime, its sockets and its traffic budget. */
 export interface NativeTunnelContext {
   readonly destinations: readonly string[];
@@ -55,7 +53,6 @@ export function tunnelNativeConnect(request: IncomingMessage, client: Socket, he
     client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
     reason = 'client-hello'; const hello = await readNativeClientHello(client, head, host, limits.headerBytes);
     reason = 'gateway-closed'; if (context.closed() || client.destroyed) throw new Error();
-    // Use the checked numeric address directly. DNS cannot change between validation and connect.
     reason = 'upstream'; const upstream = connect({ host: addresses[0]!.address, port: 443 }); context.sockets.add(upstream);
     const close = () => { upstream.destroy(); client.destroy(); };
     upstream.on('error', () => { reason = 'upstream'; reject(); close(); }); client.on('error', close);
@@ -70,7 +67,6 @@ export function tunnelNativeConnect(request: IncomingMessage, client: Socket, he
     });
   })().catch(() => { reject(); client.destroy(); });
 }
-
 /** f5: the gateway's refusals by host name for doctor and the invocation record: a CONNECT target's host part when it is a valid lower-case DNS name,
  * up to `refusedHostsMax` distinct names (`providers.json`); anything else (no host, a bracketed or malformed one, past the bound) counts as `other`. */
 function refusedHosts(max: number) {
@@ -82,9 +78,9 @@ function refusedHosts(max: number) {
     } else { other++; otherReasons[reason] = (otherReasons[reason] ?? 0) + 1; }
   }, view: () => Object.freeze({ hosts: Object.freeze({ ...hosts }), other, reasons: Object.fromEntries(Object.entries(reasons).map(([host, row]) => [host, { ...row }])), otherReasons: { ...otherReasons } }) };
 }
-/** A private 0700 directory for one Unix socket `file` under `parent`, or under /tmp (`dk-<prefix><uid>-XXXXXX`, as the runtime socket) when the path would pass sun_path (103 bytes; BeUser M-01 egress, D-05 worker gateway). */
+/** Private per-socket directory; long paths use the short root every open sandbox hides, even before the socket exists. */
 export const privateSocketDirectory = async (parent: string, prefix: string, file: string) => { const directory = await mkdtemp(Buffer.byteLength(join(parent, `${prefix}XXXXXX`, file)) > 103
-  ? join('/tmp', `dk-${prefix}${process.getuid?.() ?? 0}-`) : join(parent, prefix)); await chmod(directory, 0o700); return directory; };
+  ? join(await privateIpcRoot(), prefix) : join(parent, prefix)); await chmod(directory, 0o700); return directory; };
 /** The gateway limits a connection's server applies (`providers.json`), shared with the in-realm relay that feeds it. */
 export const nativeEgressLimits = () => Object.freeze({ connections: catalog.limits.connections, idleMs: catalog.limits.idleMs, headerBytes: catalog.limits.headerBytes,
   refusedHostsMax: catalog.limits.refusedHostsMax });
@@ -117,7 +113,6 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });
   };
-  // A Unix socket path longer than the kernel's sun_path bound cannot be bound: refused like any other listen failure.
   if (Buffer.byteLength(socketPath) > 103) { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
   try {
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });

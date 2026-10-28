@@ -70,9 +70,10 @@ if (${JSON.stringify(mode === 'no-handoff' || mode === 'codex-handoff')}) consol
       });
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); }); await chmod(socketPath, 0o600);
       cleanup.push(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+      const capabilityPath = join(root, 'bootstrap.key'); await writeFile(capabilityPath, 'b'.repeat(64), { mode: 0o600 });
       const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
         logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1, tmpBytes: 67108864, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536,
-        connection: { schemaVersion: 1, socketPath, bootstrapPath, bootstrapSha256: hash(bootstrap) } });
+        connection: { schemaVersion: 1, socketPath, capabilityPath, bootstrapPath, bootstrapSha256: hash(bootstrap) } });
       const sandbox: SandboxRequest = { protocolVersion: 1, identity: { scopeId: 'test', runId: 'run', taskId: 'dependent', attemptId: randomUUID(), generation: 1, layoutRevision: 'layout' }, workspace, argv };
       cleanup.push(async () => { await supervisor.cancel(sandbox); await supervisor.release(sandbox); });
       const result = await supervisor.execute(sandbox);

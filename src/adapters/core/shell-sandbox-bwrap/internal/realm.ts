@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, sandboxHardFloored, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
-import { DECKENT_DIR, resolveLocale, t } from '#platform/index.js';
+import { DECKENT_DIR, privateIpcRoot, resolveLocale, t } from '#platform/index.js';
 import { BUBBLEWRAP_HOME_WALK_MAX_ENTRIES, HOME_CREDENTIAL_REFUSAL, maskHomeCredentials } from './home-credentials.js';
 export { BUBBLEWRAP_HOME_WALK_MAX_DEPTH, BUBBLEWRAP_HOME_WALK_MAX_ENTRIES } from './home-credentials.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
@@ -122,6 +122,7 @@ async function sealedRoots(project: string, roots: readonly string[], home: stri
 async function maskHostSockets(environment: Readonly<Record<string, string | undefined>>, project: string,
   directories: string[], files: string[]): Promise<string | null> {
   const runtime = environment['XDG_RUNTIME_DIR'] ?? process.env['XDG_RUNTIME_DIR'];
+  try { directories.push(await privateIpcRoot()); } catch { return 'the private IPC root cannot be hidden'; }
   const dirs = ['/run', '/var/run', ...(runtime && isAbsolute(runtime) ? [runtime] : [])];
   for (const path of dirs) {
     const real = await realpath(path).catch(() => null);

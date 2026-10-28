@@ -24,9 +24,9 @@ async function gateway(root: string, preflight?: Preflight, promptDelivery?: Del
     ...(promptDelivery ? { promptDelivery } : {}) }, directory: root, credential: credential(), deadlineMs: 20000 });
   closes.push(connection.close); return connection;
 }
-function bootstrap(socketPath: string) {
+function bootstrap(socketPath: string, capability?: string) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const request = get({ socketPath, path: '/bootstrap' }, response => { let body = ''; response.on('data', p => body += p); response.on('end', () => resolve({ status: response.statusCode!, body })); });
+    const request = get({ socketPath, path: '/bootstrap', headers: capability ? { authorization: capability } : {} }, response => { let body = ''; response.on('data', p => body += p); response.on('end', () => resolve({ status: response.statusCode!, body })); });
     request.on('error', reject);
   });
 }
@@ -48,7 +48,10 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native credentia
   await expect(readLocalNativeCredential('codex', { HOME: root, USERPROFILE: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — delivers auth once over the private socket and closes capability on revocation', async () => {
-  const connection = await gateway(await fixture()); const first = await bootstrap(connection.descriptor.socketPath);
+  const connection = await gateway(await fixture());
+  expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
+  expect(connection.statistics().bootstrapReads).toBe(0);
+  const first = await bootstrap(connection.descriptor.socketPath, await readFile(connection.descriptor.capabilityPath, 'utf8'));
   expect(first.status).toBe(200); expect(first.body).not.toContain('never-forward');
   expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
   expect(JSON.stringify(connection.descriptor)).not.toContain('synthetic');
@@ -59,8 +62,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native gateway o
 it.skipIf(process.platform === 'win32')('NEGATIVE: a long workspace directory still opens a private worker gateway socket and removes it on close', async () => {
   const deep = join(await fixture(), 'a'.repeat(60), 'b'.repeat(40)); await mkdir(deep, { recursive: true, mode: 0o700 });
   const connection = await gateway(deep), socketPath = connection.descriptor.socketPath;
-  expect(Buffer.byteLength(socketPath)).toBeLessThanOrEqual(103); expect(socketPath.startsWith('/tmp/dk-connection-')).toBe(true);
-  expect((await stat(dirname(socketPath))).mode & 0o777).toBe(0o700); expect((await bootstrap(socketPath)).status).toBe(200);
+  expect(Buffer.byteLength(socketPath)).toBeLessThanOrEqual(103); expect(socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
+  expect((await stat(dirname(socketPath))).mode & 0o777).toBe(0o700); expect((await bootstrap(socketPath, await readFile(connection.descriptor.capabilityPath, 'utf8'))).status).toBe(200);
   await connection.close(); await expect(stat(dirname(socketPath))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — rejects foreign destinations, arbitrary ports and private or non-IPv4 addresses', async () => {
@@ -123,7 +126,7 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     const cliVersion = execFileSync('/usr/bin/docker', ['run', '--rm', '--network', 'none', '--entrypoint', 'node', imageId!, '--version'], { encoding: 'utf8', timeout: 10000 }).trim();
     const preflight = { schemaVersion: 1 as const, cliVersion, discovery: 'repository' as const, helpArgs: ['--help'], requiredFlags: ['--help'] };
     const f = await worker(argv, 20000, preflight, delivery, true);
-    expect(f.connection.descriptor.socketPath.startsWith('/tmp/dk-connection-')).toBe(true);
+    expect(f.connection.descriptor.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
     const result = await f.supervisor.execute(f.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
     expect(await readFile(join(f.request.workspace, 'received'), 'utf8')).toBe('private-core-görev-🧩|private-task');

@@ -41,7 +41,7 @@ it.skipIf(process.platform === 'win32')('NEGATIVE: a long state directory still 
   const deep = join(root, 'a'.repeat(60), 'b'.repeat(40)); await mkdir(deep, { recursive: true });
   const gateway = await openNativeEgressGateway({ provider: 'claude', directory: deep });
   try {
-    expect(Buffer.byteLength(gateway.socketPath)).toBeLessThanOrEqual(103); expect(gateway.socketPath.startsWith('/tmp/dk-egress-')).toBe(true);
+    expect(Buffer.byteLength(gateway.socketPath)).toBeLessThanOrEqual(103); expect(gateway.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/egress-`)).toBe(true);
     expect((await stat(dirname(gateway.socketPath))).mode & 0o777).toBe(0o700);
     await send(gateway.socketPath, 'GET / HTTP/1.1\r\nHost: x\r\n\r\n'); expect(gateway.egress().refused).toBe(1);
   } finally { await gateway.close(); }
