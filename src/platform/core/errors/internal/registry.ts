@@ -687,7 +687,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SUPERVISOR_CONTROL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_CONTROL_FAILED', p, l) }) },
   SUPERVISOR_NOT_TERMINAL: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_NOT_TERMINAL', p, l) }) },
   SUPERVISOR_RELEASE_UNCONFIRMED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_RELEASE_UNCONFIRMED', p, l) }) },
-  QUERY_UNEXPECTED_FAILURE: { category: 'error', render: (p, l) => ({ message: t('error.QUERY_UNEXPECTED_FAILURE', p, l) }) },
+  QUERY_UNEXPECTED_FAILURE: { category: 'error', render: (p, l) => ({ message: p['record'] === undefined ? t('error.QUERY_UNEXPECTED_FAILURE', p, l) : t('error.QUERY_UNEXPECTED_FAILURE.recorded', p, l) }) },
   RUN_PROGRESSION_PARKED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROGRESSION_PARKED', p, l) }) },
   // Crash-loop breaker: params task, attempt, phase (last preparation phase entered, or 'unknown'), aborts, bound. Without params (the parked
   // Run's recorded failure code seen later) the summary sentence stands.

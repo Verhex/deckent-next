@@ -364,6 +364,7 @@
   "error.SUPERVISOR_NOT_TERMINAL": "Supervisor terminal sonuç kanıtına sahip değil; yürütme sorumluluğu korunuyor.",
   "error.SUPERVISOR_RELEASE_UNCONFIRMED": "Supervisor bırakma işlemi doğrulanmadı; uzlaştırma gerekiyor.",
   "error.QUERY_UNEXPECTED_FAILURE": "Beklenmeyen işlem hatası ({errorClass}); tanı: {diagnosticId}",
+  "error.QUERY_UNEXPECTED_FAILURE.recorded": "Beklenmeyen işlem hatası ({errorClass}); tanı: {diagnosticId}. Destek için ayrıntılar (sırlar çıkarıldı): {record}",
   "error.RUN_PROGRESSION_PARKED": "İş ilerlemesi yapılandırılmış hata sınırında park edildi. Hata kodunu inceleyin, nedeni düzeltin ve süre dolmadan açıkça devam ettirin. Canlı yürütme sorumluluğu korunuyor.",
   "error.DISPATCH_PREPARATION_ABORTED": "Deckent {task} görevini yeniden başlatmadı: {attempt} denemesinin gönderim hazırlığı {aborts} kez olağan dışı sona erdi (sınır {bound}; son aşama: {phase}). Çöken bir servis aynı hazırlığı döngüde yeniden başlatmasın diye iş park edildi; işçi başlatılmadı.",
   "error.DISPATCH_PREPARATION_ABORTED.summary": "Deckent bu işi park etti: bir işçinin gönderim hazırlığı olağan dışı sona erdi (servis süreci öldü) ve runRuntime.maxPreparationAborts sınırına ulaştı. İşçi başlatılmadı.",

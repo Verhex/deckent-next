@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { redactForRecord, previewRecordStream, type KnownSecretSnapshot } from '#platform/core/redaction/index.js';
+import { EMPTY_KNOWN_SECRETS, redactForRecord, previewRecordStream, type KnownSecretSnapshot } from '#platform/core/redaction/index.js';
 import { ErrorRegistry } from './registry.js';
 import type { DeckentError } from './error.js';
 
@@ -17,7 +17,7 @@ export function unexpectedQueryFailure(error: unknown): DeckentError {
 }
 /** Server-only derived record. Scan complete fields before any bound; withhold incomplete known-secret suffixes.
  * The caller supplies its actual resolved configuration snapshot and sends the result to the existing service log. */
-export function takeQueryErrorRecord(failure: DeckentError, known: KnownSecretSnapshot): string | undefined {
+export function takeQueryErrorRecord(failure: DeckentError, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): string | undefined {
   if (!diagnostics.has(failure)) return undefined;
   let current = diagnostics.get(failure); const parts: string[] = [];
   diagnostics.delete(failure);
