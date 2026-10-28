@@ -42,12 +42,14 @@ export function renderIdentityPreview(value: IdentityProfilePreview, locale: Loc
     ...(draft.futureProjects.requested ? [t('identity.future', {}, locale)] : []),
     ...draft.unresolvedRequirements.map(requirement => t('identity.requirement', { id: safe(requirement.id), version: requirement.version }, locale)),
     ...draft.unsupportedHierarchyNodeIds.map(id => t('identity.hierarchyUnresolved', { id: safe(id) }, locale)),
-    ...(value.differences.length ? value.differences.map(cell => {
+    // BeUser S-08: only what changes is listed (gain, loss); the unchanged cells are one count line (`--json` keeps every cell).
+    ...(value.differences.some(cell => cell.change !== 'unchanged') ? value.differences.filter(cell => cell.change !== 'unchanged').map(cell => {
       const selection = (value: typeof cell.actions) => 'values' in value ? value.values.map(safe).join(', ') : value.except.length ? t('identity.allExcept', { values: value.except.map(safe).join(', ') }, locale) : t('identity.all', {}, locale);
       const status = cell.change === 'gain' ? t('identity.gain', {}, locale) : cell.change === 'loss' ? t('identity.loss', {}, locale) : t('identity.unchanged', {}, locale);
       return t('identity.difference', { status, member: safe(cell.memberId), scope: safe(cell.scopeId), kind: safe(cell.resourceKind), actions: selection(cell.actions),
         resources: selection(cell.resourceIds), before: decision(cell.before.decision, locale), after: decision(cell.after.decision, locale) }, locale);
     }) : [t('identity.noDifferences', {}, locale)]),
+    ...(value.differences.some(cell => cell.change === 'unchanged') ? [t('identity.unchangedCount', { count: value.differences.filter(cell => cell.change === 'unchanged').length }, locale)] : []),
   ].join('\n');
 }
 

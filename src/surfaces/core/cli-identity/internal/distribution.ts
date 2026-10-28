@@ -74,7 +74,8 @@ export async function identityDistributionCommand(argv: readonly string[], conte
   const cancelled = () => { emit(t('climodels.card.cancelled', {}, locale), { level: 'warning', ...sinks, json: false }); return EXIT_CODES.error; };
   const pick = async <T>(title: string, rows: readonly T[], id: (row: T) => string, label: (row: T) => string): Promise<T | null> => {
     if (!rows.length) throw ErrorRegistry.createError('IDENTITY_PREVIEW_UNAVAILABLE');
-    const chosen = await ask(context, locale, { title, options: rows.map(row => ({ id: id(row), label: safe(label(row)) })) });
+    // BeUser S-07: a pick list starts on its first row (Enter takes it), as the setup menus do; the change itself still waits for its preview card.
+    const chosen = await ask(context, locale, { title, options: rows.map(row => ({ id: id(row), label: safe(label(row)) })), initial: id(rows[0]!) });
     return rows.find(row => id(row) === chosen) ?? null;
   };
   const profile = await pick(t('climodels.identity.pick.profile', {}, locale), choices.profiles, entry => `${entry.definition.id}@${entry.definition.version}`, entry => profileLabel(entry, locale));
