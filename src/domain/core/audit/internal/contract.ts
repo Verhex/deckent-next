@@ -384,6 +384,13 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
 });
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
+  z.object({ kind: z.literal('beuser-target-refusal'), code: z.literal('BEUSER_TARGET_NOT_SANDBOX'),
+    identity: z.object({ scopeId: identitySchema, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
+      layoutRevision: identitySchema, generation: counterSchema.positive() }).strict(), realmId: identitySchema, nonce: z.string().uuid() }).strict(),
+  z.object({ kind: z.literal('authority-change'), installer: z.object({ basis: z.literal('system-policy-rows'),
+    packageId: identitySchema, dataRevision: counterSchema.positive(), packageDigest: digest, person: auditPrincipalSchema }).strict(),
+    action: z.enum(['apply', 'rollback']), commandId: identitySchema, inputDigest: digest,
+    revision: z.object({ before: identitySchema, after: identitySchema }).strict(), policyDigestBefore: digest, policyDigest: digest }).strict(),
   authorityDecisionSubjectSchema,
   /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */
   z.object({ kind: z.literal('audit-checkpoint'), checkpointSequence: counterSchema.positive(), previousDigest: digest.nullable(),
