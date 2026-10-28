@@ -51,6 +51,17 @@ describe('runtime control surfaces', () => {
     expect(restarts).toBe(1); expect(output.values.join('')).toContain('was not running; started it in the background (pid 4343');
   });
 
+  it('BeUser D-01: a restart that stops a running worker image build says so (never silently)', async () => {
+    for (const building of [true, false]) {
+      const output = sink();
+      const base = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output, initialize() {} };
+      const readiness = { mode: 'started' as const, instanceId: 'instance-d', pid: 4444, logPath: null, shutdownAvailable: true, build: null };
+      expect(await main(['runtime', 'restart'], { ...base, async describeRuntimeService() { return descriptor; }, async runningImageBuild() { return building; },
+        async restartRuntimeService() { return readiness; } })).toBe(0);
+      expect(output.values.join('').includes('worker image build that was running was stopped; open /setup')).toBe(building);
+    }
+  });
+
   it('CLI rejects incomplete or wire-forged shutdown input before invoking the handler', async () => {
     let invoked = 0; const output = sink();
     const context = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output,

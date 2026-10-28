@@ -4,6 +4,8 @@
   "cli.runtime.reconciliation": "Reconciliation page completed: {count} outcomes. Task acceptance is unchanged.",
   "cli.runtime.reconciliationFailed": "Reconciliation recovery failed: {code}.",
   "cli.runtime.restarted": "Runtime service restarted (pid {pid}, instance {instanceId}).",
+  "cli.runtime.imageBuildStopped": "The worker image build that was running was stopped; open /setup in deckent to build it again.",
+  "cli.runtime.card.imageBuild": "A worker image build is running in the service. Restarting stops it; /setup then offers to build it again (unchanged layers are reused).",
   "cli.runtime.startedAbsent": "The runtime service was not running; started it in the background (pid {pid}, instance {instanceId}).",
   "cli.runtime.idleShutdown": "No request or execution for {duration} (hh:mm:ss): this automatically started service is stopping.",
   "cli.runtime.socketHealed": "The runtime socket directory had the wrong mode and was empty; it was re-created owner-only.",

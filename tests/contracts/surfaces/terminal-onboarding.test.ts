@@ -110,10 +110,10 @@ it('U6-S4: image consent immediately follows work choice, offers verified adopti
   expect(onboardingSteps(current).map(row => row.id)).toEqual(['work:kind', 'execution:worker', 'execution:runtime', 'onboarding:first-task']);
   const question = workerImageQuestion({ providers: ['selected-cli'], sources: ['https://mirror.invalid/prefix'], proxy: 'http://proxy.invalid:8080', baseRef: 'base@sha256:pin',
     sizeGigabytes: 1, buildTimeoutMs: 20000, images: [{ imageId: missing, tag: 'worker:unknown', ready: false }, { imageId: id, tag: 'worker:r32-selected', ready: true }] }, 'en', missing);
-  expect(question.initial).toBe(id); expect(question.choices.map(row => row.id)).toEqual([id, missing, 'consent', 'later']);
+  expect(question.initial).toBe(id); expect(question.choices.map(row => row.id)).toEqual([id, 'consent', 'later']); // BeUser M-05: no row Enter cannot act on
   // No ready image: the recommended answer is the background build of the shown sources (still only on Enter).
   expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000 }, 'en').initial).toBe('consent');
-  expect(question.choices[1]).toMatchObject({ disabled: true });
+  expect(question.body.join('\n')).toContain('1 older Deckent worker image(s) on this machine cannot be used here'); expect(question.body.join('\n')).toContain('worker:unknown');
   expect(question.body.join('\n')).toContain('https://mirror.invalid/prefix'); expect(question.body.join('\n')).toContain(missing);
   expect(question.body.join('\n')).toContain('No task starts');
   expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000, previousMs: 3000, referenceMs: 70000 }, 'en').body.join('\n')).toContain('Previous measured preparation');

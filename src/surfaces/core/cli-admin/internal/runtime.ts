@@ -107,10 +107,10 @@ async function renderDescriptor(descriptor: RuntimeServiceDescriptor, context: A
     ...(descriptor.idleStopMs ? [t('cli.runtime.status.idle', { duration: humanDuration(descriptor.idleStopMs, locale) }, locale)] : [])].join('\n');
 }
 /** A person on a terminal confirms a stop or restart after seeing the work it affects; null work = not readable now (said so). */
-async function confirmStop(context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, restart: boolean): Promise<boolean> {
+async function confirmStop(context: AdminCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, restart: boolean, building = false): Promise<boolean> {
   const work = await runningWork(context, root, options);
   return await askAdminCard(context, locale, { title: restart ? t('cli.runtime.card.restartTitle', {}, locale) : t('cli.runtime.card.shutdownTitle', {}, locale), body: [
-    workText(work, locale, true),
+    workText(work, locale, true), ...(building ? [t('cli.runtime.card.imageBuild', {}, locale)] : []),
     t('cli.runtime.card.effect', {}, locale), ...(restart ? [t('cli.runtime.card.restartEffect', {}, locale)] : [])], options: confirmOptions(locale) }) === 'apply';
 }
 
@@ -167,9 +167,11 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     if (!context.restartRuntimeService || Object.keys(shutdown).length) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
     // BeUser M-09: a service that is not running has no work to confirm stopping; the restart starts it (detached).
     const absent = context.describeRuntimeService ? await context.describeRuntimeService(root, options).then(() => false, (error: { code?: unknown } | null) => error?.code === 'LOCAL_RUNTIME_UNAVAILABLE') : false;
-    if (!absent && interactive && !await confirmStop(context, root, options, locale, true)) return cancelled();
+    const building = !absent && await context.runningImageBuild?.(root, options).catch(() => false) === true; // BeUser D-01: never stop a background image build silently
+    if (!absent && interactive && !await confirmStop(context, root, options, locale, true, building)) return cancelled();
     const restarted = await context.restartRuntimeService(root, options);
-    output(restarted, () => (params => absent ? t('cli.runtime.startedAbsent', params, locale) : t('cli.runtime.restarted', params, locale))({ pid: restarted.pid ?? '-', instanceId: restarted.instanceId.slice(0, 8) }));
+    output(restarted, () => [(params => absent ? t('cli.runtime.startedAbsent', params, locale) : t('cli.runtime.restarted', params, locale))({ pid: restarted.pid ?? '-', instanceId: restarted.instanceId.slice(0, 8) }),
+      ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n'));
     return;
   }
   const { reason, ...ids } = shutdown;
@@ -183,7 +185,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
     // No identity fields: the system builds the governed command from the live descriptor. Owner CLI review 2026-10-19: a person confirms on a
     // card after seeing the running work (the reason is optional there); any other caller names its reason (`--reason`, audited).
     if (!interactive && !reason?.trim()) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_REASON_REQUIRED');
-    if (interactive && !await confirmStop(context, root, options, locale, false)) return cancelled();
+    if (interactive && !await confirmStop(context, root, options, locale, false, await context.runningImageBuild?.(root, options).catch(() => false) === true)) return cancelled();
     const stopped = await context.stopRuntimeService(root, options, reason?.trim() || t('cli.runtime.reason.terminal', {}, locale));
     output(stopped.result, () => t('cli.runtime.shutdownAdmitted', { serviceId: terminalSafeText(stopped.command.serviceId), instanceId: stopped.command.instanceId.slice(0, 8) }, locale));
     return;

@@ -83,12 +83,15 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
         if (typeof provider !== 'string') { await session.defer(step); continue; }
         try {
           const preview = await port.previewConsent(provider);
-          choice = await askOnboardingQuestion({ ...question, ...workerImageQuestion(preview, locale, worker?.image === 'missing' ? worker.configured ?? undefined : undefined) }, io);
+          const asked = workerImageQuestion(preview, locale, worker?.image === 'missing' ? worker.configured ?? undefined : undefined), interrupted = worker?.acquisition?.code === 'WORKER_IMAGE_BUILD_INTERRUPTED'; // BeUser D-01
+          choice = await askOnboardingQuestion({ ...question, ...asked, body: [...(interrupted ? [t('setup.workerImage.card.interrupted', {}, locale)] : []), ...asked.body] }, io);
           if (choice.id === 'exit') return null;
           if (choice.id === 'later') { await session.defer(step); continue; }
           const selected = preview.images?.find(image => image.imageId === choice.id && image.ready);
           if (choice.id !== 'consent' && !selected) continue;
           await port.consent(provider, preview.digest, selected?.imageId);
+          if (!selected && (await askOnboardingQuestion({ ...question, title: t('setup.workerImage.card.progress', {}, locale), body: [t('setup.workerImage.card.started', {}, locale)],
+            choices: [{ id: 'continue', label: t('onboarding.session.continue', {}, locale) }] }, io)).id === 'exit') return null; // BeUser D-01: say it started and where to watch
           await session.finish(step); continue;
         } catch (error) {
           const feedback = await askOnboardingQuestion({ ...question, title: t('onboarding.session.blocked', {}, locale),

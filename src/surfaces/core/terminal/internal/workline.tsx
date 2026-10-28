@@ -115,7 +115,7 @@ export interface WorklineProps {
   /** Approval notification cadence override (tests); production uses max(pollMs, 10 s). */
   readonly approvalPollMs?: number;
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
-  readonly restartService?: () => Promise<string>;
+  readonly restartService?: () => Promise<string>; readonly restartNotes?: () => Promise<readonly string[]>; // D-01: e.g. a running image build the restart stops
   readonly startService?: () => Promise<string>; // BeUser M-09: starts the absent runtime service (the terminal's autostart, never a stop); returns the line
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
   readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>;
@@ -592,7 +592,7 @@ export function WorklineApp(props: WorklineProps) {
         // TS-WINDOW: a restart interrupts the service's running work, so it asks first (y; n, Enter and Esc keep it running).
         const window = labels.work?.window;
         if (!window) { push([notice('error', labels.serviceRestartUnavailable)]); return true; }
-        const answer = await panel.pick(execution, { kind: 'window', title: window.restartTitle, body: [window.restartDetail], hints: window.restartPrompt, confirm: true }, ['allow', 'deny']);
+        const answer = await panel.pick(execution, { kind: 'window', title: window.restartTitle, body: [window.restartDetail, ...await props.restartNotes?.().catch(() => []) ?? []], hints: window.restartPrompt, confirm: true }, ['allow', 'deny']);
         if (execution.signal.aborted || answer === null) return true;
         push([notice('info', answer === 'allow' ? await props.restartService!() : window.restartKept)]);
       }

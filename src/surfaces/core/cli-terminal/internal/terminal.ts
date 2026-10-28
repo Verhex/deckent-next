@@ -509,9 +509,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(serviceLine || accessNotices.length || chat?.skippedDefault ? { openingNotices: [...accessNotices, ...(chat?.skippedDefault ? [{ level: 'warning' as const, text: t('terminal.model.defaultNotHere', {}, locale) }] : []), ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
       ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'warning' as const, text: configLine }] : [])] } : {}),
     ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await context.ensureRuntimeService!(root, options)).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
-      const restarted = await context.restartRuntimeService!(root, options);
-      return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
-    } } : {}),
+      const building = await context.runningImageBuild?.(root, options).catch(() => false) === true, restarted = await context.restartRuntimeService!(root, options);
+      return [t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale), ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n');
+    }, restartNotes: async () => await context.runningImageBuild?.(root, options).catch(() => false) === true ? [t('cli.runtime.card.imageBuild', {}, locale)] : [] } : {}),
     palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, startup,
     ...(ledger ? { ledger } : {}), ...(deliveryPort && !pickerNeedsTextFallback(env, true) ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
