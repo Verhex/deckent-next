@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, lstat, symlink, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile, lstat, symlink, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -563,6 +563,10 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     let interrupted; try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'bridges', planDigest: plan.planDigest }, confirm, options); } finally { tail.at = null; }
     expect(interrupted.status).toBe('unknown'); expect((await readFile(claude)).equals(claudeBefore)).toBe(true);
     const second = await previewConfiguredUninstall(project, ALL, options);
+    // M2: the archive beside the final set is lost after the interruption: the resumed tail deletes nothing more and stays unknown.
+    const companion = `${interrupted.backup.destination!}.archive.json`; await rename(companion, `${companion}.away`);
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, options)).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
+    expect(await unremoved(deck)).toBe(true); expect((await readFile(claude)).equals(claudeBefore)).toBe(true); await rename(`${companion}.away`, companion);
     // M13: the resumed tail holds the same floor: a marked SDK call is refused and deletes nothing more.
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: second.planDigest }, confirm, { ...options, env: { ...options.env, CLAUDECODE: '1' } }))
       .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });

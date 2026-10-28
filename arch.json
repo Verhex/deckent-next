@@ -213,6 +213,7 @@
     },
     "src/adapters/core/local-runtime-socket": {
       "dependencies": [
+        "src/platform/core/utils",
         "src/adapters/core/local-principal",
         "src/domain/core/agent-turn",
         "src/domain/core/model-invocation",

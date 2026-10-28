@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { createBackupCoverage, verifyBackupCoverage, type BackupLimits } from '#adapters/core/backup-store/index.js';
 import { pathWithin, sha256, readPinnedFile, restorePinnedFile, lineCut, ErrorRegistry } from '#platform/index.js';
 import { PROJECT_VAULT, type BackupContributionOwner, type BackupCoverageManifest } from '#engine/index.js';
@@ -66,4 +66,4 @@ export async function restoreUninstallArchive(set: string, roots: readonly strin
 export const hasUninstallArchive = (set: string) => existsSync(set + manifestSuffix);
 /** The folders an uninstall archive may write back into: the project folder, the vault folder of the person's global home and the trust store. */
 export const uninstallArchiveRoots = (projectRoot: string, globalRoot: string, env: Readonly<Record<string, string | undefined>> = process.env) =>
-  [projectRoot, join(globalRoot, PROJECT_VAULT.directory), instructionTrustDirectory(env)];
+  [projectRoot, join(globalRoot, PROJECT_VAULT.directory), dirname(instructionTrustDirectory(env))]; // a store emptied by uninstall comes back too

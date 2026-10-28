@@ -114,6 +114,15 @@ it('offers force for running work before any card and prints a kept image\'s ste
   expect(tr).toContain('Sizin yapmanız gereken');
 });
 
+it('asks nothing when no tier would remove or stop anything: no menu, only the nothing-to-remove line', async () => {
+  const quiet = inventory({ service: { running: false, unit: null, unitDisable: 'none', command: null }, resources: inventory().resources.filter(item => item.resourceId !== 'scratch') });
+  const lines: string[] = [], context = { root: '/fixture', env: {}, stdout: { write: (text: string) => { lines.push(text); return true; } }, locale: 'en' as const,
+    previewUninstall: async (_root: string, value: object) => createUninstallPlan({ ...query(), ...value }, quiet), applyUninstall: async () => { throw new Error('not reached'); } };
+  card.requests.length = 0;
+  expect(await uninstallCommand(['uninstall'], context)).toBe(0);
+  expect(card.requests).toEqual([]); expect(lines.join('')).toContain('npm uninstall -g deckent');
+});
+
 it('the reopen card counts unknown results from a fresh preview, says when it could not check, and "Not now" keeps the folder retired', async () => {
   const { mkdtemp, rm, lstat } = await import('node:fs/promises'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
   const { retireInstallation } = await import('#platform/index.js'), card = await import('#surfaces/core/cli-human/internal/card.js');

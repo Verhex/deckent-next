@@ -11,7 +11,7 @@ export class UninstallRecovery {
   readonly directory: string;
   private readonly hold: string;
   constructor(private readonly root: string, private readonly installationId: string, private readonly principal: VerifiedPrincipal,
-    private readonly integrity: IntegrityAuthority, private readonly maxBytes: number, externalDirectory?: string, private readonly custody?: { readonly path: string; remove(): void }) {
+    private readonly integrity: IntegrityAuthority, private readonly maxBytes: number, externalDirectory?: string, private readonly custody?: { readonly path: string; remove(): Promise<void> }) {
     this.directory = externalDirectory ?? join(root, 'uninstall-recovery'); this.hold = uninstallHoldPath(root);
   }
   private async safeDirectory(path: string) {
@@ -83,7 +83,7 @@ export class UninstallRecovery {
       // B4: a completed project-folder deletion removes only its own custody file (the exact lock it holds, by identity); every other file
       // stays, and each folder goes only when empty, the installation's own last.
       if (result.status === 'completed' && this.custody) {
-        this.custody.remove();
+        await this.custody.remove();
         for (const folder of [dirname(this.custody.path), this.root]) await removeEmptyPinnedDirectory(folder);
       }
     }

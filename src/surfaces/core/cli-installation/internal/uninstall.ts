@@ -41,7 +41,9 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   const cancelled = () => { print([uninstallStatusMessage('cancelled', locale)]); return 1 as ExitCode; };
   // The menu, when the person named no tier: one summary card; a refused tier stays visible with its reason under the card.
   // When every tier is refused for good, there is no choice to offer: the refusal below names its cause and next step.
-  while (!named.length && !yes && uninstallTierChoices(plan, locale).some(choice => !choice.blocked)) {
+  // Owner 2026-10-27: when no tier would remove or stop anything there is nothing to choose: no card, only the nothing-to-remove line.
+  const idle = plan.nothingToRemove && Object.values(plan.tiers).every(tier => tier.removes === 0);
+  while (!named.length && !yes && !idle && uninstallTierChoices(plan, locale).some(choice => !choice.blocked)) {
     const choices = uninstallTierChoices(plan, locale), answer = await ask({ title, initial: choices.find(choice => !choice.blocked)!.tier,
       body: [...uninstallSummaryLines(plan, locale), ...choices.flatMap(choice => choice.blocked ? [t('cli.uninstall.tier.blocked', { tier: choice.label, reason: choice.blocked }, locale)] : [])],
       options: [...choices.filter(choice => !choice.blocked).map(choice => ({ id: choice.tier, label: choice.label })), { id: 'details', label: t('cli.uninstall.details', {}, locale) }, cancel] });
