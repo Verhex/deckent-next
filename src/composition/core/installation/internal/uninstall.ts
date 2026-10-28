@@ -23,10 +23,8 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
     ...(config.service.identity ? [config.service.identity.scopeId] : []), ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])]);
   const installationId = async () => { const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
     if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE'); return identity.value.installationId; };
-  // Like BackupApplication, this installation-wide operation uses explicit all-scopes policy, not project-record admission. The ledger is only read (no sidecars).
   const person = async () => ({ ...readLocalOsIdentity(), scopeIds: scopes(await source.load()) }), exec = nativeServiceExec(config.installation.identityProbe, env);
   return new UninstallApplication({
-    // M13, R7: the AI/CI marker floor holds at this boundary too, over the real process and the supplied env alike (a supplied env never lowers it).
     channel: localPrincipalChannel(), witness: { attest: async () => { const peer = localPrincipalPeer(); return !marked(env, config.cli.agentEnvironment) && attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } }, principal: person,
     // M14, R8: every tier's own decision covers every ledger-recorded scope too (as again under custody), before any card.
     async authorize(action, principal) { const document = policySchema.parse(await source.load()), affected = action === 'inspect' ? scopes(document)

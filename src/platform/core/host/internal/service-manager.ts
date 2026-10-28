@@ -1,10 +1,9 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { lstat, readdir, readlink, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
-import { serializeJsonDocument, writePinnedFile } from '#platform/core/utils/index.js';
 import AUTOMATION from './automation.json' with { type: 'json' };
 
 /** A service manager that runs a process: systemd places a unit's processes in the unit's control group (`<name>.service`) and names one main process. */
@@ -55,7 +54,6 @@ export const serviceManagerRestartCommand = (found: ServiceManagerUnit): string 
 export type UserUnitExec = (args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 const showValues = async (exec: UserUnitExec, unit: string, properties: readonly string[]) => Object.fromEntries((await exec(['show',
   ...properties.flatMap(name => ['--property', name]), '--', unit])).stdout.trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
-const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 /** K4 (i), review M8/R5/F5: the unit's enablement links in the person's user unit folders (configuration, then runtime), as `<link> -> <target>`:
  * every link `systemctl disable` matches, walking every subfolder as it does (systemd v255 install.c): its name is the unit, its target (written
  * or chased to the end) names it, or its target is a link already matched, repeated until nothing joins. A folder that cannot be read (other
@@ -69,7 +67,7 @@ export async function userUnitLinks(unit: string, env: Readonly<Record<string, s
       if (++seen > AUTOMATION.unitLinkEntries) throw new Error('UNIT_LINKS_UNBOUNDED');
       const path = join(folder, entry.name);
       if (entry.isDirectory()) await walk(path, false);
-      else if (entry.isSymbolicLink()) { const target = await readlink(path); found.push({ path, target, to: resolve(folder, target), chased: await realpath(path).catch(() => '') }); }
+      else if (entry.isSymbolicLink()) { const target = await readlink(path); found.push({ path, target, to: resolve(folder, target), chased: await realpath(path) }); }
     }
   };
   for (const folder of [config && join(config, 'systemd/user'), env['XDG_RUNTIME_DIR'] && join(env['XDG_RUNTIME_DIR'], 'systemd/user')]) if (folder) await walk(folder, true);
@@ -77,8 +75,6 @@ export async function userUnitLinks(unit: string, env: Readonly<Record<string, s
   for (let grew = true; grew;) { grew = false; for (const link of found) if (!matched.has(link.path) && joins(link)) { matched.add(link.path); grew = true; } }
   return found.filter(link => matched.has(link.path)).map(link => `${link.path} -> ${link.target}`);
 }
-const runtimeLinked = (links: readonly string[], env: Readonly<Record<string, string | undefined>>) =>
-  !!env['XDG_RUNTIME_DIR'] && links.some(entry => entry.startsWith(join(env['XDG_RUNTIME_DIR']!, 'systemd/user/')));
 /** F2: the user unit search path of systemd.unit(5) (v255), in precedence order (earlier entries override later files of the same name). */
 function userUnitSearchPath(env: Readonly<Record<string, string | undefined>>, home: string) {
   const config = env['XDG_CONFIG_HOME'] || join(home, '.config'), run = env['XDG_RUNTIME_DIR'], at = (...parts: string[]) => run ? [join(run, 'systemd', ...parts)] : [];
@@ -109,43 +105,16 @@ export async function userUnitFile(unit: string, exec: UserUnitExec, env: Readon
   return file && file.isFile() && file.size === Buffer.byteLength(text) && !/^\s*(?:Also|Alias)\s*=\s*\S/mu.test(text) && !values['DropInPaths'] && values['Names']?.trim() === unit
     ? createHash('sha256').update(`${values['FragmentPath']}\0${text}`).digest('hex') : null;
 }
-/** K4: a user unit Deckent did not create, observed as running this installation's described service. `eligible` only when its main process is that
- * process, nothing else is in its control group, its unit file evidence holds (above) and none of its links is a runtime one (a persistent
- * `disable` keeps those: R5). Never a system unit. `links` and `unitFile`: bound into the confirmed plan. */
-export async function observeUserUnit(found: { readonly scope: 'user' | 'system'; readonly unit: string }, processId: number, exec: UserUnitExec,
-  env: Readonly<Record<string, string | undefined>> = process.env) {
-  const command = `systemctl ${found.scope === 'user' ? '--user ' : ''}disable --now ${found.unit}`, user = found.scope === 'user' && process.platform === 'linux';
-  const values = user ? await showValues(exec, found.unit, ['MainPID', 'ControlGroup']).catch(() => null) : null, file = values && await userUnitFile(found.unit, exec, env);
-  const links = file ? await userUnitLinks(found.unit, env).catch(() => null) : null;
-  const eligible = !!links && !runtimeLinked(links, env) && Number(values!['MainPID']) === processId
-    && readProcessFile(join('/sys/fs/cgroup', values!['ControlGroup'] ?? '', 'cgroup.procs'))?.trim() === String(processId);
-  return { unitDisable: eligible ? 'eligible' as const : 'command-only' as const, command, links: eligible ? links : [], unitFile: eligible ? file : null };
+/** A systemd unit observation cannot prove manager-owned resolution or prevent a new instance; expose only the manual command. */
+export async function observeUserUnit(found: { readonly scope: 'user' | 'system'; readonly unit: string }, _processId: number, _exec: UserUnitExec,
+  _env: Readonly<Record<string, string | undefined>> = process.env) {
+  const command = `systemctl ${found.scope === 'user' ? '--user ' : ''}disable --now ${found.unit}`;
+  return { unitDisable: 'command-only' as const, command, links: [], unitFile: null };
 }
-/**
- * K4 (d)/(e)/(i), review M7/M8, R3/R5: `disable --now` of the exact user unit, after the governed shutdown and the service's absence, only while
- * its unit file evidence and links are exactly the confirmed ones, read again right before (otherwise a typed refusal and nothing is disabled).
- * A durable intent receipt (links, previous state, undo) is written before and the real result after: systemctl's own messages and the links
- * that are actually gone (read again), with the undo that recreates exactly those. The unit file stays.
- */
+/** F2/F4/F5: no manager-owned resolution or admission fence is available. Never execute a disable from a caller's observation;
+ * even an earlier eligible plan must take the same command-only refusal. The person performs the displayed command separately. */
 export async function disableUserUnit(expected: { readonly unit: string | null; readonly links?: readonly string[] | undefined; readonly unitFile?: string | null | undefined },
-  exec: UserUnitExec, receipts: string, env: Readonly<Record<string, string | undefined>> = process.env) {
-  const unit = expected.unit ?? '', command = `systemctl --user disable --now ${unit}`, refuse = () => ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit, command } });
-  const links = await userUnitLinks(unit, env).catch(() => null);
-  if (!links || runtimeLinked(links, env) || JSON.stringify(links) !== JSON.stringify(expected.links ?? []) || !expected.unitFile || await userUnitFile(unit, exec, env) !== expected.unitFile) throw refuse();
-  const values = await showValues(exec, unit, ['UnitFileState', 'ActiveState']), previous = values['UnitFileState'] ?? 'unknown', active = values['ActiveState'] ?? 'unknown';
-  if (!['inactive', 'failed'].includes(active)) throw refuse(); // F4: an instance that started since the last absence check is never stopped by --now
-  const undoOf = (gone: readonly string[]) => [...gone.map(entry => { const [path = '', target = ''] = entry.split(' -> ');
-    return `mkdir -p ${quote(dirname(path))} && ln -sfn ${quote(target)} ${quote(path)}`; }), 'systemctl --user daemon-reload'].join(' && ');
-  // R14, F1: receipts go through their pinned parent; only an earlier receipt of this unit is replaced, any other file there stays (refusal).
-  const own = (bytes: Buffer) => { try { const body = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; return body['schemaVersion'] === 1 && body['unit'] === unit; } catch { return false; } };
-  const receipt = (phase: string, body: object) => writePinnedFile(join(receipts, AUTOMATION.unitReceipt.replace('{unit}', unit).replace('{phase}', phase)),
-    Buffer.from(serializeJsonDocument({ schemaVersion: 1, unit, previous, active, ...body })), undefined, own);
-  await receipt('intent', { links, undo: undoOf(links) });
-  const outcome = await exec(['disable', '--now', '--', unit]).then(out => ({ ok: true, stderr: out.stderr }),
-    (error: { stderr?: unknown; message?: string }) => ({ ok: false, stderr: String(error.stderr ?? error.message ?? '') }));
-  // F5: only a successful re-read says which links went; otherwise the result is unknown (no links counted gone, no undo) and refused.
-  const after = await userUnitLinks(unit, env).catch(() => null), gone = after && links.filter(entry => !after.includes(entry)), undo = gone && undoOf(gone);
-  await receipt('result', { ...outcome, links: gone, linksAfter: after, undo });
-  if (!outcome.ok || !gone || !undo) throw refuse();
-  return { unit, previous, undo, links: gone };
+  _exec: UserUnitExec, _receipts: string, _env: Readonly<Record<string, string | undefined>> = process.env): Promise<{ unit: string; previous: string; undo: string; links: readonly string[] }> {
+  const unit = expected.unit ?? '', command = `systemctl --user disable --now ${unit}`;
+  throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit, command } });
 }

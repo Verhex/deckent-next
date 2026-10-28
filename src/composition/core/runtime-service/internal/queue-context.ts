@@ -21,6 +21,8 @@ async function openQueueContext(root: string, scopeId: string, options: ConfigLo
   const artifacts = new FileArtifactStore({ root: await directory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
   const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
   const authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selected.id);
+  // F6: SQLite readOnly may create/write WAL sidecars. No write-free live snapshot port exists here: refuse before opening it.
+  if (readOnly === 'inspect') throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED');
   const path = await context.path(), db = readOnly ? openSqliteLedgerReadOnly(path, config.storage.sqlite) : openSqliteLedger(path, config.storage.sqlite, 'forbid');
   const queue = new SqliteTargetQueue(db), bounds = { ...config.targetQueue, batchSize: Math.min(config.targetQueue.batchSize, config.targetQueue.chainSize) };
   try {

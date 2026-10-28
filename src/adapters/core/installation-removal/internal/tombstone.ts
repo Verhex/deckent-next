@@ -135,7 +135,6 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
         || createHash('sha256').update(await readFile(join(verified.set, 'MANIFEST.sha256'))).digest('hex') !== intent.snapshot.manifestDigest) throw tailUnknown(directory, intent);
       const authority = async (resource: 'policy' | 'bindings') => {
         const path = productResourcePath(layout, resource), member = intent.snapshot.members.find(item => item.path === path);
-        // A tier that keeps the authority files (keep-work) decides from exactly the bytes the intent recorded; anything else is unknown (fail closed).
         if (!member) { const expected = intent.authority?.[resource], present = await memberStat(path).catch(() => { throw tailUnknown(directory, intent); });
           if (expected === undefined || !present !== (expected === null)) throw tailUnknown(directory, intent);
           if (!present) return null;
@@ -152,12 +151,10 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
       const scopes = [...new Set([...intent.scopes, ...intent.plan.scopeSummary, ...policyNamedScopes(document)])];
       for (const action of ['uninstall', 'purge'] as const) authorizeUninstall(document, { ...actor, scopeIds: scopes }, intent.plan.installation.id, scopes, action);
     } finally { verified.close(); }
-    // M2: the archive the intent bound still decrypts and names every archived member before anything more is deleted.
     if (remaining.some(member => member.archived)) await verifyUninstallArchive(intent.snapshot.set, intent.snapshot.archive ?? { digest: '', roots: [] }, remaining, passphrase,
       config.installation.packageMeasurement).catch(() => { throw tailUnknown(directory, intent); });
     const tracked = await configuredTracking(config); // B2: what the project's VCS tracks now is the team's: the tail stays unknown
     for (const member of remaining) if (tracked(member.path) || await boundState(member) !== 'bound') throw tailUnknown(directory, intent);
-    // The one executor of the normal final step: each member's exact operation (a bridge keeps everything but its bound line).
     await removeBoundMembers(remaining, intent.snapshot.root, intent.snapshot.members);
     const settled = await reconcileFinalTail(directory, root, actor, maxBytes, (plan, release) => completeUninstall(config, plan, env, release, lock));
     if (!settled || settled.remaining) throw tailUnknown(directory, intent);

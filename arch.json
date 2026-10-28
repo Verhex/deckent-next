@@ -3127,7 +3127,8 @@
         "src/platform/core/redaction",
         "src/platform/core/host",
         "src/platform/core/managed-files",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -4390,7 +4391,8 @@
         "src/adapters/core/project-instructions",
         "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "INSTALLATION"
     },

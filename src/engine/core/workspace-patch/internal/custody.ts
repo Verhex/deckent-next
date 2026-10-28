@@ -167,15 +167,15 @@ export async function sweepAttemptCustodyScopes(scopeIds: readonly string[], swe
 }
 type WorkRef = { readonly scopeId: string; readonly id: string };
 /** F7 (uninstall keep-work): an attempt's worker workspace is idle only when the ledger proves it: its lease parses with the workspace owner's schema,
- * is ready and names the exact attempt the folder is named for; that attempt's Run is terminal, binds it and runs nothing (`work`, complete); no
+ * is verified by its recorded workspace owner (options/private source/fingerprint), ready and names the exact attempt the folder is named for; that attempt's Run is terminal, binds it and runs nothing (`work`, complete); no
  * delivery or unknown result is open in its scope; and the delivery the Run owes is proven: declared none and settled (C2), or a queue ticket of
  * this exact attempt settled as adopted. Anything else (absent run, other scope, unretained output) is not idle. Pure over `read`. */
 export async function idleAttemptWorkspace(lease: unknown, folder: string, work: { readonly complete: boolean; readonly running: readonly WorkRef[]; readonly parked: readonly WorkRef[];
-  readonly deliveries: readonly WorkRef[]; readonly uncertain: readonly Omit<WorkRef, 'id'>[] }, read: (identity: AttemptIdentity) => Promise<{ readonly run: unknown; readonly deliveries: readonly unknown[] }>) {
+  readonly deliveries: readonly WorkRef[]; readonly uncertain: readonly Omit<WorkRef, 'id'>[] }, read: (identity: AttemptIdentity) => Promise<{ readonly run: unknown; readonly deliveries: readonly unknown[] }>, verify: (record: ReturnType<typeof gitWorkspaceRecordSchema.parse>) => Promise<boolean>) {
   const record = gitWorkspaceRecordSchema.safeParse(lease);
   if (!record.success) return false;
   const { request, sourceBase, status } = record.data, identity = request.identity;
-  if (status !== 'ready' || !validGitSourceBase(sourceBase, request) || gitWorkspaceIdentityTarget(identity, '/', { checkout: '', lease: '' }).id !== folder
+  if (status !== 'ready' || !await verify(record.data).catch(() => false) || !validGitSourceBase(sourceBase, request) || gitWorkspaceIdentityTarget(identity, '/', { checkout: '', lease: '' }).id !== folder
     || !work.complete || [...work.running, ...work.parked].some(ref => ref.scopeId === identity.scopeId && ref.id === identity.runId)
     || [...work.deliveries, ...work.uncertain].some(ref => ref.scopeId === identity.scopeId)) return false;
   const found = await read(identity), run = runSnapshotSchema.safeParse(found.run);

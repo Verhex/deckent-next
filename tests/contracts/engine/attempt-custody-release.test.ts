@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore, sealWorkerEventLog, type SqliteAttemptStore } from '#adapters/index.js';
 import { AttemptCustodyReleaseApplication, idleAttemptWorkspace, gitWorkspaceIdentityTarget, DispatchApplication, SupervisorError, TaskEvaluationApplication, WorkspacePatchApplication, patchExclusions, type AttemptWorkspaceCustody,
@@ -219,23 +219,43 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
 
 it.skipIf(process.platform === 'win32')('F7 (uninstall keep-work): a worker workspace is idle only on the ledger\'s proof: its exact attempt\'s Run is terminal and the delivery it owes is settled or not owed', async () => {
   const { attemptRecords } = await import('#adapters/core/installation-removal/index.js');
-  const work = { complete: true, running: [], parked: [], deliveries: [], uncertain: [] }, hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-  const source = { schemaVersion: 1, sourceRoot: '/source', repositoryRoot: '/source' };
-  const lease = (identity: AttemptIdentity) => ({ schemaVersion: 2, fingerprint: 'e'.repeat(64), request: { schemaVersion: 1, identity, baseCommit: 'a'.repeat(40) }, status: 'ready',
-    sourceBase: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: hash(source), source, baseCommit: 'a'.repeat(40) } });
+  const work = { complete: true, running: [], parked: [], deliveries: [], uncertain: [] };
   // The uninstall adapter's own read of the real ledger the owners wrote.
   const reader = (root: string) => async (identity: AttemptIdentity) => attemptRecords(join(root, 'ledger.db'), { busyTimeoutMs: 20, maxRecords: 8 }, identity);
   const f = await fixture(1, 'declared'); await f.execute(f.identity);
+  const { execFileSync } = await import('node:child_process'), { readFile, link, unlink, symlink } = await import('node:fs/promises'), { GitWorkspaceBroker } = await import('#adapters/index.js');
+  const source = join(f.root, 'source'), workspaceRoot = join(f.root, 'workspaces'); await mkdir(source, { mode: 0o700 }); await mkdir(workspaceRoot, { mode: 0o700 });
+  const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', source, '-c', 'user.email=t@example.invalid', '-c', 'user.name=T', ...args], { encoding: 'utf8' }).trim();
+  git('init', '-q'); git('commit', '-q', '--allow-empty', '-m', 'base'); const baseCommit = git('rev-parse', 'HEAD');
+  const options = { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536, sourceRoot: source, workspaceRoot }, broker = new GitWorkspaceBroker(options);
+  const leasePath = (identity: AttemptIdentity) => join(workspaceRoot, gitWorkspaceIdentityTarget(identity, workspaceRoot, { checkout: 'tree', lease: 'lease.json' }).id, 'lease.json');
+  const lease = async (identity: AttemptIdentity) => { await broker.allocate({ schemaVersion: 1, identity, baseCommit }); return JSON.parse(await readFile(leasePath(identity), 'utf8')) as unknown; };
+  const verify = async (record: { request: { identity: AttemptIdentity } }) => !!await broker.openRecorded(record.request.identity);
+
   // The folder is named by the workspace owner (`gitWorkspaceIdentityTarget`), as the broker names it.
   const folder = (identity: AttemptIdentity) => gitWorkspaceIdentityTarget(identity, '/', { checkout: '', lease: '' }).id;
-  const idle = (identity: AttemptIdentity, at = folder(identity), observed = work, read = reader(f.root)) => idleAttemptWorkspace(lease(identity), at, observed, read);
+  const idle = async (identity: AttemptIdentity, at = folder(identity), observed = work, read = reader(f.root)) => idleAttemptWorkspace(await lease(identity), at, observed, read, verify);
   expect(await idle(f.identity)).toBe(false); // executed, not evaluated: the Run is still running
   await f.settle(f.identity); expect((await f.store.loadRun('s', f.identity.runId))!.state.kind).toBe('terminal');
   expect(await idle(f.identity)).toBe(true); // declared without delivery (C2) and settled
+  // Real owner-created lease, then only its fingerprint is corrupted: KW must keep it although the Run is terminal with no delivery owed.
+  const path = leasePath(f.identity), original = await readFile(path, 'utf8'), corrupt = { ...JSON.parse(original), fingerprint: 'e'.repeat(64) };
+  await writeFile(path, JSON.stringify(corrupt));
+  await expect(broker.openRecorded(f.identity)).rejects.toMatchObject({ code: 'WORKSPACE_IDENTITY_CONFLICT' });
+  expect(await idleAttemptWorkspace(corrupt, folder(f.identity), work, reader(f.root), verify)).toBe(false);
+  await writeFile(path, original);
+  // Stale options and private-source bindings are not inferred; shared/linked leases are never accepted as custody.
+  for (const changed of [new GitWorkspaceBroker({ ...options, timeoutMs: 9999 }), new GitWorkspaceBroker(options, { repositoryRoot: source, baseCommit })])
+    expect(await idleAttemptWorkspace(JSON.parse(original), folder(f.identity), work, reader(f.root), async () => !!await changed.openRecorded(f.identity))).toBe(false);
+  await link(path, path + '.copy'); expect(await idleAttemptWorkspace(JSON.parse(original), folder(f.identity), work, reader(f.root), verify)).toBe(false); await unlink(path + '.copy');
+  await writeFile(path + '.copy', original, { mode: 0o600 }); await unlink(path); await symlink(path + '.copy', path);
+  expect(await idleAttemptWorkspace(JSON.parse(original), folder(f.identity), work, reader(f.root), verify)).toBe(false);
+  await unlink(path); await writeFile(path, original, { mode: 0o600 }); await unlink(path + '.copy');
+
   // Absence from the ledger is no proof: another scope or Run; nor is a folder of another attempt, a lease without the owner's shape, open work.
   for (const identity of [{ ...f.identity, scopeId: 'other' }, { ...f.identity, runId: 'r-absent' }]) expect(await idle(identity)).toBe(false);
   expect(await idle(f.identity, folder({ ...f.identity, attemptId: randomUUID() }))).toBe(false);
-  expect(await idleAttemptWorkspace({ schemaVersion: 2, request: { identity: f.identity } }, folder(f.identity), work, reader(f.root))).toBe(false);
+  expect(await idleAttemptWorkspace({ schemaVersion: 2, request: { identity: f.identity } }, folder(f.identity), work, reader(f.root), verify)).toBe(false);
   for (const observed of [{ ...work, complete: false }, { ...work, deliveries: [{ scopeId: 's', id: 'ticket' }] }, { ...work, running: [{ scopeId: 's', id: f.identity.runId }] }])
     expect(await idle(f.identity, folder(f.identity), observed)).toBe(false);
   // A task that owes its patch: terminal but undelivered stays; only a ticket of this exact attempt settled as adopted proves delivery.

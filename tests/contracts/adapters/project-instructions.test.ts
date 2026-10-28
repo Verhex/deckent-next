@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openProjectInstructionReader, previewProjectInstructions, PROJECT_INSTRUCTION_REGISTRY, isWriteApprovalFloored } from '#adapters/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
 import { projectSkeleton } from '#surfaces/core/project-instructions/index.js';
@@ -124,4 +124,37 @@ describe.skipIf(process.platform !== 'linux')('F3: forgetting this folder\'s leg
     await forgetFolderLegacyTrust(project, store);
     expect((await readFile(join(store, PROJECT_INSTRUCTION_REGISTRY.legacyTrust.file))).length).toBeLessThan(snapshot.length);
   });
+});
+
+it.skipIf(process.platform !== 'linux')('F3: a trust parent swapped after pinning cannot redirect lock/temp/publication, and a foreign final leaf is never replaced', async () => {
+  const { forgetFolderLegacyTrust } = await import('#adapters/index.js'), { open, rename, chmod, unlink } = await import('node:fs/promises');
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'deckent-trust-race-'))); roots.push(base);
+  const project = join(base, 'project'), store = join(base, 'store'), outside = join(base, 'outside'), moved = store + '-moved';
+  for (const dir of [project, store, outside]) { await mkdir(dir); await chmod(dir, 0o700); }
+  await writeFile(join(project, 'DECKENT.md'), '# rules');
+  const reader = await openProjectInstructionReader(project, store), view = await reader.inspect();
+  if (view.status !== 'trust-required') throw new Error(view.status); await reader.trust(view.source.digest);
+  const name = PROJECT_INSTRUCTION_REGISTRY.legacyTrust.file; await unlink(join(store, name)); await openProjectInstructionReader(project, store);
+  const snapshot = await readFile(join(store, name)); await writeFile(join(outside, name), snapshot, { mode: 0o600 });
+  const probe = await open(join(base, 'probe'), 'w'), proto = Object.getPrototypeOf(probe) as { stat(): ReturnType<typeof probe.stat>; sync(): Promise<void> }; await probe.close();
+  const stat = proto.stat; let swapped = false;
+  const spy = vi.spyOn(proto, 'stat').mockImplementation(async function (this: typeof probe) {
+    const info = await stat.call(this);
+    if (!swapped && info.isDirectory()) { swapped = true; await rename(store, moved); await symlink(outside, store); }
+    return info;
+  });
+  try { await expect(forgetFolderLegacyTrust(project, store)).rejects.toThrow('unsafe'); } finally { spy.mockRestore(); }
+  expect(swapped).toBe(true); expect((await readFile(join(outside, name))).equals(snapshot)).toBe(true);
+  expect(await readdir(outside)).toEqual([name]); expect((await readFile(join(moved, name))).length).toBeLessThan(snapshot.length);
+  await unlink(store); await rename(moved, store); await writeFile(join(store, name), snapshot, { mode: 0o600 });
+  // Replace the final name during the new snapshot's sync (after its locked read): the publisher moves, verifies and restores it.
+  const sync = proto.sync; let injected = false;
+  const syncing = vi.spyOn(proto, 'sync').mockImplementation(async function (this: typeof probe) {
+    const path = await (await import('node:fs/promises')).readlink(`/proc/self/fd/${this.fd}`);
+    if (!injected && path.endsWith('.tmp')) { injected = true; await unlink(join(store, name)); await writeFile(join(store, name), 'PERSON DATA', { mode: 0o600 }); }
+    return sync.call(this);
+  });
+  try { await expect(forgetFolderLegacyTrust(project, store)).rejects.toMatchObject({ reason: 'changed' }); } finally { syncing.mockRestore(); }
+  expect(injected).toBe(true); expect(await readFile(join(store, name), 'utf8')).toBe('PERSON DATA');
+  expect(await readdir(outside)).toEqual([name]);
 });

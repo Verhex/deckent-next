@@ -19,9 +19,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   const installationId = identity.value.installationId, globalRoot = dirname(await resolveGlobalConfigReadPath(options.env, options.platform));
   const projectData = join(config.projectRoot, DECKENT_DIR), bounds = config.installation.packageMeasurement;
-  // The installation's data root is owned when it is the bound global root or this project's .deckent (İ-6, K1); a relocated root is not.
   const rooted = layout.root === globalRoot || layout.root === projectData, env = options.env ?? process.env;
-  // A relocated cache cannot acquire ownership merely because config names it. Only the registry paths within the owned data root qualify.
   const candidates = (['scratch', 'treeScanCache'] as const).filter(resource => rooted
     && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && inside(layout.root, productResourcePath(layout, resource)));
   const tracked = await configuredTracking(config);

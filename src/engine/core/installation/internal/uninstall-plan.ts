@@ -62,7 +62,6 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
     if (!entry) throw new UninstallError('UNINSTALL_INVALID');
     let action: UninstallItem['action'] = 'keep'; let reason: string;
     if (resource.present === false) reason = 'absent';
-    // A tier that keeps this kind of data says so first; why a resource stays even when its tier deletes data comes after.
     else if (UNINSTALL_TIERS.indexOf(tier) < UNINSTALL_TIERS.indexOf(entry.removeFrom)) reason = 'durable';
     else if (resource.keep) reason = resource.keep;
     else if (resource.protected) reason = 'protected';
@@ -101,10 +100,8 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
       }
     }
   }
-  // K7: every tier that deletes data (not only caches) archives it first.
   const removing = items.filter(item => item.action === 'remove'), recovery = inventory.backupDestination && dirname(inventory.backupDestination);
   const archived = removing.some(item => registry.entries.find(entry => entry.id === item.contribution)!.removeFrom !== 'keep-data');
-  // Work and service are checked before any card (owner 2026-10-27): a running service is stopped, never reported as work.
   const work = inventory.work, service = inventory.service;
   if (!work.complete) blockers.push('work-unverified');
   if (work.running.length && !force) blockers.push('work-active');

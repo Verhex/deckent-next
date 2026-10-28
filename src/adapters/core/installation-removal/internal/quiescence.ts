@@ -9,7 +9,6 @@ const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as type
 /** Read only and without new sidecars: a ledger with no live WAL opens immutable (measured: a plain read-only open leaves -wal/-shm behind). */
 const openReadOnly = (path: string, busyTimeoutMs: number) => new (nativeSqlite().DatabaseSync)(existsSync(`${path}-wal`) || existsSync(`${path}-shm`) ? path
   : new URL(`${pathToFileURL(path).href}?immutable=1`), { readOnly: true, timeout: busyTimeoutMs });
-// A run is active when it runs or one of its dispatches has no terminal record; an unreadable record makes the observation incomplete.
 const RUNNING = `SELECT scope_id s,run_id i,revision v FROM runs r WHERE CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.state.kind')='running' ELSE 1 END
   OR EXISTS(SELECT 1 FROM dispatches d WHERE d.scope_id=r.scope_id AND json_valid(d.record) AND json_extract(d.record,'$.request.identity.runId')=r.run_id
   AND json_extract(d.record,'$.terminal') IS NULL)`;

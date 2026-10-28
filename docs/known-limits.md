@@ -657,13 +657,11 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   the person's own authority. Every step's owner decision (runs, approvals, each delivery, the removals and their approval) is
   taken before the card, without writing anything: a removal approval is refused before the card when the person's decide grant
   names approval ids one by one, a four-eyes rule applies, or a policy raises its assurance above what the card attests (the
-  peer level). A delivery whose workspace or artifact folder is missing is refused before the card. A refusal names the scope,
-  and unknown results are never closed. A unit Deckent did not create is disabled only with `--disable-unit` when every K4 check
-  holds, after the service is gone, and only while its unit file and enablement links are exactly the ones the card bound. The
-  unit file must be the first one systemd finds on disk along the user search path, with no drop-in folder; an instance unit
-  (`name@x.service`), a unit with runtime links, or one whose manager starts the service again after the governed stop, gets the
-  printed command instead. Links that point to other matched links count as well. Intent and result receipts (with the links
-  actually removed and their undo; unknown when the links cannot be read again afterwards) stay in the recovery folder. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
+  peer level). A delivery withdrawal is refused before the card: the queue owner cannot yet guarantee an observation without
+  SQLite sidecar writes. Settle or withdraw queued deliveries through their owner first, then preview uninstall again.
+  Unknown results are never closed. A user unit Deckent did not create gets the printed command and a refusal even with
+  `--disable-unit`: the caller's XDG paths do not prove the manager's resolution, and observing inactivity cannot fence a new
+  service instance. No enablement link or receipt is changed automatically. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
   refuses a `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet. An AI
   agent or CI caller (marker variables) is refused through the SDK as through the CLI.
   *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.

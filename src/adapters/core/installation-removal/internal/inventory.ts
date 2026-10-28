@@ -10,6 +10,7 @@ import { listProjectVaults } from '#adapters/core/secret-store/index.js';
 import { ABSENT_FILE_VERSION } from '#adapters/core/workspace-write/index.js';
 import type { ProjectTracking } from './vcs.js'; import { attemptRecords } from './quiescence.js';
 import paths from './paths.json' with { type: 'json' };
+import { GitWorkspaceBroker, resolveGitWorkTarget } from '#adapters/core/git-workspace/index.js';
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
 export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
@@ -39,7 +40,6 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   env: Readonly<Record<string, string | undefined>>, globalRoot: string, tracked: ProjectTracking, project: { readonly own: boolean; readonly caches: readonly string[] }) {
   const layout = config.productLayout, installationId = base.installation.id, resources = [...base.resources];
   const bounds = config.installation.packageMeasurement, targets = [];
-  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the data tier.
   let members: DataRemovalMember[] = [];
   const blockers: string[] = [], kept = (path: string) => { const keep = tracked(path), resourceId = `tracked.${sha256(path)}`;
     return !!keep && (resources.some(row => row.resourceId === resourceId) || !!resources.push({ resourceId,
@@ -48,7 +48,6 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   else {
     for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
       const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
-      // Verified absence is not unsafe; a relocated, unreadable or unsafe member blocks the whole data tier with its exact path.
       if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path)) { blockers.push(`authority-relocated:${path}`); continue; }
       try { if (await memberStat(path) && !kept(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null, archivePath: relative(resourcePath, path).split(sep).join('/') }); }
       catch { blockers.push(`authority-unsafe:${path}`); }
@@ -56,15 +55,20 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     if (blockers.length) members = [];
     else if (integrity) members.push(...(await treeMembers(layout, integrity, bounds)).filter(member => !kept(member.path)));
   }
-  // K1, K7, B3: in a project's own `.deckent` a regular single-link file of this user is a member only under a name its owner writes (`archive.members`),
-  // archived and deleted by its data tier; location is no ownership: links, other owners, unknown names and tracked files stay and are listed.
   const archived: DataRemovalMember[] = [], taken = new Set(members.map(member => member.path)), rel = (path: string) => relative(layout.root, path).split(sep).join('/');
   const matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
   const conversation = registry.archive.conversation.map(name => productResourcePath(layout, name as ProductResource)); let seen = 0;
-  // R10, F7 (§5.2): keep-work also archives and deletes config backups and a workspace its owner proves idle (lease + ledger); any other stays as possibly pending: kept, listed, counted (`workspace-pending`).
-  const leases = new Map<string, Promise<boolean>>(), limits = { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords }, idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
+  const leases = new Map<string, Promise<boolean>>(), limits = { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords };
+  let broker: Promise<GitWorkspaceBroker> | undefined;
+  const owner = () => broker ??= (async () => { if (!config.execution) throw new Error('unconfigured');
+    const target = await resolveGitWorkTarget(resolve(config.projectRoot), config.execution, layout);
+    return new GitWorkspaceBroker({ ...config.execution.git, ...target.git, workspaceRoot: productResourcePath(layout, 'workspaces') }); })();
+  const idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
     if (at && !leases.has(at)) leases.set(at, readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => idleAttemptWorkspace(JSON.parse(text), basename(at), base.work,
-      async identity => attemptRecords(productResourcePath(layout, 'ledger'), limits, identity))).catch(() => false).then(done => done || !unlisted(resolve(layout.root, at), 'workspace-pending'))); return at ? leases.get(at)! : false; };
+      async identity => attemptRecords(productResourcePath(layout, 'ledger'), limits, identity), async record => {
+        const lease = await (await owner()).openRecorded(record.request.identity);
+        return !!lease && lease.baseCommit === record.request.baseCommit && JSON.stringify(lease.sourceBase) === JSON.stringify(record.sourceBase);
+      })).catch(() => false).then(done => done || !unlisted(resolve(layout.root, at), 'workspace-pending'))); return at ? leases.get(at)! : false; };
   const unlisted = (locator: string, keep?: 'workspace-pending') => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
     ownership: 'unknown', ownershipEvidence: null, present: true, protected: !!keep, capability: false, backup: 'missing', ...(keep ? { keep } : {}) });
   const walk = async (directory: string, depth: number): Promise<void> => {
@@ -74,7 +78,6 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (taken.has(path) || project.caches.some(cache => inside(cache, path))) continue;
       const info = await lstat(path);
       if (info.isDirectory()) { await walk(path, depth + 1); continue; }
-      // R2: tracking is read per file, before the transient rule; a custody lock with bytes in it is someone's file (kept and listed).
       if (kept(path) || matches(registry.archive.transient, path) && !(info.size && path === `${productResourcePath(layout, 'ledger')}-lock`)) continue;
       if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && matches(registry.archive.members, path))
         archived.push(...(conversation.some(resource => inside(resource, path)) || matches(registry.archive.conversationFiles, path) || await idle(path) ? ['conversation-data', 'global-data'] : ['global-data'])
@@ -83,8 +86,6 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     }
   };
   if (project.own && !blockers.length) await walk(layout.root, 0).catch(() => { archived.length = 0; blockers.push('archive-limit'); });
-  // K1(f): the bridges init wrote (its committed journal names the bytes): DECKENT.md as written, the exact bridge line in CLAUDE.md/AGENTS.md; and this
-  // folder's own vault slice (its record names this installation and folder, no shared repository). Changed, tracked, shared or foreign ones stay.
   const outside: DataRemovalMember[] = [], add = (path: string, extra: Partial<DataRemovalMember> = {}) => outside.push({ resourceId: 'project', path, directory: null, archivePath: '', target: 'global-data', archived: true, ...extra });
   if (project.own && archived.length) {
     const written = new Map<string, string[]>(), earlier = new Map<string, string[]>(), created = new Set<string>();
@@ -98,20 +99,16 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     const skeleton = await bridge(PROJECT_INSTRUCTION_REGISTRY.files[0]!), stays = !skeleton && !!await lstat(join(config.projectRoot, PROJECT_INSTRUCTION_REGISTRY.files[0]!)).catch(() => null);
     const changed = stays || !!skeleton && !written.get(PROJECT_INSTRUCTION_REGISTRY.files[0]!)!.includes(await fileDigest(skeleton)); // a kept DECKENT.md keeps its bridge lines
     if (skeleton) { if (changed) unlisted(skeleton); else add(skeleton); }
-    // A bridge file init created whole that still holds exactly those bytes goes whole; otherwise only its exact line goes.
     for (const row of PROJECT_INSTRUCTION_REGISTRY.bridges) { const path = await bridge(row.path), bytes = path && !changed ? await readFile(path) : null;
       if (path && bytes && created.has(`${row.path}\0${await fileDigest(path)}`)) add(path);
       else if (path && bytes && lineCut(bytes, row.line)) add(path, { line: row.line, before: earlier.get(row.path)! }); else if (path) unlisted(path); }
-    // M12: this folder's own records in the global instruction-trust store (its owner names them); other folders' records stay.
     for (const path of await folderTrustRecords(config.projectRoot, instructionTrustDirectory(env), config.execution?.adoption.targets ?? []).catch(() => [])) add(path, { directory: dirname(path) });
     for (const { directory, record } of await listProjectVaults(globalRoot).catch(() => []))
       if (record?.anchor.installationId !== installationId || record.anchor.projectRoot !== config.projectRoot) continue;
       else if (record.anchor.repository !== null) unlisted(directory);
-      // Only the vault's own files (its record, grants and secret store); any other name in it stays and is listed (and so does the folder).
       else for (const entry of await readdir(directory)) if ([PROJECT_VAULT.projectFile, PROJECT_VAULT.grantsFile, ...registry.sharedSecretFiles].includes(entry)) add(join(directory, entry), { directory }); else unlisted(join(directory, entry));
   }
   archived.push(...outside);
-  // Rows a tier's archive covers leave that tier's plan: the archive's resource stands for them there.
   const covers = (row: UninstallResource, target: string) => [...members, ...archived].some(member => (member.target ?? 'global-data') === target && (inside(row.locator, member.path) || inside(member.path, row.locator)));
   if (project.own) for (const [index, row] of resources.entries()) if (row.contribution === 'durable' && covers(row, 'global-data'))
     resources[index] = { ...row, tiers: covers(row, 'conversation-data') ? ['keep-data'] : ['keep-data', 'keep-work'] };

@@ -131,8 +131,9 @@ const existing = async (path: string): Promise<string> => await lstat(path).then
  * exclusive no-follow temporary and are linked into place (link never replaces). An existing file is replaced only when it is this user's
  * regular single-link file whose bytes `replaceable` accepts, checked again on a moved-aside name; anything that appears meanwhile stays.
  */
-export async function writePinnedFile(path: string, bytes: Uint8Array, root?: string, replaceable: (current: Buffer) => boolean = () => false) {
-  const dir = await openPinnedParent(path, root ?? await existing(dirname(path)));
+/** `parent`: caller-held custody, kept open by the caller across its lock, read and publication; only basename(path) is resolved there. */
+export async function writePinnedFile(path: string, bytes: Uint8Array, root?: string, replaceable: (current: Buffer) => boolean = () => false, parent?: FileHandle) {
+  const dir = parent ?? await openPinnedParent(path, root ?? await existing(dirname(path)));
   if (!dir) throw new PinnedFileError('unsafe');
   const name = basename(path), temp = `.${name}.${randomUUID()}.tmp`, aside = `.${name}.${randomUUID()}.replacing`;
   try {
@@ -149,7 +150,7 @@ export async function writePinnedFile(path: string, bytes: Uint8Array, root?: st
       if (current) await unlink(at(dir, aside));
     } finally { await unlink(at(dir, temp)).catch(() => undefined); }
     await dir.sync();
-  } finally { await dir.close(); }
+  } finally { if (!parent) await dir.close(); }
 }
 /** An emptied folder goes through its pinned parent; a non-empty or missing one stays as it is (`member`: a non-empty one is a refusal). */
 export async function removeEmptyPinnedDirectory(path: string, member = false) {

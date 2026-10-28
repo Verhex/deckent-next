@@ -657,14 +657,12 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Force ve servis sınırlıdır.** `--force` kişinin kendi yetkisiyle işleri iptal eder, onayları reddeder ve kuyruktaki teslimleri
   geri çeker. Her adımın sahip kararı (işler, onaylar, her teslim, silmeler ve onayları) karttan önce ve hiçbir şey yazmadan alınır:
   kişinin karar izni onay kimliklerini tek tek adlandırıyorsa, dört göz kuralı geçerliyse ya da politika güvence düzeyini kartın
-  kanıtladığından (eş oturum düzeyi) yükseğe çıkarıyorsa silme onayı karttan önce reddedilir. Çalışma alanı ya da çıktı klasörü
-  olmayan bir teslim de karttan önce reddedilir. Ret kapsamı adıyla söyler; sonucu bilinmeyen işlem kapatılmaz. Deckent'in
-  kaydetmediği birim yalnız `--disable-unit` ile, bütün K4 koşulları sağlanırsa, servis gittikten sonra ve birim dosyası ile
-  etkinleştirme bağlantıları kartın bağladıklarıyla tam aynıysa kapatılır. Birim dosyası, systemd'nin kullanıcı arama yolunda
-  diskte bulduğu ilk dosya olmalı ve hiçbir ek ayar (drop-in) klasörü olmamalıdır; örnek birim (`ad@x.service`), çalışma zamanı
-  bağlantısı olan ya da yöneticisi servisi yönetişimli durdurmadan sonra yeniden başlatan birim için komut yazdırılır. Eşleşen
-  başka bir bağlantıyı gösteren bağlantılar da sayılır. Niyet ve sonuç makbuzları (gerçekten kaldırılan bağlantılar ve geri alma
-  komutlarıyla; bağlantılar sonradan yeniden okunamazsa bilinmiyor) kurtarma klasöründe kalır. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
+  kanıtladığından (eş oturum düzeyi) yükseğe çıkarıyorsa silme onayı karttan önce reddedilir. Kuyruktaki teslimi geri çekme de
+  karttan önce reddedilir: kuyruk sahibi SQLite yan dosyalarına yazmadan gözlem garantisi henüz veremiyor. Önce teslimi kendi
+  sahibi üzerinden sonuçlandırın veya geri çekin; ardından kaldırmayı yeniden önizleyin. Bilinmeyen sonuç kapatılmaz.
+  Deckent'in kaydetmediği kullanıcı biriminde `--disable-unit` ile de komut yazdırılır ve işlem reddedilir: çağıranın XDG yolları
+  yöneticinin dosya seçimini kanıtlamaz; kapalı gözlemi yeni bir servis örneğini engellemez. Etkinleştirme bağlantısı ya da
+  makbuz otomatik değiştirilmez. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
   Kaldırma `require-approval` politika kararını reddeder (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez. Bir
   yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.

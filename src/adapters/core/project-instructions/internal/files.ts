@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { redactForRecord, withConfigWriteLock, type KnownSecretSnapshot } from '#platform/index.js';
+import { redactForRecord, withConfigWriteLock, openPinnedParent, writePinnedFile, type KnownSecretSnapshot } from '#platform/index.js';
 import type { CommittedInstructionSource, ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
 import REGISTRY from './registry.json' with { type: 'json' };
 
@@ -121,12 +121,25 @@ export async function folderTrustRecords(rootInput: string, trustDirectory: stri
   }
   return found.sort();
 }
-/** R6 (lead 2026-10-28): delete-everything forgets this folder's entries in the shared legacy snapshot through its owner; a restore does not bring
- * them back (that trust is asked again). Other folders' entries stay. */
+/** Delete-everything forgets only this folder's legacy grants; restore asks for trust again. Failure keeps the uninstall hold. */
 export async function forgetFolderLegacyTrust(rootInput: string, trustDirectory: string) {
-  if (!await lstat(trustDirectory).catch(() => null)) return; // F3: no store, nothing to forget; otherwise the same root check, a real path too
-  await trustRoot(trustDirectory, await realpath(rootInput), true); const rootDigest = await folderDigest(rootInput);
-  for (const [name, digest] of await legacyEntries(trustDirectory).catch(() => null) ?? []) if (name === instructionDigest(`${rootDigest}\0${digest}`)) await forgetLegacy(trustDirectory, name);
+  const parent = await openPinnedParent(join(trustDirectory, LEGACY.file));
+  if (!parent) return;
+  try {
+    const info = await parent.stat(), root = await realpath(rootInput), rel = relative(root, trustDirectory);
+    if (info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700 || !rel || rel !== '..' && !rel.startsWith(`..${sep}`)) throw new Error('unsafe');
+    const directory = `/proc/self/fd/${parent.fd}`, rootDigest = await folderDigest(rootInput);
+    if (!await lstat(join(directory, LEGACY.file)).catch(error => { if (missing(error)) return null; throw error; })) return;
+    await withConfigWriteLock(join(directory, LEGACY.file), async () => {
+      const before = await privateRecord(directory, LEGACY.file, LEGACY_BYTES), entries = await legacyEntries(directory);
+      if (before === null || !entries) throw new Error('unsafe');
+      for (const [name, digest] of entries) if (name === instructionDigest(`${rootDigest}\0${digest}`)) entries.delete(name);
+      const bytes = Buffer.from(LEGACY_HEADER + [...entries].map(([name, digest]) => `${name} ${digest}\n`).join(''));
+      if (bytes.toString('utf8') !== before) await writePinnedFile(join(directory, LEGACY.file), bytes, undefined, current => current.equals(Buffer.from(before)), parent);
+    });
+    const named = await lstat(trustDirectory);
+    if (named.isSymbolicLink() || named.dev !== info.dev || named.ino !== info.ino) throw new Error('unsafe');
+  } finally { await parent.close(); }
 }
 /** The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
 export type ExpectedInstructionFile = Readonly<{ path: string; dev: number | null; ino: number | null }>;

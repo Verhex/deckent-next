@@ -577,7 +577,7 @@ it('R13: an unknown result recorded in a scope the configuration no longer names
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('F6: a delivery\'s owner decision before the card writes nothing: with the workspace folder missing it is refused, no card, no folder made', async () => {
+it('F6: a delivery\'s owner decision before the card writes nothing: missing directories and existing directories both refuse before SQLite, no card or file changes', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { DatabaseSync } = await import('node:sqlite');
@@ -597,8 +597,12 @@ it('F6: a delivery\'s owner decision before the card writes nothing: with the wo
     await writeFile(join(local, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     const db = new DatabaseSync(ledger);
-    try { db.prepare('INSERT INTO target_queue(scope_id,command_id,target_key,ordinal,revision,state,record) VALUES(?,?,?,?,?,?,?)').run('s', 'ticket-1', 'k'.repeat(64), 1, 0, 'queued', '{}'); }
-    finally { db.close(); }
+    try {
+      const { SqliteTargetQueue } = await import('#adapters/core/target-queue-store/index.js'), { targetQueueRequestSchema } = await import('#domain/index.js');
+      new SqliteTargetQueue(db).enqueue(targetQueueRequestSchema.parse({ schemaVersion: 1, commandId: 'ticket-1', identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' },
+        actor: { id: 'owner', issuer: actor.issuer, subject: actor.subject }, target: { schemaVersion: 1, installationId: 'i', adapter: { id: 'git', version: 1 }, resourceBinding: 'a'.repeat(64), target: { kind: 'git-ref', id: 'refs/heads/main' } },
+        payloadDigest: 'b'.repeat(64), policyRevision: 'p1', outputDigest: 'c'.repeat(64), acceptedRevision: 1, submittedAt: 1, deadline: 5000 }), getConfigFieldDefault('targetQueue'), () => {});
+    } finally { db.close(); }
     const plan = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
     expect(plan.steps.withdrawDeliveries).toEqual([{ scopeId: 's', id: 'ticket-1', revision: 0 }]); expect(plan.blockers).toEqual([]);
     let cards = 0;
@@ -606,6 +610,21 @@ it('F6: a delivery\'s owner decision before the card writes nothing: with the wo
       .rejects.toMatchObject({ code: 'MANAGED_FILE_MISSING' });
     expect(cards).toBe(0);
     for (const resource of ['workspaces', 'artifacts'] as const) await expect(lstat(productResourcePath(layout, resource))).rejects.toMatchObject({ code: 'ENOENT' });
+    for (const resource of ['workspaces', 'artifacts'] as const) await mkdir(productResourcePath(layout, resource), { mode: 0o700 });
+    const { withQueueContext } = await import('#composition/core/runtime-service/index.js');
+    const snapshot = async () => { const { readdir } = await import('node:fs/promises'); const names = await readdir(dirname(ledger));
+      return Promise.all(names.sort().map(async name => [name, (await readFile(join(dirname(ledger), name))).toString('hex')])); };
+    const live = new DatabaseSync(ledger);
+    try {
+      live.exec('PRAGMA journal_mode=WAL'); live.prepare('UPDATE target_queue SET record=record WHERE command_id=?').run('ticket-1');
+      const fresh = await previewConfiguredUninstall(project, { ...ALL, force: true }, options), before = await snapshot(); let entered = false;
+      await expect(withQueueContext(project, 's', options, undefined, 'inspect', async () => { entered = true; }))
+        .rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
+      await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'inspect-existing', planDigest: fresh.planDigest }, { confirm: async () => { cards += 1; return true; } }, options))
+        .rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
+      expect(entered).toBe(false); expect(await snapshot()).toEqual(before); expect(cards).toBe(0);
+    } finally { live.close(); }
+
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -732,4 +751,50 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     // R6: the restored folder record alone never reopens the committed ref read (its legacy entry stays forgotten: that trust is asked again).
     expect(await committed()).toBe('trust-required');
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('F7: keep-work preserves a real owner-created clone with only its fingerprint corrupted, despite terminal no-delivery ledger proof', async () => {
+  if (process.platform !== 'linux') return;
+  const { GitWorkspaceBroker, FileArtifactStore, openSqliteAttemptStore } = await import('#adapters/index.js');
+  const { DispatchApplication, TaskEvaluationApplication } = await import('#engine/index.js');
+  const { admitRunAttempts } = await import('../support/admission.js'), { custodyProfile, custodyOrDockerProfiles } = await import('../support/custody.js');
+  const { fixtureDockerRegistry } = await import('../support/execution-registry.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-kw-owner-'));
+  try {
+    const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install();
+    const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, '-c', 'user.email=t@example.invalid', '-c', 'user.name=T', ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q'); git('commit', '-q', '--allow-empty', '-m', 'base'); const baseCommit = git('rev-parse', 'HEAD');
+    const { argv: _argv, ...docker } = fixtureDockerRegistry([]).profiles[0]!.parameters; void _argv;
+    const gitOptions = { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 };
+    await writeFile(join(local, 'config.json'), JSON.stringify({ terminal: { scopeId: 's' }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: gitOptions } }), { mode: 0o600 }); clearConfigCache();
+    const workspaceRoot = productResourcePath(layout, 'workspaces'), artifactRoot = productResourcePath(layout, 'artifacts');
+    await mkdir(workspaceRoot, { mode: 0o700 }); await mkdir(artifactRoot, { mode: 0o700 });
+    const broker = new GitWorkspaceBroker({ ...gitOptions, sourceRoot: project, workspaceRoot });
+    const identity = { scopeId: 's', runId: 'settled', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
+    const lease = await broker.allocate({ schemaVersion: 1, identity, baseCommit }); await writeFile(join(lease.workspace, 'work.txt'), 'KEEP OUTPUT', { mode: 0o600 });
+    const store = await openSqliteAttemptStore(productResourcePath(layout, 'ledger'), getConfigFieldDefault('storage').sqlite, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles);
+    try {
+      await admitRunAttempts(store, [identity], { noWorkspaceDelivery: true });
+      const principal = { id: 'user', issuer: 'test', subject: 'user', assurance: 'os-user' as const, scopeIds: ['s'] }, verifier = { async verify() { return principal; } }, allow = { async authorize() {}, async authorizeIdentity() {} };
+      const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
+      const supervisor = { async release() { throw new Error('unused'); }, async captureProfile() { return custodyProfile; }, async cancel() { throw new Error('unused'); }, async recoverOutput() { throw new Error('unused'); }, async observe() { throw new Error('unused'); },
+        async execute() { return { handle: 'h1', result: { kind: 'exited' as const, exitCode: 0 }, stdout: 'ok', stderr: '', interrupted: false, outputCompleteness: 'complete' as const }; } };
+      await new DispatchApplication(store, supervisor, verifier, allow, 'owner', artifacts).execute({ protocolVersion: 1, identity, workspace: lease.workspace, argv: ['node'] });
+      await new TaskEvaluationApplication(store, verifier, allow, { async evaluate() { return 'pass' as const; } }, artifacts, { maxEvidenceItems: 1, maxTotalBytes: 1048576 }, { now: Date.now, timeoutMs: 86400000 })
+        .execute({ schemaVersion: 1, commandId: 'settle', identity, expectedRevision: (await store.loadRun('s', identity.runId))!.revision });
+      expect((await store.loadRun('s', identity.runId))!.state.kind).toBe('terminal');
+    } finally { store.close(); }
+    await chmod(productResourcePath(layout, 'ledger'), 0o600);
+    const leaseFile = join(dirname(lease.workspace), 'lease.json'), record = JSON.parse(await readFile(leaseFile, 'utf8'));
+    expect(await broker.openRecorded(identity)).toBeTruthy(); record.fingerprint = 'e'.repeat(64); await writeFile(leaseFile, JSON.stringify(record));
+    await expect(broker.openRecorded(identity)).rejects.toMatchObject({ code: 'WORKSPACE_IDENTITY_CONFLICT' });
+    await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
+    const plan = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
+    expect(plan.items).toContainEqual(expect.objectContaining({ locator: dirname(lease.workspace), action: 'keep', keep: 'workspace-pending' }));
+    expect(plan.items.find(item => item.resourceId === 'conversation-data')!.members).not.toContain(join(lease.workspace, 'work.txt'));
+    let cards = 0;
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'kw-corrupt', planDigest: plan.planDigest }, { confirm: async () => { cards++; return true; }, backupPassphrase: async () => phrase }, options);
+    expect(cards).toBe(1); expect(result.status).toBe('completed'); expect(await readFile(join(lease.workspace, 'work.txt'), 'utf8')).toBe('KEEP OUTPUT');
+    expect(await readFile(leaseFile, 'utf8')).toBe(JSON.stringify(record));
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

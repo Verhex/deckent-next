@@ -14,11 +14,9 @@ export type ProjectTracking = (path: string) => 'vcs-tracked' | 'vcs-unverified'
 export async function projectTracking(projectRoot: string, projectData: string, configured: string | null, bounds: { readonly timeoutMs: number; readonly outputBytes: number }): Promise<ProjectTracking> {
   const git = configured ?? removalRegistry.git.find(executable), unverified: ProjectTracking = path => pathWithin(projectRoot, path) ? 'vcs-unverified' : null;
   if (!git || !isAbsolute(git)) return inRepository(projectRoot) ? unverified : () => null;
-  // B2: the project's .deckent and the instruction files init may write at the project root (never the whole repository: its size is unbounded).
   const paths = [projectData, ...[...new Set([...BRIDGES.files, ...BRIDGES.bridges.map(row => row.path)])].map(name => join(projectRoot, name))];
   const answer = await new Promise<{ out: string; err: string; code: unknown }>(resolve => execFile(git, localGitArgs(projectRoot, ['--literal-pathspecs', 'ls-files', '-z', '--', ...paths]),
     { env: { ...GIT_LOCAL_ENV, LC_ALL: 'C' }, shell: false, encoding: 'utf8', timeout: bounds.timeoutMs, maxBuffer: bounds.outputBytes }, (error, out, err) => resolve({ out, err, code: error ? error.code ?? -1 : 0 })));
-  // Git itself saying there is no repository is an answer (a stray `.git` folder is no repository); any other failure is not.
   if (answer.code === 128 && /not a git repository/u.test(answer.err)) return () => null;
   if (answer.code !== 0) return unverified;
   const files = answer.out.split('\0').filter(Boolean).map(path => join(projectRoot, path));
