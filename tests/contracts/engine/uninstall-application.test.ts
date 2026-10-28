@@ -175,7 +175,7 @@ it('asks nothing when nothing would change, stops the service before custody in 
     force: { cancelRun: async ref => { calls.push(`cancel:${ref.id}`); work = { ...work, running: [] }; }, rejectApproval: async ref => { calls.push(`reject:${ref.id}`); work = { ...work, approvals: [] }; },
       withdrawDelivery: async ref => { calls.push(`withdraw:${ref.id}`); work = { ...work, deliveries: [] }; } },
     settle: { budgetMs: 1000, wait: async () => {} },
-    service: { budgetMs: 1000, describe: async () => { if (!answering) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); return descriptor(instance); },
+    service: { async withStoppedCustody(_confirmed, work) { calls.push('startup-fence'); try { return await work(); } finally { calls.push('release-fence'); } }, budgetMs: 1000, describe: async () => { if (!answering) throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); return descriptor(instance); },
       unit: async () => ({ unit: 'deckent-fixture.service', unitDisable: 'eligible', command: 'systemctl --user disable --now deckent-fixture.service' }),
       // A manager restarts the stopped service (a new instance) until the unit is disabled.
       shutdown: async () => { calls.push('shutdown'); instance = 'restarted'; }, disable: async ({ unit }) => { calls.push(`disable:${unit}`); answering = false; return { unit: unit!, previous: 'enabled', undo: `systemctl --user enable --now ${unit}` }; } } });
@@ -195,7 +195,7 @@ it('asks nothing when nothing would change, stops the service before custody in 
   const stops = new UninstallApplication({ ...unitPorts, service: { ...unitPorts.service!, shutdown: async () => { calls.push('shutdown'); answering = false; } } });
   const unit = await stops.preview(query({ disableUnit: true }));
   const result = await stops.apply({ schemaVersion: 2, commandId: 'c3', planDigest: unit.planDigest }, confirm);
-  expect(calls).toEqual(['shutdown', 'disable:deckent-fixture.service', 'custody:false', 'finish:completed']);
+  expect(calls).toEqual(['shutdown', 'startup-fence', 'disable:deckent-fixture.service', 'custody:false', 'finish:completed', 'release-fence']);
   expect(result).toMatchObject({ status: 'completed', unit: { unit: 'deckent-fixture.service', previous: 'enabled' } }); expect(cards).toBe(1);
   // R4 (lead 2026-10-28): the unit's manager starts a new instance after the governed shutdown (it may already accept work): nothing is
   // disabled or stopped by --now; the refusal names the exact command.
@@ -203,7 +203,7 @@ it('asks nothing when nothing would change, stops the service before custody in 
   const restarting = await app().preview(query({ disableUnit: true }));
   await expect(app().apply({ schemaVersion: 2, commandId: 'c3b', planDigest: restarting.planDigest }, confirm))
     .rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING', params: { command: 'systemctl --user disable --now deckent-fixture.service' } });
-  expect(calls).toEqual(['shutdown']); answering = false;
+  expect(calls).toEqual(['shutdown', 'startup-fence', 'release-fence']); answering = false;
   // K3: force cancels and rejects with the person's authority, names the unknown result and closes nothing; a NEW unknown result after cancelling stops before custody.
   calls.length = 0; answering = false;
   work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 2 }], approvals: [{ scopeId: 's', id: 'approval-1', revision: 0 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 3 }], uncertain: [effect] };
@@ -223,7 +223,7 @@ it('asks nothing when nothing would change, stops the service before custody in 
   // M14, R8: any step an owner would refuse after the card (here the second of two deliveries) is refused before it: no card, no service
   // stop, no cancel, no withdrawal, no custody.
   calls.length = 0; cards = 0; answering = false;
-  work = { ...idle, running: [{ scopeId: 's', id: 'run-3', revision: 1 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 1 }, { scopeId: 's', id: 'ticket-2', revision: 1 }] };
+  work = { ...idle, running: [{ scopeId: 's', id: 'run-3', revision: 1 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 1, state: 'queued' }, { scopeId: 's', id: 'ticket-2', revision: 1, state: 'queued' }] };
   const ports = (app() as unknown as { ports: import('#engine/index.js').UninstallApplicationPorts }).ports, decided: string[] = [];
   const denied = new UninstallApplication({ ...ports, preflight: async plan => { for (const ref of plan.steps.withdrawDeliveries) { decided.push(ref.id); if (ref.id === 'ticket-2') throw ErrorRegistry.createError('POLICY_DENIED'); } } });
   const forcedRun = await denied.preview(query({ tier: 'all', force: true }));
@@ -233,6 +233,8 @@ it('asks nothing when nothing would change, stops the service before custody in 
   const base = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'backup', 'run', 'operation', 'approval'].map(kind => ({ id: kind, effect: 'allow', principals: 'all', actions: 'all', scopes: 'all', resource: { kind, ids: 'all' } })) };
   const removing = { ...forcedRun, items: [{ action: 'remove', operation: { id: 'installation.remove-data', version: 1 } }], steps: { ...forcedRun.steps, cancelRuns: [{ scopeId: 's', id: 'run-3', revision: 1 }], rejectApprovals: [] } } as unknown as UninstallPlan;
   await expect(authorizeUninstallSteps(base, removing, principal, 's')).resolves.toBeUndefined();
+  await expect(authorizeUninstallSteps(base, { ...removing, steps: { ...removing.steps, withdrawDeliveries: [{ scopeId: 's', id: 'started', revision: 1, state: 'adopting' }] } }, principal, 's'))
+    .rejects.toMatchObject({ code: 'UNINSTALL_DELIVERY_QUEUED', params: { list: 'started', owner: 's' } });
   for (const kind of ['run', 'operation', 'approval']) {
     const without = { ...base, grants: [...base.grants.filter(grant => grant.id !== kind), { ...base.grants[0]!, id: `deny-${kind}`, effect: 'deny', resource: { kind, ids: 'all' } }] };
     await expect(authorizeUninstallSteps(without, removing, principal, 's')).rejects.toMatchObject({ code: kind === 'approval' ? 'APPROVAL_DENIED' : 'POLICY_DENIED' });
@@ -282,7 +284,7 @@ it('K3 on the real delivery queue: delete everything refuses a queued delivery n
         revalidate: async () => {}, prepareBackup: async () => {}, approvePlan: async () => {}, finish: async () => {} }); },
       force: { cancelRun: async () => {}, rejectApproval: async () => {},
         withdrawDelivery: async ref => { const record = await queue.inspect(ref.scopeId, ref.id, principal); if (record) await queue.cancel(record, principal); } },
-      settle: { budgetMs: 1000, wait: async () => {} }, service: { budgetMs: 1000, describe: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); },
+      settle: { budgetMs: 1000, wait: async () => {} }, service: { async withStoppedCustody(_confirmed, work) { calls.push('startup-fence'); try { return await work(); } finally { calls.push('release-fence'); } }, budgetMs: 1000, describe: async () => { throw ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'); },
         unit: async () => null, shutdown: async () => {}, disable: async ({ unit }) => ({ unit: unit!, previous: 'enabled', undo: '' }) } });
     const query = { schemaVersion: 2, tier: 'all', force: false, disableUnit: false } as const, confirm = { confirm: async () => true, backupPassphrase: async () => 'temporary' };
     // Negative: without --force nothing is touched and the refusal names the next command.

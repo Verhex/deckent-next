@@ -65,7 +65,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
     layoutRevision: layout.revision, policyRevision, inventoryRevision: hash(resources), resources, blockers: [], protectedPaths,
     dataBlockers: [], deletionRoots: rooted ? [layout.root] : [globalRoot], backupDestination: null,
     packageRemoval: { command: packageRemovalCommand(), shared: true }, managedScopes: [], service: { running: false, unit: null, unitDisable: 'none', command: null },
-    work: observeUninstallWork(productResourcePath(layout, 'ledger'), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords }) };
+    work: observeUninstallWork(productResourcePath(layout, 'ledger'), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRecords: config.audit.maxRecords, companyId: config.company.id }) };
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
   const extended = await extendUninstallInventory(config, inventory, integrity, env, globalRoot, tracked, { own: layout.root === projectData, caches: owned.map(item => item.path) });
   const imagesObserved = config.execution?.docker ? await observeWorkerRemovalInventory({ home: join(productResourcePath(layout, 'workspaces'), 'toolchains'), installationId,

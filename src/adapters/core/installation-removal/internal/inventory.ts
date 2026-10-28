@@ -16,7 +16,7 @@ import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
 export const removalRegistry = z.object({ schemaVersion: z.literal(5), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
   recoveryRoot: z.record(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.object({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) }).strict()),
-  systemctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
+  systemctl: z.array(z.string().refine(isAbsolute)).min(1), busctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
   archive: z.object({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.object({ pattern: z.string(), lease: z.string() }).strict(), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
   purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.

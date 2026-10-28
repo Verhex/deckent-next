@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { effectCommandSchema, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
+import { effectCommandSchema, queueNextState, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
@@ -75,13 +75,13 @@ export interface UninstallApplicationPorts {
   /** Missing owners → undefined, never a permissive default. `approved`: the confirmed digest D0 the archive binds to (the admitted plan is the fresh D1). */
   withAdmission?: <T>(plan: UninstallPlan, approved: string, work: (admission: UninstallAdmission) => Promise<T>) => Promise<T>;
   /** K3: the existing run cancellation and approval decision owners, as the witnessed person; nothing is closed, released or killed. */
-  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: Ref): Promise<void> };
+  readonly force?: { cancelRun(ref: Ref): Promise<void>; rejectApproval(ref: Ref): Promise<void>; withdrawDelivery(ref: UninstallPlan['work']['deliveries'][number]): Promise<void> };
   /** M14, R8: every decision an owner takes after the card (force steps, deliveries, removals, their approval) taken before it, writing nothing. */
   preflight?(plan: UninstallPlan, principal: VerifiedPrincipal): Promise<void>;
   /** Configured wait for cancelled work: its budget and poll interval; a timeout leaves the work, and the fresh plan names it. */
   readonly settle?: { readonly budgetMs: number; wait(ms: number): Promise<unknown> };
   /** The runtime service: its describe answer, the user unit whose main process it is (K4 checks), governed shutdown and `disable --now`. */
-  readonly service?: { readonly budgetMs: number; describe(signal: AbortSignal): Promise<RuntimeServiceDescriptor>;
+  readonly service?: { withStoppedCustody?<T>(confirmed: UninstallPlan['service'], work: () => Promise<T>): Promise<T>; readonly budgetMs: number; describe(signal: AbortSignal): Promise<RuntimeServiceDescriptor>;
     unit(processId: number): Promise<{ readonly unit: string; readonly unitDisable: 'eligible' | 'command-only'; readonly command: string; readonly links?: readonly string[]; readonly unitFile?: string | null } | null>;
     shutdown(): Promise<unknown>; /** `disable --now` of the confirmed unit; its owner re-reads unit file and links right before (R3). */ disable(confirmed: UninstallPlan['service']): Promise<NonNullable<UninstallResult['unit']>> };
 }
@@ -101,20 +101,24 @@ export class UninstallApplication {
       links: unit?.links ?? [], unitFile: unit?.unitFile ?? null } };
   }
   /** Governed shutdown first; absence is observed, never assumed; only then K4's `disable --now` (its owner re-reads the unit first); then absence again. */
-  private async stopService(plan: UninstallPlan) {
+  private async stopService<T>(plan: UninstallPlan, work: (unit: UninstallResult['unit']) => Promise<T>): Promise<T> {
     const { service, settle } = this.ports, deadline = service && runtimeMonotonicDeadline(service.budgetMs);
     if (!service || !deadline || !settle) throw new UninstallError('UNINSTALL_UNSUPPORTED');
-    const refused = () => ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: plan.service.unit ?? '', command: plan.service.command ?? '' } });
+    const refused = () => ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { reason: 'new-instance-or-custody-unavailable', unit: plan.service.unit ?? '', command: plan.service.command ?? '' } });
     const answer = async () => (await describeRuntimeServiceWithin(service.describe, deadline)).descriptor, first = await answer();
     const gone = async (instance: string | null) => { for (let now = await answer(); now && now.instanceId === (instance ?? now.instanceId); now = await answer()) {
       if (deadline.expired()) throw refused();
       await settle.wait(this.registry.waitPollMs); } };
     if (first) { await service.shutdown(); await gone(first.instanceId); }
-    // R4 (lead 2026-10-28): a new instance after the shutdown may have accepted work: no `--now`, the person gets the command (K4 absence rule).
-    if (await answer()) throw refused();
-    const unit = plan.steps.disableUnit && plan.service.unit ? await service.disable(plan.service) : undefined;
-    await gone(null);
-    return unit;
+    const stopped = async () => {
+      // R4 (lead 2026-10-28): a new instance after the shutdown may have accepted work: no `--now`, the person gets the command (K4 absence rule).
+      if (await answer()) throw refused();
+      const unit = plan.steps.disableUnit && plan.service.unit ? await service.disable(plan.service) : undefined;
+      await gone(null);
+      return work(unit);
+    };
+    if (plan.steps.disableUnit && !service.withStoppedCustody) throw refused();
+    return service.withStoppedCustody ? service.withStoppedCustody(plan.service, stopped) : stopped();
   }
   async preview(query: unknown): Promise<UninstallPlan> {
     const principal = await this.ports.principal();
@@ -179,73 +183,75 @@ export class UninstallApplication {
         interaction.progress?.({ remaining: left, leftMs: Math.ceil(deadline.remaining()) }); await wait(Math.min(this.registry.waitPollMs, deadline.remaining()));
       }
     }
-    if (steps.stopService) unit = await this.stopService(approved);
-    // D1 = E(D0): a fresh plan of the same query may differ only in what the confirmation already covered.
-    plan = await this.replan(approved);
-    const drift = uninstallPlanDrift(approved, plan);
-    if (drift.length) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED', { params: { diff: drift.slice(0, 8).join(', ') } });
-    states.splice(0, states.length, ...plan.items.map(item => ({ resourceId: item.resourceId, state: null })));
-    return admit(plan, approved.planDigest, async admission => {
-      admitted = admission;
-      // D2 under custody: the same expectation as D1, now that no service or other process can change the ledger.
-      const custody = uninstallPlanDrift(approved, await this.replan(approved, false));
-      if (custody.length) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED', { params: { diff: custody.slice(0, 8).join(', ') } });
-      await admission.revalidate(null);
-      const pending = plan.items.filter(item => item.action === 'remove'), registry = this.registry;
-      const commands = new Map<string, EffectCommand>();
-      for (const item of pending) {
-        const entry = registry.entries.find(entry => entry.id === item.contribution);
-        if (!entry) throw new UninstallError('UNINSTALL_INVALID');
-        // Per-plan keys survive a different CLI invocation id; paths never become effect target ids.
-        const key = hash(JSON.stringify([plan.installation.id, plan.planDigest, item.resourceId]));
-        commands.set(item.resourceId, { schemaVersion: 1, commandId: key, idempotencyKey: key, scopeId: admission.scopeId,
-          operation: item.operation, target: { kind: entry.targetKind, id: item.resourceId }, expectedVersion: item.version,
-          input: { planDigest: plan.planDigest, resourceId: item.resourceId } });
-        const record = await admission.effects.inspect(admission.scopeId, key);
-        states.find(state => state.resourceId === item.resourceId)!.state = record?.state ?? null;
-      }
-      if (pending.every(item => states.find(state => state.resourceId === item.resourceId)!.state === 'settled') && !steps.stopService && !forced) {
-        const noop = result('noop', admission.recoveryLocation); await admission.finish(noop); return noop;
-      }
-      if (plan.backup.required) {
-        if (signal?.aborted) { const cancelled = result('cancelled', admission.recoveryLocation); await admission.finish(cancelled); return cancelled; }
-        // K7: create → verify (audit included) → bind to this plan before the first deletion; an unverifiable backup deletes nothing.
-        await this.person(gated); await admission.prepareBackup(await interaction.backupPassphrase?.());
-      }
-      await this.person(gated);
-      await admission.revalidate(null); await admission.approvePlan();
-      const remaining = new Set(pending.map(item => item.resourceId));
-      while (remaining.size) {
-        const item = pending.find(item => remaining.has(item.resourceId) && item.dependencies.every(id => !remaining.has(id)));
-        if (!item) throw new UninstallError('UNINSTALL_INVALID');
-        const state = states.find(state => state.resourceId === item.resourceId)!;
-        if (state.state !== 'settled') {
-          if (signal?.aborted) { const stopped = result('cancelled', admission.recoveryLocation); await admission.finish(stopped); return stopped; }
-          try {
-            await this.person(gated);
-            await admission.revalidate(item);
-            const outcome = await admission.effects.execute(commands.get(item.resourceId)!);
-            if (outcome.status !== 'settled') throw new UninstallError('UNINSTALL_UNSUPPORTED');
-            state.state = 'settled';
-          }
-          catch (error) {
-            // Never fabricate failure/settlement after a lost result: the generic store remains the only truth. A store that can no longer
-            // be read (the final tail already removed its policy or key) leaves the outcome unknown, never a policy error.
-            state.state = (await admission.effects.inspect(admission.scopeId, commands.get(item.resourceId)!.commandId).catch(() => ({ state: 'unknown' as const })))?.state ?? null;
-            if (state.state === 'claimed' || state.state === 'unknown') {
-              const unknown = result('unknown', admission.recoveryLocation, 'EFFECT_OUTCOME_UNKNOWN'); await admission.finish(unknown); return unknown;
-            }
-            if (states.some(item => item.state === 'settled')) {
-              const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && ErrorRegistry.has(error.code) ? error.code : 'UNINSTALL_UNSUPPORTED';
-              const partial = result('partial', admission.recoveryLocation, code); await admission.finish(partial); return partial;
-            }
-            throw error;
-          }
+    const complete = async () => {
+      // D1 = E(D0): a fresh plan of the same query may differ only in what the confirmation already covered.
+      plan = await this.replan(approved);
+      const drift = uninstallPlanDrift(approved, plan);
+      if (drift.length) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED', { params: { diff: drift.slice(0, 8).join(', ') } });
+      states.splice(0, states.length, ...plan.items.map(item => ({ resourceId: item.resourceId, state: null })));
+      return admit(plan, approved.planDigest, async admission => {
+        admitted = admission;
+        // D2 under custody: the same expectation as D1, now that no service or other process can change the ledger.
+        const custody = uninstallPlanDrift(approved, await this.replan(approved, false));
+        if (custody.length) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED', { params: { diff: custody.slice(0, 8).join(', ') } });
+        await admission.revalidate(null);
+        const pending = plan.items.filter(item => item.action === 'remove'), registry = this.registry;
+        const commands = new Map<string, EffectCommand>();
+        for (const item of pending) {
+          const entry = registry.entries.find(entry => entry.id === item.contribution);
+          if (!entry) throw new UninstallError('UNINSTALL_INVALID');
+          // Per-plan keys survive a different CLI invocation id; paths never become effect target ids.
+          const key = hash(JSON.stringify([plan.installation.id, plan.planDigest, item.resourceId]));
+          commands.set(item.resourceId, { schemaVersion: 1, commandId: key, idempotencyKey: key, scopeId: admission.scopeId,
+            operation: item.operation, target: { kind: entry.targetKind, id: item.resourceId }, expectedVersion: item.version,
+            input: { planDigest: plan.planDigest, resourceId: item.resourceId } });
+          const record = await admission.effects.inspect(admission.scopeId, key);
+          states.find(state => state.resourceId === item.resourceId)!.state = record?.state ?? null;
         }
-        remaining.delete(item.resourceId);
-      }
-      const completed = result('completed', admission.recoveryLocation); await admission.finish(completed); return completed;
-    });
+        if (pending.every(item => states.find(state => state.resourceId === item.resourceId)!.state === 'settled') && !steps.stopService && !forced) {
+          const noop = result('noop', admission.recoveryLocation); await admission.finish(noop); return noop;
+        }
+        if (plan.backup.required) {
+          if (signal?.aborted) { const cancelled = result('cancelled', admission.recoveryLocation); await admission.finish(cancelled); return cancelled; }
+          // K7: create → verify (audit included) → bind to this plan before the first deletion; an unverifiable backup deletes nothing.
+          await this.person(gated); await admission.prepareBackup(await interaction.backupPassphrase?.());
+        }
+        await this.person(gated);
+        await admission.revalidate(null); await admission.approvePlan();
+        const remaining = new Set(pending.map(item => item.resourceId));
+        while (remaining.size) {
+          const item = pending.find(item => remaining.has(item.resourceId) && item.dependencies.every(id => !remaining.has(id)));
+          if (!item) throw new UninstallError('UNINSTALL_INVALID');
+          const state = states.find(state => state.resourceId === item.resourceId)!;
+          if (state.state !== 'settled') {
+            if (signal?.aborted) { const stopped = result('cancelled', admission.recoveryLocation); await admission.finish(stopped); return stopped; }
+            try {
+              await this.person(gated);
+              await admission.revalidate(item);
+              const outcome = await admission.effects.execute(commands.get(item.resourceId)!);
+              if (outcome.status !== 'settled') throw new UninstallError('UNINSTALL_UNSUPPORTED');
+              state.state = 'settled';
+            }
+            catch (error) {
+              // Never fabricate failure/settlement after a lost result: the generic store remains the only truth. A store that can no longer
+              // be read (the final tail already removed its policy or key) leaves the outcome unknown, never a policy error.
+              state.state = (await admission.effects.inspect(admission.scopeId, commands.get(item.resourceId)!.commandId).catch(() => ({ state: 'unknown' as const })))?.state ?? null;
+              if (state.state === 'claimed' || state.state === 'unknown') {
+                const unknown = result('unknown', admission.recoveryLocation, 'EFFECT_OUTCOME_UNKNOWN'); await admission.finish(unknown); return unknown;
+              }
+              if (states.some(item => item.state === 'settled')) {
+                const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && ErrorRegistry.has(error.code) ? error.code : 'UNINSTALL_UNSUPPORTED';
+                const partial = result('partial', admission.recoveryLocation, code); await admission.finish(partial); return partial;
+              }
+              throw error;
+            }
+          }
+          remaining.delete(item.resourceId);
+        }
+        const completed = result('completed', admission.recoveryLocation); await admission.finish(completed); return completed;
+      });
+    };
+    return steps.stopService ? this.stopService(approved, stoppedUnit => { unit = stoppedUnit; return complete(); }) : complete();
   }
 }
 
@@ -254,6 +260,10 @@ export async function authorizeUninstallSteps(policy: unknown, plan: UninstallPl
   const source = { load: async () => policy }, runs = new RunPolicyAuthorization(source), operations = new OperationPolicyAuthorization(source);
   for (const ref of plan.steps.cancelRuns) await runs.authorize('cancel', { scopeId: ref.scopeId, runId: ref.id }, principal);
   for (const ref of plan.steps.rejectApprovals) authorizeApproval(policy, 'decide', ref.scopeId, ref.id, principal);
+  for (const ref of plan.steps.withdrawDeliveries) {
+    try { if (!ref.state) throw new UninstallError('UNINSTALL_INVALID'); queueNextState({ state: ref.state }, 'cancelled'); }
+    catch { throw ErrorRegistry.createError('UNINSTALL_DELIVERY_QUEUED', { params: { count: '1', list: ref.id, owner: ref.scopeId } }); }
+  }
   for (const id of new Set(plan.items.filter(item => item.action === 'remove').map(item => item.operation.id))) {
     await operations.authorize('execute', scopeId, { id, version: 1 }, principal); // the first claim's own decision (inspect is asked only of a stored record)
     authorizeOwnApproval(policy, scopeId, principal, uninstallOperationDescriptors().find(item => item.operation.id === id)!); // F6: as the decider would, before the card

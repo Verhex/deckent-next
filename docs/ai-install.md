@@ -86,8 +86,9 @@ any of them with `--dry-run` or `--json` (for example `deckent uninstall --all -
 
 Every check runs before the one confirmation, and nothing is asked when there is nothing to remove. A refusal names its
 cause and next step: running work (`--force` cancels it with the person's own authority and never closes an unknown result),
-a service manager that restarts the service (`--disable-unit` currently prints the exact manual command and refuses automatic
-changes to a user unit Deckent did not create), queued deliveries (settle or withdraw them through their owner first), policy,
+a service manager that restarts the service (`--disable-unit` separately approves disabling a user unit only when the manager
+proves the exact fragment and link set and exclusive ledger custody fences startup; its unit file stays), queued deliveries
+(`--all --force` withdraws through their queue owner after that owner authorizes each delivery before the card), policy,
 retention or legal hold, or a moved or unsafe authority file. When Git tracking cannot be
 read, every project file is treated as possibly tracked and kept.
 `--yes` skips only the final card; the plan is still printed. Worker images stay; use only the exact command on the card.

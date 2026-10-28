@@ -580,7 +580,7 @@ it('R13: an unknown result recorded in a scope the configuration no longer names
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
-it('F6: a delivery\'s owner decision before the card writes nothing: missing directories and existing directories both refuse before SQLite, no card or file changes', async () => {
+it('F6: queued-withdraw preflight writes nothing, denies without the owner grant, and cancellation uses the queue owner after approval', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
   const { DatabaseSync } = await import('node:sqlite');
@@ -599,6 +599,9 @@ it('F6: a delivery\'s owner decision before the card writes nothing: missing dir
     policy.grants.push({ id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'scope', ids: ['s'] } });
     await writeFile(join(local, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const { FileProjectIdentityStore, registerLedgerScopes } = await import('#adapters/index.js');
+    await new FileProjectIdentityStore(project, getConfigFieldDefault('configFile').writeLockTimeoutMs).loadOrCreate();
+    registerLedgerScopes(ledger, getConfigFieldDefault('storage').sqlite, getConfigFieldDefault('company').id, ['s'], 'admission');
     const db = new DatabaseSync(ledger);
     try {
       const { SqliteTargetQueue } = await import('#adapters/core/target-queue-store/index.js'), { targetQueueRequestSchema } = await import('#domain/index.js');
@@ -607,10 +610,10 @@ it('F6: a delivery\'s owner decision before the card writes nothing: missing dir
         payloadDigest: 'b'.repeat(64), policyRevision: 'p1', outputDigest: 'c'.repeat(64), acceptedRevision: 1, submittedAt: 1, deadline: 5000 }), getConfigFieldDefault('targetQueue'), () => {});
     } finally { db.close(); }
     const plan = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
-    expect(plan.steps.withdrawDeliveries).toEqual([{ scopeId: 's', id: 'ticket-1', revision: 0 }]); expect(plan.blockers).toEqual([]);
+    expect(plan.steps.withdrawDeliveries).toEqual([{ scopeId: 's', id: 'ticket-1', revision: 0, identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' }, state: 'queued', company: 'current' }]); expect(plan.blockers).toEqual([]);
     let cards = 0;
     await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'inspect', planDigest: plan.planDigest }, { confirm: async () => { cards += 1; return true; } }, options))
-      .rejects.toMatchObject({ code: 'MANAGED_FILE_MISSING' });
+      .rejects.toMatchObject({ code: 'UNINSTALL_DELIVERY_QUEUED' });
     expect(cards).toBe(0);
     for (const resource of ['workspaces', 'artifacts'] as const) await expect(lstat(productResourcePath(layout, resource))).rejects.toMatchObject({ code: 'ENOENT' });
     for (const resource of ['workspaces', 'artifacts'] as const) await mkdir(productResourcePath(layout, resource), { mode: 0o700 });
@@ -624,8 +627,23 @@ it('F6: a delivery\'s owner decision before the card writes nothing: missing dir
       await expect(withQueueContext(project, 's', options, undefined, 'inspect', async () => { entered = true; }))
         .rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
       await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'inspect-existing', planDigest: fresh.planDigest }, { confirm: async () => { cards += 1; return true; } }, options))
-        .rejects.toMatchObject({ code: 'UNINSTALL_UNSUPPORTED' });
+        .rejects.toMatchObject({ code: 'UNINSTALL_DELIVERY_QUEUED' });
       expect(entered).toBe(false); expect(await snapshot()).toEqual(before); expect(cards).toBe(0);
+      for (const kind of ['attempt', 'work-target']) policy.grants.push({ id: `queue-${kind}`, effect: 'allow', actions: 'all', scopes: 'all',
+        principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } });
+      await writeFile(join(local, 'policy.json'), JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+      const permitted = await previewConfiguredUninstall(project, { ...ALL, force: true }, options), noWrite = await snapshot();
+      const declined = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'queue-decline', planDigest: permitted.planDigest },
+        { confirm: async () => { cards++; return false; } }, options);
+      expect(declined.status).toBe('cancelled'); expect(cards).toBe(1); expect(await snapshot()).toEqual(noWrite);
+      // Security proof approves the real destructive card; the queue owner cancels and audits before the later backup guard refuses.
+      await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'queue-allow', planDigest: permitted.planDigest },
+        { confirm: async () => { cards++; return true; } }, options)).rejects.toMatchObject({ code: 'BACKUP_PASSPHRASE_REQUIRED' });
+      expect(cards).toBe(2);
+      const ticket = live.prepare('SELECT state,record FROM target_queue WHERE command_id=?').get('ticket-1');
+      expect(ticket?.state).toBe('cancelled'); expect(JSON.parse(String(ticket?.record)).revision).toBe(1);
+      expect(live.prepare("SELECT COUNT(*) n FROM audit_events WHERE record LIKE '%target-queue%' AND record LIKE '%cancelled%'").get()?.n).toBe(1);
+
     } finally { live.close(); }
 
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }

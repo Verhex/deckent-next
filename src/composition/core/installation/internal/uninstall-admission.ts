@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { UninstallRecovery, FileEffectStore, acquireLedgerLock, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore,
-  localPrincipalPeer, attestLocalInteractiveTerminal } from '#adapters/index.js';
+  localPrincipalPeer, attestLocalInteractiveTerminal, type LedgerLock } from '#adapters/index.js';
 import { ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
   UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
@@ -13,11 +13,11 @@ import { observeUninstallInventory as configuredUninstallInventory } from '#adap
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
 export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: UninstallPlan, approved: string, principal: VerifiedPrincipal,
-  scopeId: string, scopeIds: readonly string[], options: ConfigLoadOptions, work: (admission: UninstallAdmission) => Promise<T>): Promise<T> {
+  scopeId: string, scopeIds: readonly string[], options: ConfigLoadOptions, work: (admission: UninstallAdmission) => Promise<T>, held?: LedgerLock): Promise<T> {
   const path = await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock');
   // A running service holds this custody: it is stopped by the plan's governed step, so a holder now is a service that came back (S4b).
-  const lock = (() => { try { return acquireLedgerLock(path); } catch (error) { if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
-    throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: plan.service.unit ?? '', command: plan.service.command ?? '' } }); } })();
+  const lock = held ?? (() => { try { return acquireLedgerLock(path); } catch (error) { if ((error as { code?: string }).code !== 'LOCAL_RUNTIME_ALREADY_RUNNING') throw error;
+    throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { reason: 'new-instance-holds-ledger', unit: plan.service.unit ?? '', command: plan.service.command ?? '' } }); } })();
   try {
     // Fresh identity/layout/target observations after custody and before the first journal write.
     const current = await configuredUninstallInventory(config, plan.policyRevision, scopeIds, options), directory = uninstallRecoveryDirectory(config, options.env ?? process.env);
@@ -85,6 +85,6 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         status: 'cancelled', items, recoveryLocation, backup: plan.backup, packageRemoval: plan.packageRemoval, uncertain: plan.work.uncertain });
       throw error;
     } finally { audit?.close(); if (!authorityClosed) approvals.close(); }
-  } finally { lock.release(); }
+  } finally { if (!held) lock.release(); }
 }
 const commandKey = (plan: UninstallPlan, id: string) => createHash('sha256').update(JSON.stringify([plan.installation.id, plan.planDigest, id])).digest('hex');

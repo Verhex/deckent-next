@@ -67,7 +67,7 @@ export function queueTerminal(state: TargetQueueState): boolean {
   return ['cancelled', 'expired', 'parked', 'settled'].includes(state);
 }
 /** Unknown is never skipped or expired; recovery needs physical custody, not a lease's wall-clock age. */
-export function queueNextState(previous: TargetQueueRecord, state: TargetQueueState): void {
+export function queueNextState(previous: Pick<TargetQueueRecord, 'state'>, state: TargetQueueState): void {
   const transitions: Readonly<Record<TargetQueueState, readonly TargetQueueState[]>> = {
     queued: ['revalidating', 'cancelled', 'expired', 'parked'], revalidating: ['verifying', 'settled', 'cancelled', 'parked', 'reconciling'],
     verifying: ['awaiting-confirmation', 'settled', 'cancelled', 'parked', 'reconciling'],

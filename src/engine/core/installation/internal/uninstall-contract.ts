@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { attemptIdentitySchema, targetQueueStateSchema } from '#domain/index.js';
 const text = z.string().min(1).max(4096).refine(value => Array.from(value).every(char => char.charCodeAt(0) > 31 && char.charCodeAt(0) !== 127));
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 /** Owner 2026-10-27 (K1–K7): keep-data is the default; keep-work keeps work records; all deletes backed-up data after a verified backup. */
@@ -23,7 +24,7 @@ export const uninstallResourceSchema = z.object({
 }).strict().readonly();
 const ref = z.object({ scopeId: text, id: text, revision: z.number().int().nonnegative().safe() }).strict().readonly();
 /** Itemized ledger work, read-only: running and parked runs, pending approvals, open deliveries and every unreconciled effect, call or held money. */
-export const uninstallWorkSchema = z.object({ running: z.array(ref), parked: z.array(ref), approvals: z.array(ref), deliveries: z.array(ref),
+export const uninstallWorkSchema = z.object({ running: z.array(ref), parked: z.array(ref), approvals: z.array(ref), deliveries: z.array(ref.unwrap().extend({ identity: attemptIdentitySchema.optional(), state: targetQueueStateSchema.optional(), company: z.enum(['current', 'unregistered', 'foreign']).optional() }).strict().readonly()),
   uncertain: z.array(z.object({ kind: z.enum(['effect', 'invocation', 'reservation']), scopeId: text, id: text, target: text.nullable() }).strict().readonly()),
   /** False when a category exceeded its bound or the ledger could not be read: unknown work is never zero work. */
   complete: z.boolean(),

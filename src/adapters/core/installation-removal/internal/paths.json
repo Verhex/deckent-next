@@ -120,5 +120,9 @@
       "^state/brain-waits/[0-9a-f]{64}\\.json$",
       "^state/onboarding\\.json$"
     ]
-  }
+  },
+  "busctl": [
+    "/usr/bin/busctl",
+    "/bin/busctl"
+  ]
 }

@@ -151,8 +151,9 @@ export function uninstallBlockerError(plan: Pick<UninstallPlan, 'blockers' | 'wo
   const known = plan.blockers.find(value => BLOCKER_ERRORS[value]), work = plan.work;
   if (known) return ErrorRegistry.createError(BLOCKER_ERRORS[known]! as 'UNINSTALL_WORK_ACTIVE', { params: { runs: String(work.running.length + (plan.purge ? work.parked.length : 0)),
     approvals: String(plan.purge ? work.approvals.length : 0), workspaces: String(plan.purge ? work.workspaces ?? 0 : 0), count: String(known === 'delivery-queued' ? work.deliveries.length : work.uncertain.length),
-    list: work.uncertain.slice(0, 5).map(item => `${item.kind} ${item.id}`).join(', '), owner: work.uncertain.find(item => item.scopeId)?.scopeId ?? '',
-    unit: plan.service.unit ?? '', command: plan.service.command ?? '', path: plan.installation.root, recovery: plan.backup?.destination ?? '' } });
+    list: known === 'delivery-queued' ? work.deliveries.slice(0, 5).map(item => item.id).join(', ') : work.uncertain.slice(0, 5).map(item => `${item.kind} ${item.id}`).join(', '),
+    owner: (known === 'delivery-queued' ? work.deliveries[0]?.scopeId : work.uncertain[0]?.scopeId) ?? '',
+    reason: 'manager-conditions-or-separate-consent', unit: plan.service.unit ?? '', command: plan.service.command ?? '', path: plan.installation.root, recovery: plan.backup?.destination ?? '' } });
   return plan.blockers.length ? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP') : null;
 }
 export function assertUninstallPlanCurrent(approved: UninstallPlan, current: UninstallPlan) {

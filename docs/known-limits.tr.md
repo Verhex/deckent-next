@@ -672,12 +672,13 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Force ve servis sınırlıdır.** `--force` kişinin kendi yetkisiyle işleri iptal eder, onayları reddeder ve kuyruktaki teslimleri
   geri çeker. Her adımın sahip kararı (işler, onaylar, her teslim, silmeler ve onayları) karttan önce ve hiçbir şey yazmadan alınır:
   kişinin karar izni onay kimliklerini tek tek adlandırıyorsa, dört göz kuralı geçerliyse ya da politika güvence düzeyini kartın
-  kanıtladığından (eş oturum düzeyi) yükseğe çıkarıyorsa silme onayı karttan önce reddedilir. Kuyruktaki teslimi geri çekme de
-  karttan önce reddedilir: kuyruk sahibi SQLite yan dosyalarına yazmadan gözlem garantisi henüz veremiyor. Önce teslimi kendi
-  sahibi üzerinden sonuçlandırın veya geri çekin; ardından kaldırmayı yeniden önizleyin. Bilinmeyen sonuç kapatılmaz.
-  Deckent'in kaydetmediği kullanıcı biriminde `--disable-unit` ile de komut yazdırılır ve işlem reddedilir: çağıranın XDG yolları
-  yöneticinin dosya seçimini kanıtlamaz; kapalı gözlemi yeni bir servis örneğini engellemez. Etkinleştirme bağlantısı ya da
-  makbuz otomatik değiştirilmez. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
+  kanıtladığından (eş oturum düzeyi) yükseğe çıkarıyorsa silme onayı karttan önce reddedilir. Kuyruk ön kontrolü onaylı plandaki typed teslim
+  kimliğiyle aynı sahip yetki kuralını denetler; SQLite açmaz ve yan dosya oluşturmaz. Karttan sonra mevcut kuyruk sahibi yeniden
+  karar verir, CAS ve audit ile iptal eder. Eksik kimlik veya ret, teslimi, kapsamını ve sonraki adımı söyler. Bilinmeyen sonuç kapatılmaz.
+  `--disable-unit` ayrı rızadır: çalışan manager'ın dosyası, arama yolları, reload durumu ve disable dry-run bağlantıları kartla aynı
+  olmalıdır; Also/Alias, drop-in veya başka cgroup süreci varsa ret verir. Yönetişimli kapanıştan sonra ledger kilidi kapatma ve
+  kaldırma sonuna kadar yeni başlangıcı kapatır. Yeni örnek veya değişen kanıt kesin elle işlem komutuyla reddedilir. Birim dosyası
+  kalır; makbuz gerçek değişen bağlantıları ve servisi başlatmayan kesin geri alma komutlarını kaydeder. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
   Kaldırma `require-approval` politika kararını reddeder (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez. Bir
   yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.

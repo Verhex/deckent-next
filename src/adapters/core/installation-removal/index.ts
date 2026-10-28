@@ -2,7 +2,7 @@ export { InstallationCacheRemovalTarget } from './internal/cache.js';
 export type { CacheRemovalResource, CacheRemovalBounds } from './internal/cache.js';
 
 export { UninstallRecovery } from './internal/recovery.js';
-export { nativeServiceExec, type NativeServiceExec } from './internal/native-service.js';
+export { nativeServiceExec, nativeUserUnitLinks, type NativeServiceExec } from './internal/native-service.js';
 export { InstallationDataRemovalTarget } from './internal/data.js';
 export type { DataRemovalMember, DataRemovalSnapshot } from './internal/data.js';
 export { extendUninstallInventory, uninstallRecoveryDirectory, assertNativeUninstallSupport } from './internal/inventory.js';

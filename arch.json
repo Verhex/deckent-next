@@ -986,7 +986,8 @@
     "src/platform/core/host": {
       "dependencies": [
         "src/platform/core/common",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/utils"
       ],
       "plan": "FOUNDATION"
     },
@@ -1490,7 +1491,8 @@
         "src/domain/core/effect",
         "src/engine/core/runtime",
         "src/engine/core/effect",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/domain/core/attempt"
       ],
       "plan": "INSTALLATION"
     },
@@ -1541,7 +1543,9 @@
         "src/adapters/core/runtime-launcher",
         "src/composition/core/runtime-service",
         "src/composition/core/runs",
-        "src/composition/core/approvals"
+        "src/composition/core/approvals",
+        "src/adapters/core/git-workspace",
+        "src/engine/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -4411,7 +4415,8 @@
         "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
         "src/engine/core/workspace-patch",
-        "src/adapters/core/git-workspace"
+        "src/adapters/core/git-workspace",
+        "src/domain/core/effect"
       ],
       "plan": "INSTALLATION"
     },
