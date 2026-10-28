@@ -92,7 +92,7 @@ export const nativeEgressLimits = () => Object.freeze({ connections: catalog.lim
  */
 export async function openNativeEgressGateway(input: { readonly provider: NativeSubscription['provider']; readonly directory: string }) {
   const spec = nativeProviderSpec(input.provider), limits = catalog.limits;
-  const directory = await mkdtemp(join(input.directory, 'egress-')); await chmod(directory, 0o700);
+  const long = Buffer.byteLength(join(input.directory, 'egress-XXXXXX', 'gateway.sock')) > 103, directory = await mkdtemp(long ? join('/tmp', `dk-egress-${process.getuid?.() ?? 0}-`) : join(input.directory, 'egress-')); await chmod(directory, 0o700); // M-01: too long for sun_path → private short /tmp dir (as the runtime socket)
   const socketPath = join(directory, 'gateway.sock');
   let closed = false, transferred = 0;
   const sockets = new Set<Socket>(), statistics = { connected: 0, rejected: 0, bytes: 0 }, refused = refusedHosts(limits.refusedHostsMax);
