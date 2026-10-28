@@ -86,6 +86,8 @@ it('bare identity is a status: profile, people and roles in words; a selected pr
   expect(text).toMatch(/Profile: Team/u);
   expect(text).toMatch(/alperen@host/u);
   expect(text).toMatch(/admin, operator/u);
+  // BeUser S-03: with one known person, how a colleague gets access is said plainly (Core account vs Enterprise company sign-in).
+  expect(text).toContain('this installation knows only you so far'); expect(text).toContain('Enterprise feature');
   expect(h.calls).toEqual([{ kind: 'choices', value: 'live' }]);
 });
 
