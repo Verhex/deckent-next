@@ -112,13 +112,13 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
   const kinds = host.kinds.filter(kind => kind.available && kind.seeded && kind.connectFamily);
   if (!kinds.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const kindId = await askModelsCard(context, locale, { title: t('climodels.models.pick.connection', {}, locale), body: [t('climodels.models.pick.connectionBody', {}, locale)],
-    options: kinds.map(kind => ({ id: kind.id, label: catalog[kind.labelKey] ?? kind.id })) });
+    options: kinds.map(kind => ({ id: kind.id, label: catalog[kind.labelKey] ?? kind.id })), initial: kinds[0]!.id }); // M-27: the cursor starts on a row, so the first Down moves
   const kind = kinds.find(entry => entry.id === kindId);
   if (!kind) return cancelled();
   const models = await host.seedModels(kind.id);
   if (!models.length) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const pull = kind.pull === 'available';
-  const nativeId = pull ? '' : await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: catalog[kind.labelKey] ?? kind.id }, locale),
+  const nativeId = pull ? '' : await askModelsCard(context, locale, { title: t('climodels.models.pick.model', { provider: catalog[kind.labelKey] ?? kind.id }, locale), initial: models[0]!.nativeId,
     options: models.map(model => ({ id: model.nativeId, label: model.displayName && model.displayName !== model.nativeId
       ? `${terminalSafeText(model.nativeId)} · ${terminalSafeText(model.displayName)}` : terminalSafeText(model.nativeId) })) });
   if (nativeId === null || !pull && !models.some(model => model.nativeId === nativeId)) return cancelled();
