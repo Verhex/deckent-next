@@ -69,7 +69,8 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
         return { id: String(i), label: typeof entry === 'string' ? entry.replace(/^refs\/heads\//u, '') : String(record['resource'] ?? record['scopeId'] ?? record['id'] ?? i + 1),
           detail: key === 'provider_spending.budgets' ? `${Number(record['limitMinorUnits']) / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd} ${String(record['currency'])}` : String(record['path'] ?? '') };
       });
-      const view = { key, layer, digest: read.digest, members, note: key === 'provider_spending.budgets' ? t('config.records.budgetNote', {}, locale) : key === 'execution.workTargets.targets' ? t('config.records.targetNote', { clone: `git clone ${root} ${root}-work` }, locale) : null };
+      const view = { key, layer, digest: read.digest, members, note: key === 'provider_spending.budgets' ? t('config.records.budgetNote', {}, locale) : key === 'execution.workTargets.targets' ? t('config.records.targetNote', { clone: `git clone ${root} ${root}-work` }, locale)
+        : key.startsWith('operations.') ? t('config.records.operationsNote', {}, locale) : null };
       session = { view, value: structuredClone(entries), writeKey: key === 'provider_spending.budgets' && spendingRead?.value === undefined ? 'provider_spending' : key, container, layoutRoot: config.productLayout.root }; return view;
     },
     async draft(member, selected) {

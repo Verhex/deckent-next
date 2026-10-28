@@ -1,5 +1,5 @@
 {
-  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi; izin verildikten sonra aynı komutu yeniden gönderin.",
+  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi. Kendi terminalinizde karar verin: deckent approval decide (listeden seçin), sonra aynı komutu yeniden çalıştırın; izin verilince bir kez gönderilir.",
   "cli.operation.settled": "Sonuçlandı: {operation}@{version}, {kind}/{id} üzerinde (sıra {sequence}, kayıt sürümü {recordVersion}).",
   "cli.operation.inspect": "Operasyon {command}: {state} (sıra {sequence}).",
   "cli.operation.inspect.next.unknown": "Sonraki adım: {kind}/{id} üzerindeki sonuç belirsiz ve otomatik olarak yeniden gönderilmez. Kaydı hedef sistemde kontrol edin; hedef yeniden yanıt verebildiğinde aynı komutu (aynı girdiyle) bir kez daha gönderin. Deckent önce hedefin idempotency kaydına bakar ve sonucu kapatır ya da aynı koşullu yazmayı aynı idempotency anahtarıyla yeniden gönderir; ikinci bir etki oluşmaz. Sonuçlanana kadar bu kayıttaki yeni operasyonlar reddedilir.",
@@ -55,7 +55,7 @@
   "error.CODING_DISCOVERY_UNSUPPORTED": "{provider} CLI'si repo talimatları gizli (--discovery disabled) çalışamıyor: bu Deckent sürümü onun için doğrulanmış bir kapatma yolu bilmiyor. Repo talimatlarıyla çalışması için --discovery repository verin. Hiçbir şey yazılmadı.",
   "error.CLI_CODING_PREPARE_FIELD_INVALID": "Hazırlık belgesi {field} alanında uymuyor. Beklenen: schemaVersion 1, template (yürütme profili) ve invocation; bkz. deckent coding --help.",
   "clisetup.operation.empty": "Bu kurulumda tanımlı işlem yok (operations.catalog boş; {targets} hedef).",
-  "clisetup.operation.define": "İş süreci işlemleri (ERP/CRM) işlem kataloğundan gelir: deckent config → operations (katalog ve hedefler) ile tanımlayın.",
+  "clisetup.operation.define": "İş süreci işlemleri (ERP/CRM) işlem kataloğundan gelir. Her alanı açıklanmış doldurulmuş bir örnek için: deckent operation --example",
   "clisetup.operation.title": "İşlem kataloğu: {targets} hedef üzerinde {count} işlem.",
   "clisetup.operation.columns": "İşlem|Hedef|Etki|Onay|Telafi",
   "clisetup.operation.approval.required": "her zaman sorar",

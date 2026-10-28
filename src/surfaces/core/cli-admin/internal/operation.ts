@@ -5,6 +5,7 @@ import { projectInputSchema, type EffectOutcome } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { cliTableStyle, renderCliTable, renderInputSchema, schemaRequested } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
+import example from './operation-example.json' with { type: 'json' };
 export type OperationEffectHandler = (root: string, command: EffectCommand, options: ConfigLoadOptions,
   submit?: { readonly awaitApproval?: { readonly timeoutMs: number } }) => Promise<EffectOutcome>;
 export type OperationInspectHandler = (root: string, query: { readonly scopeId: string; readonly commandId: string }, options: ConfigLoadOptions)
@@ -28,10 +29,12 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
   const bare = action === undefined || action.startsWith('--') && !help;
   if (!help && !bare && action !== 'execute' && action !== 'compensate' && action !== 'inspect') throw ErrorRegistry.createError('CLI_USAGE');
   const schema = !help && !bare && action !== 'inspect' && schemaRequested(argv);
+  // BeUser ZEY-01: `operation --example` prints a filled catalog + target with every field explained; `execute --example` a command for this catalog.
+  const exampled = !help && (bare || action === 'execute') && argv.includes('--example');
   const allowed = bare ? ['--lang'] : action === 'inspect' ? ['--scope', '--command-id', '--lang'] : ['--input', '--wait', '--lang'];
   for (let i = bare ? 1 : 2; i < argv.length; i++) {
     const flag = argv[i]!; if (flag === '--json' && !json) { json = true; continue; }
-    if (flag === '--schema' && schema) continue;
+    if ((flag === '--schema' && schema) || (flag === '--example' && exampled)) continue;
     if (!allowed.includes(flag) || values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
     const value = argv[++i]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE');
     values.set(flag, value);
@@ -42,6 +45,16 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
   // The input contract is the same zod schema every producer validates (machine output, one projection with MCP).
   if (schema) { emit(renderInputSchema(projectInputSchema(effectCommandSchema)), { ...sinks, json: false }); return; }
   const root = context.root ?? process.cwd(); const options = { env: context.env ?? process.env };
+  // `--json` prints the document alone, so it can go straight to a file (`deckent operation --example --json > operations.json`).
+  if (exampled && bare) { emit(json ? example : [t('cli.operation.example.intro', {}, locale), JSON.stringify(example, null, 2), t('cli.operation.example.fields', {}, locale)].join('\n'), { ...sinks, json }); return; }
+  if (exampled) {
+    const config = await loadConfig(root, { ...options, heal: false }), section = operationsSection(config as Record<string, unknown>);
+    const entry = section.catalog.find(item => item.effectClass !== 'read') ?? section.catalog[0], scopeId = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
+    if (!entry) { emit([t('clisetup.operation.empty', { targets: section.targets.length }, locale), t('clisetup.operation.define', {}, locale)].join('\n'), sinks); return; }
+    const command = { schemaVersion: 1, commandId: `${entry.operation.id}-1`, scopeId: typeof scopeId === 'string' ? scopeId : '<scope>', operation: entry.operation,
+      target: { kind: entry.targetKind, id: '<record id>' }, idempotencyKey: `${entry.operation.id}-1`, input: {}, expectedVersion: entry.effectClass === 'read' ? null : '<record version>' };
+    emit(json ? command : [JSON.stringify(command, null, 2), t('cli.operation.example.command', {}, locale)].join('\n'), { ...sinks, json }); return;
+  }
   if (bare) {
     const config = await loadConfig(root, { ...options, heal: false }), section = operationsSection(config as Record<string, unknown>);
     emit({ schemaVersion: 1 as const, catalog: section.catalog, targets: section.targets.map(target => ({ adapter: target.adapter, kind: targetKind(target) })) },

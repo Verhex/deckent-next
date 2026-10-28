@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
+import { operationsConfigSchema } from '#adapters/index.js';
 
 // BETA-RAKIP-3 (alpha.54 br3): an uncertain external effect tells the person what is known, what Deckent will not do, and the next safe step
 // on the real CLI surface, with the exact command it names (scope + command id). The typed codes and the --json machine contract stay the same.
@@ -101,5 +102,20 @@ describe.skipIf(process.platform === 'win32')('uncertain operation outcome on th
     const inspectOperation = vi.fn(async () => record('unknown'));
     const machine = await run(f, ['operation', 'inspect', '--scope', 'erp-company', '--command-id', 'approve-po-1', '--json'], { inspectOperation });
     expect(JSON.parse(machine.stdout)).toEqual(record('unknown'));
+  });
+});
+
+describe('BeUser ZEY-01: a person can start an operation catalog without a ready file', () => {
+  it('`operation --example --json` is a valid operations section (the same schema config validates); `execute --example` builds a command for the configured catalog', async () => {
+    const f = await project();
+    const shown = await run(f, ['operation', '--example', '--json'], {});
+    expect(shown.code).toBe(0);
+    const section = JSON.parse(shown.stdout);
+    expect(operationsConfigSchema.safeParse(section).success).toBe(true);
+    const human = await run(f, ['operation', '--example', '--lang', 'tr'], {});
+    expect(human.stdout).toContain('targets[].options.baseUrl'); expect(human.stdout).toContain('deckent config set operations');
+    await writeFile(join(f.projectRoot, '.deckent', 'config.json'), JSON.stringify({ terminal: { scopeId: 'erp-company' }, operations: section }));
+    const command = JSON.parse((await run(f, ['operation', 'execute', '--example', '--json'], {})).stdout);
+    expect(command).toMatchObject({ scopeId: 'erp-company', operation: { id: 'erp.purchase-order.approve', version: 1 }, target: { kind: 'purchase-order' } });
   });
 });

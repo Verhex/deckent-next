@@ -1,5 +1,5 @@
 {
-  "cli.operation.pending": "Approval pending: {operation}@{version} on {kind}/{id} needs a decision on approval {approvalId} (expires {expiresAt}). Nothing was sent; resubmit the same command after an allow.",
+  "cli.operation.pending": "Approval pending: {operation}@{version} on {kind}/{id} needs a decision on approval {approvalId} (expires {expiresAt}). Nothing was sent. Decide it on your terminal: deckent approval decide (pick it on the list), then run the same command again; it is sent once allowed.",
   "cli.operation.settled": "Settled: {operation}@{version} on {kind}/{id} (sequence {sequence}, record version {recordVersion}).",
   "cli.operation.inspect": "Operation {command}: {state} (sequence {sequence}).",
   "cli.operation.inspect.next.unknown": "Next: the outcome on {kind}/{id} is unknown and is never resent automatically. Check the record in the target system; when the target can answer again, submit the same command once more (same input). Deckent then asks the target's idempotency record and settles it, or resends the same conditional write under the same idempotency key, never a second effect. Until it settles, new operations on this record are refused.",
@@ -55,7 +55,7 @@
   "error.CODING_DISCOVERY_UNSUPPORTED": "The {provider} CLI cannot run with repository instructions hidden (--discovery disabled): this Deckent version knows no verified way to switch them off for it. Pass --discovery repository to keep its repository instructions. Nothing was written.",
   "error.CLI_CODING_PREPARE_FIELD_INVALID": "The preparation document does not fit at field {field}. It takes schemaVersion 1, template (execution profile) and invocation; see deckent coding --help.",
   "clisetup.operation.empty": "No operation is defined in this installation (operations.catalog is empty; {targets} targets).",
-  "clisetup.operation.define": "Business operations (ERP/CRM) come from the operation catalog: define them with deckent config → operations (catalog and targets).",
+  "clisetup.operation.define": "Business operations (ERP/CRM) come from the operation catalog. See a filled example with every field explained: deckent operation --example",
   "clisetup.operation.title": "Operation catalog: {count} operations on {targets} targets.",
   "clisetup.operation.columns": "Operation|Target|Effect|Approval|Compensation",
   "clisetup.operation.approval.required": "always asks",

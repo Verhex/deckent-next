@@ -1,0 +1,14 @@
+{
+  "catalog": [
+    { "schemaVersion": 1, "operation": { "id": "erp.purchase-order.read", "version": 1 }, "targetKind": "purchase-order", "effectClass": "read",
+      "approval": "policy", "precondition": "none", "compensation": null, "inputMaxBytes": 4096 },
+    { "schemaVersion": 1, "operation": { "id": "erp.purchase-order.approve", "version": 1 }, "targetKind": "purchase-order", "effectClass": "write",
+      "approval": "required", "precondition": "record-version", "compensation": { "id": "erp.purchase-order.reopen", "version": 1 }, "inputMaxBytes": 4096 },
+    { "schemaVersion": 1, "operation": { "id": "erp.purchase-order.reopen", "version": 1 }, "targetKind": "purchase-order", "effectClass": "write",
+      "approval": "required", "precondition": "record-version", "compensation": null, "inputMaxBytes": 4096 }
+  ],
+  "targets": [
+    { "adapter": "http-conditional", "options": { "kind": "purchase-order", "baseUrl": "https://erp.example.com/api", "timeoutMs": 10000,
+      "responseMaxBytes": 65536, "idempotencyLookup": true } }
+  ]
+}
