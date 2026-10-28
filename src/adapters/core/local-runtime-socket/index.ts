@@ -11,7 +11,7 @@ export { requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from './int
 export type { LocalPeerIdentity } from './internal/peer.js';
 export { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity } from './internal/authentication.js';
 export { createLocalPeerSession } from './internal/authentication.js';
-export { acquireLedgerLock } from './internal/ledger-lock.js';
+export { acquireLedgerLock, type LedgerLock } from './internal/ledger-lock.js';
 export { listenForContainerPeer, localPeerNativePath } from './internal/container-peer.js';
 export type { ContainerPeer } from './internal/container-peer.js';
 

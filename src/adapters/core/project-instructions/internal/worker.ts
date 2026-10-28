@@ -1,4 +1,4 @@
-import { normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type CoreConfig, type KnownSecretSnapshot } from '#platform/index.js';
+import { normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, type CoreConfig, type KnownSecretSnapshot } from '#platform/index.js';
 import type { CommittedInstructionSource, ProjectInstructionView } from '#engine/index.js';
 import { openProjectInstructionReader } from './files.js';
 import REGISTRY from './registry.json' with { type: 'json' };
@@ -10,10 +10,11 @@ export async function openHostProjectInstructionReader(root: string, env: NodeJS
   const directory = await trustDirectory(env).catch(() => null);
   return openProjectInstructionReader(root, directory, known, files, committed).catch(() => openProjectInstructionReader(root, null, known, files, committed));
 }
-async function trustDirectory(env: NodeJS.ProcessEnv) {
-  const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env, { ignoreProjectOverride: true });
-  return prepareProductDirectory(resolveProductLayout({ projectRoot: global.stateDir, root: global.stateDir }), 'instructionTrust');
-}
+const trustLayout = (env: Readonly<Record<string, string | undefined>>) => { const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env, { ignoreProjectOverride: true });
+  return resolveProductLayout({ projectRoot: global.stateDir, root: global.stateDir }); };
+const trustDirectory = (env: NodeJS.ProcessEnv) => prepareProductDirectory(trustLayout(env), 'instructionTrust');
+/** The user-global trust directory's path, never created here (an uninstall names this folder's records in it, review M12). */
+export const instructionTrustDirectory = (env: Readonly<Record<string, string | undefined>>) => productResourcePath(trustLayout(env), 'instructionTrust');
 /** A trust change from the CLI (F1) must persist: no session-only fallback, so an unavailable or unsafe trust directory is a refusal, never a
  * "trusted" that a one-shot process forgets. Reads exactly the one selected worker file. */
 export async function openWorkerInstructionTrust(root: string, env: NodeJS.ProcessEnv, known: KnownSecretSnapshot | undefined, file: string, committed?: CommittedInstructionSource) {

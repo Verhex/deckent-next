@@ -311,6 +311,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
+  if (!await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options)) return;
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
   let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null, configLine: string | null = null;
   if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {

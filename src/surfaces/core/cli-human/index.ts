@@ -11,3 +11,4 @@ export { assertInputFields, renderInputSchema, schemaRequested, type InputSchema
 export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/acceptance.js';
 export { withFounderStep } from './internal/refusal.js';
 export { heldPoolId, runStatusKey } from './internal/run-status.js';
+export { reopenRetiredFolder } from './internal/reopen.js';

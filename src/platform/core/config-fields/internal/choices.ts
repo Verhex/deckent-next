@@ -117,6 +117,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'installation.identityProbe.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'installation.identityProbe.outputBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },
   'installation.machineIdentity.source': { kind: 'reference', source: 'machine-files' },
+  'installation.uninstallRecoveryRoot': { kind: 'reference', source: 'paths' },
   'installation.requireMachineBinding': { kind: 'schema' },
   'installation.imageProbe.timeoutMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 5000, 60000, 900000, 3600000, 86400000] },
   'installation.imageProbe.outputBytes': { kind: 'numeric', unit: 'bytes', step: 65536, presets: [65536, 1048576, 16777216, 67108864, 536870912] },

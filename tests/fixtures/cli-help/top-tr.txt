@@ -84,9 +84,10 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
-  uninstall   Bir kurulumu önizleyin veya kaldırın;
-              veri varsayılan olarak korunur.
-      [--purge] [--dry-run] [--json]
+  uninstall   Deckent’i bu klasörden kaldırır;
+              verileriniz varsayılan olarak korunur.
+      [--keep-data|--keep-work|--all] [--force] [--disable-unit]
+      [--yes] [--dry-run [--verbose]] [--json]
   audit       Denetim kaydını (kim ne yaptı, ne zaman) ve checkpoint'lerini oku
               ve doğrula (eylemsiz: verify)
       verify | list | show | rebaseline

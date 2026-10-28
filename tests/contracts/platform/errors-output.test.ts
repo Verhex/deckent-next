@@ -114,3 +114,20 @@ describe('errors, output and locale public contracts', () => {
     expect(() => getConfigValue({}, 'constructor')).toThrow();
   });
 });
+
+// Merge regression: the existing config/spending witness guidance and uninstall's person-only guidance share one code.
+it('keeps contextual witness guidance in both locales and never offers an automatic unit card when disable is refused', () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const witness = (operation: string) => formatHumanError(ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation } }), { noColor: true, locale });
+    expect(witness('config set permission_mode')).toContain('permission_mode');
+    expect(witness('models.create-budget')).toContain('deckent models create-budget');
+    expect(witness('models.reconcile-spending')).toContain('deckent models reconcile-spending');
+    expect(witness('manageProviderSpend')).toContain('deckent models revise-budget');
+    expect(witness('uninstall')).toContain('deckent uninstall --dry-run');
+    expect(witness('uninstall')).toContain('CI');
+    const command = 'systemctl --user disable --now deckent.service';
+    const refused = formatHumanError(ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: 'deckent.service', command } }), { noColor: true, locale });
+    expect(refused).toContain(command);
+    expect(refused).not.toContain('deckent uninstall --disable-unit');
+  }
+});

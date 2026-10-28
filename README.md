@@ -497,8 +497,8 @@ OpenRouter settings.
   `deckent backup create|verify|restore` for verifiable recovery sets on a schedule if you choose.
 - **Manage signed content**: import and verify signed agent and skill packages, inspect trust and revocations, and decide
   changes on scoped cards. Public Hub connections still need deployment setup; no source is enabled by default.
-- **Remove an installation with a preview**: `deckent uninstall --dry-run --json` shows the plan. Applying it needs your
-  terminal card; data stays by default, and purge needs a managed backup and proven ownership. Images stay protected.
+- **Remove an installation with a preview**: `deckent uninstall` offers keep my data (default), keep pending work and delete
+  everything (backup first); `--dry-run --json` shows any plan. Applying needs your terminal card; images stay protected.
   The [AI installation guide](docs/ai-install.md#uninstall) explains the steps and remaining limits.
 - **Core layers, in code and not yet proven in real use**: the system picks the worker model for each kind of work from a
   list you can see; memory fills from accepted work and is verified by you or an independent evaluator; lost workers are

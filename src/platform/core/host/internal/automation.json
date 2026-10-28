@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "ciEnvironment": [
+    "CI"
+  ],
+  "unitReceipt": "unit-{unit}.{phase}.json",
+  "unitLinkEntries": 4096
+}

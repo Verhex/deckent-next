@@ -642,16 +642,48 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Skills with support files are refused by owner decision (2026-10-26, H6).** SKILL.md-only skills may be used; a skill
   requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
   *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
-- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews; application needs the
-  person's real-terminal card. Ledger, audit/identity keys, secrets and project data stay by default. Images remain until a
-  complete usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
-  *Workaround:* follow the plan's per-item instructions, then the package removal command it prints; see the
+- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews any tier; application needs the
+  person's real-terminal card. Keep-data removes only caches, stops the service and retires the folder: the service stays down
+  until the person opens `deckent` there and chooses Continue. Images remain until a complete usage-reference contract exists;
+  the card provides the exact manual step. macOS/Windows service removal is manual.
+  *Workaround:* follow the plan's per-item instructions, then the printed program command; see the
   [AI installation guide](ai-install.md#uninstall).
-- **Purge is bounded by ownership, backup and delete authority.** `deckent uninstall --purge` removes only covered files
-  after a managed backup and person confirmation. Company retention and unready folders stay, with their paths shown.
-  Moved/unsafe authority files stop purge before it starts. A partial final purge resumes only after remaining bytes and
-  delete authority are re-verified; otherwise files stay and managed backup restore remains available. An unknown step
-  stays unknown. *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
+- **Delete everything is complete only for a project-folder installation.** In a project's own `.deckent`, `--all` archives
+  (encrypted, verified before the first removal) and deletes the files whose names their Deckent owner writes. It also removes
+  `DECKENT.md` and the bridge init wrote: a file init created whole goes whole, otherwise only that exact line goes and every other
+  byte stays. This folder's unshared vault slice (its own files) and its records in the instruction-trust store go too. Any
+  other file under a Deckent folder, and Git-tracked, linked or changed files, stay and are listed (and keep their folder). An
+  installation whose data root is the shared global home keeps the alpha.56 behaviour: only the backed-up authority files go.
+  Instruction-trust records tied to a ref that no configured target names stay. This folder's entries in the shared legacy trust
+  snapshot are forgotten and a restore does not bring them back: that trust is asked again. The ledger lock file goes only when Git
+  does not track it and it is empty. Keep-work keeps earlier ledger backups where they are; it archives and deletes config backups
+  and a worker workspace only when the ledger proves it idle: its lease has the workspace owner's form and names this exact attempt,
+  whose Run is terminal, and its delivery is not owed or was adopted. Any other workspace (no such Run, another scope, output not yet
+  delivered, an unreadable lease) is kept, listed and counted as possibly pending work, so the menu offers keep-work.
+  Delete everything treats it as pending work: refused without `--force`; with `--force` it is archived in the encrypted backup,
+  then deleted, and the card names how many. Files that worker-image builds
+  and toolchain updates write under `workspaces/toolchains` are members; other files there stay and are listed.
+  `deckent backup restore --set <path>` brings files and the bridge line back. It never writes over a file that exists again with
+  other content, nor through a link: such a file is kept and named.
+  *Workaround:* review the listed files; move a kept file aside and run the same restore again.
+- **Force and the service have bounded reach.** `--force` cancels runs, rejects approvals and withdraws queued deliveries with
+  the person's own authority. Every step's owner decision (runs, approvals, each delivery, the removals and their approval) is
+  taken before the card, without writing anything: a removal approval is refused before the card when the person's decide grant
+  names approval ids one by one, a four-eyes rule applies, or a policy raises its assurance above what the card attests (the
+  peer level). A delivery withdrawal is refused before the card: the queue owner cannot yet guarantee an observation without
+  SQLite sidecar writes. Settle or withdraw queued deliveries through their owner first, then preview uninstall again.
+  Unknown results are never closed. A user unit Deckent did not create gets the printed command and a refusal even with
+  `--disable-unit`: the caller's XDG paths do not prove the manager's resolution, and observing inactivity cannot fence a new
+  service instance. No enablement link or receipt is changed automatically. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
+  refuses a `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet. An AI
+  agent or CI caller (marker variables) is refused through the SDK as through the CLI.
+  *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.
+- **A partial deletion resumes only after re-verification.** Moved/unsafe authority files stop the data tier before it starts;
+  when Git tracking cannot be read, every project file counts as possibly tracked and stays. A partial final deletion resumes
+  only after the remaining bytes, Git tracking, the archive and delete authority are verified again; otherwise files stay and
+  managed backup restore remains available. An unknown step stays unknown. The recovery location must be private and lie outside
+  every folder the removal changes; otherwise nothing starts.
+  *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
 
 ## Desktop and other surfaces
 

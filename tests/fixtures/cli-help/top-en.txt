@@ -84,8 +84,9 @@ Approvals:
       [--scope <id>]
 
 Setup / Maintenance:
-  uninstall   Preview or uninstall one installation; keep data by default.
-      [--purge] [--dry-run] [--json]
+  uninstall   Remove Deckent from this folder; keeps your data by default.
+      [--keep-data|--keep-work|--all] [--force] [--disable-unit]
+      [--yes] [--dry-run [--verbose]] [--json]
   audit       Read and verify the audit log (who did what, when) and its
               checkpoints (without an action: verify)
       verify | list | show | rebaseline

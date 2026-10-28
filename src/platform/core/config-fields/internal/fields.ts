@@ -47,6 +47,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     machineIdentity: z.object({ source: z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'MACHINE_IDENTITY_SOURCE_ABSOLUTE')
       .nullable().default(null) }).strict().default({}),
     requireMachineBinding: z.boolean().default(false),
+    // K7 (owner 2026-10-27): the person's uninstall recovery root (receipts, tombstone, archive and backup); null: the registry default (XDG state).
+    // A protected root: only the person's terminal changes it, and every plan checks it lies outside each folder it deletes.
+    uninstallRecoveryRoot: z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'UNINSTALL_RECOVERY_ROOT_ABSOLUTE').nullable().default(null),
     imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
       outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
     packageMeasurement: z.object({

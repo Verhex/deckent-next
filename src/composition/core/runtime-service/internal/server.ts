@@ -1,4 +1,4 @@
-import { assertNoUninstallHold } from '#platform/index.js';
+import { assertNoUninstallHold, assertNotRetired } from '#platform/index.js';
 import { createTargetQueueHost } from './queue-host.js';
 import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
 import { AuditCheckpointMonitor, requireAuthorityWitness, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
@@ -88,7 +88,7 @@ const closeAnchor = (anchor: LedgerAnchor) => { const db = anchor.db; delete anc
   const endpoint = await prepareRuntimeSocket(config.productLayout, true, reason => { void Promise.resolve(observer.onRuntimeSocketHealed?.({ reason })).catch(() => undefined); });
   /* LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start. */ const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
   const anchor: LedgerAnchor = {};
-  try { await assertNoUninstallHold(config.productLayout.root); return await startUnderCustody(projectRoot, observer, options, config, guard, ports, anchor); }
+  try { await assertNoUninstallHold(config.productLayout.root); await assertNotRetired(config.productLayout.root); return await startUnderCustody(projectRoot, observer, options, config, guard, ports, anchor); }
   catch (error) { closeAnchor(anchor); await guard.release(); throw error; }
 }
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,

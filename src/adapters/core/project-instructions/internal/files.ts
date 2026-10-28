@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { redactForRecord, withConfigWriteLock, type KnownSecretSnapshot } from '#platform/index.js';
+import { redactForRecord, withConfigWriteLock, openPinnedParent, writePinnedFile, type KnownSecretSnapshot } from '#platform/index.js';
 import type { CommittedInstructionSource, ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
 import REGISTRY from './registry.json' with { type: 'json' };
 
@@ -47,7 +47,7 @@ async function readIdentifiedFile(root: string, name: string, maxBytes: number):
  * (alpha.53's, such as a work target trusted before alpha.54), sealed once in one private snapshot before any write of this release. Only these
  * unlock a committed read; a folder + content record written later (no target, the terminal) never does. The snapshot is rewritten only to
  * remove entries, atomically under the shared write lock; alpha.53 never reads it. Lines: `<record name> <digest>`, bounded by registry data. */
-const HEX = /^[a-f0-9]{64}$/u, LEGACY = REGISTRY.legacyTrust, LEGACY_HEADER = 'deckent-legacy-folder-trust:1\n';
+const HEX = /^[a-f0-9]{64}$/u, LEGACY = REGISTRY.legacyTrust, LEGACY_HEADER = 'deckent-legacy-folder-trust:1\n', REF_TAG = 'ref-trust:1';
 const DIGEST_CHARS = instructionDigest('').length, LEGACY_BYTES = Buffer.byteLength(LEGACY_HEADER) + LEGACY.maxEntries * (2 * DIGEST_CHARS + ' \n'.length);
 /** An owner-private, single-link, no-follow 0600 file of the trust folder, up to `max` bytes; anything else reads as null (fail closed). */
 async function privateRecord(directory: string, name: string, max: number): Promise<string | null> {
@@ -107,6 +107,40 @@ async function forgetLegacy(directory: string, name: string) {
   });
 }
 
+/** Review M12: this folder's own records in the trust store, named by their owner rule: folder + content records, and ref records for the
+ * given refs. Another folder's records (or a ref this caller does not name) are never in the list. */
+/** The trust store is this user's private folder, never a link (`exact`: not through a linked ancestor either), outside the project folder. */
+async function trustRoot(directory: string, root: string, exact = false) { const info = await lstat(directory), real = await realpath(directory).catch(() => ''), rel = relative(root, real);
+  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700 || exact && real !== directory || !rel || (rel !== '..' && !rel.startsWith(`..${sep}`))) throw new Error('unsafe'); }
+const folderDigest = async (rootInput: string) => { const root = await realpath(rootInput), identity = await stat(root); return instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`); };
+export async function folderTrustRecords(rootInput: string, trustDirectory: string, refs: readonly string[]): Promise<readonly string[]> {
+  const rootDigest = await folderDigest(rootInput), found: string[] = [];
+  for await (const entry of await opendir(trustDirectory)) {
+    const body = HEX.test(entry.name) ? await privateRecord(trustDirectory, entry.name, 256) : null, digest = body?.startsWith(`${REF_TAG}\n`) ? body.slice(REF_TAG.length + 1) : body;
+    if (digest && [instructionDigest(`${rootDigest}\0${digest}`), ...refs.map(ref => instructionDigest(`${rootDigest}\0${REF_TAG}\0${ref}\0${digest}`))].includes(entry.name)) found.push(join(trustDirectory, entry.name));
+  }
+  return found.sort();
+}
+/** Delete-everything forgets only this folder's legacy grants; restore asks for trust again. Failure keeps the uninstall hold. */
+export async function forgetFolderLegacyTrust(rootInput: string, trustDirectory: string) {
+  const parent = await openPinnedParent(join(trustDirectory, LEGACY.file));
+  if (!parent) return;
+  try {
+    const info = await parent.stat(), root = await realpath(rootInput), rel = relative(root, trustDirectory);
+    if (info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700 || !rel || rel !== '..' && !rel.startsWith(`..${sep}`)) throw new Error('unsafe');
+    const directory = `/proc/self/fd/${parent.fd}`, rootDigest = await folderDigest(rootInput);
+    if (!await lstat(join(directory, LEGACY.file)).catch(error => { if (missing(error)) return null; throw error; })) return;
+    await withConfigWriteLock(join(directory, LEGACY.file), async () => {
+      const before = await privateRecord(directory, LEGACY.file, LEGACY_BYTES), entries = await legacyEntries(directory);
+      if (before === null || !entries) throw new Error('unsafe');
+      for (const [name, digest] of entries) if (name === instructionDigest(`${rootDigest}\0${digest}`)) entries.delete(name);
+      const bytes = Buffer.from(LEGACY_HEADER + [...entries].map(([name, digest]) => `${name} ${digest}\n`).join(''));
+      if (bytes.toString('utf8') !== before) await writePinnedFile(join(directory, LEGACY.file), bytes, undefined, current => current.equals(Buffer.from(before)), parent);
+    });
+    const named = await lstat(trustDirectory);
+    if (named.isSymbolicLink() || named.dev !== info.dev || named.ino !== info.ino) throw new Error('unsafe');
+  } finally { await parent.close(); }
+}
 /** The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
 export type ExpectedInstructionFile = Readonly<{ path: string; dev: number | null; ino: number | null }>;
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
@@ -122,14 +156,10 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
   const rootDigest = instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`);
   const sessionTrusted = new Set<string>();
   if (trustDirectory) {
-    const info = await lstat(trustDirectory);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700) throw new Error('unsafe');
-    const trustRoot = await realpath(trustDirectory), rel = relative(root, trustRoot);
-    if (!rel || (rel !== '..' && !rel.startsWith(`..${sep}`))) throw new Error('unsafe');
-    await captureLegacy(trustDirectory);
+    await trustRoot(trustDirectory, root); await captureLegacy(trustDirectory);
   }
   // A record's name binds what it trusts; its content names its kind (the bare digest is the folder + content form, never written for a ref).
-  const ref = committed?.ref ?? null, REF_TAG = 'ref-trust:1';
+  const ref = committed?.ref ?? null;
   const folderRecord = (digest: string) => ({ name: instructionDigest(`${rootDigest}\0${digest}`), body: digest });
   const refRecord = (digest: string, at: string) => ({ name: instructionDigest(`${rootDigest}\0${REF_TAG}\0${at}\0${digest}`), body: `${REF_TAG}\n${digest}` });
   const grant = (digest: string) => ref === null ? folderRecord(digest) : refRecord(digest, ref); // what a trust here writes

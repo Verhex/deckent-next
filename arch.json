@@ -213,6 +213,7 @@
     },
     "src/adapters/core/local-runtime-socket": {
       "dependencies": [
+        "src/platform/core/utils",
         "src/adapters/core/local-principal",
         "src/domain/core/agent-turn",
         "src/domain/core/model-invocation",
@@ -1536,7 +1537,11 @@
         "src/adapters/core/approval-store",
         "src/engine/core/effect",
         "src/domain/core/effect",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/adapters/core/runtime-launcher",
+        "src/composition/core/runtime-service",
+        "src/composition/core/runs",
+        "src/composition/core/approvals"
       ],
       "plan": "INSTALLATION"
     },
@@ -3139,7 +3144,8 @@
         "src/platform/core/redaction",
         "src/platform/core/host",
         "src/platform/core/managed-files",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -4381,6 +4387,7 @@
     "src/adapters/core/installation-removal": {
       "dependencies": [
         "src/engine/core/effect",
+        "src/adapters/core/workspace-write",
         "src/platform/core/errors",
         "src/platform/core/integrity",
         "src/platform/core/config",
@@ -4396,10 +4403,15 @@
         "src/engine/core/toolchain-currency",
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/utils",
-        "src/adapters/core/attempt-store",
         "src/domain/core/policy",
         "src/adapters/core/local-runtime-socket",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/engine/core/workspaces",
+        "src/adapters/core/project-instructions",
+        "src/adapters/core/secret-store",
+        "src/engine/core/secret-store",
+        "src/engine/core/workspace-patch",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "INSTALLATION"
     },

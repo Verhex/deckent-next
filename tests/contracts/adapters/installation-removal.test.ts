@@ -1,44 +1,15 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, lstat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, writeFile, readFile, rename, rm, symlink, lstat, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
-import { InstallationServiceRemovalTarget, InstallationCacheRemovalTarget, type ServiceObservation, type ServiceRemovalDriver } from '#adapters/core/installation-removal/index.js';
+import { dirname, join } from 'node:path';
+import { afterEach, expect, it, vi } from 'vitest';
+import { InstallationCacheRemovalTarget } from '#adapters/core/installation-removal/index.js';
 const roots: string[] = [];
+const observed = { dataBlockers: [], managedScopes: [], work: { running: [], parked: [], approvals: [], deliveries: [], uncertain: [], complete: true },
+  service: { running: false, unit: null, unitDisable: 'none' as const, command: null } };
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-
-it('observes stop and disable before removing only the owned service; foreign/Also/trigger/self and unresolved native states refuse', async () => {
-  for (const scope of ['user', 'system'] as const) {
-    const resource = { resourceId: 'service', installationId: 'temp', manager: 'systemd' as const, scope, unit: 'fixture.service', ownershipDigest: 'a'.repeat(64) };
-    let current: ServiceObservation = { ownershipDigest: resource.ownershipDigest, active: true, enabled: true, present: true, mainPid: 123,
-      also: [], triggers: [], foreignArtifacts: false, callerInService: false, revision: 'v1' };
-    const transcript: string[] = [];
-    const driver: ServiceRemovalDriver = { identity: `fixture-${scope}`, async withCustody(_service, work) { return work(); },
-      async inspect() { transcript.push('inspect'); return current; },
-      async stop() { transcript.push('stop'); current = { ...current, active: false, mainPid: 0 }; },
-      async disable() { transcript.push('disable'); current = { ...current, enabled: false }; },
-      async removeOwnedArtifacts() { transcript.push('remove-owned'); current = { ...current, present: false }; },
-      async reload() { transcript.push('reload'); } };
-    const target = new InstallationServiceRemovalTarget([resource], driver), ref = { kind: target.kind, id: 'service' };
-    const version = (await target.observe(ref)).version;
-    if (process.platform !== 'linux') {
-      await expect(target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'key', expectedVersion: version, input: null })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-      console.info('verify-not-run: service removal positive requires Linux manager custody'); continue;
-    }
-    await target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'key', expectedVersion: version, input: null });
-    expect(transcript).toEqual(['inspect', 'inspect', 'stop', 'inspect', 'disable', 'inspect', 'remove-owned', 'reload', 'inspect']);
-    expect(await target.lookup(ref, 'key')).toEqual({ status: 'applied', version: null });
-    for (const change of [{ ownershipDigest: 'foreign' }, { also: ['foreign.service'] }, { triggers: ['foreign.socket'] }, { callerInService: true }, { active: null }]) {
-      current = { ...current, ...change }; const prior = transcript.length;
-      await expect(target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'other', expectedVersion: version, input: null })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-      expect(transcript.slice(prior)).toEqual(['inspect']); current = { ...current, ownershipDigest: resource.ownershipDigest, also: [], triggers: [], callerInService: false, active: false };
-    }
-    current = { ...current, present: true, active: true, enabled: true, mainPid: 123 };
-    driver.stop = async () => { transcript.push('stop-unproven'); };
-    const expectedVersion = (await target.observe(ref)).version, prior = transcript.length;
-    await expect(target.apply({ target: ref, operation: { id: 'installation.remove-service', version: 1 }, idempotencyKey: 'lost', expectedVersion, input: null })).rejects.toMatchObject({ code: 'EFFECT_TARGET_UNKNOWN' });
-    expect(transcript.slice(prior)).toEqual(['inspect', 'stop-unproven', 'inspect']); expect(await target.lookup(ref, 'lost')).toBeNull();
-  }
-});
 
 it('removes only the owner-named members of a cache, keeping same-user strays and their parent while refusing symlinks, protected overlap and drift', async () => {
   if (process.platform === 'win32') {
@@ -65,6 +36,22 @@ it('removes only the owner-named members of a cache, keeping same-user strays an
   await expect(blocked.observe(ref)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
 });
 
+it('removes cache members only through their pinned parent: a link planted after the scan touches nothing outside', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: pinned removal is Linux-only'); return; }
+  const platform = await import('#platform/index.js'), root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-pinned-cache-')); roots.push(root);
+  const cache = join(root, 'cache'), area = join(cache, 'b'.repeat(32)), outside = join(root, 'outside'), entry = join(area, 'entry');
+  for (const dir of [area, outside]) await mkdir(dir, { mode: 0o700, recursive: true });
+  await writeFile(entry, 'disposable', { mode: 0o600 }); await writeFile(join(outside, 'entry'), 'OUTSIDE', { mode: 0o600 });
+  const target = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64), members: ['^[0-9a-f]{32}$'] }], [],
+    { maxEntries: 10, maxDepth: 3 }, async work => work()), ref = { kind: target.kind, id: 'cache' };
+  const request = { target: ref, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'key', expectedVersion: (await target.observe(ref)).version, input: null };
+  // After the scan and before the removal, the member folder becomes a link to another folder holding a file of the same name.
+  const original = platform.readPinnedFile, spy = vi.spyOn(platform, 'readPinnedFile').mockImplementation(async path => {
+    if (path === entry && !await lstat(`${area}-moved`).catch(() => null)) { await rename(area, `${area}-moved`); await symlink(outside, area); }
+    return original(path); });
+  try { await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); } finally { spy.mockRestore(); }
+  expect(await readFile(join(outside, 'entry'), 'utf8')).toBe('OUTSIDE'); expect(await readFile(join(`${area}-moved`, 'entry'), 'utf8')).toBe('disposable');
+});
 it('never accepts a foreign target id or a symlink ancestor into the recorded disposable set', async () => {
   if (process.platform === 'win32') { console.info('verify-not-run: POSIX no-follow ownership check'); return; }
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-foreign-')); roots.push(root);
@@ -89,12 +76,12 @@ it('keeps an authenticated recovery hold on unknown, rejects a different install
   const principal = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['company'] };
   const integrity = createHmacIntegrity('fixture', new Uint8Array(32).fill(7));
   const recovery = new UninstallRecovery(root, 'installation', principal, integrity, 65536);
-  const plan = createUninstallPlan({ schemaVersion: 1, purge: false }, { installation: { id: 'installation', root }, scopeSummary: ['company'], layoutRevision: 'l1',
-    policyRevision: 'p1', inventoryRevision: 'i1', resources: [], blockers: [], protectedPaths: [], deletionRoots: [root], backupDestination: null, packageRemoval: { command: null, shared: true } });
+  const plan = createUninstallPlan({ schemaVersion: 2, tier: 'keep-data', force: false, disableUnit: false }, { installation: { id: 'installation', root }, scopeSummary: ['company'], layoutRevision: 'l1',
+    policyRevision: 'p1', inventoryRevision: 'i1', resources: [], blockers: [], protectedPaths: [], deletionRoots: [root], backupDestination: null, packageRemoval: { command: null, shared: true }, ...observed });
   expect(await recovery.retained(plan.planDigest)).toBeNull();
   await expect(lstat(join(root, 'uninstall-recovery'))).rejects.toMatchObject({ code: 'ENOENT' });
   await recovery.admit(plan); expect(await recovery.retained(plan.planDigest)).toEqual(plan);
-  const outcome = { schemaVersion: 1 as const, planDigest: plan.planDigest, status: 'unknown' as const, items: [], recoveryLocation: root, backup: plan.backup, packageRemoval: plan.packageRemoval };
+  const outcome = { schemaVersion: 2 as const, planDigest: plan.planDigest, status: 'unknown' as const, items: [], recoveryLocation: root, backup: plan.backup, packageRemoval: plan.packageRemoval, uncertain: [] };
   await recovery.finish(outcome); expect(await lstat(uninstallHoldPath(root))).toBeTruthy();
   await expect(new UninstallRecovery(root, 'another-installation', principal, integrity, 65536).retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
   await expect(new UninstallRecovery(root, 'installation', { ...principal, subject: 'another-person' }, integrity, 65536).retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
@@ -102,44 +89,6 @@ it('keeps an authenticated recovery hold on unknown, rejects a different install
   const manifest = join(root, 'uninstall-recovery', `${plan.planDigest}.json`);
   await writeFile(manifest, (await readFile(manifest, 'utf8')).replace('p1', 'p2'), { mode: 0o600 });
   await expect(recovery.retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
-});
-
-it('uses the bounded native systemd driver only for the exact recorded user unit and enablement links, refusing foreign artifacts before stop', async () => {
-  if (process.platform !== 'linux') { console.info('verify-not-run: native systemd removal is Linux-only'); return; }
-  const { NativeServiceRemovalDriver, InstallationServiceRemovalTarget, readNativeServiceRecord } = await import('#adapters/core/installation-removal/index.js');
-  const { sha256, createHmacIntegrity } = await import('#platform/index.js');
-  const root = await mkdtemp(join(tmpdir(), 'deckent-native-uninstall-')); roots.push(root);
-  const units = join(root, 'units'), links = join(units, 'default.target.wants'), identity = join(root, 'identity');
-  await mkdir(units, { mode: 0o700 }); await mkdir(links, { mode: 0o700 }); await mkdir(identity, { mode: 0o700 });
-  const unit = join(units, 'temporary.service'), link = join(links, 'temporary.service'), foreign = join(units, 'customer.service');
-  const bytes = '[Unit]\nDescription=temporary fixture\n[Service]\nExecStart=/fixture-only\n';
-  await writeFile(unit, bytes, { mode: 0o600 }); await writeFile(foreign, 'KEEP', { mode: 0o600 }); await symlink(unit, link);
-  const record = { schemaVersion: 1 as const, installationId: 'temporary', manager: 'systemd' as const, scope: 'user' as const, unit: 'temporary.service', directory: units,
-    artifacts: [{ path: unit, digest: sha256(bytes), link: null }, { path: link, digest: sha256(unit), link: unit }] };
-  const integrity = createHmacIntegrity('fixture', Buffer.alloc(32, 7));
-  await writeFile(join(identity, 'native-service.json'), JSON.stringify({ body: record, keyId: integrity.keyId, mac: integrity.sign(JSON.stringify(record)) }), { mode: 0o600 });
-  expect(await readNativeServiceRecord(identity, 'temporary', integrity, 65536)).toEqual(record);
-  await expect(readNativeServiceRecord(identity, 'foreign', integrity, 65536)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-  let active = true, also = 'customer.service'; const commands: string[][] = [];
-  const exec = async (args: readonly string[]) => {
-    commands.push([...args]);
-    if (args[0] === 'stop') { active = false; return ''; }
-    if (args[0] === 'daemon-reload') return '';
-    expect(args[0]).toBe('show');
-    const present = await lstat(unit).then(() => true, () => false), enabled = await lstat(link).then(() => true, () => false);
-    return Object.entries({ LoadState: present ? 'loaded' : 'not-found', ActiveState: active ? 'active' : 'inactive', UnitFileState: enabled ? 'enabled' : present ? 'disabled' : '',
-      MainPID: active ? '999999' : '0', FragmentPath: present ? unit : '', DropInPaths: '', Names: 'temporary.service', Also: also, Triggers: '', TriggeredBy: '', ConsistsOf: '', BoundBy: '', PropagatesStopTo: '', OnSuccess: '', OnFailure: '', ControlGroup: '' }).map(([key, value]) => `${key}=${value}`).join('\n');
-  };
-  const driver = new NativeServiceRemovalDriver(record, exec, (_service, work) => work(), 65536);
-  const target = new InstallationServiceRemovalTarget([driver.service], driver), ref = { kind: target.kind, id: driver.service.resourceId };
-  const request = { target: ref, operation: { id: 'installation.remove-service', version: 1 }, expectedVersion: (await target.observe(ref)).version, idempotencyKey: 'approved-native-card', input: null };
-  await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-  expect(commands.some(args => args[0] === 'stop')).toBe(false); expect(await readFile(foreign, 'utf8')).toBe('KEEP');
-  also = ''; request.expectedVersion = (await target.observe(ref)).version; await target.apply(request);
-  expect(commands.filter(args => args[0] === 'stop')).toEqual([['stop', '--', 'temporary.service']]);
-  expect(commands.some(args => args[0] === 'disable')).toBe(false); // disable can cascade through Also=/aliases
-  await expect(lstat(unit)).rejects.toMatchObject({ code: 'ENOENT' }); await expect(lstat(link)).rejects.toMatchObject({ code: 'ENOENT' });
-  expect(await readFile(foreign, 'utf8')).toBe('KEEP'); expect(await target.lookup(ref, 'approved-native-card')).toEqual({ status: 'applied', version: null });
 });
 
 it('refuses unsupported native managers with typed manual guidance rather than translating them into Linux deletions', async () => {
@@ -171,7 +120,7 @@ it('deletes only exact members bound to the verified backup: a failed backup, a 
   expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP'); expect(await readFile(second, 'utf8')).toBe('NEWER BYTES');
   const saved = await readFile(second);
   target.prepare(async () => { const bound = await snapshot(); await rm(second); await symlink(foreign, second); return bound; });
-  await expect(target.apply({ ...command, expectedVersion: (await target.observe(ref)).version })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+  await expect(target.apply({ ...command, expectedVersion: (await target.observe(ref)).version })).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
   expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP'); expect(await readFile(foreign, 'utf8')).toBe('KEEP UNTIL BACKED UP');
   await rm(second); await writeFile(second, saved, { mode: 0o600 });
   // M1: a new private file in the owner's directory is no member; it stays with its directory.
@@ -190,18 +139,78 @@ it('keeps immutable tombstones across reinstall and never substitutes an old com
   const { uninstallHoldPath } = await import('#platform/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-reinstalled-purge-')); roots.push(root);
   const data = join(root, 'global'); await mkdir(data, { mode: 0o700 });
-  const directory = uninstallRecoveryDirectory(data); await mkdir(directory, { mode: 0o700, recursive: true });
+  // §5.5: the recovery directory is the person's XDG state, outside the data root; the alpha.56 place beside it is read only while it alone exists.
+  const env = { HOME: join(root, 'home') }, at = (where: string, redirect: string | null = null) => ({ productLayout: { root: where }, installation: { uninstallRecoveryRoot: redirect } });
+  const directory = uninstallRecoveryDirectory(at(data), env);
+  expect(directory.startsWith(join(root, 'home', '.local', 'state', 'deckent', 'uninstall'))).toBe(true);
+  const legacy = join(root, '.deckent-uninstall', createHash('sha256').update(data).digest('hex')); await mkdir(legacy, { recursive: true });
+  expect(uninstallRecoveryDirectory(at(data), env)).toBe(legacy); expect(uninstallRecoveryDirectory(at(data), { ...env, XDG_STATE_HOME: join(root, 'state') })).toBe(legacy);
+  // K7: the protected config may redirect the root (it still must lie outside every deleted folder; the plan checks that).
+  expect(uninstallRecoveryDirectory(at(join(root, 'other'), join(root, 'vault')), env).startsWith(join(root, 'vault'))).toBe(true);
+  await mkdir(directory, { mode: 0o700, recursive: true }); expect(uninstallRecoveryDirectory(at(data), env)).toBe(directory);
   const actor = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['s'] };
-  const plan = (id: string) => createUninstallPlan({ schemaVersion: 1, purge: true }, { installation: { id, root: data }, scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: id,
-    resources: [], blockers: [], protectedPaths: [], deletionRoots: [data], backupDestination: join(root, 'backup'), packageRemoval: { command: null, shared: true } });
-  const finish = async (value: ReturnType<typeof plan>) => writeUninstallTombstone(data, actor, value, { schemaVersion: 1, planDigest: value.planDigest,
-    status: 'completed', items: [], recoveryLocation: directory, backup: value.backup, packageRemoval: value.packageRemoval });
+  const plan = (id: string) => createUninstallPlan({ schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, { installation: { id, root: data }, scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: id,
+    resources: [], blockers: [], protectedPaths: [], deletionRoots: [data], backupDestination: join(root, 'backup'), packageRemoval: { command: null, shared: true }, ...observed });
+  const finish = async (value: ReturnType<typeof plan>) => writeUninstallTombstone(directory, data, actor, value, { schemaVersion: 2, planDigest: value.planDigest,
+    status: 'completed', items: [], recoveryLocation: directory, backup: value.backup, packageRemoval: value.packageRemoval, uncertain: [] });
   const first = plan('first'); await finish(first);
   const saved = await readFile(join(directory, `${first.planDigest}.tombstone.json`));
-  expect((await readUninstallTombstone(data, actor, 65536))?.plan.installation.id).toBe('first');
+  expect((await readUninstallTombstone(directory, data, actor, 65536))?.plan.installation.id).toBe('first');
   await writeFile(uninstallHoldPath(data), 'unknown-new-purge', { mode: 0o600 });
-  expect(await readUninstallTombstone(data, actor, 65536)).toBeNull();
+  expect(await readUninstallTombstone(directory, data, actor, 65536)).toBeNull();
   const second = plan('second'); await finish(second); await rm(uninstallHoldPath(data));
-  expect((await readUninstallTombstone(data, actor, 65536))?.plan.installation.id).toBe('second');
+  expect((await readUninstallTombstone(directory, data, actor, 65536))?.plan.installation.id).toBe('second');
   expect(await readFile(join(directory, `${first.planDigest}.tombstone.json`))).toEqual(saved);
+});
+
+it('reads Git tracking hardened: a hostile repository config runs nothing, tracked paths are kept, unreadable tracking keeps every project path', async () => {
+  if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: hardened Git probe needs Linux and /usr/bin/git'); return; }
+  const { projectTracking } = await import('#adapters/core/installation-removal/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-vcs-')); roots.push(root);
+  const project = join(root, 'project'), data = join(project, '.deckent'), marker = join(root, 'marker'), bounds = { timeoutMs: 10_000, outputBytes: 65_536 };
+  await mkdir(data, { recursive: true }); await writeFile(join(data, 'policy.json'), 'TEAM', { mode: 0o600 }); await writeFile(join(data, 'ledger.db'), 'LOCAL', { mode: 0o600 });
+  const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+  git('init', '-q'); git('add', '-f', '.deckent/policy.json');
+  // The repository's own config asks Git to run a command (fsmonitor, hooks): the uninstall probe must never execute it.
+  for (const [key, value] of [['core.fsmonitor', `touch ${marker}`], ['core.hooksPath', root]]) git('config', key, value!);
+  const tracked = await projectTracking(project, data, '/usr/bin/git', bounds);
+  expect(tracked(join(data, 'policy.json'))).toBe('vcs-tracked'); expect(tracked(data)).toBe('vcs-tracked'); expect(tracked(join(data, 'ledger.db'))).toBeNull();
+  await expect(lstat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+  // A Git that cannot answer inside a repository (here: not absolute / refusing) never makes a project path untracked.
+  for (const configured of ['git', join(root, 'missing-git')]) {
+    const unreadable = await projectTracking(project, data, configured, bounds);
+    expect(unreadable(join(data, 'ledger.db'))).toBe('vcs-unverified'); expect(unreadable(join(root, 'global', 'ledger.db'))).toBeNull();
+  }
+});
+
+it('archives members into the encrypted companion bound to D0, never deletes one changed after archiving, and restores only files that are missing', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: uninstall archive custody is Linux-only'); return; }
+  const { createBackupSet } = await import('#adapters/core/backup-store/index.js');
+  const { createUninstallArchive, restoreUninstallArchive, InstallationDataRemovalTarget } = await import('#adapters/core/installation-removal/index.js');
+  const { resolveProductLayout, productResourcePath } = await import('#platform/index.js');
+  const { DatabaseSync } = await import('node:sqlite');
+  const base = await mkdtemp(join(tmpdir(), 'deckent-uninstall-archive-')); roots.push(base);
+  const project = join(base, 'project'), root = join(project, '.deckent'), layout = resolveProductLayout({ projectRoot: project, root });
+  const file = async (path: string, bytes: string | Uint8Array, mode = 0o600) => { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); await writeFile(path, bytes, { mode }); };
+  await file(productResourcePath(layout, 'config'), '{}'); await file(productResourcePath(layout, 'policy'), '{}'); await file(productResourcePath(layout, 'bindings'), '{}');
+  await file(join(productResourcePath(layout, 'installationIdentity'), 'identity.json'), '{"installationId":"temporary"}');
+  await file(join(productResourcePath(layout, 'approvals'), 'authority.key'), Buffer.alloc(32, 9));
+  const ledger = productResourcePath(layout, 'ledger'); await mkdir(dirname(ledger), { recursive: true, mode: 0o700 }); new DatabaseSync(ledger).close(); await chmod(ledger, 0o600);
+  const history = join(root, 'state/terminal-history.jsonl'), script = join(root, 'workspaces/toolchains/build.sh');
+  await file(history, 'HISTORY\n'); await file(script, '#!/bin/sh\n', 0o755);
+  const limits = { maxFiles: 100, maxDepth: 10, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 22 }, phrase = 'fixture-private-backup-passphrase';
+  const set = join(base, 'recovery/set'); await mkdir(dirname(set), { mode: 0o700 }); await createBackupSet(layout, project, 'temporary', 'authority.key', set, phrase, limits);
+  const members = [history, script].map(path => ({ resourceId: 'file', path, directory: null, archivePath: '', target: 'conversation-data', archived: true }));
+  const { members: bound } = await createUninstallArchive(set, [project], members, { installationId: 'temporary', approved: 'a'.repeat(64), plan: 'b'.repeat(64) }, phrase, limits);
+  expect(JSON.parse(await readFile(`${set}.archive.json`, 'utf8'))).toMatchObject({ planDigest: 'a'.repeat(64), generation: 'b'.repeat(64) });
+  // A byte written after archiving is never deleted with the older archive: refused before the first unlink.
+  const target = new InstallationDataRemovalTarget('fixture', members, []), ref = { kind: target.kind, id: 'conversation-data' };
+  target.prepare(async () => ({ set, manifestDigest: createHash('sha256').update(await readFile(join(set, 'MANIFEST.sha256'))).digest('hex'), members: bound }));
+  const request = { target: ref, operation: { id: 'installation.remove-data', version: 1 }, idempotencyKey: 'archive', expectedVersion: (await target.observe(ref)).version, input: null };
+  await writeFile(history, 'NEWER'); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
+  expect(await readFile(script, 'utf8')).toBe('#!/bin/sh\n');
+  // Restore writes what is missing (mode kept) and never overwrites what exists again: that file is kept and reported.
+  await rm(script);
+  await expect(restoreUninstallArchive(set, [project], phrase, limits)).rejects.toMatchObject({ code: 'UNINSTALL_RESTORE_KEPT', params: { paths: history } });
+  expect((await lstat(script)).mode & 0o777).toBe(0o755); expect(await readFile(history, 'utf8')).toBe('NEWER');
 });
