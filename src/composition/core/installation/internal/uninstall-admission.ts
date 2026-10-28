@@ -4,12 +4,11 @@ import { UninstallRecovery, FileEffectStore, acquireLedgerLock, LocalOsSessionAu
 import { ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
   UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
-import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, retireInstallation, DECKENT_DIR, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
-import { join } from 'node:path';
-import { uninstallRecoveryDirectory, installationScopes, prepareUninstallBackup, writeUninstallTombstone } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, installationScopes, prepareUninstallBackup, writeUninstallTombstone, completeUninstall } from '#adapters/index.js';
 import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
@@ -25,8 +24,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     if (current.inventory.installation.id !== plan.installation.id || current.inventory.layoutRevision !== plan.layoutRevision || current.inventory.blockers.length
       || plan.purge && current.inventory.dataBlockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
     const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
-    const recovery = new UninstallRecovery(config.productLayout.root, plan.installation.id, principal, integrity, config.installation.profileMaxBytes, directory,
-      plan.purge && config.productLayout.root === join(config.projectRoot, DECKENT_DIR) ? lock : undefined);
+    const recovery = new UninstallRecovery(config.productLayout.root, plan.installation.id, principal, integrity, config.installation.profileMaxBytes, directory);
     const clock = new SystemTrustedClock(), peer = localPrincipalPeer();
     const sessions = await LocalOsSessionAuthority.create(scopeIds, config.approvals.sessionTtlMs, clock, peer ? { pid: peer.pid, uid: peer.uid } : undefined);
     sessions.requireInteractiveTerminal();
@@ -77,8 +75,8 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         async prepareBackup(phrase) { if (!phrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED'); passphrase = phrase;
           const initial = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, phrase, false, options, approved); backup = { ...plan.backup, destination: initial.set }; },
         async approvePlan() { /* The immutable witnessed plan is retained; each command is decided through the broker above. */ },
-        async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); await recovery.finish(result); passphrase = '';
-          if (!plan.purge && result.status === 'completed') await retireInstallation(config.productLayout.root, { installationId: plan.installation.id, planDigest: approved, tier: plan.tier }); },
+        async finish(result) { await writeUninstallTombstone(directory, config.productLayout.root, principal, plan, result); passphrase = ''; // R11: one completion owner
+          await (result.status === 'completed' ? completeUninstall(config, plan, options.env ?? process.env, () => recovery.finish(result), lock) : recovery.finish(result)); },
       });
     } catch (error) {
       const items = []; // One store transaction at a time: its custody lock is exclusive even within this process.

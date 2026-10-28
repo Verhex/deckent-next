@@ -1,9 +1,9 @@
 import { closeSync, openSync, readSync } from 'node:fs';
-import { lstat, mkdir, readdir, readlink } from 'node:fs/promises';
+import { lstat, readdir, readlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
-import { writeJsonAtomic } from '#platform/core/utils/index.js';
+import { serializeJsonDocument, writePinnedFile } from '#platform/core/utils/index.js';
 import AUTOMATION from './automation.json' with { type: 'json' };
 
 /** A service manager that runs a process: systemd places a unit's processes in the unit's control group (`<name>.service`) and names one main process. */
@@ -94,9 +94,10 @@ export async function disableUserUnit(unit: string, exec: UserUnitExec, expected
   const values = await showValues(exec, unit, ['UnitFileState', 'ActiveState']), previous = values['UnitFileState'] ?? 'unknown', active = values['ActiveState'] ?? 'unknown';
   const undo = [...links.map(entry => { const [path, target] = entry.split(' -> '); return `ln -s '${target}' '${path}'`; }), 'systemctl --user daemon-reload',
     ...(active === 'active' ? [`systemctl --user start ${unit}`] : [])].join(' && ');
-  const receipt = (phase: string, body: object) => writeJsonAtomic(join(receipts, AUTOMATION.unitReceipt.replace('{unit}', unit).replace('{phase}', phase)),
-    { schemaVersion: 1, unit, previous, active, links, undo, ...body });
-  await mkdir(receipts, { recursive: true, mode: 0o700 }); await receipt('intent', {});
+  // R14: receipts go through their pinned parent (a linked recovery folder is refused before anything is disabled).
+  const receipt = (phase: string, body: object) => writePinnedFile(join(receipts, AUTOMATION.unitReceipt.replace('{unit}', unit).replace('{phase}', phase)),
+    Buffer.from(serializeJsonDocument({ schemaVersion: 1, unit, previous, active, links, undo, ...body })), undefined, () => true);
+  await receipt('intent', {});
   const outcome = await exec(['disable', '--now', '--', unit]).then(out => ({ ok: true, stderr: out.stderr }),
     (error: { stderr?: unknown; message?: string }) => ({ ok: false, stderr: String(error.stderr ?? error.message ?? '') }));
   await receipt('result', outcome);

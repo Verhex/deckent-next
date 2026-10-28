@@ -59,3 +59,28 @@ it.skipIf(process.platform !== 'linux')('removes only the bound file through its
     expect(await restorePinnedFile(file, withLine, 0o644, owned, digest(team))).toBe('restored'); expect((await readFile(file)).equals(withLine)).toBe(true);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it.skipIf(process.platform !== 'linux')('R1: the retired marker is written and removed only through its pinned parent; a linked installation folder is refused, outside bytes stay', async () => {
+  const { retireInstallation, reopenInstallation, uninstallRetired } = await import('#platform/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-retire-'));
+  try {
+    const data = join(root, 'data'), outside = join(root, 'outside'), body = { installationId: 'i', planDigest: 'd', tier: 'keep-data' };
+    for (const dir of [data, outside]) await mkdir(dir, { mode: 0o700 });
+    await writeFile(join(outside, 'retired.json'), 'PERSON DATA', { mode: 0o600 });
+    // A global data root whose installation/ folder links elsewhere: nothing is written there and the marker write fails (no completed result).
+    await symlink(outside, join(data, 'installation'));
+    await expect(retireInstallation(data, body)).rejects.toMatchObject({ reason: 'unsafe' });
+    expect(await readFile(join(outside, 'retired.json'), 'utf8')).toBe('PERSON DATA');
+    await expect(reopenInstallation(data)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' });
+    expect(await readFile(join(outside, 'retired.json'), 'utf8')).toBe('PERSON DATA');
+    // The real folder: written (created one level below the root), a second retire replaces only a marker, reopen removes only a marker.
+    await rm(join(data, 'installation'));
+    await retireInstallation(data, body); await retireInstallation(data, { ...body, tier: 'keep-work' });
+    expect(JSON.parse(await readFile(join(data, 'installation/retired.json'), 'utf8'))).toMatchObject({ schemaVersion: 1, tier: 'keep-work' });
+    await reopenInstallation(data); expect(await uninstallRetired(data)).toBe(false);
+    await writeFile(join(data, 'installation/retired.json'), 'NOT A MARKER', { mode: 0o600 });
+    await expect(retireInstallation(data, body)).rejects.toMatchObject({ reason: 'changed' });
+    await expect(reopenInstallation(data)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' });
+    expect(await readFile(join(data, 'installation/retired.json'), 'utf8')).toBe('NOT A MARKER');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

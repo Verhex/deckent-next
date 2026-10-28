@@ -1,9 +1,9 @@
-import { createReadStream, type Stats } from 'node:fs';
+import type { Stats } from 'node:fs';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, parse } from 'node:path';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
-import { pathWithin as inside, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, type PinnedFileIdentity } from '#platform/index.js';
+import { pathWithin as inside, boundState, removeBoundMembers, type BoundMember } from '#platform/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const refuse = (code: 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_PRECONDITION'): never => { throw new EffectTargetError(code); };
 /** One exact owned file of a purge: the resource owner names it; never a subtree or a path a request supplies. `directory`: its
@@ -15,34 +15,10 @@ export interface DataRemovalMember { readonly resourceId: string; readonly path:
   readonly target?: string; readonly archived?: boolean;
   /** K1(f): remove only this exact whole line (a bridge line Deckent appended; `before`: the receipt's earlier file digests); the rest stays byte for byte. */
   readonly line?: string; readonly before?: readonly string[] }
-/** One member bound to the verified final backup: its exact identity and bytes and the exact operation (whole file, or the bound byte range). */
-export type BoundMember = PinnedFileIdentity & { readonly path: string; readonly directory?: string | null; readonly archived?: boolean; readonly cut?: readonly [number, number]; readonly after?: string;
-  /** The standard backup set restores this file too (config): the archive yields to it on restore. */
-  readonly standard?: boolean };
 /** The verified final backup's exact content of every present member, bound immediately before deletion. `root`: emptied folders go up to it. */
 export interface DataRemovalSnapshot { readonly set: string; readonly manifestDigest: string; readonly members: readonly BoundMember[]; readonly root?: string | undefined;
   /** The uninstall archive beside the set: its manifest's digest and the folders it may restore into (none when nothing was archived). */
   readonly archive?: { readonly digest: string; readonly roots: readonly string[] } | undefined }
-const same = (a: PinnedFileIdentity, b: PinnedFileIdentity) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.digest === b.digest;
-/** Bound: the exact verified file; done: a bound cut already applied (its result's bytes); anything else is not this purge's member. */
-export async function boundState(member: BoundMember): Promise<'absent' | 'bound' | 'changed'> {
-  const read = await readPinnedFile(member.path).catch(() => 'changed' as const); if (read === 'changed') return read;
-  if (!read) return member.cut ? 'changed' : 'absent';
-  return same(read.identity, member) ? 'bound' : member.cut && read.identity.digest === member.after ? 'absent' : 'changed';
-}
-/** The one executor of a purge's final step (normal effect and resumed tail alike): each bound member through its pinned parent, then the
- * folders that became empty (deepest first, up to `root`, never including it). Throws on the first member that is not the bound one. */
-export async function removeBoundMembers(members: readonly BoundMember[], root?: string) {
-  for (const member of members) await removePinnedFile(member.path, member, member.cut ? { cut: member.cut, after: member.after } : {});
-  const folders = members.flatMap(member => { const up = [];
-    for (let dir = member.directory ?? dirname(member.path); root && inside(root, dir) ? dir !== root : dir === member.directory; dir = dirname(dir)) up.push(dir); return up; });
-  for (const directory of [...new Set(folders)].sort((a, b) => b.length - a.length)) await removeEmptyPinnedDirectory(directory);
-}
-export async function fileDigest(path: string) {
-  const digest = createHash('sha256');
-  for await (const chunk of createReadStream(path)) digest.update(chunk as Buffer);
-  return digest.digest('hex');
-}
 /** A single-link regular file of this user (private unless `archived`, whose exact bytes the archive holds), or null when absent. */
 export async function memberStat(path: string, archived = false): Promise<Stats | null> {
   const info = await lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });

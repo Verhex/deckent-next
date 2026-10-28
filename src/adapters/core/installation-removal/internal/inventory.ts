@@ -2,9 +2,9 @@ import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
-import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
+import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
-import { InstallationDataRemovalTarget, fileDigest, memberStat, type DataRemovalMember } from './data.js';
+import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY, folderTrustRecords, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
 import { listProjectVaults } from '#adapters/core/secret-store/index.js';
 import { ABSENT_FILE_VERSION } from '#adapters/core/workspace-write/index.js';
@@ -70,9 +70,11 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     for (const entry of (await readdir(directory)).sort()) {
       const path = join(directory, entry);
       if (++seen > bounds.maxFiles || depth > bounds.maxDepth) throw new Error('UNINSTALL_ARCHIVE_LIMIT');
-      if (taken.has(path) || project.caches.some(cache => inside(cache, path)) || matches(registry.archive.transient, path) || kept(path)) continue;
+      if (taken.has(path) || project.caches.some(cache => inside(cache, path))) continue;
       const info = await lstat(path);
       if (info.isDirectory()) { await walk(path, depth + 1); continue; }
+      // R2: tracking is read per file, before the transient rule; a custody lock with bytes in it is someone's file (kept and listed).
+      if (kept(path) || matches(registry.archive.transient, path) && !(info.size && path === `${productResourcePath(layout, 'ledger')}-lock`)) continue;
       if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && matches(registry.archive.members, path))
         archived.push(...(conversation.some(resource => inside(resource, path)) ? ['conversation-data', 'global-data'] : ['global-data'])
           .map(target => ({ resourceId: rel(path), path, directory: null, archivePath: '', target, archived: true })));

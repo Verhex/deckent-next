@@ -101,12 +101,9 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
       }
     }
   }
-  // K7: every tier that deletes data (not only caches) archives it first. M6: on every tier that removes anything the recovery location
-  // (its custody, hold and backups) lies outside every deletion root, the project folder and every removed path, before any card.
+  // K7: every tier that deletes data (not only caches) archives it first.
   const removing = items.filter(item => item.action === 'remove'), recovery = inventory.backupDestination && dirname(inventory.backupDestination);
   const archived = removing.some(item => registry.entries.find(entry => entry.id === item.contribution)!.removeFrom !== 'keep-data');
-  if (removing.length && (!recovery || !isAbsolute(recovery) || inventory.recoveryUnsafe || [...inventory.deletionRoots, ...inventory.recoveryForbidden ?? [], ...removing.flatMap(item => item.members ?? [item.locator])]
-    .some(root => within(root, recovery) || within(recovery, root)))) blockers.push('backup-destination');
   // Work and service are checked before any card (owner 2026-10-27): a running service is stopped, never reported as work.
   const work = inventory.work, service = inventory.service;
   if (!work.complete) blockers.push('work-unverified');
@@ -122,6 +119,10 @@ function decide({ tier, force, disableUnit }: Query, installation: UninstallInst
   if (unit && !(disableUnit && service.unitDisable === 'eligible')) blockers.push('service-managed');
   const steps = { stopService: service.running, disableUnit: unit && disableUnit && service.unitDisable === 'eligible',
     cancelRuns: force ? [...work.running, ...(purge ? work.parked : [])] : [], rejectApprovals: force && purge ? [...work.approvals] : [], withdrawDeliveries: force && purge ? [...work.deliveries] : [] };
+  // M6, R14: on every tier that does anything (a removal, a service stop or disable, a force step: each writes its custody, hold, receipts or
+  // backups there) the recovery location is private and canonical and lies outside every deletion root, the project folder and every removed path.
+  if ((removing.length || Object.values(steps).some(step => step === true || Array.isArray(step) && step.length)) && (!recovery || !isAbsolute(recovery) || inventory.recoveryUnsafe
+    || [...inventory.deletionRoots, ...inventory.recoveryForbidden ?? [], ...removing.flatMap(item => item.members ?? [item.locator])].some(root => within(root, recovery) || within(recovery, root)))) blockers.push('backup-destination');
   return { items, blockers: [...new Set(blockers)].sort(), steps, archived };
 }
 /** Pure plan over owner observations. No healing, filesystem writes, service starts or identity creation. */

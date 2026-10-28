@@ -1,7 +1,8 @@
-import { constants } from 'node:fs';
+import { constants, createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdir, open, readdir, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
+import { link, lstat, mkdir, open, readdir, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, normalize } from 'node:path';
+import { pathWithin as inside } from './tree.js';
 /** The exact file a removal was bound to: inode identity, size, modification time and content digest (ctime is not compared: a move changes it). */
 export interface PinnedFileIdentity { readonly dev: number; readonly ino: number; readonly size: number; readonly mtimeMs: number; readonly digest: string }
 /** `cut`: remove only the bytes [start, end) and expect `after` as the result's digest; without it the whole file goes. */
@@ -122,6 +123,27 @@ export async function restorePinnedFile(path: string, bytes: Uint8Array, mode: n
     return 'restored';
   } finally { await dir.close(); }
 }
+/** The deepest folder of `path` that exists (a pinned write may create the missing ones below it, each through the pinned walk). */
+const existing = async (path: string): Promise<string> => await lstat(path).then(() => path, () => dirname(path) === path ? path : existing(dirname(path)));
+/**
+ * R1/R14: a small private file (a marker, a receipt) written through its pinned parent, never through a link: missing folders are created one
+ * level at a time below `root` (default: the deepest existing folder), the bytes go to an exclusive no-follow temporary beside it and are renamed
+ * into place inside that descriptor. A linked folder anywhere on the path is `unsafe` and nothing is written; an existing file is replaced only
+ * when `replaceable` accepts its bytes (`changed` otherwise) and only when it is this user's regular single-link file.
+ */
+export async function writePinnedFile(path: string, bytes: Uint8Array, root?: string, replaceable: (current: Buffer) => boolean = () => false) {
+  const dir = await openPinnedParent(path, root ?? await existing(dirname(path)));
+  if (!dir) throw new PinnedFileError('unsafe');
+  const name = basename(path), temp = `.${name}.${randomUUID()}.tmp`;
+  try {
+    const current = await readAt(dir, name);
+    if (current && !replaceable(current.bytes)) throw new PinnedFileError('changed');
+    const handle = await open(at(dir, temp), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+    await rename(at(dir, temp), at(dir, name)).catch(async (error: unknown) => { await unlink(at(dir, temp)).catch(() => undefined); throw error; });
+    await dir.sync();
+  } finally { await dir.close(); }
+}
 /** An emptied folder goes through its pinned parent; a non-empty or missing one stays as it is (`member`: a non-empty one is a refusal). */
 export async function removeEmptyPinnedDirectory(path: string, member = false) {
   const dir = await openPinnedParent(path);
@@ -129,6 +151,30 @@ export async function removeEmptyPinnedDirectory(path: string, member = false) {
   try { await rmdir(at(dir, basename(path))).catch((error: unknown) => { const code = (error as NodeJS.ErrnoException).code ?? '';
     if (member && code !== 'ENOENT' || !['ENOTEMPTY', 'EEXIST', 'ENOENT'].includes(code)) throw new PinnedFileError('changed'); }); }
   finally { await dir.close(); }
+}
+/** One file bound to a verified backup: its exact identity and bytes and the exact operation (whole file, or the bound byte range). */
+export type BoundMember = PinnedFileIdentity & { readonly path: string; readonly directory?: string | null; readonly archived?: boolean; readonly cut?: readonly [number, number]; readonly after?: string;
+  /** The standard backup set restores this file too (config): the archive yields to it on restore. */
+  readonly standard?: boolean };
+/** Bound: the exact verified file; done: a bound cut already applied (its result's bytes); anything else is not this removal's member. */
+export async function boundState(member: BoundMember): Promise<'absent' | 'bound' | 'changed'> {
+  const read = await readPinnedFile(member.path).catch(() => 'changed' as const); if (read === 'changed') return read;
+  if (!read) return member.cut ? 'changed' : 'absent';
+  return same(read.identity, member) ? 'bound' : member.cut && read.identity.digest === member.after ? 'absent' : 'changed';
+}
+/** The one executor of a removal's final step (normal effect and resumed tail alike): each bound member through its pinned parent, then the
+ * folders that became empty (deepest first, up to `root`, never including it) of every member in `all` (a resumed tail: those removed before
+ * the interruption too). Throws on the first member that is not the bound one. */
+export async function removeBoundMembers(members: readonly BoundMember[], root?: string, all = members) {
+  for (const member of members) await removePinnedFile(member.path, member, member.cut ? { cut: member.cut, after: member.after } : {});
+  const folders = all.flatMap(member => { const up = [];
+    for (let dir = member.directory ?? dirname(member.path); root && inside(root, dir) ? dir !== root : dir === member.directory; dir = dirname(dir)) up.push(dir); return up; });
+  for (const directory of [...new Set(folders)].sort((a, b) => b.length - a.length)) await removeEmptyPinnedDirectory(directory);
+}
+export async function fileDigest(path: string) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  return hash.digest('hex');
 }
 /**
  * K1(f): the byte range of the one whole line equal to `line` (ended by LF, CRLF or the end of the file) and the result's digest. When the

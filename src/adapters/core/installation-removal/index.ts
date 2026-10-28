@@ -6,7 +6,7 @@ export { nativeServiceExec, type NativeServiceExec } from './internal/native-ser
 export { InstallationDataRemovalTarget } from './internal/data.js';
 export type { DataRemovalMember, DataRemovalSnapshot } from './internal/data.js';
 export { extendUninstallInventory, uninstallRecoveryDirectory, assertNativeUninstallSupport } from './internal/inventory.js';
-export { writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease } from './internal/tombstone.js';
+export { writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease, completeUninstall } from './internal/tombstone.js';
 export { prepareUninstallBackup } from './internal/backup.js';
 export { observeUninstallInventory } from './internal/observed-inventory.js';
 export { observeUninstallWork, installationScopes } from './internal/quiescence.js';

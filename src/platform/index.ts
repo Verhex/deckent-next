@@ -88,7 +88,7 @@ export { ED25519_PKCS8_BYTES, ED25519_SPKI_BYTES, ed25519KeyId, ed25519Signer, g
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
-export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, privateLocationSafe, PRIVATE_PERMISSION_MASK, openPinnedParent, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, restorePinnedFile, lineCut, PinnedFileError, type PinnedFileIdentity, type PinnedRemoval } from '#platform/core/utils/index.js';
+export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, privateLocationSafe, PRIVATE_PERMISSION_MASK, openPinnedParent, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, restorePinnedFile, writePinnedFile, boundState, removeBoundMembers, fileDigest, type BoundMember, lineCut, PinnedFileError, type PinnedFileIdentity, type PinnedRemoval } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
 export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 

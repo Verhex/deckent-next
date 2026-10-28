@@ -1,13 +1,15 @@
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, open, readFile, realpath, rename, unlink } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { PRIVATE_PERMISSION_MASK, generateEd25519Pair, ed25519Signer, signatureMessage, verifyEd25519, sha256, ErrorRegistry, writeTextAtomic, uninstallHoldPath, productResourcePath, type ResolvedConfig } from '#platform/index.js';
+import { dirname, join, resolve } from 'node:path';
+import { PRIVATE_PERMISSION_MASK, generateEd25519Pair, ed25519Signer, signatureMessage, verifyEd25519, sha256, ErrorRegistry, writeTextAtomic, uninstallHoldPath, productResourcePath, retireInstallation,
+  removeEmptyPinnedDirectory, boundState, removeBoundMembers, DECKENT_DIR, type ResolvedConfig } from '#platform/index.js';
 import { policyNamedScopes, resolvePolicyBindings, type VerifiedPrincipal } from '#domain/index.js';
 import { authorizeUninstall, type UninstallPlan, type UninstallResult } from '#engine/index.js';
 import { verifyBackupSet } from '#adapters/core/backup-store/index.js';
-import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
-import { memberStat, boundState, removeBoundMembers, type DataRemovalSnapshot } from './data.js';
+import { acquireLedgerLock, type LedgerLock } from '#adapters/core/local-runtime-socket/index.js';
+import { forgetFolderLegacyTrust, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
+import { memberStat, type DataRemovalSnapshot } from './data.js';
 import { verifyUninstallArchive } from './archive.js';
 import { configuredTracking } from './vcs.js';
 const TOMBSTONE = 'uninstall-tombstone:1', INTENT = 'uninstall-final-tail:1';
@@ -79,7 +81,8 @@ const tailUnknown = (directory: string, intent: Intent) => ErrorRegistry.createE
  * evidenced terminal outcome (`settle` writes the tombstone and releases the hold); only absent and still-bound members → the
  * still-bound `remaining` members a second card may resume; anything changed stays held as unknown.
  */
-async function reconcileFinalTail(directory: string, root: string, actor: VerifiedPrincipal, maxBytes: number, settle: boolean) {
+type Settle = (plan: UninstallPlan, release: () => Promise<void>) => Promise<void>;
+async function reconcileFinalTail(directory: string, root: string, actor: VerifiedPrincipal, maxBytes: number, settle?: Settle) {
   const intent = await heldIntent(directory, root, actor, maxBytes);
   if (!intent) return intent;
   const states = await Promise.all(intent.snapshot.members.map(boundState));
@@ -89,9 +92,28 @@ async function reconcileFinalTail(directory: string, root: string, actor: Verifi
   if (settle && !remaining.length) {
     const saved = join(directory, `${intent.plan.planDigest}.tombstone.json`);
     if (await exists(saved)) await publishPointer(directory, await readFile(saved, 'utf8')); else await writeUninstallTombstone(directory, root, actor, intent.plan, intent.result);
-    await unlink(uninstallHoldPath(root)); await syncDirectory(root);
+    await settle(intent.plan, async () => { await unlink(uninstallHoldPath(root)); await syncDirectory(root); });
   }
   return { plan: intent.plan, result: intent.result, ...(remaining.length ? { remaining } : {}), intent };
+}
+type Env = Readonly<Record<string, string | undefined>>;
+/** The installation's ledger custody (never stolen: a holder is a running service); `optional`: a missing folder means there is none to take. */
+function custody(config: ResolvedConfig, optional = false): LedgerLock | undefined { try { return acquireLedgerLock(`${productResourcePath(config.productLayout, 'ledger')}-lock`); }
+  catch (error) { if ((error as { code?: string }).code === 'LOCAL_RUNTIME_ALREADY_RUNNING') throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); if (!optional) throw error; } }
+/** R11: the one completion of a finished removal (normal step, resumed tail, already-absent reconcile). Keep tiers leave the retired marker (R1),
+ * delete-everything forgets this folder's legacy trust (R6), both before `release` drops the hold (a failure keeps it); then the custody file goes
+ * only when the plan did not keep it, Git does not track it and it is empty (R2), then emptied folders. An absent tail takes the custody here. */
+export async function completeUninstall(config: ResolvedConfig, plan: UninstallPlan, env: Env, release: () => Promise<void>, held?: LedgerLock) {
+  const root = config.productLayout.root, own = root === join(config.projectRoot, DECKENT_DIR), path = `${productResourcePath(config.productLayout, 'ledger')}-lock`;
+  if (!plan.purge) await retireInstallation(root, { installationId: plan.installation.id, planDigest: plan.planDigest, tier: plan.tier });
+  else if (own) await forgetFolderLegacyTrust(config.projectRoot, instructionTrustDirectory(env));
+  const lock = held ?? (plan.purge && own ? custody(config, true) : undefined);
+  try {
+    await release();
+    if (!plan.purge || !own || !lock) return;
+    if (!plan.items.some(item => item.locator === path) && !(await configuredTracking(config))(path)) await lock.remove();
+    for (const folder of [dirname(path), root]) await removeEmptyPinnedDirectory(folder);
+  } finally { if (!held) lock?.release(); }
 }
 /**
  * The second card's continuation of an interrupted final tail: only the still-bound members of the exact old operation, and only after
@@ -99,13 +121,12 @@ async function reconcileFinalTail(directory: string, root: string, actor: Verifi
  * whose bytes match the snapshot) for every affected scope, the final set verifies with the person's passphrase and its manifest is the
  * snapshot's. Any doubt throws before the first unlink and the hold stays. Runs under the installation's ledger custody.
  */
-export async function resumeUninstallFinalTail(config: ResolvedConfig, directory: string, actor: VerifiedPrincipal, passphrase: string): Promise<UninstallResult> {
+export async function resumeUninstallFinalTail(config: ResolvedConfig, directory: string, actor: VerifiedPrincipal, passphrase: string, env: Env = process.env): Promise<UninstallResult> {
   const layout = config.productLayout, root = layout.root, maxBytes = config.installation.profileMaxBytes;
   if (!passphrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED');
-  const lock = (() => { try { return acquireLedgerLock(`${productResourcePath(layout, 'ledger')}-lock`); }
-    catch (error) { if ((error as { code?: string }).code === 'LOCAL_RUNTIME_ALREADY_RUNNING') throw ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING'); throw error; } })();
+  const lock = custody(config)!;
   try {
-    const held = await reconcileFinalTail(directory, root, actor, maxBytes, false);
+    const held = await reconcileFinalTail(directory, root, actor, maxBytes);
     if (!held?.remaining) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');
     const { intent, remaining } = held;
     if (!intent.scopes) throw tailUnknown(directory, intent); // a pre-scope intent cannot have its delete authority decided again
@@ -138,8 +159,8 @@ export async function resumeUninstallFinalTail(config: ResolvedConfig, directory
     const tracked = await configuredTracking(config); // B2: what the project's VCS tracks now is the team's: the tail stays unknown
     for (const member of remaining) if (tracked(member.path) || await boundState(member) !== 'bound') throw tailUnknown(directory, intent);
     // The one executor of the normal final step: each member's exact operation (a bridge keeps everything but its bound line).
-    await removeBoundMembers(remaining, intent.snapshot.root);
-    const settled = await reconcileFinalTail(directory, root, actor, maxBytes, true);
+    await removeBoundMembers(remaining, intent.snapshot.root, intent.snapshot.members);
+    const settled = await reconcileFinalTail(directory, root, actor, maxBytes, (plan, release) => completeUninstall(config, plan, env, release, lock));
     if (!settled || settled.remaining) throw tailUnknown(directory, intent);
     return settled.result;
   } finally { lock.release(); }
@@ -154,7 +175,7 @@ export async function uninstallRestoreRelease(directory: string, root: string, a
     await unlink(uninstallHoldPath(root)); await syncDirectory(root);
   };
 }
-export async function readUninstallTombstone(directory: string, root: string, actor: VerifiedPrincipal, maxBytes: number, identityPath?: string, settle = false): Promise<{ plan: UninstallPlan; result: UninstallResult; remaining?: readonly string[] } | null> {
+export async function readUninstallTombstone(directory: string, root: string, actor: VerifiedPrincipal, maxBytes: number, identityPath?: string, settle?: Settle): Promise<{ plan: UninstallPlan; result: UninstallResult; remaining?: readonly string[] } | null> {
   const reconciled = await reconcileFinalTail(directory, root, actor, maxBytes, settle);
   if (reconciled !== undefined) return reconciled && { plan: reconciled.plan, result: reconciled.result, ...(reconciled.remaining ? { remaining: reconciled.remaining.map(member => member.path) } : {}) };
   // A reinstall's new identity record (not its directory, which may hold an unlisted kept file) supersedes an old tombstone.

@@ -300,12 +300,15 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     // Dogfood: the team commits a Deckent file; Git tracking makes it the team's, never a member.
     const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', HOME: join(root, 'home') } });
     git('init', '-q'); git('add', '-f', '.deckent/bindings.json');
+    // R2: a custody-named file the team committed (bytes in it, 0600, single link): holding the lock never makes it removable.
+    const lockFile = join(local, 'state/ledger.db-lock'); await writeFile(lockFile, 'TEAM LOCK', { mode: 0o600 }); git('add', '-f', '.deckent/state/ledger.db-lock');
     const plan = await previewConfiguredUninstall(project, ALL, options), members = plan.items.find(item => item.resourceId === 'global-data')!.members!;
+    expect(plan.items.find(item => item.locator === lockFile)).toMatchObject({ action: 'keep', reason: 'vcs-tracked' });
     expect(plan.blockers).toEqual([]); expect(plan).toMatchObject({ purge: true, backup: { required: true } });
     expect(members).toEqual(expect.arrayContaining([ledger, join(local, 'policy.json'), join(local, 'installation-identity/identity.json'), join(local, 'state/terminal-history.jsonl'), join(local, 'config.json')]));
     expect(members).not.toContain(join(local, 'bindings.json')); expect(members).not.toContain(join(local, 'notes.txt')); expect(members).not.toContain(record);
     expect(plan.items.find(item => item.locator === record)).toMatchObject({ action: 'keep', ownership: 'unknown' });
-    expect(plan.items.find(item => item.resourceId.startsWith('tracked.'))).toMatchObject({ locator: join(local, 'bindings.json'), action: 'keep', reason: 'vcs-tracked' });
+    expect(plan.items.find(item => item.resourceId.startsWith('tracked.') && item.locator === join(local, 'bindings.json'))).toMatchObject({ action: 'keep', reason: 'vcs-tracked' });
     expect(plan.items.find(item => item.locator === join(local, 'notes.txt'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
     // M13: an SDK call from an AI agent or CI (marker set, even with a real terminal attested) is no person's witness: refused, nothing deleted.
@@ -323,7 +326,7 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     expect(result.status).toBe('completed');
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');
-    expect(await readFile(record, 'utf8')).toBe('CUSTOMER'); expect(await readFile(sock, 'utf8')).toBe('MINE');
+    expect(await readFile(record, 'utf8')).toBe('CUSTOMER'); expect(await readFile(sock, 'utf8')).toBe('MINE'); expect(await readFile(lockFile, 'utf8')).toBe('TEAM LOCK');
     expect(plan.items.find(item => item.locator === sock)).toMatchObject({ action: 'keep', ownership: 'unknown' });
     (await verifyBackupSet(result.backup.destination!, phrase, getConfigFieldDefault('installation').packageMeasurement)).close();
     expect(await lstat(`${result.backup.destination!}.archive`)).toBeTruthy(); expect(result.backup.destination!.startsWith(project)).toBe(false);
@@ -491,12 +494,19 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
       if (await unremoved(join(local, name))) remaining.push(join(local, name));
     expect(remaining.length).toBe(2);
     // The kept policy is not the file the intent recorded: the resumed tail cannot decide from it and deletes nothing.
+    const policy = await readFile(join(local, 'policy.json'));
     await writeFile(join(local, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'tampered', restrictions: [], grants: [] }), { mode: 0o600 });
-    const second = await previewConfiguredUninstall(project, KEEP, options).catch((error: unknown) => error);
-    const resumed = 'planDigest' in (second as object) ? applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: (second as { planDigest: string }).planDigest },
-      { backupPassphrase: async () => phrase, confirm: async () => true }, options) : Promise.reject(second);
-    await expect(resumed).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
+    const resume = async () => { const second = await previewConfiguredUninstall(project, KEEP, options).catch((error: unknown) => error);
+      return 'planDigest' in (second as object) ? applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'resume', planDigest: (second as { planDigest: string }).planDigest },
+        { backupPassphrase: async () => phrase, confirm: async () => true }, options) : Promise.reject(second); };
+    await expect(resume()).rejects.toMatchObject({ code: 'UNINSTALL_FINAL_TAIL_UNKNOWN' });
     for (const path of remaining) expect(await unremoved(path)).toBe(true);
+    // R11: with the recorded policy back the resumed tail completes like the normal step: the retired marker is there and the service refuses to start.
+    await writeFile(join(local, 'policy.json'), policy, { mode: 0o600 });
+    expect(await resume()).toMatchObject({ status: 'completed' });
+    for (const path of remaining) expect(await unremoved(path)).toBe(false);
+    const { assertNotRetired } = await import('#platform/index.js');
+    await expect(assertNotRetired(local)).rejects.toMatchObject({ code: 'UNINSTALL_RETIRED' });
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -544,6 +554,12 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     await trusted(project); await trusted(elsewhere);
     const trustStore = instructionTrustDirectory(options.env), records = (await readdir(trustStore)).filter(name => /^[a-f0-9]{64}$/u.test(name));
     expect(records).toHaveLength(2);
+    // R6: both folders' records were there before the legacy snapshot (a store from an earlier release): a committed ref read honours them.
+    const { openProjectInstructionReader } = await import('#adapters/index.js'), legacy = join(trustStore, 'legacy-folder-trust.v1');
+    await rm(legacy); await openProjectInstructionReader(project, trustStore);
+    const committed = async () => (await (await openProjectInstructionReader(project, trustStore, undefined, undefined, { ref: 'main',
+      read: async name => name === 'DECKENT.md' ? { commit: 'c'.repeat(40), blobOid: 'b'.repeat(40), bytes: original } : null })).inspect()).status;
+    expect(await committed()).toBe('ready');
     const claudeBefore = Buffer.concat([Buffer.from('@DECKENT.md\n'), team]);
     await writeFile(agents, 'Read DECKENT.md\n'); await writeFile(claude, claudeBefore);
     // B2: a root bridge the team's Git tracks is theirs: kept and listed, never cut.
@@ -583,10 +599,16 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     await expect(lstat(join(own, 'secrets.json'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(own, 'notes.txt'), 'utf8')).toBe('MINE');
     expect(await readFile(join(other, 'secrets.json'), 'utf8')).toBe('{}');
     await expect(lstat(ownRecord[0]!)).rejects.toMatchObject({ code: 'ENOENT' }); expect((await readdir(trustStore)).filter(name => records.includes(name))).toHaveLength(1);
+    // R6: this folder's legacy entry went through its owner; the other folder's stays. R11, R2: the resumed tail completes like the normal step:
+    // the empty, untracked custody file and then the emptied .deckent go.
+    const snapshot = await readFile(legacy, 'utf8'); expect(snapshot).not.toContain(basename(ownRecord[0]!)); expect(records.some(name => snapshot.includes(name))).toBe(true);
+    expect(await readdir(local, { recursive: true }).catch(() => 'gone')).toBe('gone');
     // M11: `deckent backup restore` brings back DECKENT.md, the init-created AGENTS.md, the vault slice and CLAUDE.md's bridge line, byte for byte.
     const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect((await readFile(claude)).equals(claudeBefore)).toBe(true); expect((await readFile(deck)).equals(original)).toBe(true);
     expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect(await readFile(join(own, 'secrets.json'), 'utf8')).toBe('{}'); expect(await lstat(ownRecord[0]!)).toBeTruthy();
+    // R6: the restored folder record alone never reopens the committed ref read (its legacy entry stays forgotten: that trust is asked again).
+    expect(await committed()).toBe('trust-required');
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

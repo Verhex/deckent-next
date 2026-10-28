@@ -87,6 +87,9 @@ it('binds D0 to every member, location, version and owner evidence; guards the r
   for (const unsafe of [{ backupDestination: '/fixture/data/scratch/recovery/set' }, { backupDestination: '/project/recovery/set', recoveryForbidden: ['/project'] }, { recoveryUnsafe: true }])
     expect(createUninstallPlan(query('keep-data'), { ...base, ...unsafe }).blockers).toContain('backup-destination');
   expect(createUninstallPlan(query('keep-data'), { ...base, resources: [], recoveryUnsafe: true }).blockers).toEqual([]); // nothing removed: nothing asked
+  // R14: a plan that only stops the service and disables its unit writes custody and receipts there too: refused before any card.
+  const k4 = { running: true, unit: 'deckent-fixture.service', unitDisable: 'eligible' as const, command: 'systemctl --user disable --now deckent-fixture.service' };
+  expect(createUninstallPlan(query('keep-data', { disableUnit: true }), { ...base, resources: [], service: k4, recoveryUnsafe: true })).toMatchObject({ blockers: ['backup-destination'], steps: { disableUnit: true } });
   // M9: an unknown result in a managed scope stops keep-work's data deletion too (force included); keep-data keeps the data and may go on.
   const managed = { ...base, managedScopes: ['s'], work: { ...idle, uncertain: [effect] } };
   expect(createUninstallPlan(query('keep-work', { force: true }), managed).blockers).toContain('uncertain-managed');

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
-  uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, querySystemdMainPid, installationScopes } from '#adapters/index.js';
+  uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeApproval, RunPolicyAuthorization, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -55,10 +55,10 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
         return client.shutdownService({ schemaVersion: 1, commandId: randomUUID(), serviceId: live.identity.serviceId, instanceId: live.instanceId, reason: 'uninstall' }, AbortSignal.timeout(terminal.serviceStartTimeoutMs)); },
       disable: (unit, links) => disableUserUnit(unit, exec, links, uninstallRecoveryDirectory(config, env), env) } });
 }
-async function completed(root: string, options: ConfigLoadOptions, settle = false) {
-  const config = await load(root, options), directory = uninstallRecoveryDirectory(config, options.env ?? process.env);
+async function completed(root: string, options: ConfigLoadOptions, settle = false) { // R11: an already-absent tail completes through the same owner
+  const config = await load(root, options), env = options.env ?? process.env, directory = uninstallRecoveryDirectory(config, env);
   return { directory, previous: await readUninstallTombstone(directory, config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes,
-    productResourcePath(config.productLayout, 'installationIdentity'), settle) };
+    productResourcePath(config.productLayout, 'installationIdentity'), settle ? (plan, release) => completeUninstall(config, plan, env, release) : undefined) };
 }
 export async function previewConfiguredUninstall(root: string, query: unknown, options: ConfigLoadOptions = {}) {
   const { previous } = await completed(root, options); if (previous) return completedUninstallPreview(previous.plan, previous.remaining);
@@ -77,5 +77,5 @@ export async function applyConfiguredUninstall(root: string, input: unknown, int
   if (!previous.remaining) return { ...((await completed(root, options, true)).previous ?? previous).result, status: 'noop' as const, planDigest: plan.planDigest };
   if (!await interaction.confirm(plan)) return { ...previous.result, status: 'cancelled' as const, items: [], planDigest: plan.planDigest };
   await witnessed();
-  return { ...await resumeUninstallFinalTail(await load(root, options), directory, { ...readLocalOsIdentity(), scopeIds: [] }, await interaction.backupPassphrase?.() ?? ''), planDigest: plan.planDigest };
+  return { ...await resumeUninstallFinalTail(await load(root, options), directory, { ...readLocalOsIdentity(), scopeIds: [] }, await interaction.backupPassphrase?.() ?? '', options.env), planDigest: plan.planDigest };
 }
