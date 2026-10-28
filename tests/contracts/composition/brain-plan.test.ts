@@ -60,6 +60,14 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(second.messages.at(-1)!.content.startsWith(first.messages.at(-1)!.content)).toBe(true);
     expect(second.messages.at(-1)!.content).toContain('unregistered task kind invented-kind'); expect(second.messages.at(-1)!.content).toContain('Use only these task kinds: purchase.');
   });
+  it('Astra R4: the Brain byte bound applies to the corrective request too: refused typed before a second provider call', async () => {
+    const answer = `not json ${'x'.repeat(7_900)}`, probe = await fixture({ response: answer });
+    await planRun(probe.project, command, probe.options).catch(() => undefined);
+    const limit = Buffer.byteLength(JSON.stringify(JSON.parse(probe.bodies[0]!).messages)) + 2_000; // the first request fits; the correction (+answer) does not
+    const f = await fixture({ response: answer });
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ ...f.config, brain_planner: { context: { requestMaxBytes: limit } } })); clearConfigCache();
+    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_CONTEXT_TOO_LARGE' }); expect(f.posts).toBe(1);
+  });
   it('RED→GREEN: a plan with an unregistered kind is corrected once and proposed; correctionRetries 0 keeps one call', async () => {
     const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
     const good = JSON.stringify({ graph, budgetCeiling, requiredPermissions }), bad = JSON.stringify({ graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'invented-kind' }] }, budgetCeiling, requiredPermissions });
@@ -284,3 +292,4 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   expect(refused.proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); expect(refused.run).toBeNull();
   expect(counts(f.path)).toEqual({ runs: 0, proposals: 1 });
 });
+

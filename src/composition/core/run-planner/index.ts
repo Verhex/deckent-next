@@ -6,7 +6,7 @@ import { SIWC_INFERENCE, FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvoc
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
-import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, carryContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -56,6 +56,8 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       knownSecrets: getConfigKnownSecrets(context.config), remainingBudget: scopeId => readBudget(scopeId).catch(() => null),
       continueBilling: (command, result, notice, signal) => prepareConfiguredFeatureContinuation(root, command, result, options, notice,
         async next => gateConfiguredBrainModel(await loadConfiguredScopeContext(root, next.scopeId, options, 'read'), next), signal),
+      admitCorrection: async (from, to) => { carryContinuationPin(from, to); const config = (await loadConfiguredScopeContext(root, to.scopeId, options, 'read')).config, brain = config['brain_planner']; assertBrainContextFits(to, brain, null, null); // Astra R2/R4
+        assertBrainContextFits(to, brain, ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === to.scopeId && JSON.stringify(value.reference) === JSON.stringify(to.reference))?.contextWindowTokens ?? null, await measureConfiguredModel(root, to, options, signal, 'feature')); },
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
       stoppedAtLength: openAiChatStoppedAtLength,
@@ -110,7 +112,6 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
     }).plan(input, undefined, signal, observe);
   } catch (error) { throw queryFailure(error); }
 }
-
 export { transitionConfiguredRunIntent } from './internal/intents.js';
 /** Explicit person's start only; ordinary /do replay keeps the durable intent parked/released/starting. */
 export async function startConfiguredRunIntent(root: string, intent: import('#engine/index.js').RunIntentRecord, options: ConfigLoadOptions = {}, signal?: AbortSignal) {

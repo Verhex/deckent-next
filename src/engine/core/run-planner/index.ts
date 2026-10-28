@@ -74,6 +74,8 @@ export interface BrainPlanPorts {
   /** S3-4: a rejected call's retained adapter body (base64) read under the caller's content right; null when not retained or not readable. */
   readonly subscriptionAdapterIds?: ReadonlySet<string>;
   continueBilling?(command: ModelInvocationCommand, result: ModelInvocationResult, notice: (reference: ModelReference) => void, signal?: AbortSignal): Promise<ModelInvocationCommand | null>;
+  /** Astra R2/R4: the trusted host admits a corrective re-plan derived from `from` (keeps a continuation's custody pin; applies the same Brain context bound). */
+  admitCorrection?(from: ModelInvocationCommand, to: ModelInvocationCommand): Promise<void>;
   rejectionBody?(result: ModelInvocationResult): Promise<string | null>;
   /** The scope's remaining money after the planning call, when observable; null when no budget is readable. */
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
@@ -243,7 +245,7 @@ export class BrainPlanApplication {
       try { draft = this.validated(prepared, result, invocation); break; } catch (error) {
         const next = correction < (prepared.correctionRetries ?? 0) ? correctedInvocation(command, invocation, receipt, error, prepared.kinds ?? [], this.ports.knownSecrets) : null;
         if (!next) throw error;
-        invocation = next; observe?.({ kind: 'planning', attempt: correction + 2 });
+        await this.ports.admitCorrection?.(invocation, next); invocation = next; observe?.({ kind: 'planning', attempt: correction + 2 });
         result = await this.ports.invoke(invocation, signal); assertActive(signal); assertBrainReceipt(invocation, result, command, proposer);
         if (result.receipt.outcome?.state === 'rejected') throw brainRejection(result.receipt.outcome.evidence, await this.ports.rejectionBody?.(result).catch(() => null) ?? null, this.ports.subscriptionAdapterIds);
         receipt = result.receipt;
