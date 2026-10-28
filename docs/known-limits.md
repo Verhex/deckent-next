@@ -456,6 +456,14 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   project** (KER-17, 2026-10-28): the key is now used under the same project grant as a provider key, so the server does not start in a
   project without it and the turn says which key. *Workaround:* `deckent doctor` lists each such key with its command; run
   `deckent secret grant NAME --scope <id>` once per project at your own terminal (a card; AI sessions cannot answer it).
+- **A local model connected before alpha.56.1 has no tool-call declaration, so the terminal offers it no file tools** (AYSE-16,
+  2026-10-28): the connect step now asks a keyless local server once whether it accepts a tool call and declares it. *Workaround:*
+  reconnect the server once in `deckent` → /provider (the same address); a vLLM started without `--enable-auto-tool-choice
+  --tool-call-parser <parser>` stays without tools, and the terminal says so.
+- **Without a work kind and worker pool, `/do` and the first task run in the terminal, not as a background Run** (owner İ-1/İ-6/İ-7,
+  2026-10-27): the screen shows why no Run could start, then runs the task with the model's tools under your mode, sandbox and
+  approvals. *Workaround:* for background workers set up /setup → First work kind → Worker image → Worker pool. `pool hold` and
+  `pool set-capacity` say there is no pool yet until then.
 - **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
   (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set
   stopped by the cancellation can be partly applied. The result text lists what was written. *Workaround:* before running a cancelled

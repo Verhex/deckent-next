@@ -355,7 +355,7 @@
   "error.RUN_STORE_CONFLICT": "The Run changed or is unavailable. Reload its recorded state.",
   "error.RUN_NOT_FOUND": "No recorded Run found: {run}.",
   "error.RUN_COMMAND_CONFLICT": "This command identity is already bound to different Run input.",
-  "error.RUN_POOL_REQUIRED": "A valid assigned execution pool is required.",
+  "error.RUN_POOL_REQUIRED": "No worker pool is set up for this scope yet, so no background work runs in it (nothing to hold, resume or size). Set one up in `deckent` with /setup (First work kind, then Worker pool); from a script: `deckent init registry --scope <id> … --preview`, then `deckent init pool --scope <id> --preview`.",
   "error.RUN_POOL_CONFLICT": "The execution pool already has different capacity settings.",
   "error.RUN_POOL_FULL": "The execution pool has no available capacity.",
   "error.RUN_POOL_HELD": "The execution pool is held: no new task is reserved until it is resumed; running work continues.",

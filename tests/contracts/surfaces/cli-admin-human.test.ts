@@ -85,6 +85,15 @@ it('pool changes off a terminal need --scope (owner-accepted change): CLI_SCOPE_
   expect(calls).toEqual([expect.objectContaining({ scopeId: 'live', action: 'hold', reason: 'deploy' })]);
 });
 
+it('BeUser: pool hold on a terminal with no pool says there is nothing to hold and the next step, before any reason or confirmation card', async () => {
+  const f = await project(), calls: unknown[] = [];
+  card.interactive = true; card.answers = ['live', 'maintenance', 'apply']; card.asked.length = 0;
+  const { err, context } = io(f, { ...poolHandlers(calls), inspectPoolHold: async () => { throw ErrorRegistry.createError('RUN_POOL_REQUIRED'); } });
+  expect(await main(['pool', 'hold'], context)).toBe(1);
+  expect(calls).toEqual([]); expect(card.asked).toHaveLength(1); // only the scope picker
+  expect(err.text()).toContain('nothing to hold'); expect(err.text()).toContain('/setup (First work kind, then Worker pool)');
+});
+
 it('pool hold on a terminal: scope picker, then the reason by selection, then what / which pool / why; cancel writes nothing', async () => {
   const f = await project(), calls: unknown[] = [];
   card.interactive = true; card.answers = ['live', 'maintenance', 'cancel'];

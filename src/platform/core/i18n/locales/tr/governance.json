@@ -355,7 +355,7 @@
   "error.RUN_STORE_CONFLICT": "İş değişti veya mevcut değil. Kayıtlı durumunu yeniden okuyun.",
   "error.RUN_NOT_FOUND": "Kayıtlı iş bulunamadı: {run}.",
   "error.RUN_COMMAND_CONFLICT": "Bu komut kimliği farklı iş girdisine bağlı.",
-  "error.RUN_POOL_REQUIRED": "Geçerli, atanmış bir yürütme havuzu gerekli.",
+  "error.RUN_POOL_REQUIRED": "Bu kapsam için henüz işçi havuzu kurulmadı; bu yüzden içinde arka plan işi çalışmıyor (bekletilecek, sürdürülecek ya da boyutlandırılacak bir şey yok). `deckent` içinde /setup ile kurun (İlk iş türü, sonra İşçi havuzu); betikten: `deckent init registry --scope <kimlik> … --preview`, sonra `deckent init pool --scope <kimlik> --preview`.",
   "error.RUN_POOL_CONFLICT": "Yürütme havuzunun farklı kapasite ayarları mevcut.",
   "error.RUN_POOL_FULL": "Yürütme havuzunda kullanılabilir kapasite yok.",
   "error.RUN_POOL_HELD": "Yürütme havuzu bekletiliyor: devam ettirilene kadar yeni görev ayrılmaz; çalışan işler sürer.",

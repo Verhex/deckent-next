@@ -457,6 +457,14 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   açılmasını ister** (KER-17, 2026-10-28): anahtar artık bir sağlayıcı anahtarıyla aynı proje izniyle kullanılır; izin olmayan projede
   sunucu başlamaz ve tur hangi anahtar olduğunu söyler. *Yol:* `deckent doctor` her anahtarı komutuyla listeler; her proje için bir kez
   kendi terminalinizde `deckent secret grant AD --scope <kimlik>` çalıştırın (bir kart; AI oturumları cevaplayamaz).
+- **alpha.56.1'den önce bağlanan yerel bir modelin araç çağrısı bildirimi yoktur; terminal ona dosya araçlarını sunmaz** (AYSE-16,
+  2026-10-28): bağlanma adımı artık anahtarsız yerel sunucuya bir kez araç çağrısını kabul edip etmediğini sorar ve bildirir. *Yol:*
+  sunucuyu `deckent` → /provider içinde (aynı adresle) bir kez yeniden bağlayın; `--enable-auto-tool-choice --tool-call-parser <ayrıştırıcı>`
+  olmadan başlatılan bir vLLM araçsız kalır ve terminal bunu söyler.
+- **İş türü ve işçi havuzu yokken `/do` ve ilk görev arka plan işi olarak değil, terminalde çalışır** (owner İ-1/İ-6/İ-7, 2026-10-27):
+  ekran neden bir iş başlatılamadığını gösterir, sonra görevi modelin araçlarıyla, sizin modunuz, sandbox ve onaylar altında çalıştırır.
+  *Yol:* arka plan işçileri için /setup → İlk iş türü → İşçi imajı → İşçi havuzu. O zamana kadar `pool hold` ve `pool set-capacity`
+  henüz havuz olmadığını söyler.
 - **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan
   bir araç çağrısı bittikten sonra tur iptal edilirse (bağlantı kopması, açık iptal, kapanış) çağrı yine `cancelled` bildirilir;
   iptalle durdurulan bir yazma kümesi kısmen uygulanmış kalabilir. Sonuç metni yazılanları listeler. *Yol:* iptal görünen bir

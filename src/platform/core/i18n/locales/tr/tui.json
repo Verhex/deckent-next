@@ -837,6 +837,7 @@
   "tui.panel.provider.title": "Sağlayıcılar",
   "tui.panel.provider.hints": "↑↓ seç · yazarak süz · Enter aç · Esc geri",
   "tui.panel.provider.action.connect": "Bağlan (anahtarı girin, ücretsiz deneme)",
+  "tui.panel.provider.action.connectNoKey": "Bağlan (anahtar yok: oturumu denetler)",
   "tui.panel.provider.action.replace": "Anahtarı değiştir (önce ücretsiz deneme)",
   "tui.panel.provider.action.disconnect": "Bağlantıyı kaldır (saklanan anahtarı sil)",
   "tui.panel.provider.endpointTitle": "Adres",

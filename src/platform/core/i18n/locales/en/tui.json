@@ -837,6 +837,7 @@
   "tui.panel.provider.title": "Providers",
   "tui.panel.provider.hints": "↑↓ choose · type to filter · Enter open · Esc back",
   "tui.panel.provider.action.connect": "Connect (enter the key, free check)",
+  "tui.panel.provider.action.connectNoKey": "Connect (no key: checks the sign-in)",
   "tui.panel.provider.action.replace": "Replace the key (free check first)",
   "tui.panel.provider.action.disconnect": "Disconnect (remove the stored key)",
   "tui.panel.provider.endpointTitle": "Address",

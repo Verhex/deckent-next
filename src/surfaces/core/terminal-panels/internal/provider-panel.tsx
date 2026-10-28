@@ -16,7 +16,7 @@ export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanel
   return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.pendingNote ? `${kind.pendingNote} · ${kind.detail}` : kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
     // FIX8b: the ChatGPT sign-in row has no key or catalog: its one action opens the sign-in window.
     ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.id === signIn ? { childTitle: kind.label, children: [{ id: 'connect', label: labels.actions.signIn }] } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
-      : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
+      : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : kind.keyName === null ? labels.actions.connectNoKey : labels.actions.connect }, // BeUser: a CLI subscription signs in, no key
       ...(kind.keyStored && kind.grantRequired ? [{ id: 'grant', label: labels.actions.grant }] : []),
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
       ...(models && (kind.models.length || kind.discoversModels) ? [{ id: 'model', label: labels.actions.model, ...(kind.modelBlocked ? { blocked: { reason: kind.modelBlocked } } : {}) }] : []),
