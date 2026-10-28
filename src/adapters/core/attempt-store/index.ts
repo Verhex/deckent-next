@@ -33,8 +33,8 @@ export function inventoryReadsPerCall(path: () => Promise<string>, options: impo
 }
 /** Service-start upgrade of an existing older ledger with a versioned backup; loads the native driver lazily. */
 export async function upgradeExistingProductLedger(path: string, options: SqliteLedgerOptions, backupDirectory: string, now: Date,
-  profiles?: import('#engine/index.js').SupervisorProfileValidator, companyId?: string) {
+  profiles?: import('#engine/index.js').SupervisorProfileValidator, companyId?: string, installationIdentity?: unknown) {
   const { upgradeExistingLedger } = await import('#adapters/core/sqlite-ledger/index.js');
-  return upgradeExistingLedger(path, options, backupDirectory, now, profiles, companyId);
+  return upgradeExistingLedger(path, options, backupDirectory, now, profiles, companyId, installationIdentity);
 }
 export type { LedgerUpgrade } from '#adapters/core/sqlite-ledger/index.js';
