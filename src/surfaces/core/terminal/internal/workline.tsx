@@ -12,7 +12,7 @@ import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
+import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
@@ -83,7 +83,7 @@ export interface WorklineLabels extends WorklineActionLabels {
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
 
-const LOCAL_FALLBACK = new Set(['RUN_ADMISSION_NOT_CONFIGURED', 'BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE']); // no background Run can start here yet
+const LOCAL_FALLBACK = new Set(['RUN_ADMISSION_NOT_CONFIGURED', 'BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_NONE']); // no background Run can start here yet
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
@@ -457,7 +457,7 @@ export function WorklineApp(props: WorklineProps) {
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
-        let result = await plan();
+        let result = await plan(); if (!isRunIntentResult(result) && result.proposal.status === 'rejected' && LOCAL_FALLBACK.has(String(result.proposal.reason)) && props.doPlan.localFallback) throw ErrorRegistry.createError(result.proposal.reason!, { ...(result.reasonParams ? { params: result.reasonParams } : {}) }); // BeUser M-07: no worker can run it → as a refused /do
         if (result.run) completion.register(result.run);
         setPlanning(false); onboarding.settled(execution.input.inputId);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }

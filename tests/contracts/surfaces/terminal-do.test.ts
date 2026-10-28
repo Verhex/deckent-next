@@ -95,3 +95,14 @@ it.each([['RUN_ADMISSION_NOT_CONFIGURED', true], ['BRAIN_TIER_REFUSED', true], [
   expect(asked).toEqual(local ? ['Read package.json'] : []);
   expect(view.stdout.text.includes('RUNS HERE')).toBe(local); expect(view.stdout.frame).not.toContain('PLANNING');
 });
+it('BeUser M-07: a plan rejected because no worker can run it shows the reason and runs here', async () => {
+  const pending = pendingBrainFixture(), asked: string[] = [];
+  const rejected = { ...pending, run: null, reasonParams: { taskId: 'T1', workClass: 'feature', skipped: 'x: WORKER_CHANNEL_NOT_ACTIVE' },
+    proposal: { ...pending.proposal, status: 'rejected', reason: 'WORKER_ASSIGNMENT_NONE', approval: null } };
+  const view = mountWorkline({ errorText: error => formatHumanError(error, { locale: 'en', noColor: true }),
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', lines: result => brainProposalLines(result, 'en'), plan: async () => rejected as never } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do Add sub\r');
+  await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn');
+  expect(asked).toEqual(['Add sub']); expect(view.stdout.text).toContain('Connect one of the listed models with /provider'); expect(view.stdout.text).toContain('RUNS HERE');
+});

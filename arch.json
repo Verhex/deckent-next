@@ -1207,6 +1207,7 @@
     },
     "src/surfaces/core/terminal": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
