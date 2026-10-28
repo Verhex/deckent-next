@@ -5,6 +5,8 @@ export const cliErrors: ErrorDefinitions = Object.freeze({
   // L-KIT scope rule: a state change without `--scope` off a terminal; names the valid scopes, exit 2 (usage), nothing written.
   // An empty list (a folder with no scope yet, `init --yes`) asks for a new name instead of listing "-".
   CLI_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: p['scopes'] === '' ? t('error.CLI_SCOPE_REQUIRED.none', p, l) : t('error.CLI_SCOPE_REQUIRED', p, l) }) },
+  // BeUser KER-14: an unknown command word under `--json` is one typed envelope on stderr (exit 2), the same text as without it.
+  CLI_COMMAND_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('cli.unknownCommand', p, l) }) },
   // L-KIT short ids (git-like prefixes over the `/runs` query).
   CLI_ID_AMBIGUOUS: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ID_AMBIGUOUS', p, l) }) },
   CLI_ID_TOO_SHORT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ID_TOO_SHORT', p, l) }) },

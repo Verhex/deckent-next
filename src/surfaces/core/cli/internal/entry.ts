@@ -50,8 +50,11 @@ export function dispatch(argv: readonly string[], locale?: Locale): { readonly o
 }
 
 /** Bare piped `deckent` prints the top help; anything else that is not a command is `--version` or an unknown command. */
-function emitDispatch(argv: readonly string[], locale: Locale, context: CommandContext): ExitCode {
+function emitDispatch(argv: readonly string[], locale: Locale, context: CommandContext): ExitCode | Promise<ExitCode> {
   const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv, locale);
+  // BeUser KER-14: `--json` keeps its contract for an unknown command too: one typed error object on stderr, never plain text.
+  if (result.code !== 0 && argv.includes('--json')) return reportFatal(ErrorRegistry.createError('CLI_COMMAND_UNKNOWN', { locale, params: { command: argv[0] ?? '', name: PACKAGE_NAME } }),
+    { ...context, argv, json: true, locale });
   emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
   return result.code;
 }
