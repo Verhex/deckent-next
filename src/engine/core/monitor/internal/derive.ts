@@ -147,18 +147,21 @@ function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null
  * one whose dispatch recorded no retained patch is `patch-not-prepared` (the preparation failure itself is not recorded in the ledger, so no cause is claimed),
  * else a retained patch awaits delivery; no such task means nothing to deliver. Unknown evidence (an older reader without the patch record) yields no outlook.
  */
+/** BeUser M-33: an awaiting Run whose every retained patch a person set aside (`e.dismissed`). */
+const allSetAside = (e: MonitorRunEvidence) => { const { scopeId, runId } = e.run.snapshot.identity; const ready = e.run.snapshot.graph.tasks.filter(task => task.workInput
+  && e.run.snapshot.progress.find(value => value.taskId === task.id)?.phase === 'accepted' && attemptOf(e.run, task.id)?.dispatch?.patchRecorded === true);
+  return ready.length > 0 && ready.every(task => e.dismissed?.has(`${scopeId}\0${runId}\0${task.id}`)); };
 function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): MonitorDeliveryOutlook | undefined {
   if (state !== 'accepted' || e.run.delivery || e.run.deliveryOutputPermitted === false) return undefined;
-  const snapshot = e.run.snapshot; let ready = false, unknown = false, aside = false;
+  const snapshot = e.run.snapshot; let ready = false, unknown = false;
   for (const task of snapshot.graph.tasks) {
     const progress = snapshot.progress.find(value => value.taskId === task.id);
     if (!task.workInput || progress?.phase !== 'accepted') continue;
     const recorded = attemptOf(e.run, task.id)?.dispatch?.patchRecorded;
-    if (recorded === true && e.dismissed?.has(`${snapshot.identity.scopeId}\0${snapshot.identity.runId}\0${task.id}`)) { aside = true; continue; }
     if (recorded === false) return 'patch-not-prepared';
     if (recorded === true) ready = true; else unknown = true;
   }
-  return ready ? 'awaiting-delivery' : unknown ? undefined : aside ? 'set-aside' : 'none';
+  return ready ? 'awaiting-delivery' : unknown ? undefined : 'none';
 }
 /** The model a worker ran: the sealed usage, else its init, else the requested pin (named honestly: a pin is what was asked for). */
 const modelName = (view: WorkerModelView | null | undefined) => view ? view.usage?.[0] ?? view.init ?? view.requested.modelId : null;
@@ -217,19 +220,19 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     ...(costReport ? { costReport: e.run.costComparison ? recommendRunWorkCosts(costReport, e.run.costComparison.registry, e.run.costComparison.policy) : costReport } : {}),
     ...(snapshot.authority ? { authority: snapshot.authority } : {}),
     phaseCounts: Object.freeze(phaseCounts), graphSummary: summarizeTaskGraph(snapshot.graph, snapshot.progress), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
-    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}) });
+    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}),
+    ...(outlook === 'awaiting-delivery' && allSetAside(e) ? { deliverySetAside: true as const } : {}) });
 }
 /**
- * BeUser M-33: one inspected Run's projection with its set-aside tasks (task ids from `dismissed`, the person's latest-record rule) and each task's outlook:
- * a set-aside task of an awaiting Run is `set-aside`; another task of a Run whose patches were all set aside owes nothing more (`none`). A failed read keeps
- * the outlook as if nothing was set aside and returns its typed code.
+ * BeUser M-33: one inspected Run's projection and which of its tasks a person set aside (task ids from `dismissed`, the latest-record rule): only a task of an
+ * awaiting Run is set aside; the outlook keeps its value. A failed read sets nothing aside and returns its typed code.
  */
 export async function projectRunWithDismissals(e: MonitorRunEvidence, dismissed?: (limit: number) => Promise<ReadonlySet<string>>) {
   let aside: ReadonlySet<string> = new Set(), unread: string | undefined;
   if (dismissed) try { aside = await dismissed(MONITOR_DISMISSED_READ); } catch (error) { const code = (error as { code?: unknown } | null)?.code; unread = typeof code === 'string' ? code : 'AUDIT_UNAVAILABLE'; }
-  const identity = e.run.snapshot.identity, full = projectMonitorRun(e);
-  const projected = aside.size ? projectMonitorRun({ ...e, dismissed: new Set([...aside].map(taskId => `${identity.scopeId}\0${identity.runId}\0${taskId}`)) }) : full;
-  const outlook = (taskId: string): MonitorDeliveryOutlook | undefined => aside.has(taskId) && full.deliveryOutlook === 'awaiting-delivery' ? 'set-aside'
-    : projected.deliveryOutlook === 'set-aside' ? 'none' : projected.deliveryOutlook;
-  return { projected, outlook, ...(unread && projected.deliveryOutlook === 'awaiting-delivery' ? { unread } : {}) };
+  const projected = projectMonitorRun(e), awaiting = projected.deliveryOutlook === 'awaiting-delivery';
+  return { projected, setAside: (taskId: string) => awaiting && aside.has(taskId), ...(unread && awaiting ? { unread } : {}) };
 }
+/** BeUser DR2-05: the current project's newest Runs that still owe delivery or adoption (awaiting and not set aside, or delivered and not adopted), at most the dismissal read bound. */
+export const openDeliveryRuns = (snapshot: Readonly<{ installs: readonly Readonly<{ id: string; runs: readonly MonitorRun[] }>[] }>) => (snapshot.installs.find(install => install.id === 'current')?.runs ?? [])
+  .filter(run => (run.deliveryOutlook === 'awaiting-delivery' && !run.deliverySetAside) || run.delivery?.state === 'delivered').slice(0, MONITOR_DISMISSED_READ).map(run => ({ scopeId: run.scopeId, runId: run.runId }));

@@ -20,7 +20,7 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
-    try {
+    try { await c.sameWorkSource(store);
       const runs = new RunPolicyAuthorization({ async load() { return c.document; } });
       return await use(new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(git), new GitIntegrationAdoption(git),
         c.config.execution.adoption.targets, sessions, c.authorization, clock, { registry: c.config.admission?.registry ?? null,

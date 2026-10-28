@@ -92,6 +92,8 @@ export interface MonitorRun {
   readonly delivery?: ResultBrief['runDelivery'];
   /** M2 (optional): the typed delivery outlook of an accepted Run, derived from the task's work input and the dispatch's retained-patch record. */
   readonly deliveryOutlook?: MonitorDeliveryOutlook;
+  /** BeUser M-33 (optional, additive; the outlook keeps its value): every retained patch of this awaiting Run was set aside by a person. */
+  readonly deliverySetAside?: true;
   /** PARALLEL-S3 (optional, additive): the DAG summary (counts + critical path), the same typed value `run inspect` shows. */
   readonly graphSummary?: TaskGraphSummary;
 }

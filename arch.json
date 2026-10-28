@@ -323,7 +323,8 @@
         "src/surfaces/core/effect-confirmation",
         "src/composition/core/memory-rollout",
         "src/composition/core/hub",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/engine/core/monitor"
       ],
       "plan": "SURFACES"
     },
@@ -1135,7 +1136,9 @@
         "src/engine/core/effect",
         "src/engine/core/runs",
         "src/platform/core/redaction",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/engine/core/workspace-patch",
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },

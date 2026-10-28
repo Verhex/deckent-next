@@ -3,7 +3,7 @@ import type { AttemptIdentity } from '#domain/index.js';
 import type { DeliverySummaryRequest, WorkspacePatch } from '#engine/index.js';
 import { queueSummaryRequest, readConsentSummaries, DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 import type { InventoryQueryHandler } from '#surfaces/core/monitor/index.js';
-import type { DeliveryFileDiff, DeliveryFileStat, TerminalDeliveryPort, VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
+import { queueConfigRefusal, type DeliveryFileDiff, type DeliveryFileStat, type TerminalDeliveryPort, type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import type { TargetQueueView } from '#engine/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import PORT from './deliver-port.json' with { type: 'json' };
@@ -65,8 +65,8 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
   const describe = context.describeDeliverySummaries, summaries = async (requests: readonly DeliverySummaryRequest[]) =>
     describe ? await describe(root, requests, options).catch(() => requests.map(() => null)) : [];
   const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
-    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; },
-    async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
+    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; }, blocked: async () => { const execution = (await loadConfig(root, options)).execution; return execution?.workTargets?.targets[0] ? queueConfigRefusal(execution) : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED'); },
+    async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) { const refusal = queueConfigRefusal((await loadConfig(root, options)).execution); if (refusal) throw refusal; // BeUser DR2-06: named before anything is queued
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;
       if (!ref) throw ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');

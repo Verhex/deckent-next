@@ -676,6 +676,7 @@
   "config.records.field.usd": "Budget (USD)",
   "config.records.field.kind": "Source type",
   "config.records.field.path": "Folder",
+  "config.workTarget.openDeliveries": "Warning: {count} result(s) made in {now} still await delivery or adoption; after this change they cannot be finished until the work source is {now} again.",
   "config.records.field.branch": "Git branch",
   "config.records.kind.next-project": "Deckent Next project",
   "config.records.kind.legacy-tasks": "Legacy task records",

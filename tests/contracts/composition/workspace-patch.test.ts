@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { mkdir, readFile, rm, writeFile, symlink, link, chmod, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, previewConfiguredWorkspacePatch } from '../../../src/index.js';
+import { adoptConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, previewConfiguredWorkspacePatch } from '../../../src/index.js';
 import { DockerSupervisor, GitIntegrationTarget, GitIntegrationDelivery } from '#adapters/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
@@ -298,6 +298,25 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(candidate.manifest.snapshotDigest).toBe(sdk.plan.snapshotDigest);
   });
+  it('BeUser DR2-05: once execution.workTargets points to a clone, the earlier result is WORK_TARGET_CHANGED naming both places for check, delivery and adoption; removing it restores the path', async () => {
+    const f = await readyDeliveryFixture();
+    await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
+    const delivery = { schemaVersion: 1 as const, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' };
+    await confirmedDelivery(f.project, delivery, f.options); // delivered in the project, where the work was made
+    const clone = join(f.root, 'clone'); await exec('/usr/bin/git', ['clone', '--quiet', f.project, clone]);
+    const branch = (await exec('/usr/bin/git', ['-C', clone, 'rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim(), original = await readFile(f.configPath, 'utf8');
+    const config = JSON.parse(original) as { execution: Record<string, unknown> };
+    config.execution['workTargets'] = { schemaVersion: 2, targets: [{ id: 'clone', kind: 'git', path: clone, baseRef: `refs/heads/${branch}` }] };
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await f.policy(['read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration'], [{ id: 'target', effect: 'allow', actions: ['use', 'adopt'], scopes: ['s'], principals: f.principals, resource: { kind: 'work-target', ids: ['clone'] } }]);
+    const changed = (error: { code?: string; message?: string }) => error.code === 'WORK_TARGET_CHANGED' && error.message!.includes(f.project) && error.message!.includes(clone);
+    await expect(checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options)).rejects.toSatisfy(changed);
+    await expect(confirmedDelivery(f.project, { ...delivery, commandId: 'delivery-2' }, f.options)).rejects.toSatisfy(changed);
+    await expect(adoptConfiguredWorkspaceIntegration(f.project, { schemaVersion: 2, commandId: 'adopt', identity: f.identity, deliveryCommandId: 'delivery', targetRef: 'refs/heads/team' }, f.options)).rejects.toSatisfy(changed);
+    await writeFile(f.configPath, original); clearConfigCache();
+    expect((await checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options)).proposal).toBe(f.command.proposal);
+  });
+
   it('replaces a live held writer with a separate linked candidate and preserves the old bytes/state', async () => {
     const f = await readyDeliveryFixture(); const paused = await pausedWriter(f, 'candidate', f.command);
     try {

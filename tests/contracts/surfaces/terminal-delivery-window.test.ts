@@ -91,7 +91,7 @@ function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly R
   let current: RunView = run(RUNNING, 'active');
   const recorded = recordingPort(options), pending = pendingBrainFixture();
   const withAside = (view: RunView): RunView => ({ ...view, tasks: view.tasks.map(task => recorded.aside.has(`${view.runId}/${task.id}`) && task.resultBrief?.deliveryOutlook === 'awaiting-delivery'
-    ? { ...task, resultBrief: { ...task.resultBrief, deliveryOutlook: 'set-aside' } } : task) });
+    ? { ...task, resultBrief: { ...task.resultBrief, setAside: true } } : task) });
   const ledger = { scopeId: 's', workerHeartbeatMs: 60_000, listRunIds: async () => (options.scopeRuns ?? [current]).map(item => item.runId),
     inspectRun: async (id: string) => withAside(options.scopeRuns?.find(item => item.runId === id) ?? current),
     listWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }), listApprovalPage: async () => ({ items: [], nextAfter: null }) } as unknown as WorklineLedgerPorts;
@@ -217,7 +217,7 @@ describe('queue preparation without a work target (cli-terminal port)', () => {
 function realQueuePort(targetQueue?: Readonly<{ reattempts: number }>, refusePreview = false) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-queue-intent-')); mkdirSync(join(root, '.deckent'));
   writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ ...(targetQueue ? { targetQueue } : {}), execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
-    logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: [] },
+    logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: ['refs/heads/integration'] }, // a branch the queue accepts (BeUser DR2-06 refuses others before enqueue)
     workTargets: { schemaVersion: 1, targets: [{ id: 'app', kind: 'git', path: join(root, 'target'), baseRef: 'refs/heads/integration' }] } } }));
   const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 }, enqueued: Record<string, unknown>[] = [];
   const handlers = { inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),

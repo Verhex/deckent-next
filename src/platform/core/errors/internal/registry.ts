@@ -487,7 +487,10 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   QUEUE_CAPACITY: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CAPACITY', p, l) }) },
   QUEUE_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_TARGET_BUSY', p, l) }) },
   QUEUE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CORRUPT', p, l) }) },
-  QUEUE_AUTHORITY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_AUTHORITY_REQUIRED', p, l) }) },
+  // BeUser DR2-06: a target-branch refusal names the rule and the next step; other uses keep the human-session message.
+  QUEUE_AUTHORITY_REQUIRED: { category: 'error', render: (p, l) => p['reason'] ? { message: t('error.QUEUE_TARGET_BRANCH', p, l), suggestion: p['reason'] === 'protected' ? t('remedy.QUEUE_TARGET_BRANCH.protected', p, l)
+    : p['reason'] === 'checked-out' ? t('remedy.QUEUE_TARGET_BRANCH.checkedOut', p, l) : p['reason'] === 'not-base' ? t('remedy.QUEUE_TARGET_BRANCH.notBase', p, l)
+    : p['reason'] === 'not-allowed' ? t('remedy.QUEUE_TARGET_BRANCH.notAllowed', p, l) : t('remedy.QUEUE_TARGET_BRANCH.invalid', p, l) } : { message: t('error.QUEUE_AUTHORITY_REQUIRED', p, l) } },
   QUEUE_WORK_TARGET_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_WORK_TARGET_REQUIRED', p, l) }) },
   QUEUE_RECOVERY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_RECOVERY_REQUIRED', p, l) }) },
   QUEUE_CONFIRMATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CONFIRMATION_REQUIRED', p, l) }) },
@@ -543,6 +546,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_TARGET_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_UNSAFE', p, l) }) },
   WORK_TARGET_IN_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IN_DATA_ROOT', p, l) }) },
   WORK_TARGET_IS_PROJECT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IS_PROJECT', p, l) }) },
+  // BeUser DR2-05: the work was made in another repository than the current work source; one rule sentence shared with the /config warning.
+  WORK_TARGET_CHANGED: { category: 'config', render: (p, l) => ({ message: `${p['made'] ? t('error.WORK_TARGET_CHANGED', p, l) : t('error.WORK_TARGET_CHANGED.unknown', p, l)} ${t('workTarget.onlyWhereMade', {}, l)}`,
+    suggestion: p['made'] ? t('remedy.WORK_TARGET_CHANGED', p, l) : t('remedy.WORK_TARGET_CHANGED.unknown', p, l) }) },
   // BeUser D-03: a work target on an installation without coding execution would be written beside no execution settings; set coding up first.
   WORK_TARGET_EXECUTION_MISSING: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_EXECUTION_MISSING', p, l) }) },
   WORK_TARGET_NOT_WORKTREE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_NOT_WORKTREE', p, l) }) },
@@ -592,7 +598,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_DENIED', p, l) }) },
   ADOPTION_TARGET_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_MISSING', p, l) }) },
   ADOPTION_TARGET_CHECKED_OUT: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_CHECKED_OUT', p, l) }) },
-  ADOPTION_BASE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_BASE_CHANGED', p, l) }) },
+  ADOPTION_BASE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_BASE_CHANGED', p, l), suggestion: t('remedy.ADOPTION_BASE_CHANGED', p, l) }) }, // BeUser DR2-08: the real next steps
   ADOPTION_NOT_DELIVERED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_NOT_DELIVERED', p, l) }) },
   ADOPTION_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_NOT_ACCEPTED', p, l) }) },
   ADOPTION_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_BUSY', p, l) }) },

@@ -676,6 +676,7 @@
   "config.records.field.usd": "Bütçe (USD)",
   "config.records.field.kind": "Kaynak türü",
   "config.records.field.path": "Klasör",
+  "config.workTarget.openDeliveries": "Uyarı: {now} içinde üretilen {count} sonuç hâlâ teslim ya da benimseme bekliyor; bu değişiklikten sonra çalışma kaynağı yeniden {now} olana kadar bitirilemezler.",
   "config.records.field.branch": "Git dalı",
   "config.records.kind.next-project": "Deckent Next projesi",
   "config.records.kind.legacy-tasks": "Eski görev kayıtları",

@@ -1,5 +1,6 @@
 import type { AttemptIdentity } from '#domain/index.js';
-import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView, QueueConsent, TargetBatchExecution } from '#engine/index.js';
+import { queueTargetConfigRefusal, type DeliverySummary, type EffectConfirmationView, type RunView, type TargetQueueView, type QueueConsent, type TargetBatchExecution } from '#engine/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 
 /**
  * TESLIM-PENCERESI (owner 2026-10-14): the terminal delivery window's port. The surface never writes Git, refs or the ledger itself:
@@ -36,6 +37,8 @@ export interface TerminalDeliveryPort {
     prepareCurrent(target: DeliveryTarget, commandId: string): Promise<TargetQueueView>;
     /** Read-only: whether `prepareCurrent` would carry the bounded re-attempt intent now (a work target and `targetQueue.reattempts` > 0). */
     reattempt(): Promise<boolean>;
+    /** BeUser DR2-06: the queue's refusal of the configured branch known without Git (then `r` is not offered and the refusal is shown instead). */
+    blocked?(): Promise<Error | null>;
     inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
     /** `ask` also receives each asked ticket's summary, read when the card is asked: shown ABOVE the exact card, never in its place. */
     confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => Promise<boolean>): Promise<TargetBatchExecution>;
@@ -96,11 +99,16 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
     if (run.state.kind !== 'terminal') continue;
     for (const task of run.tasks) {
       const instruction = task.taskBrief?.task;
-      const outlook = task.resultBrief?.deliveryOutlook, aside = outlook === 'set-aside'; // BeUser M-33: a set-aside one is listed to bring back
-      if (task.phase !== 'accepted' || (outlook !== 'awaiting-delivery' && !aside) || !instruction) continue;
+      const aside = task.resultBrief?.setAside === true; // BeUser M-33: a set-aside one is listed to bring back
+      if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
       const key = `${run.scopeId}:${run.runId}:${task.id}`, title = instruction.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle;
       if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, ...(aside ? { setAside: title } : {}) }));
     }
   }
   return Object.freeze([...targets.values()]);
+}
+/** BeUser DR2-06: the queue's refusal of the work target's branch that configuration alone shows (protected, not allow-listed), as the typed error the service would give. */
+export function queueConfigRefusal(execution: Readonly<{ workTargets?: Readonly<{ targets: readonly Readonly<{ baseRef: string }>[] }> | undefined; adoption: Readonly<{ targets: readonly string[]; protectedTargets: readonly string[] }> }> | null | undefined) {
+  const ref = execution?.workTargets?.targets[0]?.baseRef, refusal = execution && ref ? queueTargetConfigRefusal(ref, execution.adoption.targets, execution.adoption.protectedTargets) : null;
+  return refusal ? ErrorRegistry.createError(refusal.code, refusal.params ? { params: refusal.params } : undefined) : null;
 }

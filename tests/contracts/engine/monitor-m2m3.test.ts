@@ -52,20 +52,29 @@ describe('delivery outlook of an accepted Run (M2)', () => {
     expect(project(evidence(work, [done('w', {}, { patchRecorded: true })])).deliveryOutlook).toBe('awaiting-delivery');
     expect(project(evidence(accepted([{ id: 'v', work: false }]), [done('v', {}, { patchRecorded: false })])).deliveryOutlook).toBe('none');
   });
-  it('BeUser M-33: a set-aside task owes no delivery; the Run still awaits delivery for its other retained patch', () => {
+  it('BeUser M-33: the Run says set aside only when every retained patch was; the wire outlook keeps its value', () => {
     const two = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]), attempts = [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true })];
-    expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w']) }).deliveryOutlook).toBe('awaiting-delivery');
-    expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w', 's\0r\0x']) }).deliveryOutlook).toBe('set-aside');
-    expect(project({ ...evidence(two, attempts), dismissed: new Set(['other\0r\0w', 'other\0r\0x']) }).deliveryOutlook).toBe('awaiting-delivery');
+    const shown = (keys: string[]) => { const run = project({ ...evidence(two, attempts), dismissed: new Set(keys) }); return [run.deliveryOutlook, run.deliverySetAside]; };
+    expect(shown(['s\0r\0w'])).toEqual(['awaiting-delivery', undefined]);
+    expect(shown(['s\0r\0w', 's\0r\0x'])).toEqual(['awaiting-delivery', true]);
+    expect(shown(['other\0r\0w', 'other\0r\0x'])).toEqual(['awaiting-delivery', undefined]);
   });
-  it('BeUser M-33: inspection marks the set-aside task itself; an unread record set keeps "awaiting delivery" with its code', async () => {
-    const run = accepted([{ id: 'w', work: true }, { id: 'x', work: true }, { id: 'v', work: false }]), e = evidence(run, [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true }), done('v')]);
+  it('BeUser M-33: inspection marks the set-aside task itself; an unread record set marks nothing and carries its code', async () => {
+    const run = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]), e = evidence(run, [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true })]);
     const one = await projectRunWithDismissals(e, async () => new Set(['w']));
-    expect([one.outlook('w'), one.outlook('x'), one.unread]).toEqual(['set-aside', 'awaiting-delivery', undefined]);
-    const all = await projectRunWithDismissals(e, async () => new Set(['w', 'x']));
-    expect([all.outlook('w'), all.outlook('x'), all.outlook('v')]).toEqual(['set-aside', 'set-aside', 'none']);
+    expect([one.setAside('w'), one.setAside('x'), one.unread, one.projected.deliveryOutlook]).toEqual([true, false, undefined, 'awaiting-delivery']);
     const failed = await projectRunWithDismissals(e, async () => { throw Object.assign(new Error('x'), { code: 'INTEGRITY_KEY_UNSAFE' }); });
-    expect([failed.outlook('w'), failed.unread]).toEqual(['awaiting-delivery', 'INTEGRITY_KEY_UNSAFE']);
+    expect([failed.setAside('w'), failed.unread]).toEqual([false, 'INTEGRITY_KEY_UNSAFE']);
+    const none = await projectRunWithDismissals(evidence(run, [done('w', {}, { patchRecorded: false }), done('x', {}, { patchRecorded: true })]), async () => new Set(['x']));
+    expect(none.setAside('x')).toBe(false); // only an awaiting Run's task is set aside
+  });
+  it('BeUser M-33 wire compatibility: a set-aside brief keeps a deliveryOutlook value an older reader knows, and an older brief still parses', () => {
+    const OLDER_OUTLOOKS = ['none', 'patch-not-prepared', 'awaiting-delivery']; // the v1 values before M-33
+    const brief = projectResultBrief('a', { verdict: 'accepted' }, null, null, { deliveryOutlook: 'awaiting-delivery', setAside: true });
+    expect(OLDER_OUTLOOKS).toContain(brief.deliveryOutlook); expect(brief.schemaVersion).toBe(1);
+    const older = { schemaVersion: 1, attemptId: 'a', claimLabel: 'CLAIM', report: null, evaluation: { verdict: 'accepted' }, runDelivery: null, openIssues: null, deliveryOutlook: 'awaiting-delivery' };
+    expect(resultBriefSchema.parse(older)).toEqual(older);
+    expect(resultBriefSchema.safeParse({ ...older, deliveryOutlook: 'set-aside' }).success).toBe(false); // the set-aside fact never travels as a new outlook value
   });
   it('negative: a missing patch on any accepted work task wins, a receipt suppresses the outlook, unknown evidence and unaccepted Runs give none', () => {
     const two = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]);

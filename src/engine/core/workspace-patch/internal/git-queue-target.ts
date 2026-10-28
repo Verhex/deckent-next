@@ -2,6 +2,12 @@ import { targetBindingSchema, TargetQueueError, type EffectTargetRef } from '#do
 import { assertQueueGitTarget, queueGenerationRef, queueGenerationSchema, type GitQueueFence } from './queue-git.js';
 import { adoptionRepositoryIdentity } from './git-fence.js';
 interface QueueGitPort { custody(): Promise<void>; run(args: string[], input?: string): Promise<string>; common(): Promise<{ path: string; inode: number }> }
+/** `main` and `master` are a product security invariant of the queue (never moved); the repository's default branch and remote HEADs extend them at binding. */
+export const QUEUE_PROTECTED_BASE_REFS = Object.freeze(['refs/heads/main', 'refs/heads/master']);
+/** BeUser DR2-06: the queue target-branch refusal known from configuration alone (no Git read), so a surface never offers a queue step that must fail. */
+export function queueTargetConfigRefusal(ref: string, allowed: readonly string[], protectedRefs: readonly string[]): TargetQueueError | null {
+  try { assertQueueGitTarget(ref, ref, allowed, [...QUEUE_PROTECTED_BASE_REFS, ...protectedRefs], false); return null; } catch (error) { if (error instanceof TargetQueueError) return error; throw error; }
+}
 export const GIT_QUEUE_DISPLAY = Object.freeze({ schemaVersion: 1 as const, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' });
 /** Physical identity and protection producer. A config allow-list never overrides the security floor. */
 export class GitQueueTargetApplication {
@@ -15,7 +21,7 @@ export class GitQueueTargetApplication {
       .filter(Boolean).map(value => `refs/heads/${value.split('/').slice(3).join('/')}`);
     // `main` is a product security invariant. The local default and remote HEADs extend it, even when allow-listed.
     const defaultBranch = await this.git.run(['config', '--get', 'init.defaultBranch']).catch(() => '');
-    assertQueueGitTarget(ref, this.options.baseRef, this.targets, ['refs/heads/main', 'refs/heads/master', ...(defaultBranch ? [`refs/heads/${defaultBranch}`] : []),
+    assertQueueGitTarget(ref, this.options.baseRef, this.targets, [...QUEUE_PROTECTED_BASE_REFS, ...(defaultBranch ? [`refs/heads/${defaultBranch}`] : []),
       ...remoteDefaults, ...this.protectedRefs], worktrees.split('\n').includes(`branch ${ref}`));
     await this.git.run(['check-ref-format', ref]);
     const exact = await this.git.run(['for-each-ref', '--format=%(refname) %(objecttype) %(symref)', ref]);

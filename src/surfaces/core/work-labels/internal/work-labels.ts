@@ -295,5 +295,5 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
       DELIVERY_INTERACTIVE_REQUIRED: t('terminal.delivery.next.DELIVERY_INTERACTIVE_REQUIRED', {}, locale),
       DELIVERY_CONFIRMATION_DECLINED: t('terminal.delivery.next.DELIVERY_CONFIRMATION_DECLINED', {}, locale),
       ADOPTION_TARGET_DENIED: t('terminal.delivery.next.ADOPTION_TARGET_DENIED', {}, locale),
-      ADOPTION_NOT_VERIFIED: t('terminal.delivery.next.ADOPTION_NOT_VERIFIED', {}, locale) } };
+      ADOPTION_NOT_VERIFIED: t('terminal.delivery.next.ADOPTION_NOT_VERIFIED', {}, locale), ADOPTION_BASE_CHANGED: t('terminal.delivery.next.ADOPTION_BASE_CHANGED', {}, locale) } };
 }

@@ -16,7 +16,8 @@ export interface ConfigChoiceSourcePort {
   browse?(directory: string): Promise<readonly import('./records.js').ConfigFileChoice[]>;
   readDocument?(path: string): Promise<unknown>;
   /** BeUser D-03: refuses a work target the work path would refuse (typed WORK_TARGET_*), before the record is written. */
-  checkWorkTarget?(workTargets: unknown): Promise<void>;
+  /** Refuses an unusable target; BeUser DR2-05/06: reports the open results a move of the work source strands (`now`) and the queue's refusal of the chosen branch. */
+  checkWorkTarget?(workTargets: unknown): Promise<Readonly<{ open?: number; now?: string; branch?: Readonly<Record<string, string>> }> | null | void>;
 }
 export type ConfigValueModel = Readonly<{ choices: readonly ConfigValueChoice[]; free: boolean; hidden: boolean; readOnly: string | null;
   stepper: ConfigStepper | null; generated: boolean; notice: string | null; partial: Readonly<{ reason: ConfigChoiceCut; found: number }> | null }>;

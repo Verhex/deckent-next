@@ -1,3 +1,3 @@
-export { awaitingDeliveryTargets, deliveredTargets, consentMatches, type AdoptionOutcome, type DeliveryAnswer, type DeliveryConsent, type DeliveryFileDiff, type DeliveryFileStat, type DeliveryOutcome,
+export { awaitingDeliveryTargets, deliveredTargets, consentMatches, queueConfigRefusal, type AdoptionOutcome, type DeliveryAnswer, type DeliveryConsent, type DeliveryFileDiff, type DeliveryFileStat, type DeliveryOutcome,
   type DeliveryPreview, type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from './internal/contract.js';
 export { deliveryLines, shellWord, useDeliveryWindows, type DeliveryOpening, type DeliveryWindowLabels, type DeliveryWindows, type DeliveryWindowsInput } from './internal/window.js';

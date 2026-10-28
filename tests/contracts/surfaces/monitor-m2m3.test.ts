@@ -49,8 +49,8 @@ describe('M2 delivery outlook of an accepted Run', () => {
   it('BeUser M-33: a set-aside result names its restore command; an unread set-aside record keeps "awaiting delivery" and says why (EN + TR)', () => {
     const result = { schemaVersion: 1 as const, attemptId: 'a', claimLabel: 'CLAIM' as const, report: null, evaluation: { verdict: 'accepted' as const }, runDelivery: null, openIssues: null };
     const ids = { scope: 's', run: 'r', task: 't' };
-    expect(renderBriefLines(undefined, { ...result, deliveryOutlook: 'set-aside' }, 'en', ids).join('\n')).toContain('Accepted · patch set aside: it is kept and nothing was delivered. Bring it back from /deliver or: deckent task integration-restore --scope s --run r --task t');
-    expect(renderBriefLines(undefined, { ...result, deliveryOutlook: 'set-aside' }, 'tr', ids).join('\n')).toContain('yama kenara kondu');
+    expect(renderBriefLines(undefined, { ...result, deliveryOutlook: 'awaiting-delivery', setAside: true }, 'en', ids).join('\n')).toContain('Accepted · patch set aside: it is kept and nothing was delivered. Bring it back from /deliver or: deckent task integration-restore --scope s --run r --task t');
+    expect(renderBriefLines(undefined, { ...result, deliveryOutlook: 'awaiting-delivery', setAside: true }, 'tr', ids).join('\n')).toContain('yama kenara kondu');
     const unread = renderBriefLines(undefined, { ...result, deliveryOutlook: 'awaiting-delivery', dismissalUnread: 'AUDIT_UNAVAILABLE' }, 'en', ids).join('\n');
     expect(unread).toContain('awaiting delivery'); expect(unread).toContain('Set-aside records could not be read (AUDIT_UNAVAILABLE)');
   });

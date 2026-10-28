@@ -12,6 +12,9 @@ import { migrateLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { createTargetQueueService, targetQueueKey, RUNTIME_SERVICE_SCHEMA_VERSION, TargetQueueApplication, GitQueueTargetApplication, adoptionRepositoryIdentity,
   queueGenerationRef, type QueueServiceContext, type TargetBatchEffects, type TargetQueuePreparation } from '#engine/index.js';
 import { candidateBindingSchema, candidateEvidenceSchema, type TargetQueueRecord } from '#domain/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
+import { queueConfigRefusal } from '#surfaces/core/terminal-delivery/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 
 // Astra 2607 F1/F2 at the real boundary: a real Git target repository with the shipped generation producer (GitQueueTarget) and a
 // file-backed ledger that survives a service restart. Preparation and verification are ports here (their Git/Run proofs live elsewhere);
@@ -393,5 +396,24 @@ describe.skipIf(process.platform !== 'linux')('queue target identity is the adop
     await f.git('update-ref', '-d', ref, blob);
     await f.gitTarget.fence(targetQueueKey(binding), 'service-b', 1);
     expect(await f.generation()).toMatchObject({ key: targetQueueKey(binding), owner: 'service-b', epoch: 1 });
+  });
+});
+
+describe.skipIf(process.platform !== 'linux')('queue target-branch refusal names its rule (BeUser DR2-06)', () => {
+  it('the checked-out default branch is refused with its rule and next step in EN/TR; configuration alone already names main before anything is queued', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-queue-branch-')); roots.push(root);
+    const sourceRoot = join(root, 'target'), workspaceRoot = join(root, 'workspaces'); await mkdir(sourceRoot, { mode: 0o700 }); await mkdir(workspaceRoot, { mode: 0o700 });
+    const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', sourceRoot, ...args])).stdout.trim();
+    await git('init', '-q', '-b', 'main'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
+    await writeFile(join(sourceRoot, 'note.txt'), 'base\n'); await git('add', '.'); await git('commit', '-qm', 'base');
+    const options: GitWorkspaceOptions = { gitExecutable: '/usr/bin/git', timeoutMs: 10_000, outputBytes: 65_536, sourceRoot: await realpath(sourceRoot), workspaceRoot: await realpath(workspaceRoot), baseRef: 'refs/heads/main' };
+    const refused = await new GitQueueTarget(options, 'install', 'target', ['refs/heads/main'], []).binding('refs/heads/main').then(() => null, (error: unknown) => error);
+    expect(refused).toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED', params: { reason: 'protected', ref: 'refs/heads/main' } });
+    const shown = queryFailure(refused);
+    expect(shown.message).toBe('The delivery queue cannot use refs/heads/main as its target branch.'); expect(shown.suggestion).toContain('create a separate branch (for example refs/heads/deckent/queue)');
+    expect(ErrorRegistry.createError('QUEUE_AUTHORITY_REQUIRED', { params: { reason: 'protected', ref: 'refs/heads/main' }, locale: 'tr' }).message).toBe('Teslim kuyruğu refs/heads/main dalını hedef dal olarak kullanamaz.');
+    expect(queueConfigRefusal({ workTargets: { targets: [{ baseRef: 'refs/heads/main' }] }, adoption: { targets: [], protectedTargets: [] } })).toMatchObject({ code: 'QUEUE_AUTHORITY_REQUIRED' });
+    expect(queueConfigRefusal({ workTargets: { targets: [{ baseRef: 'refs/heads/deckent/queue' }] }, adoption: { targets: ['refs/heads/deckent/queue'], protectedTargets: [] } })).toBeNull();
+    expect(ErrorRegistry.createError('QUEUE_AUTHORITY_REQUIRED').message).toContain('verified controlling terminal'); // other uses keep the session wording
   });
 });

@@ -7,12 +7,10 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { missingEnvironmentReferenceNames } from '#composition/core/secrets/index.js';
 import { applyPolicyTemplateInstallation } from './policy-template.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-
 /** What the first-run secret store default did: switched (with the switch's own record), kept (the installation config already selects a store),
  * not offered on this platform (native Windows until the OS keyring backend), or not done (a typed refusal; the installation itself stands). */
 export type InstallationSecretStoreDefault = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string;
   record?: Readonly<{ policyRevision: string; atMs: number; subject: AuditEvent['subject'] }> }>;
-
 /** Fresh installer default via the governed store switch (owner 2026-10-08): the command result carries the switch record while no ledger exists.
  * Existing selections/installations and native Windows are kept; a refusal is visible without undoing the installation. */
 export async function applyPolicyTemplateInstallationWithSecretDefault(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
@@ -24,7 +22,6 @@ export async function applyPolicyTemplateInstallationWithSecretDefault(projectRo
   if (!fresh || result.status !== 'installed') return result;
   return Object.freeze({ ...result, secretStore: await defaultSecretStore(projectRoot, scopeId, options) });
 }
-
 /** The selection the switch found inside the custody section when one was already made (the default then keeps it). */
 class KeptSelection { constructor(readonly store: string) {} }
 
