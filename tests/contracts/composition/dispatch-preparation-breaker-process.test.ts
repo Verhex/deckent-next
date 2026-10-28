@@ -10,7 +10,7 @@ import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { applyConfiguredRunLifecycle, createConfiguredRun, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
-import { runCommand } from '#surfaces/core/cli/index.js';
+import { runCommand, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
@@ -124,6 +124,11 @@ it('a Run whose attempt is refused and the service then dies, twice, is parked f
     expect(third.result).toMatchObject({ ok: false, code: 'DISPATCH_PREPARATION_ABORTED', params: { task: 'a', phase: 'workspace', aborts: 2, bound: 2 } });
     expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'parked', reason: 'progression-failed', failureCode: 'DISPATCH_PREPARATION_ABORTED' });
     expect(await f.audit('dispatch-preparation-aborted')).toHaveLength(2);
+    // Doctor names the parked Run and its next step from the ledger, with no runtime service running.
+    const output: string[] = [];
+    await runKernelCommand(['doctor', '--lang', 'en'], { root: f.project, env: f.options.env, stdout: { write(text: string) { output.push(text); } }, inspectMonitor });
+    expect(output.join('')).toContain('Run r is parked: the runtime service stopped repeatedly while starting its work (crash-loop guard, DISPATCH_PREPARATION_ABORTED)');
+    expect(output.join('')).toContain('deckent run inspect --id r');
   } finally { f.store.close(); }
 }, 120_000);
 

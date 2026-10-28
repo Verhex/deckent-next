@@ -49,6 +49,9 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     recoveryMode, recoveryRollout,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
+    // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.
+    stuckRuns: context.inspectMonitor ? await context.inspectMonitor(root, options, { schemaVersion: 1, install: 'current' }).then(snapshot => snapshot.installs.flatMap(install => install.runs)
+      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []), () => null) : null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
   };
 }

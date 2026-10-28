@@ -78,6 +78,8 @@
   "doctor.check.binding.invalid": "The configured machine identity source cannot be read; installation commands stop",
   "doctor.check.binding.required": "Machine binding is required but no machine identity exists; installation writes are refused",
   "doctor.check.recovery": "{count} file(s) from an interrupted backup restore are still here",
+  "doctor.check.run.crashLoop": "Run {run} is parked: the runtime service stopped repeatedly while starting its work (crash-loop guard, {code}). Read why, fix the cause, then resume it.",
+  "doctor.check.run.parked": "Run {run} is parked after repeated failures ({code}). Read why, fix the cause, then resume it.",
   "doctor.check.audit.ok": "Audit chain verified",
   "doctor.check.audit.problem": "Audit chain: {status} ({reason})",
   "doctor.check.directory.private": "Installation folder is private to you",

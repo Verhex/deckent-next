@@ -78,6 +78,8 @@
   "doctor.check.binding.invalid": "Yapılandırılmış makine kimliği kaynağı okunamıyor; kurulum komutları durur",
   "doctor.check.binding.required": "Makine bağı zorunlu ama makine kimliği yok; kuruluma bağlı yazmalar reddedilir",
   "doctor.check.recovery": "Yarım kalan yedek geri yüklemesinden {count} dosya duruyor",
+  "doctor.check.run.crashLoop": "{run} işi beklemede: runtime servisi bu işi başlatırken tekrar tekrar durdu (çökme döngüsü koruması, {code}). Nedenini okuyun, düzeltin, sonra işi sürdürün.",
+  "doctor.check.run.parked": "{run} işi tekrarlanan hatalardan sonra beklemede ({code}). Nedenini okuyun, düzeltin, sonra işi sürdürün.",
   "doctor.check.audit.ok": "Audit zinciri doğrulandı",
   "doctor.check.audit.problem": "Audit zinciri: {status} ({reason})",
   "doctor.check.directory.private": "Kurulum klasörü yalnız size açık",
