@@ -34,15 +34,13 @@ export async function ensureConfiguredRuntimeService(projectRoot: string, option
   const logPath = await prepareProductFile(config.productLayout, 'runtimeLog');
   try { await access(entry); } catch { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); }
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== RUNTIME_SERVICE_AUTOSTART_ENV));
-  // K6 = A: the launch marks an automatic start; a restart passes the previous service's origin on (a hand-started service stays one).
   if (autoStarted) env[RUNTIME_SERVICE_AUTOSTART_ENV] = '1';
   const { pid } = await launch({ executable: process.execPath, entry, cwd: projectRoot, logPath, env })
-    .catch(() => { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
+    .catch(async () => { await describeWithin(client, deadline, startable); throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
   return awaitRuntimeServiceStart(deadline, pid, logPath, { describe: () => describeWithin(client, deadline, startable), wait: delay, pollMs: POLL_MS });
 }
 /** Governed stop of this project's service without hand-written command fields: the durable command is built from the
- * live descriptor with a fresh command id. A service without a configured identity cannot be stopped this way. Describe and
- * the shutdown answer share one monotonic budget; running out is an unknown outcome (the command may still be admitted),
+ * live descriptor with a fresh command id. Without an identity it cannot be stopped this way. Describe and shutdown share one monotonic budget; running out is an unknown outcome (the command may still be admitted),
  * never proof of stop and never permission to replace the service (Astra 2054 R2). */
 export async function stopConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {}, reason = 'operator stop',
   budget?: LifecycleDeadline) {

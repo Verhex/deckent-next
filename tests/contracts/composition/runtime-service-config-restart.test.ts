@@ -108,8 +108,18 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a
 // started service heals or refuses the shape, never connecting to a bad one; (3) a state changed after the decision ends typed.
 // Like the bwrap mask, the shape appears right after the stopping service removed its directory (polled each millisecond; bounded by the service's end).
 const maskAfterStop = (parent: string, shape: (parent: string) => Promise<void>) => new Promise<void>((done, fail) => {
-  const tick = setInterval(() => { void lstat(parent).catch(async () => { clearInterval(tick); try { await shape(parent); done(); } catch (error) { fail(error); } }); }, 1);
-  void services.at(-1)!.settled.then(() => setTimeout(() => { clearInterval(tick); done(); }, 2_000));
+  let reading = false, finished = false;
+  const tick = setInterval(() => {
+    if (reading || finished) return; reading = true;
+    void lstat(parent).catch(async (error: NodeJS.ErrnoException) => {
+      if (finished) return; finished = true; clearInterval(tick);
+      if (error.code !== 'ENOENT') { fail(error); return; }
+      try { await shape(parent); done(); } catch (error) { fail(error); }
+    }).finally(() => { reading = false; });
+  }, 1);
+  void services.at(-1)!.settled.then(() => { if (!finished) setTimeout(() => {
+    if (!finished) { finished = true; clearInterval(tick); fail(new Error('mask target was never observed absent')); }
+  }, 2_000); });
 });
 const shapes = {
   modeOnly: async (parent: string) => { await mkdir(parent, { mode: 0o700 }); await chmod(parent, 0o755); },
@@ -185,4 +195,14 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] R
   }, fileURLToPath(import.meta.url)).catch((error: unknown) => error);
   expect(result).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode' } }); expect(launched).toBe(1);
   await rm(parent, { recursive: true, force: true });
+});
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] launch rejection after an unsafe TOCTOU preserves the endpoint refusal before generic autostart failure', async () => {
+  const f = await fixture(), parent = await shapingOldService(f.project, f.env, shapes.modeOnly); roots.push(parent);
+  let launched = 0;
+  const result = await restartConfiguredRuntimeService(f.project, { env: f.env }, async () => {
+    launched++; await rm(parent, { recursive: true, force: true }); await shapes.nonEmpty(parent); throw new Error('synthetic launch failure');
+  }, fileURLToPath(import.meta.url)).catch((error: unknown) => error);
+  expect(result).toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode' } });
+  expect(launched).toBe(1); expect(await lstat(join(parent, 'keep'))).toMatchObject({ size: 1 });
 });
