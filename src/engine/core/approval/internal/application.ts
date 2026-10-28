@@ -2,7 +2,7 @@ import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { aiAuthorityFloor, approvalFacts, isAiPrincipal, explicitDecisionGrant, identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
-  separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
+  separationOfDutiesViolation, principalGrants, APPROVAL_ASSURANCE, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type OperationDescriptor, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABILITY_PATTERN, type ApprovalAssuranceProducer, type PrincipalVerifier, type SessionVerifier,
   type SessionAuthority } from '#engine/core/authentication/index.js';
@@ -10,7 +10,7 @@ import { PolicyAuthorizationError, authorityRefusalAuditEvent, type PolicySource
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
-import { approvalAssuranceRegistry, requiredApprovalAssurance } from './assurance.js';
+import { approvalAssuranceRegistry, requiredApprovalAssurance, operationApprovalFacts } from './assurance.js';
 
 export const approvalQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema }).strict();
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
@@ -29,6 +29,16 @@ export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' 
   // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
   if (decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
   if (decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
+}
+/** F6: the decider's own refusals (`decide` below) of the same person's allow of an operation approval the broker has not opened yet, taken before any
+ * card: the `decide` grant covers every approval id (the broker's id is unknown until then, a fresh id stands for it), no four-eyes rule applies to the
+ * requester deciding, and the minimum is Core's peer level (the card attests no turn capability). Pure; throws the decider's code. */
+export function authorizeOwnApproval(policy: unknown, scopeId: string, principal: VerifiedPrincipal, descriptor: OperationDescriptor) {
+  const id = randomUUID(); authorizeApproval(policy, 'decide', scopeId, id, principal);
+  const rule = evaluatePolicy(policy, { principal, scopeId, action: 'decide', resource: { kind: 'approval', id } }).ruleId;
+  if (!principalGrants(policySchema.parse(policy), principal).some(grant => grant.id === rule && grant.effect === 'allow' && grant.resource.ids === 'all')
+    || separationOfDutiesViolation(policy, { scopeId, requester: principal, decider: principal }) !== null) throw new ApprovalError('APPROVAL_DENIED');
+  if (operationApprovalFacts(policy, scopeId, descriptor).requiredAssurance !== APPROVAL_ASSURANCE.peerSession) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
 }
 export function approvalCommandFingerprint(tag: string, command: z.infer<typeof approvalRenewalSchema> | ApprovalCommand, actor: VerifiedPrincipal | { id: string; issuer: string; subject: string }) {
   const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: command.commandId, scopeId: command.scopeId,

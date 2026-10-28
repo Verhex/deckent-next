@@ -237,6 +237,16 @@ it('asks nothing when nothing would change, stops the service before custody in 
     const without = { ...base, grants: [...base.grants.filter(grant => grant.id !== kind), { ...base.grants[0]!, id: `deny-${kind}`, effect: 'deny', resource: { kind, ids: 'all' } }] };
     await expect(authorizeUninstallSteps(without, removing, principal, 's')).rejects.toMatchObject({ code: kind === 'approval' ? 'APPROVAL_DENIED' : 'POLICY_DENIED' });
   }
+  // F6: the decider's fixed rules for the same person, before any card: an approval grant naming ids (the broker's id is not known yet, so the
+  // plan digest named on the card covers nothing), a four-eyes rule, and an assurance minimum the card cannot attest are each refused.
+  const v2 = { ...base, schemaVersion: 2, revision: 'p1+b1', policyRevision: 'p1', bindings: { revision: 'b1', entries: [] }, roles: [], separationOfDuties: [] };
+  const listed = { ...v2, grants: v2.grants.map(grant => grant.id === 'approval' ? { ...grant, resource: { kind: 'approval', ids: [forcedRun.planDigest] } } : grant) };
+  await expect(authorizeUninstallSteps(listed, removing, principal, 's')).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  await expect(authorizeUninstallSteps({ ...v2, separationOfDuties: [{ id: 'four-eyes', rule: 'requester-cannot-approve', scopes: 'all' }] }, removing, principal, 's'))
+    .rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  await expect(authorizeUninstallSteps({ ...v2, approvalAssurance: [{ id: 'strong', scopes: 'all', subject: 'operation', minimum: 'turn-bound' }] }, removing, principal, 's'))
+    .rejects.toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
+  await expect(authorizeUninstallSteps(v2, removing, principal, 's')).resolves.toBeUndefined();
   // M14: deleting data needs the backup grant too; without it the data tiers are refused by the same decision the menu shows before any card.
   const owner = { id: 'owner', effect: 'allow', principals: 'all', actions: 'all', scopes: 'all' } as const;
   const noBackup = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [{ ...owner, resource: { kind: 'installation', ids: 'all' } }] };

@@ -562,6 +562,38 @@ it('R13: an unknown result recorded in a scope the configuration no longer names
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
+it('F6: a delivery\'s owner decision before the card writes nothing: with the workspace folder missing it is refused, no card, no folder made', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { DatabaseSync } = await import('node:sqlite');
+  const { fixtureDockerRegistry } = await import('../support/execution-registry.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-preflight-inspect-'));
+  try {
+    const { project, local, options, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger'), target = join(root, 'target');
+    const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', target, '-c', 'user.email=t@example.invalid', '-c', 'user.name=T', ...args]);
+    await mkdir(target); git('init', '-q', '-b', 'main'); git('commit', '-q', '--allow-empty', '-m', 'base');
+    const { argv: _argv, ...docker } = fixtureDockerRegistry([]).profiles[0]!.parameters; void _argv;
+    await writeFile(join(local, 'config.json'), JSON.stringify({ terminal: { scopeId: 's' }, execution: { docker: { executable: '/usr/bin/docker', ...docker },
+      git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 }, adoption: { targets: ['refs/heads/main'] },
+      workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path: target, baseRef: 'refs/heads/main' }] } } }), { mode: 0o600 }); clearConfigCache();
+    // The queue's scope is named by policy (its membership); every other grant is the installation's own.
+    const policy = JSON.parse(await readFile(join(local, 'policy.json'), 'utf8')) as { grants: unknown[] }, actor = readLocalOsIdentity();
+    policy.grants.push({ id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'scope', ids: ['s'] } });
+    await writeFile(join(local, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const db = new DatabaseSync(ledger);
+    try { db.prepare('INSERT INTO target_queue(scope_id,command_id,target_key,ordinal,revision,state,record) VALUES(?,?,?,?,?,?,?)').run('s', 'ticket-1', 'k'.repeat(64), 1, 0, 'queued', '{}'); }
+    finally { db.close(); }
+    const plan = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
+    expect(plan.steps.withdrawDeliveries).toEqual([{ scopeId: 's', id: 'ticket-1', revision: 0 }]); expect(plan.blockers).toEqual([]);
+    let cards = 0;
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'inspect', planDigest: plan.planDigest }, { confirm: async () => { cards += 1; return true; } }, options))
+      .rejects.toMatchObject({ code: 'MANAGED_FILE_MISSING' });
+    expect(cards).toBe(0);
+    for (const resource of ['workspaces', 'artifacts'] as const) await expect(lstat(productResourcePath(layout, resource))).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
 it('F8: an admitted keep-data whose only cache vanished after the card still completes through the common owner: the folder is retired', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
   const root = await mkdtemp(join(tmpdir(), 'deckent-admitted-noop-'));

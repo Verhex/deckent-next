@@ -2,10 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { effectCommandSchema, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, describeRuntimeServiceWithin, runtimeMonotonicDeadline, type AuthorityWitness, type RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
-import { authorizeApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
+import { authorizeApproval, authorizeOwnApproval, type ApprovalApplication } from '#engine/core/approval/index.js';
 import { OperationPolicyAuthorization, type EffectApplication } from '#engine/core/effect/index.js';
 import { uninstallApplySchema, UninstallError, UNINSTALL_TIERS, type UninstallItem, type UninstallPlan, type UninstallResult } from './uninstall-contract.js';
-import { createUninstallPlan, uninstallRegistry, uninstallBlockerError, uninstallPlanDrift, type UninstallInventory } from './uninstall-plan.js';
+import { createUninstallPlan, uninstallRegistry, uninstallBlockerError, uninstallPlanDrift, uninstallOperationDescriptors, type UninstallInventory } from './uninstall-plan.js';
 import { PolicyAuthorizationError, RunPolicyAuthorization } from '#engine/core/policy/index.js';
 
 /** Every scope the lifecycle decision covers: configured, every policy-named (deny/legal hold included) and every ledger-recorded scope. */
@@ -249,14 +249,14 @@ export class UninstallApplication {
   }
 }
 
-/** M14, R8: the owners' decisions of a plan's steps from one policy, writing nothing: force's cancels and rejections, each removal's operation and approval. */
+/** M14, R8, F6: the owners' decisions of a plan's steps from one policy, writing nothing: force's cancels and rejections, each removal's operation and approval. */
 export async function authorizeUninstallSteps(policy: unknown, plan: UninstallPlan, principal: VerifiedPrincipal, scopeId: string) {
   const source = { load: async () => policy }, runs = new RunPolicyAuthorization(source), operations = new OperationPolicyAuthorization(source);
   for (const ref of plan.steps.cancelRuns) await runs.authorize('cancel', { scopeId: ref.scopeId, runId: ref.id }, principal);
   for (const ref of plan.steps.rejectApprovals) authorizeApproval(policy, 'decide', ref.scopeId, ref.id, principal);
   for (const id of new Set(plan.items.filter(item => item.action === 'remove').map(item => item.operation.id))) {
     await operations.authorize('execute', scopeId, { id, version: 1 }, principal); // the first claim's own decision (inspect is asked only of a stored record)
-    authorizeApproval(policy, 'decide', scopeId, plan.planDigest, principal);
+    authorizeOwnApproval(policy, scopeId, principal, uninstallOperationDescriptors().find(item => item.operation.id === id)!); // F6: as the decider would, before the card
   }
 }
 /** One witnessed plan supplies only its exact commands to the existing broker. Required approvals remain durable and separate. */

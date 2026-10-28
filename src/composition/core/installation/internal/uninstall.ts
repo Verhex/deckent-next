@@ -44,8 +44,8 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
       rejectApproval: async ref => { await configuredApproval(root, 'decide', { schemaVersion: 1, scopeId: ref.scopeId, approvalId: ref.id, commandId: randomUUID(), expectedRevision: ref.revision,
         decision: 'deny', reason: 'uninstall --force', channel: 'local-cli' }, options); },
       withdrawDelivery: ref => withQueueContext(root, ref.scopeId, options, undefined, false, async queue => { const record = await queue.app.inspect(ref.scopeId, ref.id, queue.principal); if (record) await queue.app.cancel(record, queue.principal); }) },
-    // R8: each delivery's withdrawal is decided by the queue owner's own rule on a read-only context, every other step from one policy document.
-    async preflight(plan, principal) { await authorizeUninstallSteps(await source.load(), plan, principal, scopeId); for (const ref of plan.steps.withdrawDeliveries) await withQueueContext(root, ref.scopeId, options, undefined, true,
+    // R8, F6: each delivery's withdrawal is decided by the queue owner's own rule on a context that creates nothing, every other step from one policy document.
+    async preflight(plan, principal) { await authorizeUninstallSteps(await source.load(), plan, principal, scopeId); for (const ref of plan.steps.withdrawDeliveries) await withQueueContext(root, ref.scopeId, options, undefined, 'inspect',
       async queue => { const record = await queue.app.inspect(ref.scopeId, ref.id, queue.principal); if (record) await queue.authorization.authorizeIdentity('prepare-integration', record.request.identity, queue.principal); }); },
     // Waits are bounded by their owners' configuration: the cancellation claim lifetime, else the service lifecycle budget.
     settle: { budgetMs: config.cancellation?.claimTtlMs ?? terminal.serviceStartTimeoutMs, wait: delay },
