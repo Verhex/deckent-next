@@ -52,12 +52,12 @@ const awaitedImage = (snapshot: OnboardingSnapshot, steps: readonly OnboardingSt
   && !steps.some(row => row.id === 'execution:worker') && snapshot.plan.stages.some(row => row.id === 'execution:worker' && row.reason.code === 'setup.execution.noWorkKind'));
 export const firstSignedInHost = (snapshot: OnboardingSnapshot): string | null => snapshot.hosts.find(row => row.cli === 'found' && row.login === 'found')?.id ?? null;
 /** One answer/apply at a time. Reobserve changes applicability, while the answered prefix remains counted. */
-export function createOnboardingSession(port: OnboardingPort, initial: OnboardingSnapshot, revisit = false) {
+export function createOnboardingSession(port: OnboardingPort, initial: OnboardingSnapshot, revisit = false, focus?: 'workers') {
   let snapshot = initial, answers = { ...initial.answers }, completed: string[] = [];
   const deferred = new Set<string>();
   const model = (): OnboardingPresentation => {
     const steps = onboardingSteps({ ...snapshot, deferred: [...snapshot.deferred, ...deferred] }, revisit)
-      .filter(row => !completed.includes(row.id) && !deferred.has(row.id));
+      .filter(row => !completed.includes(row.id) && !deferred.has(row.id) && (focus !== 'workers' || row.kind === 'work' || row.kind === 'ready' || /^(work|execution):/u.test(row.id)));
     return { schemaVersion: 1, steps, completed: completed.length, total: completed.length + steps.length + awaitedImage(snapshot, steps), snapshot };
   };
   const refresh = async () => {

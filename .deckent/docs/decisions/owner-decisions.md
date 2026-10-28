@@ -928,7 +928,7 @@ Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `L
   etkin olmayan işçi kanalı, işçi ataması, bekletilen havuz ve her politika durdurması kendi reddini ve sonraki adımını gösterir; asla burada çalışmaz.
 - K3: uygun kodlar kayıt verisidir (`engine/core/run-proposal/internal/local-run.json`); her yüzey aynı veriyi okur.
 - K4/K5/K6: her seferinde, her profilde etkiden önce kart: neden · "değişiklikler doğrudan bu klasöre yazılır; arka plan işi, teslim kartı ve geri
-  alma yok" · işçiler için /setup; y = burada çalıştır, n/Esc = iptal (hiçbir şey çalışmaz). Team/Enterprise varsayılanını owner sonra belirler.
+  alma yok"; seçenekler Burada çalıştır · İşçileri kur (/setup'ı işçi adımlarında açar; klasör işçi alamıyorsa nedeniyle kapalı) · İptal; Esc = İptal (hiçbir şey çalışmaz). Team/Enterprise varsayılanını owner sonra belirler.
 - K7: `setup.question.policy` EN/TR MODES-3'e hizalandı; `WORKER_ASSIGNMENT_NONE` metninden terminal vaadi çıkarıldı.
 - K8: terminalde çalışan görev olağan yönetilen terminal turudur (aynı araçlar, mod, sandbox alanı, onaylar ve denetim kaydı).
 

@@ -54,7 +54,6 @@ function errorText(error: unknown, locale: Locale): string {
   }
   return t('terminal.chat.failed', {}, locale);
 }
-
 /** The host user's name for `/scope`: display only (the principal itself is derived by the runtime service). */
 function hostUserName(): string | null { try { return userInfo().username || null; } catch { return null; } }
 
@@ -335,7 +334,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     try {
       const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
       const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
-      const run = async (revisit: boolean, signal?: AbortSignal) => {
+      const run = async (revisit: boolean, signal?: AbortSignal, focus?: 'workers') => {
         const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
         return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
           provider: async () => {
@@ -345,9 +344,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
           },
           instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
           foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
-        }, { ...io, ...(signal ? { signal } : {}) }, revisit);
+        }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus);
       };
-      onboarding = { initial: await run(false), open: signal => run(true, signal) };
+      onboarding = { initial: await run(false), open: (signal, focus) => run(true, signal, focus) };
       const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
       if (deferred) accessNotices.push({ level: 'info', text: deferred });
     } catch (error) {
@@ -461,7 +460,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(presentation.notify !== 'off' ? { attention: true } : {}),
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
     completeTurn: turn, errorText: error => errorText(error, locale),
-    ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale), localFallback: t('brain.localFallback', {}, locale), localNoTools: t('brain.localNoTools', {}, locale), offerHere: localRunOffered, here: { title: t('brain.here.title', {}, locale), effect: t('brain.here.effect', {}, locale), setup: t('brain.here.setup', {}, locale), prompt: t('brain.here.prompt', {}, locale), cancelled: t('brain.here.cancelled', {}, locale) },
+    ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale), localFallback: t('brain.localFallback', {}, locale), localNoTools: t('brain.localNoTools', {}, locale), offerHere: localRunOffered, here: { title: t('brain.here.title', {}, locale), effect: t('brain.here.effect', {}, locale), run: t('brain.here.run', {}, locale), setup: t('brain.here.setupChoice', {}, locale), cancel: t('brain.here.cancel', {}, locale), noWorkers: t('brain.here.noWorkers', {}, locale), prompt: t('brain.here.prompt', {}, locale), cancelled: t('brain.here.cancelled', {}, locale),
+        canSetup: async () => ((await (context as { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Record<string, unknown> } }> }).observeSetup?.(root, options).catch(() => null))?.observation.families?.['coding'] as { repository?: string } | undefined)?.repository === 'present' },
       billingSwitch: t('siwc.switch.notice', { model: '{model}' }, locale),
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),

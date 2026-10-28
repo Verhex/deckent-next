@@ -85,7 +85,7 @@ export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
-    readonly offerHere?: (code: unknown) => boolean; readonly here?: Readonly<{ title: string; effect: string; setup: string; prompt: string; cancelled: string }>;
+    readonly offerHere?: (code: unknown) => boolean; readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; prompt: string; cancelled: string; canSetup?: () => Promise<boolean> }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
@@ -198,7 +198,6 @@ function useLedgerBuffer(historyLimit: number) {
   }, [buffer.pending.length]);
   return { buffer, push, reset, hold };
 }
-
 export function WorklineApp(props: WorklineProps) {
   const { labels, target, systemPrompt, historyMessages, completeTurn, errorText, ledger } = props;
   const palette = useWorklinePalette();
@@ -474,8 +473,9 @@ export function WorklineApp(props: WorklineProps) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
         if (!execution.signal.aborted && props.doPlan.offerHere?.((error as { code?: unknown })?.code) && props.doPlan.localFallback && props.doPlan.here) { // owner option A: K1 data, K4 card, K5 every time
           onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; const here = props.doPlan.here, tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
-          const answer = await panel.pick(execution, { kind: 'window', title: here.title, body: [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : []), here.setup], hints: here.prompt, confirm: true }, ['allow', 'deny']);
-          if (answer !== 'allow' || execution.signal.aborted) { push([notice('info', here.cancelled)]); return true; } // Esc = Cancel: nothing runs
+          const body = [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : [])], workers = await here.canSetup?.().catch(() => false) ?? false;
+          const answer = await windows.ask({ title: here.title, hints: here.prompt, body: () => body.map(text => ({ spans: [span(text)] })), bodyRows: body.length, tree: { title: here.title, items: [{ id: 'run', label: here.run }, { id: 'setup', label: here.setup, ...(workers && props.onboarding ? {} : { blocked: { reason: here.noWorkers } }) }, { id: 'cancel', label: here.cancel }] } });
+          if (answer === 'setup' && !execution.signal.aborted) { await onboarding.open(execution.signal, 'workers'); return true; } else if (answer !== 'run' || execution.signal.aborted) { push([notice('info', here.cancelled)]); return true; } // /setup worker steps; Esc = Cancel: nothing runs
           push([notice('info', props.doPlan.localFallback)]); await runTurn(slash.args.trim(), mentioned, execution); return true;
         }
         if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);

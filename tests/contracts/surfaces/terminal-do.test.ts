@@ -83,12 +83,13 @@ it('a cancellation crossing an already-started admission does not hide its retur
   release!({ ...pending, run, proposal: { ...pending.proposal, status: 'accepted', reason: null, approval: null } });
   await until(() => view.stdout.text.includes('Run r admitted. Follow /tasks or /monitor.'), 'returned admission remains visible');
 });
-const HERE = { title: 'RUN HERE?', effect: 'NO DELIVERY CARD', setup: 'OR /setup', prompt: 'y run · n/Esc cancel', cancelled: 'NOT RUN' };
+const HERE = { title: 'RUN HERE?', effect: 'NO DELIVERY CARD', run: 'RUN-HERE-ROW', setup: 'SETUP-ROW', cancel: 'CANCEL-ROW', noWorkers: 'NEEDS GIT', prompt: 'choose', cancelled: 'NOT RUN' };
+const windowLabels = { labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS } };
 const offerHere = (code: unknown) => code === 'RUN_ADMISSION_NOT_CONFIGURED';
 it.each(['BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_NONE', 'RUN_POOL_HELD', 'POLICY_DENIED', 'MODEL_NOT_ACTIVATED'])(
   'owner option A (K1/K2): /do refused with %s shows its own refusal and never runs here', async code => {
   const asked: string[] = [];
-  const view = mountWorkline({ errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+  const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
     doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: () => [], plan: async () => { throw new DeckentError(code, code); } } }); mounted.push(view);
   await settle(40); view.stdin.write('/do Read package.json\r');
   await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown'); await settle(80);
@@ -96,15 +97,28 @@ it.each(['BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_N
 });
 it('owner option A (K4/K5): "nothing set up" asks before any effect every time; Esc cancels with nothing run; y runs here and says so', async () => {
   const asked: string[] = [];
-  const view = mountWorkline({ errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
+  const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
     doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
   await settle(40); view.stdin.write('/do First\r');
   await until(() => view.stdout.frame.includes('RUN HERE?'), 'card'); expect(view.stdout.frame).toContain('NO DELIVERY CARD'); expect(asked).toEqual([]);
+  expect(view.stdout.frame).toContain('RUN-HERE-ROW'); expect(view.stdout.frame).toContain('CANCEL-ROW');
+  await settle(40); view.stdin.write('\u001b[B'); await until(() => view.stdout.frame.includes('NEEDS GIT'), 'disabled setup reason'); // no Git project: shown disabled with its reason
+  view.stdin.write('\r'); await settle(80); expect(asked).toEqual([]); expect(view.stdout.frame).toContain('RUN HERE?'); // a disabled choice does nothing
   view.stdin.write('\u001b'); await until(() => view.stdout.text.includes('NOT RUN'), 'cancelled'); await settle(60); expect(asked).toEqual([]);
   view.stdin.write('/do Second\r'); await until(() => view.stdout.frame.includes('RUN HERE?'), 'card again');
-  view.stdin.write('y'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn');
+  await settle(40); view.stdin.write('\r'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn');
   expect(asked).toEqual(['Second']); expect(view.stdout.text).toContain('RUNS HERE');
   view.stdin.write('/do Third\r'); await until(() => asked.length === 1 && view.stdout.frame.includes('RUN HERE?'), 'card every time');
+});
+it('owner option A: "Set up workers" opens /setup at its worker steps and runs nothing here', async () => {
+  const asked: string[] = [], opened: unknown[] = [];
+  const view = mountWorkline({ ...windowLabels, onboarding: { initial: null, open: async (_signal: AbortSignal, focus?: string) => { opened.push(focus); return null; } } as never,
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: { ...HERE, canSetup: async () => true }, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('SETUP-ROW'), 'card');
+  expect(view.stdout.frame).not.toContain('NEEDS GIT');
+  await settle(40); view.stdin.write('\u001b[B'); await settle(40); view.stdin.write('\r'); await until(() => opened.length === 1, 'setup opened');
+  expect(opened).toEqual(['workers']); await settle(60); expect(asked).toEqual([]);
 });
 it('BeUser M-07: a plan rejected because no worker can run it shows its refusal first and never runs here', async () => {
   const pending = pendingBrainFixture(), asked: string[] = [];

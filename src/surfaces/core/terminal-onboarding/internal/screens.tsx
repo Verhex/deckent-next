@@ -11,10 +11,10 @@ import { guideScreen } from './guides.js';
 import { settleOnboardingReady } from './ready.js';
 import { firstCommitScreen } from './first-commit.js';
 /** The same session drives first open and /setup; no Workline/composer is mounted in this loop. */
-export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false): Promise<FirstTaskIntent | null> {
+export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: 'workers'): Promise<FirstTaskIntent | null> {
   if (io.signal?.aborted) return null;
   await port.assertPerson();
-  const initial = await port.observe({}), session = createOnboardingSession(port, initial, revisit);
+  const initial = await port.observe({}), session = createOnboardingSession(port, initial, revisit, focus);
   await session.refresh();
   while (!io.signal?.aborted) {
     const model = session.model(), step = model.steps[0], locale = io.locale;
