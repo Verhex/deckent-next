@@ -208,7 +208,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       catch (error) {
         const code = String((error as { code?: unknown })?.code), reason = String((error as { reason?: unknown })?.reason ?? '');
         return refused([{ label: t('tui.provider.field.check', {}, locale), text: code === 'PROVIDER_ENDPOINT_INVALID' ? endpointWord(reason, locale)
-          : code === 'PROVIDER_KEY_REQUIRED' ? t('tui.panel.provider.keyRequired', {}, locale) : code === 'PROVIDER_KEY_INSECURE' ? t('models.connect.keyInsecure', {}, locale) : t('tui.provider.unavailable', {}, locale), tone: 'warning' }]);
+          : code === 'PROVIDER_KEY_REQUIRED' ? t('tui.panel.provider.keyRequired', {}, locale) : code === 'PROVIDER_KEY_INSECURE' ? t('models.connect.keyInsecure', {}, locale) : errorText(error), tone: 'warning' }]); // BeUser M-01: the typed cause and its next step, never "Not available yet"
       }
       const check: PanelLine = { label: t('tui.provider.field.check', {}, locale), text: providerOutcomeWord(probe, locale), tone: probe.outcome === 'ok' ? 'success' : 'warning' };
       const where: PanelLine[] = request.endpoint ? [{ label: t('tui.provider.field.endpoint', {}, locale), text: request.endpoint }] : [];
@@ -269,7 +269,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const match = /^([^@/]+)@(\d+)\/([^@/]+)@(\d+)$/u.exec(request.model.slice(DECLARED.length));
         return match ? { reference: { providerId: match[1]!, providerVersion: Number(match[2]), modelId: match[3]!, modelVersion: Number(match[4]) } } : null;
       })();
-      const shown = 'nativeId' in (choice ?? {}) ? (choice as { nativeId: string }).nativeId : request.model.slice(DECLARED.length);
+      const shown = request.model === PULL ? t('tui.provider.pull', {}, locale) : 'nativeId' in (choice ?? {}) ? (choice as { nativeId: string }).nativeId : request.model.slice(DECLARED.length);
       const refused = (text: string): ProviderModelOutcome => ({ connected: false, title: t('tui.provider.model.refused', { model: shown }, locale),
         lines: [{ label: t('tui.provider.model.field.model', {}, locale), text: `${label} · ${shown}` }, { label: t('tui.provider.field.check', {}, locale), text, tone: 'warning' }],
         summary: t('tui.provider.model.refused', { model: shown }, locale), approvalId: null });
@@ -283,7 +283,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         pendingConnections.delete(pendingKey);
         // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
         if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
-        return refused(errorText(error));
+        return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error)); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
       }
       if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
       while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);

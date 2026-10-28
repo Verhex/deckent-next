@@ -1158,6 +1158,7 @@
   "tui.model.fix.login": "Connect Brain login",
   "tui.provider.pull": "Connect all available priced models",
   "tui.provider.pull.blocked": "Connected, unavailable: {reason}",
+  "tui.provider.pull.none": "Nothing to connect: {kind} offered no model that can be used now.",
   "cli.init.ownerBaseline.doctor": "Founder baseline: {count} missing cells",
   "tui.provider.kind.codexCli": "Codex subscription workers",
   "tui.provider.kind.cursorCli": "Cursor subscription workers",

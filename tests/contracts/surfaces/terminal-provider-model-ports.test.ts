@@ -506,3 +506,16 @@ it('U1 provider port blocks unknown/grantless keys and renders custody refusal o
   expect(connected.stored).toBe(true); expect(connected.title).toContain('proje izni yok'); expect(connected.lines.at(-1)!.text).toContain('yönetici izni');
   expect(JSON.stringify(connected)).not.toContain(CANARY); expect(store.sets).toEqual([]);
 });
+
+it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothing usable says so and never leaks an internal id', async () => {
+  const { root, options } = await project({});
+  const local = { ...connectHost('ok').kinds[1]!, pull: 'available' as const, connectFamily: 'openai-chat-completions' };
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [local],
+    probe: async () => { throw ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE'); } },
+    connectModel: async () => { throw ErrorRegistry.createError('MODEL_CONNECT_NO_AVAILABLE', { params: { models: '-' } }); } }, options, 'en', errorText);
+  const checked = await port.connect({ kind: 'local-openai', endpoint: 'http://127.0.0.1:18777', key: null });
+  expect(checked.lines[0]!.text).toBe('ERR:HEADLESS_ISOLATION_UNAVAILABLE'); expect(JSON.stringify(checked)).not.toContain('Not available yet');
+  const pulled = await port.connectModel!({ kind: 'local-openai', endpoint: 'http://127.0.0.1:18777', model: 'pull:available' });
+  const text = JSON.stringify(pulled);
+  expect(text).toContain('Nothing to connect: '); expect(text).toContain('ERR:MODEL_CONNECT_NO_AVAILABLE'); expect(text).not.toContain(':available');
+});
