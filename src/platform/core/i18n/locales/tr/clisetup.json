@@ -1,5 +1,5 @@
 {
-  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi. Kendi terminalinizde karar verin: deckent approval decide (listeden seçin), sonra aynı komutu yeniden çalıştırın; izin verilince bir kez gönderilir.",
+  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi. Kendi terminalinizde karar verin: deckent approval decide (listeden seçin; çalışma servisi açık olmalı: deckent runtime restart), sonra aynı komutu yeniden çalıştırın; izin verilince bir kez gönderilir.",
   "cli.operation.settled": "Sonuçlandı: {operation}@{version}, {kind}/{id} üzerinde (sıra {sequence}, kayıt sürümü {recordVersion}).",
   "cli.operation.inspect": "Operasyon {command}: {state} (sıra {sequence}).",
   "cli.operation.inspect.next.unknown": "Sonraki adım: {kind}/{id} üzerindeki sonuç belirsiz ve otomatik olarak yeniden gönderilmez. Kaydı hedef sistemde kontrol edin; hedef yeniden yanıt verebildiğinde aynı komutu (aynı girdiyle) bir kez daha gönderin. Deckent önce hedefin idempotency kaydına bakar ve sonucu kapatır ya da aynı koşullu yazmayı aynı idempotency anahtarıyla yeniden gönderir; ikinci bir etki oluşmaz. Sonuçlanana kadar bu kayıttaki yeni operasyonlar reddedilir.",
