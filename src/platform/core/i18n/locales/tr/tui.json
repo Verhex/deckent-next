@@ -833,6 +833,7 @@
   "tui.model.winner.project": "Kullanılan: {model} (bu projenin ayarından; varsayılanının önüne geçer).",
   "tui.model.winner.userDefault": "Kullanılan: {model} (varsayılan modelin).",
   "tui.model.winner.user": "Kullanılan: {model} (kullanıcı ayarlarından).",
+  "tui.model.winner.connected": "Kullanılan: {model} (burada bağlı tek model; /model ile varsayılanınız yapabilirsiniz).",
   "tui.panel.provider.title": "Sağlayıcılar",
   "tui.panel.provider.hints": "↑↓ seç · yazarak süz · Enter aç · Esc geri",
   "tui.panel.provider.action.connect": "Bağlan (anahtarı girin, ücretsiz deneme)",

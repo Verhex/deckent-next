@@ -833,6 +833,7 @@
   "tui.model.winner.project": "In use: {model} (from this project's setting; it wins over your default).",
   "tui.model.winner.userDefault": "In use: {model} (your default model).",
   "tui.model.winner.user": "In use: {model} (from your user settings).",
+  "tui.model.winner.connected": "In use: {model} (the only model connected here; /model can make it your default).",
   "tui.panel.provider.title": "Providers",
   "tui.panel.provider.hints": "↑↓ choose · type to filter · Enter open · Esc back",
   "tui.panel.provider.action.connect": "Connect (enter the key, free check)",

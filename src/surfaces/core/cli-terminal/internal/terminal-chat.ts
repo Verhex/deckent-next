@@ -10,7 +10,7 @@ export type TerminalChatPlanView = Readonly<{
   status: 'ready' | 'not-configured' | 'model-not-declared';
   reference: ModelReference | null;
   /** T4-B D1: which setting chose the model (`project`, `user-default`, `user`); absent from an older host. */
-  source?: 'session' | 'project' | 'user-default' | 'user' | null;
+  source?: 'session' | 'project' | 'user-default' | 'user' | 'connected' | null; skippedDefault?: ModelReference; // BeUser M-08: a default not declared here
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;

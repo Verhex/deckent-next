@@ -18,7 +18,7 @@ function winnerNote(source: string | null | undefined, model: string, locale: Lo
   switch (source) {
     case 'project': return t('tui.model.winner.project', { model }, locale);
     case 'user-default': return t('tui.model.winner.userDefault', { model }, locale);
-    case 'user': return t('tui.model.winner.user', { model }, locale);
+    case 'user': return t('tui.model.winner.user', { model }, locale); case 'connected': return t('tui.model.winner.connected', { model }, locale);
     default: return null;
   }
 }

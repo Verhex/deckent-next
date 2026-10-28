@@ -80,8 +80,8 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
 }
 
 /** T4-B D1: the terminal's model by the one precedence (`resolveTerminalModel`), read from the two authored layer documents, never the merged config. */
-export async function configuredTerminalModel(projectRoot: string, options: ConfigLoadOptions = {}, pin?: ModelReference | null): Promise<TerminalModelChoice | null> {
+export async function configuredTerminalModel(projectRoot: string, options: ConfigLoadOptions = {}, pin?: ModelReference | null, skipDefault = false): Promise<TerminalModelChoice | null> {
   if (pin) return resolveTerminalModel({ global: {}, project: {} }, pin);
   const snapshot = await snapshotConfiguredConfig(projectRoot, options);
-  return resolveTerminalModel({ global: snapshot.global, project: snapshot.project });
+  return resolveTerminalModel({ global: snapshot.global, project: snapshot.project }, null, skipDefault);
 }

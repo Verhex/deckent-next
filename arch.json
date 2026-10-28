@@ -1852,7 +1852,7 @@
         "src/composition/core/root",
         "src/adapters/core/mcp-import",
         "src/composition/core/approvals",
-        "src/composition/core/config",
+        "src/composition/core/terminal-chat",
         "src/adapters/core/provider-connect",
         "src/engine/core/workspaces",
         "src/platform/core/integrity",

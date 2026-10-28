@@ -4,8 +4,8 @@ import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCom
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelSource } from '#adapters/index.js';
-import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
+import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 export type TerminalChatPlan = Readonly<{
@@ -17,7 +17,16 @@ export type TerminalChatPlan = Readonly<{
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
+  skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
 }>;
+/** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
+export async function terminalModelHere(projectRoot: string, options: ConfigLoadOptions = {}): Promise<{ choice: TerminalModelChoice | null; skipped: ModelReference | null }> {
+  let choice = await configuredTerminalModel(projectRoot, options), skipped: ModelReference | null = null;
+  if (choice?.source === 'user-default' && (await inspectModelBinding(projectRoot, choice.reference, options)).status !== 'declared') { skipped = choice.reference; choice = await configuredTerminalModel(projectRoot, options, null, true); }
+  const declared = choice ? null : await inspectDeclaredModels(projectRoot, options).catch(() => null);
+  const only = declared?.status === 'declared' ? declared.catalog.providers.flatMap(provider => provider.models.map(model => ({ providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version }))) : [];
+  return { choice: choice ?? (only.length === 1 ? Object.freeze({ reference: only[0]!, source: 'connected' as const }) : null), skipped };
+}
 /** Governed model invocation service; the shipped executable wires the local runtime client. */
 export interface TerminalChatInvocationPorts {
   invoke(projectRoot: string, command: ModelInvocationCommand, options: ConfigLoadOptions, signal?: AbortSignal): Promise<ModelInvocationResult>;
@@ -35,11 +44,11 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
-  const choice = await configuredTerminalModel(projectRoot, options), reference = choice?.reference ?? chat.reference;
-  if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
+  const { choice, skipped } = await terminalModelHere(projectRoot, options), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
+  if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
   const binding = await inspectModelBinding(projectRoot, reference, options);
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
-    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages });
+    catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more });
 }
 /**
  * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
@@ -51,7 +60,7 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
   const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
   const configuredChat = readTerminalChatConfig(config);
   if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const reference = pinned ?? (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? configuredChat.reference;
+  const reference = pinned ?? (await terminalModelHere(input.projectRoot, input.options)).choice?.reference ?? configuredChat.reference;
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: settings.maxCompletionTokens ?? effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);

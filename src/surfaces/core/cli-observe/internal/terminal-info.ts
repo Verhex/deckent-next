@@ -29,7 +29,7 @@ function chatPlanText(plan: ChatPlan, locale: Locale): string {
   const status = plan.status === 'ready' ? t('cli.terminalInfo.chat.ready', {}, locale) : plan.status === 'model-not-declared'
     ? t('cli.terminalInfo.chat.notDeclared', {}, locale) : t('cli.terminalInfo.chat.notConfigured', {}, locale);
   const source = plan.source === 'session' ? t('cli.terminalInfo.source.session', {}, locale) : plan.source === 'project' ? t('cli.terminalInfo.source.project', {}, locale)
-    : plan.source === 'user-default' ? t('cli.terminalInfo.source.userDefault', {}, locale) : plan.source === 'user' ? t('cli.terminalInfo.source.user', {}, locale)
+    : plan.source === 'user-default' ? t('cli.terminalInfo.source.userDefault', {}, locale) : plan.source === 'user' ? t('cli.terminalInfo.source.user', {}, locale) : plan.source === 'connected' ? t('cli.terminalInfo.source.connected', {}, locale)
       : t('cli.terminalInfo.unknown', {}, locale);
   const value = (n: number | null) => n === null ? t('cli.terminalInfo.unknown', {}, locale) : String(n);
   return terminalSafeText([t('cli.terminalInfo.chat.status', { status }, locale),

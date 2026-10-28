@@ -182,7 +182,8 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
     await press('/model', ENTER); await until(() => frame().includes('chat (local-openai)') && !frame().includes('[engellendi]') && !frame().includes(loading), 'model list');
     await press(ENTER); await until(() => frame().includes(t('tui.panel.model.session', {}, 'tr')), 'confirmation step');
     await press(ENTER); await until(() => !frame().includes(t('tui.model.title', { scope: 'scope' }, 'tr')) && !frame().includes(loading) && frame().includes('READY'), 'switch closes');
-    expect((await describeTerminalChat(f.project, options)).status).toBe('not-configured'); // the pin is for this session only
+    // The pin is for this session only: no setting was written; the only model declared here is in effect by itself (BeUser AYSE-13), never a saved choice.
+    expect(await describeTerminalChat(f.project, options)).toMatchObject({ status: 'ready', source: 'connected' });
     f.state.script.push({ content: 'Yalnız oturum yanıtı.' }); await press('first turn', ENTER);
     await until(() => view.stdout.text.includes('Yalnız oturum yanıtı.'), 'pinned first turn answer');
     expect(f.state.requests).toHaveLength(1);

@@ -113,6 +113,7 @@
   "terminal.service.configStale": "The runtime service started before a restart-apply configuration change and still uses the old values. Use /service-restart to restart it.",
   "terminal.service.buildSkew": "The runtime service runs a different build ({service}) than this terminal ({terminal}); answers come from that build. Use /service-restart to restart it onto this build.",
   "terminal.service.restarted": "Runtime service restarted onto this build (pid {pid}, instance {instance}).",
+  "terminal.model.defaultNotHere": "Your default model was chosen in another folder and is not connected here, so it is not used here. Connect it with /provider or choose a model with /model.",
   "terminal.service.startedForTurn": "The runtime service had stopped; started it again in the background (pid {pid}). Your message is sent now.",
   "terminal.service.restartUnavailable": "Restarting the runtime service is not available in this terminal.",
   "terminal.slash.serviceRestart": "Restart the runtime service from this build (asks first)",

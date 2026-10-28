@@ -170,6 +170,7 @@
   "cli.terminalInfo.source.project": "the project setting",
   "cli.terminalInfo.source.userDefault": "your default",
   "cli.terminalInfo.source.user": "your setting",
+  "cli.terminalInfo.source.connected": "the only model connected here",
   "cli.terminalInfo.unknown": "unknown",
   "cli.terminalInfo.reachability": "Chat model reachability: not tested (this command does not contact the model; the first answer or /provider's check shows it)",
   "cli.terminalInfo.context.noProfile": "Context window: unknown until the first answer is measured; with no inference_serving profile the window size is known only if the provider reports it (the status bar shows \"context ?\" until then)",

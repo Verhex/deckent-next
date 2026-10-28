@@ -170,6 +170,7 @@
   "cli.terminalInfo.source.project": "proje ayarı",
   "cli.terminalInfo.source.userDefault": "sizin varsayılanınız",
   "cli.terminalInfo.source.user": "sizin ayarınız",
+  "cli.terminalInfo.source.connected": "burada bağlı tek model",
   "cli.terminalInfo.unknown": "bilinmiyor",
   "cli.terminalInfo.reachability": "Sohbet modeline erişim: sınanmadı (bu komut modele bağlanmaz; ilk yanıt ya da /provider kontrolü gösterir)",
   "cli.terminalInfo.context.noProfile": "Bağlam penceresi: ilk yanıt ölçülene kadar bilinmiyor; inference_serving profili olmadığından pencere boyutu yalnız sağlayıcı bildirirse bilinir (o zamana kadar durum çubuğu \"bağlam ?\" gösterir)",
