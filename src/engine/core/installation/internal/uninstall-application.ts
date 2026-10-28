@@ -255,7 +255,7 @@ export async function authorizeUninstallSteps(policy: unknown, plan: UninstallPl
   for (const ref of plan.steps.cancelRuns) await runs.authorize('cancel', { scopeId: ref.scopeId, runId: ref.id }, principal);
   for (const ref of plan.steps.rejectApprovals) authorizeApproval(policy, 'decide', ref.scopeId, ref.id, principal);
   for (const id of new Set(plan.items.filter(item => item.action === 'remove').map(item => item.operation.id))) {
-    for (const action of ['inspect', 'execute'] as const) await operations.authorize(action, scopeId, { id, version: 1 }, principal);
+    await operations.authorize('execute', scopeId, { id, version: 1 }, principal); // the first claim's own decision (inspect is asked only of a stored record)
     authorizeApproval(policy, 'decide', scopeId, plan.planDigest, principal);
   }
 }

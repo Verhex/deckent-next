@@ -65,7 +65,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   const pending = new Set([...base.work.running, ...base.work.parked].map(ref => `${ref.scopeId}\0${ref.id}`)), leases = new Map<string, Promise<boolean>>();
   const idle = (path: string) => { const at = new RegExp(registry.archive.workspace.pattern, 'u').exec(rel(path))?.[0];
     if (at && !leases.has(at)) leases.set(at, readFile(join(layout.root, at, registry.archive.workspace.lease), 'utf8').then(text => { const id = (JSON.parse(text) as { request?: { identity?: Record<string, unknown> } }).request?.identity;
-      return base.work.complete && typeof id?.['runId'] === 'string' && !pending.has(`${String(id['scopeId'])}\0${id['runId']}`) && ![...base.work.deliveries, ...base.work.uncertain].some(ref => ref.scopeId === id['scopeId']); }, () => false));
+      return base.work.complete && typeof id?.['runId'] === 'string' && !pending.has(`${String(id['scopeId'])}\0${id['runId']}`) && ![...base.work.deliveries, ...base.work.uncertain].some(ref => ref.scopeId === id['scopeId']); }).catch(() => false));
     return at ? leases.get(at)! : false; };
   const unlisted = (locator: string) => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
     ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
