@@ -81,7 +81,7 @@ export interface ConfigPanelLabels {
 
 export type McpScopeId = 'local' | 'project' | 'user';
 export type McpPanelServer = Readonly<{ name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
-  trusted: boolean }>;
+  trusted: boolean; grantKey?: string }>; // KER-17: a main-vault key this project has not granted (the person-only first-use card answers it)
 export type McpPanelList = Readonly<{ servers: readonly McpPanelServer[]; problems: readonly string[] }>;
 /** One trust question of the wizard or a re-approval (the launch card, then the tools card): the window shows it, y says yes, n/Esc say no. */
 export type McpTrustQuestion = Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>;
@@ -96,6 +96,7 @@ export interface McpPanelPort {
   /** Revoke this server's trust (it asks again before it starts); re-approve with the trust windows; restart on next use; remove its entry. */
   revoke(name: string): Promise<readonly string[]>;
   approve(name: string, ask: McpTrustAsk): Promise<readonly string[]>;
+  grantKey?(name: string, key: string, ask: McpTrustAsk): Promise<readonly string[]>;
   reconnect(name: string): Promise<readonly string[]>;
   remove(name: string): Promise<readonly string[]>;
   /** The wizard's engine: the same registry command as `deckent mcp add` (its trust decision through `ask`). It checks the name before any card:
@@ -107,7 +108,7 @@ export interface McpPanelPort {
 }
 export interface McpPanelLabels {
   readonly title: string; readonly hints: string; readonly add: string; readonly addDetail: string; readonly none: string;
-  readonly actions: Readonly<Record<'detail' | 'revoke' | 'approve' | 'reconnect' | 'remove', string>>;
+  readonly actions: Readonly<Record<'detail' | 'revoke' | 'approve' | 'reconnect' | 'remove' | 'grant', string>>;
   /** Wizard steps: titles of the transport, realm and scope pickers, and the prompts of the text steps (`{step}` of `{steps}` in `step`). */
   readonly step: string;
   readonly steps: Readonly<Record<'transport' | 'name' | 'command' | 'url' | 'args' | 'env' | 'headers' | 'realm' | 'scope', string>>;

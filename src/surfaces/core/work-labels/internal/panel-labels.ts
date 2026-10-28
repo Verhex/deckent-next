@@ -21,7 +21,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       preview: t('config.select.preview', {}, locale), previewHint: t('config.select.previewHint', {}, locale) },
     mcp: { title: t('tui.panel.mcp.title', {}, locale), hints: t('tui.panel.mcp.hints', {}, locale), add: t('tui.panel.mcp.add', {}, locale), addDetail: t('tui.panel.mcp.addDetail', {}, locale),
       none: t('tui.panel.mcp.empty', {}, locale),
-      actions: { detail: t('tui.panel.mcp.action.detail', {}, locale), revoke: t('tui.panel.mcp.action.revoke', {}, locale), approve: t('tui.panel.mcp.action.approve', {}, locale),
+      actions: { grant: t('tui.panel.mcp.action.grant', {}, locale), detail: t('tui.panel.mcp.action.detail', {}, locale), revoke: t('tui.panel.mcp.action.revoke', {}, locale), approve: t('tui.panel.mcp.action.approve', {}, locale),
         reconnect: t('tui.panel.mcp.action.reconnect', {}, locale), remove: t('tui.panel.mcp.action.remove', {}, locale) },
       step: t('tui.panel.mcp.step', {}, locale),
       steps: { transport: t('tui.panel.mcp.steps.transport', {}, locale), name: t('tui.panel.mcp.steps.name', {}, locale), command: t('tui.panel.mcp.steps.command', {}, locale),

@@ -48,3 +48,17 @@ export async function* secretGrantTurn(start: () => AsyncIterable<TurnDelta>, ca
     }
   }
 }
+
+/** KER-17 audit (lead 2026-10-28): after a turn whose MCP server was refused for a main-vault key without a grant, the same person-only card is
+ * offered once per key in this session; no (Enter/Esc) keeps the key closed and the turn's notice stays. Nothing is retried; the server starts
+ * on the next message. Returns the lines to show for the keys granted now. */
+export async function offerMcpGrants(keys: () => Promise<readonly Readonly<{ name: string; project: string }>[]>, card: SecretGrantCardPort,
+  ask: (question: SecretGrantQuestion) => Promise<boolean>, offered: Set<string>, given: (name: string) => string): Promise<readonly string[]> {
+  const granted: string[] = [];
+  for (const key of await keys().catch(() => [])) {
+    if (offered.has(key.name)) continue; offered.add(key.name);
+    if (!await card.offer() || !await ask(card.question(key.name, key.project))) continue;
+    await card.grant(key.name); granted.push(given(key.name));
+  }
+  return granted;
+}

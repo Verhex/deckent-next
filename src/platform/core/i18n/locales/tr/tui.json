@@ -471,6 +471,7 @@
   "tui.panel.mcp.addDetail": "adım adım; siz güvenmeden hiçbir şey başlamaz",
   "tui.panel.mcp.empty": "Bu proje için henüz kayıtlı MCP sunucusu yok.",
   "tui.panel.mcp.action.detail": "Ayrıntılar (araçlar, sabitlemeler, son başlatma)",
+  "tui.panel.mcp.action.grant": "Anahtarına bu projede izin ver (kendi kartınız)",
   "tui.panel.mcp.action.revoke": "Güveni geri al (başlamadan önce yeniden sorar)",
   "tui.panel.mcp.action.approve": "Yeniden onayla (başlat ve araçlarını gözden geçir)",
   "tui.panel.mcp.action.reconnect": "Bir sonraki kullanımda yeniden başlat",

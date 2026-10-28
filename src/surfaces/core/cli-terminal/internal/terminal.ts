@@ -30,7 +30,6 @@ import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-a
 import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver, BrainPlanProgress } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 import { providerDisplayName } from './provider-label.js';
-
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
 const ADMISSION_DEFERRED = {
@@ -183,7 +182,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
     ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
     ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
-    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
+    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
     ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...(providerConnect ? { provider: providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale), context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}), ...budget, ...cache, ...protocol, ...workspace } } : {}),
@@ -482,6 +481,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
         ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.reference ? { reference: turn.reference } : {}),
         ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal) } : {}),
     ...(context.streamTerminalChat && context.secretGrantCard ? { secretGrant: secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, home) } : {}),
+    ...(ports.runMcp ? { mcpGrants: { given: (name: string) => t('mcp.grant.givenKey', { key: name }, locale), keys: async () => ((await ports.runMcp!(root, { verb: 'list', health: false }, options, async () => null)) as { servers?: { reason?: string }[] }).servers?.flatMap(server => server.reason?.startsWith('secret-refused:SECRET_GRANT_REQUIRED:') ? [{ name: server.reason.slice(37), project: root }] : []) ?? [] } } : {}), // KER-17 audit: offered after a turn
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

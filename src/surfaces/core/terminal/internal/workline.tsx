@@ -7,7 +7,7 @@ import { runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, 
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
-  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
+  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
@@ -82,7 +82,6 @@ export interface WorklineLabels extends WorklineActionLabels {
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
-
 const LOCAL_FALLBACK = new Set(['RUN_ADMISSION_NOT_CONFIGURED', 'BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_NONE']); // no background Run can start here yet
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
@@ -116,7 +115,7 @@ export interface WorklineProps {
   readonly approvalPollMs?: number;
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
   readonly restartService?: () => Promise<string>; readonly restartNotes?: () => Promise<readonly string[]>; // D-01: e.g. a running image build the restart stops
-  readonly startService?: () => Promise<string>; readonly serviceLost?: (listener: (text: string) => void) => () => void; // BeUser M-09: starts the absent runtime service (the terminal's autostart, never a stop), returns the line; D-05: hears, once per absence, that it stopped under this terminal
+  readonly startService?: () => Promise<string>; readonly mcpGrants?: Readonly<{ keys: () => Promise<readonly Readonly<{ name: string; project: string }>[]>; given: (name: string) => string }>; readonly serviceLost?: (listener: (text: string) => void) => () => void; // BeUser M-09: starts the absent runtime service (the terminal's autostart, never a stop), returns the line; D-05: hears, once per absence, that it stopped under this terminal
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
   readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>;
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
@@ -356,7 +355,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
-  const serviceStarted = useRef(false), fallbackShown = useRef(false); // BeUser M-09: one automatic start per absence, until a turn completes
+  const serviceStarted = useRef(false), fallbackShown = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -376,7 +375,7 @@ export function WorklineApp(props: WorklineProps) {
         const opened = openAssistantStream(startedAtMs, props.knownSecrets);
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
-        let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
+        let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [], noted = false;
         const turnIdentity = pinnedLabels.current.get(execution.input.context.sessionId)
           ?? (props.model && props.provider ? { model: props.model, provider: props.provider } : undefined);
         // Forward the session and reasoning choices with the composition's generated binding callback.
@@ -388,7 +387,7 @@ export function WorklineApp(props: WorklineProps) {
         const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => {
           setLive(null); return askGrantWindow(slot, position, question, cancel).finally(() => setLive({ step: opened, lead: true })); };
         for await (const delta of props.secretGrant ? secretGrantTurn(start, props.secretGrant, ask, signal, () => bound) : start()) {
-          if (delta.kind === 'text') answer += delta.text;
+          if (delta.kind === 'text') answer += delta.text; if (delta.kind === 'done' && delta.note) noted = true;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
             usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, { ...delta, identity: turnIdentity })); }
@@ -408,6 +407,7 @@ export function WorklineApp(props: WorklineProps) {
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
         history.current = next.length || base !== messages ? agentHistory(base[0]!, [...base, ...next]) : messages;
         push(await session.save(history.current));
+        if (props.secretGrant && props.mcpGrants && noted) for (const message of await offerMcpGrants(props.mcpGrants.keys, props.secretGrant, question => askGrantWindow(slot, position, question, signal), offeredGrants.current, props.mcpGrants.given)) push([notice('info', message)]);
       } else {
         const reply = await completeTurn(plainChatHistory(messages), signal);
         history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);

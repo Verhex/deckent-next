@@ -471,6 +471,7 @@
   "tui.panel.mcp.addDetail": "step by step; nothing starts before you trust it",
   "tui.panel.mcp.empty": "No MCP server is registered for this project yet.",
   "tui.panel.mcp.action.detail": "Details (tools, pins, last start)",
+  "tui.panel.mcp.action.grant": "Allow its key for this project (your own card)",
   "tui.panel.mcp.action.revoke": "Revoke trust (asks again before it starts)",
   "tui.panel.mcp.action.approve": "Approve again (start it and review its tools)",
   "tui.panel.mcp.action.reconnect": "Restart on next use",
