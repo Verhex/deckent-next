@@ -150,6 +150,10 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     await writeFile(join(plain, '.gitattributes'), '* filter=evil diff=evil\n'); await writeFile(join(plain, 'a.txt'), 'changed again');
     expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'present' });
     await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    // Security follow-up: a driver named with '=' (a `-c` override would set another key) fails closed before any comparison runs.
+    git(plain, 'config', 'filter.a=b.clean', hook); await writeFile(join(plain, '.gitattributes'), '* filter=a=b\n');
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'unknown' });
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' }); git(plain, 'config', '--remove-section', 'filter.a=b');
     // A folder this user does not own (or others may write) is not inspected.
     expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false, owned: async () => false } })).toMatchObject({ changes: 'unknown' });
     for (const key of ['core.fsmonitor', 'filter.evil.clean', 'filter.evil.process', 'filter.evil.required', 'diff.external']) git(plain, 'config', '--unset', key);
