@@ -54,8 +54,8 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   const removal = createBeuserRemovalReadback(runtimeOptions, artifacts, beuserPrivateRecord(directory, `kernel-${sha256(JSON.stringify(context.binding.identity))}`, context.limits.maxArtifactBytes));
   const realm = createBeuserRealm({ context, options: runtimeOptions, custody, artifacts, measurement: { digest: data.packageDigest, files: data.files, limits: config.installation.packageMeasurement }, capture: removal.capture, removal: removal.read });
   const channel = createBeuserChannel({ context, realm, custody, options: runtimeOptions, boot: { mode: data.entry.mode,
-    argv: [data.entry.nodeExecutable, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`, ...data.entry.args],
-    catalog: [], maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
+    entry: [data.entry.nodeExecutable, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`, ...data.entry.args],
+    commands: {}, maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
   const known = getConfigKnownSecrets(config), recorder = createBeuserTranscript(context, known), readbacks: BeuserReadback[] = [];
   let lastEvent: HarnessEvent | null = null;
   const sink = async (ctx: BeuserContext, event: HarnessEvent) => {

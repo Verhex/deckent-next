@@ -15,6 +15,7 @@ import struct
 import sys
 import termios
 import time
+from boot import read_boot
 
 
 def positive(value):
@@ -23,19 +24,28 @@ def positive(value):
     return value
 
 
+def refuse_boot():
+    sys.stdout.write('{"code":"BEUSER_SURFACE_INVALID"}\n')
+    sys.stdout.flush()
+    return 2
+
+
 def main():
     boot_limit = positive(int(sys.argv[1]))
     boot_line = bytearray()
     while len(boot_line) <= boot_limit:
         byte = os.read(0, 1)
         if not byte:
-            return
+            return refuse_boot()
         boot_line.extend(byte)
         if byte == b'\n':
             break
     if len(boot_line) > boot_limit or not boot_line.endswith(b'\n'):
-        return
-    boot = json.loads(boot_line)
+        return refuse_boot()
+    try:
+        boot = read_boot(boot_line)
+    except (ValueError, KeyError, TypeError, OSError, UnicodeError, RecursionError):
+        return refuse_boot()
     nonce = boot['nonce']
     limits = boot['limits']
     for name in ('maxSteps', 'maxWallMs', 'maxWaitMs', 'maxTranscriptBytes',
@@ -261,7 +271,7 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        sys.exit(main())
     except (ValueError, KeyError, TypeError, OSError, InterruptedError):
         # Never include exceptions or configuration in diagnostics: both may hold target data.
         sys.exit(125)

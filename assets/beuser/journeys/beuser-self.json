@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "revision": "b1-beuser-self-1",
+  "journeyId": "beuser-self",
+  "limitsProfile": "b1-dogfood-provisional-1",
+  "branches": [
+    {
+      "id": "SELF-B1",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Ürünün rehberiyle bir yolculuk seç, yürüyüş iste ve rapordan sonucu bul.",
+        "en": "Use product guidance to select a journey, request a walk and find its result in the report."
+      }
+    },
+    {
+      "id": "SELF-B2",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Devam edemeyen yürüyüşün nedenini ve rapordaki sonraki adımı bul.",
+        "en": "Find why a walk cannot continue and locate the next step in its report."
+      }
+    }
+  ],
+  "rubric": {
+    "schemaVersion": 1,
+    "journeyId": "beuser-self",
+    "version": 1,
+    "digest": "bc8fb130a30f3fc277ee9670e87d6c6e8d8c02dc3be777cc3e385934c2bd54a7",
+    "parameters": {
+      "phase": "preparation-only",
+      "ownerSteps": 0,
+      "personDecisions": "synthetic-person-decision",
+      "limitsProfile": "b1-dogfood-provisional-1",
+      "branches": [
+        {
+          "id": "SELF-B1",
+          "initialStates": [
+            "fresh-own-installation",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "beuser-walk",
+            "beuser-report-tr",
+            "beuser-report-en"
+          ],
+          "criteria": [
+            "report-has-broken-friction-delight-and-evidence",
+            "four-population-counts",
+            "real-cost-time-or-null",
+            "named-unwalked-and-unknown",
+            "no-owner-step"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "SELF-B2",
+          "initialStates": [
+            "missing-model-or-realm-or-binding"
+          ],
+          "variants": [
+            "beuser-walk-refusal",
+            "beuser-report"
+          ],
+          "criteria": [
+            "typed-refusal",
+            "no-false-GREEN",
+            "cleanup-or-quarantine-unknown"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        }
+      ],
+      "probeSets": [
+        {
+          "id": "probe-set-1",
+          "probes": [
+            {
+              "id": "outcome-installation",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "installation",
+              "expected": "installed"
+            },
+            {
+              "id": "safety-preservedData",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "preservedData",
+              "expected": "pass"
+            },
+            {
+              "id": "authorization-card",
+              "dimension": "authorization",
+              "readbackRef": "terminal-state",
+              "key": "card",
+              "expected": "not-shown"
+            },
+            {
+              "id": "safety-receiptLocation",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "receiptLocation",
+              "expected": "absent"
+            },
+            {
+              "id": "safety-forbiddenEffect",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "forbiddenEffect",
+              "expected": "absent"
+            },
+            {
+              "id": "outcome-lifecycle",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "lifecycle",
+              "expected": "stopped"
+            }
+          ]
+        }
+      ],
+      "constraints": [
+        "own-sealed-disposable-installation-only",
+        "no-host-live-N1-owner-installation",
+        "no-ledger-key-backup-receipt-bytes-export",
+        "secret-step-capture-off-no-values-or-hashes",
+        "approve-the-actual-card-then-assert",
+        "no-safe-command-substitution",
+        "uncertain-effects-reconcile-never-blind-retry",
+        "cleanup-absence-proof-or-quarantine-unknown"
+      ],
+      "recursion": {
+        "maxDepth": 1,
+        "childJourneyIds": [
+          "uninstall-v2",
+          "onboarding"
+        ],
+        "selfInChildCohort": false,
+        "rootCheck": "deterministic-manifest-and-probe-validation"
+      },
+      "source": "CODEX-LANES-2026-10-29/b1-c7data/CARD.md:preparation-and-walk-9"
+    }
+  }
+}

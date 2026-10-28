@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { beuserBindingSchema } from '#domain/core/beuser/index.js';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema } from '#domain/core/principal/index.js';
 import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
-import { createBeuserSurface, type BeuserRealmChannel, type BeuserSurfaceOptions, type HarnessEvent, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
+import { createBeuserSurface, pinBeuserDriverBoot, type BeuserRealmChannel, type BeuserSurfaceOptions, type HarnessEvent, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
 
 const binding = beuserBindingSchema.parse({ schemaVersion: 1,
   identity: { scopeId: 'scope', runId: 'run', taskId: 'task', attemptId: 'attempt', layoutRevision: 'layout', generation: 1 },
@@ -190,10 +190,12 @@ async function pythonFixture(mode: 'pty' | 'argv', program: string, secretValue?
       child = spawn('python3', [fileURLToPath(new URL('../../../src/adapters/core/beuser-surface/internal/pty-driver.py', import.meta.url)), '50000'],
         { stdio: ['pipe', 'pipe', 'ignore', 'pipe'], env: { PATH: process.env['PATH'] ?? '' } });
       const processChild = child;
-      processChild.stdin!.write(JSON.stringify({ nonce: binding.nonce, mode, entry, columns: size.columns, rows: size.rows,
-        env: { TERM: 'xterm-256color', LANG: 'C.UTF-8', HOME: directory }, maxArtifactBytes: limits.maxArtifactBytes,
-        limits: { ...limits, ...bounds }, commands: { 'approval-decide': { prefix: entry, allowedArgs: [['allow']] } },
-        secretFds: secretValue ? { opaque: 3 } : {} }) + '\n');
+      processChild.stdin!.write(JSON.stringify(pinBeuserDriverBoot({ schemaVersion: 1, nonce: binding.nonce, mode, entry, columns: size.columns, rows: size.rows,
+        env: { TERM: 'xterm-256color', LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', HOME: directory, DECKENT_GLOBAL_HOME: join(directory, '.deckent') }, maxArtifactBytes: limits.maxArtifactBytes,
+        limits: { maxSteps: limits.maxSteps, maxWallMs: limits.maxWallMs, maxWaitMs: limits.maxWaitMs,
+          maxTranscriptBytes: limits.maxTranscriptBytes, cleanupDeadlineMs: limits.cleanupDeadlineMs, ...bounds },
+        commands: { 'approval-decide': { prefix: entry, allowedArgs: [['allow']] } },
+        secretFds: secretValue ? { opaque: 3 } : {} })) + '\n');
       if (secretValue) (processChild.stdio[3] as Writable).end(secretValue);
       return { input: processChild.stdin!, output: processChild.stdout!, cancel: async () => {
         const exited = new Promise<void>(resolve => processChild.once('close', () => resolve()));
