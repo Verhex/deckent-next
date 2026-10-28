@@ -66,22 +66,44 @@
       "terminalHistory",
       "terminalSessions",
       "runtimeLog",
-      "ledgerBackups",
       "crashes",
       "approvalPreviews"
     ],
-    "rootFiles": [
-      "^\\.gitignore$",
-      "^config\\.json\\.bak\\..+$",
-      "^installation/retired\\.json$"
-    ],
     "transient": [
       "^uninstall-hold\\.json$",
-      "^state/ledger\\.db-(wal|shm|journal|lock)$",
-      "^state/runtime\\.sock$"
+      "^state/ledger\\.db-(wal|shm|journal|lock)$"
     ],
     "companionSuffix": ".archive",
     "owner": "uninstall-files",
-    "manifestSuffix": ".archive.json"
+    "manifestSuffix": ".archive.json",
+    "members": [
+      "^\\.gitignore$",
+      "^config\\.json$",
+      "^config\\.json\\.bak\\.\\d{4}-\\d{2}-\\d{2}T[\\dT.Z-]+\\.[a-f0-9-]{36}$",
+      "^installation/(journal|retired)\\.json$",
+      "^(installation|project)-identity/identity\\.json$",
+      "^brain/resource-trace\\.json(\\.segment-\\d{16}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jsonl|\\.trim)?$",
+      "^audit/authority-revisions/(k-[A-Za-z0-9_-]{1,128}|r-[0-9a-f]{32})\\.json$",
+      "^audit/backup-operations/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "^artifacts/(hub-cache/)?[0-9a-f]{64}/[0-9a-f]{64}$",
+      "^integrations/mcp-start-failures\\.json$",
+      "^crashes/crash-\\d+-\\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$",
+      "^crashes/(dispatch-preparation|dispatch-launcher|secret-gate-time)/[0-9a-f]{64}\\.json$",
+      "^workspaces/(integrations/)?[0-9a-f]{64}/(lease\\.json|gitconfig|hooks/.+|tree/.+)$",
+      "^workspaces/toolchains/(refresh-state|worker-image-state)\\.json$",
+      "^state/runtime-service\\.log$",
+      "^state/backups/ledger-v\\d+-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z\\.db$",
+      "^state/backups/recovery/recovery-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}Z-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(ledger\\.db|ledger\\.fingerprint\\.json|state\\.archive\\.json\\.gz|authority\\.key\\.enc|MANIFEST\\.sha256)$",
+      "^state/terminal-history\\.jsonl$",
+      "^state/terminal-sessions/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json(\\.title|\\.origin)?$",
+      "^state/file-effects/[0-9a-f]{64}\\.json$",
+      "^state/file-effects/sandbox-writes/[0-9a-f]{32}/owner\\.json$",
+      "^state/approval-previews/[0-9a-f]{64}\\.txt$",
+      "^state/autonomy-shadow/autonomy-shadow\\.jsonl(\\.1)?$",
+      "^state/memory-purges/purges\\.jsonl$",
+      "^signers/([0-9a-f]{64}\\.p8|revocations\\.log)$",
+      "^state/brain-waits/[0-9a-f]{64}\\.json$",
+      "^state/onboarding\\.json$"
+    ]
   }
 }

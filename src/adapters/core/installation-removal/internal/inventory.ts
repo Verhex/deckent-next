@@ -3,7 +3,7 @@ import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
 import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
-import { verifyAuditRecord, type UninstallInventory, type UninstallResource } from '#engine/index.js';
+import { verifyAuditRecord, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 import { InstallationDataRemovalTarget, fileDigest, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY } from '#adapters/core/project-instructions/index.js';
 import { listProjectVaults } from '#adapters/core/secret-store/index.js';
@@ -16,7 +16,7 @@ export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readon
 export const removalRegistry = z.object({ schemaVersion: z.literal(5), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
   recoveryRoot: z.record(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.object({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) }).strict()),
   systemctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
-  archive: z.object({ conversation: z.array(z.string()), rootFiles: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
+  archive: z.object({ conversation: z.array(z.string()), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
   purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
   treeMembers: z.record(z.object({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }).strict())
@@ -58,11 +58,11 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     if (blockers.length) members = [];
     else if (integrity) members.push(...(await treeMembers(layout, integrity, bounds)).filter(member => !kept(member.path)));
   }
-  // Lead 2026-10-27 (K1, K7): in a project's own `.deckent` every other regular single-link file of this user under a registry resource (or a
-  // registry root file) is archived and deleted by its data tier: conversation for keep-work, all of them for all. Links, other owners, unknown
-  // and tracked files stay and are listed; caches keep their own owner; transient custody files are never members.
+  // K1, K7, review B3: in a project's own `.deckent` a regular single-link file of this user is a member only when its name is one its Deckent
+  // owner writes (registry `archive.members`); it is archived and deleted by its data tier: conversation for keep-work, all of them for all.
+  // Location alone is no ownership: links, other owners, unknown names and tracked files stay and are listed; caches keep their own owner.
   const archived: DataRemovalMember[] = [], taken = new Set(members.map(member => member.path)), rel = (path: string) => relative(layout.root, path).split(sep).join('/');
-  const located = Object.keys(layout.resources).map(name => productResourcePath(layout, name as ProductResource)), matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
+  const matches = (list: readonly string[], path: string) => list.some(source => new RegExp(source, 'u').test(rel(path)));
   const conversation = registry.archive.conversation.map(name => productResourcePath(layout, name as ProductResource)); let seen = 0;
   const unlisted = (locator: string) => resources.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null, owner: null,
     ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
@@ -73,7 +73,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       if (taken.has(path) || project.caches.some(cache => inside(cache, path)) || matches(registry.archive.transient, path) || kept(path)) continue;
       const info = await lstat(path);
       if (info.isDirectory()) { await walk(path, depth + 1); continue; }
-      if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && (located.some(resource => inside(resource, path)) || matches(registry.archive.rootFiles, path)))
+      if (info.isFile() && info.nlink === 1 && info.uid === process.getuid?.() && matches(registry.archive.members, path))
         archived.push(...(conversation.some(resource => inside(resource, path)) ? ['conversation-data', 'global-data'] : ['global-data'])
           .map(target => ({ resourceId: rel(path), path, directory: null, archivePath: '', target, archived: true })));
       else unlisted(path);
@@ -104,7 +104,8 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     for (const { directory, record } of await listProjectVaults(globalRoot).catch(() => []))
       if (record?.anchor.installationId !== installationId || record.anchor.projectRoot !== config.projectRoot) continue;
       else if (record.anchor.repository !== null) unlisted(directory);
-      else for (const entry of await readdir(directory)) if ((await lstat(join(directory, entry))).isFile()) add(join(directory, entry), { directory });
+      // Only the vault's own files (its record, grants and secret store); any other name in it stays and is listed (and so does the folder).
+      else for (const entry of await readdir(directory)) if ([PROJECT_VAULT.projectFile, PROJECT_VAULT.grantsFile, ...registry.sharedSecretFiles].includes(entry)) add(join(directory, entry), { directory }); else unlisted(join(directory, entry));
   }
   archived.push(...outside);
   // Rows a tier's archive covers leave that tier's plan: the archive's resource stands for them there.

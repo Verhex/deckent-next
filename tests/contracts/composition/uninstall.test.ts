@@ -293,13 +293,18 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     const layout = await install(), ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     await writeFile(join(local, 'notes.txt'), 'UNKNOWN KEEP', { mode: 0o600 }); await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
+    // B3: a file under a Deckent resource folder whose name no owner writes is the person's (location is no ownership): kept and listed.
+    const record = join(local, 'workspaces/customer-record.txt'); await mkdir(dirname(record), { mode: 0o700 }); await writeFile(record, 'CUSTOMER', { mode: 0o600 });
+    // B4: a regular file at the layout's runtime.sock name (no Deckent code writes one there) is the person's: kept, even by the final cleanup.
+    const sock = join(local, 'state/runtime.sock'); await writeFile(sock, 'MINE', { mode: 0o600 });
     // Dogfood: the team commits a Deckent file; Git tracking makes it the team's, never a member.
     const git = (...args: string[]) => execFileSync('/usr/bin/git', ['-C', project, ...args], { env: { GIT_CONFIG_NOSYSTEM: '1', HOME: join(root, 'home') } });
     git('init', '-q'); git('add', '-f', '.deckent/bindings.json');
     const plan = await previewConfiguredUninstall(project, ALL, options), members = plan.items.find(item => item.resourceId === 'global-data')!.members!;
     expect(plan.blockers).toEqual([]); expect(plan).toMatchObject({ purge: true, backup: { required: true } });
     expect(members).toEqual(expect.arrayContaining([ledger, join(local, 'policy.json'), join(local, 'installation-identity/identity.json'), join(local, 'state/terminal-history.jsonl'), join(local, 'config.json')]));
-    expect(members).not.toContain(join(local, 'bindings.json')); expect(members).not.toContain(join(local, 'notes.txt'));
+    expect(members).not.toContain(join(local, 'bindings.json')); expect(members).not.toContain(join(local, 'notes.txt')); expect(members).not.toContain(record);
+    expect(plan.items.find(item => item.locator === record)).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.items.find(item => item.resourceId.startsWith('tracked.'))).toMatchObject({ locator: join(local, 'bindings.json'), action: 'keep', reason: 'vcs-tracked' });
     expect(plan.items.find(item => item.locator === join(local, 'notes.txt'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
     expect(plan.backup.destination!.startsWith(join(root, 'home', '.local', 'state'))).toBe(true);
@@ -307,6 +312,8 @@ it('deletes an in-project installation (K1) after archiving every owned file, bu
     expect(result.status).toBe('completed');
     for (const path of members) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(local, 'bindings.json'), 'utf8')).toContain('b1'); expect(await readFile(join(local, 'notes.txt'), 'utf8')).toBe('UNKNOWN KEEP');
+    expect(await readFile(record, 'utf8')).toBe('CUSTOMER'); expect(await readFile(sock, 'utf8')).toBe('MINE');
+    expect(plan.items.find(item => item.locator === sock)).toMatchObject({ action: 'keep', ownership: 'unknown' });
     (await verifyBackupSet(result.backup.destination!, phrase, getConfigFieldDefault('installation').packageMeasurement)).close();
     expect(await lstat(`${result.backup.destination!}.archive`)).toBeTruthy(); expect(result.backup.destination!.startsWith(project)).toBe(false);
     // Negative: a data root moved outside the global home and the project is a genuine relocation; the data tier stays closed with its path.
@@ -324,15 +331,18 @@ it('keep-work archives and deletes only conversation data and retires the folder
     const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     await writeFile(join(local, 'state/terminal-history.jsonl'), 'HISTORY\n', { mode: 0o600 });
-    for (const path of [join(local, 'runs'), join(local, 'workspaces/toolchains')]) await mkdir(path, { recursive: true, mode: 0o700 });
-    await writeFile(join(local, 'runs/run-1.json'), 'RUN RECORD', { mode: 0o644 }); await writeFile(join(local, 'workspaces/toolchains/build.sh'), '#!/bin/sh\n', { mode: 0o755 });
+    // Files their Deckent owners name (a worker workspace's lease and hook, an automatic ledger backup); the work records stay with keep-work.
+    const lease = join(local, `workspaces/${'c'.repeat(64)}/lease.json`), hook = join(local, `workspaces/${'c'.repeat(64)}/hooks/pre-commit`), earlier = join(local, 'state/backups/ledger-v1-2026-10-27T10-00-00-000Z.db');
+    for (const path of [hook, earlier]) await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(lease, 'LEASE', { mode: 0o644 }); await writeFile(hook, '#!/bin/sh\n', { mode: 0o755 }); await writeFile(earlier, 'EARLIER LEDGER', { mode: 0o600 });
     // A pending run makes keep-work a real choice: work records stay, conversation data goes (archived first).
     const work = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
     expect(work.items.find(item => item.resourceId === 'conversation-data')).toMatchObject({ action: 'remove', members: [join(local, 'state/terminal-history.jsonl')] });
     expect(work.items.some(item => item.resourceId === 'global-data')).toBe(false); expect(work.backup.required).toBe(true);
     const kept = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'keep-work', planDigest: work.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
     expect(kept.status).toBe('completed'); await expect(lstat(join(local, 'state/terminal-history.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(join(local, 'runs/run-1.json'), 'utf8')).toBe('RUN RECORD');
+    expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE');
+    expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER'); // M10 (JOURNEY §5.2): keep-work keeps earlier backups where they are
     expect(await lstat(join(local, 'installation/retired.json'))).toBeTruthy(); // §5.4: the service stays down until the person reopens the folder
     // Delete everything: every owned file is archived, verified, then deleted; nothing is left of the project's .deckent.
     const all = await previewConfiguredUninstall(project, ALL, options);
@@ -341,8 +351,8 @@ it('keep-work archives and deletes only conversation data and retires the folder
     expect(result.status).toBe('completed'); await expect(lstat(local)).rejects.toMatchObject({ code: 'ENOENT' });
     // `deckent backup restore <set>`: the semantic set and the uninstall archive beside it bring the installation and its files back.
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
-    expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(join(local, 'runs/run-1.json'), 'utf8')).toBe('RUN RECORD');
-    expect((await lstat(join(local, 'workspaces/toolchains/build.sh'))).mode & 0o777).toBe(0o755);
+    expect(await lstat(ledger)).toBeTruthy(); expect(await readFile(lease, 'utf8')).toBe('LEASE'); expect(await readFile(earlier, 'utf8')).toBe('EARLIER LEDGER');
+    expect((await lstat(hook)).mode & 0o777).toBe(0o755);
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -459,14 +469,14 @@ it('fails closed when a kept policy file changed before an interrupted keep-work
     const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
     openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
     await mkdir(join(local, 'state/terminal-sessions'), { mode: 0o700 });
-    for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/a.json', 'state/terminal-sessions/b.json']) await writeFile(join(local, name), name, { mode: 0o600 });
+    for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/11111111-1111-4111-8111-111111111111.json', 'state/terminal-sessions/22222222-2222-4222-8222-222222222222.json']) await writeFile(join(local, name), name, { mode: 0o600 });
     const plan = await previewConfiguredUninstall(project, { ...KEEP, tier: 'keep-work' }, options);
     tail.left = 2; // one custody unlink, then the process "dies" after the first conversation file is gone
     let interrupted;
     try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
     finally { tail.left = null; }
     expect(interrupted.status).toBe('unknown');
-    const remaining: string[] = []; for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/a.json', 'state/terminal-sessions/b.json'])
+    const remaining: string[] = []; for (const name of ['state/terminal-history.jsonl', 'state/terminal-sessions/11111111-1111-4111-8111-111111111111.json', 'state/terminal-sessions/22222222-2222-4222-8222-222222222222.json'])
       if (await unremoved(join(local, name))) remaining.push(join(local, name));
     expect(remaining.length).toBe(2);
     // The kept policy is not the file the intent recorded: the resumed tail cannot decide from it and deletes nothing.
@@ -500,7 +510,9 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     const anchor = { installationId, projectId: '00000000-0000-4000-8000-000000000001', binding: (await directoryLocation(local))!, repository: null, projectRoot: project };
     const shared = { ...anchor, projectId: '00000000-0000-4000-8000-000000000002', repository: (await directoryLocation(root))! };
     const [own, other] = await Promise.all([anchor, shared].map(async value => { const directory = (await projectVaultDirectory(join(root, 'global'), value as never, true))!;
-      await admitProjectVault(directory, value as never, true, 1, 5000); await writeFile(join(directory, 'key.json'), '{}', { mode: 0o600 }); return directory; }));
+      await admitProjectVault(directory, value as never, true, 1, 5000); await writeFile(join(directory, 'secrets.json'), '{}', { mode: 0o600 }); return directory; }));
+    // B3: a file in this folder's vault whose name the vault does not write stays and is listed (and so does the vault folder).
+    await writeFile(join(own, 'notes.txt'), 'MINE', { mode: 0o600 });
     const removed = (plan: Awaited<ReturnType<typeof previewConfiguredUninstall>>) => plan.items.find(item => item.resourceId === 'global-data')!.members!;
     const listed = (plan: Awaited<ReturnType<typeof previewConfiguredUninstall>>, path: string) => plan.items.find(item => item.locator === path && item.action === 'keep');
     // Negative: DECKENT.md the person changed stays, and so do the bridge lines that point to it; both are listed.
@@ -522,7 +534,8 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     expect(removed(tracked)).not.toContain(claude); expect(tracked.items.find(item => item.locator === claude)).toMatchObject({ action: 'keep', reason: 'vcs-tracked' });
     git('rm', '-q', '--cached', 'CLAUDE.md');
     const plan = await previewConfiguredUninstall(project, ALL, options);
-    expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'key.json')]));
+    expect(removed(plan)).toEqual(expect.arrayContaining([deck, claude, agents, join(own, 'secrets.json'), join(own, 'project.json')])); expect(removed(plan)).not.toContain(join(own, 'notes.txt'));
+    expect(listed(plan, join(own, 'notes.txt'))).toBeTruthy();
     expect(listed(plan, other)).toBeTruthy(); expect(removed(plan).some(path => path.startsWith(other))).toBe(false);
     // B1: the process dies while removing DECKENT.md, before the bridges; the resumed tail keeps every byte of CLAUDE.md but its bound line.
     const confirm = { backupPassphrase: async () => phrase, confirm: async () => true };
@@ -539,11 +552,12 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     expect(result.status).toBe('completed');
     expect(await unremoved(deck)).toBe(false); expect((await readFile(claude)).equals(team)).toBe(true);
     await expect(lstat(agents)).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(lstat(own)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(other, 'key.json'), 'utf8')).toBe('{}');
+    await expect(lstat(join(own, 'secrets.json'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(own, 'notes.txt'), 'utf8')).toBe('MINE');
+    expect(await readFile(join(other, 'secrets.json'), 'utf8')).toBe('{}');
     // M11: `deckent backup restore` brings back DECKENT.md, the init-created AGENTS.md, the vault slice and CLAUDE.md's bridge line, byte for byte.
     const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
     await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
     expect((await readFile(claude)).equals(claudeBefore)).toBe(true); expect((await readFile(deck)).equals(original)).toBe(true);
-    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect(await readFile(join(own, 'key.json'), 'utf8')).toBe('{}');
+    expect(await readFile(agents, 'utf8')).toBe('Read DECKENT.md\n'); expect(await readFile(join(own, 'secrets.json'), 'utf8')).toBe('{}');
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

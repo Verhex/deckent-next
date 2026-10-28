@@ -1,11 +1,12 @@
-import { closeSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, unlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { isAbsolute, normalize } from 'node:path';
 import { LocalRuntimeSocketError } from './endpoint.js';
 
 interface LockModule { lockFile(path: string): number | null }
-/** A held ledger custody; `release` is idempotent. */
-export interface LedgerLock { release(): void }
+/** A held ledger custody; `release` is idempotent. `remove` (a completed project-folder purge) unlinks the lock file only while the path is
+ * still exactly the file this custody holds (same device and inode), never another file under that name; then releases. */
+export interface LedgerLock { readonly path: string; release(): void; remove(): void }
 
 /** Owner 2026-09-28 (LEDGER-SINGLETON): one runtime service per ledger. The custody is an exclusive kernel `flock` on the
  * ledger's private companion file (`<ledger>-lock`), opened close-on-exec by the native adapter. It does not depend on the
@@ -25,5 +26,7 @@ export function acquireLedgerLock(path: string): LedgerLock {
   }
   if (fd === null) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
   let held: number | null = fd;
-  return Object.freeze({ release() { if (held === null) return; const closing = held; held = null; closeSync(closing); } });
+  const release = () => { if (held === null) return; const closing = held; held = null; closeSync(closing); };
+  return Object.freeze({ path, release, remove() { if (held === null) return; const own = fstatSync(held), now = lstatSync(path, { throwIfNoEntry: false });
+    if (now?.isFile() && now.dev === own.dev && now.ino === own.ino) unlinkSync(path); release(); } });
 }

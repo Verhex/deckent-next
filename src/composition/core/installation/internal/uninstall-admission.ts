@@ -4,7 +4,7 @@ import { UninstallRecovery, FileEffectStore, acquireLedgerLock, LocalOsSessionAu
 import { ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
   UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
-import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, retireInstallation, productResourcePath, DECKENT_DIR, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
+import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, retireInstallation, DECKENT_DIR, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
@@ -26,7 +26,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
       || plan.purge && current.inventory.dataBlockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
     const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
     const recovery = new UninstallRecovery(config.productLayout.root, plan.installation.id, principal, integrity, config.installation.profileMaxBytes, directory,
-      plan.purge && config.productLayout.root === join(config.projectRoot, DECKENT_DIR) ? [`${productResourcePath(config.productLayout, 'ledger')}-lock`, productResourcePath(config.productLayout, 'runtimeSocket')] : []);
+      plan.purge && config.productLayout.root === join(config.projectRoot, DECKENT_DIR) ? lock : undefined);
     const clock = new SystemTrustedClock(), peer = localPrincipalPeer();
     const sessions = await LocalOsSessionAuthority.create(scopeIds, config.approvals.sessionTtlMs, clock, peer ? { pid: peer.pid, uid: peer.uid } : undefined);
     sessions.requireInteractiveTerminal();
