@@ -1,9 +1,9 @@
 import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type ExitCode } from '#platform/index.js';
-import { MEMORY_LIMITS, MEMORY_STATES, type MemoryState } from '#domain/index.js';
+import { MEMORY_LIMITS, MEMORY_STATES, memoryContentSchema, type MemoryState } from '#domain/index.js';
 import type { MemoryHeld, MemoryInspection } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, requireIdPrefix, resolveCommandScope, safeCell, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
-import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
+import { cardIo, inputSchemaText, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { MemoryCommandContext } from './context.js';
 import { memoryWrite } from './write.js';
 import { memoryPurge, memoryRetireSource, memoryReview } from './review.js';
@@ -12,7 +12,7 @@ import { memoryRollout } from './rollout.js';
 import limits from './limits.json' with { type: 'json' };
 
 export interface Parsed { action: 'search' | 'inspect' | 'propose' | 'verify' | 'retire' | 'review' | 'purge' | 'rollout' | null; words: string[]; states?: MemoryState[]; scope?: string;
-  language?: string; input?: string; note?: string; reason?: string; supersededBy?: string; source?: { runId: string; attemptId: string | null }; json: boolean; help: boolean }
+  language?: string; input?: string; note?: string; reason?: string; supersededBy?: string; source?: { runId: string; attemptId: string | null }; json: boolean; help: boolean; schema?: true; example?: true }
 const VALUED: Readonly<Record<string, 'scope' | 'language' | 'input' | 'note' | 'reason' | 'supersededBy' | 'source'>> = { '--scope': 'scope', '--lang': 'language', '--input': 'input',
   '--note': 'note', '--reason': 'reason', '--superseded-by': 'supersededBy', '--source': 'source' };
 const ACTIONS = ['search', 'inspect', 'propose', 'verify', 'retire', 'review', 'purge', 'rollout'];
@@ -40,6 +40,7 @@ function parse(argv: readonly string[]): Parsed {
     if (key === '--help') result.help = true;
     else if (key === '--json') result.json = true;
     else if (key === '--no-color') continue;
+    else if ((key === '--schema' || key === '--example') && result.action === 'propose') result[key === '--schema' ? 'schema' : 'example'] = true;
     else if (key === '--state' && (shape.flags as readonly string[]).includes(key)) {
       const value = argv[++index]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
       const states = value.split(',');
@@ -51,7 +52,7 @@ function parse(argv: readonly string[]): Parsed {
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   const required = result.action === 'propose' ? result.input : result.action === 'verify' ? result.note : result.action === 'retire' ? result.reason : '';
-  if (!result.help && (result.words.length < shape.words[0] || result.words.length > shape.words[1] || required === undefined)) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!result.help && (result.words.length < shape.words[0] || result.words.length > shape.words[1] || (required === undefined && !result.schema && !result.example))) throw ErrorRegistry.createError('CLI_USAGE');
   // One target: an id or a source, never both or neither; a replacement names one entry only.
   if (!result.help && (result.action === 'retire' || result.action === 'purge')
     && ((result.words.length === 1) === (result.source !== undefined) || (result.source && result.supersededBy !== undefined))) throw ErrorRegistry.createError('CLI_USAGE');
@@ -71,6 +72,8 @@ export const heldNext = (code: MemoryHeld['code'], locale: Parameters<typeof t>[
 export async function memoryCommand(argv: readonly string[], context: MemoryCommandContext = {}): Promise<void | ExitCode> {
   const args = parse(argv), locale = commandLocale(context, args.language), sinks = sinksOf(context);
   if (args.help) { emit(t('memory.help.detail', {}, locale), sinks); return; }
+  // BeUser E-02: the propose file's contract or a filled example, without a project, card or terminal.
+  if (args.schema || args.example) { emit(args.schema ? inputSchemaText(memoryContentSchema as never) : t('memory.example.propose', {}, locale), { ...sinks, json: false }); return; }
   const writing = args.action === 'propose' || args.action === 'verify' || args.action === 'retire' || args.action === 'review' || args.action === 'purge';
   // A memory change is a person's terminal act (like `coding instructions trust`): an AI tool, CI, pipe or `--json` is refused before anything is read.
   const operation = `${argv[0]} ${args.action}`;

@@ -5,7 +5,7 @@ import { memoryContentSchema, type MemoryContent } from '#domain/index.js';
 import type { MemoryInspection } from '#engine/index.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { safeCell, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
-import { sinksOf } from '#surfaces/core/cli-approval/index.js';
+import { assertInputFields, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { MemoryCommandContext } from './context.js';
 import type { Parsed } from './command.js';
 import { contentLines, view } from './render.js';
@@ -27,7 +27,7 @@ export async function memoryWrite(args: Parsed, context: MemoryCommandContext, i
     if (!context.proposeMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
     const input = await readJsonInput(resolvePath(io.root, args.input!), io.inputMaxBytes,
       { subject: 'cli.input.subject.memory', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
-    const parsed = memoryContentSchema.safeParse(input);
+    assertInputFields('deckent memory propose', memoryContentSchema as never, input, 'deckent memory propose --example'); const parsed = memoryContentSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('MEMORY_ENTRY_INVALID');
     if (await io.ask({ title: t('memory.card.propose.title', {}, locale), body: [...content(parsed.data, locale), '', t('memory.card.propose.body', {}, locale)], options: cardOptions(locale) }) !== 'apply') return cancelled();
     const result = await context.proposeMemory(io.root, { schemaVersion: 1, commandId: randomUUID(), scopeId: scope.scopeId, content: parsed.data, origin: { kind: 'human', ref: null } }, io.options);

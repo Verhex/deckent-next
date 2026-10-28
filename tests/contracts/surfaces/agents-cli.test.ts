@@ -132,3 +132,17 @@ it('a cancelled scope card reports cancellation, exits 1 and reads no agents', a
     configChoiceSources: () => ({ list: async () => Object.freeze(Object.assign(['one', 'two'].map(value => ({ value, label: value })), { partial: false })) }), listAgents: read })).toBe(1);
   expect(err.text()).toContain('Cancelled'); expect(read).not.toHaveBeenCalled();
 });
+
+it('BeUser E-02: --example shows a filled file with this installation\'s WorkClasses; a bad file names its field; an unknown WorkClass lists the valid ones before any card', async () => {
+  const f = await project(), calls: unknown[] = [], out = capture();
+  await agentsCommand(['agents', 'define', '--example', '--lang', 'en'], { root: f.root, env: f.env, stdout: out.sink, ...handlers(calls) });
+  expect(out.text()).toContain('"workClasses"'); expect(out.text()).toContain('feature');
+  card.interactive = true; card.answers = ['apply'];
+  await writeFile(join(f.root, 'bad.json'), JSON.stringify({ agentId: 'a', name: 'n', persona: 'p', workClasses: 'feature' }));
+  await expect(agentsCommand(['agents', 'define', '--input', 'bad.json', '--scope', 'scope'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handlers(calls) }))
+    .rejects.toMatchObject({ code: 'CLI_INPUT_FIELD_INVALID', params: { field: 'workClasses' } });
+  await writeFile(join(f.root, 'wc.json'), JSON.stringify({ agentId: 'a', name: 'n', persona: 'p', workClasses: ['muhasebe'] }));
+  await expect(agentsCommand(['agents', 'define', '--input', 'wc.json', '--scope', 'scope'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, ...handlers(calls) }))
+    .rejects.toMatchObject({ code: 'AGENT_WORK_CLASS_UNKNOWN', params: { known: expect.stringContaining('feature') } });
+  expect(card.asked).toHaveLength(0); expect(calls).toHaveLength(0);
+});
