@@ -1,15 +1,15 @@
-export { InstallationIdentityError } from './internal/installation-identity.js';
+export { InstallationIdentityError } from '#engine/core/bootstrap-identity/index.js';
 export { configureNativeTemplate, initializeNativeRegistry, addNativeProfile } from './internal/native-template.js';
 export type { NativeTemplatePorts, CodingTemplateRequest, CodingTemplateResult, InitialRegistryRequest } from './internal/native-template.js';
 export { configuredInstallationPool, installExecutionPool } from './internal/pool.js';
 export type { InstallationPoolResult, InstallationPoolStore } from './internal/pool.js';
-export { assessInstallationBinding } from './internal/installation-identity.js';
+export { assessInstallationBinding } from '#engine/core/bootstrap-identity/index.js';
 export type { InstallationIdentityStore, InstallationIdentityErrorCode, InstallationBindingSource, InstallationBindingCapability, InstallationIdentityRead,
-  InstallationBindingObservation, InstallationBindingAssessment } from './internal/installation-identity.js';
+  InstallationBindingObservation, InstallationBindingAssessment } from '#engine/core/bootstrap-identity/index.js';
 export { installationProfilePayloadSchema, installationProfileSchema, encodeInstallationProfilePayload,
   hashInstallationProfilePayload, snapshotInstallationProfile } from './internal/profile.js';
-export { ProjectIdentityError } from './internal/project-identity.js';
-export type { ProjectIdentityStore, ProjectIdentityErrorCode, IdentityRead } from './internal/project-identity.js';
+export { ProjectIdentityError } from '#engine/core/bootstrap-identity/index.js';
+export type { ProjectIdentityStore, ProjectIdentityErrorCode, IdentityRead } from '#engine/core/bootstrap-identity/index.js';
 export type { InstallationProfilePayload, InstallationProfile } from './internal/profile.js';
 export { InstallationPreviewApplication, InstallationProfileError } from './internal/application.js';
 export type { InstallationProfileErrorCode, InstallationPreviewPorts, InstallationPreviewChoices,

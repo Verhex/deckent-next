@@ -16,3 +16,4 @@ export {
   type BuildWorklineBridgeSnapshotInput,
   type WorklineBridgeSink,
 } from './internal/bridge-snapshot.js';
+export { transcriptPage, TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels, type TranscriptPage } from './internal/transcript-page.js';

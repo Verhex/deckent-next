@@ -3,7 +3,7 @@ export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, t
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
 export type { SlashWindowLabels } from './internal/workline-windows.js';
 export { helpInfoModel } from './internal/workline-info.js';
-export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from './internal/workline-mentions.js';
+export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from '#surfaces/core/terminal-conversation/index.js';
 export { PermissionModeKeys, runModeCommand, cyclePermissionMode, permissionModeCycle, permissionModeStop, nextPermissionModeStop, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
 export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from './internal/workline-sessions.js';
 export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,

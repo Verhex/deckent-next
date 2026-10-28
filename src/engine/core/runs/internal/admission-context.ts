@@ -3,7 +3,7 @@ import { RECOVERY_POLICY_SEED, executionRegistrySchema, freezeRecoveryPolicy, lo
 import { admitWorkerModels, composeModelRolePolicy, type ModelCatalogReader, type WorkerAdmissionWarning } from '#engine/core/model-activation/index.js';
 import { resolveWorkerEffortExecution, type WorkerEffortCompiler } from './worker-effort.js';
 import type { ExecutionRegistryValidation } from './registry.js';
-import { assertTaskGraphLimits } from './resource-ceilings.js';
+import { assertTaskGraphLimits } from '#engine/core/run-limits/index.js';
 import type { RunAdmissionApplication, RunAdmissionContext } from './admission.js';
 type Store = ConstructorParameters<typeof RunAdmissionApplication>[0];
 /** Per-call store lifetimes keep native connections in their adapters and avoid holding a writer across admission preparation. */

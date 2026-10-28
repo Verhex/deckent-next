@@ -486,7 +486,8 @@
         "src/engine/core/agent-catalog",
         "src/domain/core/agent-catalog",
         "src/domain/core/catalog-evolution",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "FOUNDATION"
     },
@@ -597,7 +598,8 @@
         "src/domain/core/recovery",
         "src/capabilities/core/run-planner",
         "src/composition/core/siwc",
-        "src/adapters/core/siwc-worker"
+        "src/adapters/core/siwc-worker",
+        "src/engine/core/run-limits"
       ],
       "plan": "EXECUTION"
     },
@@ -857,7 +859,8 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/platform/core/config",
-        "src/domain/core/recovery"
+        "src/domain/core/recovery",
+        "src/engine/core/run-limits"
       ],
       "plan": "CONTRACT"
     },
@@ -1085,7 +1088,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal",
         "src/surfaces/core/terminal-composer",
-        "src/surfaces/core/terminal-render"
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/work-labels"
       ],
       "plan": "SURFACES"
     },
@@ -1365,7 +1369,6 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/engine/core/config",
-        "src/engine/core/installation",
         "src/engine/core/runs",
         "src/engine/core/monitor",
         "src/engine/core/worker-observation",
@@ -1413,7 +1416,9 @@
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-onboarding",
         "src/surfaces/core/cli-hub",
-        "src/surfaces/core/terminal-hub"
+        "src/surfaces/core/terminal-hub",
+        "src/engine/core/bootstrap-identity",
+        "src/surfaces/core/terminal-conversation"
       ],
       "plan": "SURFACES"
     },
@@ -1492,7 +1497,8 @@
         "src/engine/core/runtime",
         "src/engine/core/effect",
         "src/engine/core/approval",
-        "src/domain/core/attempt"
+        "src/domain/core/attempt",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "INSTALLATION"
     },
@@ -1582,7 +1588,8 @@
         "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/file-policy",
         "src/platform/core/i18n",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "INSTALLATION"
     },
@@ -1687,13 +1694,13 @@
         "src/platform/core/config",
         "src/platform/core/managed-files",
         "src/adapters/core/installation-files",
-        "src/engine/core/installation",
         "src/platform/core/errors",
         "src/composition/core/root",
         "src/platform/core/host",
         "src/adapters/core/audit-store",
         "src/adapters/core/local-keyring",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/engine/core/bootstrap-identity"
       ],
       "plan": "PROVIDERS"
     },
@@ -4489,6 +4496,19 @@
         "src/adapters/core/docker-supervisor"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/engine/core/bootstrap-identity": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/engine/core/run-limits": {
+      "dependencies": [
+        "src/domain/core/task-graph",
+        "src/platform/core/errors"
+      ],
+      "plan": "CONTRACT"
     }
   },
   "composition": {
