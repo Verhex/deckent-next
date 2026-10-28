@@ -8,9 +8,9 @@ export type OnboardingQuestion = Readonly<{ title: string; body: readonly string
 export type QuestionAnswer = Readonly<{ id: string; text?: string }>;
 export function OnboardingQuestionView({ question, locale, finish }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => void }) {
   const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
-  const [at, select] = useState(initial), [text, setText] = useState(''), [bodyAt, scroll] = useState(0), done = useRef(false), { exit } = useApp();
+  const [at, select] = useState(initial), [text, setText] = useState(''), [empty, setEmpty] = useState(false), [bodyAt, scroll] = useState(0), done = useRef(false), { exit } = useApp();
   const size = useWindowSize(), width = Math.max(8, size.columns - 4), height = Math.max(1, Math.min(question.choices.length || 1, Math.floor(size.rows / 3)));
-  const bodyHeight = Math.max(1, size.rows - height - 9), bodyLines = question.body.flatMap(line => wrapCells(terminalSafeText(line), width));
+  const bodyHeight = Math.max(1, size.rows - height - 9 - (question.text ? 3 : 0)), bodyLines = question.body.flatMap(line => wrapCells(terminalSafeText(line), width));
   const send = (answer: QuestionAnswer) => { if (done.current) return; done.current = true; finish(answer); exit(); };
   useInput((input, key) => {
     if (done.current || input.length > 1 && !question.text) return;
@@ -21,7 +21,7 @@ export function OnboardingQuestionView({ question, locale, finish }: { readonly 
     if (key.upArrow) select(value => Math.max(0, value - 1));
     else if (key.downArrow) select(value => Math.min(question.choices.length - 1, value + 1));
     else if (key.return) {
-      if (question.text) { if (text.trim()) send({ id: 'submit', text: text.trim() }); }
+      if (question.text) { if (text.trim()) send({ id: 'submit', text: text.trim() }); else setEmpty(true); }
       else if (question.choices[at] && !question.choices[at]!.disabled) send({ id: question.choices[at]!.id });
     } else if (question.text && (key.backspace || key.delete)) setText(value => Array.from(value).slice(0, -1).join(''));
     else if (question.text && !key.ctrl && !key.meta && !input.includes('\u001b')) setText(value => (value + terminalSafeText(input)).slice(0, 4096));
@@ -32,7 +32,10 @@ export function OnboardingQuestionView({ question, locale, finish }: { readonly 
     <Text> </Text><Text bold>{terminalSafeText(question.title)}</Text><Text> </Text>
     {body.map((line, index) => <Text key={index}>{truncateEnd(terminalSafeText(line), width, '…')}</Text>)}
     <Text>{bodyLines.length > bodyHeight ? t('onboarding.session.scroll', {}, locale) : ' '}</Text>
-    {question.text ? <Text>{truncateEnd(text || t('onboarding.firstTask.freeText', {}, locale), width, '…')}</Text>
+    {question.text ? <Box flexDirection="column">
+      <Box borderStyle="single" paddingX={1}><Text>{'> '}{truncateEnd(text || t('onboarding.firstTask.freeText', {}, locale), Math.max(1, width - 6), '…')}{text ? '|' : ''}</Text></Box>
+      <Text>{empty && !text.trim() ? t('onboarding.firstTask.empty', {}, locale) : ' '}</Text>
+    </Box>
       : question.choices.slice(start, start + height).map((row, index) => <Text key={row.id}>{at === start + index ? '> ' : '  '}{truncateEnd(terminalSafeText(row.label), width - 2, '…')}</Text>)}
     <Text> </Text><Text>{t('onboarding.session.continue', {}, locale)} · {t('onboarding.session.later', {}, locale)}</Text>
   </Box>;
