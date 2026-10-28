@@ -5,6 +5,7 @@ import type { WorkCostReport } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
 import { renderCostReport } from '#surfaces/core/monitor/index.js';
 import type { RunCommandContext } from './context.js';
+import { refusedLines, refusedRequests } from './run-list.js';
 import { familyScope, pickRun, readScopeRuns, resolveRunId, runHumanIo, runRowLabel, scopeLine, shownId } from './run-human.js';
 import REGISTRY from './run.json' with { type: 'json' };
 
@@ -116,10 +117,10 @@ export async function reportCommand(argv: readonly string[], context: RunCommand
   if (!runId) {
     const runs = await readScopeRuns(context, scope.scopeId);
     if (!io) {
-      const shown = runs.slice(0, REGISTRY.report.recentShown), ids = shown.map(run => run.runId);
-      emit({ schemaVersion: 1 as const, scopeId: scope.scopeId, runs: shown }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
+      const shown = runs.slice(0, REGISTRY.report.recentShown), ids = shown.map(run => run.runId), refused = await refusedRequests(context, scope.scopeId);
+      emit({ schemaVersion: 1 as const, scopeId: scope.scopeId, runs: shown, refused }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
         ...scopeLine(scope, locale), ...(data.runs.length ? [...data.runs.map(run => runRowLabel(run, ids, locale)), t('cli.run.report.hint', {}, locale)]
-          : [t('cli.run.list.empty', { scope: data.scopeId }, locale)])].join('\n')) });
+          : [t('cli.run.list.empty', { scope: data.scopeId }, locale)]), ...refusedLines(data.refused, locale)].join('\n')) });
       return;
     }
     const offered = runs.slice(0, REGISTRY.list.runsShown), picked = await pickRun(io, scope.scopeId, offered, t('cli.run.report.pick', { scope: scope.scopeId }, locale));

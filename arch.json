@@ -3307,7 +3307,8 @@
         "src/composition/core/policy",
         "src/engine/core/runtime",
         "src/adapters/core/worker-image",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/engine/core/audit"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },

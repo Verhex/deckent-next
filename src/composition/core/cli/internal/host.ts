@@ -1,6 +1,6 @@
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
-import { planRuntimeRun } from '#composition/core/run-planner/index.js';
+import { inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
@@ -75,6 +75,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
     configChoiceSources: (root, options) => ({ ...configuredConfigChoiceSources(root, options), checkWorkTarget: workTargets => checkConfiguredWorkTarget(root, workTargets, options) }), configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
+    listRefusedRequests: (root, scopeId, limit, options) => inspectConfiguredRefusedRequests(root, scopeId, limit, options), // BeUser D-08
     openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)
     inspectToolchainRefresh,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,

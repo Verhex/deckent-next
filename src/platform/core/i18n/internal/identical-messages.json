@@ -21,6 +21,7 @@
   "cli.root_help.group.control",
   "cli.root_help.group.observe",
   "cli.root_help.group.system",
+  "cli.run.refused.row",
   "cli.version",
   "cliContract.spawn.backend",
   "cliContract.spawn.provider",

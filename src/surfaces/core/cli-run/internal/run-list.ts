@@ -1,4 +1,5 @@
 import { emit, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { formatAgo } from '#surfaces/core/cli-human/index.js';
 import { cliMode, cliTableStyle, renderCliTable } from '#surfaces/core/cli-human/index.js';
 import type { RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
@@ -25,9 +26,18 @@ export async function runList(values: ReadonlyMap<string, string>, json: boolean
   if (!scope) return;
   const limit = Number(values.get('--limit') ?? REGISTRY.list.runsShown);
   const all = await readScopeRuns(context, scope.scopeId), runs = all.slice(0, limit);
-  emit({ schemaVersion: 1 as const, scopeId: scope.scopeId, runs }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
+  const refused = await refusedRequests(context, scope.scopeId);
+  emit({ schemaVersion: 1 as const, scopeId: scope.scopeId, runs, refused }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => terminalSafeText([
     ...scopeLine(scope, locale),
     ...(data.runs.length ? [renderRunTable(data.runs, context, locale), t('cli.run.list.footer', { shown: data.runs.length, total: all.length }, locale)]
       : [t('cli.run.list.empty', { scope: data.scopeId }, locale)]),
+    ...refusedLines(data.refused, locale),
   ].join('\n')) });
+}
+/** BeUser D-08: requests the planner refused before any Run existed (none when no record or no reader). */
+export const refusedRequests = (context: RunCommandContext, scopeId: string) => context.listRefusedRequests?.(context.root ?? process.cwd(), scopeId, REGISTRY.list.refusedShown,
+  { env: context.env ?? process.env }).catch(() => []) ?? Promise.resolve([]);
+export function refusedLines(rows: readonly Readonly<{ atMs: number; code: string; title: string }>[], locale: Locale): string[] {
+  return rows.length ? ['', t('cli.run.refused.title', { count: rows.length }, locale), ...rows.map(row => t('cli.run.refused.row', { ago: formatAgo(row.atMs, Date.now(), locale),
+    code: row.code, title: row.title }, locale))] : [];
 }

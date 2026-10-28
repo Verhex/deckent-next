@@ -2301,7 +2301,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/audit/index.ts`: `b9a555c83888810bac4f2a75c7c06397ee878cc50175645a91656a61a67ef436`
 - `src/domain/core/audit/internal/authority-decision.ts`: `88449bd08c715a38ec119cddc348b2e3d7efd8fc644a29551193488ad8d4cc2b`
 - `src/domain/core/audit/internal/checkpoint.ts`: `a9eb73ed695899d22fe012ec6715dfe044431e98f69300442fda9e12b44c3dd6`
-- `src/domain/core/audit/internal/contract.ts`: `5673be4a2329ebe036a343923d248ac22bb9781270a9a1a4cd8c2b88ba6191f3`
+- `src/domain/core/audit/internal/contract.ts`: `47627b18a3fa44a89de62fd197180e24e8c26720c2d81361a7193ee14c9b6bba`
 - `src/domain/core/audit/internal/follow.ts`: `3d0f2f9ef91be7bdc044a1c001b3d805ebfd1c5c6840504367325a6a79f69624`
 - `src/domain/core/command/index.ts`: `720255d242c75b6e1b82cef56eda2997afccfcb429185d340bd0ce5d36159723`
 - `src/domain/core/command/internal/command.ts`: `c7a2c5b977948d5a777cb8b332fb9d0c5dcae769036f1047460fbd47e9e7b154`

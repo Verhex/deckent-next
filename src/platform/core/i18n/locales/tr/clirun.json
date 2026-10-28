@@ -109,5 +109,7 @@
   "cli.run.inspect.status": "Durum: {state}",
   "cli.run.report.channelHeading": "Kanala göre kullanım (bu iş)",
   "cli.run.report.channelColumns": "Kanal|Deneme|Ölçülen API (USD)|API ölçülmedi|Ölçülen abonelik çağrısı",
-  "cli.run.report.channelEvidence": "Yalnız görülebilen denemeler; ölçülen tarife maliyeti sağlayıcı faturası değildir. Eksik abonelik sayıları bilinmiyor kalır. Fatura dönemi veya sıfırlama varsayılmaz."
+  "cli.run.report.channelEvidence": "Yalnız görülebilen denemeler; ölçülen tarife maliyeti sağlayıcı faturası değildir. Eksik abonelik sayıları bilinmiyor kalır. Fatura dönemi veya sıfırlama varsayılmaz.",
+  "cli.run.refused.title": "Reddedilen istekler (en yeni {count}, iş oluşturulmadı):",
+  "cli.run.refused.row": "  {ago} · {code} · {title}"
 }

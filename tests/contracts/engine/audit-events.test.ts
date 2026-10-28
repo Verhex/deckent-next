@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { AUDIT_EVENT_SCHEMA_VERSION, auditEventSchema, auditRecordSchema, AuditError } from '#domain/index.js';
-import { AuditApplication, sealAuditRecord, verifyAuditRecord, type AuditStore } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { AuditApplication, runRequestRefusedEvent, sealAuditRecord, verifyAuditRecord, type AuditStore } from '#engine/index.js';
+import { createHmacIntegrity, snapshotKnownSecrets } from '#platform/index.js';
 
 const integrity = createHmacIntegrity('audit-key', randomBytes(32));
 const base = {
@@ -67,4 +67,14 @@ it('the application seals inside the store append, verifies every listed record 
   // A store failure of any shape is the typed unavailable error: the caller applies no effect.
   const failing = new AuditApplication({ ...store, append: () => { throw new Error('disk'); } }, integrity);
   expect(() => failing.record(base)).toThrow(expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }));
+});
+
+it('BeUser D-08: a refused work request is sealed with a redacted one-line title (known secrets and credential patterns) and its typed code', () => {
+  const known = snapshotKnownSecrets([{ name: 'ERP_TOKEN', value: 'zz-erp-secret-value-991' }]);
+  const event = runRequestRefusedEvent({ scopeId: 'scope', principal: { issuer: 'local-os', subject: 'alperen' }, policyRevision: 'p1', commandId: 'c1',
+    request: `Approve invoices\nwith zz-erp-secret-value-991 and sk-live-abcdef1234567890abcdef ${'x'.repeat(400)}`, code: 'RUN_ADMISSION_NOT_CONFIGURED', atMs: 5, known });
+  const subject = event.subject as { kind: string; title: string; code: string; requestDigest: string };
+  expect(subject).toMatchObject({ kind: 'run-request-refused', code: 'RUN_ADMISSION_NOT_CONFIGURED' });
+  expect(subject.title).not.toContain('zz-erp-secret-value-991'); expect(subject.title).not.toContain('sk-live'); expect(subject.title).not.toContain('\n');
+  expect(subject.title.length).toBeLessThanOrEqual(200); expect(subject.requestDigest).toMatch(/^[a-f0-9]{64}$/);
 });
