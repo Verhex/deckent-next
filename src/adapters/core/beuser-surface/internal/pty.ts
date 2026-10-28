@@ -10,7 +10,7 @@ import { atomicKey, BeuserSurfaceError, literalInput, positive } from './input.j
 import { BeuserScreenRenderer, type ScreenSize } from './screen.js';
 
 /** C2 launches the packaged Python driver INSIDE the admitted realm and supplies its private pipes.
- * Boot argv/catalog/secret FD configuration is C2-owned. No host spawn, path or socket selection here.
+ * Boot entry/commands/secret FD configuration is C2-owned. No host spawn, path or socket selection here.
  */
 export interface RealmDriverIO {
   readonly input: Writable; readonly output: Readable;
@@ -40,6 +40,7 @@ class DriverProtocol {
   private buffer = Buffer.alloc(0);
   private next = 0;
   private ended = false;
+  private failure: Error | undefined;
   private pending: { id: number; resolve: (reply: DriverReply) => void; reject: (error: Error) => void } | undefined;
   constructor(private readonly io: RealmDriverIO, private readonly maxBytes: number, private readonly nonce: string) {
     io.output.on('data', (data: Buffer) => this.receive(data));
@@ -47,7 +48,7 @@ class DriverProtocol {
     io.output.on('error', () => this.fail(new BeuserSurfaceError('BEUSER_SURFACE_UNAVAILABLE')));
     io.input.on('error', () => this.fail(new BeuserSurfaceError('BEUSER_SURFACE_UNAVAILABLE')));
   }
-  private fail(error: Error): void { this.ended = true; this.buffer = Buffer.alloc(0); this.pending?.reject(error); this.pending = undefined; }
+  private fail(error: Error): void { if (this.ended) return; this.failure = error; this.ended = true; this.buffer = Buffer.alloc(0); this.pending?.reject(error); this.pending = undefined; }
   private receive(data: Buffer): void {
     if (this.ended) return;
     if (!Buffer.isBuffer(data) || this.buffer.length + data.length > this.maxBytes) { this.fail(new BeuserSurfaceError('BEUSER_SURFACE_LIMIT')); return; }
@@ -63,7 +64,7 @@ class DriverProtocol {
     } catch { this.fail(new BeuserSurfaceError('BEUSER_SURFACE_INVALID')); }
   }
   async request(command: Readonly<Record<string, unknown>>): Promise<DriverReply> {
-    if (this.ended) throw new BeuserSurfaceError('BEUSER_SURFACE_EOF');
+    if (this.ended) throw this.failure ?? new BeuserSurfaceError('BEUSER_SURFACE_EOF');
     if (this.pending) throw new BeuserSurfaceError('BEUSER_SURFACE_BUSY');
     const id = ++this.next, wire = JSON.stringify({ ...command, id, nonce: this.nonce }) + '\n';
     if (Buffer.byteLength(wire) > this.maxBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');

@@ -7,7 +7,7 @@ import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSche
 import { DockerBeuserRealmRuntime } from './lifecycle.js';
 import { dockerRealmCommand, canonicalRealmPath, BEUSER_REALM_RECIPE, type BeuserRealmOptions } from './realm.js';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
-import type { BeuserRealmChannel, RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
+import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type BeuserRealmChannel, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
   type SandboxRequest } from '#engine/index.js';
@@ -116,7 +116,7 @@ export async function verifyBeuserDistribution(root: string, files: readonly { r
 }
 /** Private pipes to the packaged driver inside the exact, re-admitted container. No public executable/socket path. */
 export function createBeuserChannel(input: { readonly context: BeuserContext; readonly realm: BeuserRealmApplication; readonly custody: BeuserRealmCustody;
-  readonly options: BeuserRealmOptions; readonly boot: { readonly mode: 'pty' | 'argv'; readonly argv: readonly string[]; readonly catalog: readonly unknown[]; readonly maxBootBytes: number; readonly language: string } }): BeuserRealmChannel {
+  readonly options: BeuserRealmOptions; readonly boot: Pick<BeuserDriverBoot, 'mode' | 'entry' | 'commands'> & { readonly maxBootBytes: number; readonly language: string } }): BeuserRealmChannel {
   const { context, realm, custody, options, boot } = input, command = dockerRealmCommand(options);
   const verify = async (ctx: BeuserContext) => {
     assertBeuserAccess(ctx, context.binding, context.principal, { kind: 'beuser-sandbox', id: context.binding.realmId }, 'create');
@@ -124,6 +124,12 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
   };
   return { binding: context.binding, verify, async open(ctx, size, bounds): Promise<RealmDriverIO> {
     await verify(ctx); const handle = (await custody.load(ctx))?.handle; if (!handle?.containerId) return refuse();
+    const wire = JSON.stringify(pinBeuserDriverBoot({ schemaVersion: 1, nonce: ctx.binding.nonce, mode: boot.mode, entry: boot.entry, commands: boot.commands,
+      secretFds: {}, columns: size.columns, rows: size.rows, maxArtifactBytes: ctx.limits.maxArtifactBytes,
+      env: { TERM: 'xterm-256color', LANG: boot.language, LC_ALL: boot.language, HOME: BEUSER_REALM_RECIPE.home, DECKENT_GLOBAL_HOME: `${BEUSER_REALM_RECIPE.home}/.deckent` },
+      limits: { maxSteps: ctx.limits.maxSteps, maxWallMs: ctx.limits.maxWallMs, maxWaitMs: ctx.limits.maxWaitMs,
+        maxTranscriptBytes: ctx.limits.maxTranscriptBytes, cleanupDeadlineMs: ctx.limits.cleanupDeadlineMs, ...bounds } })) + '\n';
+    if (!Number.isSafeInteger(boot.maxBootBytes) || boot.maxBootBytes <= 0 || Buffer.byteLength(wire) > boot.maxBootBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
     // Revalidates the trusted Docker executable using the same checked, clean command transport before spawning a streaming exec.
     await command(['container', 'inspect', '--format', '{{.Id}}', handle.containerId], ctx);
     const helper = `${BEUSER_REALM_RECIPE.packageTarget}/dist/adapters/core/beuser-surface/internal/pty-driver.py`;
@@ -134,11 +140,6 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
     child.stderr.on('data', (bytes: Buffer) => { stderrBytes += bytes.length; if (stderrBytes > ctx.limits.maxArtifactBytes) child.kill('SIGKILL'); });
     child.on('error', () => { child.stdout.destroy(new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX')); });
     child.stdin.on('error', () => {});
-    const wire = JSON.stringify({ nonce: ctx.binding.nonce, mode: boot.mode, argv: boot.argv, catalog: boot.catalog,
-      columns: size.columns, rows: size.rows, maxArtifactBytes: ctx.limits.maxArtifactBytes,
-      env: { TERM: 'xterm-256color', LANG: boot.language, LC_ALL: boot.language, HOME: BEUSER_REALM_RECIPE.home, DECKENT_GLOBAL_HOME: `${BEUSER_REALM_RECIPE.home}/.deckent` },
-      limits: { ...ctx.limits, ...bounds } }) + '\n';
-    if (Buffer.byteLength(wire) > boot.maxBootBytes) { child.kill('SIGKILL'); return refuse(); }
     child.stdin.write(wire);
     return { input: child.stdin, output: child.stdout, async cancel() {
       if (child.exitCode !== null || child.signalCode !== null) return;

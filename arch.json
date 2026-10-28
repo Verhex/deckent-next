@@ -4546,7 +4546,8 @@
       "dependencies": [
         "src/domain/core/beuser",
         "src/domain/core/principal",
-        "src/engine/core/beuser-contract"
+        "src/engine/core/beuser-contract",
+        "src/platform/core/validate"
       ],
       "plan": "EXECUTION"
     },

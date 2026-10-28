@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "nonce": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "pty",
+        "argv"
+      ]
+    },
+    "entry": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[^\\u0000]*$"
+      },
+      "minItems": 1
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "prefix": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[^\\u0000]*$"
+            },
+            "minItems": 1
+          },
+          "allowedArgs": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[^\\u0000]*$"
+              },
+              "minItems": 0
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "prefix",
+          "allowedArgs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "secretFds": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 3,
+        "maximum": 9007199254740991
+      }
+    },
+    "columns": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "rows": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "maxArtifactBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "env": {
+      "type": "object",
+      "properties": {
+        "TERM": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$"
+        },
+        "LANG": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$"
+        },
+        "LC_ALL": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$"
+        },
+        "HOME": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$"
+        },
+        "DECKENT_GLOBAL_HOME": {
+          "type": "string",
+          "pattern": "^[^\\u0000]*$"
+        }
+      },
+      "required": [
+        "TERM",
+        "LANG",
+        "LC_ALL",
+        "HOME",
+        "DECKENT_GLOBAL_HOME"
+      ],
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxSteps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxWallMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxWaitMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxTranscriptBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "cleanupDeadlineMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxInputBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "quietMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "inactivityMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "maxSteps",
+        "maxWallMs",
+        "maxWaitMs",
+        "maxTranscriptBytes",
+        "cleanupDeadlineMs",
+        "maxInputBytes",
+        "quietMs",
+        "inactivityMs"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "nonce",
+    "mode",
+    "entry",
+    "commands",
+    "secretFds",
+    "columns",
+    "rows",
+    "maxArtifactBytes",
+    "env",
+    "limits"
+  ],
+  "additionalProperties": false
+}
