@@ -1,5 +1,5 @@
-import type { BeuserContext } from '#engine/core/beuser-contract/index.js';
-import type { BeuserRealmHandle } from '#engine/core/beuser-realm/index.js';
+import type { BeuserContext } from '#engine/index.js';
+import type { BeuserRealmHandle } from '#engine/index.js';
 import { sha256 } from '#platform/index.js';
 import { BEUSER_REALM_RECIPE as recipe, checkHandle, type BeuserRealmCommand } from './realm.js';
 export interface BeuserSystemdCapability {

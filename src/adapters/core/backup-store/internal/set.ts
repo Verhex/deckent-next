@@ -1,5 +1,5 @@
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
-import { assertUnsealedInstallation } from '#engine/core/beuser-realm/index.js';
+import { assertUnsealedInstallation } from '#engine/index.js';
 import { createRequire } from 'node:module';
 import { chmod, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { identitySchema, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
-import { acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/core/beuser/index.js';
+import { acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/index.js';
 import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { runAdmissionSchema, runReservationCommandSchema, type RunAdmissionApplication, type RunReservationApplication } from '#engine/core/runs/index.js';
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { identitySchema as id, counterSchema } from '#domain/index.js';
-import { beuserVerdictSchema } from '#domain/core/beuser/index.js';
+import { beuserVerdictSchema } from '#domain/index.js';
 import { beuserCalibrationSchema } from '#capabilities/index.js';
 const measured = z.number().finite().nonnegative().nullable();
 export const beuserReportSchema = z.object({ schemaVersion: z.literal(1), simulated: z.literal(true), calibrationClaim: z.literal('uncalibrated'),

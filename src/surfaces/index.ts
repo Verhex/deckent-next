@@ -29,3 +29,4 @@ export function loadHubHttpSurface(): Promise<typeof import('#surfaces/core/hub-
 // U4B onboarding budget choices: loaded on use, so help/--version never reach the models surface (and through it the engine barrel; COLDSTART).
 export function loadModelsSurface(): Promise<typeof import('#surfaces/core/cli-models/index.js')> { return import('#surfaces/core/cli-models/index.js'); }
 export type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
+export * from '#surfaces/core/cli-beuser/index.js';

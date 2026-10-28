@@ -1,5 +1,5 @@
 import { installationIdentitySchema, type InstallationIdentity } from '#domain/index.js';
-import { beuserBindingSchema, type BeuserBinding } from '#domain/core/beuser/index.js';
+import { beuserBindingSchema, type BeuserBinding } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 
 /** Versioned containment protocol path, never a caller option or an authorization credential. */

@@ -1,3 +1,5 @@
+import beuseren from '../locales/en/beuser.json' with { type: 'json' };
+import beusertr from '../locales/tr/beuser.json' with { type: 'json' };
 import onboardingen from '../locales/en/onboarding-session.json' with { type: 'json' };
 import onboardingtr from '../locales/tr/onboarding-session.json' with { type: 'json' };
 import huben from '../locales/en/hub.json' with { type: 'json' };
@@ -95,6 +97,7 @@ import siwcen from '../locales/en/siwc.json' with { type: 'json' };
 import siwctr from '../locales/tr/siwc.json' with { type: 'json' };
 
 export const families = [
+  { en: beuseren, tr: beusertr },
   { en: siwcen, tr: siwctr },
   { en: huben, tr: hubtr },
   { en: configen, tr: configtr },

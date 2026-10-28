@@ -3,8 +3,8 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath, readlink } from 'node:fs/promises';
 import { isAbsolute, dirname, parse, resolve, sep } from 'node:path';
 import { z } from 'zod';
-import { BeuserContractError, type BeuserContext } from '#engine/core/beuser-contract/index.js';
-import { beuserBindingDigest, type BeuserRealmHandle } from '#engine/core/beuser-realm/index.js';
+import { BeuserContractError, type BeuserContext } from '#engine/index.js';
+import { beuserBindingDigest, type BeuserRealmHandle } from '#engine/index.js';
 import recipe from './recipe.json' with { type: 'json' };
 
 // Physical unit conversion, independent of policy/resource ceilings.

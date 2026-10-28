@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { BeuserTranscriptEntry } from '#domain/core/beuser/index.js';
-import type { BeuserContext } from '#engine/core/beuser-contract/index.js';
+import type { BeuserTranscriptEntry } from '#domain/index.js';
+import type { BeuserContext } from '#engine/index.js';
 import type { RenderedScreen } from './screen.js';
 import { BeuserSurfaceError } from './input.js';
 

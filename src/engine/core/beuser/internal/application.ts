@@ -1,4 +1,4 @@
-import { beuserVerdictSchema, type BeuserVerdict, type BeuserWalkerSummary } from '#domain/core/beuser/index.js';
+import { beuserVerdictSchema, type BeuserVerdict, type BeuserWalkerSummary } from '#domain/index.js';
 import { BeuserContractError, assertBeuserAccess, type BeuserContext, type RealmPort, type EvidencePort, type BeuserRealmObservation } from '#engine/core/beuser-contract/index.js';
 import { BeuserController, BeuserWalkStopped, beuserBounded, beuserDeadline, type BeuserExecutionBudget } from './controller.js';
 import { walkBeuser } from './walker.js';

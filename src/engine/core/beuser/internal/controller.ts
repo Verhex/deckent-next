@@ -1,5 +1,5 @@
 import { BeuserContractError, assertBeuserAccess, pinBeuserLimits, type BeuserLimits, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
-import type { BeuserWalkerSummary } from '#domain/core/beuser/index.js';
+import type { BeuserWalkerSummary } from '#domain/index.js';
 
 // Node's signed timer representation is a platform invariant, never a configurable walk policy.
 const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;

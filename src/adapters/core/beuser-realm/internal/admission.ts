@@ -1,8 +1,8 @@
 import { stat } from 'node:fs/promises';
 import { z } from 'zod';
 import { sha256 } from '#platform/index.js';
-import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmReadback } from '#engine/core/beuser-realm/index.js';
-import type { BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmReadback } from '#engine/index.js';
+import type { BeuserContext } from '#engine/index.js';
 import { BEUSER_REALM_RECIPE as recipe, checkHandle, NANOSECONDS_PER_SECOND, namespaceReadback, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 
 /** Read by a fresh trusted process, never terminal/persona output. No ledger, key, receipt or host HOME is read. */

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SUPPORTED_LANGUAGES } from '#platform/index.js';
-import { beuserWalkerSummarySchema, beuserBindingSchema, type BeuserBinding, type BeuserWalkerSummary, type BeuserTranscriptEntry, type BeuserVerdict } from '#domain/core/beuser/index.js';
+import { beuserWalkerSummarySchema, beuserBindingSchema, type BeuserBinding, type BeuserWalkerSummary, type BeuserTranscriptEntry, type BeuserVerdict } from '#domain/index.js';
 import { sameAttemptIdentity } from '#domain/index.js';
 import { verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, type VerifiedPrincipal } from '#domain/index.js';
 import { aiAuthorityFloor } from '#domain/index.js';

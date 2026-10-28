@@ -3,8 +3,8 @@ import { chmod, lstat, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/pr
 import { join } from 'node:path';
 import { constants } from 'node:fs';
 import { sha256, HOST_LIMITS_REGISTRY } from '#platform/index.js';
-import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmRuntime, type BeuserRealmRemoval } from '#engine/core/beuser-realm/index.js';
-import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmRuntime, type BeuserRealmRemoval } from '#engine/index.js';
+import { pinBeuserLimits, type BeuserContext } from '#engine/index.js';
 import { BeuserContainerMissing, BEUSER_REALM_RECIPE as recipe, canonicalRealmPath, checkHandle, dockerRealmCommand, pathContains,
   NANOSECONDS_PER_SECOND, pinRealmOptions, privateControllerRoot, realmFileIdentity, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 import { inspectBeuserRealm, type BeuserEvidenceRetention } from './admission.js';

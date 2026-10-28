@@ -36,3 +36,4 @@ export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError } from '
 export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem } from './internal/uninstall-contract.js';
 export { UninstallApplication, authorizeUninstall, approvedUninstallEffects, uninstallAffectedScopes } from './internal/uninstall-application.js';
 export type { UninstallApplicationPorts, UninstallAdmission, UninstallInteraction } from './internal/uninstall-application.js';
+export { installSystemPolicyRows, upgradeSystemPolicyRows } from './internal/policy-template.js';

@@ -106,3 +106,8 @@ export * from '#engine/core/hub-server/index.js';
 export * from '#engine/core/hub-client/index.js';
 
 export * from '#engine/core/hub-operations/index.js';
+export * from '#engine/core/beuser-contract/index.js';
+export * from '#engine/core/system-policy-rows/index.js';
+export * from '#engine/core/beuser-realm/index.js';
+export * from '#engine/core/beuser/index.js';
+export * from '#engine/core/beuser-evidence/index.js';

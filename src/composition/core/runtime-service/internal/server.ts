@@ -2,7 +2,7 @@ import { assertNoUninstallHold } from '#platform/index.js';
 import { createTargetQueueHost } from './queue-host.js';
 import { checkpointConfiguredAudit } from '#composition/core/audit/index.js';
 import { AuditCheckpointMonitor, requireAuthorityWitness, type AuditServiceStatus, isRuntimeServiceQueueOperation, RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams, ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema, serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
-import { attestLocalInteractiveTerminal, withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, withLocalPrincipalChannel, acquireLocalRuntimeSocketGuard, openSqliteLedgerAnchor, LocalRuntimeSocketError, prepareRuntimeSocket, FileInstallationIdentityStore, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade, type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget, startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
@@ -51,7 +51,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return undefined; throw error; }
   const upgrade = await upgradeExistingProductLedger(path, config.storage.sqlite, await prepareProductDirectory(config.productLayout, 'ledgerBackups'),
-    new Date(), { validate: validateDockerSupervisorProfile }, config.company.id);
+    new Date(), { validate: validateDockerSupervisorProfile }, config.company.id, await new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read().then(identity => identity.status === 'available' ? identity.value : undefined));
   if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
   return path;
 }

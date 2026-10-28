@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/index.js';
-import { beuserVerdictSchema, type BeuserVerdict } from '#domain/core/beuser/index.js';
+import { beuserVerdictSchema, type BeuserVerdict } from '#domain/index.js';
 import { BeuserContractError, type BeuserLimits } from '#engine/core/beuser-contract/index.js';
 import { beuserBounded, type BeuserExecutionBudget } from './controller.js';
 

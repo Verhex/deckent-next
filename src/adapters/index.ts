@@ -128,3 +128,5 @@ export * from '#adapters/core/hub-http/index.js';
 
 export { InstallationCacheRemovalTarget, UninstallRecovery, observeUninstallInventory, quiescentInstallationScopes, uninstallRecoveryDirectory, prepareUninstallBackup, writeUninstallTombstone, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, uninstallRestoreRelease } from '#adapters/core/installation-removal/index.js';
 export { FileEffectStore } from '#adapters/core/file-effect-store/index.js';
+export * from '#adapters/core/beuser-realm/index.js';
+export * from '#adapters/core/beuser-surface/index.js';

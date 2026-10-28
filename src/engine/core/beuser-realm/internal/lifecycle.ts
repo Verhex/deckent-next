@@ -1,5 +1,5 @@
 import { assertBeuserAccess, pinBeuserLimits, BeuserContractError, type BeuserContext, type BeuserRealmObservation, type RealmPort } from '#engine/core/beuser-contract/index.js';
-import type { BeuserBinding } from '#domain/core/beuser/index.js';
+import type { BeuserBinding } from '#domain/index.js';
 import { beuserBindingDigest } from './seal.js';
 
 export interface BeuserRealmHandle {

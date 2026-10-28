@@ -1,9 +1,9 @@
 import type { Readable, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
-import { beuserBindingSchema, type BeuserBinding } from '#domain/core/beuser/index.js';
+import { beuserBindingSchema, type BeuserBinding } from '#domain/index.js';
 import { verifiedPrincipalSchema } from '#domain/index.js';
-import { assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/core/beuser-contract/index.js';
+import { assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
 import { catalogCommand, type SurfaceCommand } from './argv.js';
 import { SurfaceCapture, surfaceDigest, type HarnessAction, type HarnessProcess, type HarnessSink } from './capture.js';
 import { atomicKey, BeuserSurfaceError, literalInput, positive } from './input.js';

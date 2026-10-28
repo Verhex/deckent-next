@@ -1,4 +1,4 @@
-import { beuserTranscriptEntrySchema, beuserVerdictSchema, type BeuserTranscriptEntry, type BeuserVerdict } from '#domain/core/beuser/index.js';
+import { beuserTranscriptEntrySchema, beuserVerdictSchema, type BeuserTranscriptEntry, type BeuserVerdict } from '#domain/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { assertBeuserAccess, pinBeuserLimits, type BeuserContext, type EvidencePort } from '#engine/core/beuser-contract/index.js';

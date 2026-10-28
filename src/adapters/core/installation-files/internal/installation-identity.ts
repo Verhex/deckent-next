@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { stat, open, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { BEUSER_GENESIS_PATH, parseBeuserRealmSeal, assertUnsealedInstallation, type BeuserRealmSeal } from '#engine/core/beuser-realm/index.js';
+import { BEUSER_GENESIS_PATH, parseBeuserRealmSeal, assertUnsealedInstallation, type BeuserRealmSeal } from '#engine/index.js';
 import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, installationIdentityRecordSchema,
   installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, type InstallationBindingCapture, type InstallationIdentityChoice } from '#domain/index.js';
 import { assessInstallationBinding, InstallationIdentityError, type InstallationBindingCapability, type InstallationIdentityStore,

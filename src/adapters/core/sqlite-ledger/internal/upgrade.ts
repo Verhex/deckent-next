@@ -1,4 +1,4 @@
-import { BEUSER_GENESIS_PATH, BeuserTransferError, assertUnsealedInstallation } from '#engine/core/beuser-realm/index.js';
+import { BEUSER_GENESIS_PATH, BeuserTransferError, assertUnsealedInstallation } from '#engine/index.js';
 import { chmodSync, constants, lstatSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';

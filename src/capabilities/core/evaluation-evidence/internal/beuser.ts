@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { identitySchema as id, counterSchema, criterionDefinitionSchema, evaluatorDefinitionSchema, type CriterionDefinition, type EvaluatorDefinition } from '#domain/index.js';
-import { beuserBindingSchema, beuserTranscriptEntrySchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
+import { beuserBindingSchema, beuserTranscriptEntrySchema, beuserVerdictSchema } from '#domain/index.js';
 
 export const BEUSER_EVALUATOR = Object.freeze({ id: 'beuser', version: 1, implementation: Object.freeze({ id: 'beuser', version: 1 }) });
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);

@@ -54,7 +54,7 @@ export function prepareConfiguredNervous(projectRoot: string, options: ConfigLoa
         approval: (proposal: NervousProposal) => nervousStandingApproval(c.document, c.principal, proposal, Date.now()),
         promoted: (ruleId: string, version: number) => nervousRulePromoted(c.document, c.principal, command.scopeId, ruleId, version) };
       await app.observeAttempts(command.scopeId, signals, context);
-      if (command.after === null) for (const kind of ['dispatch-preparation-aborted', 'policy-turn'] as const) {
+      if (command.after === null) for (const kind of ['dispatch-preparation-aborted', 'policy-turn', 'beuser-target-refusal'] as const) {
         await app.observeFeed(command.scopeId, kind, audit.listKind(command.scopeId, kind, app.feedCursor(command.scopeId, kind), app.rules.tracking.feedPageSize), context);
       }
     } finally { ledger.current = null; store.close(); }

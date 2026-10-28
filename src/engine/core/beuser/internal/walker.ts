@@ -1,5 +1,5 @@
 import { BeuserContractError, beuserSurfaceCommandSchema, assertBeuserAccess, type ModelPort, type SurfacePort, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
-import { beuserBindingSchema } from '#domain/core/beuser/index.js';
+import { beuserBindingSchema } from '#domain/index.js';
 import { BeuserController, BeuserWalkStopped } from './controller.js';
 import type { BeuserWalkerDecode } from './models.js';
 
