@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "revision": "b1-calibration-1",
+  "phase": "preparation-only",
+  "calibrationClaim": "uncalibrated",
+  "files": [
+    {
+      "fileName": "known-good.json",
+      "sha256": "bc5791a23c20b4b08c734cec0b051ad32ab03b790d204b65be8e92a8c84aabbd"
+    },
+    {
+      "fileName": "known-bad.json",
+      "sha256": "9304554690e48a7882efe11d01cd789e22b05ea5665d4e64b95aef7c81ed403e"
+    }
+  ],
+  "blindSetDigest": "a8f6adc8d50472965b8cc2a321646f808ce50bbbfda9442862ade23ff6474530",
+  "limitsProfile": "b1-dogfood-provisional-1",
+  "access": {
+    "filesAndOracle": "deterministic-scorer-only",
+    "modelInput": "presentation-only",
+    "caseIdsVisible": false,
+    "fileNamesVisible": false,
+    "oracleVisible": false,
+    "presentationOrder": "controller-pinned-mixed-order"
+  },
+  "calibration": {
+    "revision": "b1-calibration-1",
+    "cohort": "b1-preparation-unwalked",
+    "trapHits": 0,
+    "trapTotal": 0,
+    "falseRed": 0,
+    "goodTotal": 0,
+    "minimumHitRate": 1,
+    "maximumFalseRedRate": 0,
+    "k": 1,
+    "retries": 0
+  },
+  "reliabilityPolicy": {
+    "revision": "b1-calibration-policy-1",
+    "minHitRate": 1,
+    "maxFalseRedRate": 0
+  },
+  "measurement": {
+    "hitRate": null,
+    "falseRedRate": null,
+    "cost": null,
+    "elapsedMs": null
+  },
+  "provenance": {
+    "sourceMaker": null,
+    "walkerMaker": null,
+    "evaluatorMaker": null,
+    "independence": "unknown"
+  },
+  "rerun": {
+    "boundsFrom": "b1-dogfood-provisional-1",
+    "changedEligibleModelOrPersona": true,
+    "lowCalibrationGreenIsEvidence": false,
+    "differentCohortsAreIndependentSamples": false
+  }
+}

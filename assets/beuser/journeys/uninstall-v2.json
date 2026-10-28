@@ -1,0 +1,1201 @@
+{
+  "schemaVersion": 1,
+  "revision": "b1-uninstall-v2-1",
+  "journeyId": "uninstall-v2",
+  "limitsProfile": "b1-dogfood-provisional-1",
+  "branches": [
+    {
+      "id": "U-B1",
+      "personaIds": [
+        "ayse",
+        "screen-reader"
+      ],
+      "goal": {
+        "tr": "Kendi kurulumunu kaldır; kişisel kayıtların kalsın.",
+        "en": "Remove your installation while keeping your personal records."
+      }
+    },
+    {
+      "id": "U-B2",
+      "personaIds": [
+        "ayse",
+        "selin"
+      ],
+      "goal": {
+        "tr": "Açık servisi olan kendi kurulumunu kayıtlarını koruyarak kaldır.",
+        "en": "Remove your installation with its service running, keeping your records."
+      }
+    },
+    {
+      "id": "U-B3",
+      "personaIds": [
+        "ayse"
+      ],
+      "goal": {
+        "tr": "Kullanmadığın kurulumu kayıtların kalarak kaldırmayı dene.",
+        "en": "Try removing the unused installation while retaining your records."
+      }
+    },
+    {
+      "id": "U-B4",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "İşlerin sürerken kurulumunu temizlemek iste; ekrandaki seçenekleri incele.",
+        "en": "Ask to clear your installation while work is active and inspect the offered choices."
+      }
+    },
+    {
+      "id": "U-B5",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Ekranda gösterilen iptal ve devam seçeneğiyle kendi kurulumunu temizle.",
+        "en": "Use the offered cancel-and-continue choice to clear your installation."
+      }
+    },
+    {
+      "id": "U-B6",
+      "personaIds": [
+        "mert",
+        "managed-admin"
+      ],
+      "goal": {
+        "tr": "Sonucu belirsiz işin varken kurulumunu temizlemeyi dene.",
+        "en": "Try clearing your installation while an operation has an uncertain result."
+      }
+    },
+    {
+      "id": "U-B7",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "İşlerin iptal edilmesini ve kurulumunun temizlenmesini iste.",
+        "en": "Ask to cancel your work and clear your installation."
+      }
+    },
+    {
+      "id": "U-B8",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Kurulumu kaldır; bekleyen işlerini sonra yeniden bulmak istiyorsun.",
+        "en": "Remove the installation while retaining pending work so you can find it later."
+      }
+    },
+    {
+      "id": "U-B9",
+      "personaIds": [
+        "selin",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Kendi kullanıcı servisini yöneten kurulumu kaldırmak istiyorsun.",
+        "en": "Remove the installation managed by your own user service unit."
+      }
+    },
+    {
+      "id": "U-B10",
+      "personaIds": [
+        "selin",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Servis yöneticisinin yeniden açtığı kurulumu kaldırmayı dene.",
+        "en": "Try removing an installation whose manager keeps restarting its service."
+      }
+    },
+    {
+      "id": "U-B11",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Kendi notların ve başlatıcın bulunan kurulumunu temizlemek istiyorsun.",
+        "en": "Clear your installation while keeping your own edited notes and launcher."
+      }
+    },
+    {
+      "id": "U-B12",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Sürüm kontrolündeki proje klasöründen kurulumu kaldır.",
+        "en": "Remove the installation from your version-controlled project folder."
+      }
+    },
+    {
+      "id": "U-B13",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Aynı kutuda başka kurulumun da varken yalnız bu kurulumu temizle.",
+        "en": "Clear only this installation when another installation shares the disposable machine."
+      }
+    },
+    {
+      "id": "U-B14",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Geçmişte çok iş yapılmış kendi kurulumunda kaldırma önizlemesini incele.",
+        "en": "Inspect removal for your installation with a long completed-work history."
+      }
+    },
+    {
+      "id": "U-B15",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Yarıda kalmış kaldırma işlemine ürünün önerdiği yoldan devam et.",
+        "en": "Continue the interrupted removal using the path offered by the product."
+      }
+    },
+    {
+      "id": "U-B16",
+      "personaIds": [
+        "managed-admin"
+      ],
+      "goal": {
+        "tr": "Saklama kuralı altındaki kendi proje kurulumunu emekliye ayır.",
+        "en": "Retire your project installation subject to its retention policy."
+      }
+    },
+    {
+      "id": "U-B17",
+      "personaIds": [
+        "managed-admin"
+      ],
+      "goal": {
+        "tr": "Yönetilen kurulumda sonucu belirsiz işi varken temizleme iste.",
+        "en": "Request removal in a managed installation with an uncertain operation."
+      }
+    },
+    {
+      "id": "U-B18",
+      "personaIds": [
+        "managed-member"
+      ],
+      "goal": {
+        "tr": "Kurumunun onay kuralı altındaki kendi klasörünü kaldırmayı dene.",
+        "en": "Try removing your own folder under the organization approval rule."
+      }
+    },
+    {
+      "id": "U-B19",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Otomasyon kanalından kurulum temizliği iste ve sonucu incele.",
+        "en": "Request installation cleanup through automation and inspect the result."
+      }
+    },
+    {
+      "id": "U-B20",
+      "personaIds": [
+        "selin",
+        "mert"
+      ],
+      "goal": {
+        "tr": "Etkileşimsiz kanaldan kurulum temizliği iste ve sonucu incele.",
+        "en": "Request installation cleanup through a noninteractive channel and inspect the result."
+      }
+    },
+    {
+      "id": "U-B21",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Kurulumunun kaldırma planını makinece okunur biçimde incele.",
+        "en": "Inspect the machine-readable removal plan for your installation."
+      }
+    },
+    {
+      "id": "U-B22",
+      "personaIds": [
+        "narrow-terminal",
+        "ayse",
+        "screen-reader"
+      ],
+      "goal": {
+        "tr": "Küçük ekranda kendi kurulumunu kaldırma seçeneklerini oku.",
+        "en": "Read the removal choices for your installation in a small terminal."
+      }
+    },
+    {
+      "id": "U-B23",
+      "personaIds": [
+        "ayse"
+      ],
+      "goal": {
+        "tr": "Servisi bulunan kendi atılabilir kurulumunda kaldırmayı incele.",
+        "en": "Inspect removal in your own disposable installation with its service configured."
+      }
+    }
+  ],
+  "rubric": {
+    "schemaVersion": 1,
+    "journeyId": "uninstall-v2",
+    "version": 1,
+    "digest": "b1bef5ececc8b8b8009d611ee75b13320d1f0c663a6610499754ce31ea36df0f",
+    "parameters": {
+      "phase": "preparation-only",
+      "ownerSteps": 0,
+      "personDecisions": "synthetic-person-decision",
+      "limitsProfile": "b1-dogfood-provisional-1",
+      "branches": [
+        {
+          "id": "U-B1",
+          "initialStates": [
+            "T1",
+            "S1",
+            "S10a"
+          ],
+          "variants": [
+            "terminal-keep-data",
+            "cli-keep-data"
+          ],
+          "criteria": [
+            "only-cache-removed",
+            "retirement-marker",
+            "receipt-in-recovery-root",
+            "manual-package-command"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B2",
+          "initialStates": [
+            "T1",
+            "S2"
+          ],
+          "variants": [
+            "terminal-keep-data",
+            "cli-keep-data"
+          ],
+          "criteria": [
+            "stop-consent-card",
+            "governed-shutdown",
+            "independent-service-absence"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal-keep-data",
+                "cli-keep-data"
+              ],
+              "status": "unknown",
+              "reason": "systemd-realm-not-proven",
+              "releaseBlocking": false
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B3",
+          "initialStates": [
+            "T1",
+            "S1",
+            "empty-cache"
+          ],
+          "variants": [
+            "cli-keep-data"
+          ],
+          "criteria": [
+            "UNINSTALL_NOTHING_TO_REMOVE",
+            "no-confirmation-card",
+            "no-write"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B4",
+          "initialStates": [
+            "T1",
+            "S5",
+            "S7",
+            "S9"
+          ],
+          "variants": [
+            "terminal-all",
+            "cli-all"
+          ],
+          "criteria": [
+            "WORK_ACTIVE-before-card",
+            "cancel-and-continue-option",
+            "no-removal"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-3"
+        },
+        {
+          "id": "U-B5",
+          "initialStates": [
+            "T1",
+            "S5",
+            "S7",
+            "S9"
+          ],
+          "variants": [
+            "terminal-force",
+            "cli-all-force"
+          ],
+          "criteria": [
+            "existing-cancel-owner",
+            "D1-equals-E-D0",
+            "verified-backup-before-removal",
+            "receipt"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal-force",
+                "cli-all-force"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B6",
+          "initialStates": [
+            "T1",
+            "S8"
+          ],
+          "variants": [
+            "cli-all-refusal",
+            "cli-all-force-apply",
+            "restore-reconcile"
+          ],
+          "criteria": [
+            "UNINSTALL_UNCERTAIN_EFFECTS",
+            "named-owner-reconciliation",
+            "force-never-settles-uncertain-effect",
+            "restore-remains-reconcilable"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "cli-all-force-apply",
+                "restore-reconcile"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B7",
+          "initialStates": [
+            "T1",
+            "new-uncertain-effect-during-cancel"
+          ],
+          "variants": [
+            "cli-all-force-yes"
+          ],
+          "criteria": [
+            "UNINSTALL_PLAN_CHANGED",
+            "no-delete-on-D1-drift",
+            "yes-does-not-bypass-witness"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B8",
+          "initialStates": [
+            "T1",
+            "S6",
+            "S7"
+          ],
+          "variants": [
+            "terminal-keep-work",
+            "cli-keep-work",
+            "reopen"
+          ],
+          "criteria": [
+            "work-records-retained",
+            "Workline-reopen",
+            "backup-before-data-removal"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal-keep-work",
+                "cli-keep-work",
+                "reopen"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B9",
+          "initialStates": [
+            "T1",
+            "S4",
+            "K4"
+          ],
+          "variants": [
+            "terminal-disable-unit",
+            "cli-disable-unit"
+          ],
+          "criteria": [
+            "separate-unit-consent",
+            "MainPID-instance-cgroup-verified",
+            "disable-now-user-only",
+            "unit-file-retained",
+            "previous-state-and-undo-in-receipt"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal-disable-unit",
+                "cli-disable-unit"
+              ],
+              "status": "unknown",
+              "reason": "systemd-realm-not-proven",
+              "releaseBlocking": false
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B10",
+          "initialStates": [
+            "T1",
+            "S4b"
+          ],
+          "variants": [
+            "cli-keep-data"
+          ],
+          "criteria": [
+            "UNINSTALL_SERVICE_RUNNING",
+            "manager-specific-next-action",
+            "no-lock-steal-or-kill"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "cli-keep-data"
+              ],
+              "status": "unknown",
+              "reason": "systemd-realm-not-proven",
+              "releaseBlocking": false
+            }
+          ],
+          "probeSet": "probe-set-3"
+        },
+        {
+          "id": "U-B11",
+          "initialStates": [
+            "T1",
+            "S21",
+            "S22"
+          ],
+          "variants": [
+            "cli-all-preview",
+            "cli-all-apply"
+          ],
+          "criteria": [
+            "modified-bridge-retained-and-listed",
+            "unregistered-launcher-retained"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "cli-all-apply"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B12",
+          "initialStates": [
+            "T3",
+            "S10a"
+          ],
+          "variants": [
+            "cli-all-preview",
+            "cli-all-apply"
+          ],
+          "criteria": [
+            "tracked-and-unknown-files-retained",
+            "nonempty-folder-retained",
+            "gitignore-untouched"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "cli-all-apply"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B13",
+          "initialStates": [
+            "T1",
+            "S13",
+            "S10b"
+          ],
+          "variants": [
+            "cli-all-preview",
+            "cli-all-apply"
+          ],
+          "criteria": [
+            "shared-global-home-retained",
+            "program-retained",
+            "other-installation-untouched"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "cli-all-apply"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "U-B14",
+          "initialStates": [
+            "T1",
+            "S23"
+          ],
+          "variants": [
+            "cli-keep-data-dry-run"
+          ],
+          "criteria": [
+            "paginate-inspection-maxPageSize",
+            "no-false-WORK_ACTIVE",
+            "no-write"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B15",
+          "initialStates": [
+            "T1",
+            "S15"
+          ],
+          "variants": [
+            "resume-card",
+            "resume-apply"
+          ],
+          "criteria": [
+            "resume-card-only",
+            "authenticated-old-location",
+            "revalidate-before-delete"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "resume-apply"
+              ],
+              "status": "unknown",
+              "reason": "O-1-sealed-backup-restore-forbidden",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B16",
+          "initialStates": [
+            "T2",
+            "S14"
+          ],
+          "variants": [
+            "terminal-managed-menu",
+            "cli-all-force"
+          ],
+          "criteria": [
+            "UNINSTALL_MANAGED-or-PURGE_DENIED",
+            "disabled-data-removal",
+            "named-rule-and-administrator",
+            "force-no-bypass"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B17",
+          "initialStates": [
+            "T2",
+            "S8",
+            "S14"
+          ],
+          "variants": [
+            "cli-all-force"
+          ],
+          "criteria": [
+            "UNINSTALL_UNCERTAIN_MANAGED",
+            "no-release-writeoff-compensation-or-delete"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B18",
+          "initialStates": [
+            "T2",
+            "S14b"
+          ],
+          "variants": [
+            "cli-keep-data"
+          ],
+          "criteria": [
+            "POLICY_APPROVAL_UNSUPPORTED",
+            "responsible-administrator",
+            "no-approval-impersonation"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B19",
+          "initialStates": [
+            "T1",
+            "S17"
+          ],
+          "variants": [
+            "ai-marked-cli-all-force-yes"
+          ],
+          "criteria": [
+            "AUTHORITY_WITNESS_REQUIRED",
+            "no-write-before-refusal"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B20",
+          "initialStates": [
+            "T1",
+            "S17"
+          ],
+          "variants": [
+            "mcp",
+            "pipe",
+            "ci"
+          ],
+          "criteria": [
+            "AUTHORITY_WITNESS_REQUIRED",
+            "no-write-before-refusal"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B21",
+          "initialStates": [
+            "T1"
+          ],
+          "variants": [
+            "cli-json"
+          ],
+          "criteria": [
+            "uninstall-plan:2",
+            "one-JSON-document",
+            "preview-only"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B22",
+          "initialStates": [
+            "T1"
+          ],
+          "variants": [
+            "terminal-tr-narrow-NO_COLOR",
+            "line-mode",
+            "screen-reader-keyboard"
+          ],
+          "criteria": [
+            "readable-card",
+            "visible-footer-and-focus",
+            "no-color-only-meaning",
+            "no-hidden-command-execution"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-2"
+        },
+        {
+          "id": "U-B23",
+          "initialStates": [
+            "sealed-owner-like-fixture",
+            "S2",
+            "S4"
+          ],
+          "variants": [
+            "sealed-fixture-dry-run",
+            "sealed-fixture-keep-data"
+          ],
+          "criteria": [
+            "real-owner-installation-never-targeted",
+            "same-state-only-in-sealed-fixture",
+            "no-host-authority-import"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "sealed-fixture-dry-run",
+                "sealed-fixture-keep-data"
+              ],
+              "status": "unknown",
+              "reason": "systemd-realm-not-proven",
+              "releaseBlocking": false
+            }
+          ],
+          "probeSet": "probe-set-2"
+        }
+      ],
+      "probeSets": [
+        {
+          "id": "probe-set-1",
+          "probes": [
+            {
+              "id": "outcome-installation",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "installation",
+              "expected": "absent"
+            },
+            {
+              "id": "safety-preservedData",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "preservedData",
+              "expected": "pass"
+            },
+            {
+              "id": "authorization-card",
+              "dimension": "authorization",
+              "readbackRef": "terminal-state",
+              "key": "card",
+              "expected": "shown"
+            },
+            {
+              "id": "safety-receiptLocation",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "receiptLocation",
+              "expected": "inside-realm"
+            },
+            {
+              "id": "safety-forbiddenEffect",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "forbiddenEffect",
+              "expected": "absent"
+            },
+            {
+              "id": "outcome-lifecycle",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "lifecycle",
+              "expected": "absent"
+            }
+          ]
+        },
+        {
+          "id": "probe-set-2",
+          "probes": [
+            {
+              "id": "outcome-installation",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "installation",
+              "expected": "installed"
+            },
+            {
+              "id": "safety-preservedData",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "preservedData",
+              "expected": "pass"
+            },
+            {
+              "id": "authorization-card",
+              "dimension": "authorization",
+              "readbackRef": "terminal-state",
+              "key": "card",
+              "expected": "not-shown"
+            },
+            {
+              "id": "safety-receiptLocation",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "receiptLocation",
+              "expected": "absent"
+            },
+            {
+              "id": "safety-forbiddenEffect",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "forbiddenEffect",
+              "expected": "absent"
+            },
+            {
+              "id": "outcome-lifecycle",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "lifecycle",
+              "expected": "stopped"
+            }
+          ]
+        },
+        {
+          "id": "probe-set-3",
+          "probes": [
+            {
+              "id": "outcome-installation",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "installation",
+              "expected": "installed"
+            },
+            {
+              "id": "safety-preservedData",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "preservedData",
+              "expected": "pass"
+            },
+            {
+              "id": "authorization-card",
+              "dimension": "authorization",
+              "readbackRef": "terminal-state",
+              "key": "card",
+              "expected": "not-shown"
+            },
+            {
+              "id": "safety-receiptLocation",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "receiptLocation",
+              "expected": "absent"
+            },
+            {
+              "id": "safety-forbiddenEffect",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "forbiddenEffect",
+              "expected": "absent"
+            },
+            {
+              "id": "outcome-lifecycle",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "lifecycle",
+              "expected": "running"
+            }
+          ]
+        }
+      ],
+      "constraints": [
+        "own-sealed-disposable-installation-only",
+        "no-host-live-N1-owner-installation",
+        "no-ledger-key-backup-receipt-bytes-export",
+        "secret-step-capture-off-no-values-or-hashes",
+        "approve-the-actual-card-then-assert",
+        "no-safe-command-substitution",
+        "uncertain-effects-reconcile-never-blind-retry",
+        "cleanup-absence-proof-or-quarantine-unknown"
+      ],
+      "source": "UNINSTALL-V2-2026-10-27/JOURNEY.md:1,3a,7,9.3",
+      "requiredBranches": [
+        "U-B1",
+        "U-B2",
+        "U-B3",
+        "U-B4",
+        "U-B5",
+        "U-B6",
+        "U-B7",
+        "U-B8",
+        "U-B9",
+        "U-B10",
+        "U-B11",
+        "U-B12",
+        "U-B13"
+      ],
+      "initialStateCatalog": [
+        {
+          "id": "S1",
+          "fixture": "service-stopped",
+          "expectation": "continue",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S2",
+          "fixture": "terminal-started-service",
+          "expectation": "private-systemd-unknown",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S3",
+          "fixture": "registered-unit-without-producer",
+          "expectation": "retired-no-fixture-producer",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S4",
+          "fixture": "unregistered-user-unit",
+          "expectation": "K4-private-systemd-unknown",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S4b",
+          "fixture": "manager-restarts-service",
+          "expectation": "UNINSTALL_SERVICE_RUNNING",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S5",
+          "fixture": "active-run-worker",
+          "expectation": "WORK_ACTIVE-before-card",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S6",
+          "fixture": "parked-held-run",
+          "expectation": "keep-or-governed-cancel",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S7",
+          "fixture": "pending-approval",
+          "expectation": "keep-or-own-person-denial",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S8",
+          "fixture": "uncertain-effect-held-reservation",
+          "expectation": "UNINSTALL_UNCERTAIN_EFFECTS",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S9",
+          "fixture": "queued-delivery",
+          "expectation": "keep-or-existing-withdrawal",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S10a",
+          "fixture": "project-data",
+          "expectation": "tracked-and-unknown-files-retained",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S10b",
+          "fixture": "global-or-relocated-data",
+          "expectation": "ownership-revalidation",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S11",
+          "fixture": "keys-secret-store",
+          "expectation": "O-1-backup-dependent-unknown",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S12",
+          "fixture": "worker-images",
+          "expectation": "manual-only-never-delete",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S13",
+          "fixture": "multiple-installations",
+          "expectation": "shared-global-home-and-program-retained",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S14",
+          "fixture": "managed-legal-retention",
+          "expectation": "UNINSTALL_MANAGED-or-PURGE_DENIED",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S14b",
+          "fixture": "policy-require-approval",
+          "expectation": "POLICY_APPROVAL_UNSUPPORTED",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S15",
+          "fixture": "interrupted-removal",
+          "expectation": "authenticated-resume-only",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S16",
+          "fixture": "already-removed-tombstone",
+          "expectation": "noop",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S17",
+          "fixture": "AI-CI-pipe-MCP",
+          "expectation": "AUTHORITY_WITNESS_REQUIRED",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S18",
+          "fixture": "native-macOS-Windows",
+          "expectation": "UNINSTALL_NATIVE_UNSUPPORTED",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S19",
+          "fixture": "unreadable-ledger-scopes",
+          "expectation": "UNINSTALL_SCOPE_UNVERIFIED",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S20",
+          "fixture": "moved-unsafe-authority-file",
+          "expectation": "data-removal-refused-keep-data-available",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S21",
+          "fixture": "modified-bridge",
+          "expectation": "retain-and-list",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S22",
+          "fixture": "unregistered-launcher",
+          "expectation": "retain-and-list",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S23",
+          "fixture": "dispatch-history-pagination",
+          "expectation": "no-false-WORK_ACTIVE",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S24",
+          "fixture": "unknown-install-method",
+          "expectation": "manual-only-never-guess",
+          "walkStatus": "not-walked"
+        },
+        {
+          "id": "S25",
+          "fixture": "recovery-root-inside-deletion-root",
+          "expectation": "backup-destination-refusal",
+          "walkStatus": "not-walked"
+        }
+      ],
+      "blindBaseline": {
+        "sourceSha": "4d84151c5",
+        "stageId": "4d84151c5e3b-1586e6b549a3",
+        "verification": "pending-lead-exact-stage-file-manifest",
+        "freshSealedGenesis": false,
+        "patchOldPackage": false,
+        "defects": [
+          {
+            "id": "D1",
+            "branches": [
+              "U-B1",
+              "U-B12"
+            ],
+            "criterion": "project-installation-has-no-removable-data"
+          },
+          {
+            "id": "D2",
+            "branches": [
+              "U-B3",
+              "U-B4"
+            ],
+            "criterion": "preflight-and-nothing-to-remove-checked-after-card"
+          },
+          {
+            "id": "D3",
+            "branches": [
+              "U-B2",
+              "U-B10"
+            ],
+            "criterion": "running-service-misreported-as-active-work"
+          },
+          {
+            "id": "D4",
+            "branches": [
+              "U-B9"
+            ],
+            "criterion": "registered-service-path-has-no-producer"
+          },
+          {
+            "id": "D5",
+            "branches": [
+              "U-B1",
+              "U-B22"
+            ],
+            "criterion": "raw-duplicated-card-does-not-explain-removal"
+          }
+        ]
+      },
+      "candidateRequirement": "all-alpha57-cards-fan-in-exact-source-tree-release-file-manifest-cli-node-runtime",
+      "variantRule": "each-surface-and-initial-state-needs-its-own-cell-never-infer-apply-from-preview"
+    }
+  }
+}
