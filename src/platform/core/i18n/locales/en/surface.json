@@ -598,6 +598,8 @@
   "monitor.detail.deliveryOutlook.none": "Delivery: nothing to deliver; no accepted task of this Run carries a patch.",
   "monitor.detail.deliveryOutlook.patchNotPrepared": "Accepted · patch not prepared: no retained patch exists for this Run's accepted work, so nothing can be delivered. The ledger does not record why the preparation failed; `task patch-prepare` names the exact limit and config field.",
   "monitor.detail.deliveryOutlook.awaiting": "Accepted · patch ready, awaiting delivery: nothing has been delivered yet.",
+  "monitor.delivery.setAside": "set aside",
+  "monitor.detail.deliveryOutlook.setAside": "Accepted · patch set aside by a person: it is kept and nothing was delivered. /deliver lists it and brings it back.",
   "monitor.summary.patchNotPrepared": "{run} · accepted · patch not prepared",
   "monitor.summary.failedTests": "{task}: {count} failed tests, first: {name}",
   "monitor.detail.failedTests": "failed tests: {count} (showing {shown})",

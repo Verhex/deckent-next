@@ -86,7 +86,7 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?
       ...summaries?.[index] ?? []].map(text => ({ spans: [span(text)] }))),
     ...(run.targetQueue?.truncated ? [{ spans: [span(t('queue.truncated', {}, labels.locale), { role: 'warning' })] }] : []),
     ...run.tasks.flatMap((task, index) => [section(taskLabel(task, index)), ...(task.resultBrief
-      ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale).map(text => ({ spans: [span(text)] }))
+      ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale, { scope: run.scopeId, run: run.runId, task: task.id }).map(text => ({ spans: [span(text)] }))
       : [{ spans: [span(labels.detailsUnavailable, { role: 'warning' })] }])])];
 }
 

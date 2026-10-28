@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, type RunSnapshot } from '#domain/index.js';
-import { dispatchTerminalSchema, extractFailedTests, projectMonitorRun, resultBriefSchema, projectResultBrief, type MonitorLedgerAttempt, type MonitorRunEvidence } from '#engine/index.js';
+import { dispatchTerminalSchema, extractFailedTests, projectMonitorRun, projectRunWithDismissals, resultBriefSchema, projectResultBrief, type MonitorLedgerAttempt, type MonitorRunEvidence } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 /** M2/M3 producer side: the pure failed-test extractor, the close reason / turns / delivery outlook derivation. */
@@ -55,8 +55,17 @@ describe('delivery outlook of an accepted Run (M2)', () => {
   it('BeUser M-33: a set-aside task owes no delivery; the Run still awaits delivery for its other retained patch', () => {
     const two = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]), attempts = [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true })];
     expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w']) }).deliveryOutlook).toBe('awaiting-delivery');
-    expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w', 's\0r\0x']) }).deliveryOutlook).toBe('none');
+    expect(project({ ...evidence(two, attempts), dismissed: new Set(['s\0r\0w', 's\0r\0x']) }).deliveryOutlook).toBe('set-aside');
     expect(project({ ...evidence(two, attempts), dismissed: new Set(['other\0r\0w', 'other\0r\0x']) }).deliveryOutlook).toBe('awaiting-delivery');
+  });
+  it('BeUser M-33: inspection marks the set-aside task itself; an unread record set keeps "awaiting delivery" with its code', async () => {
+    const run = accepted([{ id: 'w', work: true }, { id: 'x', work: true }, { id: 'v', work: false }]), e = evidence(run, [done('w', {}, { patchRecorded: true }), done('x', {}, { patchRecorded: true }), done('v')]);
+    const one = await projectRunWithDismissals(e, async () => new Set(['w']));
+    expect([one.outlook('w'), one.outlook('x'), one.unread]).toEqual(['set-aside', 'awaiting-delivery', undefined]);
+    const all = await projectRunWithDismissals(e, async () => new Set(['w', 'x']));
+    expect([all.outlook('w'), all.outlook('x'), all.outlook('v')]).toEqual(['set-aside', 'set-aside', 'none']);
+    const failed = await projectRunWithDismissals(e, async () => { throw Object.assign(new Error('x'), { code: 'INTEGRITY_KEY_UNSAFE' }); });
+    expect([failed.outlook('w'), failed.unread]).toEqual(['awaiting-delivery', 'INTEGRITY_KEY_UNSAFE']);
   });
   it('negative: a missing patch on any accepted work task wins, a receipt suppresses the outlook, unknown evidence and unaccepted Runs give none', () => {
     const two = accepted([{ id: 'w', work: true }, { id: 'x', work: true }]);

@@ -7,6 +7,8 @@ import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDep
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
+/** BeUser M-33: how many dismissal records one scope's read looks at (newest first). */
+export const MONITOR_DISMISSED_READ = 200;
 
 /** Everything the pure derivation reads about one Run; `observedAt` is the snapshot's sampling time (host clock). */
 export interface MonitorRunEvidence {
@@ -147,15 +149,16 @@ function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null
  */
 function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): MonitorDeliveryOutlook | undefined {
   if (state !== 'accepted' || e.run.delivery || e.run.deliveryOutputPermitted === false) return undefined;
-  const snapshot = e.run.snapshot; let ready = false, unknown = false;
+  const snapshot = e.run.snapshot; let ready = false, unknown = false, aside = false;
   for (const task of snapshot.graph.tasks) {
     const progress = snapshot.progress.find(value => value.taskId === task.id);
-    if (!task.workInput || progress?.phase !== 'accepted' || e.dismissed?.has(`${snapshot.identity.scopeId}\0${snapshot.identity.runId}\0${task.id}`)) continue;
+    if (!task.workInput || progress?.phase !== 'accepted') continue;
     const recorded = attemptOf(e.run, task.id)?.dispatch?.patchRecorded;
+    if (recorded === true && e.dismissed?.has(`${snapshot.identity.scopeId}\0${snapshot.identity.runId}\0${task.id}`)) { aside = true; continue; }
     if (recorded === false) return 'patch-not-prepared';
     if (recorded === true) ready = true; else unknown = true;
   }
-  return ready ? 'awaiting-delivery' : unknown ? undefined : 'none';
+  return ready ? 'awaiting-delivery' : unknown ? undefined : aside ? 'set-aside' : 'none';
 }
 /** The model a worker ran: the sealed usage, else its init, else the requested pin (named honestly: a pin is what was asked for). */
 const modelName = (view: WorkerModelView | null | undefined) => view ? view.usage?.[0] ?? view.init ?? view.requested.modelId : null;
@@ -215,4 +218,18 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     ...(snapshot.authority ? { authority: snapshot.authority } : {}),
     phaseCounts: Object.freeze(phaseCounts), graphSummary: summarizeTaskGraph(snapshot.graph, snapshot.progress), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
     lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}) });
+}
+/**
+ * BeUser M-33: one inspected Run's projection with its set-aside tasks (task ids from `dismissed`, the person's latest-record rule) and each task's outlook:
+ * a set-aside task of an awaiting Run is `set-aside`; another task of a Run whose patches were all set aside owes nothing more (`none`). A failed read keeps
+ * the outlook as if nothing was set aside and returns its typed code.
+ */
+export async function projectRunWithDismissals(e: MonitorRunEvidence, dismissed?: (limit: number) => Promise<ReadonlySet<string>>) {
+  let aside: ReadonlySet<string> = new Set(), unread: string | undefined;
+  if (dismissed) try { aside = await dismissed(MONITOR_DISMISSED_READ); } catch (error) { const code = (error as { code?: unknown } | null)?.code; unread = typeof code === 'string' ? code : 'AUDIT_UNAVAILABLE'; }
+  const identity = e.run.snapshot.identity, full = projectMonitorRun(e);
+  const projected = aside.size ? projectMonitorRun({ ...e, dismissed: new Set([...aside].map(taskId => `${identity.scopeId}\0${identity.runId}\0${taskId}`)) }) : full;
+  const outlook = (taskId: string): MonitorDeliveryOutlook | undefined => aside.has(taskId) && full.deliveryOutlook === 'awaiting-delivery' ? 'set-aside'
+    : projected.deliveryOutlook === 'set-aside' ? 'none' : projected.deliveryOutlook;
+  return { projected, outlook, ...(unread && projected.deliveryOutlook === 'awaiting-delivery' ? { unread } : {}) };
 }

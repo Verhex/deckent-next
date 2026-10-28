@@ -4,12 +4,10 @@ import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, Moni
 import { monitorQuerySchema, type MonitorQuery } from './contract.js';
 import type { MonitorLedgerIndex, MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
-import { projectMonitorRun } from './derive.js';
+import { MONITOR_DISMISSED_READ, projectMonitorRun } from './derive.js';
 
 /** Finished workers (ledger terminal) shown per install, most recent first by sealed log, else launch grant; open ones are never capped. */
 export const MONITOR_FINISHED_WORKERS = 20;
-/** BeUser M-33: how many dismissal records one scope's read looks at (newest first). */
-export const MONITOR_DISMISSED_READ = 200;
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
 /** Service state from the runtime describe answer: a missing endpoint is `stopped`, any other failure `unknown` with a diagnostic. */
 async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: string[]): Promise<MonitorService> {

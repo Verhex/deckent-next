@@ -45,9 +45,8 @@ export interface TerminalDeliveryPort {
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
   previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
-  /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card), and the scope's set-aside tasks. */
+  /** BeUser M-33 (owner 2026-10-28): set an accepted task's undelivered result aside or bring it back (person card); the Run view then says `set-aside`. */
   dismiss?(target: DeliveryTarget, action: 'dismiss' | 'restore'): Promise<void>;
-  dismissed?(scopeId: string, limit: number): Promise<readonly Readonly<{ runId: string; taskId: string; atMs: number }>[]>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
   deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
   /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. A verification Run is named like the CLI's
@@ -97,10 +96,10 @@ export function awaitingDeliveryTargets(runs: readonly RunView[], fallbackTitle:
     if (run.state.kind !== 'terminal') continue;
     for (const task of run.tasks) {
       const instruction = task.taskBrief?.task;
-      if (task.phase !== 'accepted' || task.resultBrief?.deliveryOutlook !== 'awaiting-delivery' || !instruction) continue;
-      const key = `${run.scopeId}:${run.runId}:${task.id}`;
-      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id,
-        title: instruction.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle }));
+      const outlook = task.resultBrief?.deliveryOutlook, aside = outlook === 'set-aside'; // BeUser M-33: a set-aside one is listed to bring back
+      if (task.phase !== 'accepted' || (outlook !== 'awaiting-delivery' && !aside) || !instruction) continue;
+      const key = `${run.scopeId}:${run.runId}:${task.id}`, title = instruction.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle;
+      if (!targets.has(key)) targets.set(key, Object.freeze({ key, scopeId: run.scopeId, runId: run.runId, taskId: task.id, title, ...(aside ? { setAside: title } : {}) }));
     }
   }
   return Object.freeze([...targets.values()]);

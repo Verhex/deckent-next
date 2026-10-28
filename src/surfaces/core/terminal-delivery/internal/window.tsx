@@ -57,8 +57,6 @@ interface Entry {
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
   reattempt?: boolean; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
-/** How many dismissal records one /deliver read looks at (newest first). */
-const DISMISSED_READ_MAX = WINDOW.dismissedRead;
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
 
@@ -311,11 +309,9 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
     target: (key: string) => entries.current.get(key)?.target ?? null,
-    /** BeUser M-33: the candidates with the set-aside ones moved last as their own rows (newest dismissal records of the same scopes). */
-    async offered(targets: readonly DeliveryTarget[]): Promise<readonly DeliveryTarget[]> { const read = latest.current.port?.dismissed; if (!read || !labels) return targets;
-      const aside = new Set((await Promise.all([...new Set(targets.map(target => target.scopeId))].map(scopeId => read(scopeId, DISMISSED_READ_MAX).catch(() => [])) /* an unreadable record keeps every result offered (the monitor names the failure) */)).flat().map(row => `${row.runId}\0${row.taskId}`));
-      const isAside = (target: DeliveryTarget) => aside.has(`${target.runId}\0${target.taskId}`);
-      return [...targets.filter(target => !isAside(target)), ...targets.filter(isAside).map(target => Object.freeze({ ...target, setAside: target.title, title: fillTemplate(labels.dismissedTitle, { title: target.title }) }))]; } };
+    /** BeUser M-33: the candidates with the set-aside ones (the Run view's `set-aside` outlook) moved last as their own rows. */
+    async offered(targets: readonly DeliveryTarget[]): Promise<readonly DeliveryTarget[]> { if (!labels) return targets;
+      return [...targets.filter(target => target.setAside === undefined), ...targets.filter(target => target.setAside !== undefined).map(target => Object.freeze({ ...target, title: fillTemplate(labels.dismissedTitle, { title: target.setAside! }) }))]; } };
 }
 
 /** BeUser M-33: x is offered wherever it acts (the same stages as the key handler). */

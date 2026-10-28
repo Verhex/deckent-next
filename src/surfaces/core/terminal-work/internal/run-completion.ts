@@ -15,7 +15,7 @@ export function runCompletionText(run: RunView, labels: JobWindowLabels): string
     if (task.phase === 'cancelled') counts.cancelled++;
     if (task.resultBrief?.evaluation.verdict === 'rejected') counts.rejected++;
     const outlook = task.resultBrief?.deliveryOutlook;
-    if (outlook === 'none') counts.none++;
+    if (outlook === 'none' || outlook === 'set-aside') counts.none++; // BeUser M-33: a set-aside patch is owed nothing more
     else if (outlook === 'patch-not-prepared') counts.patch++;
     else if (outlook === 'awaiting-delivery') counts.awaiting++;
     else counts.unknown++;

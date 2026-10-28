@@ -79,20 +79,21 @@ function recordingPort(options: PortOptions = {}) {
       calls.push('verification-runs'); const all = options.candidates ?? [[]];
       return all[Math.min(reads++, all.length - 1)]!;
     },
-    // BeUser M-33: the person's set-aside records, latest wins (as the audit reader).
+    // BeUser M-33: the person's set-aside records; the harness Run view then says `set-aside`, as inspection does.
     ...(options.dismissable ? { async dismiss(target: { runId: string; taskId: string }, action: 'dismiss' | 'restore') { calls.push(`${action}:${target.runId}/${target.taskId}`);
-      if (action === 'dismiss') aside.add(`${target.runId}/${target.taskId}`); else aside.delete(`${target.runId}/${target.taskId}`); },
-    async dismissed() { return [...aside].map(key => ({ runId: key.split('/')[0]!, taskId: key.split('/')[1]!, atMs: 1 })); } } : {}),
+      if (action === 'dismiss') aside.add(`${target.runId}/${target.taskId}`); else aside.delete(`${target.runId}/${target.taskId}`); } } : {}),
   };
-  return { port, calls, views, adoptions };
+  return { port, calls, views, adoptions, aside };
 }
 
 /** A real Workline whose /do admits one Run (no approval); the Run then reaches acceptance with a patch awaiting delivery. */
 function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number } = {}) {
   let current: RunView = run(RUNNING, 'active');
   const recorded = recordingPort(options), pending = pendingBrainFixture();
+  const withAside = (view: RunView): RunView => ({ ...view, tasks: view.tasks.map(task => recorded.aside.has(`${view.runId}/${task.id}`) && task.resultBrief?.deliveryOutlook === 'awaiting-delivery'
+    ? { ...task, resultBrief: { ...task.resultBrief, deliveryOutlook: 'set-aside' } } : task) });
   const ledger = { scopeId: 's', workerHeartbeatMs: 60_000, listRunIds: async () => (options.scopeRuns ?? [current]).map(item => item.runId),
-    inspectRun: async (id: string) => options.scopeRuns?.find(item => item.runId === id) ?? current,
+    inspectRun: async (id: string) => withAside(options.scopeRuns?.find(item => item.runId === id) ?? current),
     listWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }), listApprovalPage: async () => ({ items: [], nextAfter: null }) } as unknown as WorklineLedgerPorts;
   const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: EN, delivery: WORDS }, ledger, pollMs: 25, maxTrackedRuns: 4,
     ...(options.port === false ? {} : { delivery: { port: recorded.port, confirmTimeoutMs: 60_000 } }),

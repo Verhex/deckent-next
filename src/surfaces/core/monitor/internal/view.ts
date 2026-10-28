@@ -42,7 +42,7 @@ const observedEnd = (run: MonitorRun) => {
     .sort((a, b) => b.endedAtMs! - a.endedAtMs!)[0] ?? null;
   return endedObserved(last);
 };
-const OUTLOOK_ROLE: Readonly<Record<NonNullable<MonitorRun['deliveryOutlook']>, MonitorRole>> = { none: 'muted', 'patch-not-prepared': 'warning', 'awaiting-delivery': 'info' };
+const OUTLOOK_ROLE: Readonly<Record<NonNullable<MonitorRun['deliveryOutlook']>, MonitorRole>> = { none: 'muted', 'patch-not-prepared': 'warning', 'awaiting-delivery': 'info', 'set-aside': 'muted' };
 const DELIVERY_ROLE: Readonly<Record<MonitorDeliveryState, MonitorRole>> = { integrating: 'info', integrated: 'info', delivering: 'info', delivered: 'success',
   adopting: 'info', adopted: 'success', 'rolling-back': 'warning', 'rolled-back': 'warning' };
 

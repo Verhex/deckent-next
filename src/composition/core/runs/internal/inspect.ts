@@ -5,7 +5,7 @@ import { FileArtifactStore, GIT_QUEUE_DISPLAY, SqliteTargetQueue, inventoryReads
 import { DispatchPolicyAuthorization, RunInspectionApplication, observeRunQueue, queueObservationReadLimit, runQuerySchema, RunPolicyAuthorization, type DispatchIdentityAuthorization, type RunQuery } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { observeConfiguredRunResults } from './result-view.js';
+import { observeConfiguredRunResults } from './result-view.js'; import { inspectConfiguredDismissedDeliveries } from '#composition/core/workspace-patch/index.js';
 import { configuredWorkCostEvidence } from '#composition/core/resource-observation/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 async function observeConfiguredQueueRun(query: RunQuery, config: ScopeContext['config'], path: ScopeContext['path'], principal: ScopeContext['principal'], authorization: DispatchIdentityAuthorization) {
@@ -23,7 +23,7 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
       { readDispatch: store.loadBoundDispatch, readMetrics: store.loadRunMetrics, loadWorkerEventLog: store.loadWorkerEventLog }));
     const inspected = await app.inspectWithModels(query);
     if (!inspected.run) return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected });
-    let run = await observeConfiguredRunResults(config, options.env, inspected.run, principal, authorization);
+    let run = await observeConfiguredRunResults(config, options.env, inspected.run, principal, authorization, undefined, limit => inspectConfiguredDismissedDeliveries(projectRoot, query.scopeId, limit, options).then(rows => new Set(rows.filter(row => row.runId === query.runId).map(row => row.taskId))));
     const targetQueue = await observeConfiguredQueueRun(query, config, path, principal, authorization);
     if (targetQueue.records.length || targetQueue.truncated) run = { ...run, targetQueue };
     return Object.freeze({ schemaVersion: 1 as const, layout, ...inspected, run });

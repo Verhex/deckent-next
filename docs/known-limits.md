@@ -383,8 +383,6 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
 - **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
   adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
   command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line.
-- **A set-aside result is hidden only from `/deliver` and the monitor's delivery column.** `/runs`, `run inspect` and the
-  Run report still say its patch awaits delivery. *Workaround:* `/deliver` lists it under its set-aside row.
 - **The adoption window cannot pre-filter verification Runs by commit.** It lists accepted verification Runs of the configured
   kind; one that verified a different commit is refused at adoption and the window returns to the choice.
 - **A verification Run cannot be created from the terminal.** *Workaround:* run the `deckent run create ...

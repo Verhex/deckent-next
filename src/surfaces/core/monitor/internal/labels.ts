@@ -145,13 +145,14 @@ export function deliveryLabel(state: MonitorDeliveryState, locale: Locale): stri
 /** Table cell wording of an accepted Run's delivery outlook (no receipt yet). */
 export function deliveryOutlookLabel(outlook: MonitorDeliveryOutlook, locale: Locale): string {
   const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.delivery.none', {}, locale), 'patch-not-prepared': t('monitor.delivery.patchNotPrepared', {}, locale),
-    'awaiting-delivery': t('monitor.delivery.awaiting', {}, locale) };
+    'awaiting-delivery': t('monitor.delivery.awaiting', {}, locale), 'set-aside': t('monitor.delivery.setAside', {}, locale) };
   return labels[outlook];
 }
 /** The detail sentence of the outlook; `patch-not-prepared` names that the cause is not recorded and where the exact one is shown. */
 export function deliveryOutlookDetail(outlook: MonitorDeliveryOutlook, locale: Locale): string {
   const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.detail.deliveryOutlook.none', {}, locale),
-    'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale) };
+    'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale),
+    'set-aside': t('monitor.detail.deliveryOutlook.setAside', {}, locale) };
   return labels[outlook];
 }
 
