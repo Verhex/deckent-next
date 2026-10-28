@@ -5,7 +5,7 @@ import { shortId, type KnownSecretSnapshot } from '#platform/index.js';
 import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/core/terminal-render/index.js';
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { Window, WindowOpeningContext, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { awaitingDeliveryTargets, consentMatches, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
+import { awaitingDeliveryTargets, consentMatches, deliveredTargets, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
   type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from './contract.js';
 import WINDOW from './window.json' with { type: 'json' };
 
@@ -21,6 +21,8 @@ export interface DeliveryWindowLabels {
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
+  /** BeUser M-25: an already-delivered task in the /deliver list (`{title}`), and the adoption step with no adoption target configured. */
+  readonly deliveredTitle: string; readonly adoptNone: string;
   readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string; readonly summaryNotAdopted: string;
   readonly next: Readonly<Record<string, string>>; readonly nextDefault: string; readonly pickerTitle: string; readonly none: string; readonly fallbackTitle: string;
   /** Y1: choosing the verification Run of an adoption (`execution.adoption.verification`), and how an adoption names its verification. */
@@ -87,6 +89,10 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const current = latest.current.port; if (!current) return;
     if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false;
+    // BeUser M-25/DR2-07: an already-delivered result opens on its adoption step (no second delivery, no integration check).
+    const delivered = entry.target.delivered;
+    if (delivered && current.previewDelivered) { current.previewDelivered(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.delivered = delivered;
+      entry.stage = { kind: 'delivered' }; changed(); } }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
       error => {
         const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
@@ -283,7 +289,11 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   return { available: Boolean(port && labels), open, element, visible: visible !== null, pending, candidates: (runs: readonly RunView[]) => {
     // The first view of a Run wins (callers pass the fresh read model first); a task delivered in this session is never offered again.
     const fresh = new Map<string, RunView>(); for (const run of runs) if (!fresh.has(`${run.scopeId}:${run.runId}`)) fresh.set(`${run.scopeId}:${run.runId}`, run);
-    return labels ? awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered) : [];
+    if (!labels) return [];
+    const awaiting = awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered);
+    // BeUser M-25/DR2-07: delivered results not adopted yet are offered too (their window opens on the adoption step).
+    return [...awaiting, ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
+      && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
     target: (key: string) => entries.current.get(key)?.target ?? null };
 }
@@ -345,6 +355,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   if (delivered) rows.push(exact(fillTemplate(labels.delivered, { commit: delivered.commit, ref: delivered.ref, command: delivered.commandId }), { role: 'success' }));
   if (stage.kind === 'delivered' && preview && delivered) {
     rows.push(line(fillTemplate(labels.adoptPrompt, { commit: delivered.commit.slice(0, 12) }), { bold: true }));
+    if (!preview.adoptionTargets.length) rows.push(line(labels.adoptNone, { role: 'muted' }));
     preview.adoptionTargets.forEach((targetRef, index) => rows.push(exact(fillTemplate(labels.adoptTarget, { mark: index === entry.selected ? '›' : ' ', target: targetRef, commit: delivered.commit.slice(0, 12) }),
       index === entry.selected ? { role: 'accent', bold: true } : {})));
   }

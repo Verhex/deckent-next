@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { targetQueueViewSchema, type QueueConsent, type EffectConfirmationView, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
+import { awaitingDeliveryTargets, deliveredTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
   type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { patchDiffs, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
@@ -118,6 +118,12 @@ describe('delivery window — pure rules', () => {
     expect(awaitingDeliveryTargets([awaiting('a'), run(RUNNING, 'accepted', 'awaiting-delivery', 'b'), run(COMPLETED, 'accepted', 'none', 'c'), run(COMPLETED, 'failed', 'awaiting-delivery', 'd'),
       { ...awaiting('e'), tasks: [{ ...awaiting('e').tasks[0]!, taskBrief: { ...awaiting('e').tasks[0]!.taskBrief!, task: null } }] } as RunView], 'FALLBACK').map(target => target.runId)).toEqual(['a']);
     expect(awaitingDeliveryTargets([awaiting('a', 'First line\nsecond')], 'FALLBACK')[0]).toMatchObject({ key: 's:a:task', title: 'First line' });
+  });
+  it('BeUser M-25/DR2-07: a delivered, not adopted result is offered for its adoption step with its delivery command and commit; adopted or undelivered ones are not', () => {
+    const withDelivery = (id: string, state: string) => { const value = run(COMPLETED, 'accepted', undefined, id);
+      return { ...value, tasks: [{ ...value.tasks[0]!, resultBrief: { runDelivery: { state, commit: 'c'.repeat(40), commandId: `delivery-${id}`, targetRef: `refs/deckent/deliveries/${id}` } } }] } as unknown as RunView; };
+    expect(deliveredTargets([withDelivery('a', 'delivered'), withDelivery('b', 'adopted'), withDelivery('c', 'integrated'), awaiting('d')], 'FALLBACK'))
+      .toEqual([expect.objectContaining({ runId: 'a', taskId: 'task', delivered: { ref: 'refs/deckent/deliveries/a', commit: 'c'.repeat(40), commandId: 'delivery-a' } })]);
   });
   it('matches a consent only to the same operation, ids, command, file set and base (delivery) or branch and commit (adoption)', () => {
     const view = { operation: 'deliver-integration', scopeId: 's', commandId: 'd', actor: { id: 'o', issuer: 'i', subject: 's' }, resource: REF, from: BASE, to: COMMIT,

@@ -79,7 +79,7 @@
   "cli.task.menu.adopt.title": "Move a branch to {commit}?",
   "cli.task.menu.adopt.body": "Choose the configured branch to move; it gets its own confirmation card.",
   "cli.task.menu.adopt.later": "Not now",
-  "cli.task.menu.adopt.left": "Delivered, not adopted. Adopt later with: deckent task integration-adopt … --delivery-command-id {command}",
+  "cli.task.menu.adopt.left": "Delivered, not adopted. Adopt later in /deliver (it lists delivered results), or: deckent task integration-adopt --scope <scope> --run <run> --target refs/heads/<branch>",
   "cli.task.menu.adopt.verifyTitle": "Which accepted {kind} Run verifies this commit?",
   "cli.task.menu.adopt.verifyRow": "Run {run} · task {task}",
   "cli.task.menu.adopt.withoutVerification": "Adopt without verification",

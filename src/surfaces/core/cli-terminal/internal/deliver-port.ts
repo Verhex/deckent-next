@@ -7,7 +7,6 @@ import type { DeliveryFileDiff, DeliveryFileStat, TerminalDeliveryPort, Verifica
 import type { TargetQueueView } from '#engine/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import PORT from './deliver-port.json' with { type: 'json' };
-
 /** The newest recorded attempt of a Run's task (the identity `deckent task … --run --task` resolves); never guessed from a Run view. */
 export async function resolveLatestAttempt(inspectInventory: InventoryQueryHandler, root: string, scopeId: string, runId: string, taskId: string,
   options: ConfigLoadOptions): Promise<AttemptIdentity> {
@@ -20,7 +19,6 @@ export async function resolveLatestAttempt(inspectInventory: InventoryQueryHandl
   if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
   return best;
 }
-
 /** `deckent task patch-preview --stat`: per-file added/removed lines from the same unified diff the CLI prints (no source read here). */
 export function patchStat(changes: WorkspacePatch['changes'], render: (path: string, before: string | null, after: string | null) => string):
   Readonly<{ files: readonly DeliveryFileStat[]; added: number; removed: number }> {
@@ -37,7 +35,6 @@ export function patchStat(changes: WorkspacePatch['changes'], render: (path: str
   });
   return Object.freeze({ files: Object.freeze(files), added, removed });
 }
-
 /**
  * Bounded per-file diff bodies of the same patch (read-only): the CLI's own renderer, never a second diff. A file whose text holds a NUL byte, or
  * whose sides exceed the byte bound, or that lies beyond the file bound carries a typed reason instead of a body (the renderer is not run on it);
@@ -57,7 +54,6 @@ export function patchDiffs(changes: WorkspacePatch['changes'], render: (path: st
     return Object.freeze({ path: change.path, lines: Object.freeze(lines.slice(0, PORT.maxDiffLinesPerFile)), hidden: Math.max(0, lines.length - PORT.maxDiffLinesPerFile), unavailable: null });
   }));
 }
-
 /**
  * TESLIM-PENCERESI: the delivery window's port over the CLI's own handlers — inventory, patch preview, integration check and prepare, and
  * the trusted composition's verified-terminal delivery/adoption. Absent (no `/deliver`, no window) unless every handler is bound.
@@ -100,6 +96,11 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
         ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef,
           ...(config.targetQueue.reattempts > 0 ? { reattempt: true as const } : {}) } : {}) });
     },
+    // BeUser M-25/DR2-07: an already-delivered result needs only its attempt, its changed files and the configured adoption step.
+    async previewDelivered(target) { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
+      const stat = await previewWorkspacePatch(root, identity, options).then(preview => patchStat(preview.patch.changes, renderUnifiedDiff), () => ({ files: [], added: 0, removed: 0 })), bar = config.execution?.adoption.verification;
+      return Object.freeze({ target, identity, ...stat, source: '', base: '', proposal: '', outOfScope: [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]),
+        verification: bar ? Object.freeze({ kind: bar.kind, required: bar.required }) : null }); },
     async deliver(preview, ids, answer) {
       const handlers = interactiveDelivery(answer);
       // A session that is not a verified human terminal is refused before any candidate is prepared.

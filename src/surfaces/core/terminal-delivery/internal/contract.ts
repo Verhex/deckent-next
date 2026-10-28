@@ -6,7 +6,8 @@ import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView,
  * `preview` is read-only (inventory, patch preview, integration check, configured adoption targets) and `deliver` / `adopt` go through the
  * existing integration applications and the TESLIM-GUVENLIK confirmation port that the trusted CLI composition binds to this verified TTY.
  */
-export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string }>;
+/** `delivered` (BeUser M-25/DR2-07): the task's result is already at its delivery ref and not adopted; the window offers the adoption step only. */
+export type DeliveryTarget = Readonly<{ key: string; scopeId: string; runId: string; taskId: string; title: string; delivered?: DeliveryOutcome }>;
 export type DeliveryFileStat = Readonly<{ path: string; added: number; removed: number }>;
 /**
  * Read-only diff content of one changed file, bounded by the port's limits (`deliver-port.json`). `lines` are the unified-diff body lines
@@ -41,6 +42,8 @@ export interface TerminalDeliveryPort {
     summary?(view: TargetQueueView): Promise<DeliverySummary | null>;
   };
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
+  /** BeUser M-25: what an already-delivered task needs for its adoption step (attempt, changed files, configured adoption targets); no integration check. */
+  previewDelivered?(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */
   deliver(preview: DeliveryPreview, ids: Readonly<{ candidate: string; delivery: string }>, answer: DeliveryAnswer): Promise<DeliveryOutcome>;
   /** Moves one configured adoption target to the delivered commit, after its own explicit `y`. A verification Run is named like the CLI's
@@ -68,6 +71,18 @@ export function consentMatches(consent: DeliveryConsent, view: EffectConfirmatio
     && (consent.to === undefined || consent.to === view.to);
 }
 
+/** BeUser M-25/DR2-07: accepted tasks of finished Runs whose result is delivered to its ref and adopted nowhere yet (the brief's delivery receipt). */
+export function deliveredTargets(runs: readonly RunView[], fallbackTitle: string): readonly DeliveryTarget[] {
+  const out: DeliveryTarget[] = [];
+  for (const run of runs) if (run.state.kind === 'terminal') for (const task of run.tasks) {
+    const delivery = task.resultBrief?.runDelivery, instruction = task.taskBrief?.task;
+    if (task.phase !== 'accepted' || delivery?.state !== 'delivered' || !delivery.commit || !delivery.commandId) continue;
+    out.push(Object.freeze({ key: `${run.scopeId}:${run.runId}:${task.id}`, scopeId: run.scopeId, runId: run.runId, taskId: task.id,
+      title: instruction?.split(/\r?\n/u).find(line => line.trim())?.trim() ?? fallbackTitle,
+      delivered: Object.freeze({ ref: delivery.targetRef ?? delivery.commit, commit: delivery.commit, commandId: delivery.commandId }) }));
+  }
+  return Object.freeze(out);
+}
 /**
  * Tasks whose prepared patch awaits delivery: an accepted task that carries work input, whose Run is finished and whose result brief says
  * "awaiting delivery" (the monitor's derivation; no new rule). A Run's tasks without work input deliver nothing.

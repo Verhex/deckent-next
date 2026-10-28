@@ -1102,5 +1102,7 @@
   "terminal.delivery.none": "No task awaits delivery.",
   "terminal.delivery.fallbackTitle": "Accepted task",
   "terminal.jobs.parked.environment-not-ready": "environment not ready",
-  "terminal.info.scope.modeRevoked": "{mode} · stored full-auto is no longer granted here, so it is not in effect"
+  "terminal.info.scope.modeRevoked": "{mode} · stored full-auto is no longer granted here, so it is not in effect",
+  "terminal.delivery.deliveredTitle": "{title} (delivered, not adopted)",
+  "terminal.delivery.adoptNone": "No adoption target is configured, so this result stays at its delivery ref. To move a branch onto it, list that branch first (never main or the default branch): deckent config set execution.adoption.targets '[\"refs/heads/<branch>\"]', then /deliver again."
 }

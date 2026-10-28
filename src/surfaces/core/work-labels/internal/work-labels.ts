@@ -274,7 +274,7 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     confirmRef: t('terminal.delivery.confirmRef', {}, locale), confirmHints: t('terminal.delivery.confirmHints', {}, locale),
     delivered: t('terminal.delivery.delivered', {}, locale), adoptPrompt: t('terminal.delivery.adoptPrompt', {}, locale),
     adoptTarget: t('terminal.delivery.adoptTarget', {}, locale), adoptHints: t('terminal.delivery.adoptHints', {}, locale),
-    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
+    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), deliveredTitle: t('terminal.delivery.deliveredTitle', {}, locale), adoptNone: t('terminal.delivery.adoptNone', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
     failedHints: t('terminal.delivery.failedHints', {}, locale), summaryDelivered: t('terminal.delivery.summaryDelivered', {}, locale),
     summaryAdopted: t('terminal.delivery.summaryAdopted', {}, locale), summaryLeft: t('terminal.delivery.summaryLeft', {}, locale),
     summaryFailed: t('terminal.delivery.summaryFailed', {}, locale), summaryAdoptFailed: t('terminal.delivery.summaryAdoptFailed', {}, locale), summaryNotAdopted: t('terminal.delivery.summaryNotAdopted', {}, locale), nextDefault: t('terminal.delivery.nextDefault', {}, locale),
