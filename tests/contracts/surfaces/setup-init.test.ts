@@ -274,6 +274,10 @@ describe('I-S4 setup window controller (no Ink)', () => {
     // A profile reads as its label, never the raw `core:solo`.
     const lines = renderSetupLines(controller.outcome().plan, 'en', { requested: false, results: [] });
     expect(lines).toMatch(/4\. Who uses this installation · [^\n]* · Solo · /u); expect(lines).not.toContain('core:solo');
+    // BeUser S-10: a refused encrypted-store default is said, with where to fix it (keys otherwise silently come from the environment).
+    const refusedStore = renderSetupLines(controller.outcome().plan, 'en', { requested: true, results: [{ stage: 'core:policy', operation: 'installation.policy-template', status: 'applied',
+      secretStore: { status: 'not-set', backend: null, code: 'SECRET_STORE_UNSAFE' } }] });
+    expect(refusedStore).toContain('the encrypted key store could not be set up here (SECRET_STORE_UNSAFE)'); expect(refusedStore).toContain('deckent secret store');
     expect(model.rows[4]).toMatch(/^> 5\. Permissions · needs your answer/u);
     model = (await controller.step('yes'))!; sizes.push(model.rows.length);
     expect(model.options.map(option => option.id)).toEqual(['apply', 'later']);

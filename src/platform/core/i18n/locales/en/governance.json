@@ -1006,7 +1006,7 @@
   "cli.policy.status": "Policy administration · {scope}: {count} usable administrators; {template}; revision {revision}",
   "cli.policy.status.first-run": "first-run v{version}",
   "cli.policy.status.hand-built": "hand-built policy",
-  "cli.policy.status.drift": "template ancestry not verified / drift",
+  "cli.policy.status.drift": "changed since the installer's template (for example a mode you opened or closed, or a hand edit); this is not an error. What an upgrade would change: deckent init policy --scope <scope> --upgrade --preview",
   "cli.policy.status.bootstrap": "Bootstrap required: use the installation administrator recovery path.",
   "cli.policy.status.recovery": "Recovery required: no usable administrator remains.",
   "cli.policy.status.ready": "Policy administration is available.",

@@ -1006,7 +1006,7 @@
   "cli.policy.status": "Politika yönetimi · {scope}: {count} kullanılabilir admin; {template}; revizyon {revision}",
   "cli.policy.status.first-run": "ilk kurulum v{version}",
   "cli.policy.status.hand-built": "elle kurulmuş politika",
-  "cli.policy.status.drift": "şablon soyu doğrulanmadı / sapma",
+  "cli.policy.status.drift": "kurulum şablonundan sonra değişti (örneğin açıp kapattığınız bir mod ya da elle düzenleme); bu bir hata değil. Bir yükseltmenin neyi değiştireceği: deckent init policy --scope <kapsam> --upgrade --preview",
   "cli.policy.status.bootstrap": "Bootstrap gerekli: kurulum yöneticisinin kurtarma yolunu kullanın.",
   "cli.policy.status.recovery": "Kurtarma gerekli: kullanılabilir admin kalmamış.",
   "cli.policy.status.ready": "Politika yönetimi kullanılabilir.",

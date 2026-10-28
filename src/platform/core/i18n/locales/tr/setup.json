@@ -287,6 +287,7 @@
   "setup.apply.declined": "{stage}: uygulanmadı (vazgeçtiniz).",
   "setup.summary.state": "{stage}: {state} (yeniden gözlendi).",
   "setup.install.done": "Kurulum tamam. deckent açıldığında (şimdi ya da bir dahaki sefere deckent yazdığınızda) sağlayıcıyı ve ilk işinizi birlikte ayarlarız.",
+  "setup.secretStore.notSet": "Anahtarlar: şifreli anahtar deposu burada kurulamadı ({code}); anahtarlar şimdilik ortam değişkenlerinden okunur. deckent secret store nedenini söyler ve düzeltilince anahtarları taşır; deckent doctor da gösterir.",
   "setup.execution.noWorkKind": "Bir iş türü seçilene kadar işçi imajı gerekmiyor.",
   "setup.execution.workerConsentRequired": "İmaj edinmeden önce onboarding veya /setup üzerinden işçi imajı kaynaklarını onaylayın.",
   "setup.execution.workerAcquisition": "İşçi imajı: {phase}; adım: {step}; neden: {code}.",
