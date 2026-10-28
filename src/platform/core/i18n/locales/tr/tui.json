@@ -751,6 +751,7 @@
   "terminal.jobs.closed": "{title} kapatıldı",
   "terminal.jobs.opening": "Süren iş: {runs} iş, {workers} işçi · /runs /workers",
   "terminal.jobs.state.running": "çalışıyor",
+  "terminal.jobs.state.pool-held": "bekliyor — havuz {pool} bekletmede (deckent pool status; açmak için: deckent pool resume --pool {pool})",
   "terminal.jobs.state.parked": "bekletildi",
   "terminal.jobs.state.completed": "tamamlandı",
   "terminal.jobs.state.incomplete": "eksik tamamlandı",

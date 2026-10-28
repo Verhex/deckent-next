@@ -10,3 +10,4 @@ export { askCliCard, cliCardGate, standingCardOptions, type CliCardIo, type CliC
 export { assertInputFields, renderInputSchema, schemaRequested, type InputSchema } from './internal/schema.js';
 export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/acceptance.js';
 export { withFounderStep } from './internal/refusal.js';
+export { heldPoolId, runStatusKey } from './internal/run-status.js';

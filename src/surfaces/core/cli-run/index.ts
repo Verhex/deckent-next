@@ -6,7 +6,7 @@ export { doCommand } from './internal/do.js';
 export { reportCommand } from './internal/report.js';
 export { inventoryCommand } from './internal/inventory.js';
 export { runControls, runControlFlow, type RunControl, type RunControlInput } from './internal/run-control.js';
-export { readScopeRuns, type RunCardAsk, type RunHumanIo } from './internal/run-human.js';
+export { readScopeRuns, runStateWord, type RunCardAsk, type RunHumanIo } from './internal/run-human.js';
 export { runList } from './internal/run-list.js';
 export { renderRunInspect } from './internal/run-inspect.js';
 export { renderHumanReport } from './internal/report.js';

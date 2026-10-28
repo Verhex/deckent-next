@@ -751,6 +751,7 @@
   "terminal.jobs.closed": "{title} closed",
   "terminal.jobs.opening": "Work running: {runs} runs, {workers} workers · /runs /workers",
   "terminal.jobs.state.running": "running",
+  "terminal.jobs.state.pool-held": "waiting — pool {pool} is on hold (deckent pool status; release: deckent pool resume --pool {pool})",
   "terminal.jobs.state.parked": "parked",
   "terminal.jobs.state.completed": "completed",
   "terminal.jobs.state.incomplete": "incomplete",

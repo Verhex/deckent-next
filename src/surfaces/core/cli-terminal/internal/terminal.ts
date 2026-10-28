@@ -427,6 +427,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   // TESLIM-PENCERESI: the delivery window's port over the CLI's own task handlers and the composition's verified-terminal confirmation.
   const deliveryPort = terminalDeliveryPort(root, context, options);
+  // BeUser DR3-02: the configured pool's hold, read with each plan, so the card says before y that an approved Run will wait.
+  let poolHold: PlanningPoolHold | null = null;
+  const readPoolHold = async () => { poolHold = await context.inspectPoolHold?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null) ?? null; };
   const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
@@ -468,9 +471,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       billingSwitch: t('siwc.switch.notice', { model: '{model}' }, locale),
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
-      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) =>
-        pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal)) : context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe),
-      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
+      plan: async (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) => {
+        const result = await (pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal))
+          : context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe));
+        await readPoolHold();
+        return result;
+      },
+      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale, poolHold) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
@@ -519,4 +526,4 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.signal ? { signal: context.signal } : {}),
   }); } finally { if (beat) clearInterval(beat); }
 }
-import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
+import { brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';

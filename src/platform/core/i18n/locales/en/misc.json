@@ -704,6 +704,8 @@
   "brain.revise": "To revise, reject this proposal with N, then submit /do with your new request.",
   "brain.contribution": "Model {model} · invocation {invocation} · template v{template}; redacted contribution summary retained.",
   "brain.next": "Run {run} admitted. Follow /tasks or /monitor.",
+  "brain.nextHeld": "Run {run} was accepted, but pool {pool} is on hold (by {by}: {reason}): it waits and starts when the pool is resumed (deckent pool resume --pool {pool}). /tasks or /monitor show it.",
+  "brain.poolHeld": "Pool {pool} is on hold (by {by}: {reason}). If you approve, the Run is created and waits; it starts only when the pool is resumed (deckent pool resume --pool {pool}).",
   "brain.planning": "Brain is planning with the selected model. No Run has been admitted.",
   "brain.cancelHint": "Esc / Ctrl+C: cancel planning",
   "brain.requestHint": "Enter /do followed by the work you want planned.",

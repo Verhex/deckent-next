@@ -704,6 +704,8 @@
   "brain.revise": "Düzeltmek için bu öneriyi N ile reddedin, ardından yeni isteğinizle /do yazın.",
   "brain.contribution": "Model {model} · çağrı {invocation} · şablon v{template}; maskeli katkı özeti kayıtlı.",
   "brain.next": "İş {run} başlatıldı. /tasks veya /monitor ile izleyin.",
+  "brain.nextHeld": "İş {run} kabul edildi, ancak havuz {pool} bekletmede ({by}: {reason}): bekler ve havuz açılınca başlar (deckent pool resume --pool {pool}). /tasks veya /monitor ile izleyin.",
+  "brain.poolHeld": "Havuz {pool} bekletmede ({by}: {reason}). Onaylarsanız iş oluşturulur ve bekler; yalnız havuz açılınca başlar (deckent pool resume --pool {pool}).",
   "brain.planning": "Brain seçilen modelle plan hazırlıyor. Henüz iş başlatılmadı.",
   "brain.cancelHint": "Esc / Ctrl+C: planlamayı iptal et",
   "brain.requestHint": "/do ardından planlanmasını istediğiniz işi yazın.",

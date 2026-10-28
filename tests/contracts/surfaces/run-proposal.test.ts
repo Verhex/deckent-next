@@ -7,7 +7,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
-import { runProposalDigest, type RunProposalResult } from '#engine/index.js';
+import { runProposalDigest, type RunProposalResult, type RunView } from '#engine/index.js';
+import { runStatusKey } from '#surfaces/core/cli-human/index.js';
+import { runStateWord } from '#surfaces/core/cli-run/index.js';
+import { runStateText } from '#surfaces/core/terminal-work/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runCommand } from '../../fixtures/cli-input.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { pendingBrainFixture } from '../support/brain-proposal.js';
@@ -130,4 +134,17 @@ it.each(['en', 'tr'] as const)('shows subscription planning as plan usage withou
   expect(lines).toContain(locale === 'tr' ? 'abonelik planı' : 'subscription plan');
   expect(lines).toContain(locale === 'tr' ? 'plan kullanımı; parasal ücret yok' : 'plan usage; no monetary charge');
   expect(lines).not.toContain('$0'); expect(lines).not.toContain(locale === 'tr' ? 'ücretli API' : 'paid API');
+});
+
+it('BeUser DR3-02: a held pool is named on the card before y, the admitted Run is "accepted, starts when the pool is resumed", and every status word says waiting (EN/TR)', () => {
+  const pool = { state: 'held', poolId: 'workers', hold: { changedBy: { issuer: 'host', subject: '1000' }, reason: 'team meeting' } };
+  const before = brainProposalLines(receipt, 'tr', pool).join('\n');
+  expect(before).toContain('Havuz workers bekletmede (host/1000: team meeting). Onaylarsanız iş oluşturulur ve bekler; yalnız havuz açılınca başlar (deckent pool resume --pool workers).');
+  const run = { schemaVersion: 3, runId: 'r', scopeId: 's', state: { kind: 'running' }, tasks: [], pool: { poolId: 'workers', waiting: [{ taskId: 't', reason: { code: 'pool-held', poolId: 'workers' } }] } } as unknown as RunView;
+  const after = brainProposalLines({ ...receipt, run }, 'en', pool).join('\n');
+  expect(after).toContain('Run r was accepted, but pool workers is on hold'); expect(after).not.toContain('admitted. Follow');
+  expect(brainProposalLines(receipt, 'en', { ...pool, state: 'open' }).join('\n')).not.toContain('on hold');
+  expect(runStatusKey(run)).toBe('pool-held'); expect(runStatusKey({ ...run, pool: undefined } as unknown as RunView)).toBe('running');
+  expect(runStateWord(run, 'tr')).toBe('bekliyor — havuz workers bekletmede (deckent pool status; açmak için: deckent pool resume --pool workers)');
+  expect(runStateText(run, workSurfaceLabels('en').jobs!)).toBe('waiting — pool workers is on hold (deckent pool status; release: deckent pool resume --pool workers)');
 });
