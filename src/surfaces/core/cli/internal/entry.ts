@@ -13,6 +13,7 @@ export const mcpCommand = lazyFunction(() => import('./mcp.js'), 'mcpCommand'), 
 
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
+  beuser: lazyFunction(() => import('#surfaces/core/cli-beuser/index.js'), 'beuserCommand'),
   audit: lazyFunction(admin, 'auditCommand'), backup: lazyFunction(admin, 'backupCommand'), identity: lazyFunction(() => import('#surfaces/core/cli-identity/index.js'), 'identityCommand'),
   // C-DOCTOR: `terminal status|chat-plan|snapshot` get their human text and single errors first; the terminal itself is unchanged (K1–K8).
   terminal: async (argv, context) => (await observe()).terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),

@@ -15,7 +15,7 @@ export async function hostLocale(argv: readonly string[], root: string, env: Nod
   return resolveCliLocale({ flag, env, configLanguage });
 }
 /** The long-running commands whose SIGINT/SIGTERM cancel the call (besides `runtime serve`); a cli-grouped-help test pins each name to the catalog. */
-export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.freeze([['do'], ['workers', 'watch'], ['decide', 'ask'],
+export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.freeze([['beuser', 'walk'], ['do'], ['workers', 'watch'], ['decide', 'ask'],
   ['task', 'integration-deliver'], ['task', 'integration-adopt'], ['task', 'integration-rollback']]);
 /** INIT-D7: the installation's `cli.agentEnvironment`, read like the language (presentation only); unreadable or invalid → the kit default. */
 export const hostAgentEnvironment = (root: string, env: NodeJS.ProcessEnv = process.env) => loadConfigAgentEnvironment(root, { env }).catch(() => undefined);

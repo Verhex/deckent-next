@@ -27,3 +27,17 @@ it('rejects fabricated acceptance labels, impossible counts and control sequence
   value.segments[0]!.segment = '\u001b]52;c;hidden\u0007onboarding\nforged';
   expect(() => formatBeuserReport(value, { json: false, locale: 'en' })).toThrow();
 });
+
+it('shows EN/TR walk/report help without a host effect and refuses incomplete, duplicate and authority-bearing arguments', async () => {
+  const { beuserCommand, parseBeuserArguments } = await import('#surfaces/core/cli-beuser/index.js');
+  const chunks: string[] = [], stdout = { write(value: string) { chunks.push(value); return true; } };
+  for (const action of ['walk', 'report']) for (const language of ['en', 'tr'] as const) {
+    await beuserCommand(['beuser', action, '--help', '--lang', language], { stdout });
+    expect(chunks.at(-1)).toContain(`deckent beuser ${action}`);
+  }
+  expect(chunks[0]).not.toBe(chunks[1]);
+  expect(() => parseBeuserArguments(['beuser', 'walk', '--journey', 'j'])).toThrow();
+  expect(() => parseBeuserArguments(['beuser', 'walk', '--journey', 'j', '--candidate', '/candidate', '--principal', 'owner'])).toThrow();
+  expect(() => parseBeuserArguments(['beuser', 'report', '--run', 'r', '--run', 'other'])).toThrow();
+  await expect(beuserCommand(['beuser', 'walk', '--journey', 'j', '--candidate', '/candidate', '--scope', 'scope'], {})).rejects.toMatchObject({ code: 'EXECUTION_NOT_CONFIGURED' });
+});

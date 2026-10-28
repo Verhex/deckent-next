@@ -35,5 +35,11 @@
   "beuser.report.evidence": "Evidence: {refs}; next owner: {owner}.",
   "beuser.report.coverage": "Critical {criterion}: walked {walked}, valid {valid}, invalid {invalid}, unknown {unknown}.",
   "beuser.report.unwalked": "Unwalked {branch}: {reason}.",
-  "beuser.report.unknownBranch": "Unknown branch {branch}: {reason}."
+  "beuser.report.unknownBranch": "Unknown branch {branch}: {reason}.",
+  "beuser.help.summary": "Walk an isolated product journey or read its retained report.",
+  "beuser.help.family": "deckent beuser walk --journey <id> --candidate <path> --scope <id> [--json]\ndeckent beuser report --run <id> [--scope <id>] [--json]",
+  "beuser.help.walk.summary": "Walk a pinned journey in an isolated realm.",
+  "beuser.help.report.summary": "Read a retained BeUser journey report.",
+  "beuser.help.walk": "deckent beuser walk --journey <id> --candidate <path> --scope <id> [--json] [--lang en|tr]\nThe installed journey, candidate, policy and finite limits must be verified before work begins. Cancellation retains uncertain cleanup.",
+  "beuser.help.report": "deckent beuser report --run <id> [--scope <id>] [--json] [--lang en|tr]\nReads the retained report with Run inspection authority. Simulated, uncalibrated; this report does not authorize adoption."
 }

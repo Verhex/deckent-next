@@ -1,5 +1,24 @@
 {
   "schemaVersion": 1,
   "revision": "beuser-limits-1",
-  "profiles": []
+  "profiles": [
+    {
+      "schemaVersion": 1,
+      "revision": "b1-dogfood-provisional-1",
+      "source": "b1-plan-bounded-walk-c7-pending",
+      "provisional": true,
+      "maxSteps": 120,
+      "maxWallMs": 1200000,
+      "maxWaitMs": 30000,
+      "maxCalls": 128,
+      "maxTokens": 131072,
+      "maxCost": 1,
+      "currency": "USD",
+      "maxReruns": 2,
+      "maxTranscriptBytes": 8388608,
+      "maxArtifactBytes": 16777216,
+      "cleanupDeadlineMs": 15000,
+      "criticalRepetitions": 2
+    }
+  ]
 }

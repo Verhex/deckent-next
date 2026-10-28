@@ -35,5 +35,11 @@
   "beuser.report.evidence": "Kanıt: {refs}; sonraki sahip: {owner}.",
   "beuser.report.coverage": "Kritik {criterion}: yürünmüş {walked}, geçerli {valid}, geçersiz {invalid}, bilinmiyor {unknown}.",
   "beuser.report.unwalked": "Yürünmeyen {branch}: {reason}.",
-  "beuser.report.unknownBranch": "Bilinmeyen dal {branch}: {reason}."
+  "beuser.report.unknownBranch": "Bilinmeyen dal {branch}: {reason}.",
+  "beuser.help.summary": "İzole ürün yolculuğunu yürü veya kalıcı raporunu oku.",
+  "beuser.help.family": "deckent beuser walk --journey <id> --candidate <path> --scope <id> [--json]\ndeckent beuser report --run <id> [--scope <id>] [--json]\nİzole yolculuk ve kalıcı rapor.",
+  "beuser.help.walk.summary": "Sabitlenmiş yolculuğu izole alanda yürü.",
+  "beuser.help.report.summary": "Kalıcı BeUser yolculuk raporunu oku.",
+  "beuser.help.walk": "deckent beuser walk --journey <id> --candidate <path> --scope <id> [--json] [--lang en|tr]\nİş başlamadan kayıtlı yolculuk, aday, politika ve sonlu sınırlar doğrulanır. İptalde belirsiz imha kanıtı korunur.",
+  "beuser.help.report": "deckent beuser report --run <id> [--scope <id>] [--json] [--lang en|tr]\nKalıcı raporu Run inceleme yetkisiyle okur. Simüle, kalibre edilmemiş; rapor benimseme yetkisi vermez."
 }

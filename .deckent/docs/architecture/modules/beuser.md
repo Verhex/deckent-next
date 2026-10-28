@@ -4,13 +4,13 @@ B1 is admitted for alpha.57; this branch is an author candidate, not a release o
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|
-| Identity and policy | Domain BeUser contract v1; system-policy-rows registry 1/1; narrow evaluator workload floor | Template remains 18; fresh-install replay lineage integration is open; read/startup never grants rows |
-| Realm | BeuserRealmApplication and DockerBeuserRealmRuntime | Durable Attempt-owned custody, package validation, retained readback and independent process/cgroup/filesystem absence need the production join |
+| Identity and policy | Domain BeUser contract v1; system-policy-rows registry 1/1; narrow evaluator workload floor | Template remains 18; explicit fresh/upgrade installers apply the separate data revision. Committed replay verifies the system-row archive lineage and exact bytes; deleted permissions stay deleted. Read/startup never grants rows |
+| Realm | BeuserRealmApplication and DockerBeuserRealmRuntime | Durable Attempt-owned custody, whole-distribution validation, retained readback and independent process/cgroup/filesystem absence still need adapter implementations and the production join |
 | Terminal | C3 Python stdlib PTY plus pinned xterm headless/Unicode 11 | Packaged `.py` bytes are copied by build; private channel/secret reset and real terminal proof remain open |
-| Controller | C4 campaign, bounded execution/model budget, reliability and supervisor wrappers | C2 created observation has empty evidenceRefs; C4 currently refuses before admission. No memory-only production custody or arbitrary caller socket is accepted |
-| Evidence | C5 transcript/readback, installed beuser@1 evaluator, retained-output verification, report schema | Existing TaskEvaluationApplication owns acceptance. harness-readback metadata still maps to unknown in legacy metrics/DeliverySummary consumers; no cast/relabel bypass |
+| Controller | C4 campaign, bounded execution/model budget, reliability and supervisor wrappers | C2 created observations reach admission without pretending to carry containment proof; admitted observations still require evidence. Verdict readback follows proven outer cleanup; quarantine has no verdict readback. Public Run/reservation/supervisor wiring remains open |
+| Evidence | C5 transcript/readback, installed beuser@1 evaluator, retained-output verification, report schema | Existing TaskEvaluationApplication owns acceptance. harness-readback metadata is carried by metrics and DeliverySummary without relabelling; the legacy human acceptance label still needs its own consumer change |
 | Common consumers | Root exports and architecture registry; localized errors; sealed identity forwarded to BackupApplication and startup ledger upgrade; real BeUser audit feed consumed by Nervous | Target refusal rule remains provisional, no live promotion or recovery grant |
-| Report | formatBeuserReport validates one strict document; locale-free JSON, TR/EN human text, null measurements, named unknown/unwalked branches | Renderer is exported; no public beuser command or persisted report query is registered yet |
+| Report | formatBeuserReport validates one strict document; locale-free JSON, TR/EN human text, null measurements, named unknown/unwalked branches | Catalog and EN/TR walk/report help are registered; both typed host callbacks remain unbound. No retained-report producer/query or public walk is claimed |
 
 ## Isolation and effect settlement
 
@@ -27,9 +27,13 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit is not proof of thr
 
 ## Limits and remaining proof
 
-The limits registry remains profiles=[]: C3/C4/C5 fixture ceilings are not a measured dogfood policy.
-The full finite production profile and calibration cohort are open. C6 must resolve create/admission,
-installer replay and evidence-kind ownership before completing the CLI/composition join. First real realm
+The limits registry contains one `b1-dogfood-provisional-1` profile. Its finite ceilings are provisional
+planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
+and replacement. The real calibration cohort remains open. The remaining production join requires
+exact adapter file ownership and a general task-to-Attempt reservation callback: C5 freezes an exact
+Attempt binding at Run admission, while the current reservation runtime creates its id later without
+receiving the selected task id. The author records this gap rather than forging an Attempt or placing
+adapter I/O bodies in composition. First real realm
 use requires independent exact-diff review and a clean law audit. C7 proves the assembled alpha.57 package,
 candidate manifest, real journeys and retained artifacts; author tests do not replace that proof.
 B2 retains native adoption/criterionWithin and B4 the full surfaces/protocol. No paid model call,
