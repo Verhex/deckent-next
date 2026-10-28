@@ -8,6 +8,7 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
   const steps: OnboardingStep[] = [], deferred = new Set(revisit ? [] : snapshot.deferred);
   const add = (step: OnboardingStep) => { if (!deferred.has(step.id) || step.id === 'core:model' && !snapshot.modelUsable) steps.push(step); };
   if (!['applied', 'not-applicable'].includes(snapshot.permissions.state)) add({ id: 'permissions:start-mode', stages: [], kind: 'permissions' });
+  if (snapshot.rights?.state === 'needed' && snapshot.rights.digest) add({ id: 'permissions:owner-rights', stages: [], kind: 'rights' });
   let workAt = -1;
   for (const stage of snapshot.plan.stages) {
     if (stage.id === 'work:kind') workAt = steps.length;

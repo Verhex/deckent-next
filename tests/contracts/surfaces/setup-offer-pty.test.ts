@@ -153,7 +153,8 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
       // U4: a first launch opens the sequential onboarding before the Workline; Esc ("Later") defers each screen. U4E G2: the window closed before
       // the profile was saved, so the pending permission screen comes first (permissions, model, first commit, instructions, then Ready!); with no
       // coding CLI on PATH the folder is not a coding folder, so no work-kind screen.
-      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
+      // BeUser ZEY-02: the person's management rights follow the permission screen (Esc = later).
+      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Step 5/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();

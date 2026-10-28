@@ -146,3 +146,12 @@ it('FIX9: an empty repository explains that there is nothing to commit and Enter
   expect(result).toBe('later');
   expect(frame).toContain('no files to commit yet'); expect(frame).toContain('Skip for now'); expect(frame).not.toMatch(/0 of 0|of 0 files/u);
 });
+it('BeUser ZEY-02/D-04: the management-rights step follows permission mode, is skippable, comes back in /setup and applies only the previewed digest', async () => {
+  const needed = { ...snapshot, permissions: { state: 'needs-confirmation' as const, reason: '' }, rights: { state: 'needed' as const, digest: 'd'.repeat(64), rules: 9 } };
+  expect(onboardingSteps(needed).slice(0, 3).map(row => row.id)).toEqual(['permissions:start-mode', 'onboarding:budget', 'permissions:owner-rights']);
+  expect(onboardingSteps({ ...needed, rights: { state: 'current', rules: 0 } }).some(row => row.kind === 'rights')).toBe(false);
+  expect(onboardingSteps({ ...needed, deferred: ['permissions:owner-rights'] }).some(row => row.kind === 'rights')).toBe(false);
+  expect(onboardingSteps({ ...needed, deferred: ['permissions:owner-rights'] }, true).some(row => row.kind === 'rights')).toBe(true);
+  const question = guideQuestion({ schemaVersion: 1, steps: [], completed: 0, total: 3, snapshot: needed }, 'rights', 'en');
+  expect(question.body.join('\n')).toContain('9 rules'); expect(question.body.join('\n')).toContain('emergency hold'); expect(question.choices.map(row => row.id)).toEqual(['apply']);
+});

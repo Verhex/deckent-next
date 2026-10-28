@@ -24,7 +24,7 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
       if (result === 'later') await session.defer(step);
       return typeof result === 'object' ? result : null;
     }
-    if (step.kind === 'budget' || step.kind === 'permissions') {
+    if (step.kind === 'budget' || step.kind === 'permissions' || step.kind === 'rights') {
       try {
         const result = await guideScreen(model, step.kind, port, io);
         if (result === 'exit') return null;

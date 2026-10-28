@@ -54,10 +54,11 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   const step = locale === 'tr' ? 'Adım 1/' : 'Step 1/', permission = locale === 'tr' ? 'İzin ayarları' : 'Permission settings', ready = locale === 'tr' ? 'Hazır!' : 'Ready!', hint = locale === 'tr' ? 'Enter gönder' : 'Enter send';
   // A fresh non-Git folder installed without a person (no saved profile, as after `init --yes`): U4E G2 puts the pending profile/permission
   // screen first, before the model step (Esc = later, nothing written), then model, project instructions (no DECKENT.md yet), then Ready.
-  const instructions = locale === 'tr' ? 'Proje yönergeleri' : 'Project instructions', second = locale === 'tr' ? 'Adım 2/' : 'Step 2/';
-  // Waits name the step counter: the Workline's deferred note also names the screen titles.
-  const steps = [[step, '\u001b'], [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [step, '\u001b'],
-    [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/exit\r']];
+  const instructions = locale === 'tr' ? 'Proje yönergeleri' : 'Project instructions', second = locale === 'tr' ? 'Adım 2/' : 'Step 2/', third = locale === 'tr' ? 'Adım 3/' : 'Step 3/';
+  // Waits name the step counter: the Workline's deferred note also names the screen titles. BeUser ZEY-02: step 2 is the person's management rights.
+  const rights = locale === 'tr' ? 'Yönetim haklarınız' : 'Your management rights';
+  const steps = [[step, '\u001b'], [rights, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [step, '\u001b'],
+    [rights, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };
   expect(run.code).toBe(0); expect(run.output.indexOf(step)).toBeLessThan(run.output.indexOf(ready));
@@ -77,8 +78,8 @@ it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window o
   // Attention notices stay on (the default): the Workline then reads the TTY through the filtered input the leak went through.
   config.language = 'en'; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline' };
   await writeFile(configPath, JSON.stringify(config));
-  const steps = [['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '/setup\r'],
-    ['Step 1/', 'abc'], ['', '\u001b'], ['Step 2/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
+  const steps = [['Step 1/', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '/setup\r'],
+    ['Step 1/', 'abc'], ['', '\u001b'], ['Your management rights', '\u001b'], ['Step 3/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };
   expect(run.code).toBe(0);

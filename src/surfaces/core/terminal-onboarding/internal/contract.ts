@@ -15,7 +15,8 @@ export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; 
   permissions: Readonly<{ state: SetupPermissionPreview['state'] | 'unavailable'; reason: string; digest?: string; mode?: string; profile?: string; principal?: string;
     selectedProfile?: SetupPermissionPreview['selectedProfile']; profiles?: SetupPermissionPreview['profiles'] }>;
   ready?: Readonly<{ provider: string | null; imageId: string | null; fallbackBefore: string | null; fallbackAfter: string | null }>;
-  pending: readonly RunIntentRecord[] }>;
+  pending: readonly RunIntentRecord[];
+  rights?: Readonly<{ state: 'needed' | 'current' | 'unavailable'; digest?: string; rules: number }> }>; // BeUser ZEY-02/D-04: the founder card, previewed
 export interface OnboardingPort {
   observe(answers: Readonly<Record<string, unknown>>): Promise<OnboardingSnapshot>;
   assertPerson(): Promise<void>;
@@ -27,6 +28,8 @@ export interface OnboardingPort {
     baseRef: string; recipeDigest: string; sizeGigabytes: number | null; referenceMs?: number | null; buildTimeoutMs: number; previousMs?: number | null; images?: readonly Readonly<{ imageId: string; tag: string; ready: boolean }>[] }>>;
   consent(provider: string, digest: string, imageId?: string): Promise<void>;
   budget(usd: number): Promise<void>;
+  /** The existing person-only founder card (owner baseline, MCP-delegable family) applied at the previewed digest; absent → the step is not offered. */
+  rights?(digest: string): Promise<Readonly<{ status: string }>>;
   /** U5 alone owns this operation; an absent carrier is unavailable, never an implicit grant. */
   previewPermissions?(profile?: Readonly<{ id: string; version: number }>): Promise<SetupPermissionPreview>;
   permissions?(digest: string, profile?: Readonly<{ id: string; version: number }>): Promise<void>;
@@ -39,7 +42,7 @@ export interface OnboardingPort {
   start(intent: RunIntentRecord, signal?: AbortSignal): Promise<RunPlanningResult>;
   cancel(intent: RunIntentRecord): Promise<void>;
 }
-export type OnboardingStep = Readonly<{ id: string; stages: readonly SetupStage[]; kind: 'stage' | 'work' | 'ready' | 'budget' | 'permissions' | 'first-task' | 'parked'; pending?: RunIntentRecord }>;
+export type OnboardingStep = Readonly<{ id: string; stages: readonly SetupStage[]; kind: 'stage' | 'work' | 'ready' | 'budget' | 'permissions' | 'rights' | 'first-task' | 'parked'; pending?: RunIntentRecord }>;
 export type OnboardingPresentation = Readonly<{ schemaVersion: 1; steps: readonly OnboardingStep[]; completed: number; total: number; snapshot: OnboardingSnapshot }>;
 export type OnboardingUi = Readonly<{ locale: Locale; provider(): Promise<void>; instructions(): Promise<void>;
   foreground(stage: SetupStage): Promise<Readonly<{ status: string; code?: string }>> }>;
