@@ -50,7 +50,7 @@ async function fixture(context: TestContext, taskIds: readonly string[] = ['a'])
   await createConfiguredRun(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'create', graph }, options);
   const identities = (await reserveConfiguredRunTasks(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve', expectedRevision: 0 }, options)).reservation.identities, identity = identities[0]!;
   /** One service start: its start-up progression turn in a fresh process (a fresh instance). */
-  const start = (mode: 'abort' | 'abort-2' | 'clean') => new Promise<{ code: number | null; signal: NodeJS.Signals | null; result: unknown }>((done, fail) => {
+  const start = (mode: 'abort' | 'abort-2' | 'clean' | 'refuse-die') => new Promise<{ code: number | null; signal: NodeJS.Signals | null; result: unknown }>((done, fail) => {
     const child = spawn(process.execPath, [program, mode], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] }); let out = '';
     child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); }); child.on('error', fail);
     child.on('close', (code, signal) => done({ code, signal, result: out.trim() ? JSON.parse(out.trim()) : null }));
@@ -106,6 +106,23 @@ it('two service starts die in the secret gate; the third parks the Run with DISP
     await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toBeTruthy();
     expect(capture).toHaveBeenCalledTimes(1);
     expect(await f.records()).toEqual([]);
+    expect(await f.audit('dispatch-preparation-aborted')).toHaveLength(2);
+  } finally { f.store.close(); }
+}, 120_000);
+
+// BeUser D-05: Node 26 ended the service for a FileHandle collected after a typed refusal had already settled the record, so no restart counted
+// the death and every start resumed the Run into it. A transient refusal now keeps the record: the next start in another instance counts it.
+it('a Run whose attempt is refused and the service then dies, twice, is parked for the person on the next start instead of resumed into the same death', async context => {
+  const f = await fixture(context);
+  try {
+    for (let start = 0; start < 2; start++) {
+      const died = await f.start('refuse-die');
+      expect(died).toMatchObject({ code: null, signal: 'SIGKILL' });
+      expect(JSON.stringify(died.result)).not.toContain('DISPATCH_PREPARATION_ABORTED');
+    }
+    const third = await f.start('refuse-die');
+    expect(third.result).toMatchObject({ ok: false, code: 'DISPATCH_PREPARATION_ABORTED', params: { task: 'a', phase: 'workspace', aborts: 2, bound: 2 } });
+    expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'parked', reason: 'progression-failed', failureCode: 'DISPATCH_PREPARATION_ABORTED' });
     expect(await f.audit('dispatch-preparation-aborted')).toHaveLength(2);
   } finally { f.store.close(); }
 }, 120_000);

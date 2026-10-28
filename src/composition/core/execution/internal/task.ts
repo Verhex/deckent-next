@@ -27,13 +27,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const audit = async (event: unknown) => { const ledger = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(ledger, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { ledger.close(); } };
-    const crashes = await prepareProductDirectory(layout, 'crashes');
-    const preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
+    const crashes = await prepareProductDirectory(layout, 'crashes'), preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
       launchers: jsonRecordDirectory(join(crashes, 'dispatch-launcher')),
       now: Date.now, record: audit, parked: async commandId => !!await store.loadRunReceipt(identity.scopeId, commandId), loadRun: () => store.loadRun(identity.scopeId, identity.runId), park: command => parkConfiguredRunProgression(projectRoot, command, options) });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
-    let dispatching = false;
+    let dispatching = false, kept = false;
     // REVISE 2695: set while the ledger holds this attempt's probe custody that no closure below may transition (only its proven end releases it).
     let custody = false;
     try {
@@ -151,8 +150,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
       if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, actor);
       else if (!dispatching && !custody) {
-        // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
-        const refusal = classifyLaunchRefusal(error);
+        // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff and (D-05) the
+        // breaker record, so a process that dies after the refusal is counted at the next start in another instance (a same-instance retry counts nothing).
+        const refusal = classifyLaunchRefusal(error); kept = refusal.disposition === 'transient';
         if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);
         // E1: a held refusal (no answer) holds a running Run through the existing progression park. Only a Run another transition already
         // parked, ended or changed keeps the typed refusal (the runtime's bounded failure path then parks it with the same code); any other
@@ -163,6 +163,6 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           .catch((failure: unknown) => { if (!HELD_PARK_SUPERSEDED.has(queryFailure(failure).code)) throw failure; });
       }
       throw error;
-    } finally { await preparation.settle(); store.close(); }
+    } finally { if (!kept) await preparation.settle(); store.close(); }
   } catch (error) { throw queryFailure(error); }
 }
