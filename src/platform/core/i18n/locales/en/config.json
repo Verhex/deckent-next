@@ -52,7 +52,21 @@
   "config.field.audit": "Audit checkpoint schedule and bounded verification settings",
   "config.field.targetQueue": "Target queue capacity, per-target backlog, active targets, batch/chain size, collection window, lease, ticket TTL, verification timeout, revalidation budget and candidate slots. Durations are milliseconds; bounds are installation policy, not measured capacity. The queue never targets main, master, the default branch or a branch listed in execution.adoption.protectedTargets, even when it is in adoption.targets.",
   "config.field.runRuntime.nervous.mode": "Nervous detection (protected; no AI may change it): off does nothing; shadow seals proposals without effects; live executes only a measured rule’s stop step under the owner’s standing grant. Requires a runtime service restart.",
+  "config.field.runRuntime.recovery.mode": "Lost-task recovery (protected; no AI may change it): off (default) never continues a lost task by itself; shadow freezes the recovery bounds at admission and only records what the recovery decision would do, but still calls its model (data goes to that provider and the call is spent); live lets the recovery decision continue a lost task, only for the cells you allowed with deckent policy recovery. The stricter of a Run's frozen mode and this one applies. Requires a runtime service restart.",
+  "config.field.runRuntime.quotaRecovery.maxResumes": "How many times a task stopped by a provider quota resumes by itself after the quota resets (0: never by itself).",
+  "config.field.runRuntime.quotaRecovery.maxWaitMs": "Longest wait for a provider quota reset, in milliseconds. A reset further away, or an unknown one when this time ends, asks you: wait again or move on.",
+  "config.field.runRuntime.quotaRecovery.maxRewaits": "How many times you may choose \"wait again\" for one quota stop; after that the task must move on or stop.",
+  "config.field.runRuntime.stallRecovery.warnAfterMs": "Worker silence, in milliseconds, after which the task is shown as silent (a warning only; nothing stops). Must be below stopAfterMs; a work class may override it.",
+  "config.field.runRuntime.stallRecovery.stopAfterMs": "Worker silence, in milliseconds, after which the silent attempt is stopped. A work class may override it.",
+  "config.field.runRuntime.stallRecovery.maxRetries": "How many times a stopped silent attempt is run again by itself (0: never).",
+  "config.field.runRuntime.stallRecovery.backoffMs": "Wait, in milliseconds, before a stopped silent attempt is run again.",
   "config.surface.effectiveDefault": "{key} = {value} (source: {source})",
   "config.issue.unrecognized": "unknown configuration key",
-  "config.issue.type": "incorrect value type"
+  "config.issue.type": "incorrect value type",
+  "config.select.baselineHint": "y apply · n or Esc not now · PgUp/PgDn every row",
+  "config.panel.guard.protected": "Protected setting: only you can change it, at your own terminal. Check the value below; Enter writes it, Esc cancels.",
+  "config.panel.guard.memoryAutomation.verification.mode": "shadow and on call the model in the memory-evaluator role (see /roles): candidate text is sent to that model's provider and every call is spent. off sends nothing.",
+  "config.panel.guard.runRuntime.recovery.mode": "shadow and live call the model in the recovery-decision role (see /roles): task details are sent to that model's provider and every call is spent. off sends nothing.",
+  "config.operations.baseline.offer": "These operations are registered, but you may not run them yet. This card grants you the registered operations (and the other founder cells you may delegate):",
+  "config.operations.baseline.later": "Not granted yet. To run the registered operations, on your own terminal: deckent init policy --scope {scope} --owner-baseline mcp-delegable --apply (needed again after each new registration)."
 }

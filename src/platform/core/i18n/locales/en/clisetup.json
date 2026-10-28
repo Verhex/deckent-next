@@ -61,7 +61,7 @@
   "clisetup.operation.approval.required": "always asks",
   "clisetup.operation.approval.policy": "by policy",
   "clisetup.operation.noCompensation": "none",
-  "clisetup.operation.next": "Run: deckent operation execute --input <file|-> [--wait <ms>] · input contract: deckent operation execute --schema",
+  "clisetup.operation.next": "Run: deckent operation execute --input <file|-> [--wait <ms>] · input contract: deckent operation execute --schema\nRefused with POLICY_DENIED? Grant yourself the registered operations: deckent init policy --scope <scope> --owner-baseline mcp-delegable --apply (needed again after each new registration).",
   "error.CLI_OPERATION_NOT_FOUND": "No recorded operation {command} in scope {scope}.",
   "error.CLI_OPERATION_INPUT_INVALID": "The operation command does not fit at field {field} ({problem}). Nothing was sent. The contract: deckent operation execute --schema",
   "clisetup.inference.next": "Details: deckent inference plan · budget · metrics",

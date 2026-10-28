@@ -334,6 +334,7 @@
   "error.AUTHENTICATION_SCOPE_DENIED": "The identity is not admitted to this scope.",
   "error.POLICY_UNAVAILABLE": "The trusted policy cannot be read or validated. No access was granted.",
   "error.POLICY_DENIED": "Policy does not permit the requested operation on this resource.",
+  "error.POLICY_DENIED.operation": "You may not {action} operation {operation} in scope {scope} yet (policy cell operation/{operation}/{action}). Nothing was sent.\nIf you set up this installation, grant yourself its registered operations on your own terminal:\n  deckent init policy --scope {scope} --owner-baseline mcp-delegable --apply\nA card lists every permission first; nothing changes until you confirm. Operations that always ask still open their approval card.\nOtherwise ask your administrator for this cell.",
   "error.MANAGED_FILE_MISSING": "The configured ledger or its directory does not exist. Nothing was created.",
   "error.MANAGED_FILE_UNSAFE": "Managed storage failed its ownership, permission or link checks.",
   "error.MANAGED_FILE_UNSUPPORTED": "Managed storage inspection is unsupported on this platform.",

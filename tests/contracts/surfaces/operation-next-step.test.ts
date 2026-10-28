@@ -48,6 +48,17 @@ describe.skipIf(process.platform === 'win32')('uncertain operation outcome on th
     // One call per invocation: the CLI itself never retries an unknown outcome.
     expect(executeOperation).toHaveBeenCalledTimes(2);
   });
+  it('a policy refusal names the missing operation cell and the founder-baseline command; --json keeps POLICY_DENIED (BeUser ZEY-02)', async () => {
+    const f = await project();
+    const executeOperation = vi.fn(async () => { throw ErrorRegistry.createError('POLICY_DENIED'); });
+    const en = await run(f, ['operation', 'execute', '--input', f.input, '--lang', 'en'], { executeOperation });
+    expect(en.code).toBe(1); expect(en.stderr).toContain('operation/erp.approve/execute');
+    expect(en.stderr).toContain('deckent init policy --scope erp-company --owner-baseline mcp-delegable --apply');
+    const tr = await run(f, ['operation', 'execute', '--input', f.input, '--lang', 'tr'], { executeOperation });
+    expect(tr.stderr).toContain('yöneticinizden');
+    const machine = await run(f, ['operation', 'execute', '--input', f.input, '--json'], { executeOperation });
+    expect(JSON.parse(machine.stderr.trim().split('\n').at(-1)!)).toMatchObject({ code: 'POLICY_DENIED', params: { operation: 'erp.approve', action: 'execute', scope: 'erp-company' } });
+  });
   it('--json keeps the typed code and carries the identifiers the next step needs', async () => {
     const f = await project();
     const executeOperation = vi.fn(async () => { throw ErrorRegistry.createError('EFFECT_OUTCOME_UNKNOWN'); });

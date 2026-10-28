@@ -75,7 +75,7 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
   }
   let result: EffectOutcome;
   try { result = await handler(root, input as EffectCommand, options, timeoutMs === undefined ? undefined : { awaitApproval: { timeoutMs } }); }
-  catch (error) { throw withNextStep(error, command.data, locale); }
+  catch (error) { throw withNextStep(error, command.data, action === 'execute' ? 'execute' : 'compensate', locale); }
   emit(result, { ...sinks, json, render: data => data.status === 'approval-pending'
     ? t('cli.operation.pending', { operation: data.operation.id, version: data.operation.version, kind: data.target.kind, id: data.target.id,
       approvalId: data.approval.approvalId, expiresAt: new Date(data.approval.expiresAt).toISOString() }, locale)
@@ -85,7 +85,10 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
 
 /** BETA-RAKIP-3: an uncertain or blocked outcome names this command's scope, id and record, so the suggestion is the exact next step. The typed
  * code and category stay the engine's; nothing is retried here. */
-function withNextStep(error: unknown, command: EffectCommand, locale: Locale): unknown {
+function withNextStep(error: unknown, command: EffectCommand, action: 'execute' | 'compensate', locale: Locale): unknown {
+  // BeUser ZEY-02: a policy refusal names the missing cell and the founder-baseline card that grants registered operations (no grant here).
+  if (error instanceof DeckentError && error.code === 'POLICY_DENIED') return ErrorRegistry.createError('POLICY_DENIED', { params: { operation: command.operation.id,
+    action, scope: command.scopeId }, locale, cause: error });
   if (!(error instanceof DeckentError) || (error.code !== 'EFFECT_OUTCOME_UNKNOWN' && error.code !== 'EFFECT_TARGET_BUSY')) return error;
   return ErrorRegistry.createError(error.code, { params: { ...error.params, scope: command.scopeId, command: command.commandId,
     kind: command.target.kind, id: command.target.id }, locale, cause: error });

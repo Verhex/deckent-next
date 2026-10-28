@@ -61,7 +61,7 @@
   "clisetup.operation.approval.required": "her zaman sorar",
   "clisetup.operation.approval.policy": "policy'ye göre",
   "clisetup.operation.noCompensation": "yok",
-  "clisetup.operation.next": "Çalıştırmak için: deckent operation execute --input <dosya|-> [--wait <ms>] · girdi sözleşmesi: deckent operation execute --schema",
+  "clisetup.operation.next": "Çalıştır: deckent operation execute --input <dosya|-> [--wait <ms>] · girdi sözleşmesi: deckent operation execute --schema\nPOLICY_DENIED ile reddedildi mi? Kayıtlı işlemlerin yetkisini kendinize verin: deckent init policy --scope <kapsam> --owner-baseline mcp-delegable --apply (her yeni kayıttan sonra yeniden gerekir).",
   "error.CLI_OPERATION_NOT_FOUND": "{scope} kapsamında {command} için kayıtlı işlem yok.",
   "error.CLI_OPERATION_INPUT_INVALID": "İşlem komutu {field} alanında uymuyor ({problem}). Hiçbir şey gönderilmedi. Sözleşme: deckent operation execute --schema",
   "clisetup.inference.next": "Ayrıntı: deckent inference plan · budget · metrics",

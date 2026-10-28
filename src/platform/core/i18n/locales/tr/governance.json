@@ -334,6 +334,7 @@
   "error.AUTHENTICATION_SCOPE_DENIED": "Kimliğin bu kapsama erişimi yok.",
   "error.POLICY_UNAVAILABLE": "Güvenilir politika okunamadı veya doğrulanamadı. Erişim verilmedi.",
   "error.POLICY_DENIED": "Politika bu kaynak üzerinde istenen işleme izin vermiyor.",
+  "error.POLICY_DENIED.operation": "{scope} kapsamında {operation} işlemi için henüz {action} yetkiniz yok (politika hücresi operation/{operation}/{action}). Hiçbir şey gönderilmedi.\nBu kurulumu siz kurduysanız, kayıtlı işlemlerin yetkisini kendi terminalinizde kendinize verin:\n  deckent init policy --scope {scope} --owner-baseline mcp-delegable --apply\nBir kart önce her izni listeler; siz onaylamadan hiçbir şey değişmez. Her zaman soran işlemler yine onay kartını açar.\nDeğilse bu hücreyi yöneticinizden isteyin.",
   "error.MANAGED_FILE_MISSING": "Yapılandırılmış ledger veya dizini yok. Hiçbir dosya oluşturulmadı.",
   "error.MANAGED_FILE_UNSAFE": "Yönetilen depolama sahiplik, izin veya bağlantı denetiminden geçemedi.",
   "error.MANAGED_FILE_UNSUPPORTED": "Bu platformda yönetilen depolama incelemesi desteklenmiyor.",

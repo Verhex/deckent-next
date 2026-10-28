@@ -52,7 +52,21 @@
   "config.field.audit": "Audit checkpoint zamanlaması ve sınırlı doğrulama ayarları",
   "config.field.targetQueue": "Hedef kuyruğu kapasitesi, hedef başına bekleyen iş, etkin hedefler, parti/zincir boyu, toplama aralığı, sahiplik süresi, bilet ömrü, doğrulama süresi, yeniden kontrol bütçesi ve aday kapasitesi. Süreler milisaniyedir; sınırlar kurulum politikasıdır, ölçülmüş kapasite değildir. Kuyruk main, master, varsayılan dal veya execution.adoption.protectedTargets içindeki bir dalı adoption.targets içinde olsa bile hedef almaz.",
   "config.field.runRuntime.nervous.mode": "Nervous gözlemi (korumalı; hiçbir AI değiştiremez): off kapalıdır; shadow etki üretmeden önerileri mühürler; live yalnız ölçülmüş kuralın durdurma adımını sahibin kalıcı izni altında yürütür. Çalışma hizmetinin yeniden başlatılması gerekir.",
+  "config.field.runRuntime.recovery.mode": "Kayıp iş kurtarma (korumalı; hiçbir AI değiştiremez): off (varsayılan) kayıp bir işi asla kendiliğinden sürdürmez; shadow kurtarma sınırlarını kabulde dondurur ve kurtarma kararının ne yapacağını yalnız kaydeder, ama modelini yine çağırır (veri o sağlayıcıya gider, çağrı harcanır); live kurtarma kararının kayıp işi sürdürmesine izin verir, yalnız deckent policy recovery ile izin verdiğiniz hücrelerde. İşin dondurulmuş kipiyle bu kipten daha sıkı olanı geçerlidir. Çalışma hizmetinin yeniden başlatılması gerekir.",
+  "config.field.runRuntime.quotaRecovery.maxResumes": "Sağlayıcı kotasıyla duran bir görevin kota sıfırlanınca kendiliğinden kaç kez sürdüğü (0: kendiliğinden hiç).",
+  "config.field.runRuntime.quotaRecovery.maxWaitMs": "Kota sıfırlanması için en uzun bekleme (milisaniye). Daha uzaktaki bir sıfırlama ya da bu süre bitince hâlâ bilinmeyen bir sıfırlama size sorulur: yeniden bekle ya da sonrakine geç.",
+  "config.field.runRuntime.quotaRecovery.maxRewaits": "Bir kota duruşunda \"yeniden bekle\" seçeneğini kaç kez seçebileceğiniz; sonrasında görev sonrakine geçmeli ya da durmalı.",
+  "config.field.runRuntime.stallRecovery.warnAfterMs": "İşçi bu kadar milisaniye ses vermezse görev sessiz olarak gösterilir (yalnız uyarı; hiçbir şey durmaz). stopAfterMs değerinden küçük olmalı; bir iş türü bunu değiştirebilir.",
+  "config.field.runRuntime.stallRecovery.stopAfterMs": "İşçi bu kadar milisaniye ses vermezse sessiz deneme durdurulur. Bir iş türü bunu değiştirebilir.",
+  "config.field.runRuntime.stallRecovery.maxRetries": "Durdurulan sessiz denemenin kendiliğinden kaç kez yeniden çalıştırıldığı (0: hiç).",
+  "config.field.runRuntime.stallRecovery.backoffMs": "Durdurulan sessiz deneme yeniden çalıştırılmadan önceki bekleme (milisaniye).",
   "config.surface.effectiveDefault": "{key} = {value} (kaynak: {source})",
   "config.issue.unrecognized": "bilinmeyen yapılandırma anahtarı",
-  "config.issue.type": "değer türü geçersiz"
+  "config.issue.type": "değer türü geçersiz",
+  "config.select.baselineHint": "y uygula · n ya da Esc şimdi değil · PgUp/PgDn tüm satırlar",
+  "config.panel.guard.protected": "Korumalı ayar: yalnız siz, kendi terminalinizde değiştirebilirsiniz. Aşağıdaki değeri kontrol edin; Enter yazar, Esc vazgeçer.",
+  "config.panel.guard.memoryAutomation.verification.mode": "shadow ve on, memory-evaluator rolündeki modeli çağırır (bkz. /roles): aday metni o modelin sağlayıcısına gider ve her çağrı harcanır. off hiçbir şey göndermez.",
+  "config.panel.guard.runRuntime.recovery.mode": "shadow ve live, recovery-decision rolündeki modeli çağırır (bkz. /roles): görev ayrıntıları o modelin sağlayıcısına gider ve her çağrı harcanır. off hiçbir şey göndermez.",
+  "config.operations.baseline.offer": "Bu işlemler kayıtlı, ama henüz çalıştırma yetkiniz yok. Bu kart size kayıtlı işlemlerin yetkisini (ve devredebileceğiniz diğer kurucu hücrelerini) verir:",
+  "config.operations.baseline.later": "Henüz verilmedi. Kayıtlı işlemleri çalıştırmak için kendi terminalinizde: deckent init policy --scope {scope} --owner-baseline mcp-delegable --apply (her yeni kayıttan sonra yeniden gerekir)."
 }

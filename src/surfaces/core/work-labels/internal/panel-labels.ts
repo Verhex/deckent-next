@@ -18,7 +18,7 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       freeEntry: t('tui.panel.config.freeEntry', {}, locale), unset: t('tui.panel.config.unset', {}, locale), entryTitle: t('tui.panel.config.entryTitle', {}, locale),
       entryHint: t('tui.panel.config.entryHint', {}, locale), stepper: t('config.select.stepper', {}, locale),
       stepperHint: t('config.select.stepperHint', {}, locale), regenerate: t('config.select.regenerate', {}, locale),
-      preview: t('config.select.preview', {}, locale), previewHint: t('config.select.previewHint', {}, locale) },
+      preview: t('config.select.preview', {}, locale), previewHint: t('config.select.previewHint', {}, locale), baselineHint: t('config.select.baselineHint', {}, locale) },
     mcp: { title: t('tui.panel.mcp.title', {}, locale), hints: t('tui.panel.mcp.hints', {}, locale), add: t('tui.panel.mcp.add', {}, locale), addDetail: t('tui.panel.mcp.addDetail', {}, locale),
       none: t('tui.panel.mcp.empty', {}, locale),
       actions: { detail: t('tui.panel.mcp.action.detail', {}, locale), revoke: t('tui.panel.mcp.action.revoke', {}, locale), approve: t('tui.panel.mcp.action.approve', {}, locale),

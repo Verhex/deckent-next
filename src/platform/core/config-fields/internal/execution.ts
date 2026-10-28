@@ -76,12 +76,12 @@ export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().pos
 export const RUN_PARKING_SETTINGS = z.object({ schemaVersion: z.literal(1),
   timeoutMs: z.number().int().positive().safe().default(86_400_000) }).strict();
 
-export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes),
-  maxWaitMs: z.number().int().positive().safe().default(quotaDefaults.maxWaitMs),
+export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes).describe('config.field.runRuntime.quotaRecovery.maxResumes'),
+  maxWaitMs: z.number().int().positive().safe().default(quotaDefaults.maxWaitMs).describe('config.field.runRuntime.quotaRecovery.maxWaitMs'),
   /** S9: how often a person may choose to keep waiting after the ask; the ask itself never ends the Run. */
-  maxRewaits: z.number().int().nonnegative().safe().default(quotaDefaults.maxRewaits) }).strict();
+  maxRewaits: z.number().int().nonnegative().safe().default(quotaDefaults.maxRewaits).describe('config.field.runRuntime.quotaRecovery.maxRewaits') }).strict();
 /** R3 (owner D4a): installation silence policy for watchable workers (frozen per task at admission; a work class may override warn/stop),
  * at most `maxRetries` automatic re-runs of a stalled Attempt after `backoffMs`. Warn must come before stop. */
-export const STALL_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), warnAfterMs: z.number().int().positive().safe().default(stallDefaults.warnAfterMs),
-  stopAfterMs: z.number().int().positive().safe().default(stallDefaults.stopAfterMs), maxRetries: z.number().int().nonnegative().safe().default(stallDefaults.maxRetries),
-  backoffMs: z.number().int().nonnegative().safe().default(stallDefaults.backoffMs) }).strict().refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });
+export const STALL_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), warnAfterMs: z.number().int().positive().safe().default(stallDefaults.warnAfterMs).describe('config.field.runRuntime.stallRecovery.warnAfterMs'),
+  stopAfterMs: z.number().int().positive().safe().default(stallDefaults.stopAfterMs).describe('config.field.runRuntime.stallRecovery.stopAfterMs'), maxRetries: z.number().int().nonnegative().safe().default(stallDefaults.maxRetries).describe('config.field.runRuntime.stallRecovery.maxRetries'),
+  backoffMs: z.number().int().nonnegative().safe().default(stallDefaults.backoffMs).describe('config.field.runRuntime.stallRecovery.backoffMs') }).strict().refine(value => value.warnAfterMs < value.stopAfterMs, { path: ['warnAfterMs'], message: 'WORKER_INACTIVITY_POLICY_INVALID' });

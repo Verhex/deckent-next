@@ -49,7 +49,10 @@ function focusLines(field: ConfigPanelField | undefined, labels: ConfigPanelLabe
     { spans: [span(rowFacts(field), { role: 'muted' })] }, { spans: [span(fillTemplate(labels.expected, { expected: field.expected }), { role: 'muted' })] }];
 }
 
-type Step = Readonly<{ kind: 'pick' } | { kind: 'entry' | 'number' | 'records'; field: ConfigPanelField; layer: ConfigPanelLayer } | { kind: 'preview'; field: ConfigPanelField; layer: ConfigPanelLayer; value: unknown }>;
+type Offer = import('#surfaces/core/config/index.js').OperationsBaselineOffer;
+type Step = Readonly<{ kind: 'pick' } | { kind: 'entry' | 'number' | 'records'; field: ConfigPanelField; layer: ConfigPanelLayer } | { kind: 'preview'; field: ConfigPanelField; layer: ConfigPanelLayer; value: unknown }
+  | { kind: 'baseline'; offer: Offer }>;
+const operationsKey = (key: string) => key === 'operations' || key.startsWith('operations.');
 
 /**
  * `/config` as a window: sections → key → value, then the layer (project or user) with each layer's policy lock. Choosing writes through the
@@ -84,8 +87,15 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
       push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: fillTemplate(words.summary, { text: outcome.lines[0] ?? view.title }) }]);
       if (outcome.status === 'approval-pending' && outcome.approvalId) { onClose(); openApproval(outcome.approvalId); return; }
       await reload();
+      if (await offerBaseline(request.keyPath)) return;
     } catch (error) { onError(error); } finally { busy.current = false; }
     setState(backToKeys(at)); setGeneration(value => value + 1); setStep({ kind: 'pick' });
+  };
+  // BeUser ZEY-02: registered operations the person may not run yet → the founder-baseline card, right here (the installer's own plan).
+  const offerBaseline = async (keyPath: string) => {
+    const offer = operationsKey(keyPath) && port.operationsBaseline ? await port.operationsBaseline.offer() : null;
+    if (offer) setStep({ kind: 'baseline', offer });
+    return offer !== null;
   };
   const chosen = (result: PickerResult, at: PickerState) => {
     if (result.kind !== 'selected') { onClose(); return; }
@@ -97,18 +107,34 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
     if (value === FREE && configEntryAllowed(target.key, target.sensitive)) { setStep({ kind: 'entry', field: target, layer }); return; }
     if (value === UNSET) { void write({ action: 'unset', keyPath: target.key, layer }, at); return; }
     const choice = target.choices.find(item => item.id === value);
-    if (choice && !choice.blocked) void write({ action: 'set', keyPath: target.key, value: choice.value, layer }, at);
+    // BeUser E-07: a protected key's value is shown with its confirm lines first (the help promises a preview); Enter writes, Esc cancels.
+    if (choice && !choice.blocked && target.guard?.length) setStep({ kind: 'preview', field: target, layer, value: choice.value });
+    else if (choice && !choice.blocked) void write({ action: 'set', keyPath: target.key, value: choice.value, layer }, at);
   };
   const cancelStep = () => { setState(backToKeys(state)); setGeneration(value => value + 1); setStep({ kind: 'pick' }); };
   if (step.kind === 'records' && port.records) return <ConfigRecordWindow port={port.records} keyPath={step.field.key} title={step.field.description} layer={step.layer} labels={labels}
     onClose={cancelStep} onError={onError} onResult={outcome => {
       push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: fillTemplate(words.summary, { text: outcome.lines[0] ?? view.title }) }]);
       if (outcome.status === 'approval-pending' && outcome.approvalId) { onClose(); openApproval(outcome.approvalId); return; }
-      void reload().catch(onError); cancelStep();
+      void reload().then(() => offerBaseline(step.field.key)).then(offered => { if (!offered) cancelStep(); }, error => { onError(error); cancelStep(); });
     }} />;
   if (step.kind === 'number' && step.field.stepper) return <ConfigNumberWindow title={step.field.key} stepper={step.field.stepper} hints={words.stepperHint}
     position={labels.position} onCancel={cancelStep} onSubmit={value => { void write({ action: 'set', keyPath: step.field.key, value, layer: step.layer }, state); }} />;
+  if (step.kind === 'baseline') {
+    const { offer } = step, answer = (apply: boolean) => {
+      if (busy.current) return;
+      busy.current = true;
+      void (apply && port.operationsBaseline ? port.operationsBaseline.apply(offer) : Promise.resolve([offer.later]))
+        .then(lines => push(lines.map(text => ({ level: apply ? 'info' as const : 'warning' as const, text }))), onError).finally(() => { busy.current = false; cancelStep(); });
+    };
+    return <Window title={[span(offer.title, { bold: true })]} body={offer.lines.map(text => ({ spans: [span(text)] }))} hints={words.baselineHint} position={labels.position}
+      onClose={() => answer(false)} onInput={(input, key) => {
+        if (/^y$/iu.test(input)) answer(true); else if (/^n$/iu.test(input) || key.escape) answer(false);
+        return !key.pageUp && !key.pageDown && !key.home && !key.end;
+      }} />;
+  }
   if (step.kind === 'preview') return <Window title={[span(words.preview, { bold: true })]} body={[...focusLines(step.field, words),
+    ...(step.field.guard ?? []).map(text => ({ spans: [span(text, { role: 'warning' as const })] })),
     { spans: [span(step.field.sensitive ? step.field.value : JSON.stringify(step.value), { bold: true })] }]} hints={words.previewHint} position={labels.position} onClose={cancelStep}
     onInput={(input, key) => { if (key.escape || key.ctrl && input === 'c') cancelStep(); else if (key.return) void write({ action: 'set', keyPath: step.field.key, value: step.value, layer: step.layer }, state); return true; }} />;
   if (step.kind === 'entry') {
