@@ -7,7 +7,7 @@ import { runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, 
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
-  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
+  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, treeChangeLine, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
@@ -85,7 +85,8 @@ export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
-    readonly dirty?: Readonly<{ check: () => Promise<boolean>; title: string; body: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => boolean; readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; prompt: string; cancelled: string; canSetup?: () => Promise<boolean> }>;
+    readonly dirty?: Readonly<{ check: () => Promise<boolean>; title: string; body: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => Promise<boolean>; readonly chatReady?: () => Promise<boolean>; readonly tree?: () => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>;
+    readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; noModel: string; prompt: string; cancelled: string; changed: string; unchanged: string; unread: string; canSetup?: () => Promise<boolean> }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
@@ -431,7 +432,8 @@ export function WorklineApp(props: WorklineProps) {
     }
   }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
-  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] }), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
+  const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
+  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: bareSlash(text), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
@@ -471,12 +473,13 @@ export function WorklineApp(props: WorklineProps) {
         if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
       } catch (error) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
-        if (!execution.signal.aborted && props.doPlan.offerHere?.((error as { code?: unknown })?.code) && props.doPlan.localFallback && props.doPlan.here) { // owner option A: K1 data, K4 card, K5 every time
+        if (!execution.signal.aborted && props.doPlan.localFallback && props.doPlan.here && await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { // owner option A: K1 data, K4 card, K5 every time
           onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; const here = props.doPlan.here, tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
-          const body = [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : [])], workers = await here.canSetup?.().catch(() => false) ?? false;
-          const answer = await windows.ask({ title: here.title, hints: here.prompt, body: () => body.map(text => ({ spans: [span(text)] })), bodyRows: body.length, tree: { title: here.title, items: [{ id: 'run', label: here.run }, { id: 'setup', label: here.setup, ...(workers && props.onboarding ? {} : { blocked: { reason: here.noWorkers } }) }, { id: 'cancel', label: here.cancel }] } });
+          const body = [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : [])], workers = await here.canSetup?.().catch(() => false) ?? false, chat = Boolean(sessionModel.pinned()) || (await props.doPlan.chatReady?.().catch(() => true) ?? true); // DR3-01
+          const answer = await windows.ask({ title: here.title, hints: here.prompt, body: () => body.map(text => ({ spans: [span(text)] })), card: true, tree: { title: here.title, items: [{ id: 'run', label: here.run, ...(chat ? {} : { blocked: { reason: here.noModel } }) }, { id: 'setup', label: here.setup, ...(workers && props.onboarding ? {} : { blocked: { reason: here.noWorkers } }) }, { id: 'cancel', label: here.cancel }] } });
           if (answer === 'setup' && !execution.signal.aborted) { await onboarding.open(execution.signal, 'workers'); return true; } else if (answer !== 'run' || execution.signal.aborted) { push([notice('info', here.cancelled)]); return true; } // /setup worker steps; Esc = Cancel: nothing runs
-          push([notice('info', props.doPlan.localFallback)]); await runTurn(slash.args.trim(), mentioned, execution); return true;
+          push([notice('info', props.doPlan.localFallback)]); const before = await props.doPlan.tree?.().catch(() => null) ?? null; // K5: the files that really changed, from two tree reads
+          await runTurn(slash.args.trim(), mentioned, execution).finally(async () => push([notice('info', treeChangeLine(before, before?.state === 'unknown' ? null : await props.doPlan!.tree?.().catch(() => null) ?? null, here))])); return true;
         }
         if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }
@@ -698,7 +701,7 @@ export function WorklineApp(props: WorklineProps) {
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-    busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+    busy={busy} historyText={bareSlash} remember={remember} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
     onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;

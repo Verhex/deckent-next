@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
+import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstTaskBody, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
 import { planSetup, SetupStageRegistry, type SetupStage } from '#engine/index.js';
 const observation = { schemaVersion: 2 as const, environment: { platform: 'linux' as const, node: 'supported' as const },
   language: { configured: 'en' as const, requested: null, system: null }, folder: { installation: 'present' as const, homeRoot: false, configuredScope: 's', suggestedScope: null },
@@ -162,4 +162,11 @@ it('BeUser M-J6: a chosen first task is not offered at every open, is not named 
   expect(deferredOnboardingNotice(done, 'en')).toBeNull();
   expect(deferredOnboardingNotice({ ...done, deferred: [...done.deferred, 'onboarding:first-task'] }, 'en')).toBeNull(); // AYSE-R2-04: Esc on Ready! after a first task
   expect(onboardingSteps({ ...done, deferred: [] }).some(row => row.kind === 'first-task')).toBe(true);
+});
+it('Astra 2761 R1 (K3): the first-task screen reads the host run-here answer; when it is closed it promises no local run', () => {
+  const pool: SetupStage = { id: 'work:pool', namespace: 'work', title: 'setup.work.kindTitle', phase: 'onboarding', state: 'ready' } as SetupStage;
+  const open = { ...snapshot, plan: { ...snapshot.plan, stages: [pool] } };
+  expect(firstTaskBody({ ...open, localRun: true }, 'en').join(' ')).toContain('runs here in the terminal');
+  const closed = firstTaskBody({ ...open, localRun: false }, 'en').join(' ');
+  expect(closed).toContain('closed for this setup'); expect(closed).not.toContain('runs here in the terminal');
 });

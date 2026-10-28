@@ -133,7 +133,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, HubCommand
   selfSourceProject?: (root: string) => Promise<boolean>;
   describeRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<ServiceDescription>;
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
-  restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>; runningImageBuild?: (root: string, options: ConfigLoadOptions) => Promise<boolean>; // D-01: a worker image build runs in the service
+  restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>; runningImageBuild?: (root: string, options: ConfigLoadOptions) => Promise<boolean>; localRunOffer?: (root: string, scopeId: string, options: ConfigLoadOptions, code?: unknown) => Promise<boolean>; workingTreeChanges?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>; // D-01: a worker image build runs in the service
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions, folder?: string) => Promise<TerminalSessionStoreView | null>;
   /** T4 (Ctrl+G): the person's `$VISUAL`/`$EDITOR` behind the composition's adapter (temporary 0600 file, bounded read-back). */

@@ -23,6 +23,7 @@
   "onboarding.firstTask.title": "Hazır! İlk işinizi seçin",
   "onboarding.firstTask.body": "Bu ekran ilk açılış oturumunu bitirir. Ertelenen hazırlıklar, politika, bütçe ve onay kontrolleri geçerlidir.",
   "onboarding.firstTask.local": "Arka plan işçileri henüz kurulmadı; bu ilk iş burada, terminalde modelin araçlarıyla çalışır. İşçileri sonra /setup ile ekleyebilirsiniz.",
+  "onboarding.firstTask.localClosed": "Arka plan işçileri henüz kurulmadı ve bu kurulumda görevleri burada, terminalde çalıştırmak kapalı (profil ya da bekletilen işçi havuzu): önce /setup ile işçileri kurun.",
   "onboarding.firstTask.localNoGit": "Bu ilk iş burada, terminalde modelin araçlarıyla çalışır. (Arka plan işçileri bir Git projesinde kodlama işi yapar; bu klasörün onlara ihtiyacı yok.)",
   "onboarding.rights.title": "Yönetim haklarınız",
   "onboarding.rights.body": "Deckent’i burada ({scope}) siz kurdunuz. Yönetim haklarını kendinize verelim mi?",

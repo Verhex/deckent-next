@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { identityProfileRefSchema, IdentityProfileError, type IdentityProfileRef } from '#domain/index.js';
 import data from './permission-defaults.json' with { type: 'json' };
 const entry = z.object({ profile: identityProfileRefSchema, openModes: z.array(z.enum(['full-auto', 'full-access'])).max(2),
-  startMode: z.enum(['standart', 'full-auto', 'full-access']), ownerBaseline: z.object({ families: z.array(z.string().min(1)).max(64) }).strict() }).strict()
+  startMode: z.enum(['standart', 'full-auto', 'full-access']), ownerBaseline: z.object({ families: z.array(z.string().min(1)).max(64) }).strict(),
+  /** Owner option A K3/K6: 'closed' — this profile (a company's registered row) never offers to run a refused /do here; absent: offered behind the card. */
+  localRunFallback: z.enum(['offer', 'closed']).optional() }).strict()
   .refine(row => row.startMode === 'standart' || row.openModes.includes(row.startMode));
 const defaults = z.object({ schemaVersion: z.literal(1), entries: z.array(entry).max(64) }).strict().parse(data);
 export type ProfilePermissionDefaults = z.infer<typeof entry>;
@@ -28,3 +30,5 @@ export class PermissionDefaultsRegistry {
   }
 }
 export const permissionDefaultsRegistry = new PermissionDefaultsRegistry();
+/** K3: whether the person's identity profile closes the run-here offer (registry data a company sets; unknown profile: not closed). */
+export const localRunFallbackClosed = (profile: IdentityProfileRef | null, registry = permissionDefaultsRegistry): boolean => registry.resolve(profile)?.localRunFallback === 'closed';

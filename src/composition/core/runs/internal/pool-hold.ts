@@ -1,8 +1,12 @@
-import { AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema } from '#engine/index.js';
-import { openLocalIntegrityAuthority, openSqliteAttemptStore } from '#adapters/index.js';
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { AuditApplication, QuotaReleaseApplication, quotaReleaseCommandSchema, ExecutionPoolHoldApplication, ExecutionPoolCapacityApplication, PoolControlPolicyAuthorization, poolHoldCommandSchema, poolCapacityCommandSchema, poolHoldQuerySchema, localRunOffered, localRunFallbackClosed } from '#engine/index.js';
+import { openLocalIntegrityAuthority, openSqliteAttemptStore, readIdentityProfileConfig } from '#adapters/index.js';
+import { SystemTrustedClock, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+/** Owner option A K2/K3: the one answer the terminal card and the onboarding pre-announcement read; a held or unreadable pool hold (a scope with no pool has none) or profile defaults that close it say no. */
+export async function configuredLocalRunOffer(root: string, scopeId: string, options: ConfigLoadOptions = {}, code: unknown = 'RUN_ADMISSION_NOT_CONFIGURED'): Promise<boolean> {
+  const config = await loadConfig(root, { ...options, heal: false }), held = (config['admission'] as { poolId?: unknown } | undefined)?.poolId ? await inspectConfiguredPoolHold(root, { schemaVersion: 1, scopeId }, { ...options, heal: false }).then(view => view.state !== 'open', () => true) : false;
+  return localRunOffered(code, { closed: localRunFallbackClosed(readIdentityProfileConfig(config['identity'])?.profile ?? null), paused: held }); }
 export async function applyConfiguredPoolHold(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, poolHoldCommandSchema, true, (hold, _capacity, value) => hold.apply(value)); }
 export async function inspectConfiguredPoolHold(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, poolHoldQuerySchema, false, (hold, _capacity, value) => hold.inspect(value)); }
 export async function applyConfiguredPoolCapacity(root: string, input: unknown, options: ConfigLoadOptions = {}) { return poolControl(root, input, options, poolCapacityCommandSchema, true, (_hold, capacity, value) => capacity.apply(value)); }

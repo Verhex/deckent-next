@@ -12,3 +12,4 @@ export * from './internal/panel-controller.js';
 export * from './internal/use-observation.js';
 export * from './internal/surface-push.js';
 export * from './internal/service-watch.js';
+export { treeChangeLine } from './internal/tree-change.js';

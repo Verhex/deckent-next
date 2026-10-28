@@ -23,6 +23,7 @@
   "onboarding.firstTask.title": "Ready! Choose your first task",
   "onboarding.firstTask.body": "This finishes onboarding. Deferred setup and all policy, budget and approval checks still apply.",
   "onboarding.firstTask.local": "Background workers are not set up yet, so this first task runs here in the terminal with the model's tools; /setup adds workers later.",
+  "onboarding.firstTask.localClosed": "Background workers are not set up yet, and running tasks here in the terminal is closed for this setup (profile or a paused worker pool): set up workers with /setup first.",
   "onboarding.firstTask.localNoGit": "This first task runs here in the terminal with the model's tools. (Background workers do coding work in a Git project; this folder does not need them.)",
   "onboarding.rights.title": "Your management rights",
   "onboarding.rights.body": "You installed Deckent here ({scope}). Give yourself the rights to manage it?",

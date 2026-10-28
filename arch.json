@@ -522,6 +522,7 @@
     "src/composition/core/runs": {
       "dependencies": [
         "src/engine/core/agent-catalog",
+        "src/engine/core/identity-profile",
         "src/composition/core/agent-catalog",
         "src/domain/core/run",
         "src/engine/core/handoff-observation",

@@ -45,6 +45,8 @@ export interface ComposerProps {
   /** What a submitted line is remembered as (in-memory recall and `history`); the owner strips what must never be kept (SLASH-WINDOWS I-1:
    *  a rich terminal keeps only `/command`, never a typed slash argument). The submitted text itself is unchanged. */
   readonly historyText?: (text: string) => string;
+  /** A line sent for the person outside the composer (a new `seq` each time): kept in recall and `history` like a submitted one. */
+  readonly remember?: Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null;
   readonly mentions?: ComposerMentionPort;
   /** T3 (Alt+Up on an empty draft): the owner takes its last queued message out of the queue and returns it, or null when none is left. */
   readonly onWithdraw?: () => ComposerHistoryEntry | null;
@@ -160,6 +162,8 @@ export function Composer(props: ComposerProps): ReactNode {
     props.history?.load().then(entries => { if (live) dispatch({ type: 'history', entries }); }, ignore);
     return () => { live = false; };
   }, [dispatch, props.history]);
+  const rememberSeq = props.remember?.seq ?? 0;
+  useEffect(() => { const remember = latest.current.remember; if (!remember) return; dispatch({ type: 'remember', entry: remember.entry }); void (async () => latest.current.history?.append(remember.entry))().catch(ignore); }, [dispatch, rememberSeq]);
   useEffect(() => {
     if (state.armedAt === null) return;
     const timer = setTimeout(() => dispatch({ type: 'tick' }), COMPOSER_LIMITS.exitWindowMs + 1);

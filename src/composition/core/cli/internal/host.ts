@@ -1,4 +1,4 @@
-import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel } from '#adapters/index.js';
+import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
@@ -31,7 +31,7 @@ import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvide
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
-  changeConfiguredRecoveryPolicy, configuredRecoveryReview } from '#composition/core/runs/index.js';
+  changeConfiguredRecoveryPolicy, configuredRecoveryReview, configuredLocalRunOffer } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
@@ -79,7 +79,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectToolchainRefresh,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),
-    restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry), runningImageBuild: async (projectRoot, options) => ['requested', 'waiting-docker', 'acquiring'].includes((await inspectConfiguredWorkerImage(projectRoot, options).catch(() => null))?.phase ?? ''),
+    restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry), runningImageBuild: async (projectRoot, options) => ['requested', 'waiting-docker', 'acquiring'].includes((await inspectConfiguredWorkerImage(projectRoot, options).catch(() => null))?.phase ?? ''), localRunOffer: configuredLocalRunOffer, workingTreeChanges: (projectRoot, options) => workingTreeChanges(projectRoot, options.env ?? process.env),
     openProjectInstructions: configuredProjectInstructions,
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),

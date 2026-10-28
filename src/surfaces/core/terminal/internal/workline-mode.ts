@@ -49,7 +49,6 @@ export interface WorklineModeLabels {
 const NEUTRAL: WorklineModeLabels = { current: '/mode · {mode}', changed: '/mode · {previous} → {mode}', inert: ' · modeEligible: 0',
   unsupported: '/mode · {mode} · policy v1', usage: '/mode [standart|full-auto|full-access] · /mode ask-edits on|off · /mode start full-access' };
 const SWITCHABLE: readonly PermissionMode[] = PERMISSION_MODES;
-
 /**
  * T2 T-MODE-CYCLE (owner 2026-10-07, corrected): the stops Shift+Tab walks — every mode the person may take here. `ask-edits` is `standart` with
  * the person's "ask for edits too" preference (not a policy mode). Full-auto is in the cycle unless the company's set grant leaves it out (an
@@ -71,7 +70,6 @@ const STOP_TARGET: Readonly<Record<PermissionModeStop, { readonly mode: Permissi
   standart: { mode: 'standart', askEdits: false }, 'ask-edits': { mode: 'standart', askEdits: true },
   'full-auto': { mode: 'full-auto', askEdits: false }, 'full-access': { mode: 'full-access', askEdits: false },
 };
-
 /** The mode this session runs in: full access only while the session holds it; a stored full-access, or a full-auto without its grant now, is standart (the decision's reading). */
 function sessionMode(view: PermissionModeView, fullAccess: boolean): PermissionMode {
   return fullAccess ? 'full-access' : view.mode === 'full-access' || fullAutoNotInEffect(view) ? 'standart' : view.mode;
@@ -94,7 +92,6 @@ function options(view: PermissionModeView, labels: WorklineModeLabels, fullAcces
   return [...(others.length ? [notice('info', fillTemplate(labels.switch, { options: others.join('; ') }))] : []),
     ...(labels.fullAccessGrant && !view.fullAccess && !fullAccess ? [notice('info', labels.fullAccessGrant)] : [])];
 }
-
 /**
  * `/mode` (and `/mode show`) shows the mode; `/mode standart|full-auto|full-access` sets it with the revision last read (read first when none is known). Full
  * access (T2, owner 2026-10-07) is switched into inside the session through the same service set, for this session only (FA-SESSION): the
@@ -128,7 +125,6 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
     : (askEdits ? labels.askEditsOn : labels.askEditsOff) ?? line(view, labels, session);
   return done([notice(mode === 'full-access' ? 'warning' : 'info', said)], view, session);
 }
-
 /**
  * One Shift+Tab step (T2 T-MODE-CYCLE): the next stop of the cycle set through the service with the revision last read and the stop's
  * explicit `askEdits` (full-auto never inherits "ask for edits too"). The service decides each grant and audits every change; a refusal or a
@@ -141,7 +137,6 @@ export async function cyclePermissionMode(port: WorklinePermissionModePort, know
   const current = permissionModeStop(base, fullAccess);
   return stepPermissionMode(port, base, labels, current, nextPermissionModeStop(permissionModeCycle(base, Boolean(port.open)), current) ?? 'standart', session);
 }
-
 /**
  * T3 L4 `/mode` panel: the chosen stop, set exactly as a Shift+Tab step to it would be (same service set, grant check and audit); the
  * view is read first so the set carries the current revision. A stop the cycle does not hold here is refused by the service, not here.
@@ -152,9 +147,7 @@ export async function selectPermissionModeStop(port: WorklinePermissionModePort,
   if (!base.supported) return { entries: [notice('error', line(base, labels, fullAccess))], view: base, fullAccess };
   return stepPermissionMode(port, base, labels, permissionModeStop(base, fullAccess), target, session);
 }
-
 const closedMode = (mode: PermissionMode, view: PermissionModeView) => mode === 'full-access' ? !view.fullAccess : mode === 'full-auto' && view.fullAuto === false;
-
 async function stepPermissionMode(port: WorklinePermissionModePort, base: PermissionModeView, labels: WorklineModeLabels, current: PermissionModeStop, next: PermissionModeStop,
   session: WorklineModeSession): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const target = STOP_TARGET[next];
@@ -169,7 +162,6 @@ async function stepPermissionMode(port: WorklinePermissionModePort, base: Permis
   // change (the `/mode` window and Shift+Tab alike) is the one system summary line, never a chat notice.
   return { entries: [systemSummaryEntry(fillTemplate(template, { previous: word(current), mode: word(next) }), next === 'full-access' ? 'warning' : 'info')], view, fullAccess: next === 'full-access' };
 }
-
 /** The status row's mode stop (null: unknown or unsupported — no segment; full access always shown), `/mode` and the Shift+Tab step. A failure
  * refreshes the view. `launchedFullAccess`: the session was launched in full access (the launch already checked the company grant). */
 export function useWorklineMode(port: WorklinePermissionModePort | undefined, push: (entries: readonly WorkLedgerEntry[]) => void,
@@ -210,7 +202,6 @@ export function useWorklineMode(port: WorklinePermissionModePort | undefined, pu
   const stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : undefined;
   return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle, select };
 }
-
 /**
  * T2 T-MODE-CYCLE + TS-WINDOW: Shift+Tab (Alt+M where the console cannot report Shift+Tab) steps the mode only while the base layer owns the
  * keyboard — `active` (no card, picker or running turn) and the window stack idle. Any open window, including one that is neither a card

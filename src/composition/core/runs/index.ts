@@ -7,7 +7,7 @@ export { reconcileConfiguredAttempt } from './internal/reconcile.js';
 export { evaluateConfiguredTask } from './internal/evaluate.js';
 export { reserveConfiguredRunTasks } from './internal/reserve.js';
 export { recoverConfiguredCancellations } from './internal/recover-cancellation.js';
-export { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from './internal/pool-hold.js';
+export { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold, configuredLocalRunOffer } from './internal/pool-hold.js';
 export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
 export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';
 export { prepareConfiguredNervous } from './internal/nervous.js';

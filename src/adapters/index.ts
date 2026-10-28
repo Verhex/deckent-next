@@ -116,7 +116,7 @@ export { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 export { GIT_QUEUE_DISPLAY, GitQueueTarget, gitQueueCandidateSource } from '#adapters/core/git-patch/index.js';
 export { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, workerImageEstimate, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-export { detectCodingFacts, codingSetupFamily, gitTracksPaths, previewFirstCommit, observeFirstCommitRecovery, firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/core/setup-detect-coding/index.js';
+export { detectCodingFacts, workingTreeChanges, codingSetupFamily, gitTracksPaths, previewFirstCommit, observeFirstCommitRecovery, firstCommitTarget, FIRST_COMMIT_OPERATION } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
 export { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
 export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from '#adapters/core/worker-image/index.js';
