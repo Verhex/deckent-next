@@ -5,6 +5,9 @@
   "reasoningModes": ["model-default", "off"],
   "quotaWait": { "maxWaitMs": 900000, "marginMs": 15000, "maxAttempts": 2 },
   "quotaWaitCeilingMs": 86400000,
+  "correctionRetries": 1,
+  "correctionRetriesCeiling": 1,
+  "correction": "Your previous answer was refused by validation ({error}). Your previous answer was:\n{answer}\nAnswer again with only the JSON object in the required shape. Use only these task kinds: {kinds}.",
   "selected": {
     "id": "run-proposal",
     "version": 4
