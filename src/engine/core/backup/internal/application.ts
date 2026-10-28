@@ -1,3 +1,4 @@
+import { BeuserTransferError, assertUnsealedInstallation } from '#engine/core/beuser-realm/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policySchema, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry, DeckentError, sha256 } from '#platform/index.js';
@@ -5,7 +6,8 @@ import { backupCommandSchema, type BackupAuthority, type BackupAudit, type Backu
 /** The single governed application for human and AI backup callers. Policy and audit never see the passphrase. */
 export class BackupApplication {
   constructor(private readonly storage: BackupStoragePort, private readonly authorize: BackupAuthorization,
-    private readonly audit: BackupAudit, private readonly authority: BackupAuthority, private readonly now: () => number = Date.now) {}
+    private readonly audit: BackupAudit, private readonly authority: BackupAuthority, private readonly now: () => number = Date.now,
+    private readonly installationIdentity?: () => Promise<unknown>) {}
   async execute(input: unknown, passphrase: string) {
     const parsed = backupCommandSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('BACKUP_INPUT_INVALID');
@@ -24,6 +26,7 @@ export class BackupApplication {
     await this.audit(event('intent', null), this.authority.integrity);
     let applied = false;
     try {
+      if (this.installationIdentity) assertUnsealedInstallation(await this.installationIdentity());
       // Owner CLI review 2026-10-19: where the set is comes first; no passphrase is its own cause, never "wrong passphrase".
       if (command.action !== 'create') await this.storage.locate?.(command.set);
       if (!passphrase) throw ErrorRegistry.createError('BACKUP_PASSPHRASE_REQUIRED');
@@ -34,7 +37,7 @@ export class BackupApplication {
       return result;
     } catch (error) {
       // The original failure travels only as the error's cause for diagnosis; the message, code and audit stay the registered BACKUP_IO.
-      const failure = error instanceof DeckentError && error.code.startsWith('BACKUP_') ? error : ErrorRegistry.createError('BACKUP_IO', { cause: error });
+      const failure = error instanceof BeuserTransferError || error instanceof DeckentError && error.code.startsWith('BACKUP_') ? error : ErrorRegistry.createError('BACKUP_IO', { cause: error });
       await this.audit(event(applied || failure.code === 'BACKUP_RESTORE_INCOMPLETE' ? 'uncertain' : 'failed', failure.code), this.authority.integrity);
       throw failure;
     }

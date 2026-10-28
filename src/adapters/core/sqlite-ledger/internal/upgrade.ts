@@ -1,3 +1,4 @@
+import { BEUSER_GENESIS_PATH, BeuserTransferError, assertUnsealedInstallation } from '#engine/core/beuser-realm/index.js';
 import { chmodSync, constants, lstatSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -16,7 +17,7 @@ export interface LedgerUpgrade { readonly from: number; readonly to: number; rea
  * The caller runs this once, before the service accepts connections; clients and read paths never migrate.
  */
 export function upgradeExistingLedger(path: string, options: SqliteLedgerOptions, backupDirectory: string, now: Date,
-  profiles?: SupervisorProfileValidator, companyId?: string): LedgerUpgrade | null {
+  profiles?: SupervisorProfileValidator, companyId?: string, installationIdentity?: unknown): LedgerUpgrade | null {
   try { if (!lstatSync(path).isFile()) return null; } catch { return null; }
   assertSqliteEngineSupported(process.versions.sqlite);
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
@@ -25,6 +26,10 @@ export function upgradeExistingLedger(path: string, options: SqliteLedgerOptions
   try {
     from = requireLedgerVersion(db, 0);
     if (from === CURRENT_LEDGER_VERSION) return null;
+    assertUnsealedInstallation(installationIdentity);
+    // Current/missing ledgers need no backup; an older sealed ledger must refuse, never skip backup and migrate.
+    try { lstatSync(BEUSER_GENESIS_PATH); throw new BeuserTransferError(); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     backupPath = join(backupDirectory, `ledger-v${from}-${now.toISOString().replace(/[:.]/g, '-')}.db`);
     try { lstatSync(backupPath); throw new Error('LEDGER_BACKUP_EXISTS'); } catch (error) { if ((error as Error).message === 'LEDGER_BACKUP_EXISTS') throw error; }
     db.prepare('VACUUM INTO ?').run(backupPath);
