@@ -32,6 +32,21 @@
         "path": "package/LICENSE"
       },
       "retrieved": "2026-09-30"
+    },
+    {
+      "name": "@xterm/headless",
+      "version": "6.0.0",
+      "license": "MIT",
+      "file": "xterm-headless@6.0.0/LICENSE",
+      "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd",
+      "reason": "The exact npm headless tarball does not ship a license file; this is its upstream repository license at the registry gitHead.",
+      "source": {
+        "type": "vcs",
+        "url": "https://raw.githubusercontent.com/xtermjs/xterm.js/f447274f430fd22513f6adbf9862d19524471c04/LICENSE",
+        "commit": "f447274f430fd22513f6adbf9862d19524471c04",
+        "path": "LICENSE"
+      },
+      "retrieved": "2026-10-29"
     }
   ]
 }

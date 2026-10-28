@@ -10,6 +10,12 @@ Ayrıntılı sıra, dilimler, bağımlılıklar ve açık sorular [2026-10-15 yo
 
 **Beta kapısı (sekiz koşul; beta kabulü verilmedi; durum 2026-10-27):** (1) owner terminal kabulü: owner denemesi bekleniyor; (2) dispatch öncesi S6: kod alpha.39/alpha.46, kabul kanıtı açık (BETA-RAKIP-4 = alpha.54 BR4); (3) NATIVE-BAGLAM: kod alpha.39, kabul kanıtı açık (BR4); (4) temiz makine provası: açık, N1 50 görev son sayım 20/50 (2026-10-18); (5) exact aday CI: son birleşen alpha.56 kendi head'inde (PR #117), beta adayı Node 26 (10-28) sonrası yeniden; (6) dürüst bilinen sınırlar/README: sürekli; (7) N1 devir ve test-ERP canlı gözlemi: açık; (8) CLI-INSAN (owner 2026-10-19; Sıradaki 14): kod alpha.48 ve alpha.53'te, kabul açık. Bir sürümün tarihsel yeşili gelecekteki adaya taşınmaz; 7 fixture kanıtıyla kapanmaz. Aşağıdaki gruplar bu kapıların açılmış ön işlerini içerir.
 
+## BeUser B1 — alpha.57 entegrasyonu (owner 27–29 Ekim 2026)
+
+C1–C5 bu yan dalda birleşti; C6 author entegrasyonu kabul/kapanış değildir. R3-B: sistem satırları ilk init/upgrade yayınının içindedir; replay'in özgün byte denetimi korunur, aynı veri revision'ında silinen izin geri verilmez. Üretim host callback'leri, genel Run/Task-bound Attempt rezervasyonu, kalıcı adapter custody/private channel, C4→C5→TaskEvaluation ve özel kalıcı rapor/sorgu kaynakta bağlıdır. Dry admission gerçek SQLite/pool üzerinde doğrulanır; gerçek realm/model çağrısı yapılmaz. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; unknown/null başarıya dönüştürülmez. C7 birleşik paket yürüyüşü, bağımsız inceleme ve owner kabulü bekler. Tavanlar adapters 40000/composition 12000 değişmez.
+
+Core template 18 kalır; tavan artırımı yapılmaz. O-1 mutlak sealed backup/restore yasağı; backup bağımlı dallar unknown. Systemd unknown sürümü bekletmez. Author kontrolü, bağımsız review, hosted CI ve owner kabulü ayrı kapılardır. [Modül notu](.deckent/docs/architecture/modules/beuser.md).
+
 ## Şimdi (en çok 7)
 
 Kod inmesi kabul değildir; her sürümün kanıtı ve kabul durumu [COMPLETED-PLAN](COMPLETED-PLAN.md)'dadır.

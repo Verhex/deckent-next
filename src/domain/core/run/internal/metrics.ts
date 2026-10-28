@@ -29,7 +29,7 @@ const legacyMetricsSchema = z.object({ schemaVersion: z.literal(1), ...common,
  * attributable to the worker/agent; every other value is its own bucket that no aggregation rule reads (a crash never counts against an agent). */
 export const FAILURE_CAUSES = ['criteria-failed', 'worker-report-failed', 'human-rejected', 'infra', 'model', 'dependency', 'policy', 'operator', 'unattributed'] as const;
 /** What the verdict rests on (law 1): the installed evaluators' evidence kinds plus a human decision; `unknown` for an unlisted evaluator. */
-export const METRIC_EVIDENCE_KINDS = ['exit-code', 'human-decision', 'operation-record', 'unknown'] as const;
+export const METRIC_EVIDENCE_KINDS = ['exit-code', 'human-decision', 'operation-record', 'harness-readback', 'unknown'] as const;
 const label = z.string().min(1).max(64);
 /** ATAMA-0 v2 (owner A1/A5, ASS1): effort, the worker-reported model with its evidence label (a report, never provider attestation),
  * container duration, evidence kinds, rubric score, human decisions and quota parks. One current row per (Task, Attempt, outcome kind)

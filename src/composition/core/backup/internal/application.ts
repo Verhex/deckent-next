@@ -86,7 +86,16 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     // C-PRIO J1: a recovery audit lives next to the set, so a set that does not exist is refused before that audit is written (no stray
     // audit folder, never AUDIT_UNAVAILABLE for a mistyped path). Any other refusal of an existing set (unsafe, modified) is audited as before.
     if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'BACKUP_SET_NOT_FOUND') throw error; });
-    const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority);
+    const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority, Date.now, async () => {
+      await FileInstallationIdentityStore.assertTransferAllowed(layout);
+      // A completed purge may leave an identity directory containing foreign files. Restore owns that retained loss;
+      // a missing record is not a new identity. Genesis/raw markers are refused before this observation and by storage.
+      const record = await lstat(join(productResourcePath(layout, 'installationIdentity'), 'identity.json'))
+        .catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+      if (!record) return undefined;
+      const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
+      return identity.status === 'available' ? identity.value : undefined;
+    });
     // Lead 2026-10-27: a set an uninstall archived files beside also brings those files back (never over a file that exists again).
     const result = await app.execute(command, passphrase); if (command.action === 'restore') await restoreUninstallArchive(command.set, uninstallArchiveRoots(resolve(projectRoot), dirname(globalConfigPath), options.env), passphrase, limits); await release?.(); return result;
   } finally { recovered?.close(); }

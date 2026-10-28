@@ -48,8 +48,13 @@ it.skipIf(process.platform === 'win32').each([false, true])('installer template/
   try {
     const integrity = await openLocalIntegrityAuthority(f.config.productLayout, f.config.approvals.keyFile);
     const records = new AuditApplication(store, integrity).list('s', 0, 100);
-    expect(records).toHaveLength(named ? 2 : 1);
-    const record = records[0]!;
+    expect(records).toHaveLength(named ? 4 : 2); // original init, optional named-person data, then the template batches
+    const dataRecords = records.filter(record => record.event.subject.kind === 'authority-change' && record.event.subject.installer?.basis === 'system-policy-rows');
+    expect(dataRecords).toHaveLength(named ? 2 : 1);
+    const templateRecords = records.filter(record => record.event.subject.kind === 'authority-change' && record.event.subject.installer?.basis !== 'system-policy-rows');
+    expect(templateRecords).toHaveLength(named ? 2 : 1);
+    for (const record of records) expect(verifyAuditRecord(record, integrity)).toEqual(record);
+    const record = templateRecords[0]!;
     expect(record.event.subject).toMatchObject({ kind: 'authority-change', installer: { basis: named ? 'named-person' : 'first-run', person: f.person },
       revision: { before: 'first-run-template-v4', after: applied.revision }, counts: { grantsAdded: applied.rules.length, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } });
     expect(record.event.subject).not.toHaveProperty('approvalId'); expect(record.event.subject).not.toHaveProperty('decider');

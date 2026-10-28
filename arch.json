@@ -247,6 +247,7 @@
       "dependencies": [
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
+        "src/domain/core/beuser",
         "src/domain/core/primitives",
         "src/domain/core/run",
         "src/domain/core/task-evaluation",
@@ -325,7 +326,8 @@
         "src/composition/core/memory-rollout",
         "src/composition/core/hub",
         "src/adapters/core/provider-siwc",
-        "src/engine/core/monitor"
+        "src/engine/core/monitor",
+        "src/composition/core/beuser"
       ],
       "plan": "SURFACES"
     },
@@ -487,7 +489,10 @@
         "src/domain/core/agent-catalog",
         "src/domain/core/catalog-evolution",
         "src/platform/core/output",
-        "src/engine/core/bootstrap-identity"
+        "src/engine/core/bootstrap-identity",
+        "src/adapters/core/beuser-surface",
+        "src/engine/core/beuser-contract",
+        "src/engine/core/beuser-realm"
       ],
       "plan": "FOUNDATION"
     },
@@ -918,15 +923,16 @@
         "src/domain/core/run",
         "src/domain/core/task-evaluation",
         "src/domain/core/task-graph",
+        "src/domain/core/worker-event",
         "src/engine/core/attempts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
+        "src/engine/core/handoff-observation",
         "src/engine/core/runs",
         "src/engine/core/supervisor",
-        "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/engine/core/handoff-observation",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/platform/core/redaction"
       ],
       "plan": "CONTRACT"
     },
@@ -1361,7 +1367,8 @@
         "src/surfaces/core/cli-memory",
         "src/surfaces/core/cli-agents",
         "src/surfaces/core/setup",
-        "src/surfaces/core/cli-hub"
+        "src/surfaces/core/cli-hub",
+        "src/surfaces/core/cli-beuser"
       ],
       "plan": "SURFACES"
     },
@@ -1498,7 +1505,8 @@
         "src/engine/core/effect",
         "src/engine/core/approval",
         "src/domain/core/attempt",
-        "src/engine/core/bootstrap-identity"
+        "src/engine/core/bootstrap-identity",
+        "src/engine/core/system-policy-rows"
       ],
       "plan": "INSTALLATION"
     },
@@ -1551,7 +1559,8 @@
         "src/composition/core/runs",
         "src/composition/core/approvals",
         "src/adapters/core/git-workspace",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/engine/core/system-policy-rows"
       ],
       "plan": "INSTALLATION"
     },
@@ -1589,7 +1598,9 @@
         "src/adapters/core/file-policy",
         "src/platform/core/i18n",
         "src/platform/core/errors",
-        "src/engine/core/bootstrap-identity"
+        "src/engine/core/bootstrap-identity",
+        "src/engine/core/beuser-realm",
+        "src/platform/core/common"
       ],
       "plan": "INSTALLATION"
     },
@@ -1634,17 +1645,18 @@
     },
     "src/adapters/core/sqlite-ledger": {
       "dependencies": [
+        "src/adapters/core/sqlite-ledger-migrations",
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/run",
         "src/domain/core/task-graph",
+        "src/domain/core/worker-event",
         "src/engine/core/attempts",
+        "src/engine/core/beuser-realm",
         "src/engine/core/dispatch",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
-        "src/platform/core/config-fields",
-        "src/domain/core/worker-event",
-        "src/adapters/core/sqlite-ledger-migrations"
+        "src/platform/core/config-fields"
       ],
       "plan": "STORE"
     },
@@ -3207,25 +3219,27 @@
       "dependencies": [
         "src/domain/core/audit",
         "src/domain/core/policy",
-        "src/platform/core/errors",
         "src/domain/core/principal",
+        "src/engine/core/beuser-realm",
+        "src/platform/core/errors",
         "src/platform/core/integrity"
       ],
       "plan": "INSTALLATION"
     },
     "src/adapters/core/backup-store": {
       "dependencies": [
-        "src/platform/core/host",
-        "src/engine/core/audit",
-        "src/domain/core/audit",
-        "src/platform/core/integrity",
-        "src/platform/core/errors",
-        "src/engine/core/backup",
         "src/adapters/core/installation-files",
         "src/adapters/core/local-runtime-socket",
+        "src/domain/core/audit",
+        "src/engine/core/audit",
+        "src/engine/core/backup",
+        "src/engine/core/beuser-realm",
+        "src/platform/core/config",
         "src/platform/core/config-fields",
-        "src/platform/core/utils",
-        "src/platform/core/config"
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/integrity",
+        "src/platform/core/utils"
       ],
       "plan": "INSTALLATION"
     },
@@ -4509,6 +4523,160 @@
         "src/platform/core/errors"
       ],
       "plan": "CONTRACT"
+    },
+    "src/domain/core/beuser": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/beuser-contract": {
+      "dependencies": [
+        "src/domain/core/beuser",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/domain/core/attempt",
+        "src/domain/core/audit",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/i18n",
+        "src/engine/core/model-invocation",
+        "src/engine/core/task-evaluation"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/system-policy-rows": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/domain/core/audit",
+        "src/engine/core/policy"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/engine/core/beuser": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/audit",
+        "src/domain/core/beuser",
+        "src/domain/core/command",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/audit",
+        "src/engine/core/beuser-contract",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/nervous",
+        "src/engine/core/runs",
+        "src/engine/core/supervisor",
+        "src/platform/core/integrity",
+        "src/domain/core/model-invocation"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/beuser-evidence": {
+      "dependencies": [
+        "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/attempt",
+        "src/domain/core/beuser",
+        "src/domain/core/primitives",
+        "src/engine/core/beuser-contract",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/redaction"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/beuser-surface": {
+      "dependencies": [
+        "src/domain/core/beuser",
+        "src/domain/core/principal",
+        "src/engine/core/beuser-contract"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/beuser-realm": {
+      "dependencies": [
+        "src/adapters/core/beuser-surface",
+        "src/adapters/core/installation-artifacts",
+        "src/capabilities/core/artifacts",
+        "src/domain/core/beuser",
+        "src/domain/core/principal",
+        "src/engine/core/beuser-contract",
+        "src/engine/core/beuser-realm",
+        "src/engine/core/dispatch",
+        "src/engine/core/supervisor",
+        "src/platform/core/common",
+        "src/platform/core/config",
+        "src/platform/core/integrity",
+        "src/platform/core/redaction",
+        "src/platform/core/utils"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/engine/core/beuser-realm": {
+      "dependencies": [
+        "src/domain/core/beuser",
+        "src/domain/core/primitives",
+        "src/engine/core/beuser-contract",
+        "src/platform/core/integrity"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/surfaces/core/cli-beuser": {
+      "dependencies": [
+        "src/engine/core/beuser-evidence",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/surfaces/core/cli-kit"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/composition/core/beuser": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/beuser-realm",
+        "src/adapters/core/beuser-surface",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/installation-artifacts",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/sqlite-model-activation",
+        "src/capabilities/core/artifacts",
+        "src/capabilities/core/evaluation-evidence",
+        "src/composition/core/model-activation",
+        "src/composition/core/model-invocation",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/runs",
+        "src/composition/core/scoped-request",
+        "src/composition/core/terminal-chat",
+        "src/domain/core/beuser",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/engine/core/beuser",
+        "src/engine/core/beuser-contract",
+        "src/engine/core/beuser-evidence",
+        "src/engine/core/beuser-realm",
+        "src/engine/core/dispatch",
+        "src/engine/core/nervous",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/supervisor",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/integrity",
+        "src/platform/core/managed-files",
+        "src/platform/core/redaction"
+      ],
+      "plan": "EXECUTION"
     }
   },
   "composition": {
@@ -4543,9 +4711,9 @@
       "domain": 10800,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 38000,
+      "adapters": 40000,
       "surfaces": 45000,
-      "composition": 11000
+      "composition": 12000
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -4639,7 +4807,8 @@
       "brainwait",
       "agentstats",
       "agentsevo",
-      "onboarding-session"
+      "onboarding-session",
+      "beuser"
     ]
   },
   "literals": {
@@ -4688,7 +4857,8 @@
       ".deckent/worker-instructions.md",
       "docs/ai-install.md",
       "docs/ai-install.tr.md",
-      "site/llms.txt"
+      "site/llms.txt",
+      ".deckent/docs/architecture/modules/beuser.md"
     ],
     "pointerFiles": {
       "CLAUDE.md": 70,

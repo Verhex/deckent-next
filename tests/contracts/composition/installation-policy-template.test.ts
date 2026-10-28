@@ -8,9 +8,10 @@ import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTe
 import { main } from '#surfaces/index.js';
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 
+import { FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
@@ -48,11 +49,12 @@ it('previews without touching disk, then a real apply journals and writes policy
   const identityPaths = ['installation-identity', 'project-identity'].map(name => join(root, '.deckent', name, 'identity.json'));
   const identities = await Promise.all(identityPaths.map(path => readFile(path, 'utf8')));
   expect(JSON.parse(identities[0]!)).toHaveProperty('installationId'); expect(JSON.parse(identities[1]!)).toHaveProperty('projectId');
-  expect(JSON.parse(policyBytes)).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v18' });
-  expect(JSON.parse(bindingsBytes)).toEqual({ schemaVersion: 1, revision: 'first-run-template-v18-bindings', bindings: [] });
+  expect(JSON.parse(policyBytes)).toMatchObject({ schemaVersion: 2, revision: expect.stringMatching(/^a-/u) });
+  expect(JSON.parse(policyBytes).roles).toContainEqual(expect.objectContaining({ id: expect.stringMatching(/^sr-/u) }));
+  expect(JSON.parse(bindingsBytes)).toMatchObject({ schemaVersion: 3, revision: expect.stringMatching(/^a-/u), bindings: [expect.objectContaining({ id: expect.stringMatching(/^sr-/u) })], modes: [] });
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600); expect((await stat(bindingsPath)).mode & 0o777).toBe(0o600);
 
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 18 });
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 18 }); // separate committed data rows preserve recognition
 
   const replay = await applyPolicyTemplateInstallation(root, 'installation');
   expect(replay).toMatchObject({ status: 'replayed' });
@@ -107,7 +109,9 @@ it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
-  const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { revision: string; grants: { id: string; resource: { ids: unknown } }[] };
+  const templateFixture = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(root, '.deckent/bindings.json'), `${JSON.stringify(templateFixture.bindings)}\n`);
+  const v5 = templateFixture.policy as { revision: string; grants: { id: string; resource: { ids: unknown } }[] };
   // The bytes alpha.10 `init policy` wrote: v5 without the MCP rules, read tools without the proposal tool, the v4 revision.
   const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !V13.includes(grant.id) && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(grant.id))
     .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: (grant.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : grant) };
@@ -132,7 +136,9 @@ it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and e
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
-  const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
+  const templateFixture = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(root, '.deckent/bindings.json'), `${JSON.stringify(templateFixture.bindings)}\n`);
+  const v5 = templateFixture.policy as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
   const person = v5.grants[0]!.principals;
   const wire = { id: 'hand-mcp-github', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: person, resource: { kind: 'agent-tool', ids: ['mcp__github__search'] } };
   const odd = { id: 'first-run-approvals', effect: 'allow', actions: ['inspect'], scopes: ['installation'], principals: person, resource: { kind: 'approval', ids: 'all' } };
@@ -165,7 +171,9 @@ it('security (lead 2026-10-07): only the installation owner may use the direct u
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   const policyPath = join(root, '.deckent/policy.json');
-  const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
+  const templateFixture = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES });
+  await writeFile(join(root, '.deckent/bindings.json'), `${JSON.stringify(templateFixture.bindings)}\n`);
+  const v5 = templateFixture.policy as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
   const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !V13.includes(grant.id) && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
     'first-run-approvals'].includes(grant.id)) };
   await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
@@ -237,11 +245,11 @@ it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires ins
 it.skipIf(process.platform === 'win32')('CLI previews exactly the v11 + v12 + v13 delta for v10, applies it on the previewed revision and preserves bindings', async () => {
   const root = await project(); await applyPolicyTemplateInstallation(root, 'installation');
   const path = join(root, '.deckent/policy.json'), bindingPath = join(root, '.deckent/bindings.json');
-  const current = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
+  const current = firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).policy as { grants: { id: string }[] };
   const ids = ['first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown', ...V13];
   const older = { ...current, revision: 'first-run-template-v10', grants: current.grants.filter(rule => !ids.includes(rule.id)) };
   await writeFile(path, JSON.stringify(older), { mode: 0o600 });
-  const oldBindings = { ...JSON.parse(await readFile(bindingPath, 'utf8')), revision: 'first-run-template-v10-bindings' };
+  const oldBindings = { ...firstRunPolicyTemplate({ scopeId: 'installation', principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).bindings, revision: 'first-run-template-v10-bindings' };
   await writeFile(bindingPath, JSON.stringify(oldBindings), { mode: 0o600 });
   const before = await readFile(path, 'utf8'), bindings = await readFile(bindingPath, 'utf8');
   const output: string[] = [], errors: string[] = [];

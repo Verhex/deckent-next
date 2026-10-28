@@ -14,7 +14,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 workerLineage(ROOT);
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');
-const ASSET_EXTENSIONS = new Set(['.json', '.md', '.template', '.sh']);
+const ASSET_EXTENSIONS = new Set(['.json', '.md', '.template', '.sh', '.py']);
 execFileSync(process.execPath, [join(ROOT, 'scripts/package-metadata.mjs')], { cwd: ROOT, stdio: 'inherit' });
 const BINS = Object.values(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).bin ?? {});
 execFileSync(process.execPath, [join(ROOT, 'scripts/config-vocabulary.mjs')], { cwd: ROOT, stdio: 'inherit' });

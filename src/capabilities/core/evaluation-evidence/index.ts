@@ -6,3 +6,5 @@ export { OPERATION_EVIDENCE_EVALUATOR, evaluateOperationEvidence, createInstalle
 export type { OperationEvidenceReader, OperationEvidenceResult, OperationSettlementReference } from './internal/operation-evidence.js';
 export { evaluatorEvidence } from './internal/evidence-kind.js';
 export type { EvaluatorEvidence, EvaluatorEvidenceKind } from './internal/evidence-kind.js';
+export { BEUSER_EVALUATOR, beuserReadbackSchema, beuserEvidenceSchema, beuserParametersSchema, beuserCalibrationSchema, beuserDigest, evaluateBeuserEvidence, validateInstalledBeuserEvaluator, validateBeuserCriterion } from './internal/beuser.js';
+export type { BeuserEvidence, BeuserReadback, BeuserParameters, BeuserCalibration } from './internal/beuser.js';

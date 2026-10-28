@@ -38,3 +38,4 @@ export { DecisionDelegationError, getDecisionSteps, delegationQuerySchema, deleg
 export type { DecisionStep, DelegationQuery, DelegationCommand, DecisionDelegationView } from './internal/delegations.js';
 
 export { planOwnerBaseline, personOnlyBaselineCells, OWNER_BASELINE_FAMILIES, OWNER_BASELINE_DEFAULT_FAMILIES, OWNER_BASELINE_FAMILY_REGISTRY, OWNER_BASELINE_PREFIX, type OwnerBaselineFamily, type OwnerBaselineCell, type OwnerBaselineState, type OwnerBaselinePlan } from './internal/owner-baseline.js';
+export { BEUSER_EVALUATOR_ALLOWED_PAIRS } from './internal/ai-floor.js';

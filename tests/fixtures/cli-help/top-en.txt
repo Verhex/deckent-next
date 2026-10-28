@@ -37,6 +37,9 @@ Observe:
       [--scope <id>] [--json]
 
 Execute work:
+  beuser      Walk an isolated product journey or read its retained report.
+      walk | report
+      <walk|report>
   hub         Manage signed Hub packages and sources.
       sources list|add|remove | search | inspect | install | update |
       uninstall | verify | export | refresh | cards | publish | yank | revoke

@@ -67,7 +67,7 @@ it('offers the tiers in one card, checks before the single confirmation, preview
   expect(CLI_CATALOG.find(command => command.name === 'uninstall')).toMatchObject({ installation: 'owned' });
   expect(cliInstallationContract(['uninstall', '--json'], CLI_COMMANDS)).toBe('owned');
   expect(uninstallPlanLines(plan, 'tr').join('\n')).toContain('Silinecek');
-  // Own only this command's entry in the shared help goldens; retain other lanes' entries byte-for-byte.
+  // The catalog generator owns command ordering; this test checks only uninstall's rendered entry.
   for (const locale of ['en', 'tr'] as const) {
     let help = '';
     expect(await main(['uninstall', '--help', '--lang', locale], {
@@ -76,9 +76,7 @@ it('offers the tiers in one card, checks before the single confirmation, preview
     })).toBe(0);
     const path = `../../fixtures/cli-help/commands-${locale}.json`;
     const golden = JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8')) as Record<string, string>;
-    delete golden['uninstall'];
-    const otherCommands = golden;
-    await expect(JSON.stringify({ uninstall: help, ...otherCommands }, null, 2) + '\n').toMatchFileSnapshot(path);
+    expect(help).toBe(golden['uninstall']);
   }
 });
 

@@ -1,4 +1,4 @@
-export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from './internal/evidence.js';
+export { verifyDispatchEvaluationEvidence, readBeuserDispatchEvidence, TaskEvidenceError } from './internal/evidence.js';
 export { proposeTaskEvaluationCommit, assertTaskEvaluationReady } from './internal/transition.js';
 export { taskEvaluationCommitSchema, assertTaskEvaluationCustody } from './internal/commit.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from './internal/commit.js';

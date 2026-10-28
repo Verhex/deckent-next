@@ -11,6 +11,11 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 Deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
+
+## BeUser B1 integration candidate (unreleased alpha.57)
+
+The source candidate binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. C7 assembled-package proof, independent review, hosted CI and owner acceptance are open.
+
 ## Platforms: tried and not tried
 
 - **Tried:** Linux and Windows through WSL2 (the supported execution path). Hosted checks run on Ubuntu with Node 24 and

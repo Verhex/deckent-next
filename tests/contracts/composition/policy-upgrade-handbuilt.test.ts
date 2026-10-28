@@ -3,12 +3,12 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FilePolicySource } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FilePolicySource, readLocalOsIdentity } from '#adapters/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, firstRunPolicyTemplate, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 /** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
 const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
   'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
-import { decideAgentToolCall } from '#engine/index.js';
+import { FIRST_RUN_TOOL_NAMES, decideAgentToolCall } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -66,6 +66,8 @@ async function installation(policy: unknown = handBuilt()) {
   await applyPolicyTemplateInstallation(root, SCOPE);
   const data = join(root, '.deckent'), policyPath = join(data, 'policy.json');
   await writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`, { mode: 0o600 });
+  // Historical hand-built state has no BeUser binding; reset both authority documents together.
+  await writeFile(join(data, 'bindings.json'), JSON.stringify(firstRunPolicyTemplate({ scopeId: SCOPE, principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).bindings), { mode: 0o600 });
   const source = new FilePolicySource({ path: policyPath, bindingsPath: join(data, 'bindings.json'), archivePath: join(data, 'audit', 'authority-revisions'),
     ownerUid: userInfo().uid, maxBytes: 65_536 });
   const principal = { id: 'owner@live', ...PERSON, assurance: 'os-user' as const, scopeIds: [SCOPE] };
@@ -244,7 +246,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const root = await mkdtemp(join(tmpdir(), 'deckent-policy-handbuilt-template-')); roots.push(root);
     await applyPolicyTemplateInstallation(root, SCOPE);
     const policyPath = join(root, '.deckent', 'policy.json');
-    const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
+    const v5 = firstRunPolicyTemplate({ scopeId: SCOPE, principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).policy;
+    await writeFile(join(root, '.deckent', 'bindings.json'), JSON.stringify(firstRunPolicyTemplate({ scopeId: SCOPE, principal: readLocalOsIdentity(), ...FIRST_RUN_TOOL_NAMES }).bindings), { mode: 0o600 });
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
       'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)

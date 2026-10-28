@@ -81,8 +81,12 @@ export const catalogAggregatorPrincipal = (owner: { readonly issuer: string; rea
   const ref = catalogAggregatorPrincipalRef(owner);
   return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
 };
+/** B1: composition-only workload reference; persona and wire input never issue this identity. */
+export const beuserEvaluatorPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
+  Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/beuser-evaluator`), subject: identitySchema.parse(owner.subject) });
+export const isBeuserEvaluatorPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/beuser-evaluator');
 /** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller or evaluator, recovery, catalog aggregator): never an installing person. */
 export const isWorkloadPrincipalRef = (ref: { readonly issuer: string }) => isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref)
-  || isMemoryEvaluatorPrincipal(ref) || isRecoveryPrincipal(ref) || isCatalogAggregatorPrincipal(ref);
+  || isMemoryEvaluatorPrincipal(ref) || isRecoveryPrincipal(ref) || isCatalogAggregatorPrincipal(ref) || isBeuserEvaluatorPrincipal(ref);
 /** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous, memory-distiller/evaluator or recovery os-user is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) => isWorkloadPrincipalRef(actor) || actor.assurance !== 'os-user';

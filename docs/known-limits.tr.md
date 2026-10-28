@@ -11,6 +11,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
+
+## BeUser B1 entegrasyon adayı (yayımlanmamış alpha.57)
+
+Kaynak adayı walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel kalıcı realm kayıtlarını, private transport'u, C4/C5 kanıtını, TaskEvaluation ve Run raporunu bağlar. R3-B izin verisini init/upgrade yayınının içine alır; replay özgün byte denetimini korur. Dry admission yazar kanıtıdır, gerçek realm yolculuğu değildir. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; ölçülmeyen alanlar unknown/null kalır. Sonlu limits profili provisional'dır. Mühürlü ledger hiçbir yolda export/backup/restore olamaz; yedek bağımlı dallar unknown kalır. Desteklenmeyen private systemd unknown/non-blocking'dir. Host socket/bus çözümü yoktur. Native adoption/tam surfaces B2/B4'tür. C7 birleşik paket kanıtı, bağımsız inceleme, hosted CI ve owner kabulü açıktır.
+
 ## Platformlar: denenenler ve denenmeyenler
 
 - **Denenen:** Linux ve WSL2 üzerinden Windows (desteklenen yürütme yolu). Barındırılan (hosted) kontroller Ubuntu'da Node 24 ve

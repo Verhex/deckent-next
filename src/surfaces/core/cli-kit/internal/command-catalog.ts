@@ -48,6 +48,10 @@ const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revis
  * Children inherit the family handler; existing handlers retain argument validation and execution. Handler actions and catalog
  * actions are kept equal by `cli-grouped-help.test.ts` (both directions). */
 export const CLI_CATALOG = [
+  { name: 'beuser', group: 'work', summary: 'beuser.help.summary', detail: 'beuser.help.family', args: '<walk|report>', bare: {}, children: [
+    action('walk', 'work', 'beuser.help.walk.summary', 'beuser.help.walk', { requires: ['--journey <id>', '--candidate <path>'] }),
+    action('report', 'observe', 'beuser.help.report.summary', 'beuser.help.report'),
+  ] },
   { name: 'uninstall', group: 'setup', summary: 'cli.uninstall.help.summary', detail: 'cli.uninstall.help', installation: 'owned', args: '[--keep-data|--keep-work|--all] [--force] [--disable-unit] [--yes] [--dry-run [--verbose]] [--json]', bare: 'handler' },
   { name: 'hub', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', args: '[--scope <id>] [--input <file|->]', children: [
     { name: 'sources', group: 'work', summary: 'hub.help.action.sources', detail: 'hub.help', bare: 'handler', children: ['list', 'add', 'remove'].map(name => action(name, 'work', `hub.help.action.sources.${name}` as MessageKey, 'hub.help')) },

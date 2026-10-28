@@ -3,7 +3,9 @@ import { z } from 'zod';
 /** Durable installation metadata; neither a host/path fingerprint nor an authorization grant. */
 export const installationIdSchema = z.string().uuid().brand<'InstallationId'>();
 export type InstallationId = z.infer<typeof installationIdSchema>;
-export const installationIdentitySchema = z.object({ schemaVersion: z.literal(1), installationId: installationIdSchema }).strict().readonly();
+const realmSealSchema = z.object({ schemaVersion: z.literal(1), fixture: z.literal('realm-sealed'), realmId: z.string().min(1), nonce: z.string().uuid(),
+  bindingDigest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict().readonly();
+export const installationIdentitySchema = z.object({ schemaVersion: z.literal(1), installationId: installationIdSchema, realmSeal: realmSealSchema.optional() }).strict().readonly();
 export type InstallationIdentity = z.infer<typeof installationIdentitySchema>;
 
 const bindingLocation = { canonicalRoot: z.string().min(1), device: z.string().regex(/^\d+$/), inode: z.string().regex(/^[1-9]\d*$/) };
@@ -47,4 +49,6 @@ export const boundInstallationIdentitySchema = z.object({ schemaVersion: z.liter
 }).strict().readonly();
 /** An unbound v1 record is never trusted as bound: on a machine-capable host it needs an explicit operator decision; on a host with only
  * weak binding the next write path binds it (weak) under the identity writer lock. Reads never upgrade. */
-export const installationIdentityRecordSchema = z.union([boundInstallationIdentitySchema, installationIdentitySchema]);
+const sealedInstallationIdentitySchema = z.object({ schemaVersion: z.literal(3), installationId: installationIdSchema,
+  binding: installationBindingSchema, lastResolution: installationIdentityResolutionSchema.nullable(), realmSeal: realmSealSchema }).strict().readonly();
+export const installationIdentityRecordSchema = z.union([sealedInstallationIdentitySchema, boundInstallationIdentitySchema, installationIdentitySchema]);

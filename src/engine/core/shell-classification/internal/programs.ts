@@ -215,7 +215,11 @@ export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record
   deckent: Object.freeze({ secret: { actions: ['grant', 'revoke', 'set', 'delete', 'handover', 'store'] }, approval: { actions: ['decide'] },
     'init policy': { actions: [''], requiredFlags: ['--apply', '--modes', '--owner-baseline'] },
     init: { actions: ['', 'apply', 'resume'], requiredFlags: ['--yes'] },
-    run: { actions: ['resume', 'close'], bound: true }, task: { actions: ['accept', 'reject'], bound: true } }) });
+    run: { actions: ['resume', 'close'], bound: true }, task: { actions: ['accept', 'reject'], bound: true }, beuser: { actions: ['walk'] } }),
+  // Trusted harness entry names are security vocabulary, not a user-selectable executable registry.
+  'pty-driver.py': Object.freeze({ 'pty-driver.py': { actions: [''] } }),
+  'index.js': Object.freeze({ 'beuser-surface/index.js': { actions: [''] }, 'beuser/index.js': { actions: [''] } }),
+  'index.ts': Object.freeze({ 'beuser-surface/index.ts': { actions: [''] }, 'beuser/index.ts': { actions: [''] } }) });
 /** Programs that run their payload on a new pseudo-terminal (a forged terminal witness for the product's authority commands). */
 export const PTY_WRAPPER_PROGRAMS: ReadonlySet<string> = new Set(['script', 'unbuffer', 'expect']);
 /** Astra REVISE 2704 B: prefixes that run the next word as the program with the same argv and stdin (options and assignments before it). */

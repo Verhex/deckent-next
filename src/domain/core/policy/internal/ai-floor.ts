@@ -1,4 +1,4 @@
-import { isAiPrincipal, isAuditorPrincipal, isCatalogAggregatorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
+import { isBeuserEvaluatorPrincipal, isAiPrincipal, isAuditorPrincipal, isCatalogAggregatorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
 /** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
 export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
 /** S6 Nervous (K-B): the only actions the Nervous principal may ever be granted; it writes no state (the broker applies proposals). */
@@ -15,6 +15,9 @@ export const MEMORY_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect
 export const RECOVERY_ALLOWED_PAIRS = Object.freeze([['attempt', 'reconcile'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
 /** S8-3 (S8-DESIGN §9): the catalog aggregator's exact allow-list — read the catalog, Runs and memory refs, suggest, narrow (each write signed by its own key). */
 export const CATALOG_AGGREGATOR_ALLOWED_PAIRS = Object.freeze([['agent-catalog', 'inspect'], ['agent-catalog', 'suggest'], ['agent-catalog', 'narrow'], ['run', 'inspect'], ['memory', 'inspect']] as const);
+/** B1 exact security ceiling; data grants and own-Attempt application guards are still required. */
+export const BEUSER_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['run', 'inspect'], ['beuser-transcript', 'inspect'], ['attempt', 'evaluate'],
+  ['model-invocation', 'invoke'], ['beuser-sandbox', 'create'], ['beuser-sandbox', 'destroy']] as const);
 const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, action: string) => pairs.some(([allowedKind, allowed]) => allowedKind === kind && allowed === action);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
@@ -32,6 +35,7 @@ const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-ca
  */
 export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assurance?: string }, resource: { readonly kind: string; readonly id: string }, action: string): boolean {
   if (!isAiPrincipal(actor)) return false;
+  if (isBeuserEvaluatorPrincipal(actor) && !pairIn(BEUSER_EVALUATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
   // The auditor reads and writes nothing else: every other action (any resource, any extension's future action) is refused whatever is granted.
   if (isAuditorPrincipal(actor) && !(AUDITOR_READ_ACTIONS as readonly string[]).includes(action)) return true;
   if (isNervousPrincipal(actor) && !(NERVOUS_READ_ACTIONS as readonly string[]).includes(action)) return true;
@@ -89,7 +93,7 @@ const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity',
   // S3-3 (design §10, MINOR 4): the owner-only switch that makes the subscription Brain connect kind available on this installation.
   'models.headless', 'toolchains.image', 'toolchains.currency.registryEndpoint',
   // S8-2 (S8-DESIGN §9): the catalog aggregator switch and the `catalog-evolution` registry overlay (thresholds, calibration) — no AI changes either.
-  'catalogEvolution',
+  'catalogEvolution', 'beuser',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
 export function protectedConfigKey(keyPath: string): boolean {
   const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');

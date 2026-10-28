@@ -976,3 +976,7 @@ Kaynak: lead'in BEUSER-FIX-2 atama mesajları (Jev c10e0946, c6c1182a).
   `delivery-dismissed {runId, taskId, attemptId, action: dismiss|restore}`, terminal tanığıyla. /deliver ve monitor bırakılan görevi
   gizler; /deliver içindeki "bırakılanlar" listesi ve `deckent task integration-restore` geri getirir. Yama ve gözetim (custody)
   değişmez; ledger/run şeması ve göç yok.
+
+## BeUser B1 uygulama sınırları — owner 2026-10-29
+
+Owner'ın B1 planına son eki: O-1 mutlak yasağı korunur; sealed BeUser ledger yedeklenmez/restore edilmez/export edilmez, yedek gerektiren uninstall dalları adıyla unknown kalır. Private systemd yetki genişletmeden çalışmazsa unknown'dur, alpha.57'yi bekletmez. Paket tavanlarının kesin değeri birleştirmede ölçülen ihtiyaç + küçük pay olarak owner'a rakamla bildirilir; author tavan yükseltmez. Bu kararlar implementation/gerçek realm/bağımsız kabul sonucu değildir. Kaynak: dış proof BEUSER-B1-2026-10-28/OPEN-DECISIONS.md, son “Owner kararları — 2026-10-29” eki.

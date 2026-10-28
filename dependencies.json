@@ -108,7 +108,7 @@
           "note": "Server framework layered on the official SDK; not an independent client implementation."
         }
       ],
-      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface — 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
+      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface \u2014 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
       "watch": [
         "FASTURI-OUT (owner 2026-09-29): the published package does not contain the embedded ajv/ajv-formats/fast-uri/json-schema-traverse; scripts/build-dist.mjs loads _shims and validators/ajv with their ajvProvider import replaced by a stub that throws DeckentRemovedValidatorError (MCP_DEFAULT_VALIDATOR_REMOVED), and fails the build if the metafile, shipped packages or sourcemap-embedded components name them. They remain in the installed dev/test tree (embedded[] below mirrors the installed sourcemaps).",
         "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.",
@@ -475,7 +475,7 @@
         "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)",
         "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)",
         "plugin onResolve + build.resolve + onLoad replacing the MCP SDK's ajvProvider import in _shims/validators/ajv with a throwing stub (FASTURI-OUT)",
-        "package.json imports (#…) resolution inside dependencies"
+        "package.json imports (#\u2026) resolution inside dependencies"
       ],
       "criticality": "P1",
       "alternatives": [
@@ -484,7 +484,7 @@
           "package": "rolldown",
           "version": "1.2.11",
           "date": "2026-09-24",
-          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) — matters for build identity and provenance."
+          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) \u2014 matters for build identity and provenance."
         },
         {
           "name": "tsdown",
@@ -657,6 +657,65 @@
       "ownSolution": "Goes with react; aligned to 19.2.x with the react pin (DEPS-P0 applied 2026-09-29).",
       "lastReview": "2026-09-29",
       "nextReview": "2026-12-28"
+    },
+    "@xterm/headless": {
+      "kind": "runtime",
+      "reviewedVersion": "6.0.0",
+      "owners": [
+        "src/adapters/core/beuser-surface"
+      ],
+      "purpose": "Trusted BeUser controller terminal state from the isolated target PTY; never grants target authority.",
+      "features": [
+        "Terminal.write",
+        "active buffer, viewport and scrollback cells",
+        "VT parser rejection"
+      ],
+      "criticality": "P1",
+      "alternatives": [
+        {
+          "name": "own VT subset parser",
+          "note": "Rejected: incomplete terminal semantics; ANSI stripping cannot prove rendered state."
+        },
+        {
+          "name": "node-pty",
+          "note": "PTY transport only, not a terminal emulator; native dependency unnecessary for the existing Python stdlib transport."
+        }
+      ],
+      "ownSolution": "Existing Python stdlib PTY transport remains separate; no custom VT emulator.",
+      "watch": [
+        "MIT; risk owner: C6 integration / BeUser surface maintainers.",
+        "Pure JS does not bound RSS; transcript, grid and realm limits must be pinned before admission.",
+        "C7 must prove packaged PTY, unsupported VT, Unicode and cancellation paths."
+      ],
+      "lastReview": "2026-10-29",
+      "nextReview": "2026-11-28"
+    },
+    "@xterm/addon-unicode11": {
+      "kind": "runtime",
+      "reviewedVersion": "0.9.0",
+      "owners": [
+        "src/adapters/core/beuser-surface"
+      ],
+      "purpose": "Pin Unicode 11 cell width behavior for BeUser headless rendered-state evidence.",
+      "features": [
+        "Unicode11Addon",
+        "unicode.activeVersion"
+      ],
+      "criticality": "P1",
+      "alternatives": [
+        {
+          "name": "headless default Unicode provider",
+          "note": "Rejected for this slice: C3 rendered-state contract explicitly pins Unicode 11."
+        }
+      ],
+      "ownSolution": "Existing Python stdlib PTY transport remains separate; no custom VT emulator.",
+      "watch": [
+        "MIT; risk owner: C6 integration / BeUser surface maintainers.",
+        "Pure JS does not bound RSS; transcript, grid and realm limits must be pinned before admission.",
+        "C7 must prove packaged PTY, unsupported VT, Unicode and cancellation paths."
+      ],
+      "lastReview": "2026-10-29",
+      "nextReview": "2026-11-28"
     }
   },
   "platform": {

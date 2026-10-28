@@ -37,6 +37,9 @@ Başlarken:
       [--scope <id>] [--json]
 
 İş yürütme:
+  beuser      İzole ürün yolculuğunu yürü veya kalıcı raporunu oku.
+      walk | report
+      <walk|report>
   hub         İmzalı Hub paketlerini ve kaynaklarını yönetin.
       sources list|add|remove | search | inspect | install | update |
       uninstall | verify | export | refresh | cards | publish | yank | revoke

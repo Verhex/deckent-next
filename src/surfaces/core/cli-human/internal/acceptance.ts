@@ -16,6 +16,7 @@ export function acceptanceEvidenceQualifier(evaluators: readonly Readonly<{ id: 
 function evidenceParts(evaluator: Readonly<{ id: string; version: number }>, locale: Locale) {
   const entry = evaluatorEvidence(evaluator);
   const kind = entry.kind === 'exit-code' ? t('cli.human.acceptance.exitCode', {}, locale)
+    : entry.kind === 'harness-readback' ? t('beuser.acceptance.harnessReadback', {}, locale)
     : entry.kind === 'operation-record' ? t('cli.human.acceptance.operationRecord', {}, locale)
       : t('cli.human.acceptance.evaluator', { evaluator: `${terminalSafeText(evaluator.id)}@${evaluator.version}` }, locale);
   const check = entry.independent === null ? t('cli.human.acceptance.checkUnknown', {}, locale)
