@@ -438,6 +438,7 @@
   "doctor.installationBinding.required": "installation.requireMachineBinding is on and no machine identity is available: installation-bound writes are refused (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)",
   "models.connect.connected": "Connected {reference} in scope {scope}.",
   "models.connect.pending": "{reference}: waiting for approval {approval} ({key}). Run the same command again after it is allowed.",
+  "models.connect.pendingResume": "{reference}: waiting for approval {approval} ({key}). After it is allowed, continue with exactly this command (the same command id, so the same approval applies): {command}",
   "models.connect.steps": "Catalog: {catalog} · declaration: {declaration} · profile: {profile} · activation: {activation} · carried activations: {carried}",
   "models.connect.step.written": "written",
   "models.connect.step.present": "already in place",

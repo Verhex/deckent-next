@@ -32,7 +32,7 @@ function parse(argv: readonly string[]) {
 const stepWord = (state: string, locale: Locale) => state === 'written' ? t('models.connect.step.written', {}, locale)
   : state === 'present' ? t('models.connect.step.present', {}, locale) : t('models.connect.step.skipped', {}, locale);
 /** The person's summary: what is connected, under which key name, what each governed step did and what (if anything) still waits. */
-export function renderModelConnect(result: ModelConnectResult, locale: Locale): string {
+export function renderModelConnect(result: ModelConnectResult, locale: Locale, resume?: ModelConnectCommand): string {
   const reference = `${result.reference.providerId}@${result.reference.providerVersion}/${result.reference.modelId}@${result.reference.modelVersion}`;
   // BeUser alpha.56.1 (Ayşe): a pull leads with the human result (each model and its state), then the scope and reference, the key, the bookkeeping
   // steps. A single `--model`/`--reference` connect has no per-model rows and still opens with the reference line.
@@ -40,7 +40,8 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
     return model.state === 'connected' ? t('models.connect.pull.connected', params, locale) : model.state === 'unpriced' ? t('models.connect.pull.unpriced', params, locale)
       : model.state === 'notOnKey' ? t('models.connect.pull.notOnKey', params, locale) : t('models.connect.pull.notInCatalog', params, locale); });
   lines.push(result.status === 'connected' ? t('models.connect.connected', { reference, scope: result.scopeId }, locale)
-    : t('models.connect.pending', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-' }, locale),
+    : resume ? t('models.connect.pendingResume', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-', command: resumeCommand(resume) }, locale) // Astra R3: the same id resumes
+      : t('models.connect.pending', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-' }, locale),
   result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false ? t('models.connect.keyMissing', { name: result.credentialRef }, locale)
     : t('models.connect.key', { name: result.credentialRef }, locale),
   t('models.connect.steps', { catalog: stepWord(result.steps.catalog, locale), declaration: stepWord(result.steps.declaration, locale),
@@ -57,6 +58,15 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
   return lines.join('\n');
 }
 
+const word = (value: string) => /^[A-Za-z0-9_@%+=:,./-]+$/u.test(value) ? value : `'${value.replace(/'/gu, `'\\''`)}'`;
+/** Astra R3: the exact command that resumes this connection after its approval (same command id, so the same approval applies). */
+export function resumeCommand(command: ModelConnectCommand): string {
+  const model = 'nativeId' in command.model ? ['--model', command.model.nativeId] : 'reference' in command.model
+    ? ['--reference', `${command.model.reference.providerId}@${command.model.reference.providerVersion}/${command.model.reference.modelId}@${command.model.reference.modelVersion}`] : [];
+  return [t('climodels.budget.command', { action: 'connect' }), '--scope', command.scopeId, '--connection', command.connection, ...(command.endpoint ? ['--endpoint', command.endpoint] : []), ...model,
+    ...(command.cli?.executable ? ['--executable', command.cli.executable] : []), ...(command.cli?.configDir ? ['--config-dir', command.cli.configDir] : []),
+    ...(command.delegate ? ['--delegate', command.delegate.length ? command.delegate.join(',') : 'none'] : []), '--command-id', command.commandId].map((part, index) => index === 0 ? part : word(part)).join(' ');
+}
 /** `deckent models connect` (T4-B D2): the same `models.connect` application as SDK `connectModel`, MCP `connect_model` and the terminal. */
 export async function modelConnectCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
   const choosing = connectPickOnly(argv);
@@ -78,7 +88,7 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
     endpoint: value('--endpoint') ?? null, model: exact ? { reference: { providerId: exact[1], providerVersion: Number(exact[2]), modelId: exact[3], modelVersion: Number(exact[4]) } }
       : value('--model') ? { nativeId: value('--model') } : { pull: 'available' } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');
-  emit(await context.connectModel(root, command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale) });
+  emit(await context.connectModel(root, command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale, command.data) });
 }
 
 /** The connection kinds and their seeded models the host binds for the terminal's `/provider` window (registry data, exact ids). */
@@ -129,6 +139,6 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
   const command = modelConnectCommandSchema.parse({ schemaVersion: 1, commandId: `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: kind.id, endpoint: null, model: pull ? { pull: 'available' } : { nativeId } });
   emit(scopeNotice(scope, locale), modelsSinks(context));
   const result = await context.connectModel(root, command, options);
-  emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale),
+  emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale, command),
     ...(item.credentialRef && item.keyStored === false ? [t('climodels.models.connect.storeKey', { name: terminalSafeText(item.credentialRef) }, locale)] : [])].join('\n') });
 }

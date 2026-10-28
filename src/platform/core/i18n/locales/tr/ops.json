@@ -438,6 +438,7 @@
   "doctor.installationBinding.required": "installation.requireMachineBinding açık ve makine kimliği yok: kuruluma bağlı yazmalar reddedilir (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)",
   "models.connect.connected": "{reference}, {scope} kapsamına bağlandı.",
   "models.connect.pending": "{reference}: {approval} onayı bekleniyor ({key}). İzin verildikten sonra aynı komutu yeniden çalıştırın.",
+  "models.connect.pendingResume": "{reference}: {approval} onayı bekleniyor ({key}). İzin verildikten sonra tam olarak şu komutla sürdürün (aynı komut kimliği, bu yüzden aynı onay geçerli): {command}",
   "models.connect.steps": "Katalog: {catalog} · tanım: {declaration} · profil: {profile} · etkinleştirme: {activation} · taşınan etkinleştirme: {carried}",
   "models.connect.step.written": "yazıldı",
   "models.connect.step.present": "zaten var",

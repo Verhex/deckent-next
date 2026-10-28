@@ -47,6 +47,17 @@ describe('models.connect surface parity', () => {
     }
   });
 
+  it('Astra R3: a generated command id that waits for approval prints the exact resume command; running it reuses the same id', async () => {
+    const seen: ModelConnectCommand[] = [], out: string[] = [];
+    const pending = { ...result, status: 'approval-pending', approval: { approvalId: 'ap-1', keyPath: 'provider_invocation_profiles', layer: 'project' } } as unknown as ModelConnectResult;
+    const context = { root: '/project', env: {}, stdout: { write: (text: string) => { out.push(text); return true; } } as never, connectModel: async (_root: string, input: ModelConnectCommand) => { seen.push(input); return pending; } };
+    await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'openai-api', '--model', 'gpt-6-luna'], context);
+    const printed = /(deckent models connect .*--command-id \S+)/u.exec(out.join(''))?.[1];
+    expect(printed).toContain(`--command-id ${seen[0]!.commandId}`); expect(out.join('')).toContain('ap-1');
+    await modelsCommand(printed!.split(' ').slice(1), context);
+    expect(seen).toHaveLength(2); expect(seen[1]).toEqual(seen[0]);
+  });
+
   it('BeUser alpha.56.1 (Ayşe): the person\'s text leads with the model and its state; the reference, key and bookkeeping steps follow', async () => {
     const out: string[] = [];
     await modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'local-openai', '--command-id', 'c-3', '--lang', 'tr'], { root: '/project', env: {},
