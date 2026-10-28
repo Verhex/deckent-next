@@ -37,7 +37,7 @@ bounds and stop conditions, and the law check and two perspectives (full templat
     8. İkinci görüş — uyumlu / ilgisiz / çatışma: <neden>
     9. Alp Discipline — uyumlu / ilgisiz / çatışma: <neden>
     10. Enterprise katmanı — uyumlu / ilgisiz / çatışma: <neden>
-    11. Ürün tasarımı ve yolculuk — uyumlu / ilgisiz / çatışma: <neden>
+    11. Ürün tasarımı ve yolculuk (taslak, yalnız bilgi) — uyumlu / ilgisiz / not: <neden>
     North star (güvenlik, determinizm, sınırlı kaynak, iptal/kurtarma, ölçülmüş performans) — <neden>
     ## İki bakış
     - Dogfood: Deckent kendini geliştirirken bu ne katar?

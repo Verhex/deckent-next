@@ -1,5 +1,7 @@
 # Ürün tasarımı ve kullanıcı yolculuğu
 
+> **Durum: TASLAK, tasarım aşamasında (owner 2026-10-28: "accepted değil, sonra inceleyeceğim").** Owner kabul edene kadar bağlayıcı kanun değildir; kanun kontrolünde yalnız bilgi satırıdır ve çatışma gerekçesiyle iş durdurmaz. Metin owner incelemesinde değişebilir.
+
 Owner 2026-10-28 (ilke taşıma; owner tek tek onayladı, yeni kanun olarak yerleşim owner seçimi A, Jev 713fc4c9 0,84): Deckent kişiler ve şirketler için tasarlanır; yüzey tasarımı kanıtlanmış ürünleri izler ve iş, kişinin yolculuğu montajlı sürümde yürünmeden bitmiş sayılmaz.
 
 - **Önce ürün** (owner 2026-10-26): her kart/lane yalnız dogfood için değil, iş süreci yürüten solo kişi ve kurumsal şirket için tasarlanır; brief solo + enterprise davranışını (admin policy, yönetilen kurulum, saklama/legal hold) adlandırır. Yıkıcı işlemde sahipliği kanıtlanmamış veri silinmez: "bilinmeyen sahiplik = koru ve raporla", negatif testle.

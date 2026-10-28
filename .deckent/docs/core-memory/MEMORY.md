@@ -1,9 +1,9 @@
-# Memory — 11 KALICI KANUN (Alperen-seçimi; genişletme/daraltma yalnız Alperen-onayıyla)
+# Memory — 10 KALICI KANUN + Kanun 11 TASLAK (Alperen-seçimi; genişletme/daraltma yalnız Alperen-onayıyla)
 
 > Bu dosya ve aynı dizindeki referanslar bu repo için canonical ürün/geliştirme core-memory authority'sidir.
 > Provider/host HOME kopyaları yalnız projection'dır. İş-takibi burada değil → `PLAN.md`; kimde-ne-var/sıradaki adım host süreç panosunda (`node .agents/refactor/board.mjs show`), koşum kanıtı dış proof'ta; `follow-up-works/current-flow.md` kısa süreli görev hafızasıdır (owner 2026-10-10).
 > Her satır tek hook'tur; operatif ayrıntı dosyanın kendisindedir.
-> Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu 2026-09-21; owner birleştirmesi 2026-09-23 (25 → 9 dosya, Jev f2551a1d); 2026-10-28 ilke taşıma (lead kişisel hafızasından 16 owner-onaylı ilke; Kanun 11 eklendi, Jev 713fc4c9); bugün 13 dosya (11 kanun + north star + bu indeks; manifest).
+> Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu 2026-09-21; owner birleştirmesi 2026-09-23 (25 → 9 dosya, Jev f2551a1d); 2026-10-28 ilke taşıma (lead kişisel hafızasından 16 owner-onaylı ilke; Kanun 11 taslak olarak eklendi, Jev 713fc4c9); bugün 13 dosya (10 kanun + taslak Kanun 11 + north star + bu indeks; manifest).
 > Tarihsel kaynak her dosya için birleştirme öncesi Git geçmişidir; eski komut ve durumlar güncel yetki değildir.
 
 Ortak ürün hedefi ve karar ölçütü: **[Product north star](project_product_north_star.md)** — Jev bağlamına SHA-256 ile gömülüdür, değiştirilmez. Milyon-ölçek, MVP yasağı ve agentic-OS hedefi orada tanımlıdır.
@@ -21,7 +21,7 @@ Ortak ürün hedefi ve karar ölçütü: **[Product north star](project_product_
 8. **[İkinci görüş, Jev ve inceleme kanalı](law_second_opinion_jev.md)** — belirsizlikte logged Jev, iki çekimser seçenek zorunlu; Jev danışmandır, PASS değil; kanal (2026-09-23): Opus uygular, Astra inceler.
 9. **[Alp Discipline karar çapası](law_alp_discipline_anchor.md)** — negative-space → sınır-içi-alternatif → kayıpta-dur → irtifa-ilanı.
 10. **[Enterprise katmanı ve ERP adapter ailesi](law_enterprise_layering.md)** — ticari hedef Enterprise; Core Apache-2.0/bağımsız; her Core sözleşmesi Enterprise ve ERP'nin Core'u değiştirmeden giydirilebileceği biçimde; genel etki sözleşmesi kapısı; ERP adapter'ları (IFS/SAP/Oracle/Microsoft/Uyumsoft/Logo) Enterprise'da, müşteri ERP sürümüne göre paket sorumluluğu; iki hat (owner 2026-09-23).
-11. **[Ürün tasarımı ve kullanıcı yolculuğu](law_product_design_journey.md)** — önce ürün (solo + enterprise, bilinmeyen sahiplik korunur); kanıtlanmış UX kopyalanır; kontrol ≠ tıkanma; CLI hem AI hem insan; insanın okuyabildiği izleme; bitti = kişinin yolculuğu montajlı sürümde BeUser ile yürünür (owner 2026-10-28, Jev 713fc4c9).
+11. **[Ürün tasarımı ve kullanıcı yolculuğu](law_product_design_journey.md)** — **TASLAK, owner incelemesinde; kabul edilene kadar bağlayıcı değil.** önce ürün (solo + enterprise, bilinmeyen sahiplik korunur); kanıtlanmış UX kopyalanır; kontrol ≠ tıkanma; CLI hem AI hem insan; insanın okuyabildiği izleme; bitti = kişinin yolculuğu montajlı sürümde BeUser ile yürünür (owner 2026-10-28, Jev 713fc4c9).
 
 ## Eski numara eşlemesi (2026-09-23 birleştirme)
 
