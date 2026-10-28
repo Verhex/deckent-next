@@ -2,8 +2,8 @@
   "agentstats.help": "deckent agents stats [<agent-id>] [--scope <id>] [--json]\n  Shows how the scope's agents did on real work, per revision and WorkClass: accepted outcomes, a confidence interval, time, measured cost, every failure kind and what was set apart, beside the WorkClass overall and the promoted agent. With an agent id: every revision in the window, a split by model, each pinned skill and the team total of its reports. Numbers are associations, not causes, and acceptance rates, not accuracy; only failures that belong to the worker (failed criteria, its own report, a person's rejection) count.",
   "agentstats.title": "Agent statistics · association, not causation · acceptance rate, not accuracy",
   "agentstats.mode.off": "Aggregation pass: off. These numbers are read from the sealed metrics now.",
-  "agentstats.mode.shadow": "Aggregation pass: shadow. It records statistics and sealed suggestions marked shadow; no card and no narrowing.",
-  "agentstats.mode.on": "Aggregation pass: on. It records statistics and sealed suggestions for your cards; it narrows only on rules marked calibrated.",
+  "agentstats.mode.shadow": "Aggregation pass: shadow. It records statistics and sealed suggestions marked shadow; no card and no narrowing. This is the setting: it runs only after a service restart and while the aggregator has its signing key (deckent doctor shows both); the last pass line shows what actually ran.",
+  "agentstats.mode.on": "Aggregation pass: on. It records statistics and sealed suggestions for your cards; it narrows only on rules marked calibrated. This is the setting: it runs only after a service restart and while the aggregator has its signing key (deckent doctor shows both); the last pass line shows what actually ran.",
   "agentstats.registry": "Rules {revision} ({status}) · {rows} metric row(s) read{truncated}",
   "agentstats.registry.provisional": "starting values, not yet measured",
   "agentstats.registry.calibrated": "agreed by a person on real work: acceptance rate, not accuracy",
@@ -44,5 +44,6 @@
   "agentstats.help.action.stats": "show agent statistics from sealed work (associations, acceptance rates)",
   "agentstats.mode.label.shadow": "shadow",
   "agentstats.mode.label.on": "on",
-  "agentstats.signer.unavailable": "Catalog signing-key readiness could not be read."
+  "agentstats.signer.unavailable": "Catalog signing-key readiness could not be read.",
+  "agentstats.noWork": "    No sealed work for this agent and WorkClass yet: effort, failures and models appear after its first accepted or rejected task."
 }

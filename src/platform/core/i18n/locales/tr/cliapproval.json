@@ -176,5 +176,9 @@
   "cli.policy.recovery.exitsUnmet": "Ölçülen çıkış ölçütleri sağlanmadı; değişiklik reddedilecek.",
   "cli.policy.recovery.applied": "Değiştirildi.",
   "cli.policy.recovery.current": "Zaten böyle; hiçbir şey değişmedi.",
-  "cli.approval.tableDetails": "Tam ayrıntı: deckent approval inspect --input <dosya|->; girdi alanları: deckent approval inspect --schema. Yukarıdaki tam kimliği kullanın."
+  "cli.approval.tableDetails": "Tam ayrıntı: deckent approval inspect --input <dosya|->; girdi alanları: deckent approval inspect --schema. Yukarıdaki tam kimliği kullanın.",
+  "cli.policy.recovery.rule.named": "Şu olduğunda kendiliğinden davran: {when} ({rule})",
+  "cli.policy.recovery.when.container-gone": "bir işçinin konteyneri kayboldu",
+  "cli.policy.recovery.when.launcher-dead-orphan": "bir işçinin başlatıcısı öldü ama işçi hâlâ çalışıyor",
+  "cli.policy.recovery.when.launcher-dead-gone": "bir işçinin başlatıcısı öldü ve işçi de yok"
 }

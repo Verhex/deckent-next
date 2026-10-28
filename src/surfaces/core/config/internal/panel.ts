@@ -6,12 +6,16 @@ export { configSchemaChoices } from './choices.js';
 import { CONFIG_RECORD_KEYS, CONFIG_IMPORT_KEYS, configRecordPort, configRecordSupported } from './records.js';
 import { configValueWord, schemaWord, sourceWord, applyWord } from './render.js';
 import { terminalConfigWrite, type ConfigCommandContext } from './command.js';
+import { applyOperationsBaseline, operationsBaselineOffer, type OperationsBaselineOffer } from './operations-baseline.js';
+import { isProtectedConfigWrite } from '#engine/index.js';
 
 type Layer = 'project' | 'global';
 const LAYERS: readonly Layer[] = ['project', 'global'];
 /** The panel's view of one key (the shape the terminal's `/config` window takes; localized words only). */
 export type ConfigPanelFieldView = Readonly<{ key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
-  records: boolean; choices: ConfigValueModel['choices']; free: boolean; stepper: ConfigValueModel['stepper']; readOnly: string | null; generated: boolean; choiceNotice: string | null; unsettable: boolean; sensitive: boolean;
+  records: boolean; choices: ConfigValueModel['choices']; free: boolean;
+  /** BeUser E-07: a protected key's confirm lines (who may change it, and for a model-calling switch what is sent and spent); empty otherwise. */
+  guard: readonly string[]; stepper: ConfigValueModel['stepper']; readOnly: string | null; generated: boolean; choiceNotice: string | null; unsettable: boolean; sensitive: boolean;
   locks: Readonly<Record<Layer, Readonly<{ blocked: string | null; note: string | null }>>> }>;
 
 /** What a layer's policy decision means for the person: a lock with its reason, a note (asks for approval), or nothing. */
@@ -75,7 +79,7 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
         const of = (layer: Layer) => permissions?.find(item => item.keyPath === field.key && item.layer === layer);
         return { key: field.key, section: field.key.split('.')[0]!, description: described(field), value, source: sourceWord(field.source, locale), apply: applyWord(field.apply, locale),
           expected: schemaWord(field.schema, locale), choices: model.choices, stepper: model.stepper, readOnly: configRecordSupported(field.key) ? null : model.readOnly, records: configRecordSupported(field.key), generated: model.generated, choiceNotice: model.notice,
-          free: model.free, unsettable: field.source === 'project' || field.source === 'global', sensitive: field.redacted,
+          free: model.free, guard: guardLines(field.key, locale), unsettable: field.source === 'project' || field.source === 'global', sensitive: field.redacted,
           locks: { project: layerLock(of('project'), readOnly, locale), global: layerLock(of('global'), readOnly, locale) } };
       }))).filter((field): field is ConfigPanelFieldView => field !== null);
       return { title: t('config.surface.title', { project: typeof projectName === 'string' ? projectName : '-' }, locale), fields, notes };
@@ -88,9 +92,17 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
       if (parsed.ok) return parsed;
       return { ok: false as const, reason: t('config.panel.invalid', { expected: expected.get(keyPath) ?? '-' }, locale) };
     },
+    ...(context.openOwnerBaselineInstallation ? { operationsBaseline: { offer: () => operationsBaselineOffer(root, context.openOwnerBaselineInstallation, options, locale),
+      apply: (offer: OperationsBaselineOffer) => applyOperationsBaseline(root, context.openOwnerBaselineInstallation!, offer, locale) } } : {}),
     write(request: { readonly action: 'set' | 'unset'; readonly keyPath: string; readonly value?: unknown; readonly layer: Layer }) {
       return terminalConfigWrite(root, { action: request.action, keyPath: request.keyPath, ...(request.action === 'set' ? { value: request.value } : {}), layer: request.layer },
         context, options, locale, surface);
     },
   };
+}
+/** A protected key asks for confirmation; a switch whose shadow already calls a model says so (the catalog holds that text, keyed by the key). */
+function guardLines(keyPath: string, locale: Locale): readonly string[] {
+  if (!isProtectedConfigWrite(keyPath)) return [];
+  const cost = (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[`config.panel.guard.${keyPath}`];
+  return [t('config.panel.guard.protected', {}, locale), ...(cost ? [cost] : [])];
 }

@@ -118,6 +118,21 @@ async function sealedRoots(project: string, roots: readonly string[], home: stri
   const outer = [...new Set(real)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
   return { ok: true, sealed: outer.filter(root => under(root, project)), hidden: outer.filter(root => !under(root, project)) };
 }
+/** A Deckent runtime socket path of this uid (`/tmp/dk-<uid>-<sha256>/…`, the local-runtime-socket location); group 1 is its directory. */
+const runtimeSocketPath = () => new RegExp(`^(/tmp/dk-${process.getuid?.() ?? -1}-[0-9a-f]{64})/`, 'u');
+/**
+ * alpha.57 (RESTART-HUNT pre-spawn re-check, Jev e0cbf302): the view's runtime-socket masks are checked again right before bwrap spawns. A masked
+ * runtime directory a stopping service removed since the view was built is dropped, so bwrap does not re-create it 0755 on the host; a present one
+ * (or any other lstat outcome) stays masked, and every other mask is untouched. The window shrinks from the view build to the spawn; bwrap 0.13
+ * always creates a missing mount point, so it cannot reach zero (the service start still heals what remains).
+ */
+export async function recheckRuntimeSocketMasks(view: BubblewrapView): Promise<BubblewrapView> {
+  if (!view.open) return view;
+  const runtimeSocket = runtimeSocketPath();
+  const gone = await Promise.all(view.maskedDirectories.map(path => runtimeSocket.exec(`${path}/`)?.[1] === path
+    ? lstat(path).then(() => false, (error: NodeJS.ErrnoException) => error.code === 'ENOENT') : false));
+  return gone.some(Boolean) ? Object.freeze({ ...view, maskedDirectories: view.maskedDirectories.filter((_, index) => !gone[index]) }) : view;
+}
 /** Runtime IPC is never a full-access grant: hide daemon/user-runtime directories and configured sockets. */
 async function maskHostSockets(environment: Readonly<Record<string, string | undefined>>, project: string,
   directories: string[], files: string[]): Promise<string | null> {
@@ -143,7 +158,7 @@ async function maskHostSockets(environment: Readonly<Record<string, string | und
   // SEC-1 (F27): each Deckent runtime socket directory with a bound socket (`/tmp/dk-<uid>-<sha256>`, the local-runtime-socket location) is
   // an empty tmpfs, so an agent shell cannot find or reach any installation's runtime service. The kernel's bound-socket table is read, not
   // a `/tmp` listing (stale directories without a socket are many and harmless). A service started later still refuses the peer itself.
-  const runtimeSocket = new RegExp(`^(/tmp/dk-${process.getuid?.() ?? -1}-[0-9a-f]{64})/`, 'u');
+  const runtimeSocket = runtimeSocketPath();
   const bound = await readFile('/proc/net/unix', 'utf8').catch(() => null);
   if (bound === null) return 'the bound host sockets cannot be listed; the runtime socket directory cannot be hidden';
   // RESTART-HUNT (alpha.56.1): bwrap creates a missing mask target on the HOST /tmp here (0755), which later starts refused. A listed directory already
@@ -416,7 +431,7 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${'code' in view && view.code ? `${view.code}: ` : ''}${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     }
-    const prefix = bubblewrapArguments(view.view), tooLarge = bubblewrapArgumentsOverBound(prefix, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
+    const prefix = bubblewrapArguments(await recheckRuntimeSocketMasks(view.view)), tooLarge = bubblewrapArgumentsOverBound(prefix, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
     if (tooLarge) return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${tooLarge}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
       durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     return runShellProcess({ file: bwrap, args: command => [...prefix, '--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)] }, request);
@@ -442,7 +457,8 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         if (!view.ok) return { ok: false as const, reason: view.reason };
         // K4: the profile's HOME replaces the empty one at the same path (no HOME to replace: refused, never a server with the user's HOME).
         if (profile && !view.view.home) return { ok: false as const, reason: 'no HOME to give the server its own' };
-        const shaped = profile ? { ...view.view, homeBind: profile.home, ...(profile.network ? { network: true, networkFiles: resolverFiles() } : {}) } : view.view;
+        const current = await recheckRuntimeSocketMasks(view.view); // right before the caller spawns the server
+        const shaped = profile ? { ...current, homeBind: profile.home, ...(profile.network ? { network: true, networkFiles: resolverFiles() } : {}) } : current;
         const args = bubblewrapArguments(shaped), tooLarge = bubblewrapArgumentsOverBound(args, options.maxArgumentBytes ?? BUBBLEWRAP_ARGUMENT_MAX_BYTES);
         if (tooLarge) return { ok: false as const, reason: tooLarge };
         return { ok: true as const, file: binary.path, args, view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };

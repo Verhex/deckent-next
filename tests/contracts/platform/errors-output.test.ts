@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, getConfigValue,
+  resolveLocale, getConfigValue, unexpectedQueryFailure,
 } from '../../../src/platform/index.js';
 
 describe('errors, output and locale public contracts', () => {
@@ -93,6 +93,20 @@ describe('errors, output and locale public contracts', () => {
       const hostile = new Proxy({}, { getPrototypeOf() { throw new Error('hostile object'); } });
       expect(await reportFatal(hostile, { root, env: {}, stderr: { write() {} } })).toBe(1);
       expect((await readdir(join(root, '.deckent/crashes'))).some(name => name.endsWith('.tmp'))).toBe(false);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+  it('BeUser E-05: an unexpected query failure of a local command leaves a private record under its diagnostic id and the error line names it; without the installation\'s known secrets no detail is kept', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-diag-'));
+    try {
+      const failure = unexpectedQueryFailure(new Error('boom password=sample-secret')), id = String(failure.params?.['diagnosticId']);
+      let text = '';
+      expect(await reportFatal(failure, { root, env: {}, locale: 'en', argv: ['deckent', 'hub'], stderr: { write(value: string) { text += value; } } })).toBe(1);
+      const name = (await readdir(join(root, '.deckent/crashes'))).find(entry => entry.includes(id))!;
+      const path = join(root, '.deckent/crashes', name), record = JSON.parse(await readFile(path, 'utf8'));
+      // No readable installation config here, so no known-secret snapshot: the record keeps code, time, command and id only (fail closed).
+      expect(record).toMatchObject({ schemaVersion: 1, diagnosticId: id, name: 'QUERY_UNEXPECTED_FAILURE', message: '' });
+      expect(JSON.stringify(record)).not.toContain('sample-secret'); expect(text).toContain(id); expect(text).toContain(path);
+      if (process.platform !== 'win32') expect((await stat(path)).mode & 0o777).toBe(0o600);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
   it('redacts admitted bearer, URL passwords, bounded argv assignments and environment assignments', () => {

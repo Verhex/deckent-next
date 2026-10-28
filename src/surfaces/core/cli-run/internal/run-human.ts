@@ -1,6 +1,6 @@
 import { ErrorRegistry, HOST_LIMITS_REGISTRY, loadConfig, mapBounded, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { askCliCard, displayId, listRunIds, matchIdPrefix, orderPendingFirst, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice, untitledWorkName,
-  type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
+  heldPoolId, runStatusKey, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import { runQuerySchema, type RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
 
@@ -36,6 +36,7 @@ export function runStateWord(run: RunView, locale: Locale): string {
     running: () => t('terminal.jobs.state.running', {}, locale), parked: () => t('terminal.jobs.state.parked', {}, locale),
     completed: () => t('terminal.jobs.state.completed', {}, locale), incomplete: () => t('terminal.jobs.state.incomplete', {}, locale),
     failed: () => t('terminal.jobs.state.failed', {}, locale), cancelled: () => t('terminal.jobs.state.cancelled', {}, locale) };
+  if (runStatusKey(run) === 'pool-held') return t('terminal.jobs.state.pool-held', { pool: heldPoolId(run) ?? '' }, locale); // BeUser DR3-02: one status mapping
   const state = states[run.state.kind === 'terminal' ? run.state.outcome : run.state.kind]();
   if (run.state.kind !== 'parked') return state;
   const reasons: Readonly<Record<typeof run.state.reason, () => string>> = {

@@ -1,14 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { projectInputSchema } from '#engine/index.js';
-import { hubOperationSchemas, parseHubOperation, hubOperationWrites, decodeHubBundle, type HubOperation, type HubOperationName } from '#engine/index.js';
+import { hubOperationSchemas, parseHubOperation, hubOperationWrites, decodeHubBundle, hubFounderFamilies, hubPolicyAction, type HubOperation, type HubOperationName } from '#engine/index.js';
 import { ErrorRegistry, emit, loadConfig, t, getConfigKnownSecrets, type KnownSecretSnapshot, type ConfigLoadOptions, type ExitCode, type Locale, sha256 } from '#platform/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import { commandLocale, readJsonInput, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { projectApprovalDecisionText } from '#surfaces/core/approval-presentation/index.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
-import { cliMode, askCliCard, resolveCommandScope, scopeLister } from '#surfaces/core/cli-human/index.js';
-
+import { assertInputFields, cliMode, askCliCard, resolveCommandScope, scopeLister, withFounderStep } from '#surfaces/core/cli-human/index.js';
 
 export interface HubCommandContext extends CliBaseContext, Pick<ConfigCommandContext, 'configChoiceSources'> {
   executeHub?: (root: string, request: HubOperation, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<unknown>;
@@ -32,6 +31,25 @@ export function hubCardLines(request: HubOperation, locale: Locale, known?: Know
 export function hubResultLines(result: unknown, locale: Locale): string[] {
   const cards = Array.isArray(result) ? result.flatMap(row => row && typeof row === 'object' && Array.isArray(row.cards) ? row.cards : []) : [];
   return [t('hub.output.untrusted', {}, locale), ...cards.map(card => shown(String(card.message))), shown(JSON.stringify(result, null, 2) ?? '')];
+}
+/** BeUser E-05: the minimal input of each Hub operation that needs one (field names only; values are placeholders the person replaces). */
+const HUB_EXAMPLES: Partial<Record<HubOperationName, Record<string, unknown>>> = {
+  'hub.sources.add': { hubId: '<64-hex hub id>', expectedRevision: null, publicKey: '<hub root public key>', endpoint: 'https://hub.example', label: 'My hub' },
+  'hub.sources.remove': { hubId: '<64-hex hub id>', expectedRevision: 1 }, 'hub.search': { hubId: '<64-hex hub id>' },
+  'hub.inspect': { hubId: '<64-hex hub id>', packageId: '<package id>' }, 'hub.verify': { hubId: '<64-hex hub id>', packageId: '<package id>' },
+  'hub.export': { hubId: '<64-hex hub id>', packageId: '<package id>' }, 'hub.uninstall': { hubId: '<64-hex hub id>', packageId: '<package id>', expectedRevision: 1 },
+};
+/** The example and `--schema` hint a person sees before choosing an input file (window and refusal share it). */
+export const hubExample = (operation: HubOperationName) => ({ example: JSON.stringify(HUB_EXAMPLES[operation] ?? {}), command: operation.slice(4).replace('.', ' ') });
+/** The typed request, or a refusal naming the first field that does not fit and a minimal example (never a raw schema dump). */
+export function hubRequest(operation: HubOperationName, input: Record<string, unknown>): HubOperation {
+  assertInputFields(`deckent hub ${operation.slice(4).replace('.', ' ')}`, hubOperationSchemas[operation], input, JSON.stringify(HUB_EXAMPLES[operation] ?? {}));
+  return parseHubOperation({ operation, input });
+}
+/** A policy refusal names the missing `hub/<action>` cell and the founder family whose card grants it (publish/yank/revoke: none, unchanged). */
+export function hubRefusal(error: unknown, request: HubOperation): unknown {
+  const action = hubPolicyAction(request), family = hubFounderFamilies(action);
+  return family ? withFounderStep(error, { cell: `hub/${action}`, scope: request.input.scopeId, family }) : error;
 }
 /** Strict CLI grammar; the operation schema supplies every input type. No secret, path or authority flag crosses the application boundary. */
 export function parseHubArguments(argv: readonly string[]) {
@@ -72,12 +90,11 @@ export async function hubCommand(argv: readonly string[], context: HubCommandCon
     configured, mutating: writing, interactive: cliMode(context, args.json).mode === 'interactive', listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) return 1;
   if (value.scopeId !== undefined && value.scopeId !== scope.scopeId) throw ErrorRegistry.createError('CLI_USAGE');
-  const request = parseHubOperation({ operation: args.operation, input: { schemaVersion: 1, ...value, scopeId: scope.scopeId,
-    ...(writing && value.commandId === undefined ? { commandId: randomUUID() } : {}) } });
+  const request = hubRequest(args.operation, { schemaVersion: 1, ...value, scopeId: scope.scopeId, ...(writing && value.commandId === undefined ? { commandId: randomUUID() } : {}) });
   if (writing && await ask({ title: t('hub.card.title', { operation: args.operation }, locale),
     body: hubCardLines(request, locale, getConfigKnownSecrets(config)),
     options: [{ id: 'apply', key: 'y', label: t('hub.card.apply', {}, locale) }, { id: 'cancel', key: 'n', label: t('hub.card.cancel', {}, locale) }] }) !== 'apply') return 1;
   if (!context.executeHub) throw ErrorRegistry.createError('HUB_STORE_UNAVAILABLE');
-  const result = await context.executeHub(root, request, options, context.signal);
+  const result = await context.executeHub(root, request, options, context.signal).catch(error => { throw hubRefusal(error, request); });
   emit(args.json ? result : hubResultLines(result, locale).join('\n'), { ...sinks, json: args.json });
 }

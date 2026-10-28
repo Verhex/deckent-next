@@ -132,6 +132,8 @@
   "monitor.brief.deliveryNone": "Teslim: teslim edilecek bir şey yok; bu işin kabul edilen hiçbir görevi yama taşımıyor.",
   "monitor.brief.deliveryPatchNotPrepared": "Kabul edildi · yama hazırlanamadı: bu iş için saklanmış yama yok, bu yüzden teslim edilecek bir şey yok. Nedeni ledger'da kayıtlı değil; tam sınırı ve yapılandırma alanını `task patch-prepare` söyler.",
   "monitor.brief.deliveryAwaiting": "Kabul edildi · yama hazır, teslim bekliyor: henüz hiçbir şey teslim edilmedi.",
+  "monitor.brief.deliverySetAside": "Kabul edildi · yama kenara kondu: korunuyor, hiçbir şey teslim edilmedi. /deliver içinden ya da şununla geri getirin: deckent task integration-restore --scope {scope} --run {run} --task {task}",
+  "monitor.brief.dismissalUnread": "Kenara koyma kayıtları okunamadı ({code}); bu sonuç kenara konmuş olabilir.",
   "acceptance.summary": "Kabul: sınıf {workClass} · politika {policyRevision} · profil {profileVersion} · {outcome} · kriter {criteria} · tavan {ceilings}",
   "acceptance.unknown": "bilinmiyor",
   "acceptance.outcome.accepted": "kabul edildi",

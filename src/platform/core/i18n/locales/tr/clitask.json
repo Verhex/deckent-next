@@ -79,7 +79,7 @@
   "cli.task.menu.adopt.title": "Bir dal {commit} commit'ine taşınsın mı?",
   "cli.task.menu.adopt.body": "Taşınacak yapılandırılmış dalı seçin; kendi onay kartı gelir.",
   "cli.task.menu.adopt.later": "Şimdi değil",
-  "cli.task.menu.adopt.left": "Teslim edildi, benimsenmedi. Sonra benimsemek için: deckent task integration-adopt … --delivery-command-id {command}",
+  "cli.task.menu.adopt.left": "Teslim edildi, benimsenmedi. Sonra /deliver içinde benimseyin (teslim edilen sonuçları listeler) ya da: deckent task integration-adopt --scope <kapsam> --run <iş> --target refs/heads/<dal>",
   "cli.task.menu.adopt.verifyTitle": "Bu commit'i hangi kabul edilmiş {kind} koşumu doğruluyor?",
   "cli.task.menu.adopt.verifyRow": "Koşum {run} · görev {task}",
   "cli.task.menu.adopt.withoutVerification": "Doğrulamasız benimse",
@@ -108,5 +108,7 @@
   "queue.cli.confirm.published.no": "yayımlanmadı",
   "queue.cli.confirm.item.settled": "  {ticket}: sonuçlandı ({published})",
   "queue.cli.confirm.item.refused": "  {ticket}: reddedildi ({published}). {reason}",
-  "queue.cli.confirm.item.unknown": "  {ticket}: sonuç bilinmiyor ({published}); uzlaştırılıyor. {reason}"
+  "queue.cli.confirm.item.unknown": "  {ticket}: sonuç bilinmiyor ({published}); uzlaştırılıyor. {reason}",
+  "cli.task.dismissed": "Kenara kondu: /deliver ve monitor {run} işinin {task} görevini artık önermiyor; yaması korunuyor. Geri getirmek için: deckent task integration-restore --scope {scope} --run {run} --task {task}",
+  "cli.task.restored": "Geri getirildi: {run} işinin {task} görevi yeniden /deliver içinde."
 }

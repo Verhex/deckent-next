@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { targetQueueViewSchema, type QueueConsent, type EffectConfirmationView, type RunView } from '#engine/index.js';
 import type { WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
-import { awaitingDeliveryTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
+import { awaitingDeliveryTargets, deliveredTargets, consentMatches, deliveryLines, shellWord, type DeliveryAnswer, type DeliveryFileDiff, type DeliveryPreview, type TerminalDeliveryPort,
   type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import { deliveryWindowLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { patchDiffs, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
@@ -38,11 +38,11 @@ const awaiting = (id = 'r', title = 'ORDER-TASK') => run(COMPLETED, 'accepted', 
 
 type PortOptions = { diffs?: readonly DeliveryFileDiff[]; targets?: readonly string[]; failFirst?: { code: string; message: string }; failAdopt?: { code: string; message: string }; viewFiles?: readonly string[];
   /** Y1: the installation's verification bar, the candidates each read returns (in order; the last repeats), and refusals by verification Run. */
-  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>> };
+  verification?: { kind: string; required: boolean }; candidates?: (readonly VerificationCandidate[])[]; refuseRun?: Readonly<Record<string, string>>; dismissable?: boolean; failPreview?: { code: string; message: string } };
 /** Records every step; `answer` is asked where the production port asks it, with the card the engine would build. */
 function recordingPort(options: PortOptions = {}) {
   const calls: string[] = [], views: EffectConfirmationView[] = [], adoptions: { commandId: string; verificationRunId: string | undefined }[] = [];
-  let reads = 0;
+  let reads = 0; const aside = new Set<string>();
   const card = (preview: DeliveryPreview, commandId: string, extra: Partial<EffectConfirmationView>): EffectConfirmationView => ({ operation: 'deliver-integration',
     scopeId: preview.identity.scopeId, commandId, actor: { id: 'owner', issuer: 'host', subject: '1000' }, resource: REF, from: BASE, to: COMMIT,
     runId: preview.identity.runId, taskId: preview.identity.taskId, title: 'Ship order', files: options.viewFiles ?? ['note.txt'], added: 1, removed: 1, ...extra });
@@ -53,6 +53,7 @@ function recordingPort(options: PortOptions = {}) {
   const port: TerminalDeliveryPort = {
     async preview(target) {
       calls.push(`preview:${target.runId}`);
+      if (options.failPreview) throw Object.assign(new Error(options.failPreview.message), { code: options.failPreview.code });
       return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 },
         files: options.diffs ? options.diffs.map(diff => ({ path: diff.path, added: 1, removed: 1 })) : [{ path: 'note.txt', added: 1, removed: 1 }], ...(options.diffs ? { diffs: options.diffs } : {}), added: 1, removed: 1, source: 'SOURCE-FINGERPRINT', base: BASE, proposal: 'P'.repeat(20), outOfScope: [],
         adoptionTargets: options.targets ?? [], verification: options.verification ?? null };
@@ -79,16 +80,25 @@ function recordingPort(options: PortOptions = {}) {
       calls.push('verification-runs'); const all = options.candidates ?? [[]];
       return all[Math.min(reads++, all.length - 1)]!;
     },
+    // BeUser M-32: the retained patch alone (read-only), offered when the check refused.
+    ...(options.failPreview ? { async patchOnly(target: { scopeId: string; runId: string; taskId: string }) { calls.push('patch-only');
+      return { target, identity: { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: 'a', layoutRevision: 'l', generation: 1 }, files: [{ path: 'src.js', added: 1, removed: 1 }],
+        diffs: [{ path: 'src.js', lines: ['@@ -1 +1 @@', '-old line', '+WORKER LINE'], hidden: 0, unavailable: null }], added: 1, removed: 1, source: '', base: BASE, proposal: '', outOfScope: [], adoptionTargets: [], verification: null } as never; } } : {}),
+    // BeUser M-33: the person's set-aside records; the harness Run view then says `set-aside`, as inspection does.
+    ...(options.dismissable ? { async dismiss(target: { runId: string; taskId: string }, action: 'dismiss' | 'restore') { calls.push(`${action}:${target.runId}/${target.taskId}`);
+      if (action === 'dismiss') aside.add(`${target.runId}/${target.taskId}`); else aside.delete(`${target.runId}/${target.taskId}`); } } : {}),
   };
-  return { port, calls, views, adoptions };
+  return { port, calls, views, adoptions, aside };
 }
 
 /** A real Workline whose /do admits one Run (no approval); the Run then reaches acceptance with a patch awaiting delivery. */
 function harness(options: PortOptions & { port?: boolean; scopeRuns?: readonly RunView[]; fullscreen?: boolean; rows?: number } = {}) {
   let current: RunView = run(RUNNING, 'active');
   const recorded = recordingPort(options), pending = pendingBrainFixture();
+  const withAside = (view: RunView): RunView => ({ ...view, tasks: view.tasks.map(task => recorded.aside.has(`${view.runId}/${task.id}`) && task.resultBrief?.deliveryOutlook === 'awaiting-delivery'
+    ? { ...task, resultBrief: { ...task.resultBrief, setAside: true } } : task) });
   const ledger = { scopeId: 's', workerHeartbeatMs: 60_000, listRunIds: async () => (options.scopeRuns ?? [current]).map(item => item.runId),
-    inspectRun: async (id: string) => options.scopeRuns?.find(item => item.runId === id) ?? current,
+    inspectRun: async (id: string) => withAside(options.scopeRuns?.find(item => item.runId === id) ?? current),
     listWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }), listApprovalPage: async () => ({ items: [], nextAfter: null }) } as unknown as WorklineLedgerPorts;
   const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, windows: SLASH_WINDOW_TEST_LABELS, focus, work: EN, delivery: WORDS }, ledger, pollMs: 25, maxTrackedRuns: 4,
     ...(options.port === false ? {} : { delivery: { port: recorded.port, confirmTimeoutMs: 60_000 } }),
@@ -118,6 +128,12 @@ describe('delivery window — pure rules', () => {
     expect(awaitingDeliveryTargets([awaiting('a'), run(RUNNING, 'accepted', 'awaiting-delivery', 'b'), run(COMPLETED, 'accepted', 'none', 'c'), run(COMPLETED, 'failed', 'awaiting-delivery', 'd'),
       { ...awaiting('e'), tasks: [{ ...awaiting('e').tasks[0]!, taskBrief: { ...awaiting('e').tasks[0]!.taskBrief!, task: null } }] } as RunView], 'FALLBACK').map(target => target.runId)).toEqual(['a']);
     expect(awaitingDeliveryTargets([awaiting('a', 'First line\nsecond')], 'FALLBACK')[0]).toMatchObject({ key: 's:a:task', title: 'First line' });
+  });
+  it('BeUser M-25/DR2-07: a delivered, not adopted result is offered for its adoption step with its delivery command and commit; adopted or undelivered ones are not', () => {
+    const withDelivery = (id: string, state: string) => { const value = run(COMPLETED, 'accepted', undefined, id);
+      return { ...value, tasks: [{ ...value.tasks[0]!, resultBrief: { runDelivery: { state, commit: 'c'.repeat(40), commandId: `delivery-${id}`, targetRef: `refs/deckent/deliveries/${id}` } } }] } as unknown as RunView; };
+    expect(deliveredTargets([withDelivery('a', 'delivered'), withDelivery('b', 'adopted'), withDelivery('c', 'integrated'), awaiting('d')], 'FALLBACK'))
+      .toEqual([expect.objectContaining({ runId: 'a', taskId: 'task', delivered: { ref: 'refs/deckent/deliveries/a', commit: 'c'.repeat(40), commandId: 'delivery-a' } })]);
   });
   it('matches a consent only to the same operation, ids, command, file set and base (delivery) or branch and commit (adoption)', () => {
     const view = { operation: 'deliver-integration', scopeId: 's', commandId: 'd', actor: { id: 'o', issuer: 'i', subject: 's' }, resource: REF, from: BASE, to: COMMIT,
@@ -206,7 +222,7 @@ describe('queue preparation without a work target (cli-terminal port)', () => {
 function realQueuePort(targetQueue?: Readonly<{ reattempts: number }>, refusePreview = false) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-queue-intent-')); mkdirSync(join(root, '.deckent'));
   writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify({ ...(targetQueue ? { targetQueue } : {}), execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}`, memoryBytes: 2147483648, pids: 128, cpus: 2,
-    logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: [] },
+    logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 }, adoption: { targets: ['refs/heads/integration'] }, // a branch the queue accepts (BeUser DR2-06 refuses others before enqueue)
     workTargets: { schemaVersion: 1, targets: [{ id: 'app', kind: 'git', path: join(root, 'target'), baseRef: 'refs/heads/integration' }] } } }));
   const identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 }, enqueued: Record<string, unknown>[] = [];
   const handlers = { inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),
@@ -287,6 +303,36 @@ describe('delivery window on the real Workline', () => {
     expect(frame(h)).toContain('WINDOW-FOCUS'); // a person-opened window takes focus
     await press(h, ESC, 100);
     expect(frame(h)).not.toContain(windowTitle); expect(h.calls.filter(call => call !== 'preview:r')).toEqual([]);
+  });
+
+  it('BeUser M-33: x sets the result aside (patch kept, restore named); /deliver lists it as set aside and Enter brings it back to its window', async () => {
+    const h = harness({ dismissable: true }); await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('DECIDE-HINT'), 'window ready');
+    await press(h, CTRL_O); await until(() => frame(h).includes(WORDS.dismissHint), 'x offered'); await press(h, 'x', 120);
+    expect(frame(h)).not.toContain(windowTitle); expect(h.calls).toEqual(['preview:r', 'dismiss:r/task']);
+    expect(squeeze(transcript(h))).toContain(squeeze('Set aside: ORDER-TASK (run r, task task).'));
+    expect(squeeze(transcript(h))).toContain(squeeze('deckent task integration-restore --scope s --run r --task task'));
+    expect(frame(h)).not.toContain(`ORDER-TASK · ${EN.activeWork!.deliveryWaiting}`);
+    await press(h, '/deliver\r', 150);
+    await until(() => frame(h).includes('ORDER-TASK — set aside; Enter brings it back'), 'set-aside row');
+    await press(h, '\r', 150);
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes(WORDS.hints), 'restored window');
+    expect(h.calls).toContain('restore:r/task'); expect(transcript(h)).toContain('Brought back: ORDER-TASK is offered in /deliver again.');
+  });
+
+  it('BeUser M-32: a refused check still lists what the worker changed; Enter shows the read-only diff, Esc goes back; nothing is prepared', async () => {
+    const h = harness({ failPreview: { code: 'PATCH_CONFLICT', message: 'Workspace snapshot conflicts.' } });
+    // The retained patch can arrive before the configuration read: it must survive the missing-target refusal too.
+    h.port.queue = { async reattempt() { return false; }, async blocked() { await settle(); return ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED'); },
+      async prepareCurrent() { throw new Error('must-not-prepare'); }, async inspect() { return null; }, async confirm() { throw new Error('must-not-confirm'); } };
+    await admit(h); h.set(awaiting());
+    await until(() => frame(h).includes(windowTitle) && frame(h).includes('What the worker changed'), 'refusal with the changes');
+    expect(squeeze(frame(h))).toContain(squeeze('› src.js')); expect(h.calls).toEqual(['preview:r', 'patch-only']);
+    await press(h, CTRL_O); await until(() => frame(h).includes(WORDS.failedDiffHints), 'diff keys');
+    expect(frame(h)).not.toContain(WORDS.queue!.reprepare); await press(h, 'r');
+    await press(h, '\r', 100); await until(() => frame(h).includes('+WORKER LINE'), 'diff body');
+    await press(h, ESC, 100); expect(frame(h)).not.toContain('+WORKER LINE'); expect(frame(h)).toContain('What the worker changed');
+    expect(h.calls).toEqual(['preview:r', 'patch-only']);
   });
 
   it('a stale base is refused in human words with the next step; nothing is prepared or written', async () => {

@@ -385,6 +385,13 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
   authorityDecisionSubjectSchema,
+  /** BeUser D-08 (lead 2026-10-28): a work request the planner refused before any Run existed, so a person can see it later (run list, monitor,
+   * report, audit list). The title is the request's first `AUDIT_SHELL_HEAD_MAX_CHARS` characters after known-secret and pattern redaction. */
+  /** BeUser M-33 (owner 2026-10-28, Jev c10e0946): a person sets an accepted task's undelivered result aside (`dismiss`) or brings it back
+   * (`restore`); the latest record per task decides whether /deliver and the monitor offer it. Patch and custody are untouched. */
+  z.object({ kind: z.literal('delivery-dismissed'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, action: z.enum(['dismiss', 'restore']) }).strict(),
+  z.object({ kind: z.literal('run-request-refused'), commandId: identitySchema, requestDigest: digest,
+    title: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/) }).strict(),
   /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */
   z.object({ kind: z.literal('audit-checkpoint'), checkpointSequence: counterSchema.positive(), previousDigest: digest.nullable(),
     /** An explicit operator re-baseline (witnessed human terminal, audited reason): supersedes earlier markers from this sequence on. */

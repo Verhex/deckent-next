@@ -939,3 +939,25 @@ Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `L
 - K8: owner kararı + ARCHITECTURE karar günlüğü satırı; Deniz/Mert/Ayşe r3 yürüyüşü bu koşullarla exact binary'de (ret kodu başına bir yol,
   bekletme altında, Team standart'ta Esc). Bu yürüyüş kapanış kanıtıdır; yazılmadan K8 kapanmış sayılmaz.
 
+
+## Owner kararları — 2026-10-28: BeUser E-05 Hub kurucu aileleri
+
+Kaynak: dış `proof/BEUSER-SWEEP-2026-10-27/LAW-AUDIT-E05.md` (temiz bağlam kanun denetimi, K1–K8) ve lead'in BEUSER-FIX-2 atama mesajı.
+
+- **hub-trust (owner, 2026-10-28):** “yalnız kişiye” — evet. Kişi kartla `hub-trust` ailesini alabilir: `hub` kaynağında `sources.add`,
+  `sources.remove`, `refresh`, `install`, `update`, `uninstall`; yalnız adı verilen kişiye, `ids`/`scopes` = seçilen scope, `allow`.
+  Her komutun kendi kişi kartı kalır; AI/MCP'ye asla (`sources.*` AI tabanında).
+- **hub-read (lead kararı, Jev bfba048a):** `inspect`, `search`, `export` aynı kurallarla. Yayıncı eylemleri (`publish`, `yank`, `revoke`)
+  hiçbir kurucu ailesine girmez. Varsayılan kaynak ve halka açılma (H9) bu kararın dışındadır.
+- Şablon değişmez (v18 kalır); aileler `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` kartıyla verilir.
+
+## Owner kararları — 2026-10-28: BeUser teslim ve proje talimatı
+
+Kaynak: lead'in BEUSER-FIX-2 atama mesajları (Jev c10e0946, c6c1182a).
+
+- **AYSE-19 proje talimatı güven penceresi (owner, 2026-10-28, Jev c6c1182a):** pencere kalır, ama dosya içeriği (digest) başına bir kez
+  sorulur ve kişinin cevabı, ret de dahil, içerik değişene kadar hatırlanır; otomatik güven yok; sözleşme değişmez.
+- **M-33 teslim bekleyen sonucu bırakma (owner, 2026-10-28, Jev c10e0946):** Seçenek 1. Ek ve yalnız kişiye ait audit konusu
+  `delivery-dismissed {runId, taskId, attemptId, action: dismiss|restore}`, terminal tanığıyla. /deliver ve monitor bırakılan görevi
+  gizler; /deliver içindeki "bırakılanlar" listesi ve `deckent task integration-restore` geri getirir. Yama ve gözetim (custody)
+  değişmez; ledger/run şeması ve göç yok.

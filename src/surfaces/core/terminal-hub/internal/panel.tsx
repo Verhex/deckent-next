@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { hubOperationSchemas, hubOperationWrites, parseHubOperation, type HubOperation, type HubOperationName } from '#engine/index.js';
-import { ErrorRegistry, t, type KnownSecretSnapshot, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
-import { hubResultLines, hubCardLines, type HubCommandContext } from '#surfaces/core/cli-hub/index.js';
+import { hubOperationSchemas, hubOperationWrites, type HubOperation, type HubOperationName } from '#engine/index.js';
+import { ErrorRegistry, MESSAGE_REGISTRY, t, type KnownSecretSnapshot, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { CLI_CATALOG, readJsonInput, type CliCommandSpec } from '#surfaces/core/cli-kit/index.js';
+import { hubResultLines, hubCardLines, hubExample, hubRefusal, hubRequest, type HubCommandContext } from '#surfaces/core/cli-hub/index.js';
 import { EntryWindow, QuestionWindow, LinesWindow, PickerWindow, type PanelLabels, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 
+/** BeUser E-05: an operation by its CLI help summary (the catalog's own words), never its raw id. */
+function opLabel(operation: HubOperationName, locale: Locale): string {
+  const [family, ...path] = operation.split('.');
+  const spec = path.reduce<CliCommandSpec | undefined>((node, name) => node?.children?.find(child => child.name === name), CLI_CATALOG.find(command => command.name === family));
+  return spec ? (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[spec.summary] ?? operation : operation;
+}
 /** Shared with the CLI: a file cannot redirect the terminal card to another scope. */
 export function hubWindowRequest(operation: HubOperationName, input: unknown, scopeId: string): HubOperation {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw ErrorRegistry.createError('CLI_USAGE');
   const raw = input as Record<string, unknown>;
   if (raw.scopeId !== undefined && raw.scopeId !== scopeId) throw ErrorRegistry.createError('CLI_USAGE');
-  return parseHubOperation({ operation, input: { schemaVersion: 1, ...raw, scopeId,
-    ...(hubOperationWrites(operation) && raw.commandId === undefined ? { commandId: randomUUID() } : {}) } });
+  return hubRequest(operation, { schemaVersion: 1, ...raw, scopeId, ...(hubOperationWrites(operation) && raw.commandId === undefined ? { commandId: randomUUID() } : {}) });
 }
 interface HubPanelInput { readonly root: string; readonly scopeId: string; readonly options: ConfigLoadOptions; readonly locale: Locale;
   readonly known?: KnownSecretSnapshot; readonly maxBytes: number; readonly timeoutMs: number; readonly execute: NonNullable<HubCommandContext['executeHub']> }
@@ -36,9 +41,9 @@ function HubPanel(props: HubPanelInput & WindowActions) {
       if (!lifetime.current.signal.aborted) {
         if (command.operation === 'hub.cards' && Array.isArray(value)) setCardsAfter(Number(value.at(-1)?.after ?? 0));
         const lines = hubResultLines(value, locale); setResult(lines); setRequest(null);
-        props.push([{ level: 'info', text: `${command.operation} · ${props.scopeId}` }]);
+        props.push([{ level: 'info', text: `${opLabel(command.operation, locale)} · ${props.scopeId}` }]);
       }
-    } catch (error) { if (!lifetime.current.signal.aborted) props.onError(error); }
+    } catch (error) { if (!lifetime.current.signal.aborted) props.onError(hubRefusal(error, command)); }
     finally { pending.current = false; if (!lifetime.current.signal.aborted) setBusy(false); }
   };
   if (busy) return <PickerWindow title={[span(title)]} bodyRows={2} body={[{ spans: [span(labels.loading)] }]} tree={null}
@@ -48,7 +53,8 @@ function HubPanel(props: HubPanelInput & WindowActions) {
   if (request) return <QuestionWindow title={t('hub.card.title', { operation: request.operation }, locale)}
     lines={hubCardLines(request, locale, props.known).map(text => ({ label: '', text }))}
     hints={t('hub.window.confirm', {}, locale)} position={labels.position} onAnswer={answer => { if (answer === true) void execute(request); else { setRequest(null); setAction(null); } }} />;
-  if (action) return <EntryWindow title={title} body={[{ spans: [span(t('hub.window.input', {}, locale))] }]} hints={hints} position={labels.position}
+  if (action) return <EntryWindow title={`${title} · ${opLabel(action, locale)}`} body={[{ spans: [span(t('hub.window.input', {}, locale))] },
+    { spans: [span(t('hub.window.example', hubExample(action), locale), { role: 'muted' })] }]} hints={hints} position={labels.position}
     onCancel={() => setAction(null)} onSubmit={async path => {
       try {
         const raw = await readJsonInput(resolve(props.root, path), props.maxBytes, { subject: 'hub.input', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID',
@@ -59,7 +65,7 @@ function HubPanel(props: HubPanelInput & WindowActions) {
       } catch (error) { props.onError(error); setAction(null); return null; }
     }} />;
   return <PickerWindow title={[span(title)]} bodyRows={2} body={[{ spans: [span(props.scopeId)] }, { spans: [span(t('hub.output.untrusted', {}, locale))] }]}
-    tree={{ title, items: [...(Object.keys(hubOperationSchemas) as HubOperationName[]).map(id => ({ id, label: id })), ...(cardsAfter ? [{ id: 'next-cards', label: t('hub.window.nextCards', {}, locale) }] : [])] }} labels={labels.picker} position={labels.position}
+    tree={{ title, items: [...(Object.keys(hubOperationSchemas) as HubOperationName[]).map(id => ({ id, label: opLabel(id, locale) })), ...(cardsAfter ? [{ id: 'next-cards', label: t('hub.window.nextCards', {}, locale) }] : [])] }} labels={labels.picker} position={labels.position}
     onResult={selected => {
       if (selected.kind !== 'selected') { props.onClose(); return; }
       if (selected.id === 'next-cards') { void execute(hubWindowRequest('hub.cards', { after: cardsAfter }, props.scopeId)); return; }

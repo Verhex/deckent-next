@@ -14,4 +14,6 @@ export interface MonitorCommandContext extends CliBaseContext, ConfigCommandCont
   inspectInventory?: InventoryQueryHandler;
   /** MONITOR: the whole observe-only snapshot (data lane, composition); `deckent monitor` and `/monitor` fail typed without it. */
   inspectMonitor?: MonitorHandler;
+  /** BeUser D-08: the newest refused work requests of a scope (sealed audit records), for the snapshot's "refused requests" line. */
+  listRefusedRequests?: (root: string, scopeId: string, limit: number, options: ConfigLoadOptions) => Promise<readonly Readonly<{ atMs: number; code: string; title: string }>[]>;
 }

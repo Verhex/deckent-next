@@ -1,10 +1,9 @@
 import type { RunView } from '#engine/index.js';
 import type { JobWindowLabels } from './job-windows.js';
-import { runViewToLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
+import { runViewToLedgerEntry, LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { useContext, useState, type ReactElement } from 'react';
 import { useWindowSize } from 'ink';
 import { shortId } from '#platform/index.js';
-import { LEDGER_TAIL_LIMIT, fillTemplate, formatRunCardLines, formatWorkerLine, type LedgerCardLabels, type WorkerLineLabels, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { span, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
 import { Window, WindowOpeningContext, WINDOW_RESERVED_ROWS, useWindowReserve, useFocusOwner, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 

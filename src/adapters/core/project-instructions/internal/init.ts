@@ -1,6 +1,5 @@
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { lstat } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { InstructionInitPreview, InstructionFileChange } from '#engine/index.js';
 import { instructionDigest, PROJECT_INSTRUCTION_REGISTRY as registry, readInstructionFile } from './files.js';
 

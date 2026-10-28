@@ -5,7 +5,7 @@ import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import { catalogSuggestionViewRefusal } from '#engine/index.js';
 import type { AgentsCommandContext } from './context.js';
 import { agentTable, agentView, skillTable, skillView } from './render.js';
-import { agentsWrite } from './write.js';
+import { agentsInputHelp, agentsWrite, type InputAction } from './write.js';
 import { SIGNER_ACTIONS, signersCommand, type SignerAction } from './signers.js';
 import { agentStatsView } from './stats.js';
 import { EVOLUTION_ACTIONS, draftDefine, evolutionCommand, resolveSuggestion, type EvolutionAction } from './evolution.js';
@@ -14,15 +14,15 @@ import limits from './limits.json' with { type: 'json' };
 const ACTIONS = ['inspect', 'skills', 'skill', 'define', 'define-skill', 'stats', ...SIGNER_ACTIONS, ...EVOLUTION_ACTIONS] as const;
 type Action = typeof ACTIONS[number];
 interface Parsed { action: Action | null; words: string[]; scope?: string; language?: string; input?: string; principal?: string; label?: string; workClass?: string; suggestion?: string;
-  fromSuggestion?: string; id?: string; json: boolean; help: boolean }
+  fromSuggestion?: string; id?: string; json: boolean; help: boolean; schema?: true; example?: true }
 /** How many words each action takes (`optional`: at most that many) and whether it needs `--input` (null: the bare agent list); S8-5 `enrol-signer`
  * takes `--principal` and `--label`; S8-4 standing cards take `--work-class` (and optionally `--suggestion`), a define may come `--from-suggestion` with `--id`. */
-type Shape = { words: number; input: boolean; enrol?: true; optional?: true; workClass?: true; suggestion?: true; draft?: true };
+type Shape = { words: number; input: boolean; enrol?: true; optional?: true; workClass?: true; suggestion?: true; draft?: true; file?: true };
 const card: Shape = { words: 1, input: false, workClass: true, suggestion: true };
 const SHAPE: Readonly<Record<Action | 'list', Shape>> = { list: { words: 0, input: false }, inspect: { words: 1, input: false },
-  skills: { words: 0, input: false }, skill: { words: 1, input: false }, define: { words: 0, input: true, draft: true, suggestion: true }, 'define-skill': { words: 0, input: true, draft: true },
+  skills: { words: 0, input: false }, skill: { words: 1, input: false }, define: { words: 0, input: true, draft: true, suggestion: true, file: true }, 'define-skill': { words: 0, input: true, draft: true, file: true },
   signers: { words: 0, input: false }, 'enrol-signer': { words: 0, input: false, enrol: true }, 'add-signer': { words: 0, input: true }, 'revoke-signer': { words: 1, input: false },
-  'repair-signers': { words: 0, input: false }, 'import-skill': { words: 0, input: true }, stats: { words: 1, input: false, optional: true },
+  'repair-signers': { words: 0, input: false }, 'import-skill': { words: 0, input: true, file: true }, stats: { words: 1, input: false, optional: true },
   suggestions: { words: 2, input: false, optional: true }, promote: card, demote: card, restore: card, retire: card, dismiss: { words: 1, input: false }, standing: { words: 1, input: false, workClass: true } };
 const VALUE_FLAGS = { '--work-class': 'workClass', '--suggestion': 'suggestion', '--from-suggestion': 'fromSuggestion', '--id': 'id' } as const;
 function parse(argv: readonly string[]): Parsed {
@@ -38,6 +38,7 @@ function parse(argv: readonly string[]): Parsed {
     if (key === '--help') result.help = true;
     else if (key === '--json') result.json = true;
     else if (key === '--no-color') continue;
+    else if ((key === '--schema' || key === '--example') && shape.file) result[key === '--schema' ? 'schema' : 'example'] = true;
     else if (key === '--scope' || key === '--lang' || (key === '--input' && shape.input) || ((key === '--principal' || key === '--label') && shape.enrol)
       || (key === '--work-class' && shape.workClass) || (key === '--suggestion' && shape.suggestion) || ((key === '--from-suggestion' || key === '--id') && shape.draft)) {
       const value = argv[++index]; if (!value || (value.startsWith('-') && key !== '--input' && key !== '--label')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -47,7 +48,7 @@ function parse(argv: readonly string[]): Parsed {
   }
   // A define comes from a file or from a suggestion's draft (`--from-suggestion` + `--id`), never both; `--suggestion` names the revise suggestion a file decides.
   const draft = result.fromSuggestion !== undefined || result.id !== undefined;
-  if (!result.help && ((shape.optional ? result.words.length > shape.words : result.words.length !== shape.words) || (shape.input && !draft && result.input === undefined)
+  if (!result.help && !result.schema && !result.example && ((shape.optional ? result.words.length > shape.words : result.words.length !== shape.words) || (shape.input && !draft && result.input === undefined)
     || (draft && (result.input !== undefined || result.suggestion !== undefined || !result.fromSuggestion || !result.id)) || (shape.enrol && (!result.principal || !result.label))
     || (shape.workClass && !result.workClass) || (shape.draft && result.suggestion !== undefined && result.input === undefined))) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
@@ -58,6 +59,8 @@ function parse(argv: readonly string[]): Parsed {
 export async function agentsCommand(argv: readonly string[], context: AgentsCommandContext = {}): Promise<void | ExitCode> {
   const args = parse(argv), locale = commandLocale(context, args.language), sinks = sinksOf(context);
   if (args.help) { emit(`${t('agents.help.detail', {}, locale)}\n${t('agentsign.help.detail', {}, locale)}\n${t('agentstats.help', {}, locale)}\n${t('agentsevo.help', {}, locale)}`, sinks); return; }
+  // BeUser E-02: the input file's contract or a filled example, without a project, card or terminal.
+  if (args.schema || args.example) return agentsInputHelp(args.action as InputAction, args.schema === true, context, locale);
   const writing = args.action !== null && !['inspect', 'skills', 'skill', 'signers', 'stats', 'suggestions'].includes(args.action);
   // A catalog change is a person's terminal act (the default card): an AI tool, CI, pipe or `--json` is refused before anything is read.
   if (writing && cliMode(context, args.json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: `${argv[0]} ${args.action}` } });

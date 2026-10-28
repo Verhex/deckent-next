@@ -30,14 +30,16 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
     return option ? { kind: 'submit', ids: [option.id] } : { kind: 'ignored' };
   }
   if (input.length !== 1) return { kind: 'ignored' };
+  const lower = input.toLowerCase(), shortcut = kind === 'single' ? options.find(option => option.key !== undefined && option.key.toLowerCase() === lower) : undefined;
+  // BeUser E-14: a key the card shows next to an option (`(4)`, `(y)`) answers with it, digits included; an unlabelled digit only moves.
+  if (shortcut) return { kind: 'submit', ids: [shortcut.id] };
   if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return move(Number(input) - 1);
   if (kind === 'multi' && input === ' ') {
     const id = options[state.at]?.id;
     if (id === undefined) return { kind: 'ignored' };
     return { kind: 'move', state: { ...state, ticked: state.ticked.includes(id) ? state.ticked.filter(item => item !== id) : [...state.ticked, id] } };
   }
-  const lower = input.toLowerCase(), shortcut = kind === 'single' ? options.find(option => option.key !== undefined && option.key.toLowerCase() === lower) : undefined;
-  return shortcut ? { kind: 'submit', ids: [shortcut.id] } : { kind: 'ignored' };
+  return { kind: 'ignored' };
 }
 
 /** The option rows: a pointer on the highlighted row, its number, `[x]` for ticked rows of a multi-choice question, the letter it answers to. */

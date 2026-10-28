@@ -4,6 +4,7 @@ import type { RunView } from '#engine/index.js';
 import { fillTemplate, formatDuration, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { SpanText, cells, projectHumanPickerText, span, truncateEnd, useHumanTextSecrets, useRenderGlyphs, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
 import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
+import { runStatusKey } from '#surfaces/core/cli-human/index.js';
 import { displayId, parkReasonText, runStateText, runTitle, type JobWindowLabels } from './job-windows.js';
 import type { TrackedRun } from './run-completion.js';
 
@@ -44,7 +45,7 @@ function runState(run: RunView, labels: ActiveWorkLabels, jobs: JobWindowLabels)
   if (rank === 0) return { text: labels.needsYou, role: 'warning' };
   if (rank === 1 && run.tasks.some(task => task.phase === 'evaluating')) return { text: labels.evaluating, role: 'accent' };
   const text = runStateText(run, jobs), reason = parkReasonText(run, jobs);
-  if (run.state.kind !== 'terminal') return { text: reason ? `${text} · ${reason}` : text, role: rank === 2 ? 'warning' : 'accent' };
+  if (run.state.kind !== 'terminal') return { text: reason ? `${text} · ${reason}` : text, role: rank === 2 || runStatusKey(run) === 'pool-held' ? 'warning' : 'accent' };
   return { text, role: run.state.outcome === 'completed' ? 'success' : run.state.outcome === 'cancelled' ? 'muted' : 'error' };
 }
 

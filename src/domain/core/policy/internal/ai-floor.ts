@@ -63,6 +63,8 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'nervous-rule') return true;
   // S8-5 (S8-DESIGN §9, N22): signer rows are a person's — enrol, add, revoke and log repair are refused for every AI principal.
   if (resource.kind === 'skill-signer' && action !== 'inspect') return true;
+  // E-05 K3 (owner 2026-10-28): pinning or dropping a Hub source (its root key) is a person's trust decision; no AI holds it whatever is granted.
+  if (resource.kind === 'hub' && (action === 'sources.add' || action === 'sources.remove')) return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
   if (resource.kind === 'agent-tool-call' && ['edit-authority', 'edit-floor'].includes(resource.id)) return true;

@@ -22,7 +22,7 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale, fallback
     : h.transcript.state === 'unavailable' ? t('monitor.human.transcriptUnavailable', {}, locale) : t('monitor.human.transcriptMissing', {}, locale);
   return [
     line(t('monitor.human.title', { title: h.title ? safe(h.title) : fallbackTitle ? safe(fallbackTitle) : t('monitor.human.noTitle', {}, locale), source: sources[h.titleEvidence] }, locale), 'strong'),
-    ...renderBriefLines(h.taskBrief, h.resultBrief, locale).map(text => line(text)),
+    ...renderBriefLines(h.taskBrief, h.resultBrief, locale, worker.identity ? { scope: worker.identity.scopeId, run: worker.identity.runId, task: worker.identity.taskId } : undefined).map(text => line(text)),
     ...(worker.model?.reasoningEffort ? [line(renderWorkerModelLine(worker.model, locale))] : []),
     ...(h.resultBrief ? [] : [line(evaluationText(h.taskBrief, { verdict: h.evaluation, ...(h.evaluationReason ? { reason: h.evaluationReason } : {}) }, locale),
       h.evaluation === 'rejected' ? 'warning' : undefined)]),

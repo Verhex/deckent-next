@@ -104,6 +104,8 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     await expect(applyPoolHold(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     const cli = await f.cli('hold', '--command-id', 'h2');
     expect(cli.code).toBe(1); expect(cli.stderr).toContain('POLICY_DENIED');
+    // BeUser D-04: the refusal names the cell and the founder card that grants the emergency hold.
+    expect(cli.stderr).toContain('pool/hold'); expect(cli.stderr).toContain('deckent init policy --scope s --owner-baseline mcp-delegable --apply');
     const session = await mcp({ applyPoolHold: input => applyPoolHold(f.project, input, f.options), inspectPoolHold: input => inspectPoolHold(f.project, input, f.options) });
     try {
       expect(JSON.stringify(await session.client.callTool({ name: 'apply_pool_hold', arguments: { ...command, commandId: 'h3' } }))).toContain('POLICY_DENIED');

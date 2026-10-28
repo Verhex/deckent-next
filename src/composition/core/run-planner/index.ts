@@ -1,9 +1,9 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { listRefusedRunRequests, runRequestRefusedEvent, intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainCorrectionRetries, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { SIWC_INFERENCE, FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
 import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, carryContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
@@ -40,6 +40,7 @@ export function planRuntimeRun(root: string, input: BrainPlanCommand, options: C
 async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOptions,
   invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>, signal?: AbortSignal,
   propose?: (proposal: RunProposal) => ReturnType<typeof proposeConfiguredRun>, observe?: BrainPlanObserver, starting = false) {
+  let scoped: Awaited<ReturnType<typeof loadConfiguredScopeContext>> | undefined;
   try {
     const parsed = brainPlanCommandInputSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('BRAIN_INPUT_INVALID');
@@ -49,7 +50,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       if (waiting) return waiting;
     }
     await loadComposedConfig(root, options);
-    const context = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
+    const context = scoped = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
     const readBudget = (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
     return await new BrainPlanApplication({ verify: async () => context.principal }, {
       subscriptionAdapterIds: new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID, SIWC_INFERENCE.adapter.id]),
@@ -110,7 +111,18 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
           quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']), correctionRetries: brainCorrectionRetries(context.config['brain_planner']) };
       },
     }).plan(input, undefined, signal, observe);
-  } catch (error) { throw queryFailure(error); }
+  } catch (error) {
+    // BeUser D-08: a refused request (not a cancel) leaves a sealed, redacted audit record a person can find later; recording never masks the refusal.
+    const failure = queryFailure(error), c = scoped;
+    if (c && failure.code !== 'BRAIN_CANCELLED') await withScopeAudit(c, audit => audit.record(runRequestRefusedEvent({ scopeId: input.scopeId, principal: c.principal,
+      policyRevision: c.document.revision, commandId: input.commandId, request: input.intent, code: failure.code, atMs: Date.now(), known: getConfigKnownSecrets(c.config) }))).catch(() => undefined);
+    throw failure;
+  }
+}
+/** BeUser D-08: the newest refused work requests of one scope (none when the scope has no audit key yet). */
+export async function inspectConfiguredRefusedRequests(root: string, scopeId: string, limit: number, options: ConfigLoadOptions = {}) {
+  try { const c = await loadConfiguredScopeContext(root, scopeId, options, 'read'); return await withScopeAudit(c, audit => listRefusedRunRequests(audit, scopeId, limit), false); }
+  catch { return []; }
 }
 export { transitionConfiguredRunIntent } from './internal/intents.js';
 /** Explicit person's start only; ordinary /do replay keeps the durable intent parked/released/starting. */

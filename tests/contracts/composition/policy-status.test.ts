@@ -47,6 +47,11 @@ it.skipIf(process.platform !== 'linux')('SDK, CLI, MCP and doctor share scoped r
     json = '';
     await runKernelCommand(['doctor', '--json'], { root, env: options.env, inspectPolicyAdministration: inspect, stdout: { write: value => { json += value; } } });
     expect(JSON.parse(json)).toMatchObject({ policyAdministration: sdk });
+    // BeUser D-04: missing founder cells are a warning naming the card's exact command, never a green row.
+    let human = '';
+    await runKernelCommand(['doctor', '--lang', 'en'], { root, env: options.env, inspectPolicyAdministration: inspect,
+      inspectOwnerBaseline: async () => ({ status: 'plan', missing: 5, digest: 'd' }), stdout: { write: value => { human += value; } } });
+    expect(human).toContain('Management rights not granted yet: 5'); expect(human).toContain('--owner-baseline mcp-delegable,decision-steps --apply');
     expect(await readdir(data)).toEqual(before); expect(await readFile(join(data, 'policy.json'), 'utf8')).toBe(document);
   } finally { await client.close(); await server.close(); clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

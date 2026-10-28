@@ -53,6 +53,7 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 | Nervous durdurma eylemi ya da kayıp görev devamı için kalıcı onay | `recovery-action/fixture-target/apply`, `recovery-action/fixture-target/future-action`, `recovery-action/fence-attempt/apply`, `recovery-action/fence-attempt/future-action`, `recovery-action/stop-orphan/apply`, `recovery-action/stop-orphan/future-action`, `recovery-action/hand-to-human/apply`, `recovery-action/hand-to-human/future-action`, `recovery-action/continue-new-attempt/apply`, `recovery-action/continue-new-attempt/future-action` | Kurtarma aracısı mühürlü Nervous önerisini uygular, kurtarma sistemi kayıp görevi yeni Attempt ile sürdürür; ikisi de yalnız sahibin kalıcı izniyle (K-B, S6R-3/S6R-4); bu izni hiçbir AI taşımaz, Nervous yalnız önerir. |
 | Bir Nervous kuralını canlıya alma | `nervous-rule/container-gone@1/promote`, `nervous-rule/container-gone@1/future-action`, `nervous-rule/fixture-target/promote`, `nervous-rule/fixture-target/future-action` | Ölçülmüş bir kuralı ve sürümünü yalnız bir kişi canlıya alır (alpha.56 G2, owner Q-A1); bunu taşıyan bir AI kendi tespitleriyle işçileri durdurup bırakabilirdi. |
 | İmza anahtarı ekleme, kaydetme, iptal ve kayıt onarımı | `skill-signer/fixture-target/enrol`, `skill-signer/fixture-target/add`, `skill-signer/fixture-target/revoke`, `skill-signer/fixture-target/repair`, `skill-signer/fixture-target/future-action` | AI ve sistem kimliklerinin katalog eylemlerini imzaladığı anahtarları yalnız bir kişi ekler ya da iptal eder (S8-5, owner 2026-10-23); bunu taşıyan bir AI kendine imza yetkisi verirdi. |
+| Hub kaynağı ekleme ve kaldırma | `hub/fixture-target/sources.add`, `hub/fixture-target/sources.remove` | Bir Hub kaynağını (kök anahtarını) sabitlemek ya da kaldırmak kişinin güven kararıdır (BeUser E-05, owner 2026-10-28 "yalnız kişiye"); bunu taşıyan bir AI kendini her yayıncıya güvendirebilirdi. |
 | Katalog önerisi ve kural daraltması (katalog toplayıcı dışındaki her AI) | `agent-catalog/fixture-target/suggest`, `agent-catalog/fixture-target/narrow` | Önerileri ve otomatik daraltmayı yalnız katalog toplayıcı, kendi anahtarıyla imzalayarak yazar (S8-3, §9); bunları yazan başka bir AI hangi ajanın kartsız çalışacağını yönlendirebilirdi. |
 | Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Güvenlik, yalıtım, admission, operasyon, audit, kurtarma ve Nervous modları, shell ortamı ve ağ çıkışı ayarla gevşetilemez. |
 <!-- ai-floor:end -->
@@ -282,6 +283,14 @@ karttan sonra değişir. `--owner-baseline none --apply` bu kişinin yönetilen 
 kurallarını kaldırır; özel izinleri korur. Her parti politika değişikliği sınırına
 uyar; `remaining` sonraki karta kalan hücreleri gösterir. Paylaşılan havuz ve model
 kataloğu gibi kurulum hücreleri bütün kapsamları içerir.
+
+İki kişiye özel aile aynı yolla uygulanır ama hiçbir zaman varsayılan değildir: `hub-read`
+(`hub` inspect, search, export) ve `hub-trust` (`hub` sources.add, sources.remove,
+refresh, install, update, uninstall); her biri yalnız adı verilen kişiye ve seçilen
+kapsama yazılır (owner 2026-10-28). Publish, yank ve revoke hiçbir ailede değildir. Her
+Hub yazması yine kendi kişi kartını açar; `hub` sources.add/remove AI tabanındadır, bu
+yüzden hiçbir AI veya MCP aktörü kaynak değişikliğini tutamaz ya da devralamaz. Varsayılan
+kurucu hücreleri eksikken doctor uyarır ve kartın komutunu yazar.
 
 Taban, araç çağrısı izinlerini, izin kiplerini veya karar değerlendiricisini değiştirmez.
 İşlemler erişilebilir kayıtlı katalogdan gelir; `surface: authority` tanımları dışarıda

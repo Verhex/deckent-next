@@ -5,7 +5,7 @@ import { shortId, type KnownSecretSnapshot } from '#platform/index.js';
 import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/core/terminal-render/index.js';
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
 import { Window, WindowOpeningContext, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { awaitingDeliveryTargets, consentMatches, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
+import { awaitingDeliveryTargets, consentMatches, deliveredTargets, type AdoptionOutcome, type DeliveryConsent, type DeliveryOutcome, type DeliveryPreview,
   type DeliveryTarget, type TerminalDeliveryPort, type VerificationCandidate } from './contract.js';
 import WINDOW from './window.json' with { type: 'json' };
 
@@ -21,6 +21,10 @@ export interface DeliveryWindowLabels {
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
   readonly delivered: string; readonly adoptPrompt: string; readonly adoptTarget: string; readonly adoptHints: string; readonly adopting: string;
   readonly adopted: string; readonly doneHints: string; readonly failedHints: string;
+  /** BeUser M-25: an already-delivered task in the /deliver list (`{title}`), and the adoption step with no adoption target configured. */
+  readonly deliveredTitle: string; readonly adoptNone: string;
+  /** BeUser M-33: the x hint, the set-aside summary, a set-aside row in /deliver (`{title}`) and the brought-back summary. */
+  readonly dismissHint: string; readonly dismissed: string; readonly dismissedTitle: string; readonly restored: string;
   readonly summaryDelivered: string; readonly summaryAdopted: string; readonly summaryLeft: string; readonly summaryFailed: string; readonly summaryAdoptFailed: string; readonly summaryNotAdopted: string;
   readonly next: Readonly<Record<string, string>>; readonly nextDefault: string; readonly pickerTitle: string; readonly none: string; readonly fallbackTitle: string;
   /** Y1: choosing the verification Run of an adoption (`execution.adoption.verification`), and how an adoption names its verification. */
@@ -28,6 +32,8 @@ export interface DeliveryWindowLabels {
   readonly verifyHow: string; readonly verifyCheck: string; readonly verifyHints: string; readonly verifyNoneHints: string;
   readonly verifiedBy: string; readonly notVerified: string;
   /** Read-only per-file diff view inside the window: key hints, header, why a body is absent, cut lines and the scroll position. */
+  /** BeUser M-32: the refused window's list of the worker's changes (`{count}`, `{added}`, `{removed}`) and its keys. */
+  readonly patchChanged: string; readonly failedDiffHints: string;
   readonly diffListHints: string; readonly diffHints: string; readonly diffHeader: string; readonly diffUnavailable: string;
   readonly diffEmpty: string; readonly diffHidden: string; readonly diffPosition: string;
 }
@@ -51,7 +57,7 @@ interface Entry {
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
-  reattempt?: boolean; noTarget?: boolean; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
+  reattempt?: boolean; queueBlocked?: string; patch?: DeliveryPreview; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -86,16 +92,26 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
     if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
-    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false;
+    entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false; delete entry.queueBlocked; delete entry.patch;
+    // BeUser M-25/DR2-07: an already-delivered result opens on its adoption step (no second delivery, no integration check).
+    const delivered = entry.target.delivered;
+    if (delivered && current.previewDelivered) { current.previewDelivered(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.delivered = delivered;
+      entry.stage = { kind: 'delivered' }; changed(); } }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
       error => {
         const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
+        // BeUser M-32: a refused check still shows the worker's changes (read-only diffs of the retained patch); a failed read shows nothing more.
+        current.patchOnly?.(entry.target).then(patch => { if (entry.stage.kind === 'loading' || entry.stage.kind === 'failed') { entry.patch = patch; entry.fileSel = 0; changed(); } }, () => undefined);
         // A refused preview that offers `r` (queue preparation on the current base) shows the re-attempt line first when that enqueue carries the intent.
-        if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) Promise.all([current.queue.reattempt(), current.queue.hasTarget?.() ?? true]).then(([yes, target]) => { entry.reattempt = yes; entry.noTarget = !target; show(); }, show); else show();
+        if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) Promise.all([current.queue.reattempt(), current.queue.blocked?.() ?? null]).then(([yes, blocked]) => { entry.reattempt = yes;
+          if (blocked) entry.queueBlocked = codeOf(blocked) === 'QUEUE_WORK_TARGET_REQUIRED' ? '' : latest.current.errorText(blocked); show(); }, show); else show(); // no work target: no queue, no line
       });
   }, [changed, summarize]);
   const open = useCallback((target: DeliveryTarget, opening: DeliveryOpening) => {
-    if (!latest.current.port || !latest.current.labels) return;
+    const port = latest.current.port, words = latest.current.labels; if (!port || !words) return;
+    if (target.setAside !== undefined) { const { setAside: title, ...rest } = target, back = Object.freeze({ ...rest, title });
+      port.dismiss?.(back, 'restore').then(() => { latest.current.summary(fillTemplate(words.restored, { title: humanRecordText(back.title, latest.current.known) })); openRef.current(back, opening); },
+        error => latest.current.summary(latest.current.errorText(error), 'error')); return; }
     seen.current.add(target.key);
     let entry = entries.current.get(target.key);
     if (!entry) {
@@ -108,6 +124,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       : order.current.includes(target.key) ? order.current : [...order.current, target.key];
     changed();
   }, [changed, load]);
+  const openRef = useRef(open); openRef.current = open;
   // A Run this session admitted reaching "awaiting delivery" opens its window once, in the background; a refreshed snapshot never reopens it.
   const targets = useMemo(() => labels ? awaitingDeliveryTargets(input.runs, labels.fallbackTitle) : [], [input.runs, labels]);
   useEffect(() => { for (const target of targets) if (!seen.current.has(target.key)) open(target, 'background'); }, [targets, open]);
@@ -220,24 +237,31 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const visible = order.current.map(key => entries.current.get(key)).find((entry): entry is Entry => Boolean(entry && !entry.closed)) ?? null;
   const element = visible && labels ? <WindowOpeningContext.Provider value={visible.opening}>
     <Window key={`delivery:${visible.target.key}:${visible.generation}`} title={[span(fillTemplate(labels.title, { title: humanRecordText(visible.target.title, input.known) }))]}
-      body={deliveryLines(visible, labels, input.known)} hints={hintsOf(visible, labels, Boolean(port?.queue))} position={input.position} decision
+      body={deliveryLines(visible, labels, input.known)} hints={withDismiss(visible, labels, hintsOf(visible, labels, Boolean(port?.queue)), Boolean(port?.dismiss))} position={input.position} decision
       onInput={(text, key) => {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
         if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
-        if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue && !visible.noTarget) {
-          if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && QUEUE_REPREPARE.has(stage.code ?? '')) prepareCurrent(visible);
+        if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
+          if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && QUEUE_REPREPARE.has(stage.code ?? '') && visible.queueBlocked === undefined) prepareCurrent(visible);
           return true;
         }
         if (stage.kind === 'queue') { if (decision === 'yes') { confirmQueue(visible); return true; } if (decision === 'no') { close(visible); return true; } return false; }
+        // BeUser M-33: x sets this result aside (person card in the composition, reversible); it stays retained and /deliver lists it under "set aside".
+        if (text === 'x' && !key.ctrl && !key.meta && dismissable(visible) && latest.current.port?.dismiss) {
+          const entry = visible, words = latest.current.labels!; latest.current.port.dismiss(entry.target, 'dismiss').then(() => {
+            latest.current.summary(fillTemplate(words.dismissed, { title: humanRecordText(entry.target.title, latest.current.known), scope: entry.target.scopeId, run: entry.target.runId, task: entry.target.taskId }));
+            entry.closed = true; entries.current.delete(entry.target.key); order.current = order.current.filter(key => key !== entry.target.key); changed(); },
+          error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return true;
+        }
         if (stage.kind === 'confirm') {
           if (decision !== null) stage.waiting.resolve(decision === 'yes');
           return decision !== null;
         }
         // Read-only diff of the changed files (ready step only): ↑↓/j/k choose a file, Enter opens its hunks, ↑↓/j/k scroll them, the page keys scroll the
         // window, Esc goes back. No key here delivers, adopts or declines.
-        const diffs = stage.kind === 'ready' ? visible.preview?.diffs : undefined;
-        if (diffs?.length && visible.preview && !key.ctrl && !key.meta) {
+        const source = stage.kind === 'ready' ? visible.preview : stage.kind === 'failed' && !visible.preview ? visible.patch : undefined, diffs = source?.diffs;
+        if (diffs?.length && source && !key.ctrl && !key.meta) {
           const up = key.upArrow || text === 'k', down = key.downArrow || text === 'j', file = visible.fileSel ?? 0;
           if (visible.diffScroll !== null && visible.diffScroll !== undefined) {
             // The page keys stay the Window's own scroll, so a short terminal still reaches the page's last rows; every other key stays here and never decides.
@@ -248,7 +272,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
             else if (down) visible.diffScroll = Math.min(room, visible.diffScroll + 1);
             changed(); return true;
           }
-          const count = Math.min(visible.preview.files.length, WINDOW.maxFiles);
+          const count = Math.min(source.files.length, WINDOW.maxFiles);
           if ((up || down) && count) { visible.fileSel = (file + (up ? count - 1 : 1)) % count; changed(); return true; }
           if (key.return) { visible.diffScroll = 0; changed(); return true; }
         }
@@ -283,10 +307,21 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   return { available: Boolean(port && labels), open, element, visible: visible !== null, pending, candidates: (runs: readonly RunView[]) => {
     // The first view of a Run wins (callers pass the fresh read model first); a task delivered in this session is never offered again.
     const fresh = new Map<string, RunView>(); for (const run of runs) if (!fresh.has(`${run.scopeId}:${run.runId}`)) fresh.set(`${run.scopeId}:${run.runId}`, run);
-    return labels ? awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered) : [];
+    if (!labels) return [];
+    const awaiting = awaitingDeliveryTargets([...fresh.values()], labels.fallbackTitle).filter(target => !deliveredKeys.current.has(target.key) && !entries.current.get(target.key)?.delivered);
+    // BeUser M-25/DR2-07: delivered results not adopted yet are offered too (their window opens on the adoption step).
+    return [...awaiting, ...deliveredTargets([...fresh.values()], labels.fallbackTitle).filter(target => !entries.current.get(target.key)?.adopted
+      && !awaiting.some(other => other.key === target.key)).map(target => Object.freeze({ ...target, title: fillTemplate(labels.deliveredTitle, { title: target.title }) }))];
   },
-    target: (key: string) => entries.current.get(key)?.target ?? null };
+    target: (key: string) => entries.current.get(key)?.target ?? null,
+    /** BeUser M-33: the candidates with the set-aside ones (the Run view's `set-aside` outlook) moved last as their own rows. */
+    async offered(targets: readonly DeliveryTarget[]): Promise<readonly DeliveryTarget[]> { if (!labels) return targets;
+      return [...targets.filter(target => target.setAside === undefined), ...targets.filter(target => target.setAside !== undefined).map(target => Object.freeze({ ...target, title: fillTemplate(labels.dismissedTitle, { title: target.setAside! }) }))]; } };
 }
+
+/** BeUser M-33: x is offered wherever it acts (the same rule as the key handler): an undelivered result, ready or failed. A delivered one is not set aside. */
+const dismissable = (entry: Entry) => !entry.delivered && !entry.target.delivered && (entry.stage.kind === 'ready' || entry.stage.kind === 'failed');
+const withDismiss = (entry: Entry, labels: DeliveryWindowLabels, hints: string, available: boolean) => available && dismissable(entry) ? `${hints} · ${labels.dismissHint}` : hints;
 
 function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boolean): string {
   switch (entry.stage.kind) {
@@ -298,14 +333,15 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
     // The re-prepare key is offered only where `r` acts (the same rule as the key handler); closing stays visible on every failure.
-    case 'failed': return labels.queue && queueAvailable && !entry.queue && !entry.noTarget && QUEUE_REPREPARE.has(entry.stage.code ?? '')
+    case 'failed': if (!entry.preview && entry.patch?.diffs?.length) return entry.diffScroll !== null && entry.diffScroll !== undefined ? labels.diffHints : labels.failedDiffHints;
+      return labels.queue && queueAvailable && !entry.queue && entry.queueBlocked === undefined && QUEUE_REPREPARE.has(entry.stage.code ?? '')
       ? `${labels.queue.reprepare} · ${labels.failedHints}` : labels.failedHints;
     default: return '';
   }
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'queueSummary' | 'fileSel' | 'diffScroll' | 'reattempt'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'queueSummary' | 'fileSel' | 'diffScroll' | 'reattempt' | 'queueBlocked' | 'patch'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
@@ -345,6 +381,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   if (delivered) rows.push(exact(fillTemplate(labels.delivered, { commit: delivered.commit, ref: delivered.ref, command: delivered.commandId }), { role: 'success' }));
   if (stage.kind === 'delivered' && preview && delivered) {
     rows.push(line(fillTemplate(labels.adoptPrompt, { commit: delivered.commit.slice(0, 12) }), { bold: true }));
+    if (!preview.adoptionTargets.length) rows.push(line(labels.adoptNone, { role: 'muted' }));
     preview.adoptionTargets.forEach((targetRef, index) => rows.push(exact(fillTemplate(labels.adoptTarget, { mark: index === entry.selected ? '›' : ' ', target: targetRef, commit: delivered.commit.slice(0, 12) }),
       index === entry.selected ? { role: 'accent', bold: true } : {})));
   }
@@ -352,14 +389,20 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
   if (adopted) rows.push(exact(fillTemplate(labels.adopted, { target: adopted.targetRef, from: adopted.fromCommit, to: adopted.toCommit, command: adopted.commandId,
     verification: adopted.verifiedBy ? fillTemplate(labels.verifiedBy, { run: adopted.verifiedBy }) : labels.notVerified }), { role: 'success' }));
   if (stage.kind === 'failed') {
+    const patch = !preview ? entry.patch : undefined; // BeUser M-32: the worker's changes stay viewable when the check refused
+    if (patch?.diffs?.length && entry.diffScroll !== null && entry.diffScroll !== undefined) return [...rows, ...diffLines(patch, entry.fileSel ?? 0, entry.diffScroll, labels, text)];
     rows.push(...stage.error.split('\n').map(value => line(value, { role: 'error' })));
-    if (!preview && !entry.queue && entry.reattempt && QUEUE_REPREPARE.has(stage.code ?? '')) rows.push(line(labels.reattempt, { role: 'muted' }));
+    if (patch?.diffs?.length) rows.push(line(fillTemplate(labels.patchChanged, { count: patch.files.length, added: patch.added, removed: patch.removed }), { bold: true }),
+      ...patch.files.slice(0, WINDOW.maxFiles).map((file, index) => exact(`${index === (entry.fileSel ?? 0) ? '›' : ' '} ${fillTemplate(labels.file, { path: file.path, added: file.added, removed: file.removed })}`,
+        index === (entry.fileSel ?? 0) ? { role: 'accent', bold: true } : {})));
+    if (!preview && !entry.queue && entry.reattempt && entry.queueBlocked === undefined && QUEUE_REPREPARE.has(stage.code ?? '')) rows.push(line(labels.reattempt, { role: 'muted' }));
+    if (entry.queueBlocked) rows.push(line(entry.queueBlocked, { role: 'warning' })); // BeUser DR2-06: why `r` (the queue) is not offered
     // A next step may name the exact command for this attempt, delivery and selected branch (ADOPTION_NOT_VERIFIED: the CLI with --verification-run).
     const next = (stage.code ? labels.next[stage.code] : undefined) ?? labels.nextDefault, id = preview?.identity;
     // Identities admit spaces, quotes, $() and ; — every value placed into the suggested command is one POSIX shell word (Astra 2543 P1).
     const arg = shellWord, target = preview?.adoptionTargets[entry.selected];
     rows.push(line(preview && id ? fillTemplate(next, { scope: arg(id.scopeId), run: arg(id.runId), task: arg(id.taskId), attempt: arg(id.attemptId),
-      generation: arg(String(id.generation)), layout: arg(id.layoutRevision), delivery: delivered ? arg(delivered.commandId) : '<delivery>',
+      generation: arg(String(id.generation)), layout: arg(id.layoutRevision), delivery: delivered ? arg(delivered.commandId) : '<delivery>', ref: delivered ? arg(delivered.ref) : '<delivery-ref>',
       target: target === undefined ? '<branch>' : arg(target) }) : fillTemplate(next, { scope: arg(entry.target.scopeId), run: arg(entry.target.runId), task: arg(entry.target.taskId) }), { role: 'accent' }));
   }
   return rows;

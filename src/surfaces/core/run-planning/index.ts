@@ -2,14 +2,18 @@ import { isRunIntentResult, type RunPlanningResult, type RunIntentResult, type R
 import { advisoryProposalPermissions, deriveProposalPermissions } from '#domain/index.js';
 import { currencyAmountText, terminalSafeText, redactForRecord, t, ErrorRegistry, type Locale } from '#platform/index.js';
 const permissionText = (rows: ReturnType<typeof deriveProposalPermissions>) => terminalSafeText(rows.map(row => `${row.kind}/${row.action}/${row.resourceId}`).join(', ')) || '-';
-export function brainProposalLines(result: RunPlanningResult, locale: Locale): readonly string[] {
+/** BeUser DR3-02: the configured pool's hold as read for the card (`deckent pool status`'s view); a held pool never refuses the Run, it waits. */
+export type PlanningPoolHold = Readonly<{ state: string; poolId: string; hold: Readonly<{ changedBy: Readonly<{ issuer: string; subject: string }>; reason: string | null }> | null }>;
+export function brainProposalLines(result: RunPlanningResult, locale: Locale, pool?: PlanningPoolHold | null): readonly string[] {
   if (isRunIntentResult(result)) return runIntentLines(result, locale);
+  const held = pool?.state === 'held' ? { pool: terminalSafeText(pool.poolId), by: terminalSafeText(pool.hold ? `${pool.hold.changedBy.issuer}/${pool.hold.changedBy.subject}` : '-'),
+    reason: terminalSafeText(redactForRecord(pool.hold?.reason ?? '-')) } : null;
   const record = result.proposal, proposal = record.proposal, unrecognised = result.unrecognisedPermissions ?? [];
   // Unrecognised entries get their own advisory line (accept_mark, owner 2026-10-18); every entry appears once.
   const marked = new Set(unrecognised.map(row => JSON.stringify(row))), advisory = advisoryProposalPermissions(proposal.requiredPermissions, proposal.graph).filter(row => !marked.has(JSON.stringify(row)));
   const statuses = { recorded: t('proposal.status.recorded', {}, locale), pending: t('proposal.status.pending', {}, locale),
     accepted: t('proposal.status.accepted', {}, locale), rejected: t('proposal.status.rejected', {}, locale), parked: t('proposal.status.parked', {}, locale) };
-  return [...(result.run ? [t('brain.next', { run: result.run.runId }, locale)] : []),
+  return [...(result.run ? [held ? t('brain.nextHeld', { run: result.run.runId, ...held }, locale) : t('brain.next', { run: result.run.runId }, locale)] : held ? [t('brain.poolHeld', held, locale)] : []),
     t('brain.preview', { run: proposal.runId, status: statuses[record.status] }, locale),
     t('brain.scope', { scope: proposal.scopeId, actor: proposal.proposer.id }, locale),
     ...proposal.graph.tasks.flatMap(task => [t('brain.task', { id: task.id, kind: task.kind, workClass: task.workClass ?? '-', text: task.workInput?.title ?? task.workInput?.task ?? task.id }, locale),

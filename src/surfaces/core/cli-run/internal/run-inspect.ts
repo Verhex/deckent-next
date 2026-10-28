@@ -47,7 +47,7 @@ function exclusionLines(exclusions: Exclusions, locale: Locale, verbose: boolean
 const unresolvedRecoveryText = (mode: RunView['recoveryMode'], locale: Locale) => mode === 'live' ? t('recovery.unresolved.live', {}, locale)
   : mode === 'shadow' ? t('recovery.unresolved.shadow', {}, locale) : t('recovery.unresolved.off', {}, locale);
 function taskLines(run: RunView, task: TaskView, models: InspectData['models'], locale: Locale, verbose: boolean): string[] {
-  const brief = renderBriefLines(task.taskBrief, task.resultBrief, locale);
+  const brief = renderBriefLines(task.taskBrief, task.resultBrief, locale, { scope: run.scopeId, run: run.runId, task: task.id });
   // With a result, the brief's last line is its delivery line: it closes the task block (request → result → acceptance evidence → delivery).
   const delivery = task.resultBrief ? brief.splice(-1) : [];
   return [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale), ...brief,

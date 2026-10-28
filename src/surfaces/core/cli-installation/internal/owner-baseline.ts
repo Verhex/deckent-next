@@ -1,4 +1,4 @@
-import type { InstallerOwnerBaselineResult } from '#engine/index.js';
+import { ownerBaselineFamilyKnown, type InstallerOwnerBaselineResult } from '#engine/index.js';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale, type OutputSink } from '#platform/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import type { InstallationCommandContext } from './context.js';
@@ -10,7 +10,7 @@ export function parseBaseline(text: string | undefined): readonly string[] {
   if (!text) throw ErrorRegistry.createError('CLI_USAGE');
   if (text === 'none') return [];
   const families = text.split(',');
-  if (families.some(family => !['mcp-delegable', 'decision-steps'].includes(family)) || new Set(families).size !== families.length) throw ErrorRegistry.createError('CLI_USAGE');
+  if (families.some(family => !ownerBaselineFamilyKnown(family)) || new Set(families).size !== families.length) throw ErrorRegistry.createError('CLI_USAGE');
   return families;
 }
 /** Same installer custody as PRE-9; applying always previews the exact cells on a person's terminal. */

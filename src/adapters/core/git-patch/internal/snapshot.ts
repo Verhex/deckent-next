@@ -4,15 +4,13 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { workspacePathHidden } from '#domain/index.js';
-import { patchDigest, patchFile, isPatchExcluded, WorkspacePatchError, type PatchFile } from '#engine/index.js';
+import { patchDigest, patchFile, isPatchExcluded, WorkspacePatchError, type PatchFile, SnapshotBudget, parseBaseListing, baseIdentical, type Snapshot, type BaseEntry, type BaseListing, gitFailure } from '#engine/index.js';
 import type { GitWorkspaceLease, GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 const exec = promisify(execFile);
-import { SnapshotBudget, parseBaseListing, baseIdentical, type Snapshot, type BaseEntry, type BaseListing } from '#engine/index.js';
 export { SnapshotBudget, gitBlobOid, hashAlgorithmOf, diffAgainstBase, snapshotDigest } from '#engine/index.js';
 export type { Snapshot, BaseEntry, BaseListing } from '#engine/index.js';
 export { gitFailure } from '#engine/index.js';
-import { gitFailure } from '#engine/index.js';
 const decode = (bytes: Uint8Array) => new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
 function sourceGit(lease: GitWorkspaceLease, options: GitWorkspaceOptions, budget: SnapshotBudget) {
   return async (args: string[], maxBuffer: number) => {

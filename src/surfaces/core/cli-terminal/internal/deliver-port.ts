@@ -3,7 +3,7 @@ import type { AttemptIdentity } from '#domain/index.js';
 import type { DeliverySummaryRequest, WorkspacePatch } from '#engine/index.js';
 import { queueSummaryRequest, readConsentSummaries, DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 import type { InventoryQueryHandler } from '#surfaces/core/monitor/index.js';
-import type { DeliveryFileDiff, DeliveryFileStat, TerminalDeliveryPort, VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
+import { queueConfigRefusal, type DeliveryFileDiff, type DeliveryFileStat, type TerminalDeliveryPort, type VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
 import type { TargetQueueView } from '#engine/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import PORT from './deliver-port.json' with { type: 'json' };
@@ -68,8 +68,15 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
   const describe = context.describeDeliverySummaries, summaries = async (requests: readonly DeliverySummaryRequest[]) =>
     describe ? await describe(root, requests, options).catch(() => requests.map(() => null)) : [];
   const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
-    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; }, async hasTarget() { return Boolean((await loadConfig(root, options)).execution?.workTargets?.targets[0]); },
+    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; },
+    // BeUser DR2-06/08: what configuration alone shows the queue would refuse (a missing work target, a protected or not allow-listed branch).
+    async blocked() {
+      const execution = (await loadConfig(root, options)).execution;
+      return execution?.workTargets?.targets[0] ? queueConfigRefusal(execution) : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
+    },
     async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
+      const refusal = queueConfigRefusal((await loadConfig(root, options)).execution);
+      if (refusal) throw refusal; // named before anything is queued
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;
       if (!ref) throw ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
@@ -84,7 +91,13 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
     },
     ...(describe ? { async summary(view: TargetQueueView) { return (await summaries([queueSummaryRequest(view, DELIVERY_RENDER_LIMITS.cardTopPaths)]))[0] ?? null; } } : {}),
   } : undefined;
-  return { ...(queue ? { queue } : {}),
+  // BeUser M-33: set a result aside or bring it back on the latest attempt (the person card and its witness live in the composition).
+  const change = context.changeDeliveryDismissal;
+  const dismiss = change ? async (target: Parameters<TerminalDeliveryPort['preview']>[0], action: 'dismiss' | 'restore') => {
+    const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
+    await change(root, { scopeId: target.scopeId, runId: target.runId, taskId: target.taskId, attemptId: identity.attemptId, action }, options);
+  } : undefined;
+  return { ...(queue ? { queue } : {}), ...(dismiss ? { dismiss } : {}),
     async preview(target) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
       const preview = await previewWorkspacePatch(root, identity, options);
@@ -99,6 +112,18 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
         ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef,
           ...(config.targetQueue.reattempts > 0 ? { reattempt: true as const } : {}) } : {}) });
     },
+    // BeUser M-32: what the worker changed, read from the retained patch alone (no integration check, nothing written).
+    async patchOnly(target) {
+      const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options);
+      const patch = (await previewWorkspacePatch(root, identity, options)).patch;
+      return Object.freeze({ target, identity, ...patchStat(patch.changes, renderUnifiedDiff), diffs: patchDiffs(patch.changes, renderUnifiedDiff), source: '', base: patch.baseCommit,
+        proposal: '', outOfScope: [], adoptionTargets: [], verification: null });
+    },
+    // BeUser M-25/DR2-07: an already-delivered result needs only its attempt, its changed files and the configured adoption step.
+    async previewDelivered(target) { const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
+      const stat = await previewWorkspacePatch(root, identity, options).then(preview => patchStat(preview.patch.changes, renderUnifiedDiff), () => ({ files: [], added: 0, removed: 0 })), bar = config.execution?.adoption.verification;
+      return Object.freeze({ target, identity, ...stat, source: '', base: '', proposal: '', outOfScope: [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]),
+        verification: bar ? Object.freeze({ kind: bar.kind, required: bar.required }) : null }); },
     async deliver(preview, ids, answer) {
       const handlers = interactiveDelivery(answer);
       // A session that is not a verified human terminal is refused before any candidate is prepared.

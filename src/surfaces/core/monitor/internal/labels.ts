@@ -143,15 +143,19 @@ export function deliveryLabel(state: MonitorDeliveryState, locale: Locale): stri
   return labels[state];
 }
 /** Table cell wording of an accepted Run's delivery outlook (no receipt yet). */
-export function deliveryOutlookLabel(outlook: MonitorDeliveryOutlook, locale: Locale): string {
-  const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.delivery.none', {}, locale), 'patch-not-prepared': t('monitor.delivery.patchNotPrepared', {}, locale),
-    'awaiting-delivery': t('monitor.delivery.awaiting', {}, locale) };
+/** BeUser M-33: the shown outlook adds `set-aside` (carried beside the wire outlook, which keeps its value). */
+export type ShownDeliveryOutlook = MonitorDeliveryOutlook | 'set-aside';
+export const shownOutlook = (outlook: MonitorDeliveryOutlook | undefined, setAside: boolean | undefined): ShownDeliveryOutlook | undefined => outlook && setAside ? 'set-aside' : outlook;
+export function deliveryOutlookLabel(outlook: ShownDeliveryOutlook, locale: Locale): string {
+  const labels: Record<ShownDeliveryOutlook, string> = { none: t('monitor.delivery.none', {}, locale), 'patch-not-prepared': t('monitor.delivery.patchNotPrepared', {}, locale),
+    'awaiting-delivery': t('monitor.delivery.awaiting', {}, locale), 'set-aside': t('monitor.delivery.setAside', {}, locale) };
   return labels[outlook];
 }
 /** The detail sentence of the outlook; `patch-not-prepared` names that the cause is not recorded and where the exact one is shown. */
-export function deliveryOutlookDetail(outlook: MonitorDeliveryOutlook, locale: Locale): string {
-  const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.detail.deliveryOutlook.none', {}, locale),
-    'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale) };
+export function deliveryOutlookDetail(outlook: ShownDeliveryOutlook, locale: Locale): string {
+  const labels: Record<ShownDeliveryOutlook, string> = { none: t('monitor.detail.deliveryOutlook.none', {}, locale),
+    'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale),
+    'set-aside': t('monitor.detail.deliveryOutlook.setAside', {}, locale) };
   return labels[outlook];
 }
 

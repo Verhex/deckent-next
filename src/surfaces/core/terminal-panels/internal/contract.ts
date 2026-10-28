@@ -51,6 +51,8 @@ export type ConfigPanelField = Readonly<{
   unsettable: boolean;
   /** The value is redacted: an entry is masked while typed. */
   sensitive: boolean;
+  /** BeUser E-07: a protected key's confirm lines; non-empty means a chosen value is previewed before it is written. */
+  guard?: readonly string[];
   locks: Readonly<Record<ConfigPanelLayer, Readonly<{ blocked: string | null; note: string | null }>>>;
 }>;
 export type ConfigPanelView = Readonly<{ title: string; fields: readonly ConfigPanelField[]; notes: readonly string[] }>;
@@ -63,6 +65,9 @@ export interface ConfigPanelPort {
   parse(keyPath: string, text: string): Readonly<{ ok: true; value: unknown }> | Readonly<{ ok: false; reason: string }>;
   /** The L2 write port: principal'd, policy-checked, approval-aware; nothing else writes config. */
   write(request: ConfigPanelWrite): Promise<ConfigPanelOutcome>;
+  /** BeUser ZEY-02: the founder-baseline card offered after operations are registered (null: nothing to grant). */
+  readonly operationsBaseline?: Readonly<{ offer(): Promise<import('#surfaces/core/config/index.js').OperationsBaselineOffer | null>;
+    apply(offer: import('#surfaces/core/config/index.js').OperationsBaselineOffer): Promise<readonly string[]> }>;
 }
 export interface ConfigPanelLabels {
   readonly records: Readonly<Record<'edit' | 'add' | 'remove' | 'import' | 'save' | 'before' | 'after' | 'browse' | 'select' | 'empty', string>>;
@@ -74,7 +79,7 @@ export interface ConfigPanelLabels {
   /** Value-level rows: the typed entry and "back to the lower layer" (unset). */
   readonly freeEntry: string; readonly unset: string;
   readonly summary: string;
-  readonly stepper: string; readonly stepperHint: string; readonly regenerate: string; readonly preview: string; readonly previewHint: string;
+  readonly stepper: string; readonly stepperHint: string; readonly regenerate: string; readonly preview: string; readonly previewHint: string; readonly baselineHint: string;
   /** `{key}`, `{expected}`: the entry prompt and its hint row. */
   readonly entryTitle: string; readonly entryHint: string;
 }

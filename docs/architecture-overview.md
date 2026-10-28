@@ -220,7 +220,11 @@ Person writes require an interactive terminal; `--json`, pipes and AI environmen
 cannot approve their cards. The SDK exports `executeHub(root, request, options)`;
 `request` contains `operation` (for example `hub.verify`) and its typed `input`.
 An explicit scope policy grant for resource kind `hub` is required. No grant is
-created by using a surface. An AI write also requires its own active signing key;
+created by using a surface. The installation's founder grants it to themselves on a
+card: `deckent init policy --scope <id> --owner-baseline hub-read --apply` (inspect,
+search, export) and `hub-trust` (sources, feeds, install/update/uninstall); a refusal
+names the missing cell and this command. A publisher's key must also be an import key
+(`deckent agents add-signer`) before its packages install. An AI write also requires its own active signing key;
 the Hub server independently checks the publisher signature and authority.
 MCP omits source trust changes and person security cards. Publisher-key management
 continues to use the existing person-only signer cards.

@@ -54,11 +54,11 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
     return this.read(() => this.db.prepare(`SELECT entry_id,revision,state,record FROM memory_entries WHERE scope_id=? AND state IN(${states.map(() => '?').join(',')}) ORDER BY seq DESC LIMIT ?`)
       .all(scopeId, ...states, limit).map(row => this.entry(row, scopeId)));
   }
-  /** Terms are already folded words (letters/digits only); each is quoted, so no FTS5 operator or column filter can reach MATCH. */
+  /** Terms are already folded words (letters/digits only); each is quoted, so no FTS5 operator or column filter can reach MATCH; `*` makes it a prefix (BeUser E-10). */
   async search(scopeId: string, terms: readonly string[], states: readonly MemoryState[], limit: number) {
     return this.read(() => this.db.prepare(`SELECT e.entry_id FROM memory_search s JOIN memory_entries e ON e.id=s.rowid WHERE memory_search MATCH ? AND e.scope_id=?
       AND e.state IN(${states.map(() => '?').join(',')}) ORDER BY bm25(memory_search) LIMIT ?`)
-      .all(terms.map(term => `"${term.replaceAll('"', '""')}"`).join(' '), scopeId, ...states, limit).map(row => String(row['entry_id'])));
+      .all(terms.map(term => `"${term.replaceAll('"', '""')}"*`).join(' '), scopeId, ...states, limit).map(row => String(row['entry_id'])));
   }
   private loadReceipt(scopeId: string, commandId: string): MemoryReceipt | null {
     const row = this.db.prepare('SELECT entry_id,revision,record FROM memory_command_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);

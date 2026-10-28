@@ -383,8 +383,6 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
 - **Terminalde geri alma penceresi yok.** Dala almayı geri almak bir komut satırı adımıdır; terminal dala almanın komut
   kimliğini ve `deckent task integration-rollback --adoption-command-id` ipucunu gösterir. *Yol:* o komutu çalıştırın ya da
   dalı `Benimsendi:` satırındaki commit ile Git'te kendiniz geri taşıyın.
-- **Teslimden sonra terminal penceresi o görev için yeniden açılmaz;** bazı mesajlar `/deliver`'ın yeniden açtığını söylese de.
-  *Yol:* önceki maddedeki gibi komut satırından dala alın.
 - **Dala alma penceresi doğrulama Run'larını commit'e göre önceden süzemez.** Yapılandırılmış türdeki kabul edilmiş
   doğrulama Run'larını listeler; başka bir commit'i doğrulamış olan dala almada reddedilir ve pencere seçime döner.
 - **Doğrulama Run'ı terminalden oluşturulamaz.** *Yol:* pencerenin gösterdiği `deckent run create ... --delivery-command-id
@@ -427,7 +425,7 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   (Tek başına `deckent operation` yapılandırılmış işlem kataloğunu listeler, çalışmış komutları değil.)
 - **`deckent operation execute` terminalde de komutu JSON olarak alır.** Adım adım akış henüz yok (katalogdan işlem → hedef →
   şemadan parametreler → önizleme → onay → aynı ekranda bekleme); `--schema` sözleşmeyi basar ve hatalı belge alanını adıyla
-  söyler. *Etki:* kişi komut belgesini elle ya da bir betikle yazar.
+  söyler; `--example` bu katalog için başlangıç komutu yazar. *Etki:* kişi bir JSON belgesini düzenler.
 - **Belirsiz bir ERP yazımından yeniden göndermeden başka çıkış yok.** Hedef yazımın olup olmadığını söyleyemiyorsa Deckent onu
   kendiliğinden yeniden denemez ve kayıt hedefi meşgul tutar. Hedef sonradan doğrulayabiliyorsa aynı komut kimliğini yeniden
   gönderin, kanıtı kaydı kesinleştirir; doğrulayamıyorsa kayıt çözümsüz kalır. `EFFECT_OUTCOME_UNKNOWN` bu sonraki adımı söyler ve
@@ -435,13 +433,14 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   işlemin önce sonuçlanması gerektiğini söyler ama o önceki komutu adlandıramaz: komut kimliğini sizin bilmeniz gerekir. *Etki:* bir
   kişi çözümsüz kaydı henüz kapatamaz.
   İnsan beyanıyla (kanıt eki zorunlu, kabul sayılmaz) kapatma planlı.
-- **Bir operasyonun onay kartı operasyonu, hedefi ve 12 karakterlik girdi özetini gösterir,** yazacağı alanları değil.
-  *Etki:* onaylayan tutarı ya da durumu göremez. *Yol:* onaylamadan önce girdi dosyasını inceleyin.
+- **Bir operasyonun onay kartı girdi alanlarını gönderildiği gibi listeler, hedef kaydın sonucunu değil.** Her üst düzey alan
+  bir satırdır (katalogdaki isteğe bağlı `inputLabels` ile adlandırılır, kimlik bilgileri gizlenir, uzun girdiler sayılır); girdi
+  özeti ilk satırda kalır. *Etki:* gönderileni görürsünüz, ERP kaydının hesaplanmış önce/sonrasını değil.
 - **Bir ERP sonucunun kabul edilmemesinin on yedi nedeninden onunun okunabilir metni yok** (altısı kanıtla, dördü telafiyle
   ilgili); kodu görürsünüz.
 - **Okuma operasyonu yalnız kayıt sürümünü döndürür,** iş verisini değil.
-- **Her operasyon elle yazılmış bir JSON komutudur;** kendi komut kimliği, idempotency anahtarı ve beklenen sürümü vardır;
-  operasyon kataloğu ve hedef yapılandırması kullanıcı belgelerinde anlatılmıyor.
+- **Her operasyon elle yazılmış bir JSON komutudur;** kendi komut kimliği, idempotency anahtarı ve beklenen sürümü vardır. `deckent operation --example`
+  her alanı açıklanmış doldurulmuş bir katalog ve hedef, `deckent operation execute --example` onun için bir komut yazar.
 - **ERP etki sonuçları henüz denetim izine kendi olayları olarak yazılmıyor.** Yetki ve policy değişiklikleri denetlenir;
   genel etki yolu sonucunu ledger'a yazar.
 - **Enterprise SSO, filo yönetimi ve merkezi policy hizmeti yok.** Policy modülünün kalan parçaları (kartlı kurucu admin
@@ -634,8 +633,10 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Hub ağı dağıtım bağlantılarını bekler.** Alpha.56 imzalı paketleri, yerel kaynak/güven kartlarını,
   çevrimdışı önbellek doğrulamasını ve yönetilen taşıma portlarını sağlar. İlk kullanım, kimlik doğrulama ve güven
   hizmetleri bağlanmadan arama, uzak inceleme ve yayın `HUB_CONNECTION_UNAVAILABLE` verir. Varsayılan açık Hub/kaynak
-  yoktur; halka açılma ayrı owner kapısıdır. *Yol:* doğrulanmış çevrimdışı paketleri ve
-  [imzalı Hub rehberini](architecture-overview.tr.md#imzali-hub-paketleri) kullanın; paket kurmak araç/politika izni vermez.
+  yoktur; halka açılma ayrı owner kapısıdır. *Yol:* Hub hücrelerini
+  `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` kartıyla kendinize verin, sonra doğrulanmış
+  çevrimdışı paketleri ve [imzalı Hub rehberini](architecture-overview.tr.md#imzali-hub-paketleri) kullanın; paket kurmak
+  araç/politika izni vermez.
 - **Hub online anahtarları kökten imzalı delegasyon ister.** Paketler ve iptal akışları attestation/feed amacına ve
   geçerlilik aralığına bağlı `hub-key-delegation:1` taşır (registry varsayılanı en çok 90 gün, saat sapması 5 dk). Yeni içerikte
   güvenilir saat aralığın içinde olmalıdır; sapma aralığı genişletmez, geri çekilmiş/iptal anahtar yeni içerik imzalayamaz.

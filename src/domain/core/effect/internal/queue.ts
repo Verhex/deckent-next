@@ -55,7 +55,9 @@ export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
 export type TargetQueueOutcome = z.infer<typeof targetQueueOutcomeSchema>;
 export class TargetQueueError extends Error {
   constructor(readonly code: 'QUEUE_CONFLICT' | 'QUEUE_CAPACITY' | 'QUEUE_TARGET_BUSY' | 'QUEUE_CORRUPT' | 'QUEUE_AUTHORITY_REQUIRED'
-    | 'QUEUE_RECOVERY_REQUIRED' | 'QUEUE_CONFIRMATION_REQUIRED' | 'QUEUE_EXPIRED' | 'QUEUE_REQUEUE_EXHAUSTED') { super(code); this.name = 'TargetQueueError'; }
+    | 'QUEUE_RECOVERY_REQUIRED' | 'QUEUE_CONFIRMATION_REQUIRED' | 'QUEUE_EXPIRED' | 'QUEUE_REQUEUE_EXHAUSTED',
+    /** BeUser DR2-06: display facts of a target-branch refusal (`reason`, `ref`); never a decision input. */
+    readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'TargetQueueError'; }
 }
 /** D2b: the typed cause under which the service may re-queue a delegated ticket: a stop before any effect started, never a refusal. */
 export function queueRequeueCause(record: Pick<TargetQueueRecord, 'state' | 'batchDigest'>): 'parked' | 'expired' | null {

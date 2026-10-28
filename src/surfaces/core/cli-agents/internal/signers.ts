@@ -7,6 +7,7 @@ import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { cliTableStyle, renderCliTable, safeCell, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import { sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { AgentsCommandContext } from './context.js';
+import { assertAgentsFile } from './write.js';
 import { revokedPromotionsCard } from './evolution.js';
 
 /** S8-5 `deckent agents` signer actions (S8-DESIGN §8): the list reads; every other action is one person's card at their own terminal. */
@@ -85,6 +86,7 @@ export async function signersCommand(action: SignerAction, args: { readonly id?:
   }
   // import-skill: the bundle's text, source, pin and signature; the application checks floor (d) and the store verifies the signature at commit.
   const raw = await input() as Record<string, unknown> | null, bundle = raw && typeof raw === 'object' ? raw : {};
+  assertAgentsFile('import-skill', raw);
   const skillId = typeof bundle['skillId'] === 'string' ? bundle['skillId'] : '';
   const current = skillId ? await need(context.inspectSkill)(io.root, { schemaVersion: 1, scopeId, skillId }, io.options) : null;
   const command = skillImportCommandSchema.safeParse({ ...base, skillId, expectedRevision: current?.status === 'ok' ? current.item.revision : null,

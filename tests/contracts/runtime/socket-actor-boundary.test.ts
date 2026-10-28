@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, type ShellSandboxLayout } from '#adapters/index.js';
-import { bubblewrapArguments, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { bubblewrapArguments, bubblewrapShellSandbox, recheckRuntimeSocketMasks, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { prepareRuntimeSocket, startLocalRuntimeSocketServer, type LocalRuntimeSocketOptions, type LocalRuntimeSocketServer } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { landlockShellSandbox, resolveShellRealm } from '#adapters/core/host-shell/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -28,15 +28,22 @@ const landlockAbi = (() => {
 })();
 const owned: string[] = [];
 // RESTART-HUNT (alpha.56.1): the kernel's bound-socket table can be made unreadable for one call; every other read is the real one.
-const procTable = vi.hoisted(() => ({ unreadable: false }));
+const procTable = vi.hoisted(() => ({ unreadable: false, deniedStat: '', beforeRealpath: null as null | { path: string; run: () => Promise<void> } }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   const readFile = ((path: unknown, ...rest: unknown[]) => procTable.unreadable && path === '/proc/net/unix'
     ? Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })) : (actual.readFile as (...args: unknown[]) => unknown)(path, ...rest)) as typeof actual.readFile;
-  return { ...actual, readFile, default: { ...actual, readFile } };
+  const lstat = ((path: unknown, ...rest: unknown[]) => path === procTable.deniedStat
+    ? Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })) : (actual.lstat as (...args: unknown[]) => unknown)(path, ...rest)) as typeof actual.lstat;
+  const realpath = (async (path: unknown, ...rest: unknown[]) => {
+    if (procTable.beforeRealpath?.path === path) { const hook = procTable.beforeRealpath; procTable.beforeRealpath = null; await hook.run(); }
+    return (actual.realpath as (...args: unknown[]) => unknown)(path, ...rest);
+  }) as typeof actual.realpath;
+  return { ...actual, readFile, lstat, realpath, default: { ...actual, readFile, lstat, realpath } };
 });
 const servers: LocalRuntimeSocketServer[] = [];
 afterEach(async () => {
+  procTable.unreadable = false; procTable.deniedStat = ''; procTable.beforeRealpath = null;
   await Promise.all(servers.splice(0).map(server => server.dispose().catch(() => undefined)));
   await Promise.all(owned.splice(0).map(path => rm(path, { recursive: true, force: true })));
 });
@@ -84,6 +91,26 @@ function outcome(stdout: string): Record<string, unknown> {
 }
 
 describe.skipIf(process.platform !== 'linux')('SEC-1: an agent shell cannot reach or use the runtime socket', () => {
+  it('pre-spawn only drops absent own-UID runtime masks from an open view; closed and unrelated masks stay', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-recheck-')); owned.push(root);
+    const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: root })), directory = dirname(endpoint); owned.push(directory);
+    const unrelated = join(root, 'absent-credential'), privateIpc = `/tmp/dk-ipc-${process.getuid!()}`;
+    const closed = { projectRoot: root, scratchDir: null, home: null, systemPaths: [], toolchainPaths: [], readOnlyPaths: [],
+      maskedDirectories: [directory, unrelated, privateIpc], maskedFiles: [] };
+    const view = { ...closed, open: { sealed: [], hidden: [] } };
+    expect(await recheckRuntimeSocketMasks(view)).toBe(view);
+    procTable.deniedStat = directory;
+    expect(await recheckRuntimeSocketMasks(view)).toBe(view);
+    procTable.deniedStat = '';
+    await rmdir(directory);
+    expect(await recheckRuntimeSocketMasks(closed)).toBe(closed);
+    const rechecked = await recheckRuntimeSocketMasks(view);
+    expect(rechecked.maskedDirectories).toEqual([unrelated, privateIpc]);
+    expect(rechecked.maskedFiles).toBe(view.maskedFiles); expect(rechecked.open).toBe(view.open);
+    expect(view.maskedDirectories).toEqual([directory, unrelated, privateIpc]);
+    await expect(lstat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it.skipIf(!launcher)('(a) the full-access open view hides the runtime socket directory: the endpoint cannot be reached, nothing is dispatched', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-open-')); owned.push(root);
     const project = join(root, 'project'), home = join(root, 'home'), global = join(root, 'global');
@@ -154,7 +181,7 @@ describe.skipIf(process.platform !== 'linux')('SEC-1: an agent shell cannot reac
     const project = join(root, 'project'), home = join(root, 'home'), global = join(root, 'global');
     await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(home, { recursive: true }), mkdir(global, { recursive: true })]);
     const live = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: project })); owned.push(dirname(live));
-    await serve(live);
+    const { seen } = await serve(live);
     // A stopping service: its socket file and empty directory are removed while its listener is still open, so /proc/net/unix still lists it.
     const goneLayout = resolveProductLayout({ projectRoot: join(root, 'other') }), gone = await prepareRuntimeSocket(goneLayout), goneDir = dirname(gone); owned.push(goneDir);
     const listeners: NetServer[] = [];
@@ -180,7 +207,35 @@ describe.skipIf(process.platform !== 'linux')('SEC-1: an agent shell cannot reac
       await prepareRuntimeSocket(goneLayout); await bind();
       const racing = await openView(); if (!racing.ok) throw new Error(racing.reason);
       expect(racing.view.maskedDirectories).toContain(goneDir);
+      // A failed stat is not evidence of absence: keep that mask and all non-runtime masks, even missing ones.
+      procTable.deniedStat = goneDir;
+      expect(await recheckRuntimeSocketMasks(racing.view)).toBe(racing.view);
+      procTable.deniedStat = '';
       await stop();
+      // alpha.57 pre-spawn re-check: the same stale view, checked again right before the spawn, drops the vanished mask (the live one stays),
+      // so bwrap creates nothing on the host.
+      const rechecked = await recheckRuntimeSocketMasks(racing.view);
+      expect(rechecked.maskedDirectories).toContain(dirname(live)); expect(rechecked.maskedDirectories).not.toContain(goneDir);
+      expect(rechecked.maskedDirectories).toEqual(racing.view.maskedDirectories.filter(path => path !== goneDir));
+      const hidden = await run(launcher!, [...bubblewrapArguments(rechecked), '--', process.execPath, '-e', CLIENT, live, String(RUNTIME_SERVICE_SCHEMA_VERSION)], env);
+      expect(hidden.status, hidden.stderr).toBe(0); expect(outcome(hidden.stdout)).toEqual({ error: 'ENOENT' });
+      await expect(lstat(goneDir)).rejects.toMatchObject({ code: 'ENOENT' });
+      // Exercise the production realm: remove the listed directory during HOME resolution, after the socket mask scan.
+      await prepareRuntimeSocket(goneLayout); await bind();
+      const usable = bubblewrapShellSandbox(layout).usable(measured); if (!usable.ok) throw new Error(usable.reason);
+      procTable.beforeRealpath = { path: home, run: stop };
+      const command = [process.execPath, '-e', CLIENT, live, String(RUNTIME_SERVICE_SCHEMA_VERSION)].map(value => `'${value.replace(/'/gu, "'\\''")}'`).join(' ');
+      const started = await usable.realm.run({ command, cwd: project, environment: env, open: true, writeFloorReadOnly: true });
+      expect(procTable.beforeRealpath).toBeNull(); expect(started.status, started.output).toBe('exited'); expect(started.exitCode).toBe(0);
+      expect(outcome(started.output)).toEqual({ error: 'ENOENT' });
+      await expect(lstat(goneDir)).rejects.toMatchObject({ code: 'ENOENT' });
+      // The MCP launch uses a private /tmp and keeps both live and stopped host endpoints out of its view.
+      const serverLaunch = await usable.launch!(env); if (!serverLaunch.ok) throw new Error(serverLaunch.reason);
+      const server = await run(serverLaunch.file, [...serverLaunch.args, '--', process.execPath, '-e', CLIENT, live, String(RUNTIME_SERVICE_SCHEMA_VERSION)], env);
+      expect(server.status, server.stderr).toBe(0); expect(outcome(server.stdout)).toEqual({ error: 'ENOENT' });
+      expect(seen).toEqual([]);
+      await expect(lstat(goneDir)).rejects.toMatchObject({ code: 'ENOENT' });
+      // Without the re-check (the mount after the directory vanished) bwrap leaves a 0755 directory on the host; the start still heals it.
       expect((await run(launcher!, [...bubblewrapArguments(racing.view), '--', '/bin/true'], env)).status).toBe(0);
       expect((await lstat(goneDir)).mode & 0o777).toBe(0o755);
       await expect(prepareRuntimeSocket(goneLayout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', reason: 'parent-mode' });

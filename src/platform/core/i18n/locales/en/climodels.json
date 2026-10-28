@@ -262,5 +262,7 @@
   "models.catalog.lifecycle.retired": "retired",
   "models.catalog.lifecycle.deprecated": "deprecated",
   "climodels.budget.usdRange": "The amount is whole US dollars from {min} to {max}: a monthly limit for every API provider of the scope.",
-  "climodels.budget.command": "deckent models {action}"
+  "climodels.budget.command": "deckent models {action}",
+  "climodels.roles.pendingFooter.filled": "New model: role pending ({count}). No role may use these models until you assign one, for example:\n  deckent models roles set --channel {channel} --model {model} --tier worker --roles <one or more of {roles}>\n--tier takes worker or frontier; --roles a comma-separated list.",
+  "climodels.roles.tierMeaning": "Tiers: worker runs ordinary tasks; frontier marks a top-capability model you trust for planning and review roles (Brain, recovery decisions). A role takes its tier or higher; the tier you set is your judgement, not a measurement."
 }

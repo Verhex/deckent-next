@@ -10,11 +10,11 @@ import { renderAgentSessionContext, type AgentSessionSnapshot } from './session-
  * locale, first and last; v6 PROMPT-POSTURE: the shell's posture for the turn, apart from fetch_url; v7 TRUNCATED-TOOLCALL: the per-answer
  * output limit and writing large content in parts, when an edit tool is offered; v8 TC-1: pin the turn-local carry/render contract; v10 NATIVE-BAGLAM:
  * the descriptive session context — mode, thinking, model capabilities, each offered tool's effect now, surfaces, rules — and the answer holds
- * no reasoning). The text is protocol, like tool
+ * no reasoning; v11 BeUser E-04: the Deckent features the assistant may point the person to, as commands, never as its own tools). The text is protocol, like tool
  * descriptions: English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the
  * rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 10;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 11;
 /**
  * v6 PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because v5 said "Network access: none" whenever fetch_url
  * was absent): where this turn's shell commands run, as composition resolved it from the realm the turn's shell calls take (the same
@@ -118,6 +118,12 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       + ' intermediate data and diagrams (Mermaid .mmd or SVG source as text) there with scratch_write, and read them with scratch_read and'
       + ` scratch_list (paths relative to it); run_shell gets it as TMPDIR, and shell commands may address it by this absolute path. It never`
       + ` changes the project; an area unused for ${scratch.retentionDays} days is removed.`] : []),
+    '', 'Deckent features you may point the user to (commands for the user; they are not among your tools):',
+    '- Work: /do <request> plans and runs a job; /runs shows jobs; /approvals shows what waits for the user\'s decision.',
+    '- Setup: /setup reopens the first-open steps; /model picks the model; /config changes settings; deckent doctor checks the installation.',
+    '- Agents and skills: deckent agents (define, define-skill; --example prints a filled file).',
+    '- Memory: deckent memory (propose, verify, search). Verified entries reach workers only when a job starts and the person turned'
+      + ' memoryAutomation.context.mode on; this chat does not read memory, so do not claim to remember earlier conversations.',
     '- Deckent\'s own state and authority (its ledger, saved conversations and history, logs, the runtime socket, approvals and their previews,'
       + ' audit, policy, runs and workspaces), keys and credential files are protected: the tools and the shell refuse them; do not try to read'
       + ' them another way.',

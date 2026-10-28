@@ -248,26 +248,27 @@ from scratch yet ([known limits](docs/known-limits.md)).
 ### One-time setup
 
 Work runs in a worker container, so Deckent needs a worker image, settings that say where work runs, a first kind of
-work and a worker pool. `deckent init` prepares all four at your own terminal. It asks on a card before each step and
-writes nothing until you confirm.
+work and a worker pool. `deckent init` installs; the first time you open `deckent` its setup steps (`/setup`) prepare all
+four at your own terminal. Each step asks on a card and writes nothing until you confirm.
 
 ```sh
-# 1. In your project: build the worker image, write the execution settings, declare the first kind of work and set
-#    up the worker pool. Each step asks on a card first.
+# 1. In your project: install, then open the terminal and follow its setup steps (build or pick the worker image,
+#    execution settings, first kind of work, worker pool). /setup opens them again later.
 deckent init
-#    Or use a worker image this Docker already has instead of building one:
-deckent init --image-id sha256:<image id>
+deckent
+#    Without the terminal, doctor prints each missing step with its exact command (see below):
+deckent doctor
 
 # 2. If the service was already running, restart it so it reads the new settings
 deckent runtime restart
 ```
 
 The image build uses Docker and the network (the base image and the coding CLIs), and its card names the size and the time
-limit before anything starts. The execution settings name the Docker and Git that `deckent init` found and the new image;
+limit before anything starts. The execution settings name the Docker and Git that the setup step found and the image;
 the other values keep their defaults (`deckent config explain execution`). The first kind of work is `coding` on the coding
 CLI you pick (`codex`, `claude` or `cursor`; a Cursor worker needs one more catalog step, see the operator reference), with
-the pool `workers` and one running slot. For another kind, pool name or capacity, or without a terminal, `deckent init` and
-`deckent doctor` print the missing steps with their exact commands, for example:
+the pool `workers` and one running slot. For another kind, pool name or capacity, or without a terminal,
+`deckent doctor` prints the missing steps with their exact commands, for example:
 
 ```sh
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \

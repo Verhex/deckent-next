@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, PACKAGE_NAME } from '#platform/index.js';
 import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { emit, formatValue } from '#platform/index.js';
 import { isSensitiveConfigKey, MESSAGE_REGISTRY, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { configServiceState, configWriteOperation, isProtectedConfigWrite, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-import { cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
+import { askCliCard, cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
+import { applyOperationsBaseline, operationsBaselineOffer, registersOperations, type OwnerBaselineOpener } from './operations-baseline.js';
 import { applyWord, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
 import { configValueModel } from './choices.js';
 import { configChoiceWords, narrowConfigPanel, renderConfigKeyList, renderConfigLeaves, renderConfigOverrides, type ConfigPanelOpener } from './cli-view.js';
@@ -21,6 +22,8 @@ export interface ConfigCommandContext extends CliBaseContext {
   resolveConfigPrincipal?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<VerifiedPrincipal>;
   /** C-SETUP: the `/config` window on a person's terminal (bare `deckent config`, `config set <key>` without a value). */
   openConfigPanel?: ConfigPanelOpener;
+  /** BeUser ZEY-02: the installer's founder-baseline preview/apply, offered after a person registers operations (person terminal only). */
+  openOwnerBaselineInstallation?: OwnerBaselineOpener;
 }
 interface Parsed { readonly args: string[]; json: boolean; global: boolean; help: boolean; verbose: boolean; language?: string; expect?: string; scope?: string; commandId?: string }
 function parse(argv: readonly string[]): Parsed {
@@ -51,7 +54,9 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   const options: ConfigLoadOptions = { env, heal: false, onWarning: warning => emit(warning, { ...sinks, level: 'warning', render: value => value.message }) };
   const style = () => cliTableStyle(context), person = () => cliMode(context, parsed.json).mode === 'interactive';
   if (parsed.help) { emit(t('config.surface.help', {}, locale), { ...sinks, json: false }); return; }
-  if (!isWrite && (parsed.expect || parsed.scope || parsed.commandId)) throw ErrorRegistry.createError('CLI_USAGE');
+  // BeUser E-11: name the flag and say it belongs to set/unset, instead of a bare "invalid arguments".
+  if (!isWrite && (parsed.expect || parsed.scope || parsed.commandId)) throw ErrorRegistry.createError('CLI_USAGE', { locale, params: { command: [PACKAGE_NAME, argv[0], action].filter(Boolean).join(' '),
+    flag: parsed.scope ? '--scope' : parsed.expect ? '--expect' : '--command-id', usage: t('config.surface.writeOnlyFlag', {}, locale) } });
   if (parsed.verbose && action !== 'explain') throw ErrorRegistry.createError('CLI_USAGE');
   // alpha.55.1: a write of a protected root is refused off a person's terminal before anything is read (`set <key>` alone writes nothing).
   if (isWrite && keyPath && parsed.args.length === (action === 'set' ? 3 : 2)) assertConfigPerson(context, action as 'set' | 'unset', keyPath, parsed.json);
@@ -121,6 +126,18 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
   emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale).join('\n') });
+  if (!parsed.json && registersOperations(keyPath) && person()) await offerOperationsBaseline(context, root, options, locale, sinks);
+}
+/** BeUser ZEY-02: after registering operations the person who lacks their cells gets the founder-baseline card at once (the installer's own plan). */
+async function offerOperationsBaseline(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale,
+  sinks: { stdout?: import('#platform/index.js').OutputSink; stderr?: import('#platform/index.js').OutputSink }) {
+  const offer = await operationsBaselineOffer(root, context.openOwnerBaselineInstallation, options, locale);
+  if (!offer) return;
+  const ttlMs = (await loadConfig(root, options)).approvals.sessionTtlMs;
+  const answer = await askCliCard({ title: offer.title, body: [...offer.lines], options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, locale), key: 'y' },
+    { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), key: 'n' }] }, { locale, env: context.env ?? process.env, signal: AbortSignal.timeout(ttlMs) });
+  const lines = answer === 'apply' ? await applyOperationsBaseline(root, context.openOwnerBaselineInstallation!, offer, locale) : [offer.later];
+  emit(lines.join('\n'), { ...sinks, json: false });
 }
 /**
  * alpha.55.1 (functest B P1): a write that changes a protected root (`isProtectedConfigWrite`: the AI floor's security roots and core-layer switches)
@@ -253,7 +270,10 @@ export async function configSlash(root: string, args: string, context: ConfigCom
     if (!keyPath || (verb === 'set' ? words.length < 3 : words.length !== 2)) return [t('config.surface.slashUsage', {}, locale)];
     let value: unknown;
     if (verb === 'set') { try { value = JSON.parse(args.trim().slice(verb.length).trimStart().slice(keyPath.length).trim()); } catch { return [t('config.surface.slashUsage', {}, locale)]; } }
-    return (await terminalConfigWrite(root, { action: verb as 'set' | 'unset', keyPath, value }, context, options, locale)).lines;
+    const written = await terminalConfigWrite(root, { action: verb as 'set' | 'unset', keyPath, value }, context, options, locale);
+    // A typed line cannot hold a card: it names the founder-baseline step when the registered operations are not the person's yet (ZEY-02).
+    const offer = written.status === 'applied' && registersOperations(keyPath) ? await operationsBaselineOffer(root, context.openOwnerBaselineInstallation, options, locale) : null;
+    return offer ? [...written.lines, offer.later] : written.lines;
   }
   if (words.length > 1) return [t('config.surface.slashUsage', {}, locale)];
   const view = await context.configApplication(root, options).inspect(verb ? { keyPath: verb } : {});

@@ -80,12 +80,13 @@ describe('memory search terms (DB-neutral; every adapter receives the same folde
     expect(memorySearchTerms(Array.from({ length: 40 }, (_, i) => `w${i}`).join(' '))).toHaveLength(MEMORY_LIMITS.queryTermsMax);
     expect(() => memorySearchTerms('x'.repeat(MEMORY_LIMITS.queryMaxBytes + 1))).toThrow(expect.objectContaining({ code: 'MEMORY_QUERY_INVALID' }));
   });
-  it('the scan fallback matches whole folded words over title, body, tags and lesson fields (all terms required)', () => {
+  it('the scan fallback matches folded word prefixes over title, body, tags and lesson fields (all terms required; BeUser E-10)', () => {
     const entry = propose();
     expect(memoryIndexText(entry)).toContain('istanbul');
     expect(memoryEntryMatches(entry, memorySearchTerms('istanbul fatura'))).toBe(true);
     expect(memoryEntryMatches(entry, memorySearchTerms('onaya irsaliye eksik'))).toBe(true);
     expect(memoryEntryMatches(entry, memorySearchTerms('istanbul ankara'))).toBe(false);
-    expect(memoryEntryMatches(entry, memorySearchTerms('ista'))).toBe(false);
+    expect(memoryEntryMatches(entry, memorySearchTerms('ista'))).toBe(true);
+    expect(memoryEntryMatches(entry, memorySearchTerms('stanbul'))).toBe(false);
   });
 });

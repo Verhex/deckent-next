@@ -2,8 +2,10 @@ import { runIntentLines, planningSpendingLines } from '#surfaces/core/run-planni
 import { resolve } from 'node:path';
 import { currencyAmountText, t, emit, loadConfig, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { isRunIntentResult, parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult, type RunPlanningResult } from '#engine/index.js';
-import type { RunProposal } from '#domain/index.js';
+import { runProposalSchema, type RunProposal } from '#domain/index.js';
 import { cliUsage, commandLocale } from '#surfaces/core/cli-kit/index.js';
+import { assertInputFields, renderInputSchema } from '#surfaces/core/cli-human/index.js';
+import { projectInputSchema } from '#engine/index.js';
 import { readGraphInput } from './graph-input.js';
 import type { RunCommandContext } from './context.js';
 export type RunProposalHandler = (root: string, command: RunProposal, options: ConfigLoadOptions) => Promise<RunProposalResult>;
@@ -28,7 +30,10 @@ export function renderRunProposal(data: RunPlanningResult, locale: Locale): stri
   ].join('\n');
 }
 export async function runProposalCommand(argv: readonly string[], context: RunCommandContext, initialLocale: Locale) {
-  const action = argv[1], allowed = action === 'propose' ? ['--proposal', '--lang'] : ['--scope', '--id', '--command-id', '--lang'];
+  const action = argv[1];
+  // BeUser D-12: the proposal file's contract (JSON Schema), without a project.
+  if (action === 'propose' && argv.includes('--schema')) { emit(renderInputSchema(projectInputSchema(runProposalSchema as never)), { json: false, ...(context.stdout ? { stdout: context.stdout } : {}) }); return; }
+  const allowed = action === 'propose' ? ['--proposal', '--lang'] : ['--scope', '--id', '--command-id', '--lang'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -45,7 +50,10 @@ export async function runProposalCommand(argv: readonly string[], context: RunCo
     const source = values.get('--proposal'); if (!source) throw cliUsage('run', action, locale, '--proposal');
     if (!context.proposeRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const config = await loadConfig(root, options);
-    const proposal = parseRunProposal(await readGraphInput(source === '-' ? source : resolve(root, source), config.cli.graphInputMaxBytes, context.stdin));
+    const raw = await readGraphInput(source === '-' ? source : resolve(root, source), config.cli.graphInputMaxBytes, context.stdin);
+    // A file that does not fit names its first field and the contract (was a bare RUN_PROPOSAL_INVALID); a wrong schemaVersion keeps its own code.
+    if (!(raw && typeof raw === 'object' && 'schemaVersion' in raw && raw.schemaVersion !== 1)) assertInputFields('deckent run propose', runProposalSchema as never, raw, 'deckent run propose --schema');
+    const proposal = parseRunProposal(raw);
     data = await context.proposeRun(root, proposal, options);
   } else {
     const scopeId = values.get('--scope'), runId = values.get('--id'), commandId = values.get('--command-id');

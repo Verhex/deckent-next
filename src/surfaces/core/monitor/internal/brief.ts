@@ -12,7 +12,8 @@ export function evaluationText(task: TaskBrief | undefined, evaluation: ResultBr
     + (evaluation.reason ? ` · ${notAcceptedLabel(evaluation.reason, locale)}` : '');
 }
 /** Shared EN/TR wording for worker detail and run inspect. Labels never turn worker reports into evaluation evidence. */
-export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrief | undefined, locale: Locale): string[] {
+/** `ids` (BeUser M-33) fills the restore command of a set-aside result; without them its placeholders stay. */
+export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrief | undefined, locale: Locale, ids?: Readonly<{ scope: string; run: string; task: string }>): string[] {
   const missing = t('monitor.brief.missing', {}, locale);
   const lines: string[] = [];
   if (task) {
@@ -49,7 +50,9 @@ export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrie
       if (result.failedTests.count > result.failedTests.names.length) lines.push(t('monitor.brief.failedTestsMore', { more: result.failedTests.count - result.failedTests.names.length }, locale));
     }
     const outlook = result.deliveryOutlook === 'none' ? t('monitor.brief.deliveryNone', {}, locale) : result.deliveryOutlook === 'patch-not-prepared' ? t('monitor.brief.deliveryPatchNotPrepared', {}, locale)
+      : result.deliveryOutlook === 'awaiting-delivery' && result.setAside ? t('monitor.brief.deliverySetAside', ids ? { scope: safe(ids.scope), run: safe(ids.run), task: safe(ids.task) } : { scope: '<scope>', run: '<run>', task: '<task>' }, locale)
       : result.deliveryOutlook === 'awaiting-delivery' ? t('monitor.brief.deliveryAwaiting', {}, locale) : null;
+    if (result.dismissalUnread && !receipts.length) lines.push(t('monitor.brief.dismissalUnread', { code: result.dismissalUnread }, locale));
     lines.push(receipts.length ? t('monitor.brief.attribution', {}, locale) : outlook ?? t('monitor.brief.deliveryMissing', {}, locale));
   }
   return lines;

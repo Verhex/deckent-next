@@ -127,7 +127,10 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
   const checks = [...doctorChecks(data, facts, locale)];
-  if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push({ group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: ownerBaseline.missing }, locale) });
+  // BeUser D-04/ZEY-02: missing founder cells are a warning with the card's exact command, never a green row (pool hold, operations need them).
+  if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push(ownerBaseline.missing ? { group: 'security', id: 'owner-baseline', state: 'warning',
+    text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }
+    : { group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: 0 }, locale) });
   return { data: { ...data, providerSpending: facts.providerSpending ?? null }, checks, config, options };
 }
 

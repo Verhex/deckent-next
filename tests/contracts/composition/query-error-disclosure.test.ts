@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -12,7 +12,7 @@ import * as inventory from '#composition/core/inventory/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { SupervisorError, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
-import { clearConfigCache, ErrorRegistry, getConfigKnownSecrets, loadConfig, reportQueryError, resolveGlobalConfigPaths, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, getConfigKnownSecrets, loadConfig, reportQueryError, writeDiagnosticRecord, resolveGlobalConfigPaths, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
 const canary = 'registered-customer-fixture-canary';
@@ -39,6 +39,18 @@ it('uses the real fresh config snapshot for the existing service record sink and
     expect(events[0]!.detail).toContain('adapter failed'); expect(events[0]!.detail).toContain('driver failed');
     expect(events[0]!.detail).toContain('‹secret:QUERY_FIXTURE›'); expect(events[0]!.detail).not.toContain(canary);
     expect(takeQueryErrorRecord(failure, snapshotKnownSecrets([]))).toBeUndefined();
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+it('BeUser diagnostics record: a registered secret of the installation never reaches the local record file; the record keeps the redacted detail', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dk-local-diagnostic-'));
+  try {
+    await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/config.json'), JSON.stringify({}));
+    const env = homeEnv(join(root, 'home'));
+    await writeInstallationConfig(env, { service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } } });
+    const failure = queryFailure(new Error(`adapter failed ${canary}`));
+    const path = await writeDiagnosticRecord(failure, root, ['deckent', 'hub'], env, { secretResolver: async () => canary });
+    const text = await readFile(path!, 'utf8');
+    expect(text).toContain('adapter failed'); expect(text).toContain('‹secret:QUERY_FIXTURE›'); expect(text).not.toContain(canary);
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 it('scans a patterned secret crossing the old 2048 cut before bounding the server record', () => {

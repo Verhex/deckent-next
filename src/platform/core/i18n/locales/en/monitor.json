@@ -132,6 +132,8 @@
   "monitor.brief.deliveryNone": "Delivery: nothing to deliver; no accepted task of this Run carries a patch.",
   "monitor.brief.deliveryPatchNotPrepared": "Accepted · patch not prepared: no retained patch exists for this work, so nothing can be delivered. The ledger does not record why; `task patch-prepare` names the exact limit and config field.",
   "monitor.brief.deliveryAwaiting": "Accepted · patch ready, awaiting delivery: nothing has been delivered yet.",
+  "monitor.brief.deliverySetAside": "Accepted · patch set aside: it is kept and nothing was delivered. Bring it back from /deliver or: deckent task integration-restore --scope {scope} --run {run} --task {task}",
+  "monitor.brief.dismissalUnread": "Set-aside records could not be read ({code}); this result may have been set aside.",
   "acceptance.summary": "Acceptance: class {workClass} · policy {policyRevision} · profile {profileVersion} · {outcome} · criteria {criteria} · ceiling {ceilings}",
   "acceptance.unknown": "unknown",
   "acceptance.outcome.accepted": "accepted",

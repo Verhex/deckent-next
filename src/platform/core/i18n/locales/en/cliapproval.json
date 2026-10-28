@@ -176,5 +176,9 @@
   "cli.policy.recovery.exitsUnmet": "Its measured exit criteria are not met; the change will be refused.",
   "cli.policy.recovery.applied": "Changed.",
   "cli.policy.recovery.current": "Already so; nothing changed.",
-  "cli.approval.tableDetails": "Full details: deckent approval inspect --input <file|->; input fields: deckent approval inspect --schema. Use the full id shown above."
+  "cli.approval.tableDetails": "Full details: deckent approval inspect --input <file|->; input fields: deckent approval inspect --schema. Use the full id shown above.",
+  "cli.policy.recovery.rule.named": "Act by itself when {when} ({rule})",
+  "cli.policy.recovery.when.container-gone": "a worker's container has disappeared",
+  "cli.policy.recovery.when.launcher-dead-orphan": "a worker's launcher died but the worker still runs",
+  "cli.policy.recovery.when.launcher-dead-gone": "a worker's launcher died and the worker is gone"
 }

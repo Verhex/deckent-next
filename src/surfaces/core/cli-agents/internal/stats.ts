@@ -35,8 +35,10 @@ export function agentStatsView(view: AgentStatsView, locale: Locale, nowMs = Dat
   for (const agent of view.agents) {
     lines.push('', t('agentstats.agent', { id: safeCell(agent.agentId), name: safeCell(agent.name), revision: agent.revision }, locale));
     for (const key of agent.keys) {
+      // BeUser E-09: a key with no sealed work folds its all-zero detail rows into one line.
+      const idle = key.stats.n === 0 && key.stats.decided === 0;
       lines.push(t('agentstats.key', { workClass: safeCell(key.workClass), revision: key.revision, standing: standingLabel(key.standing, locale), line: counts(key.stats, locale) }, locale),
-        ...detailLines(key.stats, locale), ...modelLine(key.stats, locale),
+        ...(idle ? [t('agentstats.noWork', {}, locale)] : [...detailLines(key.stats, locale), ...modelLine(key.stats, locale)]),
         t('agentstats.baseline', { line: counts(key.baseline, locale), ratio: key.effortRatioMicro === null ? t('agentstats.ratio.none', {}, locale) : formatDecimal(key.effortRatioMicro / STATS_MICRO, locale, 2) }, locale),
         ...key.active ? [t('agentstats.active', { id: safeCell(key.active.agentId), revision: key.active.revision, line: counts(key.active.stats, locale) }, locale)] : [],
         ...(key.skills ?? []).map(skill => t('agentstats.skill', { id: safeCell(skill.skillId), revision: skill.revision, line: counts(skill.stats, locale) }, locale)));

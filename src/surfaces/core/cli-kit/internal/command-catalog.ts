@@ -122,6 +122,8 @@ export const CLI_CATALOG = [
     action('integration-deliver', 'work', 'cli.help.action.integration-deliver', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--candidate-command-id <id>'] }),
     action('integration-adopt', 'work', 'cli.help.action.integration-adopt', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--delivery-command-id <id>', '--target <ref>'] }),
     action('integration-rollback', 'work', 'cli.help.action.integration-rollback', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--adoption-command-id <id>'] }),
+    action('integration-dismiss', 'work', 'cli.help.action.integration-dismiss', 'cli.help.task', { requires: [...TASK] }),
+    action('integration-restore', 'work', 'cli.help.action.integration-restore', 'cli.help.task', { requires: [...TASK] }),
     action('transcript', 'work', 'cli.help.action.transcript', 'cli.help.task', { requires: TASK, picks: true }),
   ] },
   { name: 'pool', group: 'work', summary: 'cli.help.summary.pool', detail: 'cli.help.pool', args: '[--scope <id>] [--pool <id>]', bare: { read: 'status' }, children: [

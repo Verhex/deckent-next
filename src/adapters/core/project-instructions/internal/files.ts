@@ -133,6 +133,8 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
   const folderRecord = (digest: string) => ({ name: instructionDigest(`${rootDigest}\0${digest}`), body: digest });
   const refRecord = (digest: string, at: string) => ({ name: instructionDigest(`${rootDigest}\0${REF_TAG}\0${at}\0${digest}`), body: `${REF_TAG}\n${digest}` });
   const grant = (digest: string) => ref === null ? folderRecord(digest) : refRecord(digest, ref); // what a trust here writes
+  // AYSE-19 (owner 2026-10-28): a person's "no" to exactly this place and content is remembered like a "yes", so the window asks once per content.
+  const declineRecord = (digest: string) => ({ name: instructionDigest(`${rootDigest}\0decline:1\0${ref ?? ''}\0${digest}`), body: `decline:1\n${digest}` });
   const recorded = async ({ name, body }: { name: string; body: string }) => (await privateRecord(trustDirectory!, name, 256)) === body;
   const consented = async (digest: string) => ref === null ? recorded(folderRecord(digest)) : await recorded(refRecord(digest, ref))
     || (await recorded(folderRecord(digest)) && (await legacyEntries(trustDirectory!))?.get(folderRecord(digest).name) === digest);
@@ -164,7 +166,19 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
   // REVISE 2734 R1: a writer that names the exact file it showed acts only when the read just before the write is that file (path + identity).
   const sameFile = ({ path, identity }: ProjectInstructionSource, expected?: ExpectedInstructionFile) => !expected || (path === expected.path
     && (identity.kind === 'file' ? identity.dev === expected.dev && identity.ino === expected.ino : expected.dev === null && expected.ino === null));
-  return { root, identity: { dev: identity.dev, ino: identity.ino }, inspect: load, async trust(digest: string, expected?: ExpectedInstructionFile): Promise<ProjectInstructionView> {
+  return { root, identity: { dev: identity.dev, ino: identity.ino }, inspect: load,
+  /** Remembers that the person declined exactly this content here (no trust; workers and the chat still do not get the file). */
+  async decline(digest: string): Promise<void> {
+    if (!/^[a-f0-9]{64}$/u.test(digest) || !trustDirectory) return;
+    const { name, body } = declineRecord(digest);
+    try {
+      const handle = await open(join(trustDirectory, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      try { await handle.writeFile(body); await handle.sync(); } finally { await handle.close(); }
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+  },
+  /** Whether the person already declined exactly this content here (an owner-private, no-follow record; anything else asks again). */
+  async declined(digest: string): Promise<boolean> { return !!trustDirectory && /^[a-f0-9]{64}$/u.test(digest) && recorded(declineRecord(digest)); },
+  async trust(digest: string, expected?: ExpectedInstructionFile): Promise<ProjectInstructionView> {
     const current = await load();
     if (current.status !== 'trust-required' && current.status !== 'ready') return current;
     if (!sameFile(current.source, expected)) throw new Error('changed');

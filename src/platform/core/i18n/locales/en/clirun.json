@@ -109,5 +109,7 @@
   "cli.run.inspect.status": "State: {state}",
   "cli.run.report.channelHeading": "Usage by channel (this Run)",
   "cli.run.report.channelColumns": "Channel|Attempts|Measured API (USD)|API unmeasured|Measured subscription calls",
-  "cli.run.report.channelEvidence": "Visible attempts only; measured tariff cost is not provider billing. Missing subscription counts stay unknown. No billing period or reset is inferred."
+  "cli.run.report.channelEvidence": "Visible attempts only; measured tariff cost is not provider billing. Missing subscription counts stay unknown. No billing period or reset is inferred.",
+  "cli.run.refused.title": "Refused requests (newest {count}, no Run was created):",
+  "cli.run.refused.row": "  {ago} · {code} · {title}"
 }

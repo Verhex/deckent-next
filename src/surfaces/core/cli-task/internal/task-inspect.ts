@@ -46,7 +46,7 @@ export async function inspectTask(target: Readonly<{ scopeId: string; runId: str
     .map(criterion => [`${criterion.evaluator.id}@${criterion.evaluator.version}`, criterion.evaluator])).values()];
   emit({ schemaVersion: 1 as const, runId, task, models: (result.models ?? []).filter(value => value.taskId === taskId) }, {
     json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
-      const brief = renderBriefLines(data.task.taskBrief, data.task.resultBrief, locale);
+      const brief = renderBriefLines(data.task.taskBrief, data.task.resultBrief, locale, { scope: scopeId, run: runId, task: taskId });
       // With a result, the brief's last line is its delivery line: the acceptance evidence goes just before it (request → result → acceptance → delivery).
       const delivery = data.task.resultBrief ? brief.splice(-1) : [];
       // SEC-5S sweep: config-exclusion paths come from the worker tree (any text up to 4096 chars); the human view reaches the terminal only safe.

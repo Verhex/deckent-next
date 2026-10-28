@@ -63,7 +63,9 @@ describe('config record editors: actual config publication', () => {
     expect((await f.document()).execution).toMatchObject({ docker: execution.docker, git: execution.git, adoption: { targets: ['refs/heads/main'] } });
   });
   it('work targets: add, edit from discovered repository branches, and remove through the optional parent; keep other execution settings', async () => {
-    const f = await fixture({ execution }); await f.port.open('execution.workTargets.targets', 'project'); await f.port.draft(null);
+    const f = await fixture({ execution }); await f.port.open('execution.workTargets.targets', 'project');
+    // BeUser D-03: no folder is pre-selected (the project itself is never a valid target); the branches follow the chosen folder.
+    expect((await f.port.draft(null)).values['path']).toBeUndefined(); await f.port.draft(null, { path: f.root });
     await f.port.commit((await f.port.preview(null, { path: f.root, branch: 'refs/heads/main' })).token);
     const target = (await f.document()).execution.workTargets.targets[0]; expect(target).toMatchObject({ kind: 'git', path: f.root, baseRef: 'refs/heads/main' });
     await f.port.open('execution.workTargets.targets', 'project'); await expect(f.port.draft(null)).rejects.toThrow(); await f.port.draft('0');
@@ -71,6 +73,13 @@ describe('config record editors: actual config publication', () => {
     expect((await f.document()).execution.workTargets.targets[0]).toEqual({ ...target, baseRef: 'refs/heads/dev' });
     await f.port.open('execution.workTargets.targets', 'project'); await f.port.commit((await f.port.preview('0', null)).token);
     expect((await f.document()).execution).not.toHaveProperty('workTargets'); expect((await f.document()).execution.docker).toEqual(execution.docker); expect(f.audits).toHaveLength(3);
+  });
+  it('BeUser DR2-05: moving the work source names the open results it strands with the refusal\'s rule sentence; no open result, no warning', async () => {
+    const f = await fixture({ execution }); let open: { open: number; now: string } | null = { open: 2, now: '/work/project' };
+    const port = configRecordPort(f.root, f.context, f.options, 'en', { ...f.sources, checkWorkTarget: async () => open });
+    await port.open('execution.workTargets.targets', 'project'); await port.draft(null, { path: f.root });
+    expect((await port.preview(null, { path: f.root, branch: 'refs/heads/main' })).warning).toBe('Warning: 2 result(s) made in /work/project still await delivery or adoption; after this change they cannot be finished until the work source is /work/project again. A result is delivered and adopted only in the repository it was made in.');
+    open = null; expect((await port.preview(null, { path: f.root, branch: 'refs/heads/main' })).warning).toBeUndefined();
   });
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: layout resource editor resolves POSIX layout paths] layout resources: select registry resource and relative location, edit, remove; refuse fixed resources and escaping paths', async () => {
     const f = await fixture(); await f.port.open('layout.resources', 'project'); await f.port.draft(null, { resource: 'memory' });

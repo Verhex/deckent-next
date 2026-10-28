@@ -323,7 +323,8 @@
         "src/surfaces/core/effect-confirmation",
         "src/composition/core/memory-rollout",
         "src/composition/core/hub",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/engine/core/monitor"
       ],
       "plan": "SURFACES"
     },
@@ -968,7 +969,8 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/i18n",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/platform/core/config"
       ],
       "plan": "FOUNDATION"
     },
@@ -1135,7 +1137,9 @@
         "src/engine/core/effect",
         "src/engine/core/runs",
         "src/platform/core/redaction",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/engine/core/workspace-patch",
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },
@@ -2160,7 +2164,9 @@
         "src/adapters/core/git-workspace",
         "src/capabilities/core/evaluation-evidence",
         "src/engine/core/effect",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/engine/core/audit",
+        "src/engine/core/runtime"
       ],
       "plan": "ISOLATION"
     },
@@ -2537,7 +2543,9 @@
         "src/engine/core/approval",
         "src/adapters/core/local-runtime-socket",
         "src/engine/core/runtime",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/platform/core/redaction",
+        "src/platform/core/i18n"
       ],
       "plan": "EXECUTION"
     },
@@ -2809,7 +2817,8 @@
         "src/engine/core/policy",
         "src/composition/core/agent-catalog",
         "src/platform/core/managed-files",
-        "src/adapters/core/brain-wait-store"
+        "src/adapters/core/brain-wait-store",
+        "src/composition/core/workspace-patch"
       ],
       "plan": "MONITOR"
     },
@@ -3311,7 +3320,8 @@
         "src/composition/core/policy",
         "src/engine/core/runtime",
         "src/adapters/core/worker-image",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/engine/core/audit"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3474,7 +3484,8 @@
         "src/surfaces/core/cli-human",
         "src/domain/core/work-cost",
         "src/platform/core/common",
-        "src/surfaces/core/recovery-text"
+        "src/surfaces/core/recovery-text",
+        "src/engine/core/config"
       ],
       "plan": "SURFACES"
     },

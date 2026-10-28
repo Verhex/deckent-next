@@ -41,7 +41,7 @@ export function taskActions(run: RunView, task: TaskView, delivery: boolean): re
   return [
     'inspect', ...(attempt ? ['transcript' as const] : []), ...(attempt && ['awaiting-decision', 'accepted', 'failed'].includes(task.phase) ? ['diff' as const] : []),
     ...(decisionOpen(run, task, 'accept') ? ['accept' as const] : []), ...(decisionOpen(run, task, 'reject') ? ['reject' as const] : []),
-    ...(delivery && task.phase === 'accepted' && task.resultBrief?.deliveryOutlook === 'awaiting-delivery' ? ['deliver' as const] : []),
+    ...(delivery && task.phase === 'accepted' && task.resultBrief?.deliveryOutlook === 'awaiting-delivery' && !task.resultBrief.setAside ? ['deliver' as const] : []),
   ];
 }
 

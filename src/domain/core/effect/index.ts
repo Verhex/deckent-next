@@ -8,3 +8,4 @@ export type { TargetBinding, CandidateBinding, CandidateEvidence, TargetDisplay 
 export { targetQueueRequestSchema, targetQueueStateSchema, targetQueueOutcomeSchema, targetQueueRecordSchema, queueReasonSchema, TargetQueueError, queueTerminal, queueNextState,
   queueDeliveryIntentSchema, queueReattemptSchema, queueDelegationSchema, queueRequeueCause, queueServiceActor, queueApprover } from './internal/queue.js';
 export type { TargetQueueRequest, TargetQueueRecord, TargetQueueState, TargetQueueOutcome } from './internal/queue.js';
+export { describeOperationInput } from './internal/operation-input.js';

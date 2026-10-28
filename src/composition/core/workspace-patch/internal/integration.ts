@@ -6,8 +6,8 @@ import { GitIntegrationTarget, openSqliteAttemptStore, openSqliteInventoryReader
 import { WorkspaceIntegrationInspection, integrationQuerySchema, type IntegrationQuery, WorkspacePatchApplication, WorkspaceIntegrationApplication, integrationCommandSchema, type IntegrationCommand, type RunBoundDispatchStore, type RunBoundTaskStore } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
-async function application(root: string, c: Awaited<ReturnType<typeof workspacePatchContext>>, store: RunBoundDispatchStore & RunBoundTaskStore) {
-  if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
+async function application(root: string, c: Awaited<ReturnType<typeof workspacePatchContext>>, store: RunBoundDispatchStore & RunBoundTaskStore & Parameters<typeof c.sameWorkSource>[0]) {
+  if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED'); await c.sameWorkSource(store);
   const target = new GitIntegrationTarget({ ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') },
     { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes });
   const patches = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);

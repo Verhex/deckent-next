@@ -38,7 +38,7 @@
   "memory.purge.reason.other": "başka bir neden",
   "memory.purge.card.title": "{count} hafıza kaydının içeriği silinsin mi? Nedeni seçin.",
   "memory.purge.card.scope": "Silinen: her kaydın tüm sürümlerdeki metni, arama satırı ve değerlendirici çağrılarının saklanan istem ve cevapları. Kalan: yalnız bu kurulumun hesaplayabildiği, aynı metnin yeniden önerilmesini engelleyen anahtarlı özet ve silme kaydı.\nSilinmeyen: kaydın geldiği işçi çıktısı ve raporları, işlerin model bağlamına dondurulmuş kopyalar, mevcut yedekler (biri geri yüklenirse bu silme iş başlamadan yeniden uygulanır), değerlendiricinin sağlayıcısına giden kopya, her değerlendirici çağrısının makbuzunda kalan isteğin düz özeti ve anahtarlı özetlerden önce mühürlenmiş denetim olayları ile makbuzlardaki düz özetler.",
-  "memory.purge.done": "{id} silindi: {revisions} sürümde artık yalnız mezar taşı var; değerlendirici içeriği {invocations} çağrıdan kaldırıldı.",
+  "memory.purge.done": "{id} silindi: {revisions} sürümün içeriği kaldırıldı (yalnız silindiğini gösteren kayıt kaldı); değerlendirici içeriği {invocations} çağrıdan kaldırıldı.",
   "memory.source.none": "Bu kapsamda {source} kaynağından gelen hafıza kaydı yok.",
   "memory.source.incomplete": "{source} kaynağından bir karta sığandan fazla kayıt geliyor; kalanlar için komutu yeniden çalıştırın.",
   "memory.source.retire.title": "{source} kaynağından gelen {count} hafıza kaydı emekliye ayrılsın mı?",

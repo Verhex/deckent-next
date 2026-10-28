@@ -1,6 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { assertDispatchFenceCommand, assertDispatchFenceReceipt, assertLostDispatchReplay, DispatchError, type DispatchRecord } from '#engine/index.js';
-import { dispatchFenceReceiptId } from '#engine/index.js';
+import { assertDispatchFenceCommand, assertDispatchFenceReceipt, assertLostDispatchReplay, DispatchError, type DispatchRecord, dispatchFenceReceiptId } from '#engine/index.js';
 import { runSnapshotSchema } from '#domain/index.js';
 /** Every reader verifies both immutable journals and the persisted audit under its transaction. */
 export function readDispatchFence(db: DatabaseSync, record: DispatchRecord) {

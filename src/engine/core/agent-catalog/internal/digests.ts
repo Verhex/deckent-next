@@ -1,4 +1,4 @@
-import { encodeCommandProjection, mergeWorkClassRegistries, CORE_WORK_CLASSES, SIGNATURE_LABELS, type SkillContent, type SkillRef, type WorkClassRegistry } from '#domain/index.js';
+import { encodeCommandProjection, executionRegistrySchema, mergeWorkClassRegistries, CORE_WORK_CLASSES, SIGNATURE_LABELS, type SkillContent, type SkillRef, type WorkClassRegistry } from '#domain/index.js';
 import { sha256, signatureMessage } from '#platform/index.js';
 
 /** The pin of a skill revision: the canonical projection of its content (name and text). A publisher computes the same value. */
@@ -21,3 +21,7 @@ export const catalogCommandDigest = (kind: 'agent' | 'skill', command: { readonl
 /** The WorkClass ids an agent may bind: the Core seed plus the installation registry's overlay (the same merge assignment uses). */
 export const registeredWorkClassIds = (overlay: WorkClassRegistry | undefined): readonly string[] =>
   mergeWorkClassRegistries(CORE_WORK_CLASSES, overlay ? [overlay] : []).classes.map(row => row.id);
+/** BeUser E-02: the same ids from an installation's raw `admission.registry` (absent or unreadable: the Core seed), for examples and refusals. */
+export const configuredWorkClassIds = (registry: unknown): readonly string[] => {
+  const parsed = executionRegistrySchema.safeParse(registry); return registeredWorkClassIds(parsed.success ? parsed.data.workClasses : undefined);
+};

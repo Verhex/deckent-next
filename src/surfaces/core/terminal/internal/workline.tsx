@@ -493,13 +493,13 @@ export function WorklineApp(props: WorklineProps) {
       const words = labels.delivery;
       if (!deliveries.available || !words || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
       try {
-        const targets = deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)]);
+        const targets = await deliveries.offered(deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)])); // M-33: set-aside rows last
         if (!targets.length) {
           await panel.pick(execution, { kind: 'window', title: words.pickerTitle, body: [words.none], hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
           push([systemSummaryEntry(words.none)]); return true;
         }
-        const picked = targets.length === 1 ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
-          [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: true }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
+        const picked = targets.length === 1 && targets[0]!.setAside === undefined ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
+          [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: target.setAside === undefined }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
         targets.map((_, index) => String(index)));
         if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
       } catch (error) { push([notice('error', errorText(error))]); }

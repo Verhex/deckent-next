@@ -79,7 +79,7 @@
   "cli.task.menu.adopt.title": "Move a branch to {commit}?",
   "cli.task.menu.adopt.body": "Choose the configured branch to move; it gets its own confirmation card.",
   "cli.task.menu.adopt.later": "Not now",
-  "cli.task.menu.adopt.left": "Delivered, not adopted. Adopt later with: deckent task integration-adopt … --delivery-command-id {command}",
+  "cli.task.menu.adopt.left": "Delivered, not adopted. Adopt later in /deliver (it lists delivered results), or: deckent task integration-adopt --scope <scope> --run <run> --target refs/heads/<branch>",
   "cli.task.menu.adopt.verifyTitle": "Which accepted {kind} Run verifies this commit?",
   "cli.task.menu.adopt.verifyRow": "Run {run} · task {task}",
   "cli.task.menu.adopt.withoutVerification": "Adopt without verification",
@@ -108,5 +108,7 @@
   "queue.cli.confirm.published.no": "not published",
   "queue.cli.confirm.item.settled": "  {ticket}: settled ({published})",
   "queue.cli.confirm.item.refused": "  {ticket}: refused ({published}). {reason}",
-  "queue.cli.confirm.item.unknown": "  {ticket}: outcome not known ({published}); it is being reconciled. {reason}"
+  "queue.cli.confirm.item.unknown": "  {ticket}: outcome not known ({published}); it is being reconciled. {reason}",
+  "cli.task.dismissed": "Set aside: /deliver and the monitor no longer offer task {task} of run {run}; its patch is kept. Bring it back: deckent task integration-restore --scope {scope} --run {run} --task {task}",
+  "cli.task.restored": "Brought back: task {task} of run {run} is offered in /deliver again."
 }
