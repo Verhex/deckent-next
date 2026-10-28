@@ -1,6 +1,6 @@
 import {
   ErrorRegistry, loadConfig, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile, describeWorkerRecommendation,
-  detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t,
+  detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, assertActorAssurance, principalToActor, resolveLocale, assessNodeSupport, NODE_ENGINE_RANGE, t, terminalSafeText,
   type ConfigLoadOptions,
 } from '#platform/index.js';
 import { configServiceState } from '#engine/index.js';
@@ -38,6 +38,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
+    egress: await egressFacts(root, config, context, options),
     providerSpending, budgetPeriodText,
     catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
@@ -54,6 +55,19 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
       .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []), () => null) : null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
   };
+}
+
+/** BeUser S-11: the outbound routes the configuration names (hosts and names only): model endpoints, chat web fetch, MCP servers, the toolchain check. */
+async function egressFacts(root: string, config: DoctorConfig, context: KernelCommandContext, options: ConfigLoadOptions): Promise<NonNullable<DoctorCheckFacts['egress']>> {
+  const host = (value: unknown) => { try { return typeof value === 'string' ? new URL(value).hostname : null; } catch { return null; } };
+  const profiles = ((config as Record<string, unknown>)['provider_invocation_profiles'] as { profiles?: { id?: unknown; adapter?: { id?: unknown; definition?: { endpoint?: unknown } } }[] } | undefined)?.profiles ?? [];
+  const models = profiles.map(profile => { const at = host(profile.adapter?.definition?.endpoint);
+    return { name: terminalSafeText(String(profile.adapter?.id ?? profile.id ?? '-')), host: at === null ? null : terminalSafeText(at), local: at !== null && ['127.0.0.1', '[::1]', '::1', 'localhost'].includes(at) }; });
+  const fetch = ((config as Record<string, unknown>)['terminal'] as { fetch?: { egress?: unknown; allowedHosts?: unknown } } | undefined)?.fetch;
+  const listed = context.runMcpCommand ? await context.runMcpCommand(root, { verb: 'list', health: false }, options, async () => null).catch(() => null) as { servers?: { name: string; transport?: string; command?: string; realm?: string | null }[] } | null : null;
+  return { models, fetch: { mode: typeof fetch?.egress === 'string' ? fetch.egress : 'none', hosts: Array.isArray(fetch?.allowedHosts) ? fetch.allowedHosts.map(item => terminalSafeText(String(item))) : [] },
+    toolchainCheck: config.toolchains.currency.mode === 'off' ? null : host(config.toolchains.currency.registryEndpoint),
+    mcp: listed?.servers ? listed.servers.map(server => ({ name: terminalSafeText(server.name), host: server.transport === 'http' ? host(server.command) : null, realm: server.realm ?? null })) : null };
 }
 
 /** Active models past `active` in the catalog lifecycle, joined (J2e, delta C-MODELS-for-C-DOCTOR) with the `models` table's own warning rule: a

@@ -1,10 +1,10 @@
 import { open } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
+import { auditVerifyQuerySchema, type AuditListView, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
 import { renderAuditStatus, renderAuditReason } from '#surfaces/core/doctor/index.js';
 import { emit, ErrorRegistry, EXIT_CODES, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
-import { formatAgo } from '#surfaces/core/cli-human/index.js';
+import { formatAgo, formatClock } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
 import { adminSinks, askAdminCard } from './io.js';
 export type AuditVerifyHandler = (root: string, query: AuditVerifyQuery, options: ConfigLoadOptions) => Promise<AuditVerification>;
@@ -34,6 +34,7 @@ async function exportCheckpoint(path: string, witness: AuditVerification['checkp
  */
 export async function auditCommand(argv: readonly string[], context: AdminCommandContext): Promise<ExitCode> {
   if (argv[1] === 'rebaseline') return rebaselineCommand(argv, context);
+  if (argv[1] === 'list' || argv[1] === 'show') return auditListCommand(argv, context);
   if (argv[1] !== 'verify' || !context.verifyAudit) throw ErrorRegistry.createError('CLI_USAGE');
   const values = new Map<string, string>(); let json = false, exporting = false, exportFile: string | undefined;
   for (let i = 2; i < argv.length; i++) {
@@ -90,4 +91,43 @@ async function rebaselineCommand(argv: readonly string[], context: AdminCommandC
   emit(result, { json, ...adminSinks(context), render: () => t('cli.audit.rebaseline.done', { scope: terminalSafeText(result.scopeId), sequence: result.checkpoint?.checkpoint.sequence ?? 0,
     head: result.head?.sequence ?? 0 }, locale) });
   return result.status === 'match' ? EXIT_CODES.success : EXIT_CODES.error;
+}
+
+/** BeUser S-04: one audit record in words: its number, local time, who, what (the subject kind and its action when it names one) and the policy revision. */
+function auditLine(record: AuditListView['records'][number], locale: Locale): string {
+  const { kind, action: named } = record.event.subject as { kind: string; action?: unknown }, what = typeof named === 'string' ? `${kind} (${named})` : kind;
+  return t('cli.audit.list.row', { sequence: record.sequence, at: formatClock(record.event.atMs, locale), who: terminalSafeText(`${record.event.principal.issuer}/${record.event.principal.subject}`),
+    what: terminalSafeText(what), policy: terminalSafeText(record.event.policyRevision) }, locale);
+}
+/**
+ * `deckent audit list [--scope <id>] [--after <n>] [--limit <n>] [--json]` and `deckent audit show <n>` (BeUser S-04): read the scope's sealed audit
+ * log (who did what, when), verified page by page; `--json` is the export (every field of each sealed event). Read only, the `approval/inspect` cell.
+ */
+async function auditListCommand(argv: readonly string[], context: AdminCommandContext): Promise<ExitCode> {
+  if (!context.listAudit) throw ErrorRegistry.createError('CLI_USAGE');
+  const show = argv[1] === 'show', values = new Map<string, string>(); let json = false, start = 2;
+  if (show) { if (!/^[1-9]\d{0,15}$/u.test(argv[2] ?? '')) throw ErrorRegistry.createError('CLI_USAGE', { params: { command: t('cli.audit.list.command', { action: argv[1]! }, commandLocale(context)), flag: '<n>' } }); start = 3; }
+  for (let i = start; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === '--json' && !json) { json = true; continue; }
+    if (arg === '--no-color') continue;
+    if (!['--scope', '--lang', ...(show ? [] : ['--after', '--limit'])].includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
+    const value = argv[++i]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(arg, value);
+  }
+  const root = context.root ?? process.cwd(), env = context.env ?? process.env, config = await loadConfig(root, { env }), locale = commandLocale(context, values.get('--lang'));
+  const scopeId = values.get('--scope') ?? (config.terminal as { scopeId?: string } | undefined)?.scopeId;
+  if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  const number = (flag: string) => { const raw = values.get(flag); if (raw === undefined) return undefined; if (!/^\d{1,15}$/u.test(raw)) throw ErrorRegistry.createError('CLI_USAGE', { params: { command: t('cli.audit.list.command', { action: 'list' }, locale), flag } }); return Number(raw); };
+  const after = show ? Number(argv[2]) - 1 : number('--after') ?? 0, limit = show ? 1 : number('--limit');
+  const view = await context.listAudit(root, { schemaVersion: 1, scopeId, after, ...(limit === undefined ? {} : { limit }) }, { env });
+  if (show) {
+    const record = view.records[0];
+    if (!record || record.sequence !== Number(argv[2])) throw ErrorRegistry.createError('AUDIT_RECORD_NOT_FOUND', { params: { sequence: argv[2]!, scope: terminalSafeText(scopeId) } });
+    emit(record, { json, ...adminSinks(context), render: () => [auditLine(record, locale), terminalSafeText(JSON.stringify(record.event.subject, null, 2))].join('\n') });
+    return EXIT_CODES.success;
+  }
+  emit(view, { json, ...adminSinks(context), render: () => [t('cli.audit.list.head', { scope: terminalSafeText(scopeId) }, locale),
+    ...(view.records.length ? view.records.map(record => auditLine(record, locale)) : [t('cli.audit.list.none', {}, locale)]),
+    view.next === null ? t('cli.audit.list.end', {}, locale) : t('cli.audit.list.next', { scope: terminalSafeText(scopeId), after: view.next }, locale)].join('\n') });
+  return EXIT_CODES.success;
 }

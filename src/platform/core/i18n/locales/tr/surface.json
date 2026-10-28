@@ -638,6 +638,7 @@
   "agent.turn.outcome.interrupted": "Tur tamamlanmadan hata oluştu; ardından başka bir işlem çalıştırılmadı. Bağlantıyı kontrol edip yeniden deneyin.",
   "agent.turn.outcome.restart": "Çalışma servisi yeniden başlatıldığı için tur kesildi. Tamamlanan araç çağrıları kayıtlıdır. İsteği yeni bir turda tekrar gönderin.",
   "agent.turn.outcome.rejected": "reddedildi",
+  "agent.turn.outcome.notActivated": "bu model bu kapsamda kapalı: terminalinizde deckent models activate ile açın (orada seçin) ya da /model ile başka bir model seçin; MODEL_NOT_ACTIVATED",
   "agent.turn.outcome.unknown": "sonuç belirsiz",
   "agent.turn.outcome.prevented": "çağrı engellendi",
   "agent.turn.outcome.providerStop": "Sağlayıcı bu turu durdurdu: {reason}. {summary}. Bu yanıttaki araçlar çalıştırılmadı. Kullanım yalnız geçerli son ölçüm varsa kesinleştirilir.",

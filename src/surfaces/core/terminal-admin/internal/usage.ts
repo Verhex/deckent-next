@@ -107,6 +107,8 @@ async function accountSection(call: TerminalAdminCall, budget: Budget | null): P
   if (!context.inspectProviderSpendAccount) return { title, chip: { state: 'neutral', text: t('terminal.info.chip.unavailable', {}, locale) }, notes: [t('terminal.admin.partUnavailable', { part: t('terminal.admin.usage.partSpend', {}, locale) }, locale)] };
   try {
     const result = await context.inspectProviderSpendAccount(root, parseProviderSpendAccountQuery(budget ? { schemaVersion: 1, scopeId, budgetId: budget.budgetId, budgetRevision: budget.revision } : { schemaVersion: 1, scopeId, current: true }), options);
+    // BeUser AYSE-21: the scope's own budget never created means no paid API call could run here: say that plainly, with the way to allow them.
+    if (result.checkpoint === null && !budget) return { title, chip: { state: 'ok', text: t('terminal.info.usage.chip.noPaid', {}, locale) }, notes: [t('terminal.info.usage.noAccount', {}, locale)] };
     if (result.checkpoint === null) return { title, chip: { state: 'warn', text: t('terminal.info.usage.chip.noSnapshot', {}, locale) },
       notes: [t('models.spending.absent', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision }, locale)] };
     const { account } = result.checkpoint, currency = account.budget.currency, minor = (amount: number | string | bigint) => money(amount, currency, locale);
@@ -141,13 +143,13 @@ export async function usageView(call: TerminalAdminCall, usage: SessionUsageView
         value: t('terminal.info.usage.model', { model: row.model, provider: row.provider, prompt: count(row.promptTokens, locale), completion: count(row.completionTokens, locale), reports: row.reports }, locale) })), ...cacheRows(usage, locale)],
     notes: [t('terminal.admin.usage.notBilling', {}, locale)] };
   const budgetsTitle = t('terminal.info.usage.section.budgets', {}, locale);
-  let budgets: readonly Budget[] = [], budgetSection: InfoSection;
+  let budgets: readonly Budget[] = [], budgetSection: InfoSection | null;
   try {
     budgets = scopeBudgets(await loadConfig(root, options), scopeId);
     budgetSection = budgets.length ? { title: budgetsTitle, choices: budgets.map((budget, index) => ({ id: `budget-${index}`,
       label: t('terminal.info.usage.budgetChoice', { budget: budget.budgetId, limit: money(budget.limitMinorUnits, budget.currency, locale) }, locale),
       detail: t('terminal.info.usage.budgetRevision', { revision: budget.revision }, locale) })), notes: [t('terminal.info.usage.pick', {}, locale)] }
-      : { title: budgetsTitle, notes: [t('terminal.info.usage.noBudgets', {}, locale)] };
+      : null; // AYSE-21: no declared budget adds nothing beside the live account (it read as "no budget" next to one)
   } catch (error) {
     budgetSection = { title: budgetsTitle, chip: { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) }, notes: [t('terminal.admin.partFailed', { part: budgetsTitle, reason: queryFailureText(error, locale) }, locale)] };
   }
@@ -157,7 +159,7 @@ export async function usageView(call: TerminalAdminCall, usage: SessionUsageView
   const live = await accountSection(call, null);
   const recovery = call.context.manageProviderSpend ? await spendRecoveryView(call).catch(() => null) : null;
   const actions = recovery?.model.sections.flatMap(section => section.choices?.length ? [{ choices: section.choices }] : []) ?? [];
-  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [live, conversation, budgetSection, ...(account ? [account] : []), ...actions] }, pick: async choice => {
+  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [live, conversation, ...(budgetSection ? [budgetSection] : []), ...(account ? [account] : []), ...actions] }, pick: async choice => {
     if ((choice === 'reconcile' || choice === 'budget') && recovery?.pick) return recovery.pick(choice);
     const budget = budgets[Number(choice.slice('budget-'.length))];
     return budget && choice.startsWith('budget-') ? view(await accountSection(call, budget)) : null;

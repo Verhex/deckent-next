@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
+import { openConfiguredTerminalSessions } from '#composition/core/cli/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 /** Lead-only: requires a fresh dist binary. No author-lane build/PTY execution. No model or external command is admitted. */
@@ -85,4 +86,34 @@ it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window o
   expect(run.code).toBe(0);
   // Everything after the reopened window closed is the Workline: the typed text is not in its composer and no turn was sent.
   expect(run.output.slice(run.output.lastIndexOf('Ready!'))).not.toContain('abc');
+}, 180_000);
+
+it.skipIf(process.platform !== 'linux')('AYSE-18/22/23 PTY: empty first-task input stays open; saved conversations have a working return path in EN/TR', async () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const base = await mkdtemp(join(tmpdir(), 'onboarding-return-')); roots.push(base);
+    const root = join(base, 'customer'), home = join(base, 'home'); await mkdir(root); await mkdir(home);
+    const env = { PATH: process.env['PATH'], HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), TERM: 'xterm-256color', LANG: 'C.UTF-8', NO_COLOR: '1' };
+    await applyPolicyTemplateInstallation(root, 's', { env });
+    const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+    config.language = locale; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline', notify: 'off' };
+    await writeFile(configPath, JSON.stringify(config));
+    const tr = locale === 'tr', hint = tr ? 'Enter gönder' : 'Enter send', first = tr ? 'Adım 1/' : 'Step 1/', second = tr ? 'Adım 2/' : 'Step 2/';
+    const ready = tr ? 'Hazır!' : 'Ready!', instructions = tr ? 'Proje yönergeleri' : 'Project instructions';
+    const free = tr ? 'İlk işinizi kendiniz yazın' : 'Write your own first task';
+    const empty = tr ? 'Enter’dan önce bir iş yazın' : 'Write a task before pressing Enter';
+    const steps = [[first, '\u001b'], [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b[B'.repeat(20)], ['', '\r'],
+      ['> ', '\r'], [empty, '\u001b'], [hint, '/exit\r']];
+    const run = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root],
+      { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
+    expect(run.code).toBe(0); expect(run.output).toContain(empty); expect(run.output).toContain(free);
+    expect(run.output).not.toContain(tr ? 'Bu klasörde kayıtlı bir konuşmanız var' : 'A saved conversation is available');
+    expect(run.output).toContain(tr ? 'Geri dönmek için' : 'To come back');
+    const store = await openConfiguredTerminalSessions(root, { env }); expect(store).not.toBeNull();
+    await store!.save({ schemaVersion: 1, scopeId: 's', sessionId: '11111111-2222-4333-8444-555555555555', updatedAtMs: Date.now(),
+      messages: [{ role: 'user', content: 'Yesterday request' }, { role: 'assistant', content: 'Saved reply', toolCalls: [] }] });
+    const again = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify([[first, '\u001b'],
+      [tr ? 'Bu klasörde kayıtlı bir konuşmanız var' : 'A saved conversation is available', '/resume\r'], ['Yesterday request', '\r'],
+      [tr ? 'mesajıyla devam ediliyor.' : 'Resumed', '/exit\r']]), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
+    expect(again.code).toBe(0); expect(again.output).toContain('Saved reply');
+  }
 }, 180_000);

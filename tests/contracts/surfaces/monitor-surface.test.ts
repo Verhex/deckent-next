@@ -110,6 +110,13 @@ describe('monitor text snapshot', () => {
     expect(parallelText).toContain('run-human-wait'); expect(parallelText).toContain(t('monitor.blocker.awaitingDecision', {}, locale));
     expect(parallelText).toContain(t('monitor.time.expiresIn', { duration: t('monitor.duration.minutesOnly', { m: 10 }, locale) }, locale));
   });
+  // BeUser KER-10/KER-03: the install's own scope with nothing recorded yet is an empty view (the ledger lists only scopes with records);
+  // a scope that is neither recorded nor this install's own is refused naming it and where the usable scopes are listed.
+  it('NEGATIVE: --scope of the install\'s own empty scope is an empty view; an unknown scope names itself and deckent policy scopes', () => {
+    expect(surface.filterSnapshot(emptySnapshot, { scope: 'mine', registered: ['mine'] }).installs.flatMap(install => install.runs)).toEqual([]);
+    const refused = (() => { try { surface.filterSnapshot(emptySnapshot, { scope: 'nope', registered: ['mine'] }); } catch (error) { return error as { code: string; message: string }; } throw new Error('expected'); })();
+    expect(refused.code).toBe('SCOPE_UNKNOWN'); expect(refused.message).toContain('nope'); expect(refused.message).toContain('deckent policy scopes');
+  });
   it('states every empty view in a sentence and points at the observation sources config', async () => {
     for (const locale of ['en', 'tr'] as const) {
       const text = surface.renderMonitorText(emptySnapshot, { locale, width: 100, ascii: false });

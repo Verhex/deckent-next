@@ -90,7 +90,8 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
       sections.push({ title: t('terminal.info.doctor.section.pools', {}, locale), chip: status === 'ready' ? chip('ok') : status === 'drift' ? chip('warn') : status === 'unavailable' ? chip('fail')
         : { state: 'neutral', text: words },
         rows: [{ key: t('terminal.info.doctor.key.readiness', {}, locale), value: words,
-          ...(data.poolReadiness.code ? { chip: { state: 'neutral' as const, text: data.poolReadiness.code } } : {}) }] });
+          ...(data.poolReadiness.code ? { chip: { state: 'neutral' as const, text: data.poolReadiness.code } } : {}) }],
+        ...(['unconfigured', 'missing'].includes(status) ? { notes: [t('terminal.info.doctor.poolSetup', {}, locale)] } : {}) });
     }
     if (data.shellRealm) {
       const realm = (view: Readonly<{ selected: string | null; code: string | null }>) => view.selected === null ? t('terminal.info.doctor.sandbox.refused', {}, locale)
@@ -100,7 +101,7 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
       sections.push({ title: t('terminal.info.doctor.section.sandbox', {}, locale), chip: chip(state(data.shellRealm)), rows: [
         { key: t('terminal.info.doctor.key.realm', {}, locale), value: realm(data.shellRealm), ...(data.shellRealm.code ? { chip: { state: 'fail' as const, text: data.shellRealm.code } } : {}) },
         ...(prefer ? [{ key: t('terminal.info.doctor.key.mcp', {}, locale), value: realm(prefer), chip: chip(state(prefer)) }] : [])],
-      ...(data.shellRealm.notice ? { notes: [data.shellRealm.notice] } : {}) });
+      notes: [t('terminal.info.doctor.sandbox.selection', {}, locale), ...(data.shellRealm.notice ? [data.shellRealm.notice] : [])] });
     }
     if (data.toolchains?.providers.length) {
       sections.push({ title: t('terminal.info.doctor.section.toolchains', {}, locale), items: data.toolchains.providers.map(entry => ({ text: entry.provider,

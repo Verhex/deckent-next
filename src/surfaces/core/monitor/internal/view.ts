@@ -20,7 +20,7 @@ import { installName, installsBlocks, installState, problemsSpan } from './insta
  * blocks. Every time is relative to the snapshot's `observedAt` (the age as observed, stable for a given snapshot). The blocker is the
  * engine's; this surface only words and orders it.
  */
-export interface MonitorFilters { readonly install?: string; readonly scope?: string }
+export interface MonitorFilters { readonly install?: string; readonly scope?: string; /** KER-10: this install's own configured scopes (terminal, service). */ readonly registered?: readonly string[] }
 export interface MonitorView { readonly header: readonly MonitorLine[]; readonly tabs: Readonly<Record<MonitorTab, readonly MonitorBlock[]>> }
 /** PB-MON-UX markers: ✓ fine, ! needs attention, ○ off/absent, ● the install is reachable, → the next step (ASCII `+ ! o * ->`). */
 interface Marks { readonly states: Readonly<Record<MonitorRunState, string>>; readonly warn: string; readonly ok: string; readonly on: string; readonly off: string; readonly sep: string;
@@ -52,7 +52,8 @@ const timeText = (ms: number | null | undefined) => ms === null || ms === undefi
 export function filterSnapshot(snapshot: MonitorSnapshot, filters: MonitorFilters): MonitorSnapshot {
   if (filters.install === undefined && filters.scope === undefined) return snapshot;
   const scope = filters.scope;
-  if (scope !== undefined && !snapshot.installs.some(install => (filters.install === undefined || install.id === filters.install) && install.scopeIds.includes(scope))) {
+  // KER-10: the install's own scope with nothing recorded yet is an empty view, not an unknown scope (the ledger lists only scopes with records).
+  if (scope !== undefined && !filters.registered?.includes(scope) && !snapshot.installs.some(install => (filters.install === undefined || install.id === filters.install) && install.scopeIds.includes(scope))) {
     throw ErrorRegistry.createError('SCOPE_UNKNOWN', { params: { scope } });
   }
   const installs = snapshot.installs.filter(install => filters.install === undefined || install.id === filters.install).map(install => scope === undefined ? install : {

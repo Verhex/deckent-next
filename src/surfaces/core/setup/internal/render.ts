@@ -73,6 +73,9 @@ export function renderSetupLines(plan: SetupPlan, locale: Locale, apply: Readonl
     if (command && stage.state !== 'done') lines.push(`   $ ${command}`);
   });
   for (const result of apply.results) lines.push(applyLine(plan, result, locale));
+  // BeUser S-10: a fresh installation whose encrypted key store default was refused says so and where to fix it (never silent: keys then come from
+  // the environment, which the README does not lead a person to expect).
+  for (const result of apply.results) if (result.secretStore?.status === 'not-set') lines.push(t('setup.secretStore.notSet', { code: terminalSafeText(result.secretStore.code ?? '-') }, locale));
   if (!apply.results.some(result => result.status === 'applied')) lines.push(apply.requested ? t('setup.render.nothingAppliedYes', {}, locale) : t('setup.render.nothingApplied', {}, locale));
   if (setupAuthority(plan).status === 'authority-pending') lines.push('', t('setup.permissions.pending', {}, locale));
   // The installation is complete once the final check settled; the first open sets up the provider and the first job (onboarding).

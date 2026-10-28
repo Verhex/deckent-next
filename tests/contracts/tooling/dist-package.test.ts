@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, lockedLicenseTexts, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { ajvGuard, declarationImports, developmentInputs, publishedManifest, STANDALONE_ENTRIES, standaloneImportProblems, stubAjvImport } from '../../../scripts/build-dist.mjs';
+import { ajvGuard, declarationImports, developmentInputs, publishedManifest, rewritePackageLinks, STANDALONE_ENTRIES, standaloneImportProblems, stubAjvImport } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { sbomComponents } from '../../../scripts/deps-watch.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
@@ -198,6 +198,14 @@ describe('standalone mounted entries (PACKAGED-WORKER-BOOTSTRAP)', () => {
 });
 
 describe('published manifest', () => {
+  // BeUser KER-04/S-11: a shipped document never links to a file the package lacks; such a link points at the source of this build's commit.
+  it('rewrites only links to files the package does not carry; anchors, absolute URLs and shipped files stay', () => {
+    const shipped = (path: string) => ['docs/ai-install.md', 'LICENSE', 'README.tr.md'].includes(path);
+    const text = '[a](docs/ai-install.md) [b](docs/known-limits.md#x) [c](.deckent/docs/architecture/operator-reference.md#runtime-service) [d](#get-started) [e](https://x.y/z) [f](LICENSE)';
+    expect(rewritePackageLinks(text, 'README.md', shipped, 'https://h/blob/c1')).toBe('[a](docs/ai-install.md) [b](https://h/blob/c1/docs/known-limits.md#x) '
+      + '[c](https://h/blob/c1/.deckent/docs/architecture/operator-reference.md#runtime-service) [d](#get-started) [e](https://x.y/z) [f](LICENSE)');
+    expect(rewritePackageLinks('[k](known-limits.md) [r](../README.tr.md)', 'docs/ai-install.md', shipped, 'https://h/blob/c1')).toBe('[k](https://h/blob/c1/docs/known-limits.md) [r](../README.tr.md)');
+  });
   it('drops dependencies and scripts, keeps the public entry points and lists the notice files', () => {
     const manifest = publishedManifest({ name: 'deckent', version: '1.0.0', type: 'module', bin: { deckent: './dist/cli.js' }, exports: { '.': './dist/index.js' },
       imports: { '#platform/*': './dist/platform/*' }, dependencies: { zod: '3.25.76' }, devDependencies: { esbuild: '0.28.2' }, scripts: { build: 'x' },

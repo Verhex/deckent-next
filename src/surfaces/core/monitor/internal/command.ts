@@ -77,7 +77,8 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
   const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
   const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, configOptions, query, memo);
-  const filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
+  const own = [(config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, config.service.identity?.scopeId].filter((id): id is string => typeof id === 'string');
+  const filters = { ...filtersOf(parsed), registered: own }, ascii = prefersAsciiGlyphs(env);
   let initial = parsed.scope ? await inspect(root, options) : undefined;
   if (initial) filterSnapshot(initial, filters); // Refuse unknown scope before opening the fullscreen view too.
   const load = async (memo?: MonitorSourceMemo) => { const snapshot = initial ?? await inspect(root, options, memo); initial = undefined; return snapshot; };

@@ -68,7 +68,7 @@ describe('relocation producer to actual CLI surface', () => {
     expect(startRuntimeService).not.toHaveBeenCalled();
     expect(f.output.join('')).toContain('INSTALLATION_IDENTITY_RELOCATED');
     expect(f.output.join('')).toContain('deckent init identity --keep'); expect(f.output.join('')).toContain('deckent init identity --new');
-    expect(f.output.join('')).toContain(lang === 'en' ? 'same installation' : 'aynı kurulum');
+    expect(f.output.join('')).toContain(lang === 'en' ? 'If the original installation is still in use' : 'Asıl kurulum hâlâ kullanılıyorsa'); // BeUser S-06: a copy is never kept silently
     expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;
     expect(await main(['init', 'identity', '--lang', lang], f.context)).toBe(78);
     expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;

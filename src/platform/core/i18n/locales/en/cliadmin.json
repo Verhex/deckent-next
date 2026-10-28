@@ -349,5 +349,14 @@
   "cli.uninstall.blocker.authority-relocated": "{path} is not at its recorded location. Purge is stopped and nothing will be deleted. Run deckent uninstall without --purge to keep the data.",
   "cli.uninstall.blocker.authority-in-project": "This installation keeps its data in the project folder {path}, and project .deckent folders are always kept, so --purge has nothing to remove. Nothing will be deleted. Run deckent uninstall without --purge.",
   "cli.uninstall.blocker.authority-unsafe": "{path} could not be verified as a private file of this user (link, owner, permissions or read failure). Purge is stopped and nothing will be deleted. Run deckent uninstall without --purge to keep the data.",
-  "cli.uninstall.backupPassphrase": "Backup passphrase"
+  "cli.uninstall.backupPassphrase": "Backup passphrase",
+  "error.AUDIT_RECORD_NOT_FOUND": "There is no audit record {sequence} in scope {scope}. List them with deckent audit list --scope {scope}.",
+  "cli.audit.list.summary": "List the audit log: who did what, when",
+  "cli.audit.show.summary": "Show one audit record in full",
+  "cli.audit.list.head": "Audit log of scope {scope} (oldest first; who did what, when):",
+  "cli.audit.list.row": "#{sequence} · {at} · {who} · {what} · policy {policy}",
+  "cli.audit.list.none": "No audit record yet.",
+  "cli.audit.list.end": "End of the log. One record in full: deckent audit show <number>. Every field: add --json.",
+  "cli.audit.list.next": "More: deckent audit list --scope {scope} --after {after}. One record in full: deckent audit show <number>.",
+  "cli.audit.list.command": "deckent audit {action}"
 }

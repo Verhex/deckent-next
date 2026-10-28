@@ -376,7 +376,7 @@ deckent run list                          # Runs of this scope, newest first
 deckent approval list                     # waiting approvals first, with the time left
 deckent report --scope my-project --run <id>   # one Run's cost and acceptance evidence
 deckent audit verify                      # check the audit history
-deckent backup create                     # write a verifiable recovery set
+deckent backup create --scope <id> --set <folder>   # write a verifiable recovery set (passphrase at the prompt)
 deckent policy grants --mine              # your standing "always" grants
 deckent memory                            # the scope's memory journal: facts and lessons
 deckent agents                            # the scope's agents and skills

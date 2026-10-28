@@ -54,5 +54,6 @@
   "config.field.runRuntime.nervous.mode": "Nervous gözlemi (korumalı; hiçbir AI değiştiremez): off kapalıdır; shadow etki üretmeden önerileri mühürler; live yalnız ölçülmüş kuralın durdurma adımını sahibin kalıcı izni altında yürütür. Çalışma hizmetinin yeniden başlatılması gerekir.",
   "config.surface.effectiveDefault": "{key} = {value} (kaynak: {source})",
   "config.issue.unrecognized": "bilinmeyen yapılandırma anahtarı",
-  "config.issue.type": "değer türü geçersiz"
+  "config.issue.type": "değer türü geçersiz",
+  "config.issue.allowed": "geçerli değerler: {values}"
 }

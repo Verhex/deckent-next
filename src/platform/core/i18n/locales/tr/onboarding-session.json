@@ -119,5 +119,6 @@
   "onboarding.permissions.chooseProfile": "Başlangıç izinlerini önizlemek için profil seçin. Sonraki onaya kadar hiçbir şey yazılmaz.",
   "onboarding.permissions.profileMissing": "{scope} kapsamında {principal} için {profile} profili kaydedilip {mode} ile başlayacak. Korunan ayarlar, sırlar ve yıkıcı işlemler kendi onay kurallarını korur. Bekleyen kurulum izinlerini tamamlamak için onaylayın.",
   "onboarding.permissions.preserved": "{scope} kapsamında {principal} için önceki kip seçiminiz ({mode}) korunur.",
-  "onboarding.permissions.profileWithoutDefaults": "{profile} profilinin başlangıç izinleri yok. Onay bu profili kaydeder ve {scope} kapsamında {principal} için mevcut kipi ({mode}) korur."
+  "onboarding.permissions.profileWithoutDefaults": "{profile} profilinin başlangıç izinleri yok. Onay bu profili kaydeder ve {scope} kapsamında {principal} için mevcut kipi ({mode}) korur.",
+  "onboarding.firstTask.empty": "Enter’dan önce bir iş yazın; iş vermeden devam etmek için Esc’ye basın."
 }

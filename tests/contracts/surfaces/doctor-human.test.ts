@@ -36,6 +36,16 @@ const report = {
 };
 
 describe('doctor rows (pure)', () => {
+  // BeUser S-11: "Where your data can go" lists the configured outbound routes as facts, last, and says plainly that no telemetry is sent.
+  it('lists where data can go: local and remote models, web fetch, MCP servers, the toolchain check, workers, Hub and no telemetry (EN/TR)', () => {
+    const egress = { models: [{ name: 'openai-chat-http', host: '127.0.0.1', local: true }, { name: 'anthropic', host: 'api.anthropic.com', local: false }],
+      fetch: { mode: 'allowlist', hosts: ['docs.example.com'] }, toolchainCheck: 'registry.npmjs.org', mcp: [{ name: 'gh', host: 'api.github.com', realm: null }] };
+    const en = renderDoctorChecks(doctorChecks(report, facts({ egress }), 'en'), 'en');
+    expect(en.split('\n').indexOf('Where your data can go')).toBeGreaterThan(en.split('\n').indexOf('Tools'));
+    for (const text of ['Model openai-chat-http: 127.0.0.1, on this machine', 'Model anthropic: api.anthropic.com, a remote service', 'only these hosts: docs.example.com',
+      'MCP server gh: api.github.com', 'Toolchain version check: registry.npmjs.org', 'Deckent sends no telemetry or usage data']) expect(en).toContain(text);
+    expect(renderDoctorChecks(doctorChecks(report, facts({ egress: { ...egress, models: [] } }), 'tr'), 'tr')).toContain('Yapılandırılmış model bağlantısı yok');
+  });
   it('groups rows under Kurulum / Güvenlik / Çalışma / Araçlar with word markers, a summary first and one next step per warning', () => {
     const checks = doctorChecks(report, facts(), 'tr');
     for (const check of checks.filter(row => row.state === 'warning' || row.state === 'error')) expect(check.next, check.id).toBeTruthy();

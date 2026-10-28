@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ConfigValidationError, assertSafeKeys, isRecord, assertConfigSecretPolicies } from '#platform/index.js';
+import { ConfigValidationError, configIssue, assertSafeKeys, isRecord, assertConfigSecretPolicies } from '#platform/index.js';
 import { configDefinitions } from './registry.js';
 /** Validate only authored overlay members against the original registry nodes; merged semantics remain in validateConfig. */
 export function validateAuthoredConfigOverlay(document: Record<string, unknown>): void {
@@ -37,7 +37,7 @@ export function validateAuthoredConfigOverlay(document: Record<string, unknown>)
       return;
     }
     const checked = schema.safeParse(value);
-    if (!checked.success) throw new ConfigValidationError(checked.error.issues.map(issue => ({ path: [...path, ...issue.path].join('.'), reason: issue.code })));
+    if (!checked.success) throw new ConfigValidationError(checked.error.issues.map(issue => configIssue(path, issue)));
   }
   const definitions = configDefinitions();
   for (const [key, value] of Object.entries(document)) {

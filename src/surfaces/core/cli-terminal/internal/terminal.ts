@@ -211,8 +211,8 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
       if (trimmed === '/exit' || trimmed === '/quit') break;
       if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
       else if (trimmed === '/status') { emit(await status(), sinks); }
-      // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
-      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
+      else if (trimmed === '/help') { emit(t('terminal.session.help', {}, locale), sinks); } // KER-09: line mode's own commands, on stdout
+      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: t('terminal.session.unknown', { command: trimmed.split(/\s/u)[0]! }, locale) }, locale), { ...sinks, level: 'error' }); // local, never sent to the model
       else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
@@ -327,6 +327,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
+  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
+  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
+  const previousConversation = sessions && (await sessions.list().catch(() => [])).some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined;
+  if (previousConversation) accessNotices.push({ level: 'info', text: previousConversation });
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
     const surface = await import('#surfaces/core/terminal-onboarding/index.js');
@@ -344,7 +348,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
           },
           instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
           foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
-        }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus);
+        }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus, previousConversation);
       };
       onboarding = { initial: await run(false), open: (signal, focus) => run(true, signal, focus) };
       const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
@@ -434,8 +438,6 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
-  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
-  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);

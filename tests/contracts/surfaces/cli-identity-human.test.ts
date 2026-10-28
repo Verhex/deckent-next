@@ -51,7 +51,7 @@ function host(f: Awaited<ReturnType<typeof project>>, calls: { kind: string; val
     listIdentityDistributionChoices: async (_root: string, scopeId: string) => { calls.push({ kind: 'choices', value: scopeId }); return choices; },
     previewIdentityProfile: async () => { calls.push({ kind: 'preview', value: null }); throw new Error('not reached'); },
     previewIdentityDistribution: async (_root: string, selection: unknown) => { calls.push({ kind: 'distribution-preview', value: selection });
-      return { schemaVersion: 1, digest: 'e'.repeat(64), submission: { selection }, preview: { digest: 'f'.repeat(64), unaffectedBindings: 1, differences: [],
+      return { schemaVersion: 1, digest: 'e'.repeat(64), submission: { selection }, preview: { digest: 'f'.repeat(64), unaffectedBindings: 1, differences: [{ change: 'gain', memberId: 'm-1', scopeId: 'live', resourceKind: 'run', actions: { values: ['reserve'] }, resourceIds: { except: [] }, before: { decision: 'deny' }, after: { decision: 'allow' } }, { change: 'unchanged', memberId: 'm-2', scopeId: 'live', resourceKind: 'run', actions: { values: ['reserve'] }, resourceIds: { except: [] }, before: { decision: 'deny' }, after: { decision: 'deny' } }, { change: 'unchanged', memberId: 'm-3', scopeId: 'live', resourceKind: 'run', actions: { values: ['reserve'] }, resourceIds: { except: [] }, before: { decision: 'deny' }, after: { decision: 'deny' } }, { change: 'unchanged', memberId: 'm-4', scopeId: 'live', resourceKind: 'run', actions: { values: ['reserve'] }, resourceIds: { except: [] }, before: { decision: 'deny' }, after: { decision: 'deny' } }],
         pins: { policyRevision: 'p1', bindingsRevision: 'b1', registryVersion: 1 },
         draft: { profile: { id: 'core:team', version: 1 }, projectScopeIds: ['live'], addedBindings: [{}], removedBindings: [], addedRoles: [{}], currentSeparationOfDuties: [],
           futureProjects: { requested: false }, unresolvedRequirements: [], unsupportedHierarchyNodeIds: [] } } }; },
@@ -86,6 +86,8 @@ it('bare identity is a status: profile, people and roles in words; a selected pr
   expect(text).toMatch(/Profile: Team/u);
   expect(text).toMatch(/alperen@host/u);
   expect(text).toMatch(/admin, operator/u);
+  // BeUser S-03: with one known person, how a colleague gets access is said plainly (Core account vs Enterprise company sign-in).
+  expect(text).toContain('this installation knows only you so far'); expect(text).toContain('Enterprise feature');
   expect(h.calls).toEqual([{ kind: 'choices', value: 'live' }]);
 });
 
@@ -114,6 +116,11 @@ it('distribute on a terminal: arrow-key picks (profile, person, role, project), 
   expect(await main(['identity', 'distribute', '--scope', 'live', '--apply'], h.context)).toBe(0);
   expect(card.asked).toHaveLength(5);
   expect(card.asked[4]!.body?.join('\n')).toMatch(/Proposed bindings/u);
+  // BeUser S-07/S-08: every pick starts on its first row; the preview card ends with how to apply exactly it.
+  expect(card.asked.slice(0, 4).every(request => request.initial === request.options[0]!.id)).toBe(true);
+  expect(card.asked[4]!.body?.join('\n')).toContain(`--apply --expect ${'e'.repeat(64)}`);
+  const body = card.asked[4]!.body!.join('\n');
+  expect(body).toContain('m-1'); expect(body).not.toContain('m-2'); expect(body).toContain('3 more cells keep their decision');
   expect(h.calls.find(call => call.kind === 'distribution-preview')!.value).toMatchObject({ profile: { id: 'core:team', version: 1 }, scopeId: 'live',
     assignments: [{ principalId: 'os-1234', roleId: 'profile-contributor', scopeIds: ['live'] }] });
   expect(h.calls.find(call => call.kind === 'apply')!.value).toMatchObject({ expect: 'e'.repeat(64) });

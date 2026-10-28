@@ -5,7 +5,7 @@ Deckent setup plan acfec5ac8069
 3. Folder and scope · done · The scope "my-erp" was chosen.
 4. Who uses this installation · answered; saved after permissions · Solo · saved once setup has written the permissions.
 5. Permissions · blocked · Waits for the Language stage to finish first.
-6. Command sandbox · done · The command sandbox works (bubblewrap).
+6. Command sandbox · done · The command sandbox works (bubblewrap). Current measurement; /doctor checks again after the runtime starts and prepares the preferred sandbox.
 7. Final check · ready to apply · Ready for the final check.
    $ deckent doctor --json
 Nothing was applied. On a terminal, deckent init asks stage by stage; unattended: deckent init --yes --scope <id> (fresh permissions and the language only; the final check is read-only and only reported).

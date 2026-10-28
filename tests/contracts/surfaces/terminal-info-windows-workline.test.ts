@@ -124,9 +124,14 @@ describe('information windows on the real workline (SW-1)', () => {
     const report = { schemaVersion: 2, scope: 'kernel', platform: 'linux', status: 'ready', host: { cpuCores: 8, totalMemMB: 16000, recommendedMaxWorkers: 4 },
       company: { companyId: 'default' }, principal: { id: 'host:1000' }, poolReadiness: { status: 'missing', code: 'RUN_POOL_REQUIRED', drift: null }, shellRealm: null };
     const ports = admin(root, {}, { doctorReport: async sink => { sink.write(`${JSON.stringify(report)}\n`); } });
-    const text = infoModelText((await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model).join('\n');
+    const model = (await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
+    const text = infoModelText(model).join('\n');
     expect(text).toContain('configured, not set up yet');
-    expect(text).not.toMatch(/\bmissing\b/u);
+    expect(model.sections.find(section => section.title === 'Pools')?.rows).toEqual([
+      expect.objectContaining({ key: 'Readiness', value: 'configured, not set up yet' }),
+    ]);
+    expect(text).toContain('Open /setup');
+    expect(text).toContain('deckent doctor');
   });
 
   it('the real `deckent doctor --json` command feeds the structured window (not the text fallback)', async () => {

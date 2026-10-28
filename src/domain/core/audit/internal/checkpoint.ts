@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AuditEvent } from './contract.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** v1 pull-witness contract: no credentials, raw policy or event content. */
@@ -9,6 +10,12 @@ export const auditWitnessSchema = z.object({ schemaVersion: z.literal(1), kind: 
   checkpoint: auditCheckpointSchema, digest }).strict().readonly();
 export const auditVerifyQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   witness: auditWitnessSchema.optional() }).strict().readonly();
+/** BeUser S-04: one page of a scope's audit log, ascending after a sequence (`after` 0 = from the start; `limit` absent = the configured
+ * `audit.pageSize`, the application's page bound applies); the read is the `approval/inspect` cell. */
+export const auditListQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, after: counterSchema.default(0),
+  limit: counterSchema.positive().optional() }).strict().readonly();
+export type AuditListQuery = z.input<typeof auditListQuerySchema>;
+export type AuditListView = Readonly<{ schemaVersion: 1; scopeId: string; records: readonly Readonly<{ sequence: number; event: AuditEvent }>[]; next: number | null }>;
 export const auditVerificationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   status: z.enum(['match', 'truncated', 'possible-wipe', 'policy-changed', 'producers-changed', 'chain-broken', 'unknown']),
   reason: z.enum(['verified', 'no-checkpoint-yet', 'unavailable', 'limit', 'foreign-witness', 'key-unavailable', 'integrity', 'head-missing', 'checkpoints-missing', 'policy', 'producers']),

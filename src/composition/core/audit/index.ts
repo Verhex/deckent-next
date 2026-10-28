@@ -1,1 +1,1 @@
-export { verifyConfiguredAudit, checkpointConfiguredAudit, rebaselineConfiguredAudit } from './internal/application.js';
+export { verifyConfiguredAudit, listConfiguredAudit, checkpointConfiguredAudit, rebaselineConfiguredAudit } from './internal/application.js';

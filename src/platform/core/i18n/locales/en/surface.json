@@ -638,6 +638,7 @@
   "agent.turn.outcome.interrupted": "The turn failed before it could finish; nothing more ran.",
   "agent.turn.outcome.restart": "The turn was interrupted by a runtime service restart; the tool calls it settled are recorded. Send the request again as a new turn.",
   "agent.turn.outcome.rejected": "rejected",
+  "agent.turn.outcome.notActivated": "this model is switched off in this scope: switch it on with deckent models activate in your terminal (pick it there), or choose another model with /model; MODEL_NOT_ACTIVATED",
   "agent.turn.outcome.unknown": "unknown",
   "agent.turn.outcome.prevented": "prevented",
   "agent.turn.outcome.providerStop": "The provider stopped this turn: {reason}. {summary}. No tool from this response ran. Usage is settled only when its final measurement is valid.",

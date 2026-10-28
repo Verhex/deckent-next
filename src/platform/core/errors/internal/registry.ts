@@ -65,6 +65,16 @@ function installationFileUnsafe(p: Params, l: Locale): string {
   const reason = String(p['reason']);
   return p['path'] && Object.hasOwn(reasons, reason) ? t('installation.fileUnsafeDetail', { ...p, reason: reasons[reason as keyof typeof reasons] }, l) : t('error.INSTALLATION_FILE_UNSAFE', p, l);
 }
+/** BeUser KER-06: an input file that could not be read adds its path, the bounded cause (missing | denied | link | unreadable) and the next step. */
+function inputUnavailable(base: string, p: Params, l: Locale): string {
+  switch (p['reason']) {
+    case 'missing': return `${base} ${t('cli.input.unavailable.missing', p, l)}`;
+    case 'denied': return `${base} ${t('cli.input.unavailable.denied', p, l)}`;
+    case 'link': return `${base} ${t('cli.input.unavailable.link', p, l)}`;
+    case 'unreadable': return `${base} ${t('cli.input.unavailable.unreadable', p, l)}`;
+    default: return base;
+  }
+}
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
 function patchLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -218,7 +228,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   IDENTITY_PREVIEW_SCOPE_DENIED: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_SCOPE_DENIED', p, l) }) },
   IDENTITY_PREVIEW_CONFLICT: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_CONFLICT', p, l) }) },
   IDENTITY_PREVIEW_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_LIMIT', p, l) }) },
-  IDENTITY_PREVIEW_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_UNAVAILABLE', p, l) }) },
+  IDENTITY_PREVIEW_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.IDENTITY_PREVIEW_UNAVAILABLE', p, l), p, l) }) },
   PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
   PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_MASKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_MASKED', p, l) }) },
@@ -249,11 +259,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
   CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
   CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
-  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', { ...p, subject: invocationInputSubject(p, l) }, l), p, l) }) },
   CLI_CATALOG_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_LIMIT', p, l) }) },
   CLI_CATALOG_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_INVALID', p, l) }) },
   CLI_CATALOG_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_TTY', p, l) }) },
-  CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l), p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
   MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: discoveryUnavailable(p, l) }) },
@@ -266,7 +276,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CONNECT_NOT_CONNECTABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NOT_CONNECTABLE', p, l) }) },
   MODEL_CONNECT_ENDPOINT_FIXED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_FIXED', p, l) }) },
   MODEL_CONNECT_ENDPOINT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_INVALID', p, l) }) },
-  MODEL_CONNECT_MODEL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_MODEL_UNKNOWN', p, l) }) },
+  // KER-07: the requested model and connection are named; the models the server listed are shown, or that it listed none.
+  MODEL_CONNECT_MODEL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: typeof p['model'] !== 'string' ? t('error.MODEL_CONNECT_MODEL_UNKNOWN', p, l)
+    : p['models'] ? t('error.MODEL_CONNECT_MODEL_UNKNOWN.listed', p, l) : t('error.MODEL_CONNECT_MODEL_UNKNOWN.none', p, l) }) },
   MODEL_CONNECT_DECLARATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DECLARATION_CONFLICT', p, l) }) },
   MODEL_CONNECT_KEY_NAME_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE', p, l) }) },
   MODEL_CONNECT_SEED_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_SEED_UNAVAILABLE', p, l) }) },
@@ -703,7 +715,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   POLICY_DELEGATION_STEP_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_STEP_INVALID', p, l) }) },
   POLICY_DELEGATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_CONFLICT', p, l) }) },
   POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
-  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SCOPE_UNKNOWN', p, l) }) },
+  // KER-03: a refusal that knows the requested scope names it; both say where the usable scopes are listed.
+  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: typeof p['scope'] === 'string' ? t('error.SCOPE_UNKNOWN.named', p, l) : t('error.SCOPE_UNKNOWN', p, l) }) },
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
@@ -832,11 +845,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_CODING_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_LIMIT', p, l) }) },
   CLI_CODING_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_INVALID', p, l) }) },
   CLI_CODING_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_TTY', p, l) }) },
-  CLI_CODING_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_CODING_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_CODING_INPUT_UNAVAILABLE', p, l), p, l) }) },
   CLI_GRAPH_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_LIMIT', { ...p, limit: p.limit ?? t('cli.graph.configuredLimit', {}, l) }, l) }) },
   CLI_GRAPH_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_INVALID', { ...p, path: p.path ?? 'graph', reason: p.reason ?? t('cli.graph.expected', {}, l) }, l) }) },
   CLI_GRAPH_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_TTY', p, l) }) },
-  CLI_GRAPH_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_GRAPH_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_GRAPH_INPUT_UNAVAILABLE', p, l), p, l) }) },
   INSTALL_INSPECTION_CONTROL_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALL_INSPECTION_CONTROL_REQUIRED', p, l) }) },
   INSTALL_INSPECTION_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALL_INSPECTION_UNAVAILABLE', p, l) }) },
   INSTALLATION_EVIDENCE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_EVIDENCE_INVALID', p, l) }) },

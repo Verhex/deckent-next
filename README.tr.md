@@ -375,7 +375,7 @@ deckent run list                          # bu kapsamın Run'ları, en yenisi ö
 deckent approval list                     # önce bekleyen onaylar, kalan süreyle
 deckent report --scope my-project --run <id>   # bir Run'ın maliyet ve kabul kanıtı
 deckent audit verify                      # denetim geçmişini doğrula
-deckent backup create                     # doğrulanabilir bir kurtarma seti yaz
+deckent backup create --scope <kimlik> --set <klasör>   # doğrulanabilir bir kurtarma seti yaz (parola istemde)
 deckent policy grants --mine              # kalıcı "her zaman" izinleriniz
 deckent memory                            # kapsamın hafıza günlüğü: olgular ve dersler
 deckent agents                            # kapsamın ajanları ve skill'leri

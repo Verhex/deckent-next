@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { configCommand, configPanelPort, narrowConfigPanel, type ConfigPanelOpener } from '#surfaces/core/config/index.js';
+import { parseConfigInput } from '#engine/index.js';
 
 // C-SETUP (review §config, owner 2026-10-19): bare `deckent config` off a terminal = overrides + group count + where the rest is; on a
 // terminal = the `/config` window (one implementation, bound by composition); `set <key>` without a value is chosen, never typed.
@@ -55,6 +56,18 @@ describe('C-SETUP: config set, explain, get', () => {
   it('NEGATIVE: set <key> without a value off a terminal is refused with what the key takes, and nothing is submitted', async () => {
     const f = fixture();
     await expect(configCommand(['config', 'set', 'max_workers'], f.context)).rejects.toMatchObject({ code: 'CLI_CONFIG_VALUE_MISSING' });
+    expect(f.submit).not.toHaveBeenCalled();
+  });
+  // BeUser KER-02/KER-05: a refusal names the key the person typed (never a literal `{key}`) and what the key takes, with the next step.
+  it('NEGATIVE: an unknown key is named with the command that lists every key; a value that is not JSON names what the key takes; nothing is submitted', async () => {
+    const unknown = (() => { try { parseConfigInput('no.such.option', '7'); } catch (error) { return error as { code: string; params?: unknown; message: string }; } throw new Error('expected'); })();
+    expect(unknown).toMatchObject({ code: 'CONFIG_KEY_UNKNOWN', params: { key: 'no.such.option' } });
+    expect(unknown.message).toBe('Unknown configuration key: no.such.option. Every key and what it is: deckent config explain.');
+    const f = fixture({ locale: 'en' });
+    f.app.explain.mockImplementation(async () => field('language', 'en', 'global', { schema: { type: 'string', enum: ['en', 'tr'] } }) as never);
+    const error = await configCommand(['config', 'set', 'language', 'xx'], f.context).then(() => null, (failure: unknown) => failure as { code: string; message: string });
+    expect(error).toMatchObject({ code: 'CLI_CONFIG_VALUE_NOT_JSON', params: { key: 'language', values: 'en, tr' } });
+    expect(error!.message).toContain('It takes: en, tr.'); expect(error!.message).toContain(`deckent config set language '"<value>"'`);
     expect(f.submit).not.toHaveBeenCalled();
   });
   // CONFIG-PARTIAL-CLI: off a terminal the refusal lists what the key takes; a list cut short says so (EN/TR) and carries the cut as data.
