@@ -174,3 +174,12 @@ it('BeUser M-32: with uncommitted changes and workers set up, /do asks first (Co
   view.stdin.write('/do Second\r'); await until(() => view.stdout.frame.includes('CONTINUE-ROW'), 'card again'); await settle(40); view.stdin.write('\r');
   await until(() => plans.length === 1, 'planned'); expect(plans).toEqual(['Second']);
 });
+
+it('RC-C1: a company/pool stop arriving while the run-here card is open cancels before the local turn', async () => {
+  let open = true; const asked: string[] = [];
+  const view = mountWorkline({ ...windowLabels, errorText: () => 'Nothing set up', completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere: () => open, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('RUN HERE?'), 'card');
+  open = false; view.stdin.write('\r'); await until(() => view.stdout.text.includes('NOT RUN'), 'policy recheck cancels');
+  expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUNS HERE');
+});
