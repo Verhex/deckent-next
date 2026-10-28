@@ -4,6 +4,7 @@ import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions,
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
+import { workerChannelText } from '#surfaces/core/work-labels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { providerDisplayName } from './provider-label.js';
@@ -56,7 +57,13 @@ function custodyText(backend: string, locale: Locale): string {
   return t('tui.panel.provider.transparency', { backend }, locale);
 }
 
-type Host = Pick<TerminalLaunchContext, 'siwc' | 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret'>;
+type Host = Pick<TerminalLaunchContext, 'siwc' | 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret' | 'inspectModelCatalog'>
+  & { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Readonly<Record<string, unknown>> } }> };
+async function workerReadiness(host: Host, root: string, scopeId: string, options: ConfigLoadOptions, channelId: string, locale: Locale) { // BeUser D-05b
+  const channel = (await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null))?.channels.find(row => row.channelId === channelId);
+  return channel?.access === 'allowed' && channel.channel.kind === 'native-cli' && channel.channel.cli ? workerChannelText(channel.channel.cli, channel.activation?.state === 'active',
+    (await host.observeSetup?.(root, options).catch(() => null))?.observation.families ?? null, locale) : null;
+}
 const PULL = 'pull:available';
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
@@ -103,6 +110,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale).filter(row => row.text !== t('tui.provider.model.next', {}, locale)));
       const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       const usable = reading?.models.find(row => row.availability.invocable && result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference)));
+      const worker = usable ? null : await workerReadiness(host, root, scopeId, options, result.reference.providerId, locale);
+      if (worker) { lines.push({ label: '', text: worker }); return; }
       lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : t('tui.provider.pull.blocked', { reason: result.status === 'approval-pending' ? result.approval?.approvalId ?? '-' : result.budget?.state === 'missing' ? t('tui.budget.missing', { scope: scopeId }, locale) : t('tui.provider.unavailable', {}, locale) }, locale), tone: usable ? 'success' : 'warning' });
     } catch (error) { lines.push({ label: '', text: errorText(error), tone: 'warning' }); }
   };

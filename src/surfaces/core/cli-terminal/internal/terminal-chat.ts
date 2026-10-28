@@ -38,7 +38,6 @@ export type TerminalChatStreamHandler = (
 ) => AsyncIterable<TurnDelta>;
 
 export type TerminalChatPlanHandler = (root: string, options: ConfigLoadOptions) => Promise<TerminalChatPlanView>;
-
 /** Composer `@file` candidates (runtime v15 `findWorkspaceFiles`): paths the service's scoped read port lists for the query. */
 export type TerminalMentionFindHandler = (root: string, input: Readonly<{ scopeId: string; query: string }>, options: ConfigLoadOptions,
   signal?: AbortSignal) => Promise<readonly string[]>;

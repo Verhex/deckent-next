@@ -22,7 +22,6 @@ import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import type { TerminalSessionStoreView, WorklineProps } from '#surfaces/core/terminal/index.js';
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
-
 /** Same handlers as `deckent run` and `deckent run cancel`; the terminal's run card and `/cancel` use them through the ledger ports. */
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
   models?: readonly TaskWorkerModel[] }>>;
@@ -30,17 +29,14 @@ export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoa
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   lifecycle: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }> | null>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
-
 export interface RuntimeServiceReadinessView {
   readonly mode: 'connected' | 'started'; readonly instanceId: string; readonly pid: number | null; readonly logPath: string | null;
   readonly shutdownAvailable: boolean; readonly build: { readonly sourceTreeSha256: string; readonly sourceCommit: string | null } | null;
   /** Restart-apply configuration fingerprint the service started with (undefined from an older service) and its idle stop period (null: never). */
   readonly configDigest?: string | undefined; readonly idleStopMs?: number | null;
 }
-
 /** What the config surface and the read-only management commands both read from a service describe. */
 type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnType<NonNullable<TerminalAdminContext['describeRuntimeService']>>>;
-
 /**
  * The slice of the host's command context the interactive terminal reads (TERMINAL-LAUNCH, design A); the CLI's command context extends it.
  * Commands that live in the CLI (`doctor`, `/mcp`, the cancellation text) reach the terminal as {@link TerminalLaunchPorts}, never as an import.
@@ -88,7 +84,6 @@ export type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'gra
 export type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
 export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
-
 /** The engine's `ProfileCachePlan` as this unit reads it (no engine model-activation import here). */
 export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown> }>[]; shared: readonly ModelReference[] }>;
@@ -106,7 +101,6 @@ export interface TerminalLaunchContext extends MonitorCommandContext, HubCommand
   describeDeliverySummaries?: DeliverySummaryReader;
   /** OTONOM-TESLIM shadow (lane B1 store): list and inspect only, never a consent card; absent = no shadow column or line. */
   readAutonomyShadow?: AutonomyShadowReader;
-
   /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once. */
   readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
@@ -176,10 +170,8 @@ export interface TerminalLaunchContext extends MonitorCommandContext, HubCommand
   inspectSurfaceRunIds?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
 }
-
 /** Human rendering of a typed cancellation delivery (the CLI's `run cancel` text, shared by the terminal `/cancel` card). */
 export type RunCancellationRenderer = (data: Awaited<ReturnType<RunCancellationDeliveryHandler>>, commandId: string, scopeId: string, runId: string, locale: Locale) => string;
-
 /** The host commands the terminal uses; the CLI binds them to its own command context (this unit never imports the CLI). */
 export interface TerminalLaunchPorts {
   readonly foregroundSetup?: (root: string, stage: import('#engine/index.js').SetupStage, scopeId: string, locale: Locale) => Promise<Readonly<{ status: string; code?: string }>>;

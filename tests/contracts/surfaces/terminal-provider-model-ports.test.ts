@@ -519,3 +519,21 @@ it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothi
   const text = JSON.stringify(pulled);
   expect(text).toContain('Nothing to connect: '); expect(text).toContain('ERR:MODEL_CONNECT_NO_AVAILABLE'); expect(text).not.toContain(':available');
 });
+
+it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-in, image), never "Connected, unusable"', async () => {
+  const { root, options } = await project({});
+  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false };
+  const ref = { providerId: 'codex-cli-subscription', providerVersion: 1, modelId: 'gpt-x', modelVersion: 1 };
+  const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
+    connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'codex-cli-subscription', status: 'connected', reference: ref,
+      models: [{ nativeId: 'gpt-x', state: 'connected', reference: ref }], credentialRef: null, keyStored: null,
+      steps: { catalog: 'present', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' }) as never,
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [] }) as never,
+    inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', channel: { kind: 'native-cli', cli: 'codex' },
+      activation: { state: 'active', revision: 1 }, models: [] }] }) as never,
+    observeSetup: async () => ({ observation: { families: { coding: { hosts: [{ id: 'codex', cli: 'found', login: 'found' }] }, execution: { worker: { image: 'missing', acquisition: null } } } } }) }, options, 'en', errorText);
+  const outcome = await port.connect({ kind: 'codex-cli-subscription', endpoint: null, key: null });
+  const text = outcome.lines.map(line => line.text).join('\n');
+  expect(text).toContain('Connected as a codex worker channel'); expect(text).toContain('Channel on: yes'); expect(text).toContain('signed in on this machine: yes');
+  expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
+});
