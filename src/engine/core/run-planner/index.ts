@@ -201,7 +201,9 @@ export class BrainPlanApplication {
     const usage = openAiChatUsageSchema.safeParse(result.response?.usage);
     if (prepared.prompt.modelAssignment === 'system') assertBrainLeavesAssignment(draft);
     if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
-      throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
+      // BeUser D-02: the refusal names the kinds the model used that this scope has not registered, and the registered ones (bounded, names only).
+      const unknown = [...new Set(draft.graph.tasks.map(task => task.kind).filter(kind => !prepared.kinds!.includes(kind)))].slice(0, 8);
+      throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED', kinds: unknown.join(', '), registered: prepared.kinds.slice(0, 16).join(', ') || '-' } });
     }
     const prompt = prepared.prompt, limit = prompt.summaryChars;
     // The system, not the model, bounds the declared ceiling: at most the money left after this planning call (live 2026-10-17: a copied

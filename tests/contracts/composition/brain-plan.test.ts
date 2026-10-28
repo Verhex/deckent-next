@@ -49,7 +49,10 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
   it('keeps the unknown kind rule before proposal storage', async () => {
     const { graph, budgetCeiling, requiredPermissions } = proposalFixture('business');
     const f = await fixture({ response: JSON.stringify({ graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'invented-kind' }] }, budgetCeiling, requiredPermissions }) });
-    await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
+    // BeUser D-02: the refusal names the kind the model used and the registered kinds (EN/TR), so the person can ask again or register it.
+    const refused = await planRun(f.project, command, f.options).then(() => null, (error: { code: string; params?: Record<string, unknown>; localize: (l: 'en' | 'tr') => { message: string } }) => error);
+    expect(refused).toMatchObject({ code: 'BRAIN_GRAPH_INVALID', params: { rule: 'TASK_KIND_NOT_REGISTERED', kinds: 'invented-kind', registered: 'purchase' } });
+    expect(refused!.localize('en').message).toContain('task kind invented-kind'); expect(refused!.localize('tr').message).toContain('/setup (İlk iş türü)');
     expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 0, proposals: 0 });
   });
   it('projects the actual scoped template worker model and billing through SDK without any prepared task prompt', async () => {

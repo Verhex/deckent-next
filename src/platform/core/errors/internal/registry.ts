@@ -640,7 +640,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BRAIN_OUTPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTPUT_INVALID', p, l) }) },
   BRAIN_OUTPUT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTPUT_TRUNCATED', p, l) }) },
   BRAIN_CONTEXT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_CONTEXT_TOO_LARGE', p, l) }) },
-  BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_GRAPH_INVALID', p, l) }) },
+  // BeUser D-02: an unregistered task kind names the kinds used and the registered ones, with the person's next step.
+  BRAIN_GRAPH_INVALID: { category: 'error', render: (p, l) => ({ message: p['rule'] === 'TASK_KIND_NOT_REGISTERED' && typeof p['kinds'] === 'string' ? t('error.BRAIN_GRAPH_INVALID.kind', p, l) : t('error.BRAIN_GRAPH_INVALID', p, l) }) },
   BRAIN_PROVIDER_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_PROVIDER_REJECTED', p, l) }) },
   BRAIN_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_OUTCOME_UNKNOWN', p, l) }) },
   BRAIN_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_CANCELLED', p, l) }) },
