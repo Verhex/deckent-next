@@ -127,6 +127,8 @@ describe('information windows on the real workline (SW-1)', () => {
     const text = infoModelText((await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model).join('\n');
     expect(text).toContain('configured, not set up yet');
     expect(text).not.toMatch(/\bmissing\b/u);
+    expect(text).toContain('Open /setup');
+    expect(text).toContain('deckent doctor');
   });
 
   it('the real `deckent doctor --json` command feeds the structured window (not the text fallback)', async () => {

@@ -4,10 +4,10 @@ import type { CliCardIo } from '#surfaces/core/cli-human/index.js';
 import { FirstTaskRegistry, firstTaskIntent } from './first-tasks.js';
 import { askOnboardingQuestion } from './question.js';
 import type { FirstTaskIntent, OnboardingPresentation } from './contract.js';
-export async function firstTaskScreen(model: OnboardingPresentation, io: CliCardIo, registry = new FirstTaskRegistry()): Promise<FirstTaskIntent | 'later' | 'exit'> {
+export async function firstTaskScreen(model: OnboardingPresentation, io: CliCardIo, conversationNotice?: string, registry = new FirstTaskRegistry()): Promise<FirstTaskIntent | 'later' | 'exit'> {
   const snapshot = model.snapshot, rows = registry.select(snapshot.folderFacts), locale = io.locale;
   const question = { title: t('onboarding.firstTask.title', {}, locale), step: model.completed + 1, total: model.total,
-    body: [t('onboarding.firstTask.body', {}, locale)], choices: [...rows.map(row => ({ id: row.id,
+    body: [t('onboarding.firstTask.body', {}, locale), ...(conversationNotice ? [conversationNotice] : [])], choices: [...rows.map(row => ({ id: row.id,
       label: `${onboardingMessage(row.labelKey, {}, locale)} · ${onboardingMessage(row.effectKey, {}, locale)}` })), { id: 'free', label: t('onboarding.firstTask.freeText', {}, locale) }] };
   const picked = await askOnboardingQuestion(question, io);
   if (picked.id === 'later' || picked.id === 'exit') return picked.id;

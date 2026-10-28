@@ -152,7 +152,7 @@
   "terminal.slash.resumeArgument": "<n|kimlik>",
   "terminal.slash.clear": "Yeni konuşma başlat (bu konuşma kayıtlı kalır)",
   "terminal.session.entry": "{index}. {session} · {when} · {count} mesaj · {preview}",
-  "terminal.session.exitHint": "Konuşmanız kaydedildi. Geri dönmek için: deckent, ardından /resume.",
+  "terminal.session.exitHint": "Geri dönmek için: deckent, ardından kayıtlı bir konuşma seçmek için /resume.",
   "terminal.session.none": "Bu kapsamda kayıtlı önceki konuşma yok.",
   "terminal.session.notFound": "Eşleşen kayıtlı konuşma yok; seçmek için /resume yazın.",
   "terminal.session.exactRequired": "Tam oturum kimliğini veya az önce gösterilen listedeki sıra numarasını girin; kimlik önekiyle konuşma yüklenmez.",
@@ -429,5 +429,8 @@
   "terminal.mode.fullAutoRevoked": "Tam otomatik bu kapsamda artık izinli değil, bu yüzden kayıtlı tam otomatik seçiminiz geçerli değil: bu oturum standart çalışır ve her çağrı standart olarak karar alır. Kurulumun sahibi bunu deckent init policy --scope <kapsam> --modes full-auto ile yeniden açabilir.",
   "terminal.admin.scope.modeRevoked": "Mod: {mode} (kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil)",
   "terminal.session.folders.all": "Tüm klasörler",
-  "terminal.session.folders.current": "Bu klasör"
+  "terminal.session.folders.current": "Bu klasör",
+  "terminal.session.previous": "Bu klasörde kayıtlı bir konuşmanız var. Devam etmek için /resume açın.",
+  "terminal.info.doctor.poolSetup": "İşçi havuzu kurulmadan iş başlayamaz. Eksik işçi ve havuz adımlarını tamamlamak için /setup açın; terminal dışında deckent doctor adımları listeler.",
+  "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır."
 }

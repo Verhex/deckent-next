@@ -331,6 +331,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
+  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
+  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
+  const previousConversation = sessions && (await sessions.list().catch(() => [])).some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined;
+  if (previousConversation) accessNotices.push({ level: 'info', text: previousConversation });
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
     const surface = await import('#surfaces/core/terminal-onboarding/index.js');
@@ -348,7 +352,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
           },
           instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
           foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
-        }, { ...io, ...(signal ? { signal } : {}) }, revisit);
+        }, { ...io, ...(signal ? { signal } : {}) }, revisit, previousConversation);
       };
       onboarding = { initial: await run(false), open: signal => run(true, signal) };
       const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
@@ -438,8 +442,6 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
-  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
-  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);

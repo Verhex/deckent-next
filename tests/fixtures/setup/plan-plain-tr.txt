@@ -5,7 +5,7 @@ Deckent kurulum planı acfec5ac8069
 3. Klasör ve kapsam · tamam · "my-erp" kapsamı seçildi.
 4. Kurulumu kim kullanacak · yanıtlandı; izinlerden sonra kaydedilecek · Bireysel · kurulum izinleri yazınca kaydedilecek.
 5. İzinler · bekliyor · Önce Dil aşamasının bitmesini bekliyor.
-6. Komut korumalı alanı · tamam · Komut korumalı alanı çalışıyor (bubblewrap).
+6. Komut korumalı alanı · tamam · Komut korumalı alanı çalışıyor (bubblewrap). Bu, kurulum anındaki ölçümdür; çalışma hizmeti öncelikli korumalı alanı hazırladıktan sonra /doctor yeniden kontrol eder.
 7. Son kontrol · uygulanmaya hazır · Son kontrole hazır.
    $ deckent doctor --json
 Hiçbir şey uygulanmadı. Terminalde deckent init aşama aşama sorar; gözetimsiz: deckent init --yes --scope <kimlik> (yalnız yeni izinler ve dil; son kontrol salt okunur, yalnız raporlanır).
