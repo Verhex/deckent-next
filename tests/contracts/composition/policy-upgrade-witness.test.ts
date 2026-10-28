@@ -51,9 +51,11 @@ describe.skipIf(process.platform !== 'linux')('init policy --upgrade --apply nee
     expect(await snapshot(root)).toEqual(before);
     expect((await stat(policyPath)).mtimeMs).toBe(mtime);
 
-    // Positive control: the same apply with an attesting witness writes exactly the previewed v18 delta (an exact v17 becomes the current template).
+    // Positive control: the same witnessed apply restores every v18 grant and keeps the separately installed workload roles.
     expect(await upgradePolicyTemplateInstallation(root, 'installation', true, preview.expect!, {}, process.getuid?.(), undefined, attested))
       .toMatchObject({ status: 'upgraded', template: { to: 18 } });
-    expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(current);
+    const upgraded = JSON.parse(await readFile(policyPath, 'utf8'));
+    expect(upgraded).toEqual({ ...current, revision: expect.stringMatching(/^a-/u) });
+    expect(upgraded.revision).not.toBe(current.revision); // The explicit v17 rewrite cannot reuse the earlier authority revision.
   });
 });

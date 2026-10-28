@@ -6,6 +6,7 @@ import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/in
 import { pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
 import { BeuserApplication, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent,
   type BeuserWalkPorts } from '#engine/core/beuser/index.js';
+import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
 import { AuditApplication } from '#engine/core/audit/index.js';
 import { NervousApplication, NERVOUS_RULES_SEED } from '#engine/core/nervous/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
@@ -123,7 +124,7 @@ it('cancellation reaches an in-flight model; destruction without absence proof q
 it('rejects foreign harness readback and unbound persona before allowing acceptance or starting a realm', async () => {
   const h = harness();
   h.ports.evidence.readback = async () => ({ binding: { ...binding, transcriptId: 'foreign' }, verdict: green });
-  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'invalid' });
+  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'invalid', verdict: null });
   const fresh = harness();
   await expect(fresh.app.walk(context(), { ...summary, goal: 'changed' })).rejects.toThrow('BEUSER_INPUT_INVALID');
   expect(fresh.ports.realm.create).not.toHaveBeenCalled();
@@ -188,4 +189,35 @@ it('the real dispatch owner replays an uncertain launch without invoking the sup
   expect(refusal).toHaveBeenCalledOnce();
   await expect(adapter.execute(context(), { ...request, argv: ['approval', 'decide'] }, null)).rejects.toThrow('SUPERVISOR_REQUEST_INVALID');
   expect(execute).toHaveBeenCalledOnce();
+});
+
+it('C2 created observation must reach C4 admission before the first surface action', async () => {
+  let lease: BeuserRealmLease | null = null;
+  const inspect = vi.fn(async () => ({ valid: true, evidenceRefs: ['fixture-containment', 'fixture-kernel'] }));
+  const handle = { binding, incarnation: 'fixture-incarnation', containerId: 'a'.repeat(64), controlDirectory: '/fixture/private', controlIdentity: '1:2' };
+  const realm = new BeuserRealmApplication({ async create(_ctx, publish) { await publish(handle); return handle; }, inspect,
+    async remove() { return { processesAbsent: true, cgroupAbsent: true, filesystemAbsent: true, evidenceRefs: ['fixture-absence'] }; } },
+    { async reserve() { lease = { handle: null, observation: { binding, state: 'created', evidenceRefs: [] } }; },
+      async publish(_ctx, value) { lease = { handle: value, observation: lease!.observation }; },
+      async load() { return lease; }, async settle(_ctx, observation) { lease = { handle: lease?.handle ?? null, observation }; } });
+  // Test-only fallible ports: this reproduces the real C2→C4 call sequence, never a real realm or successful walk.
+  const unused = new Proxy({}, { get() { return async () => { throw new Error('FIXTURE_SURFACE_UNAVAILABLE'); }; } });
+  const ports = { realm, surface: unused, models: unused, evidence: unused, decode() {}, finished: async () => false,
+    record: async () => {}, refusal: async () => {} } as BeuserWalkPorts;
+  const result = await new BeuserApplication(ports).walk(context(), summary);
+  console.info('R1 observed', { state: result.state, cleanup: result.cleanup, admissionInspections: inspect.mock.calls.length });
+  expect(inspect).toHaveBeenCalledOnce();
+});
+
+it('reads retained acceptance only after destruction, and never reads a verdict for quarantined cleanup', async () => {
+  const h = harness(), order: string[] = [];
+  const destroy = h.ports.realm.destroy, readback = h.ports.evidence.readback;
+  h.ports.realm.destroy = async ctx => { order.push('destroy'); return destroy(ctx); };
+  h.ports.evidence.readback = async ctx => { order.push('readback'); return readback(ctx); };
+  expect(await h.app.walk(context(), summary)).toMatchObject({ cleanup: 'destroyed', state: 'completed' });
+  expect(order).toEqual(['destroy', 'readback']);
+  const uncertain = harness();
+  uncertain.ports.realm.destroy = async () => ({ binding, state: 'quarantined', evidenceRefs: ['fixture-unknown'] });
+  expect(await uncertain.app.walk(context(), summary)).toMatchObject({ cleanup: 'quarantined', state: 'unknown', verdict: null });
+  expect(uncertain.ports.evidence.readback).not.toHaveBeenCalled();
 });

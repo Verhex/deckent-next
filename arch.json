@@ -1356,7 +1356,8 @@
         "src/surfaces/core/cli-memory",
         "src/surfaces/core/cli-agents",
         "src/surfaces/core/setup",
-        "src/surfaces/core/cli-hub"
+        "src/surfaces/core/cli-hub",
+        "src/surfaces/core/cli-beuser"
       ],
       "plan": "SURFACES"
     },
@@ -1538,7 +1539,8 @@
         "src/adapters/core/approval-store",
         "src/engine/core/effect",
         "src/domain/core/effect",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/engine/core/system-policy-rows"
       ],
       "plan": "INSTALLATION"
     },
@@ -4569,7 +4571,10 @@
       "dependencies": [
         "src/engine/core/beuser-evidence",
         "src/platform/core/i18n",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/surfaces/core/cli-kit"
       ],
       "plan": "SURFACES"
     }

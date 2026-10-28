@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
-import { governedPolicyDigest, type AuthorityDocumentStore } from '#engine/core/policy/index.js';
+import { governedPolicyDigest, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
+import { authorityDocuments, bindingsFileSchema, resolvePolicyBindings, policySchema } from '#domain/index.js';
+import { bindSystemPolicyRows, planSystemPolicyRows, CORE_SYSTEM_POLICY_ROWS } from '#engine/core/system-policy-rows/index.js';
 import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
@@ -45,8 +47,20 @@ export interface PolicyTemplateSource { load(): Promise<unknown> }
  * policy.json document (`policyFileSchema`: v1 or v2 as written, never the bindings-resolved merge — its own
  * `revision` is exactly what the template writes). An unreadable/unsafe/missing policy, or one that is not
  * exactly this template, is null — never the trusted authorization path. */
-export async function inspectFirstRunPolicyTemplate(source: PolicyTemplateSource): Promise<{ readonly id: string; readonly version: number } | null> {
-  try { return matchFirstRunPolicyTemplate(policyFileSchema.parse(await source.load()).revision); }
+export async function inspectFirstRunPolicyTemplate(source: PolicyTemplateSource, lineage?: { readonly prepared: PreparedPolicyTemplateInstallation;
+  readonly policy: unknown; readonly history: readonly AuthorityRevision[] | null }): Promise<{ readonly id: string; readonly version: number } | null> {
+  try {
+    const exact = matchFirstRunPolicyTemplate(policyFileSchema.parse(await source.load()).revision);
+    if (exact || !lineage) return exact;
+    const { prepared, history } = lineage, target = { scopeId: prepared.preview.scopeId, person: prepared.preview.principal };
+    const planned = planSystemPolicyRows({ data: CORE_SYSTEM_POLICY_ROWS.data, target,
+      snapshot: { policy: prepared.preview.policy, bindings: prepared.preview.bindings }, history: [], action: 'apply' });
+    const current = authorityDocuments(policySchema.parse(lineage.policy)), expected = planned.next && governedPolicyDigest(planned.next.policy, planned.next.bindings);
+    // Read-soft recognition of exactly the template plus its committed data revision; custom changes still are not an exact template.
+    return expected && expected === governedPolicyDigest(current.policy, current.bindings)
+      && history?.some(entry => entry.key === planned.key && governedPolicyDigest(authorityDocuments(entry.after).policy, authorityDocuments(entry.after).bindings) === expected)
+      ? prepared.preview.template : null;
+  }
   catch { return null; }
 }
 
@@ -103,6 +117,8 @@ export interface PolicyTemplateInstallationPorts {
   inspectPreimage(target: PolicyTemplatePublishTarget): Promise<string | null>;
   publish(target: PolicyTemplatePublishTarget, transactionId: string): Promise<void>;
   verify(target: PolicyTemplatePublishTarget, transactionId: string): Promise<void>;
+  /** Read-only archive recognition, only after this exact bootstrap journal committed. */
+  verifyAuthorityReplay?(prepared: PreparedPolicyTemplateInstallation): Promise<void>;
   now(): number;
 }
 
@@ -189,7 +205,8 @@ export class PolicyTemplateInstallationApplication {
     }
     if (!observed.record) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     if (observed.record.phase === 'committed') {
-      for (const target of targets) await this.ports.verify(target, preview.transactionId);
+      if (this.ports.verifyAuthorityReplay) await this.ports.verifyAuthorityReplay(prepared);
+      for (const target of targets) if (!this.ports.verifyAuthorityReplay || target.resource !== 'policy' && target.resource !== 'bindings') await this.ports.verify(target, preview.transactionId);
       return this.result(preview, 'replayed');
     }
     for (const target of targets) {
@@ -210,6 +227,47 @@ export class PolicyTemplateInstallationApplication {
   private result(preview: PolicyTemplatePreview, status: 'installed' | 'replayed') {
     return Object.freeze({ schemaVersion: 1 as const, status, transactionId: preview.transactionId, planDigest: preview.planDigest,
       template: preview.template, scopeId: preview.scopeId, paths: preview.paths });
+  }
+}
+
+/** A committed system-row write anchors the installer lineage; every later edge must be contiguous.
+ * Return the exact serialization digests the authority writer published. This never applies a grant.
+ * Callers verify these bytes while holding the authority writer's lock, against its current snapshot. */
+export function policyTemplateReplayTargets(prepared: PreparedPolicyTemplateInstallation, history: readonly AuthorityRevision[] | null,
+  snapshot: { readonly policy: unknown; readonly bindings: unknown }): readonly PolicyTemplatePublishTarget[] {
+  const original = prepared.targets.filter(target => target.resource === 'policy' || target.resource === 'bindings');
+  const start = resolvePolicyBindings(prepared.preview.policy, prepared.preview.bindings);
+  const current = resolvePolicyBindings(snapshot.policy, snapshot.bindings);
+  const digest = (policy: typeof start) => governedPolicyDigest(authorityDocuments(policy).policy, authorityDocuments(policy).bindings);
+  const base = digest(start), end = digest(current);
+  if (base === end) return original;
+  if (!history || !base || !end) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+  const anchor = bindSystemPolicyRows(CORE_SYSTEM_POLICY_ROWS.data, { scopeId: prepared.preview.scopeId, person: prepared.preview.principal }).key;
+  let held: string | undefined = base, anchored = false;
+  const remaining = [...history], targets = new Map(original.map(target => [target.resource, target]));
+  for (;;) {
+    const matches = remaining.filter(entry => digest(entry.before) === held && (anchored || entry.key === anchor));
+    if (matches.length !== 1) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+    const entry = matches[0]!;
+    remaining.splice(remaining.indexOf(entry), 1);
+    const before = authorityDocuments(entry.before), after = authorityDocuments(entry.after);
+    // C1's exact planner owns the wire document (effective history normalizes bindings versions).
+    const planned = anchored ? null : planSystemPolicyRows({ data: CORE_SYSTEM_POLICY_ROWS.data,
+      target: { scopeId: prepared.preview.scopeId, person: prepared.preview.principal },
+      snapshot: { policy: prepared.preview.policy, bindings: prepared.preview.bindings }, history: [], action: 'apply' });
+    if (!anchored && (!planned?.next || governedPolicyDigest(planned.next.policy, planned.next.bindings) !== digest(entry.after))) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+    // Later policy-only edits (including deletions) retain their lineage. A binding-format change needs raw archive custody.
+    if (anchored && canonical(before.bindings) !== canonical(after.bindings)) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+    for (const resource of ['policy', 'bindings'] as const) {
+      const parse = (value: unknown) => resource === 'policy' ? policyFileSchema.parse(value) : bindingsFileSchema.parse(value);
+      if (JSON.stringify(parse(before[resource])) === JSON.stringify(parse(after[resource]))) continue;
+      const content = `${JSON.stringify(parse(planned?.next?.[resource] ?? after[resource]), null, 2)}\n`, target = targets.get(resource)!;
+      targets.set(resource, { ...target, content, digest: digestOf(content) });
+    }
+    anchored = true;
+    held = digest(entry.after);
+    if (held === end) return [...targets.values()];
+    if (!held || remaining.length === 0) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
   }
 }
 
