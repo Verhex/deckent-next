@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "evaluators": {
+    "beuser": { "evidence": "harness-readback", "independent": true },
     "process-exit": { "evidence": "exit-code", "independent": false },
     "operation-evidence": { "evidence": "operation-record", "independent": true }
   }
