@@ -146,7 +146,9 @@ export class ModelConnectApplication {
         if (state) models.push({ nativeId, state }); else commands.push({ ...command, model: { nativeId } });
       }
       for (const nativeId of live ?? []) if (!candidates.includes(nativeId)) models.push({ nativeId, state: 'notInCatalog' });
-    } else commands.push(command);
+    } else { // Mert M-35: a single-model catalog-only connect passes the same worker-image gate as the pull form (the port refuses without one)
+      const live = kind.connect.catalogOnly && ports.available ? await ports.available(kind.id, base ?? '') : null, nativeId = 'nativeId' in command.model ? command.model.nativeId : command.model.reference.modelId;
+      if (live && !live.includes(nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN'); commands.push(command); }
     const targets = await Promise.all(commands.map(item => this.target(kind, item, effective(), base ?? '')));
     const target = targets[0];
     if (!target) throw new ModelConnectError('MODEL_CONNECT_NO_AVAILABLE', models);
