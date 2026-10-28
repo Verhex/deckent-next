@@ -3,9 +3,13 @@ import { resolve } from 'node:path';
 import { ErrorRegistry, prepareProductDirectory, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { TargetQueueError } from '#domain/index.js';
 import { createWorkspaceQueueAdmission, describeWorkspaceQueueCandidate, DispatchPolicyAuthorization, workTargetAttemptAuthorization } from '#engine/index.js';
-import { FileArtifactStore, GitQueueTarget, openLocalIntegrityAuthority, openSqliteAttemptStore, resolveGitWorkTarget, selectWorkTarget, SqliteTargetQueue, openSqliteLedger, openSqliteLedgerReadOnly, type LocalPeerIdentity } from '#adapters/index.js';
+import { FileArtifactStore, GitQueueTarget, openLocalIntegrityAuthority, openSqliteAttemptStore, resolveGitWorkTarget, selectWorkTarget, SqliteTargetQueue, openSqliteLedger, openSqliteLedgerReadOnly, type LocalPeerIdentity, type WorkTargetDeclaration, type ResolvedGitWorkTarget } from '#adapters/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+/** Pure prerequisite shared with decisions that must precede a card and cannot open the queue. */
+export function assertQueueWorkTarget(selected: WorkTargetDeclaration | null, resolved: Pick<ResolvedGitWorkTarget, 'id'>): asserts selected is WorkTargetDeclaration {
+  if (!selected || resolved.id !== selected.id) throw selected ? new TargetQueueError('QUEUE_AUTHORITY_REQUIRED') : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
+}
 async function openQueueContext(root: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity | undefined, readOnly: boolean | 'inspect') {
   const context = await (peer ? loadConfiguredPeerScopeContext(root, scopeId, { ...options, force: true }, peer, readOnly ? 'read' : 'write')
     : loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, readOnly ? 'read' : 'write'));
@@ -13,7 +17,7 @@ async function openQueueContext(root: string, scopeId: string, options: ConfigLo
   if (!config.execution || !installationId) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
   const selected = selectWorkTarget(config.execution);
   const resolved = await resolveGitWorkTarget(resolve(root), config.execution, layout);
-  if (!selected || resolved.id !== selected.id) throw selected ? new TargetQueueError('QUEUE_AUTHORITY_REQUIRED') : ErrorRegistry.createError('QUEUE_WORK_TARGET_REQUIRED');
+  assertQueueWorkTarget(selected, resolved);
   // The service owns the execution plane's private directories (as run create and task execution do): a fresh installation that has not run a task yet still lists its queue and runs the intent pass. F6: `inspect` (a decision before a card) creates nothing.
   const directory = readOnly === 'inspect' ? inspectProductDirectory : prepareProductDirectory, git = { ...config.execution.git, ...resolved.git, workspaceRoot: await directory(layout, 'workspaces') };
   const limits = { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes };

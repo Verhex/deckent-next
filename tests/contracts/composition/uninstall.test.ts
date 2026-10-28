@@ -632,6 +632,28 @@ it('F6: queued-withdraw preflight writes nothing, denies without the owner grant
       for (const kind of ['attempt', 'work-target']) policy.grants.push({ id: `queue-${kind}`, effect: 'allow', actions: 'all', scopes: 'all',
         principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } });
       await writeFile(join(local, 'policy.json'), JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+      // F2772-1: a retained ticket survives removal of its configured target; refuse before the destructive card, without opening the queue.
+      const configPath = join(local, 'config.json'), configured = await readFile(configPath, 'utf8'), noTarget = JSON.parse(configured);
+      delete noTarget.execution.workTargets;
+      await writeFile(configPath, JSON.stringify(noTarget)); clearConfigCache();
+      const missingTarget = await previewConfiguredUninstall(project, { ...ALL, force: true }, options);
+      expect(missingTarget.steps.withdrawDeliveries).toEqual(plan.steps.withdrawDeliveries);
+      const allFiles = async () => Promise.all((await readdir(root, { recursive: true })).sort().map(async name => {
+        const path = join(root, name), stat = await lstat(path); return [name, stat.isFile() ? (await readFile(path)).toString('hex') : stat.mode];
+      }));
+      const engine = await import('#engine/index.js'), unchanged = await allFiles(), cancel = vi.spyOn(engine.TargetQueueApplication.prototype, 'cancel'), effect = vi.spyOn(engine.EffectApplication.prototype, 'execute');
+      try {
+        const refused = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'queue-no-target', planDigest: missingTarget.planDigest },
+          { confirm: async () => { cards++; return true; } }, options).catch(error => error);
+        expect(refused).toMatchObject({ code: 'UNINSTALL_DELIVERY_TARGET_REQUIRED', params: { delivery: 'ticket-1', owner: 's' } });
+        for (const locale of ['en', 'tr'] as const) {
+          const message = refused.localize(locale).message;
+          for (const text of ['ticket-1', 's', 'delivery-queue', 'execution.workTargets', '/config', 'deckent uninstall --all --force']) expect(message).toContain(text);
+        }
+        expect(cards).toBe(0); expect(cancel).not.toHaveBeenCalled(); expect(effect).not.toHaveBeenCalled(); expect(await allFiles()).toEqual(unchanged);
+        expect(live.prepare('SELECT state,revision FROM target_queue WHERE command_id=?').get('ticket-1')).toMatchObject({ state: 'queued', revision: 0 });
+      } finally { cancel.mockRestore(); effect.mockRestore(); }
+      await writeFile(configPath, configured); clearConfigCache();
       const permitted = await previewConfiguredUninstall(project, { ...ALL, force: true }, options), noWrite = await snapshot();
       const declined = await applyConfiguredUninstall(project, { schemaVersion: 2, commandId: 'queue-decline', planDigest: permitted.planDigest },
         { confirm: async () => { cards++; return false; } }, options);

@@ -946,6 +946,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_UNCERTAIN_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_EFFECTS', p, l) }) },
   UNINSTALL_UNCERTAIN_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_MANAGED', p, l) }) },
   UNINSTALL_DELIVERY_QUEUED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_DELIVERY_QUEUED', p, l) }) },
+  UNINSTALL_DELIVERY_TARGET_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_DELIVERY_TARGET_REQUIRED', p, l) }) },
   UNINSTALL_RETIRED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RETIRED', p, l) }) },
   UNINSTALL_FLAG_MOVED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_FLAG_MOVED', p, l) }) },
   INSTALLATION_PUBLICATION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_INVALID', p, l) }) },

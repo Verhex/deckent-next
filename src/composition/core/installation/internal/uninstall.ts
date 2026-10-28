@@ -7,7 +7,7 @@ import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChanne
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, DispatchPolicyAuthorization, workTargetAttemptAuthorization, resolvePolicyScopeMembership, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, prepareProductCompanionPath, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { createConfiguredRuntimeClient, withQueueContext } from '#composition/core/runtime-service/index.js';
+import { createConfiguredRuntimeClient, withQueueContext, assertQueueWorkTarget } from '#composition/core/runtime-service/index.js';
 import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
@@ -47,7 +47,9 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
     // F6: queue authority is decided from the owner's typed observation bound into D0; no queue context or SQLite is opened before the card.
     async preflight(plan, principal) { const document = await source.load(); await authorizeUninstallSteps(document, plan, principal, scopeId);
       if (plan.steps.withdrawDeliveries.length && !config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      if (plan.steps.withdrawDeliveries.length) await resolveGitWorkTarget(root, config.execution, layout);
+      const delivery = plan.steps.withdrawDeliveries[0];
+      if (delivery) try { assertQueueWorkTarget(config.execution ? selectWorkTarget(config.execution) : null, await resolveGitWorkTarget(root, config.execution, layout)); }
+      catch { throw ErrorRegistry.createError('UNINSTALL_DELIVERY_TARGET_REQUIRED', { params: { delivery: delivery.id, owner: delivery.scopeId } }); }
       const authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(source), source, config.execution ? selectWorkTarget(config.execution)?.id ?? null : null);
       for (const ref of plan.steps.withdrawDeliveries) {
         if (!ref.identity || !ref.state || (!ref.company || ref.company === 'foreign') || ref.identity.scopeId !== ref.scopeId) throw ErrorRegistry.createError('UNINSTALL_DELIVERY_QUEUED', { params: { count: '1', list: ref.id, owner: ref.scopeId } });
