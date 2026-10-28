@@ -1,0 +1,5 @@
+{
+  "$comment": "Owner decision 2026-10-28 (option A, LAW-AUDIT-DR2-01 K1-K3, Jev 46317275): the only /do refusal after which the terminal may OFFER to run the task here (always behind the person's card) is 'nothing is set up'. Policy refusals (Brain tier, inactive worker channel, worker assignment), a held pool and any policy stop show their own refusal and next step. Profile/company policy may close it (defaults decided by the owner later).",
+  "schemaVersion": 1,
+  "offerHereOn": ["RUN_ADMISSION_NOT_CONFIGURED"]
+}

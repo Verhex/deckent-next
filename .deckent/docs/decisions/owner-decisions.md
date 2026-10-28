@@ -920,3 +920,15 @@ anahtarı kullanamaz."
   `secret list` "kullanan", silme ve geri alma kartları ve doctor bu MCP sunucularını adlandırır.
 - Reddedilenler: yalnız local kapsamda izin istemek; yalnız metin düzeltmesi.
 - Yükseltme bedeli: her anahtar için her projede bir izin (doctor komutu söyler). Bilinen sınırlar belgesinde EN/TR yükseltme notu var.
+
+## Owner kararı — 2026-10-28: terminalde çalıştırma yalnız "hiçbir şey kurulmamış" iken ve kartla (seçenek A)
+
+Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `LAW-AUDIT-DR2-01` (HOLD). Owner seçenek A'yı seçti (Jev 46317275).
+- K1/K2: `/do` reddinden sonra terminalde çalıştırma yalnız `RUN_ADMISSION_NOT_CONFIGURED` (iş türü/havuz hiç yok) için önerilir. Brain kademesi,
+  etkin olmayan işçi kanalı, işçi ataması, bekletilen havuz ve her politika durdurması kendi reddini ve sonraki adımını gösterir; asla burada çalışmaz.
+- K3: uygun kodlar kayıt verisidir (`engine/core/run-proposal/internal/local-run.json`); her yüzey aynı veriyi okur.
+- K4/K5/K6: her seferinde, her profilde etkiden önce kart: neden · "değişiklikler doğrudan bu klasöre yazılır; arka plan işi, teslim kartı ve geri
+  alma yok" · işçiler için /setup; y = burada çalıştır, n/Esc = iptal (hiçbir şey çalışmaz). Team/Enterprise varsayılanını owner sonra belirler.
+- K7: `setup.question.policy` EN/TR MODES-3'e hizalandı; `WORKER_ASSIGNMENT_NONE` metninden terminal vaadi çıkarıldı.
+- K8: terminalde çalışan görev olağan yönetilen terminal turudur (aynı araçlar, mod, sandbox alanı, onaylar ve denetim kaydı).
+

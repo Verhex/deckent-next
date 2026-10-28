@@ -63,6 +63,7 @@
   "doctor.check.startability.ok": "The runtime service can start here",
   "doctor.check.startability.blocked": "The runtime service cannot start: {reason}",
   "doctor.check.service.stale": "The running service uses an older configuration; restart it to apply the change",
+  "doctor.check.service.staleBuilding": "The running service uses an older configuration, but a worker image build is running in it: let the build finish (watch it in /setup), then restart the service with deckent runtime restart",
   "doctor.check.service.current": "The runtime service is running with the current configuration",
   "doctor.check.service.stopped": "The runtime service is not running (it starts on the first command that needs it)",
   "doctor.check.service.unknown": "The runtime service did not answer; its configuration state is unknown",

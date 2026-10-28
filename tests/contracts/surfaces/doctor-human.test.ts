@@ -382,3 +382,10 @@ it('names an open secret folder ssh-style with chmod 700 and says when ChatGPT s
   expect(custody({ backend: 'core.secret-store.env@1', personalCustody: { status: 'store' } })[0]).toMatchObject({ state: 'warning', next: 'deckent secret store --to core.secret-store.encrypted-file@1' });
   expect(custody({ personalCustody: { status: 'ready' } })[0]).toMatchObject({ state: 'ok' });
 });
+
+it('BeUser D-01: doctor never prescribes `runtime restart` while a worker image build runs in the service; it says to let the build finish', async () => {
+  const row = (extra: object) => doctorChecks({ ...report, serviceConfig: 'stale', ...extra } as never, facts(), 'en').find(item => item.id === 'setup.service')!;
+  expect(row({})).toMatchObject({ next: 'deckent runtime restart' });
+  const building = row({ imageBuilding: true });
+  expect(building.next).toBe('/setup'); expect(building.text).toContain('a worker image build is running');
+});

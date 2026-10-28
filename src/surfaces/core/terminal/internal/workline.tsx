@@ -79,14 +79,13 @@ export interface WorklineLabels extends WorklineActionLabels {
   /** A decision's hint row before its keys count (terminal.decision.*); neutral marks without them. */
   readonly decisionArm?: DecisionArmLabels;
 }
-
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
-const LOCAL_FALLBACK = new Set(['RUN_ADMISSION_NOT_CONFIGURED', 'BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_NONE']); // no background Run can start here yet
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
-    readonly localFallback?: string; readonly localNoTools?: string; // owner İ-1/İ-6/İ-7: no worker admission → the task runs here (with / without model tools)
+    readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
+    readonly offerHere?: (code: unknown) => boolean; readonly here?: Readonly<{ title: string; effect: string; setup: string; prompt: string; cancelled: string }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
@@ -355,7 +354,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
-  const serviceStarted = useRef(false), fallbackShown = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
+  const serviceStarted = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -456,7 +455,7 @@ export function WorklineApp(props: WorklineProps) {
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
-        let result = await plan(); if (!isRunIntentResult(result) && result.proposal.status === 'rejected' && LOCAL_FALLBACK.has(String(result.proposal.reason)) && props.doPlan.localFallback) throw ErrorRegistry.createError(result.proposal.reason!, { ...(result.reasonParams ? { params: result.reasonParams } : {}) }); // BeUser M-07: no worker can run it → as a refused /do
+        let result = await plan(); if (!isRunIntentResult(result) && result.proposal.status === 'rejected' && result.proposal.reason && ErrorRegistry.has(result.proposal.reason)) throw ErrorRegistry.createError(result.proposal.reason!, { ...(result.reasonParams ? { params: result.reasonParams } : {}) }); // BeUser M-07: no worker can run it → as a refused /do
         if (result.run) completion.register(result.run);
         setPlanning(false); onboarding.settled(execution.input.inputId);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
@@ -473,10 +472,11 @@ export function WorklineApp(props: WorklineProps) {
         if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
       } catch (error) {
         setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
-        if (!execution.signal.aborted && LOCAL_FALLBACK.has(String((error as { code?: unknown })?.code)) && props.doPlan.localFallback) {
-          onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; /* lead 2026-10-27 (owner İ-1/İ-6/İ-7, Jev 70b89253): runs here via the agent's governed tools */ const tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
-          const line = tools === false && props.doPlan.localNoTools ? props.doPlan.localNoTools : props.doPlan.localFallback, calm = (error as { code?: unknown }).code === 'RUN_ADMISSION_NOT_CONFIGURED'; // AYSE-12: nothing set up → one calm line per session; a worker that cannot run keeps its reason
-          if (!calm || !fallbackShown.current) { fallbackShown.current ||= calm; push([notice('info', calm ? line : `${errorText(error)}\n${line}`)]); } await runTurn(slash.args.trim(), mentioned, execution); return true;
+        if (!execution.signal.aborted && props.doPlan.offerHere?.((error as { code?: unknown })?.code) && props.doPlan.localFallback && props.doPlan.here) { // owner option A: K1 data, K4 card, K5 every time
+          onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; const here = props.doPlan.here, tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
+          const answer = await panel.pick(execution, { kind: 'window', title: here.title, body: [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : []), here.setup], hints: here.prompt, confirm: true }, ['allow', 'deny']);
+          if (answer !== 'allow' || execution.signal.aborted) { push([notice('info', here.cancelled)]); return true; } // Esc = Cancel: nothing runs
+          push([notice('info', props.doPlan.localFallback)]); await runTurn(slash.args.trim(), mentioned, execution); return true;
         }
         if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }

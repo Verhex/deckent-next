@@ -62,7 +62,7 @@
   "setup.question.language": "{language} ile devam edilsin mi?",
   "setup.question.folder": "Deckent bu klasöre \"{scope}\" kapsamıyla kurulsun mu?",
   "setup.question.profile": "Bu kurulumu kimler kullanacak?",
-  "setup.question.policy": "İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; standart modda düzenleme ve kabuk komutları önce sorulur)",
+  "setup.question.policy": "İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; standart modda proje içi düzenlemeler kartsız çalışır ve kayda geçer, kabuk komutları önce sorulur; /mode ask-edits on düzenlemeleri de sordurur)",
   "setup.question.policyUpgrade": "Güncel ilk kurulum kurallarına yükseltilsin mi? (eklenen her kural önce kartta gösterilir)",
   "setup.question.model": "Şimdi bir model bağlansın mı?",
   "setup.reason.waitsFor": "Önce {stage} aşamasının bitmesini bekliyor.",

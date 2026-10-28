@@ -101,7 +101,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
   const imageRefresh = context.inspectToolchainRefresh ? await context.inspectToolchainRefresh(root, options).catch(() => null) : null;
   // Read-soft: whether the running service still uses the restart-apply configuration now on disk (null when it cannot be asked).
-  const serviceConfig = await configServiceState(root, options, context.describeRuntimeService);
+  const serviceConfig = await configServiceState(root, options, context.describeRuntimeService), imageBuilding = serviceConfig === 'stale' && await (context as { runningImageBuild?: (root: string, options: ConfigLoadOptions) => Promise<boolean> }).runningImageBuild?.(root, options).catch(() => false) === true;
   const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
   const recoveryFiles = context.inspectRecoveryFiles ? await context.inspectRecoveryFiles(root, options).catch(() => null) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
@@ -110,7 +110,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
-    ...(toolchains ? { toolchains } : {}) };
+    ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
   const checks = [...doctorChecks(data, facts, locale)];
   if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push({ group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: ownerBaseline.missing }, locale) });

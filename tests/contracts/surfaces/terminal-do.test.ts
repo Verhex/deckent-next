@@ -83,29 +83,38 @@ it('a cancellation crossing an already-started admission does not hide its retur
   release!({ ...pending, run, proposal: { ...pending.proposal, status: 'accepted', reason: null, approval: null } });
   await until(() => view.stdout.text.includes('Run r admitted. Follow /tasks or /monitor.'), 'returned admission remains visible');
 });
-it.each([['RUN_ADMISSION_NOT_CONFIGURED', true], ['BRAIN_TIER_REFUSED', true], ['MODEL_NOT_ACTIVATED', false]] as const)('/do refused with %s runs here only when no background Run can start (owner İ-1/İ-6/İ-7)', async (code, local) => {
+const HERE = { title: 'RUN HERE?', effect: 'NO DELIVERY CARD', setup: 'OR /setup', prompt: 'y run · n/Esc cancel', cancelled: 'NOT RUN' };
+const offerHere = (code: unknown) => code === 'RUN_ADMISSION_NOT_CONFIGURED';
+it.each(['BRAIN_TIER_REFUSED', 'WORKER_CHANNEL_NOT_ACTIVE', 'WORKER_ASSIGNMENT_NONE', 'RUN_POOL_HELD', 'POLICY_DENIED', 'MODEL_NOT_ACTIVATED'])(
+  'owner option A (K1/K2): /do refused with %s shows its own refusal and never runs here', async code => {
   const asked: string[] = [];
-  const view = mountWorkline({ errorText: error => `REFUSED ${(error as DeckentError).code}`,
-    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
-    doPlan: { ...words, localFallback: 'RUNS HERE', localNoTools: 'NO TOOLS', lines: () => [],
-      plan: async () => { throw new DeckentError(code, code); } } }); mounted.push(view);
+  const view = mountWorkline({ errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: () => [], plan: async () => { throw new DeckentError(code, code); } } }); mounted.push(view);
   await settle(40); view.stdin.write('/do Read package.json\r');
-  if (local) await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn answer'); else await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown');
-  expect(asked).toEqual(local ? ['Read package.json'] : []);
-  expect(view.stdout.text.includes('RUNS HERE')).toBe(local); expect(view.stdout.frame).not.toContain('PLANNING');
-  // AYSE-12: with nothing set up the screen shows one calm line (no error code), once per session; other reasons stay visible.
-  expect(view.stdout.text.includes(`REFUSED ${code}`)).toBe(code !== 'RUN_ADMISSION_NOT_CONFIGURED');
-  if (code === 'RUN_ADMISSION_NOT_CONFIGURED') { await settle(40); view.stdin.write('/do Again\r'); await until(() => asked.length === 2, 'second local turn');
-    expect(view.stdout.frame.split('RUNS HERE').length - 1).toBe(1); }
+  await until(() => view.stdout.text.includes(`REFUSED ${code}`), 'refusal shown'); await settle(80);
+  expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?'); expect(view.stdout.text).not.toContain('RUNS HERE');
 });
-it('BeUser M-07: a plan rejected because no worker can run it shows the reason and runs here', async () => {
+it('owner option A (K4/K5): "nothing set up" asks before any effect every time; Esc cancels with nothing run; y runs here and says so', async () => {
+  const asked: string[] = [];
+  const view = mountWorkline({ errorText: error => `REFUSED ${(error as DeckentError).code}`, completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do First\r');
+  await until(() => view.stdout.frame.includes('RUN HERE?'), 'card'); expect(view.stdout.frame).toContain('NO DELIVERY CARD'); expect(asked).toEqual([]);
+  view.stdin.write('\u001b'); await until(() => view.stdout.text.includes('NOT RUN'), 'cancelled'); await settle(60); expect(asked).toEqual([]);
+  view.stdin.write('/do Second\r'); await until(() => view.stdout.frame.includes('RUN HERE?'), 'card again');
+  view.stdin.write('y'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn');
+  expect(asked).toEqual(['Second']); expect(view.stdout.text).toContain('RUNS HERE');
+  view.stdin.write('/do Third\r'); await until(() => asked.length === 1 && view.stdout.frame.includes('RUN HERE?'), 'card every time');
+});
+it('BeUser M-07: a plan rejected because no worker can run it shows its refusal first and never runs here', async () => {
   const pending = pendingBrainFixture(), asked: string[] = [];
   const rejected = { ...pending, run: null, reasonParams: { taskId: 'T1', workClass: 'feature', skipped: 'x: WORKER_CHANNEL_NOT_ACTIVE' },
     proposal: { ...pending.proposal, status: 'rejected', reason: 'WORKER_ASSIGNMENT_NONE', approval: null } };
   const view = mountWorkline({ errorText: error => formatHumanError(error, { locale: 'en', noColor: true }),
-    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content).split('\n')[0]!); return 'LOCAL ANSWER'; },
-    doPlan: { ...words, localFallback: 'RUNS HERE', lines: result => brainProposalLines(result, 'en'), plan: async () => rejected as never } }); mounted.push(view);
+    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+    doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: HERE, lines: result => brainProposalLines(result, 'en'), plan: async () => rejected as never } }); mounted.push(view);
   await settle(40); view.stdin.write('/do Add sub\r');
-  await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'local turn');
-  expect(asked).toEqual(['Add sub']); expect(view.stdout.text).toContain('Connect one of the listed models with /provider'); expect(view.stdout.text).toContain('RUNS HERE');
+  await until(() => view.stdout.text.includes('Connect one of the listed models with /provider'), 'refusal'); await settle(80);
+  expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?');
 });
+

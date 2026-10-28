@@ -461,8 +461,10 @@ Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/pla
   2026-10-28): bağlanma adımı artık anahtarsız yerel sunucuya bir kez araç çağrısını kabul edip etmediğini sorar ve bildirir. *Yol:*
   sunucuyu `deckent` → /provider içinde (aynı adresle) bir kez yeniden bağlayın; `--enable-auto-tool-choice --tool-call-parser <ayrıştırıcı>`
   olmadan başlatılan bir vLLM araçsız kalır ve terminal bunu söyler.
-- **İş türü ve işçi havuzu yokken `/do` ve ilk görev arka plan işi olarak değil, terminalde çalışır** (owner İ-1/İ-6/İ-7, 2026-10-27):
-  ekran neden bir iş başlatılamadığını gösterir, sonra görevi modelin araçlarıyla, sizin modunuz, sandbox ve onaylar altında çalıştırır.
+- **İş türü ve işçi havuzu yokken `/do` ve ilk görev arka plan işi olarak değil, terminalde çalışabilir** (owner seçenek A, 2026-10-28):
+  yalnız hiçbir şey kurulmamışken ve her seferinde onayladığınız bir karttan sonra (değişiklikler doğrudan klasöre yazılır: teslim kartı ve
+  geri alma yok; Esc iptal eder). Diğer her ret (Brain kademesi, işçi kanalı, atama, bekletilen havuz, politika) kendi sonraki adımını
+  gösterir ve burada çalışmaz.
   *Yol:* arka plan işçileri için /setup → İlk iş türü → İşçi imajı → İşçi havuzu. O zamana kadar `pool hold` ve `pool set-capacity`
   henüz havuz olmadığını söyler.
 - **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan

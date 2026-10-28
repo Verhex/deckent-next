@@ -460,9 +460,10 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   2026-10-28): the connect step now asks a keyless local server once whether it accepts a tool call and declares it. *Workaround:*
   reconnect the server once in `deckent` → /provider (the same address); a vLLM started without `--enable-auto-tool-choice
   --tool-call-parser <parser>` stays without tools, and the terminal says so.
-- **Without a work kind and worker pool, `/do` and the first task run in the terminal, not as a background Run** (owner İ-1/İ-6/İ-7,
-  2026-10-27): the screen shows why no Run could start, then runs the task with the model's tools under your mode, sandbox and
-  approvals. *Workaround:* for background workers set up /setup → First work kind → Worker image → Worker pool. `pool hold` and
+- **Without a work kind and worker pool, `/do` and the first task can run in the terminal, not as a background Run** (owner option A,
+  2026-10-28): only when nothing is set up, and only after a card you confirm every time (changes go straight to the folder: no
+  delivery card, no rollback; Esc cancels). Any other refusal (Brain tier, worker channel, assignment, a held pool, policy) shows its
+  own next step and never runs here. *Workaround:* for background workers set up /setup → First work kind → Worker image → Worker pool. `pool hold` and
   `pool set-capacity` say there is no pool yet until then.
 - **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
   (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set

@@ -88,7 +88,8 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
   if (healable) rows.push(row('setup', 'setup.startability', 'warning', healable.message, 'deckent runtime serve'));
   else if (r.startability) rows.push(r.startability.status === 'ready' ? row('setup', 'setup.startability', 'ok', t('doctor.check.startability.ok', {}, l))
     : row('setup', 'setup.startability', 'error', t('doctor.check.startability.blocked', { reason: r.startability.checks[0]?.message ?? '-' }, l), 'deckent doctor --verbose'));
-  if (r.serviceConfig === 'stale') rows.push(row('setup', 'setup.service', 'warning', t('doctor.check.service.stale', {}, l), 'deckent runtime restart'));
+  if (r.serviceConfig === 'stale') rows.push(r.imageBuilding ? row('setup', 'setup.service', 'warning', t('doctor.check.service.staleBuilding', {}, l), '/setup') // D-01: never prescribe a restart that stops the build
+    : row('setup', 'setup.service', 'warning', t('doctor.check.service.stale', {}, l), 'deckent runtime restart'));
   else if (r.serviceConfig === 'current') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.current', {}, l)));
   else if (r.serviceConfig === 'stopped') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.stopped', {}, l)));
   else if (r.serviceConfig === 'unknown') rows.push(row('setup', 'setup.service', 'untested', t('doctor.check.service.unknown', {}, l)));

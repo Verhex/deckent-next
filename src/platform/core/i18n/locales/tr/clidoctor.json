@@ -63,6 +63,7 @@
   "doctor.check.startability.ok": "Runtime servisi burada başlayabilir",
   "doctor.check.startability.blocked": "Runtime servisi başlayamaz: {reason}",
   "doctor.check.service.stale": "Çalışan servis eski yapılandırmayla çalışıyor; değişiklik için yeniden başlatın",
+  "doctor.check.service.staleBuilding": "Çalışan servis eski yapılandırmayı kullanıyor, ama içinde bir işçi imajı derlemesi sürüyor: derlemenin bitmesini bekleyin (/setup ile izleyin), sonra servisi deckent runtime restart ile yeniden başlatın",
   "doctor.check.service.current": "Runtime servisi güncel yapılandırmayla çalışıyor",
   "doctor.check.service.stopped": "Runtime servisi çalışmıyor (gereken ilk komutta başlar)",
   "doctor.check.service.unknown": "Runtime servisi yanıt vermedi; yapılandırma durumu bilinmiyor",
