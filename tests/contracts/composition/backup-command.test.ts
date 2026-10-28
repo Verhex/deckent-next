@@ -69,6 +69,12 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   expect(await main(['backup', 'create', '--scope', 'scope', '--set', f.set, '--json'], { root: f.root, env: f.env, initialize: composeCore,
     executeBackup, stdin: Readable.from([phrase + '\n']), stdout: { write: text => { output += text; } }, stderr: { write: text => { errors += text; } } })).toBe(0);
   expect(errors).toBe(''); expect(JSON.parse(output).action).toBe('create'); expect(output).not.toContain(phrase);
+  // BeUser S-06: a create without its set (or a restore off a terminal without its target) names the missing flag, nothing is written.
+  for (const argv of [['create', '--scope', 'scope'], ['restore', '--scope', 'scope', '--set', f.set]]) {
+    let refused = '';
+    expect(await main(['backup', ...argv], { root: f.root, env: f.env, initialize: composeCore, executeBackup, stdin: Readable.from([]), stdout: { write() {} }, stderr: { write: text => { refused += text; } } })).toBe(2);
+    expect(refused).toContain(argv[0] === 'create' ? '--set <path>' : '--target <project>'); expect(refused).toContain('CLI_ARGUMENT_MISSING');
+  }
   await call(f, 'verify');
   const frozen = new DatabaseSync(join(f.set, 'ledger.db'), { readOnly: true });
   const count = Number(frozen.prepare('SELECT n FROM backup_count').get()?.n);

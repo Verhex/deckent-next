@@ -62,9 +62,10 @@ export const CLI_CATALOG = [
     action('rebaseline', 'setup', 'cli.audit.rebaseline.summary', 'cli.audit.help', { requires: ['--reason <text>'] }),
   ] },
   { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', args: '[<action> --scope <id> --set <path>]', bare: 'handler', children: [
-    action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup'),
+    // BeUser S-06: a create without its set, a restore without its target name the missing flag (CLI_ARGUMENT_MISSING), not "invalid arguments".
+    action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup', { requires: ['--set <path>'] }),
     action('verify', 'setup', 'cli.help.action.backup.verify', 'cli.help.backup'),
-    action('restore', 'setup', 'cli.help.action.backup.restore', 'cli.help.backup'),
+    action('restore', 'setup', 'cli.help.action.backup.restore', 'cli.help.backup', { requires: ['--target <project>'], picks: true }),
   ] },
   { name: 'terminal', group: 'start', summary: 'cli.help.summary.terminal', detail: 'cli.help.terminal', args: '[--scope <id>] [--full-access]', bare: 'handler', children: [
     action('workline', 'start', 'cli.help.action.workline', 'cli.help.terminal'),
