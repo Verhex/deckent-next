@@ -10,3 +10,4 @@ export { parseRunProposalEnvelope, runIntentRecordSchema, setupIntentFactSchema,
 export type { RunIntentRecord, RunProposalEnvelope, SetupIntentFact } from './internal/proposal-contract.js';
 
 export { intentStartExpectedRevision } from './internal/intent-application.js';
+export { localRunOffered, type LocalRunContext } from './internal/local-run.js';

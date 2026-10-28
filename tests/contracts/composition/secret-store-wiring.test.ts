@@ -113,9 +113,11 @@ it('without the service handlers secret set/delete are usage refusals; a value g
 });
 
 it('every production credential read goes through the one configured resolver (no direct environment fallback left)', async () => {
-  const sources = ['src/composition/core/secrets/internal/project.ts', 'src/composition/core/agent-turn/internal/mcp.ts', 'src/platform/core/config/internal/layers.ts'];
-  // PRE-8 v2: every provider read goes through the one project credential entry point, whose main-vault read is that resolver.
-  for (const path of ['src/composition/core/model-invocation/internal/credential.ts', 'src/composition/core/model-connect/internal/discovery.ts', 'src/composition/core/provider-catalog/internal/workspace.ts']) {
+  const sources = ['src/composition/core/secrets/internal/project.ts', 'src/platform/core/config/internal/layers.ts'];
+  // PRE-8 v2: every provider read goes through the one project credential entry point, whose main-vault read is that resolver; KER-17: so does a
+  // personal-file MCP `$DECK:` key (turn and `mcp` command), never the main vault directly.
+  for (const path of ['src/composition/core/model-invocation/internal/credential.ts', 'src/composition/core/model-connect/internal/discovery.ts', 'src/composition/core/provider-catalog/internal/workspace.ts',
+    'src/composition/core/agent-turn/internal/mcp.ts']) {
     const text = await readFile(path, 'utf8');
     expect(text, path).toContain('projectCredentialResolver(');
     expect(text, path).not.toContain('configuredSecretResolver(');

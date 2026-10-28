@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { describeMcpApproval, describeMcpResult, describeMcpTrustCard, expandMcpEntry, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpEndpointRefusal, mcpTurnTools,
-  openMcpAgentTools, resolveMcpRegistry, runMcpCommand, type McpCommandContext, type McpCommandRequest, type McpTrustCard } from '#adapters/index.js';
+  openMcpAgentTools, openTurnMcp, resolveMcpRegistry, runMcpCommand, type McpCommandContext, type McpCommandRequest, type McpTrustCard } from '#adapters/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { mcpCommand, type CommandContext } from '#surfaces/core/cli/index.js';
 // @ts-expect-error -- a plain ESM test fixture (no declaration file)
@@ -96,6 +96,28 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect(existsSync(personal) && readFileSync(personal, 'utf8')).toContain('$DECK:GH'); expect(readFileSync(personal, 'utf8')).not.toContain(SECRET);
   }, 60_000);
 
+  // KER-17 (owner GO 2026-10-28, LAW-AUDIT-KER17): a personal-file `$DECK:` key resolves under the project's grant. A trusted server whose key loses
+  // the grant (RED) is retired before its next call, offers nothing and says which key and command; granted again (GREEN) it starts.
+  it('NEGATIVE: a revoked $DECK grant retires the running server before its next call and names the key; a grant brings it back', async () => {
+    const server = await fixture(), w = await workspace(); let granted = true;
+    const context: McpCommandContext = { ...w.context, secret: async name => { if (!granted) throw Object.assign(new Error('refused'), { code: 'SECRET_GRANT_REQUIRED' }); return name === 'GH' ? SECRET : undefined; } };
+    await runMcpCommand({ verb: 'add', scope: 'local', name: 'web-docs', entry: { type: 'http', url: server.url, headers: { Authorization: 'Bearer $DECK:GH' } } }, context);
+    const pool = new McpClientPool(new AbortController().signal); closers.push(() => pool.close());
+    const view = pool.scoped({ scopeId: 'scope', cwd: w.project }), signal = new AbortController().signal;
+    const open = () => openTurnMcp({ registry: context, pool: view, cwd: w.project, sandboxes: [], principal: { id: 'p', issuer: 'test', subject: 'owner' }, sqlite: {} as never, keyFile: '',
+      requestTtlMs: 1_000, inputMaxBytes: 65_536, resultMaxBytes: 65_536, scopeId: 'scope', turnId: 'turn', signal, emit: () => undefined, ledgerPath: async () => '',
+      requestPolicy: async () => { throw new Error('no card expected'); }, describeNotice: notice => JSON.stringify(notice) });
+    const before = await open(), whoami = [...before.offered.values()].find(entry => entry.tool === 'whoami')!;
+    expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'answered' });
+    granted = false;
+    const after = await open();
+    expect(after.offered.size).toBe(0); expect(after.notices).toEqual([JSON.stringify({ kind: 'secret-refused', name: 'web-docs', code: 'SECRET_GRANT_REQUIRED', key: 'GH', scope: 'scope' })]);
+    expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'refused', reason: 'not-connected' });
+    expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH' }] });
+    granted = true;
+    expect((await open()).offered.size).toBe(2);
+  }, 60_000);
+
   it('a project file cannot carry a secret reference to an HTTP server; plain http to a remote host is refused at add; a literal header value is masked in get', async () => {
     const server = await fixture(), w = await workspace();
     await w.run({ verb: 'add', scope: 'project', name: 'shared', entry: { type: 'http', url: server.url, headers: { Authorization: 'Bearer $DECK:GH' } } });
@@ -119,4 +141,14 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     await expect(mcpCommand(['mcp', 'add', '--transport', 'sse', 'web', 'https://x'], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
     await expect(mcpCommand(['mcp', 'add', '--header', 'A: b', 'web', '--', 'node', 'srv.js'], context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
+});
+
+it('Astra D11-R1: every project-vault refusal keeps its own kind through stdio env and HTTP headers (never collapsed into "not granted")', async () => {
+  for (const code of ['SECRET_GRANT_REQUIRED', 'SECRET_PROJECT_MISSING', 'DECK_DECLARATION_REQUIRED', 'SECRET_PROJECT_IDENTITY_REQUIRED']) {
+    const secret = async () => { throw Object.assign(new Error('refused'), { code }); };
+    const stdio = await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, secret);
+    const http = await expandMcpEntry({ type: 'http', url: 'https://mcp.example/v1', headers: { authorization: 'Bearer $DECK:KEY' } } as never, 'user', {}, secret);
+    expect([stdio, http]).toEqual([{ ok: false, reason: `secret-refused:${code}:KEY` }, { ok: false, reason: `secret-refused:${code}:KEY` }]);
+  }
+  expect(await expandMcpEntry({ command: 'server', env: { TOKEN: '$DECK:KEY' } } as never, 'user', {}, async () => undefined)).toEqual({ ok: false, reason: 'secret-unresolved:KEY' });
 });

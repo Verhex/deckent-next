@@ -3,11 +3,11 @@ import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
-import { launchDetachedRuntimeService, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, readLocalOsIdentity } from '#adapters/index.js';
+import { launchDetachedRuntimeService, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, readLocalOsIdentity, runtimeSocketHealable } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, awaitRuntimeServiceStart, awaitRuntimeServiceRestart, describeRuntimeServiceWithin, runtimeServiceReadiness as readiness, runtimeMonotonicDeadline as monotonicDeadline, runtimeDeadlineSignal as within,
-  type RuntimeServiceReadiness, type LifecycleDeadline } from '#engine/index.js';
+  type RuntimeServiceReadiness, type LifecycleDeadline, type RuntimeStartable } from '#engine/index.js';
 export type { RuntimeServiceReadiness } from '#engine/index.js';
 const POLL_MS = 150;
 const ENTRY = fileURLToPath(new URL('./entry.js', import.meta.url));
@@ -15,8 +15,8 @@ async function lifecycleDeadline(projectRoot: string, options: ConfigLoadOptions
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
 }
-const describeWithin = (client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline) =>
-  describeRuntimeServiceWithin(signal => client.describeService(signal), deadline);
+const describeWithin = (client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline, startable?: RuntimeStartable) => describeRuntimeServiceWithin(signal => client.describeService(signal), deadline, startable);
+/** RESTART-HUNT (LAW-AUDIT-2): a describe's `parent-mode` refusal is a state the service start heals only when the read-only adapter predicate agrees. */ const startableFor = (projectRoot: string, options: ConfigLoadOptions): RuntimeStartable => async error => (error as { code?: unknown } | null)?.code === 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' && (error as { params?: Record<string, unknown> }).params?.['reason'] === 'parent-mode' && await runtimeSocketHealable((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout);
 /**
  * Owner 2026-09-23: the interactive terminal starts the local runtime service when none is running, as a detached
  * `runtime serve` of the same executable that keeps running after the terminal exits. An existing service is reused.
@@ -29,20 +29,18 @@ export async function ensureConfiguredRuntimeService(projectRoot: string, option
   const client = createConfiguredRuntimeClient(projectRoot, options);
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   const deadline = budget ?? monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
-  const first = await describeWithin(client, deadline);
+  const startable = startableFor(projectRoot, options), first = await describeWithin(client, deadline, startable);
   if (first.descriptor) return readiness('connected', first.descriptor, null, null);
   const logPath = await prepareProductFile(config.productLayout, 'runtimeLog');
   try { await access(entry); } catch { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); }
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== RUNTIME_SERVICE_AUTOSTART_ENV));
-  // K6 = A: the launch marks an automatic start; a restart passes the previous service's origin on (a hand-started service stays one).
   if (autoStarted) env[RUNTIME_SERVICE_AUTOSTART_ENV] = '1';
   const { pid } = await launch({ executable: process.execPath, entry, cwd: projectRoot, logPath, env })
-    .catch(() => { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
-  return awaitRuntimeServiceStart(deadline, pid, logPath, { describe: () => describeWithin(client, deadline), wait: delay, pollMs: POLL_MS });
+    .catch(async () => { await describeWithin(client, deadline, startable); throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
+  return awaitRuntimeServiceStart(deadline, pid, logPath, { describe: () => describeWithin(client, deadline, startable), wait: delay, pollMs: POLL_MS });
 }
 /** Governed stop of this project's service without hand-written command fields: the durable command is built from the
- * live descriptor with a fresh command id. A service without a configured identity cannot be stopped this way. Describe and
- * the shutdown answer share one monotonic budget; running out is an unknown outcome (the command may still be admitted),
+ * live descriptor with a fresh command id. Without an identity it cannot be stopped this way. Describe and shutdown share one monotonic budget; running out is an unknown outcome (the command may still be admitted),
  * never proof of stop and never permission to replace the service (Astra 2054 R2). */
 export async function stopConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {}, reason = 'operator stop',
   budget?: LifecycleDeadline) {
@@ -55,19 +53,19 @@ export async function stopConfiguredRuntimeService(projectRoot: string, options:
   return { command, autoStarted: descriptor.autoStarted === true, result: await client.shutdownService(command, within(deadline)) };
 }
 /** CI-108: manager-run means the service process IS its unit's main process, as systemd reports it (bounded); its control group alone only names a candidate. */
-const managerRunning = (pid: number | undefined) => detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS));
+export const managerRunning = (pid: number | undefined) => detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS));
 /** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current
  * build — all within one monotonic budget. A new service is launched only after absence is observed. */
 export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
   launch = launchDetachedRuntimeService, entry = ENTRY, managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null> = managerRunning): Promise<RuntimeServiceReadiness> {
-  const deadline = await lifecycleDeadline(projectRoot, options);
-  // A service run by a service manager is restarted by that manager: stopping it here would only race the manager's own restart with a second launch.
-  const managed = await managerOf((await createConfiguredRuntimeClient(projectRoot, options).describeService(within(deadline))).processId);
+  const deadline = await lifecycleDeadline(projectRoot, options), first = await describeWithin(createConfiguredRuntimeClient(projectRoot, options), deadline, startableFor(projectRoot, options));
+  if (!first.descriptor) return ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, true); // BeUser M-09: absent (positive evidence) → started like the autostart; no origin to carry on
+  const managed = await managerOf(first.descriptor.processId); // a service its manager runs is restarted by that manager (stopping it here would race a second launch)
   if (managed) throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerRestartCommand(managed) } });
   const stopped = await stopConfiguredRuntimeService(projectRoot, options, 'managed restart onto the current build and configuration', deadline);
   const client = createConfiguredRuntimeClient(projectRoot, options);
   return awaitRuntimeServiceRestart(deadline, { describe: () => client.describeService(within(deadline)),
-    start: () => ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, stopped.autoStarted), wait: delay, pollMs: POLL_MS });
+    start: () => ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, stopped.autoStarted), startable: startableFor(projectRoot, options), wait: delay, pollMs: POLL_MS });
 }
 /** The interactive terminal's composer history for this project, or null when disabled in `terminal.persistHistory`.
  * Entries that carried pasted content are not stored (only the visible line would survive, as a chip label). */

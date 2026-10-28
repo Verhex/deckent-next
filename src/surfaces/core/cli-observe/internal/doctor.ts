@@ -33,7 +33,9 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     ? await context.inspectWorkerImage({ executable: docker.executable, imageId: docker.imageId, timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes }).catch(() => 'unknown' as const) : null;
   // PRE-8 v2: the one inventory (names only): used keys without a grant, undeclared project keys, declared keys not stored, used keys stored nowhere.
   const inventory = context.inspectSecretInventory && scopeId ? await context.inspectSecretInventory(root, { scopeId, all: false }, options).catch(() => null) : null;
-  const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name })),
+  // KER-17: a grant finding names the MCP servers that need the key (personal-file `$DECK:`), so the next step is the one grant command.
+  const mcpUsers = (name: string) => inventory?.rows.find(row => row.name === name && row.vault === 'main')?.usedBy.filter(user => user.startsWith('mcp:')).map(user => user.slice(4)) ?? [];
+  const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name, ...finding.kind === 'grant-required' && mcpUsers(finding.name).length ? { servers: mcpUsers(finding.name).join(', ') } : {} })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
     providerSpending, budgetPeriodText,
@@ -47,6 +49,9 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     recoveryMode, recoveryRollout,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     siwcConnections: context.inspectSiwcConnections && scopeId ? await context.inspectSiwcConnections(root, scopeId, options).catch(() => null) : null,
+    // BeUser D-05: Runs parked with a typed failure code (progression failures, the crash-loop breaker), read from the ledger without the service.
+    stuckRuns: context.inspectMonitor ? await context.inspectMonitor(root, options, { schemaVersion: 1, install: 'current' }).then(snapshot => snapshot.installs.flatMap(install => install.runs)
+      .flatMap(run => run.blocker?.code === 'parked' && /^[A-Z][A-Z0-9_]+$/u.test(run.blocker.detail ?? '') ? [{ runId: run.runId, code: run.blocker.detail! }] : []), () => null) : null,
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
   };
 }
@@ -96,7 +101,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
   const imageRefresh = context.inspectToolchainRefresh ? await context.inspectToolchainRefresh(root, options).catch(() => null) : null;
   // Read-soft: whether the running service still uses the restart-apply configuration now on disk (null when it cannot be asked).
-  const serviceConfig = await configServiceState(root, options, context.describeRuntimeService);
+  const serviceConfig = await configServiceState(root, options, context.describeRuntimeService), imageBuilding = serviceConfig === 'stale' && await (context as { runningImageBuild?: (root: string, options: ConfigLoadOptions) => Promise<boolean> }).runningImageBuild?.(root, options).catch(() => false) === true;
   const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
   const recoveryFiles = context.inspectRecoveryFiles ? await context.inspectRecoveryFiles(root, options).catch(() => null) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
@@ -105,7 +110,7 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
   const data = { schemaVersion: 2, scope: 'kernel', platform, host: { ...host, workerBasis: describeWorkerRecommendation(host.freeMemMB, host.cpuCores) }, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, node, auditIntegrity, startability, status: node.status === 'unsupported' || (auditIntegrity && auditIntegrity.status !== 'match') || startability?.status === 'blocked' || poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' || shellRealm?.selfTest?.status === 'failed' ? 'degraded' as const : 'ready' as const, poolReadiness, ownerBaseline, policyTemplate, policyAdministration, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
-    ...(toolchains ? { toolchains } : {}) };
+    ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
   const checks = [...doctorChecks(data, facts, locale)];
   if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push({ group: 'security', id: 'owner-baseline', state: 'ok', text: t('cli.init.ownerBaseline.doctor', { count: ownerBaseline.missing }, locale) });

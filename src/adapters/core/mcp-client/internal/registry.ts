@@ -159,10 +159,9 @@ export type McpExpandedEntry = { readonly ok: true; readonly command: string; re
   | { readonly ok: false; readonly reason: string };
 /**
  * The launch values of one entry: `${VAR}` / `${VAR:-default}` in `command`, `args`, `env` values, `url` and header values from the service
- * environment. A project file (someone else's commit) reads only the allowlisted non-secret variables (SEC-2, F30: any other name reads as its
- * written default or empty; an allowlisted value carrying a credential refuses the entry) and may not use a Deckent secret reference; a
- * personal file may give an `env` value as exactly `$DECK:NAME`, or name `$DECK:NAME` inside a header value, resolved by the installation's
- * secret resolver. An unset variable without a default makes the entry invalid; an HTTP endpoint must pass `mcpEndpointRefusal`.
+ * environment. A project file (someone else's commit) reads only the allowlisted non-secret variables (SEC-2, F30: any other name reads as its written default or empty; an allowlisted value carrying a credential refuses the entry) and may not use a Deckent secret reference; a
+ * personal file may give an `env` value as exactly `$DECK:NAME`, or name `$DECK:NAME` inside a header value, resolved by the composition's
+ * project credential decision (KER-17: a main-vault key only with this project's grant). An unset variable without a default makes the entry invalid; an HTTP endpoint must pass `mcpEndpointRefusal`.
  */
 export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, environment: Readonly<Record<string, string | undefined>>,
   secret: (name: string) => Promise<string | undefined>, known?: KnownSecretSnapshot): Promise<McpExpandedEntry> {
@@ -176,8 +175,9 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
     missing ??= name; return '';
   });
   const secrets: string[] = [];
+  let denied: string | null = null; const unresolved = (reference: string) => ({ ok: false as const, reason: denied ? `secret-refused:${denied}:${reference}` : `secret-unresolved:${reference}` }); // KER-17/D11-R1: the refusal kind is kept
   const resolve = async (reference: string): Promise<string | null> => {
-    const resolved = await secret(reference).catch(() => undefined);
+    const resolved = await secret(reference).catch((error: unknown) => { const code = String((error as { code?: unknown } | null)?.code); denied = /^(?:SECRET_GRANT_REQUIRED|DECK_DECLARATION_REQUIRED|SECRET_PROJECT_IDENTITY_REQUIRED|SECRET_PROJECT_MISSING)$/u.test(code) ? code : null; return undefined; });
     if (resolved === undefined || resolved === '') return null;
     secrets.push(resolved); return resolved;
   };
@@ -189,7 +189,7 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
       let text = expand(value);
       for (const reference of references) {
         const resolved = await resolve(reference);
-        if (resolved === null) return { ok: false, reason: `secret-unresolved:${reference}` };
+        if (resolved === null) return unresolved(reference);
         text = text.replace(`$DECK:${reference}`, () => resolved);
       }
       if (!headerValue(text)) return { ok: false, reason: `header-invalid:${name}` };
@@ -207,7 +207,7 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
     if (reference === undefined) { env[name] = expand(value); continue; }
     if (scope === 'project') return { ok: false, reason: 'secret-reference-in-project-file' };
     const resolved = await resolve(reference);
-    if (resolved === null) return { ok: false, reason: `secret-unresolved:${reference}` };
+    if (resolved === null) return unresolved(reference);
     env[name] = resolved;
   }
   if (refused !== null) return { ok: false, reason: `variable-value-refused:${refused as string}` };

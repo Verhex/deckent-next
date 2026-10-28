@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { discoverProviderModels, discoveredProviderCatalog, providerConnectKind, providerDiscoveryChannel, PROVIDER_CONNECT_LIMITS,
-  ProviderModelListError, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
+  ProviderModelListError, listKindProviderWorkspaces, probeLocalToolCalls, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
 
 const local = providerConnectKind('local-openai')!, generic = providerConnectKind('openai-compatible')!;
 const key = 'sk-discovery-canary-41db79';
@@ -133,4 +133,30 @@ it('seeded model discovery completes registry-paged lists with one bound, a sele
   await expect(discoverProviderModels(kind, null, key, { fetch: async () => { echoed++; return new Response(JSON.stringify({ data: [{ id: 'a' }], has_more: true, last_id: key })); } }))
     .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
   expect(echoed).toBe(1);
+});
+
+it('Astra R2 (alpha.56.1): a network failure keeps one display address (scheme, host, port, path) and never a query, userinfo or fragment', async () => {
+  const canary = 'reviewOpaqueCredential7fd91', down: ProviderProbeFetch = async () => { throw new TypeError('fetch failed'); };
+  const failure = async (work: Promise<unknown>) => { const error = await work.catch((caught: unknown) => caught) as ProviderModelListError;
+    expect(error).toBeInstanceOf(ProviderModelListError); expect(JSON.stringify({ ...error, address: error.address })).not.toContain(canary); return error.address; };
+  // A registry row whose list path carries a query secret (a test/Enterprise overlay); the shipped Anthropic row's `?limit=1` still gives a usable address.
+  expect(await failure(discoverProviderModels({ ...local, probe: { ...local.probe!, path: `/v1/models?k=${canary}#${canary}` } }, 'http://127.0.0.1:18080', null, { fetch: down })))
+    .toBe('http://127.0.0.1:18080/v1/models');
+  const anthropic = providerConnectKind('anthropic-api')!;
+  expect(await failure(discoverProviderModels(anthropic, null, key, { fetch: down }))).toBe('https://api.anthropic.com/v1/models');
+  // The workspace list: a path with userinfo never shows it.
+  const workspaces = { ...anthropic, connect: { ...anthropic.connect!, workspaceList: { ...anthropic.connect!.workspaceList!, path: `//review-user:${canary}@api.anthropic.com/v1/organizations/workspaces` } } };
+  expect(await failure(listKindProviderWorkspaces(workspaces, 'https://api.anthropic.com', key, { fetch: down }))).toBe('https://api.anthropic.com/v1/organizations/workspaces');
+});
+it('BeUser AYSE-16/M-04 (alpha.56.1): a keyless loopback server that accepts one tool call declares tool-calls; a refusal or remote endpoint declares none', async () => {
+  const sent: { url: string; init: RequestInit }[] = [];
+  const probe = (status: number): ProviderProbeFetch => async (url, init) => { sent.push({ url: String(url), init: init! }); return new Response('{}', { status }); };
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: probe(200) })).toBe(true);
+  expect(sent[0]).toMatchObject({ url: 'http://127.0.0.1:8000/v1/chat/completions', init: { method: 'POST', redirect: 'manual' } });
+  expect(JSON.parse(String(sent[0]!.init.body))).toMatchObject({ model: 'm', max_tokens: 1, tool_choice: 'auto', tools: [{ type: 'function' }] });
+  expect(new Headers(sent[0]!.init.headers).get('authorization')).toBeNull();
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: probe(400) })).toBe(false);
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: async () => { throw new Error('down'); } })).toBe(false);
+  expect(await probeLocalToolCalls(generic, 'https://llm.example/v1', 'm', { fetch: probe(200) })).toBe(false); expect(sent).toHaveLength(2);
+  expect(discoveredProviderCatalog(local, 'http://127.0.0.1:8000', 'm', true).providers[0]!.models[0]!.protocols[0]!.capabilities).toEqual([{ id: 'tool-calls', version: 1, state: 'supported' }]);
 });

@@ -1,15 +1,16 @@
-import { prepareRuntimeSocket } from '#adapters/core/local-runtime-socket/index.js';
+import { prepareRuntimeSocket, runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
 import { resolveProductLayout } from '#platform/index.js';
-import { chmod, mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, mkdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
 import { encodeServiceFrame, ServiceFrameDecoder } from '#adapters/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
+import { awaitRuntimeServiceRestart, runtimeMonotonicDeadline, RUNTIME_SERVICE_AUTOSTART_ENV } from '#engine/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
 
 const roots: string[] = [], peers: Server[] = [], sockets: Socket[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
@@ -72,6 +73,14 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] t
     .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
   expect(performance.now() - started).toBeLessThan(3_000);
   expect(launched).toBe(0);
+});
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] BeUser M-09: restart of a service that is not running starts it (one launch, marked automatic), never LOCAL_RUNTIME_UNAVAILABLE', async () => {
+  const f = await fixture({ serviceStartTimeoutMs: 1_000 });
+  const launches: Array<{ env: Record<string, string> }> = [];
+  await expect(restartConfiguredRuntimeService(f.project, f.options, async input => { launches.push(input); return { pid: 1 }; }, fileURLToPath(import.meta.url)))
+    .rejects.toMatchObject({ code: 'RUNTIME_AUTOSTART_FAILED' });
+  expect(launches).toHaveLength(1); expect(launches[0]!.env[RUNTIME_SERVICE_AUTOSTART_ENV]).toBe('1');
 });
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats a crashed host\'s stale socket (nothing listening) as no service and launches once', async () => {
@@ -140,5 +149,63 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] b
     expect(performance.now() - started).toBeLessThan(6_000);
     // With a stoppable descriptor the governed shutdown was sent; its unanswered outcome stays unknown, never a restart.
     expect(seen.includes('shutdownService')).toBe(answerDescribe);
+  }
+});
+
+// RESTART-HUNT option B (LAW-AUDIT-2 K1–K6, Jev ed1f54d8): describe keeps refusing an own empty directory whose only fault is the mode, but the
+// terminal autostart launches the ordinary start for exactly that state once (the start re-creates it 0700); any other unsafe state launches nothing.
+const SERVICE = { cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
+  cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
+  service: { inputMaxBytes: 4096, responseMaxBytes: 4096, maxConnections: 2, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 100, shutdownGraceMs: 100 } };
+async function modeOnlyParent(terminal: Record<string, unknown> = {}) {
+  const f = await fixture({ serviceStartTimeoutMs: 5_000, ...terminal }, SERVICE);
+  const parent = dirname(runtimeSocketLocation(resolveProductLayout({ projectRoot: f.project, root: f.data }))); roots.push(parent);
+  await mkdir(parent, { mode: 0o700 }); await chmod(parent, 0o755); // what an open-view bwrap mask leaves on the host
+  return { ...f, parent };
+}
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT: the autostart launches the start once for its own empty mode-only directory; the start heals it and only then connects', async () => {
+  const f = await modeOnlyParent();
+  await expect(prepareRuntimeSocket(resolveProductLayout({ projectRoot: f.project, root: f.data }), false)).rejects.toMatchObject({ reason: 'parent-mode' }); // K1
+  let launched = 0;
+  const ready = await ensureConfiguredRuntimeService(f.project, f.options, async () => {
+    launched++; services.push(await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, f.options)); return { pid: process.pid };
+  }, fileURLToPath(import.meta.url));
+  expect(ready).toMatchObject({ mode: 'started' }); expect(launched).toBe(1);
+  expect((await lstat(f.parent)).mode & 0o777).toBe(0o700);
+});
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT: a non-empty, linked or non-directory parent stays UNSAFE and launches nothing', async () => {
+  for (const spoil of [async (parent: string) => { await chmod(parent, 0o700); await writeFile(join(parent, 'keep'), 'x', { mode: 0o600 }); await chmod(parent, 0o755); },
+    async (parent: string) => { const other = `${parent}-target`; roots.push(other); await mkdir(other, { mode: 0o755 }); await rm(parent, { recursive: true }); await symlink(other, parent); },
+    async (parent: string) => { await rm(parent, { recursive: true }); await writeFile(parent, 'x', { mode: 0o600 }); }]) {
+    const f = await modeOnlyParent(); await spoil(f.parent);
+    let launched = 0;
+    await expect(ensureConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; }, fileURLToPath(import.meta.url)))
+      .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+    expect(launched).toBe(0);
+  }
+});
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] RESTART-HUNT TOCTOU: a state that changes after the decision ends typed (UNSAFE or RUNTIME_AUTOSTART_FAILED), never a connection', async () => {
+  const changed = await modeOnlyParent();
+  let launched = 0;
+  await expect(ensureConfiguredRuntimeService(changed.project, changed.options, async () => {
+    launched++; await chmod(changed.parent, 0o700); await writeFile(join(changed.parent, 'planted'), 'x', { mode: 0o600 }); await chmod(changed.parent, 0o755); return { pid: 1 };
+  }, fileURLToPath(import.meta.url))).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', params: { reason: 'parent-mode' } });
+  expect(launched).toBe(1);
+  // The launched start never heals it (it died): one launch, bounded by the deadline, typed.
+  const silent = await modeOnlyParent({ serviceStartTimeoutMs: 1_000 });
+  launched = 0;
+  await expect(ensureConfiguredRuntimeService(silent.project, silent.options, async () => { launched++; return { pid: 1 }; }, fileURLToPath(import.meta.url)))
+    .rejects.toMatchObject({ code: 'RUNTIME_AUTOSTART_FAILED' });
+  expect(launched).toBe(1);
+});
+it('RESTART-HUNT: the restart loop launches once only for the startable refusal; any other unsafe refusal throws without a launch', async () => {
+  const unsafe = ErrorRegistry.createError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { params: { reason: 'parent-mode' } });
+  const ready = { mode: 'started', instanceId: 'i', pid: 1, logPath: null, shutdownAvailable: true, build: null, configDigest: undefined, idleStopMs: null } as const;
+  for (const healable of [true, false]) {
+    let starts = 0;
+    const result = awaitRuntimeServiceRestart(runtimeMonotonicDeadline(1_000), { describe: async () => { throw unsafe; }, start: async () => { starts++; return ready; },
+      startable: async error => error === unsafe && healable, wait: async () => undefined, pollMs: 1 });
+    if (healable) await expect(result).resolves.toBe(ready); else await expect(result).rejects.toBe(unsafe);
+    expect(starts).toBe(healable ? 1 : 0);
   }
 });

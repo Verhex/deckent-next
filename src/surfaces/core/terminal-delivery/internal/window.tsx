@@ -51,7 +51,7 @@ interface Entry {
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
-  reattempt?: boolean; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
+  reattempt?: boolean; noTarget?: boolean; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -91,7 +91,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
       error => {
         const show = () => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); };
         // A refused preview that offers `r` (queue preparation on the current base) shows the re-attempt line first when that enqueue carries the intent.
-        if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) current.queue.reattempt().then(yes => { entry.reattempt = yes; show(); }, show); else show();
+        if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) Promise.all([current.queue.reattempt(), current.queue.hasTarget?.() ?? true]).then(([yes, target]) => { entry.reattempt = yes; entry.noTarget = !target; show(); }, show); else show();
       });
   }, [changed, summarize]);
   const open = useCallback((target: DeliveryTarget, opening: DeliveryOpening) => {
@@ -225,7 +225,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         // One key rule with the decision cards: only a single typed y says yes; Ctrl/Alt+y, pasted or coalesced keys leave it waiting.
         const stage = visible.stage, decision = decisionKey(text, key);
         if (stage.kind === 'queue-confirm') { if (decision !== null) stage.resolve(decision === 'yes'); return decision !== null; }
-        if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue) {
+        if (text === 'r' && !key.ctrl && !key.meta && ['queue', 'failed'].includes(stage.kind) && latest.current.port?.queue && !visible.noTarget) {
           if (visible.queue) refreshQueue(visible); else if (stage.kind === 'failed' && QUEUE_REPREPARE.has(stage.code ?? '')) prepareCurrent(visible);
           return true;
         }
@@ -298,7 +298,7 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
     case 'verify': return entry.preview && entry.verify?.runs && verifyOptions(entry.preview, entry.verify).length ? labels.verifyHints : labels.verifyNoneHints;
     case 'done': return labels.doneHints;
     // The re-prepare key is offered only where `r` acts (the same rule as the key handler); closing stays visible on every failure.
-    case 'failed': return labels.queue && queueAvailable && !entry.queue && QUEUE_REPREPARE.has(entry.stage.code ?? '')
+    case 'failed': return labels.queue && queueAvailable && !entry.queue && !entry.noTarget && QUEUE_REPREPARE.has(entry.stage.code ?? '')
       ? `${labels.queue.reprepare} · ${labels.failedHints}` : labels.failedHints;
     default: return '';
   }
@@ -360,7 +360,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
     const arg = shellWord, target = preview?.adoptionTargets[entry.selected];
     rows.push(line(preview && id ? fillTemplate(next, { scope: arg(id.scopeId), run: arg(id.runId), task: arg(id.taskId), attempt: arg(id.attemptId),
       generation: arg(String(id.generation)), layout: arg(id.layoutRevision), delivery: delivered ? arg(delivered.commandId) : '<delivery>',
-      target: target === undefined ? '<branch>' : arg(target) }) : next, { role: 'accent' }));
+      target: target === undefined ? '<branch>' : arg(target) }) : fillTemplate(next, { scope: arg(entry.target.scopeId), run: arg(entry.target.runId), task: arg(entry.target.taskId) }), { role: 'accent' }));
   }
   return rows;
 }

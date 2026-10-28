@@ -37,7 +37,7 @@
   "delivery.model.unavailable": "Model: bilinmiyor",
   "delivery.risk": "Risk durumu: {parts}",
   "delivery.risk.small": "küçük değişiklik",
-  "delivery.risk.other": "küçük değişiklik değil",
+  "delivery.risk.other": "küçük değişiklik sınıfında değil (dosyaların türüne göre, boyutuna göre değil)",
   "delivery.risk.protected": "korumalı hedef",
   "delivery.risk.size": "boyut {size}",
   "delivery.flag.acceptance-unverified": "kabul bağımsız doğrulanmadı",

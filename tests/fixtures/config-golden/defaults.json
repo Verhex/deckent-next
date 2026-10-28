@@ -42,6 +42,7 @@
       "requestMaxBytes": 131072,
       "tokenFramingAllowance": 1024
     },
+    "correctionRetries": 1,
     "maxCompletionTokens": null,
     "quotaWait": {
       "marginMs": 15000,

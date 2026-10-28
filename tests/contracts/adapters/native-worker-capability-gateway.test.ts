@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { get, request } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,14 +19,14 @@ vi.mock('node:fs/promises', async importOriginal => {
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
 const fetchBootstrap = (socketPath: string) => new Promise<Record<string, unknown>>((resolve, reject) => {
-  const req = get({ socketPath, path: '/bootstrap' }, response => { let body = ''; response.setEncoding('utf8'); response.on('data', part => { body += part; }); response.on('end', () => resolve(JSON.parse(body))); });
+  const req = get({ socketPath, path: '/bootstrap', headers: { authorization: readFileSync(join(dirname(socketPath), 'bootstrap.key'), 'utf8') } }, response => { let body = ''; response.setEncoding('utf8'); response.on('data', part => { body += part; }); response.on('end', () => resolve(JSON.parse(body))); });
   req.on('error', reject);
 });
 const ended = JSON.stringify({ schemaVersion: 1, sequence: 2, atMs: 2, kind: 'session.ended', outcome: 'success', turns: 1, durationMs: 1,
   apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0, models: ['fixture-model'] });
 const post = (socketPath: string, provider: string) => new Promise<void>((resolve, reject) => {
   const body = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider, model: 'fixture-model', cliVersion: null }) + '\n' + ended;
-  const req = request({ socketPath, path: '/events', method: 'POST', headers: { 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); });
+  const req = request({ socketPath, path: '/events', method: 'POST', headers: { authorization: readFileSync(join(dirname(socketPath), 'bootstrap.key'), 'utf8'), 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); });
   req.on('error', reject); req.end(body);
 });
 
@@ -79,7 +80,7 @@ it('keeps the first session start for the host verdict: a later start cannot rep
   const start = (sequence: number, model: string) => JSON.stringify({ schemaVersion: 1, sequence, atMs: sequence, kind: 'session.started', provider: 'codex', model, cliVersion: null });
   const body = [start(1, 'other-model'), start(2, 'fixture-model'), ended.replace('"sequence":2', '"sequence":3')].join('\n') + '\n';
   await new Promise<void>((resolve, reject) => {
-    const req = request({ socketPath: connection.descriptor.socketPath, path: '/events', method: 'POST', headers: { 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); });
+    const req = request({ socketPath: connection.descriptor.socketPath, path: '/events', method: 'POST', headers: { authorization: readFileSync(join(dirname(connection.descriptor.socketPath), 'bootstrap.key'), 'utf8'), 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); });
     req.on('error', reject); req.end(body);
   });
   expect(connection.modelVerification()).toMatchObject({ status: 'client-reported-mismatch', unexpected: ['other-model'], evidenceCapability: 'client-reported' });

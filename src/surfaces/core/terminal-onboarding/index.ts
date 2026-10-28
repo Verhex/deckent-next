@@ -1,6 +1,7 @@
 export type { FolderFacts, FirstTaskIntent, OnboardingSnapshot, OnboardingPort, OnboardingStep, OnboardingPresentation, OnboardingUi } from './internal/contract.js';
 export { intentCommand } from './internal/contract.js';
 export { FirstTaskRegistry, firstTaskIntent, type FirstTaskSuggestion } from './internal/first-tasks.js';
+export { firstTaskBody } from './internal/first-task.js';
 export { deferredOnboardingNotice, onboardingSteps, firstSignedInHost, createOnboardingSession } from './internal/session.js';
 /** Remain Ink-free until the actual attested rich-terminal mount. */
 export const loadOnboardingScreens = () => import('./internal/screens.js');

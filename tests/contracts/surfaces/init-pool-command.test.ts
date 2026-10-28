@@ -28,3 +28,14 @@ it.each(['en', 'tr'] as const)('renders %s pool/slots/next action and emits the 
     expect(JSON.parse(output)).toEqual(result); expect(calls.at(-1)).toEqual(['/fixture-project', 's', true]);
   }
 });
+it('BeUser re-walk: a fresh install without an admission pool names the missing fields and the managed first step, not the same command again', async () => {
+  for (const language of ['en', 'tr'] as const) {
+    let output = '';
+    const context = { root: '/fixture-project', stdout: { write(text: string) { output += text; } },
+      async installConfiguredExecutionPool(): Promise<InstallationPoolResult> { return { schemaVersion: 1, scopeId: 's', status: 'unavailable', reason: 'invalid-admission', configured: null }; } };
+    expect(await main(['init', 'pool', '--scope', 's', '--preview', '--lang', language], context)).toBe(0);
+    // AYSE-R2: the person reads the managed step (/setup); the exact commands come from the onboarding plan; the fields stay named for the CLI/AI.
+    for (const word of ['admission.poolId', 'executionSlots', 'inFlightSlots', '/setup', 'deckent init --phase onboarding --json']) expect(output).toContain(word);
+    expect(output).not.toContain('deckent init pool --scope s --preview');
+  }
+});

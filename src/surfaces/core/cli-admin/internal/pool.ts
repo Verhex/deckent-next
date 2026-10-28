@@ -129,6 +129,8 @@ export async function poolCommand(argv: readonly string[], context: AdminCommand
     return;
   }
   if (!context.applyPoolHold) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  // BeUser: with no pool there is nothing to hold or resume; say so (and the next step) before any card, never after the person confirmed.
+  if (interactive) await context.inspectPoolHold?.(root, { schemaVersion: 1, scopeId, ...(pool ? { poolId: pool } : {}) }, options).catch((error: { code?: unknown } | null) => { if (error?.code === 'RUN_POOL_REQUIRED') throw error; });
   let reason = values.get('--reason');
   if (interactive && action === 'hold' && !reason) {
     const presets: Readonly<Record<string, string>> = reasons(locale);

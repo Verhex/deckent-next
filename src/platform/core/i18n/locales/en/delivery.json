@@ -37,7 +37,7 @@
   "delivery.model.unavailable": "Model: unknown",
   "delivery.risk": "Risk: {parts}",
   "delivery.risk.small": "small change",
-  "delivery.risk.other": "not a small change",
+  "delivery.risk.other": "not in the small-change class (by the kind of files, not their size)",
   "delivery.risk.protected": "protected target",
   "delivery.risk.size": "size {size}",
   "delivery.flag.acceptance-unverified": "acceptance not independently verified",

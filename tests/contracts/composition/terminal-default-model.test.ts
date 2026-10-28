@@ -120,6 +120,25 @@ describe('terminal.defaultModel through the governed writer', () => {
   });
 });
 
+describe('BeUser M-08/AYSE-13: a default from another folder and the only connected model', () => {
+  it('a user default this project does not declare is skipped and named; with one declared model here that model is used', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'default-model-here-')); roots.push(root);
+    const home = join(root, 'global'), options = { env: { DECKENT_GLOBAL_HOME: home } };
+    const catalog = (ids: string[]) => ({ schemaVersion: 1, revision: 'c1', providers: [{ id: 'p', version: 1, models: ids.map(id => ({ id, version: 1, nativeId: `n-${id}`,
+      protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] })) }] });
+    await mkdir(join(root, '.deckent'), { recursive: true });
+    const globalPath = await findGlobalFile(home); await mkdir(join(globalPath, '..'), { recursive: true });
+    await writeFile(globalPath, JSON.stringify({ terminal: { defaultModel: ref('elsewhere') } }));
+    for (const [ids, expected] of [[[], { status: 'not-configured', reference: null }], [['here'], { status: 'ready', reference: ref('here'), source: 'connected' }],
+      [['here', 'there'], { status: 'not-configured', reference: null }], [['here', 'elsewhere'], { status: 'ready', reference: ref('elsewhere'), source: 'user-default' }]] as const) {
+      await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ provider_catalog: catalog([...ids]) })); clearConfigCache();
+      const plan = await describeTerminalChat(root, options);
+      expect(plan, ids.join()).toMatchObject(expected);
+      expect(plan.skippedDefault, ids.join()).toEqual(ids.includes('elsewhere' as never) ? undefined : ref('elsewhere'));
+    }
+  });
+});
+
 describe('a project model that shadows the user default (owner 2026-10-08, Jev 77898686)', () => {
   const catalog = { schemaVersion: 1, revision: 'c1', providers: [{ id: 'p', version: 1, models: ['team', 'mine'].map(id => ({ id, version: 1, nativeId: `n-${id}`,
     protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] })) }] };

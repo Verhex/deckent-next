@@ -1,3 +1,4 @@
 {
-  "maxFamilies": 64
+  "maxFamilies": 64,
+  "refusedFieldSchemaDepth": 32
 }

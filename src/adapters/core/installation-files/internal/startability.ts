@@ -2,11 +2,10 @@ import { readFile, lstat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { BUBBLEWRAP_BUNDLED, BUBBLEWRAP_BUNDLED_MAX_BYTES } from '#adapters/core/shell-sandbox-bwrap/index.js';
-import { LocalRuntimeSocketError, runtimeSocketLocation, prepareRuntimeSocket } from '#adapters/core/local-runtime-socket/index.js';
+import { LocalRuntimeSocketError, runtimeSocketLocation, runtimeSocketHealable, prepareRuntimeSocket } from '#adapters/core/local-runtime-socket/index.js';
 import { openSqliteLedgerReadOnly, requireLedgerVersion, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { ErrorRegistry, inspectProductFile, productResourcePath, resolveLocale, type ConfigLoadOptions, type loadConfig } from '#platform/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
-
 
 export interface InstallationStartability {
   readonly status: 'ready' | 'blocked'; readonly endpoint: string | null;
@@ -29,11 +28,12 @@ export async function inspectInstallationStartabilityFiles(config: Awaited<Retur
     const db = openSqliteLedgerReadOnly(path, config.storage.sqlite);
     try { requireLedgerVersion(db, CURRENT_LEDGER_VERSION); } finally { db.close(); }
   } catch (error) { add('DOCTOR_LEDGER_UNAVAILABLE', (error as { code?: string }).code ?? 'unreadable'); }
-  let endpoint: string | null = null;
+  let endpoint: string | null = null; // BeUser alpha.56.1: the own empty mode-only directory is no blocker (the start re-creates it); reported, never repaired here.
   try {
     endpoint = runtimeSocketLocation(config.productLayout);
     try { await prepareRuntimeSocket(config.productLayout, false); }
-    catch (error) { if (!(error instanceof LocalRuntimeSocketError) || error.code !== 'LOCAL_RUNTIME_UNAVAILABLE') throw error; }
+    catch (error) { if (error instanceof LocalRuntimeSocketError && error.reason === 'parent-mode' && await runtimeSocketHealable(config.productLayout)) add('DOCTOR_SOCKET_HEALABLE', '-');
+      else if (!(error instanceof LocalRuntimeSocketError) || error.code !== 'LOCAL_RUNTIME_UNAVAILABLE') throw error; }
   } catch (error) { add('DOCTOR_SOCKET_UNAVAILABLE', (error as { path?: string; code?: string }).path ?? (error as { code?: string }).code ?? 'unreadable'); }
   try {
     if (!process.getuid) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED');
@@ -45,5 +45,5 @@ export async function inspectInstallationStartabilityFiles(config: Awaited<Retur
     if (process.platform !== 'linux' || !expected || !stat.isFile() || stat.isSymbolicLink() || stat.size > BUBBLEWRAP_BUNDLED_MAX_BYTES
       || createHash('sha256').update(await readFile(path)).digest('hex') !== expected) throw new Error('digest/type/platform');
   } catch { add('DOCTOR_BUBBLEWRAP_NOT_STAGED', path); }
-  return Object.freeze({ status: checks.length ? 'blocked' : 'ready', endpoint, checks: Object.freeze(checks) });
+  return Object.freeze({ status: checks.some(check => check.code !== 'DOCTOR_SOCKET_HEALABLE') ? 'blocked' : 'ready', endpoint, checks: Object.freeze(checks) });
 }

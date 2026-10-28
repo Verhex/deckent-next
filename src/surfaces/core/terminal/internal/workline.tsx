@@ -7,12 +7,12 @@ import { runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, 
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
-  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
+  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, treeChangeLine, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
+import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
@@ -79,13 +79,14 @@ export interface WorklineLabels extends WorklineActionLabels {
   /** A decision's hint row before its keys count (terminal.decision.*); neutral marks without them. */
   readonly decisionArm?: DecisionArmLabels;
 }
-
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
-
 export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
+    readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
+    readonly dirty?: Readonly<{ check: () => Promise<boolean>; title: string; body: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => Promise<boolean>; readonly chatReady?: () => Promise<boolean>; readonly tree?: () => Promise<Readonly<{ state: string; files: ReadonlyMap<string, string> }>>;
+    readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; noModel: string; prompt: string; cancelled: string; changed: string; unchanged: string; unread: string; canSetup?: () => Promise<boolean> }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
@@ -113,7 +114,8 @@ export interface WorklineProps {
   /** Approval notification cadence override (tests); production uses max(pollMs, 10 s). */
   readonly approvalPollMs?: number;
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
-  readonly restartService?: () => Promise<string>;
+  readonly restartService?: () => Promise<string>; readonly restartNotes?: () => Promise<readonly string[]>; // D-01: e.g. a running image build the restart stops
+  readonly startService?: () => Promise<string>; readonly mcpGrants?: Readonly<{ keys: () => Promise<readonly Readonly<{ name: string; project: string }>[]>; given: (name: string) => string }>; readonly serviceLost?: (listener: (text: string) => void) => () => void; // BeUser M-09: starts the absent runtime service (the terminal's autostart, never a stop), returns the line; D-05: hears, once per absence, that it stopped under this terminal
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
   readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>;
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
@@ -177,19 +179,14 @@ export interface WorklineProps {
   /** T2: ask for terminal focus reports and ring BEL when work finishes or a card waits while the window is unfocused (`terminal.notify`). */
   readonly attention?: boolean;
 }
-
-
-
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
   const owner = useFocusOwner();
   return <Composer {...props} active={(props.active ?? true) && owner.composing} acceptsInput={() => owner.inputAllowed() && !elsewhere?.()} />;
 }
-
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
   return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'chat' as const, id: 'chat', role, text });
 }
-
 function useLedgerBuffer(historyLimit: number) {
   const [buffer, setBuffer] = useState<LedgerBuffer>(EMPTY_LEDGER);
   const held = useRef<WorkLedgerEntry[] | null>(null);
@@ -202,7 +199,6 @@ function useLedgerBuffer(historyLimit: number) {
   }, [buffer.pending.length]);
   return { buffer, push, reset, hold };
 }
-
 export function WorklineApp(props: WorklineProps) {
   const { labels, target, systemPrompt, historyMessages, completeTurn, errorText, ledger } = props;
   const palette = useWorklinePalette();
@@ -338,7 +334,6 @@ export function WorklineApp(props: WorklineProps) {
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
-
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
@@ -347,7 +342,7 @@ export function WorklineApp(props: WorklineProps) {
   useEffect(() => {
     const notices = opening.current;
     if (notices?.length) push(notices.map(item => notice(item.level, item.text)));
-  }, [push]);
+  }, [push]); useEffect(() => props.serviceLost?.(text => push([notice('error', text)])), [props.serviceLost, push]);
   useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     work.observeWorkers(workers);
@@ -358,6 +353,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
+  const serviceStarted = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -377,7 +373,7 @@ export function WorklineApp(props: WorklineProps) {
         const opened = openAssistantStream(startedAtMs, props.knownSecrets);
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
-        let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
+        let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [], noted = false;
         const turnIdentity = pinnedLabels.current.get(execution.input.context.sessionId)
           ?? (props.model && props.provider ? { model: props.model, provider: props.provider } : undefined);
         // Forward the session and reasoning choices with the composition's generated binding callback.
@@ -389,7 +385,7 @@ export function WorklineApp(props: WorklineProps) {
         const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => {
           setLive(null); return askGrantWindow(slot, position, question, cancel).finally(() => setLive({ step: opened, lead: true })); };
         for await (const delta of props.secretGrant ? secretGrantTurn(start, props.secretGrant, ask, signal, () => bound) : start()) {
-          if (delta.kind === 'text') answer += delta.text;
+          if (delta.kind === 'text') answer += delta.text; if (delta.kind === 'done' && delta.note) noted = true;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
             usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, { ...delta, identity: turnIdentity })); }
@@ -409,17 +405,21 @@ export function WorklineApp(props: WorklineProps) {
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
         history.current = next.length || base !== messages ? agentHistory(base[0]!, [...base, ...next]) : messages;
         push(await session.save(history.current));
+        if (props.secretGrant && props.mcpGrants && noted) for (const message of await offerMcpGrants(props.mcpGrants.keys, props.secretGrant, question => askGrantWindow(slot, position, question, signal), offeredGrants.current, props.mcpGrants.given)) push([notice('info', message)]);
       } else {
         const reply = await completeTurn(plainChatHistory(messages), signal);
         history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);
         push(await session.save(history.current));
         // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
         push(assistantLedgerEntries(renderCompleteReply(humanRecordText(reply, props.knownSecrets), startedAtMs, Date.now())));
-      }
+      } serviceStarted.current = false;
     } catch (error) {
-      history.current = messages;
-      push([notice('error', errorText(error))]);
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+      history.current = code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
+      if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
+        const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
+        if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
+      push([notice('error', errorText(error))]);
       if (props.spending && props.info && !signal.aborted && (code === 'PROVIDER_SPEND_EXHAUSTED' || code === 'PROVIDER_SPEND_FROZEN')) {
         try { await infoWindow.show(await props.spending(), props.info.labels, signal); }
         catch (failure) { push([notice('error', errorText(failure))]); }
@@ -430,9 +430,10 @@ export function WorklineApp(props: WorklineProps) {
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
-  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] }), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
+  const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
+  const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: bareSlash(text), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
@@ -451,10 +452,11 @@ export function WorklineApp(props: WorklineProps) {
       };
       const selectedIntent = onboarding.intent(execution.input.inputId), commandId = selectedIntent?.commandId ?? globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
         props.doPlan!.quotaWait ? observe : undefined, selectedIntent?.pending);
+      const dirty = props.doPlan.dirty && !selectedIntent?.pending && await props.doPlan.dirty.check().catch(() => false) ? props.doPlan.dirty : null; if (dirty &&  await windows.ask({ title: dirty.title, hints: dirty.prompt, body: () => [{ spans: [span(dirty.body)] }], bodyRows: 2, tree: { title: dirty.title, items: [{ id: 'continue', label: dirty.go }, { id: 'cancel', label: dirty.cancel }] } }) !== 'continue') { push([notice('info', dirty.cancelled)]); return true; } // BeUser M-32: the worker starts from the last commit
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
-        let result = await plan();
+        let result = await plan(); if (!isRunIntentResult(result) && result.proposal.status === 'rejected' && result.proposal.reason && ErrorRegistry.has(result.proposal.reason)) throw ErrorRegistry.createError(result.proposal.reason!, { ...(result.reasonParams ? { params: result.reasonParams } : {}) }); // BeUser M-07: no worker can run it → as a refused /do
         if (result.run) completion.register(result.run);
         setPlanning(false); onboarding.settled(execution.input.inputId);
         if (execution.signal.aborted) { push([systemSummaryEntry(props.doPlan.lines(result).join('\n'))]); return true; }
@@ -470,9 +472,17 @@ export function WorklineApp(props: WorklineProps) {
         await show(props.doPlan.lines(result));
         if (result.run && !execution.signal.aborted) await performRef.current('/tasks', [], execution);
       } catch (error) {
-        setPlanning(false);
-        if (!execution.signal.aborted) await show([errorText(error)]);
-        else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
+        setPlanning(false); setActiveDo(null); // a refused /do is no longer active work (BeUser M-02)
+        if (!execution.signal.aborted && props.doPlan.localFallback && props.doPlan.here && await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { // owner option A: K1 data, K4 card, K5 every time
+          onboarding.settled(execution.input.inputId); setDoRunning(false); workNote.current = { ...workNote.current, active: null }; const here = props.doPlan.here, tools = await props.panels?.ports.model?.toolsDeclared?.(sessionModel.pinned()).catch(() => null) ?? null;
+          const body = [errorText(error), here.effect, ...(tools === false && props.doPlan.localNoTools ? [props.doPlan.localNoTools] : [])], workers = await here.canSetup?.().catch(() => false) ?? false, chat = Boolean(sessionModel.pinned()) || (await props.doPlan.chatReady?.().catch(() => true) ?? true); // DR3-01
+          const answer = await windows.ask({ title: here.title, hints: here.prompt, body: () => body.map(text => ({ spans: [span(text)] })), card: true, tree: { title: here.title, items: [{ id: 'run', label: here.run, ...(chat ? {} : { blocked: { reason: here.noModel } }) }, { id: 'setup', label: here.setup, ...(workers && props.onboarding ? {} : { blocked: { reason: here.noWorkers } }) }, { id: 'cancel', label: here.cancel }] } });
+          if (answer === 'setup' && !execution.signal.aborted) { await onboarding.open(execution.signal, 'workers'); return true; } else if (answer !== 'run' || execution.signal.aborted) { push([notice('info', here.cancelled)]); return true; } // /setup worker steps; Esc = Cancel: nothing runs
+          if (!await props.doPlan.offerHere?.((error as { code?: unknown })?.code)) { push([notice('info', here.cancelled)]); return true; }
+          push([notice('info', props.doPlan.localFallback)]); const before = await props.doPlan.tree?.().catch(() => null) ?? null; // K5: partial folder observations, not attributed effects
+          await runTurn(slash.args.trim(), mentioned, execution).finally(async () => push([notice('info', treeChangeLine(before, before?.state === 'unknown' ? null : await props.doPlan!.tree?.().catch(() => null) ?? null, here))])); return true;
+        }
+        if (!execution.signal.aborted) await show([errorText(error)]); else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }
       finally { setPlanning(false); setPlanWait(null); setDoRunning(false); setActiveDo(null); }
       return true;
@@ -586,7 +596,7 @@ export function WorklineApp(props: WorklineProps) {
         // TS-WINDOW: a restart interrupts the service's running work, so it asks first (y; n, Enter and Esc keep it running).
         const window = labels.work?.window;
         if (!window) { push([notice('error', labels.serviceRestartUnavailable)]); return true; }
-        const answer = await panel.pick(execution, { kind: 'window', title: window.restartTitle, body: [window.restartDetail], hints: window.restartPrompt, confirm: true }, ['allow', 'deny']);
+        const answer = await panel.pick(execution, { kind: 'window', title: window.restartTitle, body: [window.restartDetail, ...await props.restartNotes?.().catch(() => []) ?? []], hints: window.restartPrompt, confirm: true }, ['allow', 'deny']);
         if (execution.signal.aborted || answer === null) return true;
         push([notice('info', answer === 'allow' ? await props.restartService!() : window.restartKept)]);
       }
@@ -692,7 +702,7 @@ export function WorklineApp(props: WorklineProps) {
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-    busy={busy} historyText={bareSlash} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+    busy={busy} historyText={bareSlash} remember={remember} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
     onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;

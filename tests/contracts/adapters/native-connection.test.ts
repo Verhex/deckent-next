@@ -1,5 +1,5 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat, symlink } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { get } from 'node:http';
 import { connect, createServer } from 'node:net';
@@ -24,9 +24,9 @@ async function gateway(root: string, preflight?: Preflight, promptDelivery?: Del
     ...(promptDelivery ? { promptDelivery } : {}) }, directory: root, credential: credential(), deadlineMs: 20000 });
   closes.push(connection.close); return connection;
 }
-function bootstrap(socketPath: string) {
+function bootstrap(socketPath: string, capability?: string) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const request = get({ socketPath, path: '/bootstrap' }, response => { let body = ''; response.on('data', p => body += p); response.on('end', () => resolve({ status: response.statusCode!, body })); });
+    const request = get({ socketPath, path: '/bootstrap', headers: capability ? { authorization: capability } : {} }, response => { let body = ''; response.on('data', p => body += p); response.on('end', () => resolve({ status: response.statusCode!, body })); });
     request.on('error', reject);
   });
 }
@@ -48,11 +48,25 @@ it.skipIf(process.platform === 'win32')('requires POSIX private native credentia
   await expect(readLocalNativeCredential('codex', { HOME: root, USERPROFILE: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — delivers auth once over the private socket and closes capability on revocation', async () => {
-  const connection = await gateway(await fixture()); const first = await bootstrap(connection.descriptor.socketPath);
+  const connection = await gateway(await fixture());
+  expect(connection.descriptor.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
+  expect(dirname(connection.descriptor.capabilityPath)).toBe(dirname(connection.descriptor.socketPath));
+  expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
+  expect(connection.statistics().bootstrapReads).toBe(0);
+  const first = await bootstrap(connection.descriptor.socketPath, await readFile(connection.descriptor.capabilityPath, 'utf8'));
   expect(first.status).toBe(200); expect(first.body).not.toContain('never-forward');
   expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
   expect(JSON.stringify(connection.descriptor)).not.toContain('synthetic');
   await connection.close(); await expect(bootstrap(connection.descriptor.socketPath)).rejects.toThrow();
+});
+// BeUser D-05: a worker's gateway under a project whose `.deckent/workspaces` path is too long for sun_path (104 bytes) still opens, in a private
+// 0700 directory under /tmp removed on close; before the fix the first run failed NATIVE_CONNECTION_UNAVAILABLE (the M-01 class, worker side).
+it.skipIf(process.platform === 'win32')('NEGATIVE: a long workspace directory still opens a private worker gateway socket and removes it on close', async () => {
+  const deep = join(await fixture(), 'a'.repeat(60), 'b'.repeat(40)); await mkdir(deep, { recursive: true, mode: 0o700 });
+  const connection = await gateway(deep), socketPath = connection.descriptor.socketPath;
+  expect(Buffer.byteLength(socketPath)).toBeLessThanOrEqual(103); expect(socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
+  expect((await stat(dirname(socketPath))).mode & 0o777).toBe(0o700); expect((await bootstrap(socketPath, await readFile(connection.descriptor.capabilityPath, 'utf8'))).status).toBe(200);
+  await connection.close(); await expect(stat(dirname(socketPath))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — rejects foreign destinations, arbitrary ports and private or non-IPv4 addresses', async () => {
   const connection = await gateway(await fixture());
@@ -94,8 +108,9 @@ it('checks a real TLS ClientHello, TCP/record fragmentation, wrong SNI, non-TLS 
   expect(inspectNativeClientHello(fragmented, 'chatgpt.com', 8192)).toBe('accepted');
 });
 describe.skipIf(!imageId)('real connected Docker confinement and custody', () => {
-  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight, promptDelivery?: Delivery) {
-    const root = await fixture(); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight, promptDelivery);
+  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight, promptDelivery?: Delivery, deep = false) {
+    // D-05: `deep` puts the installation under a path too long for sun_path, so the gateway socket the container binds lives under /tmp.
+    const root = deep ? join(await fixture(), 'a'.repeat(60), 'b'.repeat(40)) : await fixture(); await mkdir(root, { recursive: true, mode: 0o700 }); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight, promptDelivery);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!,
       uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1,
       tmpBytes: 67108864, deadlineMs, controlTimeoutMs: 10000, outputBytes: 65536, connection: connection.descriptor });
@@ -112,7 +127,8 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     const delivery = { ...body, sha256: hash(JSON.stringify(body)), argvSha256: hash(JSON.stringify(argv)) };
     const cliVersion = execFileSync('/usr/bin/docker', ['run', '--rm', '--network', 'none', '--entrypoint', 'node', imageId!, '--version'], { encoding: 'utf8', timeout: 10000 }).trim();
     const preflight = { schemaVersion: 1 as const, cliVersion, discovery: 'repository' as const, helpArgs: ['--help'], requiredFlags: ['--help'] };
-    const f = await worker(argv, 20000, preflight, delivery);
+    const f = await worker(argv, 20000, preflight, delivery, true);
+    expect(f.connection.descriptor.socketPath.startsWith(`/tmp/dk-ipc-${process.getuid?.()}/connection-`)).toBe(true);
     const result = await f.supervisor.execute(f.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
     expect(await readFile(join(f.request.workspace, 'received'), 'utf8')).toBe('private-core-görev-🧩|private-task');
@@ -138,6 +154,7 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     const result = await f.supervisor.execute(f.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 }); expect(result.stdout).not.toContain('synthetic-sensitive-output');
     expect(JSON.parse(await readFile(join(f.request.workspace, 'boundary.json'), 'utf8'))).toEqual({ confined: true });
+    expect(f.connection.statistics().bootstrapReads).toBe(1);
     expect(f.connection.statistics().rejected).toBe(1);
   });
   it('refuses a mismatched CLI version before executing a task or using provider egress', async () => {

@@ -11,6 +11,7 @@ import type { WorkerEvent } from '#domain/index.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const roots: string[] = []; const closes: (() => Promise<void>)[] = [];
+const capabilities = new Map<string, string>();
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, secret: 'claude-access' })).toString('base64url') + '.sig-claude-e2e';
 const credential = () => ({ claudeAiOauth: { accessToken: access, refreshToken: 'never-forward', expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } });
@@ -18,10 +19,15 @@ async function fixture() { const root = await mkdtemp(join(tmpdir(), 'dn-ev-'));
 async function gateway(root: string, received: WorkerEvent[][]) {
   const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'claude' }, directory: root, credential: credential(), deadlineMs: 20000,
     onEvents: events => { received.push([...events]); } });
-  closes.push(connection.close); return connection;
+  closes.push(connection.close);
+  // A real worker presents the per-attempt capability it receives through its private mount (RC-S1).
+  capabilities.set(connection.descriptor.socketPath, await readFile(connection.descriptor.capabilityPath, 'utf8'));
+  return connection;
 }
 const call = (socketPath: string, method: 'GET' | 'POST', path: string, body?: string, length?: number) => new Promise<number>((resolve, reject) => {
-  const req = (method === 'GET' ? get : request)({ socketPath, path, method, headers: body === undefined ? {} : { 'content-type': 'application/x-ndjson', 'content-length': length ?? Buffer.byteLength(body) } },
+  const authorization = capabilities.get(socketPath);
+  const headers = { ...(authorization ? { authorization } : {}), ...(body === undefined ? {} : { 'content-type': 'application/x-ndjson', 'content-length': length ?? Buffer.byteLength(body) }) };
+  const req = (method === 'GET' ? get : request)({ socketPath, path, method, headers },
     response => { response.resume(); response.on('end', () => resolve(response.statusCode!)); });
   req.on('error', reject); if (method === 'POST') req.end(body); else req.end();
 });
@@ -105,6 +111,7 @@ it('refuses a worker-forged model verdict and derives the host verdict from acce
     modelId: 'claude-sonnet-5-5', auxiliaryModelIds: ['claude-haiku-4-5-20251001'] } }, directory: root, credential: credential(), deadlineMs: 20000,
   onEvents: events => { received.push([...events]); } });
   closes.push(connection.close); const socket = connection.descriptor.socketPath;
+  capabilities.set(socket, await readFile(connection.descriptor.capabilityPath, 'utf8'));
   expect(await call(socket, 'GET', '/bootstrap')).toBe(200);
   expect(connection.modelVerification()).toBeNull();
   const started = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'claude', model: 'claude-sonnet-5-5', cliVersion: '2.1.285' });

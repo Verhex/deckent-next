@@ -170,3 +170,14 @@ describe('the grant-refused notice (en, tr)', () => {
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'POLICY_CHANGE_TOO_LARGE' }, 'en')).toContain('not allowed: POLICY_CHANGE_TOO_LARGE.');
   });
 });
+
+it('Astra D11-R1: each project-vault refusal renders its own cause and next step (EN/TR); only a missing grant suggests a grant', async () => {
+  const { renderMcpStartNotice: render } = await import('#composition/core/agent-turn/index.js');
+  const text = (code: string, locale: 'en' | 'tr') => render({ kind: 'secret-refused', name: 'docs', key: 'KEY', scope: 's', code }, locale);
+  for (const locale of ['en', 'tr'] as const) {
+    expect(text('SECRET_GRANT_REQUIRED', locale)).toContain('deckent secret grant KEY --scope s');
+    expect(text('SECRET_PROJECT_MISSING', locale)).toContain('deckent secret set KEY --project --scope s'); expect(text('SECRET_PROJECT_MISSING', locale)).not.toContain('secret grant');
+    expect(text('DECK_DECLARATION_REQUIRED', locale)).toContain('KEY=project'); expect(text('DECK_DECLARATION_REQUIRED', locale)).not.toContain('secret grant');
+    expect(text('SECRET_PROJECT_IDENTITY_REQUIRED', locale)).toContain('deckent init'); expect(text('SECRET_PROJECT_IDENTITY_REQUIRED', locale)).not.toContain('secret grant');
+  }
+});

@@ -9,4 +9,4 @@ export { assessConfiguredModelInvocationDelivery, configuredModelInvocationDeliv
 export type { ModelInvocationDeliveryFinding, ModelInvocationDeliverySurface } from './internal/delivery-audit.js';
 export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';
 export { createCatalogTariffLookup } from './internal/catalog-tariff.js';
-export { prepareConfiguredSiwcContinuation, siwcLimitContinuation, configuredContinuationPin } from './internal/continuation.js';
+export { prepareConfiguredSiwcContinuation, siwcLimitContinuation, configuredContinuationPin, carryContinuationPin } from './internal/continuation.js';

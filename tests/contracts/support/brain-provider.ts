@@ -16,7 +16,7 @@ import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { fixtureDockerRegistry } from './execution-registry.js';
 import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
-export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean;
+export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string | ((body: string) => string); hold?: boolean;
   finishReason?: 'stop' | 'length'; maxOutputTokens?: number; responseMaxBytes?: number;
   thinking?: 'supported' | 'unsupported' | 'unknown' | 'wrong-version' | 'wrong-protocol';
   noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number;

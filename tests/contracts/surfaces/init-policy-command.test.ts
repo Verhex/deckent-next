@@ -120,3 +120,17 @@ it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with 
     expect(await main(argv, ctx)).toBe(2);
   }
 });
+it('alpha.56.1: a hand-built policy refusal repeats the mode the person typed (--apply [--expect] stays --apply) and adds --person', async () => {
+  const output: string[] = [], person = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' }, refused = { status: 'unavailable', reason: 'not-first-run', people: [person] };
+  const ctx = context({ async upgradePolicyTemplateInstallation() { return refused; }, async openPermissionModesInstallation() { return refused; },
+    stdin: { isTTY: true }, stdout: { isTTY: true, write(value: string) { output.push(value); return true; } }, agentEnvironment: [], env: { HOME: tmpdir(), TERM: 'xterm' } });
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--lang', 'en'], ctx)).toBe(0);
+  expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --person <issuer>/<subject>');
+  output.length = 0;
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--lang', 'tr'], ctx)).toBe(0);
+  expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person <issuer>/<subject>');
+  output.length = 0;
+  expect(await main(['init', 'policy', '--scope', 'live', '--modes', 'full-auto', '--apply', '--lang', 'en'], ctx)).toBe(0);
+  expect(output.join('')).toContain('deckent init policy --scope live --modes full-auto --apply --person <issuer>/<subject>');
+  expect(output.join('')).not.toContain('--preview');
+});

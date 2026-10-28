@@ -17,7 +17,7 @@ const ACTIONS: readonly Action[] = ['detail', 'approve', 'revoke', 'reconnect', 
 export function mcpPanelTree(list: McpPanelList, labels: McpPanelLabels): PickerTree {
   const servers: PickerNode[] = list.servers.map(server => ({ id: server.name, label: server.attention ? `! ${server.name}` : server.name,
     detail: [server.status, server.tools, server.realm, server.scope].filter(Boolean).join(' · '), keywords: [server.launch], childTitle: server.name,
-    children: ACTIONS.filter(action => server.trusted || (action !== 'revoke' && action !== 'reconnect')).map(action => ({ id: action, label: labels.actions[action] })) }));
+    children: [...(server.grantKey ? [{ id: 'grant', label: labels.actions.grant }] : []), ...ACTIONS.filter(action => server.trusted || (action !== 'revoke' && action !== 'reconnect')).map(action => ({ id: action, label: labels.actions[action] }))] }));
   return { title: labels.title, items: [{ id: ADD, label: labels.add, detail: labels.addDetail }, ...servers] };
 }
 
@@ -98,7 +98,8 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
     if (!name || !action) { back(at); return; }
     if (action === 'detail') { setView({ kind: 'busy' }); port.detail(name).then(lines => setView({ kind: 'detail', name, lines }), error => { onError(error); back(at); }); return; }
     if (action === 'remove') { setView({ kind: 'confirm', name }); return; }
-    void run(() => action === 'approve' ? port.approve(name, ask) : action === 'revoke' ? port.revoke(name) : port.reconnect(name));
+    const key = list.servers.find(server => server.name === name)?.grantKey;
+    void run(() => action === 'grant' && key && port.grantKey ? port.grantKey(name, key, ask) : action === 'approve' ? port.approve(name, ask) : action === 'revoke' ? port.revoke(name) : port.reconnect(name));
   };
   const body: WindowLine[] = list.servers.length ? [] : [{ spans: [span(words.none, { role: 'muted' })] }];
   return <PickerWindow title={[span(words.title)]} body={[...body, ...list.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} bodyRows={BODY_ROWS}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { clearConfigCache } from '#platform/index.js';
-import { assertTerminalChatReady } from '#composition/core/terminal-chat/index.js';
+import { assertTerminalChatReady, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 
 // T4 MODEL-SWITCH (owner 2026-10-08, Jev a172b1ad; S19): `/model` pins a model for this session; the next turn carries the exact reference (protocol
@@ -45,7 +45,8 @@ describe.skipIf(process.platform !== 'linux')('session model pin through the run
     const path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8')) as { terminal: { chat: { reference?: unknown } } };
     delete config.terminal.chat.reference;
     await writeFile(path, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
-    await expect(assertTerminalChatReady(f.project, { env: f.env })).rejects.toMatchObject({ code: 'TERMINAL_CHAT_NOT_CONFIGURED' });
+    // BeUser AYSE-13: with no setting, the only model declared here is in effect (no file written); a pin still runs as itself.
+    expect(await describeTerminalChat(f.project, { env: f.env })).toMatchObject({ status: 'ready', source: 'connected' });
     await expect(assertTerminalChatReady(f.project, { env: f.env }, declared, 'scope')).resolves.toBeDefined();
     f.state.script = [{ content: 'Only pin.' }];
     expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-only-pin', messages: [{ role: 'user', content: 'hi' }], reference: declared },

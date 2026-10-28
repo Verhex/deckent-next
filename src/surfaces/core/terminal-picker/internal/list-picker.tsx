@@ -77,6 +77,8 @@ export function ListPicker(props: {
   readonly maxRows?: number;
   /** Inside a window that draws the title and the key hints (TERM-PANEL): no breadcrumb, no hint rows, one fixed height. Default false. */
   readonly embedded?: boolean;
+  /** False: PgUp/PgDn are not the list's (a card window scrolls its body with them, AYSE-R3-01/DR3-01). Default true. */
+  readonly pageKeys?: boolean;
 }): ReactNode {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
@@ -105,7 +107,7 @@ export function ListPicker(props: {
   useInput((input, key) => {
     if (closed.current || !acceptsInput()) return;
     const action = pickerActionOf(input, key, stateRef.current.stage);
-    if (!action) return;
+    if (!action || action.type === 'page' && latest.current.pageKeys === false) return;
     const before = stateRef.current, next = pickerReduce(latest.current.tree, before, action, { pageSize: pageRef.current });
     stateRef.current = next.state;
     setState(next.state);

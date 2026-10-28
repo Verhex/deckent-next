@@ -4,7 +4,7 @@ import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
 import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { policyPreviewText } from './policy-preview.js';
-import { parseModes, policyModesCommand } from './policy-modes.js';
+import { parseModes, policyModesCommand, typedMode } from './policy-modes.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -126,6 +126,7 @@ export async function initCommand(argv: readonly string[], context: Installation
         : value.status === 'created' ? t('cli.init.pool.created', params, locale)
         : value.status === 'current' ? t('cli.init.pool.current', params, locale)
         : value.status === 'conflict' ? t('cli.init.pool.conflict', params, locale)
+        : value.reason === 'invalid-admission' ? t('cli.init.pool.noAdmission', params, locale) // BeUser re-walk: the field and the managed first step
         : t('cli.init.pool.unavailable', params, locale);
     } });
     return;
@@ -153,7 +154,7 @@ export async function initCommand(argv: readonly string[], context: Installation
     if (policyUpgrade) {
       if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');
       const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply, expect, ...(person === undefined ? [] : [person]));
-      emit(result, { ...sinks, json, render: value => policyUpgradeText(value, scopeId!, locale) });
+      emit(result, { ...sinks, json, render: value => policyUpgradeText(value, scopeId!, locale, typedMode(policyApply, expect)) });
       return;
     }
     if (policyApply) {
@@ -188,7 +189,7 @@ export async function initCommand(argv: readonly string[], context: Installation
 }
 
 /** `init policy --upgrade` in the person's words: what happened, the exact next command, the rules added, and what is kept as it is. */
-function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>, scope: string, locale: Locale): string {
+function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>, scope: string, locale: Locale, typed: string): string {
   const revision = value.revision ?? '-', who = (item: Person) => terminalSafeText(`${item.issuer}/${item.subject}`), named = value.person ? who(value.person) : '-';
   // The next command repeats `--person` whenever it was given: without it the apply could be refused or name another person.
   const person = value.person ? ` --person ${named}` : '', handBuilt = value.basis === 'named-person';
@@ -201,7 +202,7 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
     : value.reason === 'service-identity-unbound' ? t('cli.init.policyUpgrade.serviceIdentityUnbound', { scope }, locale)
     : value.status === 'conflict' ? t('cli.init.policyUpgrade.conflict', { revision }, locale)
     : value.reason === 'not-owner' ? t('cli.init.policyUpgrade.notOwner', { scope }, locale)
-    : value.reason === 'not-first-run' ? t('cli.init.policyUpgrade.handBuilt', { scope, people }, locale)
+    : value.reason === 'not-first-run' ? t('cli.init.policyUpgrade.handBuilt', { scope, people, typed }, locale)
     : value.reason === 'person-not-named' ? t('cli.init.policyUpgrade.personNotNamed', { scope, person: named, people }, locale)
     : t('cli.init.policyUpgrade.unavailable', {}, locale);
   const rules = (value.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string; ids?: unknown } };

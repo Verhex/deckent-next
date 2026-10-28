@@ -55,6 +55,8 @@ export type ComposerKey =
   | { readonly type: 'submit' | 'newline' | 'tab' | 'escape' | 'interrupt' | 'eof' | 'search' | 'yank' | 'tick' | 'stash' | 'undo' | 'withdraw' | 'editor' }
   /** T3/T4: an entry the owner hands back (a withdrawn queued message, the editor's text) replaces the draft as one undo step. */
   | { readonly type: 'restore'; readonly entry: ComposerHistoryEntry }
+  /** AYSE-R3-02: a line sent for the person elsewhere (the onboarding first job) is recalled with Up like a typed one. */
+  | { readonly type: 'remember'; readonly entry: ComposerHistoryEntry }
   | { readonly type: 'move'; readonly to: ComposerMove }
   | { readonly type: 'delete'; readonly span: ComposerDelete }
   | { readonly type: 'mentions'; readonly start: number; readonly query: string; readonly items: readonly string[] }
@@ -294,6 +296,7 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
   if (key.type === 'interrupt') return interrupt(state, context);
   if (key.type === 'editor' && !context.editor) return reduceComposer(state, { type: 'escape' }, context);
   if (key.type === 'restore') return step(restore(state, key.entry));
+  if (key.type === 'remember') return step({ ...state, history: [...state.history, key.entry].slice(-COMPOSER_LIMITS.historyEntries) });
   if (state.search) return searchKey(state, key);
   if (state.shortcuts) {
     state = { ...state, shortcuts: false };

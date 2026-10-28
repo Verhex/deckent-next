@@ -10,6 +10,7 @@ import { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } from '#surfaces/
 import { admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 
 describe.skipIf(process.platform !== 'linux')('MCP authority through the actual configured applications and service', () => {
   it('refuses budget changes/unfreeze, activation and paid sends on v7/v8/v9; owner still revises; explicit scoped MCP grant works and is audited', async () => {
@@ -24,7 +25,8 @@ describe.skipIf(process.platform !== 'linux')('MCP authority through the actual 
       shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
     await writeFile(join(f.data, 'policy.json'), JSON.stringify(template.policy), { mode: 0o600 });
     await writeFile(join(f.data, 'bindings.json'), JSON.stringify(template.bindings), { mode: 0o600 });
-    await f.start(); const owner = f.client(true);
+    // S-05: the owner's budget change needs the service-held terminal witness, so the owner is a real PTY peer (as the permission-mode tests).
+    await f.start(); const owner = createTerminalRuntimeClient(f.project, { env: f.env });
     await owner.manageProviderSpend(scopeBudgetCreateCommand('scope', 25, 'cli', 'owner-create'));
     const current = await owner.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', current: true });
     const revise = scopeBudgetRevisionCommand(current, 30, true, 'cli', 'mcp-revise');

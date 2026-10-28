@@ -1,3 +1,4 @@
+import { displayAddress } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { z } from 'zod';
@@ -6,7 +7,8 @@ import { RuntimeLauncherError } from './launch.js';
 const diagnostic = z.object({ op: z.enum(['model-discovery', 'workspace-discovery', 'provider-probe']),
   code: z.enum(['MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'MODEL_CONNECT_DISCOVERY_INVALID', 'MODEL_CONNECT_DISCOVERY_LIMIT', 'PROVIDER_PROBE_REFUSED']),
   cause: z.enum(['no-credential', 'credential-rejected', 'access-denied', 'rate-limit', 'spend-limit', 'limit-reached', 'http-status',
-    'redirect', 'network', 'timeout', 'invalid-list', 'not-listable']), status: z.number().int().min(100).max(599).nullable() }).strip();
+    'redirect', 'network', 'timeout', 'invalid-list', 'not-listable']), status: z.number().int().min(100).max(599).nullable(), // alpha.56.1: the tried address, display form only
+  address: z.string().max(2048).transform(text => displayAddress(text)).optional().catch(undefined) }).strip();
 /** The existing service log, with the launcher's private/no-follow custody. Only a closed diagnostic projection is appended. */
 export async function appendRuntimeProviderDiagnostic(path: string, input: unknown): Promise<void> {
   const event = diagnostic.parse(input);

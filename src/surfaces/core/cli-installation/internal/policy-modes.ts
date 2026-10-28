@@ -34,7 +34,7 @@ export async function policyModesCommand(context: InstallationCommandContext, in
   const handler = context.openPermissionModesInstallation;
   if (!handler || (input.expect !== undefined && !input.apply)) throw ErrorRegistry.createError('CLI_USAGE');
   const { root, scopeId, locale } = input, call = { modes: input.modes, ...(input.person ? { person: input.person } : {}) };
-  const show = (view: PolicyModesView): void => { emit(view, { ...input.sinks, json: input.json, render: value => policyModesText(value, scopeId, input.modesText, locale) }); };
+  const show = (view: PolicyModesView): void => { emit(view, { ...input.sinks, json: input.json, render: value => policyModesText(value, scopeId, input.modesText, locale, typedMode(input.apply, input.expect)) }); };
   if (!input.apply) return show(await handler(root, scopeId, { ...call, apply: false }));
   // The y/N card is the person's confirmation: off an interactive terminal (a pipe, CI, an AI agent's shell even inside a pseudo-terminal) nothing
   // is asked and nothing is applied. The composition's witness refuses the same request again on its own.
@@ -64,12 +64,14 @@ function modeLines(view: PolicyModesView, locale: Locale): string[] {
     t('cli.init.policyModes.hardFloor', {}, locale)];
 }
 /** The result in the person's words: what happened, the exact next command, each mode's effective state, the rules that still allow a mode. */
-export function policyModesText(view: PolicyModesView, scope: string, modes: string, locale: Locale): string {
+/** alpha.56.1: the hand-built refusal repeats the mode the person typed (`--apply [--expect <rev>]` stays, never turned into `--preview`). */
+export const typedMode = (apply: boolean, expect?: string): string => (apply ? `--apply${expect === undefined ? '' : ` --expect ${terminalSafeText(expect)}`}` : '--preview');
+export function policyModesText(view: PolicyModesView, scope: string, modes: string, locale: Locale, typed = '--preview'): string {
   const named = view.person ? `${view.person.issuer}/${view.person.subject}` : '';
   const people = (view.people ?? []).map(item => `${item.issuer}/${item.subject}`).join(', ') || '-';
   const blocked = (view.modes ?? []).find(item => item.wanted && item.after !== 'allow');
   const params = { scope: terminalSafeText(scope), modes: terminalSafeText(modes), revision: terminalSafeText(view.revision ?? '-'), person: view.person ? ` --person ${terminalSafeText(named)}` : '',
-    who: whoText(view), people: terminalSafeText(people), mode: blocked?.mode ?? '-', rule: terminalSafeText(blocked?.blockedBy ?? '-') };
+    who: whoText(view), people: terminalSafeText(people), typed, mode: blocked?.mode ?? '-', rule: terminalSafeText(blocked?.blockedBy ?? '-') };
   const head = view.status === 'preview' ? t('cli.init.policyModes.preview', params, locale)
     : view.status === 'applied' ? t('cli.init.policyModes.applied', params, locale)
     : view.status === 'current' ? t('cli.init.policyModes.current', params, locale)

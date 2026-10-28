@@ -130,7 +130,7 @@ describe('pinned Workline terminal', () => {
   it('scrolls long /do result rows inside the focused window while input/status stay pinned', async () => {
     const pending = pendingBrainFixture();
     const view = mount({ doPlan: { planning: 'PLANNING', cancelHint: 'CANCEL', requestHint: 'REQUEST',
-      plan: async () => ({ ...pending, proposal: { ...pending.proposal, status: 'rejected', approval: null } }),
+      plan: async () => ({ ...pending, proposal: { ...pending.proposal, status: 'rejected', approval: null, reason: null } }), // M-07: a registered reason is a refusal
       lines: () => Array.from({ length: 100 }, (_, i) => `plan-line-${i + 1}`) } });
     await settle(80); view.stdin.write('/do plan\r'); await until(() => view.stdout.frame.includes('plan-line-1'), 'result window');
     assertPinned(view, 24, 80); expect(view.stdout.frame).toMatch(/rows 1–\d+ of 100/u);

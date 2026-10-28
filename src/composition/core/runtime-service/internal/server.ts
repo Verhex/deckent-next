@@ -37,7 +37,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onReconciliationError?: ConfiguredReconciliationRuntimeObserver['onError'];
   onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
   onModelCancellationError?: ConfiguredModelCancellationRuntimeObserver['onError'];
-  onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
+  onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>; /** RESTART-HUNT: the start re-created its own empty runtime-socket directory 0700. */ onRuntimeSocketHealed?(event: { readonly reason: 'parent-mode' }): void | Promise<void>;
   /** K6 = A: an automatically started service found itself idle for `afterMs` and begins its governed stop. */ onIdleShutdown?(event: { readonly afterMs: number }): void | Promise<void>;
   /** Close turns left by a stopped service as interrupted; report damaged rows without closing them. */ onAgentTurnsInterrupted?(result: { readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }): void | Promise<void>;
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */ onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
@@ -85,7 +85,7 @@ const closeAnchor = (anchor: LedgerAnchor) => { const db = anchor.db; delete anc
   /* Name every missing section: an absent config.json lacks both, and the catalog text interpolates `{missing}`. */ const missingCancellation = [...(config.cancellation ? [] : ['cancellation']), ...(config.cancellationRuntime ? [] : ['cancellationRuntime'])];
   if (missingCancellation.length) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: missingCancellation.join(', ') } });
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
-  const endpoint = await prepareRuntimeSocket(config.productLayout);
+  const endpoint = await prepareRuntimeSocket(config.productLayout, true, reason => { void Promise.resolve(observer.onRuntimeSocketHealed?.({ reason })).catch(() => undefined); });
   /* LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start. */ const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
   const anchor: LedgerAnchor = {};
   try { await assertNoUninstallHold(config.productLayout.root); return await startUnderCustody(projectRoot, observer, options, config, guard, ports, anchor); }

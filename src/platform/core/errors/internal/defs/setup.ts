@@ -5,7 +5,8 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_STAGE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_INVALID', p, l) }) },
   SETUP_STAGE_SHADOW: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_SHADOW', p, l) }) },
   SETUP_FAMILY_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_FAMILY_UNKNOWN', p, l) }) },
-  SETUP_OBSERVATION_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_OBSERVATION_INVALID', p, l) }) },
+  // The refused family and field (key path only) when known; a bare refusal keeps the generic sentence.
+  SETUP_OBSERVATION_INVALID: { category: 'usage', render: (p, l) => ({ message: p['family'] && p['field'] ? t('error.SETUP_OBSERVATION_INVALID.field', p, l) : t('error.SETUP_OBSERVATION_INVALID', p, l) }) },
   SETUP_ANSWER_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_ANSWER_INVALID', p, l) }) },
   // I-S4: `--yes` reached an eligible stage this build cannot apply (no apply owner wired yet); nothing was written.
   SETUP_APPLY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_APPLY_UNAVAILABLE', p, l) }) },

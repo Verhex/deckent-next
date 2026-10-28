@@ -623,6 +623,8 @@
   "agent.turn.outcome.tools": "{rounds} turda {calls} araç çağrısı çalıştırıldı; sonuçları yukarıda",
   "agent.turn.outcome.cancelled": "İptal edildi. {summary}.",
   "agent.turn.outcome.cancelledMidAnswer": "yanıt tamamlanmadan iptal edildi",
+  "agent.turn.outcome.serviceStopped": "Runtime servisi bu tur sırasında durdu (kapatıldı; siz iptal etmediniz). {summary}. Bir sonraki iletiniz servisi yeniden başlatır.",
+  "agent.turn.outcome.serviceStoppedMidAnswer": "runtime servisi yanıtın ortasında durdu",
   "agent.turn.outcome.mechanical": "Önceki iletiler model özeti olmadan kısaltıldı; modelin özeti okunamadı. İletiler kısa alıntılar olarak korunduğu için bazı ayrıntılar eksik olabilir. Hâlâ önemli olan bilgileri tekrar yazın veya yeni bir konuşma açın.",
   "agent.turn.outcome.limit": " ({tokens} token)",
   "agent.turn.outcome.truncatedCalls": "{count} araç çağrısı modelin çıktı sınırında{limit} kesildiği için çalıştırılmadı. Modelden daha küçük parçalar halinde yazması istendi.",

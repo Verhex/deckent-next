@@ -10,13 +10,11 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
 import { invokeConfiguredModelAs } from '#composition/core/model-invocation/index.js';
 import { holdConfiguredRunForNervous } from './lifecycle.js';
-
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 /** The Nervous stop steps whose execution ends in a slot release with proof: only their cases can be decided — released when the step ran, as
  * would-stop shadow input (alpha.56 G1, every other disposition) when it did not; the engine derives the basis from the sealed detection. */
 const RELEASING = new Set(['fence-attempt', 'stop-orphan']);
 const errorCode = (error: unknown, fallback: string) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : fallback; };
-
 /** The invocation id a claimed call recorded under `commandId` (null: nothing was claimed, nothing sent). */
 async function claimedInvocation(c: Context, path: string, scopeId: string, commandId: string) {
   const reader = await openSqliteModelInvocationReader(path, { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });

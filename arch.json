@@ -522,6 +522,7 @@
     "src/composition/core/runs": {
       "dependencies": [
         "src/engine/core/agent-catalog",
+        "src/engine/core/identity-profile",
         "src/composition/core/agent-catalog",
         "src/domain/core/run",
         "src/engine/core/handoff-observation",
@@ -1207,6 +1208,7 @@
     },
     "src/surfaces/core/terminal": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
@@ -1852,12 +1854,14 @@
         "src/composition/core/root",
         "src/adapters/core/mcp-import",
         "src/composition/core/approvals",
-        "src/composition/core/config",
+        "src/composition/core/terminal-chat",
         "src/adapters/core/provider-connect",
         "src/engine/core/workspaces",
         "src/platform/core/integrity",
         "src/engine/core/runtime",
-        "src/adapters/core/provider-siwc"
+        "src/adapters/core/provider-siwc",
+        "src/composition/core/secrets",
+        "src/composition/core/scoped-request"
       ],
       "plan": "SURFACES"
     },
@@ -1952,6 +1956,7 @@
     "src/adapters/core/provider-connect": {
       "dependencies": [
         "src/platform/core/validate",
+        "src/platform/core/common",
         "src/domain/core/model-invocation",
         "src/engine/core/agent-turn",
         "src/domain/core/provider-catalog",
@@ -2078,6 +2083,7 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
+        "src/platform/core/host",
         "src/domain/core/primitives",
         "src/domain/core/worker-event",
         "src/domain/core/model-invocation",
@@ -2416,7 +2422,8 @@
     },
     "src/adapters/core/runtime-launcher": {
       "dependencies": [
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -2618,6 +2625,7 @@
     },
     "src/adapters/core/shell-sandbox-bwrap": {
       "dependencies": [
+        "src/platform/core/host",
         "src/adapters/core/host-shell",
         "src/adapters/core/workspace-read",
         "src/domain/core/agent-tool",
@@ -2713,7 +2721,8 @@
         "src/engine/core/runtime",
         "src/engine/core/audit",
         "src/composition/core/scoped-request",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/adapters/core/mcp-client"
       ],
       "plan": "SECURITY"
     },

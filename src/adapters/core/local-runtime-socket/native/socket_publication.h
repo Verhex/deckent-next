@@ -29,8 +29,11 @@ struct SocketStagingDirectory {
     if (!mkdtemp(bytes.data())) return;
     path = bytes.data(); name = path.substr(path.find_last_of('/') + 1);
     fd = openat(parent_fd, name.c_str(), O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    ready = fd >= 0 && fstat(fd, &identity) == 0 && S_ISDIR(identity.st_mode)
-      && identity.st_uid == getuid() && (identity.st_mode & 07777) == 0700;
+    if (fd < 0 || fstat(fd, &identity) != 0 || !S_ISDIR(identity.st_mode) || identity.st_uid != getuid()) return;
+    // alpha.56.1 (Astra delta 3 R1): umask masks mkdtemp's 0700 (0177 gives 0600); set 0700 on the pinned inode via /proc/self/fd (O_PATH: no fchmod).
+    struct stat pinned{};
+    ready = chmod(("/proc/self/fd/" + std::to_string(fd)).c_str(), 0700) == 0 && fstat(fd, &pinned) == 0 && S_ISDIR(pinned.st_mode)
+      && pinned.st_dev == identity.st_dev && pinned.st_ino == identity.st_ino && pinned.st_uid == getuid() && (pinned.st_mode & 07777) == 0700;
   }
   ~SocketStagingDirectory() {
     struct stat current{};

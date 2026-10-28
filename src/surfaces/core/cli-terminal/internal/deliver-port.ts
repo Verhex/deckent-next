@@ -57,7 +57,6 @@ export function patchDiffs(changes: WorkspacePatch['changes'], render: (path: st
     return Object.freeze({ path: change.path, lines: Object.freeze(lines.slice(0, PORT.maxDiffLinesPerFile)), hidden: Math.max(0, lines.length - PORT.maxDiffLinesPerFile), unavailable: null });
   }));
 }
-
 /**
  * TESLIM-PENCERESI: the delivery window's port over the CLI's own handlers — inventory, patch preview, integration check and prepare, and
  * the trusted composition's verified-terminal delivery/adoption. Absent (no `/deliver`, no window) unless every handler is bound.
@@ -69,7 +68,7 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
   const describe = context.describeDeliverySummaries, summaries = async (requests: readonly DeliverySummaryRequest[]) =>
     describe ? await describe(root, requests, options).catch(() => requests.map(() => null)) : [];
   const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
-    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; },
+    async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; }, async hasTarget() { return Boolean((await loadConfig(root, options)).execution?.workTargets?.targets[0]); },
     async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
       const identity = await resolveLatestAttempt(inspectInventory, root, target.scopeId, target.runId, target.taskId, options), config = await loadConfig(root, options);
       const ref = config.execution?.workTargets?.targets[0]?.baseRef;

@@ -5,6 +5,7 @@ import { SETUP_PLAN_SCHEMA_VERSION, setupAnswersSchema, setupDecisionSchema, set
 import { CORE_STAGE_EVALUATORS, CORE_STAGE_TITLES } from './core-stages.js';
 import { SetupStageRegistry } from './registry.js';
 import { canonicalSetupJson } from './canonical.js';
+import { refusedSchemaField } from './refused-field.js';
 
 const freezeStage = (stage: SetupStage): SetupStage => Object.freeze(stage);
 /** Pure, deterministic setup plan: the same observation, answers and registry give the same stages and `planDigest`.
@@ -14,7 +15,7 @@ const freezeStage = (stage: SetupStage): SetupStage => Object.freeze(stage);
 export function planSetup(observation: SetupObservation, answers: SetupAnswers = { schemaVersion: SETUP_PLAN_SCHEMA_VERSION, values: {} },
   registry: SetupStageRegistry = new SetupStageRegistry(), options: Readonly<{ phase?: SetupPhase; attestedPerson?: boolean }> = {}): SetupPlan {
   const observed = setupObservationSchema.safeParse(observation);
-  if (!observed.success) throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID');
+  if (!observed.success) throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID', { params: { family: 'core', field: refusedSchemaField(observed.error, setupObservationSchema) } });
   const given = setupAnswersSchema.safeParse(answers);
   if (!given.success) throw ErrorRegistry.createError('SETUP_ANSWER_INVALID');
   const facts = observed.data, values = given.data.values, order = registry.order();
@@ -23,7 +24,7 @@ export function planSetup(observation: SetupObservation, answers: SetupAnswers =
   if (Object.keys(facts.families).some(namespace => !registry.family(namespace))) throw ErrorRegistry.createError('SETUP_FAMILY_UNKNOWN');
   const familyFacts = new Map(registry.list().map(family => {
     try { return [family.namespace, family.parseFacts(facts.families[family.namespace])] as const; }
-    catch { throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID', { params: { family: family.namespace } }); }
+    catch (error) { throw ErrorRegistry.createError('SETUP_OBSERVATION_INVALID', { params: { family: family.namespace, field: refusedSchemaField(error, family.factsSchema) } }); }
   }));
   const folderAnswer = identitySchema.safeParse(values['core:folder']);
   const scopeId = facts.folder.configuredScope ?? (folderAnswer.success ? folderAnswer.data : null);

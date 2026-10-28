@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useWindowSize } from 'ink';
 import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
+import { layoutWindowLines, Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { PickerWindow, QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
 import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import type { ScratchView } from '#domain/index.js';
 import type { SecretGrantQuestion, SlashCommand } from '#surfaces/core/terminal-kit/index.js';
@@ -41,6 +42,8 @@ export type SlashPickSpec = Readonly<{
   body?: (focused: string | null) => readonly WindowLine[]; bodyRows?: number; hints: string;
   /** A read-only window: no list, Esc, Enter or `q` close it. */
   info?: true;
+  /** A choice card (AYSE-R3-01): the whole body stays readable (its rows measured at this width), one title, one key-hint row (`hints`). */
+  card?: true;
 }>;
 
 /**
@@ -59,10 +62,12 @@ function SlashPickWindow({ spec: raw, labels, onAnswer }: { readonly spec: Slash
   const known = useHumanTextSecrets();
   const spec = useMemo(() => projectSlashPickSpec(raw, text => projectHumanPickerText(text, known).label), [raw, known]);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
-  const room = usePickerRoom(spec.bodyRows ?? 2);
+  const room = usePickerRoom(spec.bodyRows ?? 2), columns = useWindowSize().columns || 80;
   const shown = pickerView(spec.tree, state), focused = shown.rows[shown.pos]?.id ?? null;
   const answered = useRef(false);
   const answer = (id: string | null) => { if (answered.current) return; answered.current = true; onAnswer(id); };
+  if (spec.card) { const body = spec.body?.(null) ?? []; return <PickerWindow title={[span(spec.title)]} body={body} bodyRows={layoutWindowLines(body, Math.max(1, columns - 4)).length} tree={spec.tree} bodyPages
+    labels={labels.picker} listHints={spec.hints} position={labels.position} onResult={result => answer(result.kind === 'selected' ? result.id : null)} />; }
   if (spec.info) return <Window title={[span(spec.title)]} body={[...(spec.body?.(null) ?? [])]} hints={spec.hints} position={labels.position} onClose={() => answer(null)}
     onInput={(input, key) => { if (key.return || input === 'q') { answer(null); return true; } return false; }} />;
   return <Window title={[span(spec.title)]} {...(spec.status ? { status: [span(spec.status)] } : {})} body={[...(spec.body?.(focused) ?? [])]} hints={spec.hints}

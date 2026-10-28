@@ -3,7 +3,7 @@ import { SIWC_INFERENCE } from '#adapters/index.js';
 import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
-import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
+import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, probeLocalToolCalls, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -41,7 +41,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       defaults: registry.profileDefaults,
       async available(id, base) {
         const kind = kindOf(id)!;
-        if (kind.connect?.catalogOnly) return workerConnectionModelIds(await readProviderConnectSeed(kind.connect.seed!), effective as never);
+        if (kind.connect?.catalogOnly) { const seed = await readProviderConnectSeed(kind.connect.seed!), ids = workerConnectionModelIds(seed, effective as never); if (ids.length) return ids; throw ErrorRegistry.createError('MODEL_CONNECT_WORKER_IMAGE_REQUIRED', { params: { cli: seed.providers[0]?.channel.cli ?? kind.id } }); } // BeUser M-24: the image comes first
         if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc) { const ids = (await siwc.models()).map(row => row.slug); pulled.set(id, ids); return ids; }
         if (!kind.probe?.listsModels) return null;
         const ids = (await listConfiguredConnectionModels(projectRoot, String(scopeId), id, base, options, host)).map(row => row.nativeId);
@@ -63,7 +63,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       seed: readProviderConnectSeed,
       discover: async (id, base, nativeId) => {
         if (kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc && !pulled.has(id)) pulled.set(id, (await siwc.models()).map(row => row.slug));
-        return pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host);
+        return pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId, await probeLocalToolCalls(kindOf(id)!, base, nativeId, host.discoveryOptions)) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host);
       },
       adapter: (id, value) => kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc ? siwc.adapter(value.existing) : kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
       async workerActivate(reference, commandId) {

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CORE_SETUP_STAGES, SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, planSetup, setupObservationSchema, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
-import { MESSAGE_KEYS } from '#platform/index.js';
+import { ErrorRegistry, MESSAGE_KEYS } from '#platform/index.js';
 
 const base: SetupObservation = { schemaVersion: 2,
   environment: { platform: 'linux', node: 'supported' }, language: { configured: null, requested: null, system: 'tr' },
@@ -147,6 +147,11 @@ describe('I-S1 setup planner', () => {
     expect(await code(() => planSetup({ ...observe(), families: { erp: {} } }, answers({}), registry))).toBe('SETUP_FAMILY_UNKNOWN');
     expect(await code(() => planSetup({ ...observe(), families: { execution: { ready: 'yes' } } }, answers({}), registry))).toBe('SETUP_OBSERVATION_INVALID');
     expect(await code(() => planSetup({ ...observe(), runtime: { installed: true } } as SetupObservation))).toBe('SETUP_OBSERVATION_INVALID');
+    // FIX14: the refusal names the family and the refused key path (never its value), so the fail-open notice is actionable.
+    let refused: { params?: Record<string, unknown> } = {};
+    try { planSetup({ ...observe(), families: { execution: { ready: true, durationMs: 9347 } } }, answers({}), registry); } catch (error) { refused = error as typeof refused; }
+    expect(refused.params).toEqual({ family: 'execution', field: '<unknown-key>' });
+    expect(ErrorRegistry.get('SETUP_OBSERVATION_INVALID', 'en', refused.params as never)!.message).toBe('The setup observation is invalid: the execution facts refuse the field <unknown-key>.');
     expect(await code(() => planSetup(observe(), answers({ 'core:unknown': true })))).toBe('SETUP_ANSWER_INVALID');
     expect(await code(() => planSetup(observe(), answers({ 'core:profile': { id: 'acme:x', version: 1 } })))).toBe('SETUP_ANSWER_INVALID');
     expect(await code(() => planSetup(observe(), answers({ 'core:language': 'de' })))).toBe('SETUP_ANSWER_INVALID');
@@ -230,4 +235,20 @@ it('U3-1b: declared onboarding order passes only answered earlier stages to late
   expect(seen).toEqual(['chosen-cli']);
   planSetup(observe(), answers({ 'work:kind': { unvalidated: true } }), registry);
   expect(seen).toEqual(['chosen-cli', undefined]);
+});
+
+it('Astra R1 (alpha.56.1): a refused fact names only the schema\'s own keys and positions; an input key (unrecognized, record entry) never', () => {
+  // only the schema's own key names and positions are named; an input key (unrecognized or a record entry) never is.
+  const canary = 'reviewOpaqueCredential7fd91', fieldOf = (work: () => unknown) => { try { work(); } catch (error) { return (error as { params?: Record<string, unknown> }).params; } return null; };
+  const nested = new SetupStageRegistry([{ ...family('execution'), facts: z.object({ worker: z.object({ receipt: z.object({ imageId: z.string() }).strict().nullable(),
+    images: z.array(z.object({ id: z.string() }).strict()), records: z.record(z.number()) }).strict() }).strict() }]);
+  const facts = (worker: Record<string, unknown>) => ({ ...observe(), families: { execution: { worker: { receipt: { imageId: 'x' }, images: [], records: {}, ...worker } } } });
+  const cases = [[{ receipt: { imageId: 'x', [canary]: 1 } }, 'worker.receipt.<unknown-key>'], [{ receipt: { imageId: 'x', [canary]: 1, other: 2 } }, 'worker.receipt.<unknown-key>(2)'],
+    [{ records: { [canary]: 'invalid' } }, 'worker.records.<entry>'], [{ images: [{ id: 'a' }, { id: 7 }] }, 'worker.images.1.id'], [{ receipt: { imageId: 42 } }, 'worker.receipt.imageId']] as const;
+  for (const [worker, field] of cases) {
+    const params = fieldOf(() => planSetup(facts(worker) as SetupObservation, answers({}), nested));
+    expect(params).toEqual({ family: 'execution', field });
+    for (const locale of ['en', 'tr'] as const) expect(JSON.stringify([params, ErrorRegistry.get('SETUP_OBSERVATION_INVALID', locale, params as never)!.message])).not.toContain(canary);
+  }
+  expect(fieldOf(() => planSetup({ ...observe(), [canary]: true } as SetupObservation))).toEqual({ family: 'core', field: '<unknown-key>' });
 });

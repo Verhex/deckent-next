@@ -133,7 +133,7 @@ never sent to a model; it goes to a person. Isolation (alpha.56 D2, owner `invar
 The dispatch record declares this per Attempt: the Docker profile v3 records an isolation block (`network: none`, egress `none` or
 `provider-gateway` with the catalog provider; it must equal the block its options derive), and the proof is the create-time refusal:
 the supervisor starts a container only after the daemon reports that network mode (`SUPERVISOR_ISOLATION_MISMATCH` otherwise). Network
-scope only: unix sockets inside read-only binds are not checked. A lost Attempt whose record carries no block (written before alpha.56), an unreadable one
+scope only: unix sockets inside dependency read-only binds are not checked. The native worker bootstrap additionally requires its per-launch capability, delivered as a private read-only file mount (no key in argv, environment, profile or logs), before the one credential read; the supervisor verifies that capability mount with the socket and bootstrap. Long socket paths use the private IPC root hidden by every open shell sandbox, including sockets opened after spawn. A lost Attempt whose record carries no block (written before alpha.56), an unreadable one
 or a wider one is held for a person (`isolation-unproven`), never continued. A worker route to customer systems is new owner-admitted
 scope (a governed worker operation route that stamps the Attempt producer); a non-Docker adapter must record the same block when it lands.
 A circuit breaker counted from sealed decisions survives a restart, and a case already

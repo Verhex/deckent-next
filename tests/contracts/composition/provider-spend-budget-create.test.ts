@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { clearConfigCache } from '#platform/index.js';
-import { inspectRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
+import { inspectRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
+import type { ProviderSpendManagementCommand } from '#domain/index.js';
+import type { ConfigLoadOptions } from '#platform/index.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 import { scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
+
+// S-05 (2026-10-27): a budget change through the service needs the service-held terminal witness, so the person is a real PTY peer.
+const manageRuntimeProviderSpend = (project: string, command: ProviderSpendManagementCommand, options: ConfigLoadOptions) =>
+  createTerminalRuntimeClient(project, options).manageProviderSpend(command);
 
 // Stage 1 (owner 2026-10-08, Jev 459611ed): the scope's first budget through the governed spend command (`budget-create`), never hand-written
 // JSON. Real configured runtime service and ledger; the scripted local server stands in for the provider. The profile carries a non-zero v2
@@ -37,7 +44,7 @@ describe.skipIf(process.platform !== 'linux')('governed first budget (budget-cre
     const created = await manageRuntimeProviderSpend(f.project, scopeBudgetCreateCommand('scope', 25, 'cli', 'create-1'), f.options);
     expect(created.receipt).toMatchObject({ before: null, after: { budget: { budgetId: 'scope-budget', revision: 1, currency: 'USD', limitMinorUnits: 2500 },
       reservedMinorUnits: 0, budgetRevisionCommandId: 'create-1' } });
-    expect(scopeBudgetLine(created, 'en')).toBe('Budget created for scope scope: 25 USD (revision 1).');
+    expect(scopeBudgetLine(created, 'en')).toBe('Budget created for scope scope: 25 USD a month (revision 1).');
     // The same command id replays (no second account); a new create is refused with the revision as the next step.
     expect((await manageRuntimeProviderSpend(f.project, scopeBudgetCreateCommand('scope', 25, 'cli', 'create-1'), f.options)).replayed).toBe(true);
     await expect(manageRuntimeProviderSpend(f.project, scopeBudgetCreateCommand('scope', 50, 'cli', 'create-2'), f.options))
@@ -61,7 +68,7 @@ describe.skipIf(process.platform !== 'linux')('governed first budget (budget-cre
     expect(raised.receipt.after.budget).toMatchObject({ revision: 2, limitMinorUnits: 10_000 });
     const lowered = await manageRuntimeProviderSpend(f.project, scopeBudgetRevisionCommand(await current(), 5, false, 'terminal'), f.options);
     expect(lowered.receipt.after.budget).toMatchObject({ revision: 3, limitMinorUnits: 500 });
-    expect(scopeBudgetLine(lowered, 'tr')).toBe('scope kapsamının bütçesi değişti: 5 USD (revizyon 3).');
+    expect(scopeBudgetLine(lowered, 'tr')).toBe('scope kapsamının bütçesi değişti: ayda 5 USD (revizyon 3).');
     expect(await current()).toMatchObject({ budgetRevision: 3, checkpoint: { account: { budget: { limitMinorUnits: 500 } } } });
     expect(await f.client().chatTurn(ask('t-rev'), () => undefined)).toMatchObject({ answer: expect.any(String) });
     const reservation = f.rows('SELECT record FROM model_invocation_spend_reservations').map(row => JSON.parse(String(row['record'])) as { descriptor: { budgetRevision: number } });

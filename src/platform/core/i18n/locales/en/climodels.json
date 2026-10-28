@@ -167,6 +167,7 @@
   "climodels.models.card.activate": "Switch on {model}?",
   "climodels.models.card.deactivate": "Switch off {model}?",
   "climodels.models.card.connect": "Connect {model}?",
+  "climodels.models.card.connectAll": "Connect all available priced models?",
   "climodels.models.card.connectWhat": "Declares the model, writes the scope's invocation profile and activates it; each step on its governed path.",
   "climodels.models.card.where": "Scope {scope} · provider {provider}",
   "climodels.models.card.whereCatalog": "Scope {scope} · channel {channel}",
@@ -258,5 +259,7 @@
   "climodels.models.card.channelCascade": "Turn on this channel and its already-on models. Never-touched candidates (each must pass the tariff gate): {models}. Explicitly off models stay off.",
   "models.catalog.lifecycle.active": "available",
   "models.catalog.lifecycle.retired": "retired",
-  "models.catalog.lifecycle.deprecated": "deprecated"
+  "models.catalog.lifecycle.deprecated": "deprecated",
+  "climodels.budget.usdRange": "The amount is whole US dollars from {min} to {max}: a monthly limit for every API provider of the scope.",
+  "climodels.budget.command": "deckent models {action}"
 }
