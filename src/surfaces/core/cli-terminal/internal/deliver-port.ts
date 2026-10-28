@@ -57,7 +57,6 @@ export function patchDiffs(changes: WorkspacePatch['changes'], render: (path: st
     return Object.freeze({ path: change.path, lines: Object.freeze(lines.slice(0, PORT.maxDiffLinesPerFile)), hidden: Math.max(0, lines.length - PORT.maxDiffLinesPerFile), unavailable: null });
   }));
 }
-
 /**
  * TESLIM-PENCERESI: the delivery window's port over the CLI's own handlers — inventory, patch preview, integration check and prepare, and
  * the trusted composition's verified-terminal delivery/adoption. Absent (no `/deliver`, no window) unless every handler is bound.

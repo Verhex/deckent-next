@@ -137,7 +137,10 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     await writeFile(join(plain, 'a.txt'), 'a'); git(plain, 'add', '.'); git(plain, 'commit', '-q', '-m', 'first');
     const clone = await temp('clone'); await mkdir(join(clone, '.git'));
     const full = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, workTargets: [clone, plain, '/nonexistent/target'], ports: { selfSource: async () => false } });
-    expect(full).toMatchObject({ repository: 'present', commits: 'present', productSource: false, workTargets: { configured: 2, present: 1 } });
+    expect(full).toMatchObject({ repository: 'present', commits: 'present', changes: 'none', productSource: false, workTargets: { configured: 2, present: 1 } });
+    await writeFile(join(plain, 'a.txt'), 'changed'); // BeUser M-32: uncommitted work in the tree is observed (read-only `git status --porcelain`)
+    expect(await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } })).toMatchObject({ changes: 'present' });
+    git(plain, 'checkout', '--', 'a.txt');
     expect(coding(full, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.repository', params: { targets: 1 } } });
     const self = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => true } });
     expect(coding(self, 0)).toMatchObject({ state: 'done', reason: { code: 'setup.coding.productSource' } });

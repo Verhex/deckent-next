@@ -132,3 +132,13 @@ it('BeUser M-07: a plan rejected because no worker can run it shows its refusal 
   expect(asked).toEqual([]); expect(view.stdout.text).not.toContain('RUN HERE?');
 });
 
+it('BeUser M-32: with uncommitted changes and workers set up, /do asks first (Continue / Cancel, Esc = Cancel); Deckent commits nothing', async () => {
+  const plans: string[] = [];
+  const dirty = { check: async () => true, title: 'UNCOMMITTED', body: 'STARTS FROM LAST COMMIT', go: 'CONTINUE-ROW', cancel: 'CANCEL-ROW', prompt: 'choose', cancelled: 'NOT STARTED' };
+  const view = mountWorkline({ ...windowLabels, doPlan: { ...words, dirty, lines: () => ['PLANNED'], plan: async intent => { plans.push(intent); throw new DeckentError('MODEL_NOT_ACTIVATED', 'x'); } } }); mounted.push(view);
+  await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('UNCOMMITTED'), 'card');
+  expect(view.stdout.frame).toContain('STARTS FROM LAST COMMIT'); view.stdin.write('\u001b'); await until(() => view.stdout.text.includes('NOT STARTED'), 'cancelled');
+  expect(plans).toEqual([]);
+  view.stdin.write('/do Second\r'); await until(() => view.stdout.frame.includes('CONTINUE-ROW'), 'card again'); await settle(40); view.stdin.write('\r');
+  await until(() => plans.length === 1, 'planned'); expect(plans).toEqual(['Second']);
+});

@@ -554,3 +554,14 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const text = outcome.lines.map(line => line.text).join('\n');
   expect(text).toContain('deckent models login --connection claude-cli-subscription'); expect(outcome.stored).toBe(false);
 });
+
+it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models instead of "-"', async () => {
+  const { root, options } = await project({});
+  const codex = { ...connectHost('ok').kinds[2]!, id: 'codex-cli-subscription', available: true, secretName: null, keyRequired: false };
+  const models = (count: number) => Array.from({ length: count }, (_, index) => ({ modelId: `m${index}`, activation: { state: index < 7 ? 'active' : 'inactive', revision: 1 } }));
+  const view = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
+    inspectModelCatalog: async () => ({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: 'codex-cli-subscription', access: 'allowed', models: models(8) }] }) as never }, options, 'en', errorText).inspect();
+  expect(view.kinds[0]!.detail).toBe('7 model(s) connected');
+  const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
+  expect(none.kinds[0]!.detail).toBe('-');
+});

@@ -85,7 +85,7 @@ export interface WorklineProps {
   readonly onboarding?: OnboardingHandoff;
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
     readonly localFallback?: string; readonly localNoTools?: string; // owner option A (2026-10-28, LAW-AUDIT-DR2-01 K1-K8): run here only on "nothing set up", always behind the card
-    readonly offerHere?: (code: unknown) => boolean; readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; prompt: string; cancelled: string; canSetup?: () => Promise<boolean> }>;
+    readonly dirty?: Readonly<{ check: () => Promise<boolean>; title: string; body: string; go: string; cancel: string; prompt: string; cancelled: string }>; readonly offerHere?: (code: unknown) => boolean; readonly here?: Readonly<{ title: string; effect: string; run: string; setup: string; cancel: string; noWorkers: string; prompt: string; cancelled: string; canSetup?: () => Promise<boolean> }>;
     /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
     readonly billingSwitch: string;
     readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
@@ -333,7 +333,6 @@ export function WorklineApp(props: WorklineProps) {
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
-
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
@@ -451,6 +450,7 @@ export function WorklineApp(props: WorklineProps) {
       };
       const selectedIntent = onboarding.intent(execution.input.inputId), commandId = selectedIntent?.commandId ?? globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
         props.doPlan!.quotaWait ? observe : undefined, selectedIntent?.pending);
+      const dirty = props.doPlan.dirty && !selectedIntent?.pending && await props.doPlan.dirty.check().catch(() => false) ? props.doPlan.dirty : null; if (dirty &&  await windows.ask({ title: dirty.title, hints: dirty.prompt, body: () => [{ spans: [span(dirty.body)] }], bodyRows: 2, tree: { title: dirty.title, items: [{ id: 'continue', label: dirty.go }, { id: 'cancel', label: dirty.cancel }] } }) !== 'continue') { push([notice('info', dirty.cancelled)]); return true; } // BeUser M-32: the worker starts from the last commit
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {

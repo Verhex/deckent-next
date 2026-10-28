@@ -8,7 +8,6 @@ import { workerChannelText } from '#surfaces/core/work-labels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { providerDisplayName } from './provider-label.js';
-
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
 function kindLabel(kind: ProviderConnectKindView | undefined, id: string, locale: Locale): string {
   return kind ? (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[kind.labelKey] ?? id : id;
@@ -45,7 +44,6 @@ const credentialRefs = (config: Record<string, unknown>, scopeId: string): reado
     return value.scopeId === scopeId && typeof ref === 'string' ? [ref] : [];
   });
 };
-
 /**
  * Who can read a stored key, in the same words `doctor` uses for each Core backend (SECRET-AT-REST 1c); another backend (or one not read yet)
  * gets the general note, which the secret lane may replace (`tui.panel.provider.transparency`).
@@ -170,12 +168,13 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
         await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
-      const reading = await host.inspectInvocableModels?.(root, scopeId, options);
+      const reading = await host.inspectInvocableModels?.(root, scopeId, options), catalogView = await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null); // M-28 tail: a keyless CLI channel's count
       const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.map(async kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
         const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
-        const detail = !kind.available ? '' : keyName === null ? '-' : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
+        const active = catalogView?.channels.find(row => row.access === 'allowed' && row.channelId === (kind.catalogProviderId ?? kind.id)), on = active && active.access === 'allowed' ? active.models.filter(model => model.activation?.state === 'active').length : 0;
+        const detail = !kind.available ? '' : keyName === null ? (on ? t('tui.provider.state.models', { count: on }, locale) : '-') : !kind.keyRequired && (linked || names === null) ? (linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale)) : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale) // AYSE-R2-05: a keyless server never shows the key store
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
