@@ -216,8 +216,8 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
       if (trimmed === '/exit' || trimmed === '/quit') break;
       if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
       else if (trimmed === '/status') { emit(await status(), sinks); }
-      // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
-      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
+      else if (trimmed === '/help') { emit(t('terminal.session.help', {}, locale), sinks); } // KER-09: line mode's own commands, on stdout
+      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: t('terminal.session.unknown', { command: trimmed.split(/\s/u)[0]! }, locale) }, locale), { ...sinks, level: 'error' }); // local, never sent to the model
       else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
