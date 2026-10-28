@@ -77,7 +77,7 @@ any of them with `--dry-run` or `--json` (for example `deckent uninstall --all -
 
 - `--keep-data` (default): caches go and the running service stops; work records, settings and history stay. The folder is
   retired: the next `deckent` there asks once whether to continue with the earlier data.
-- `--keep-work`: also archives and deletes conversation data (history, logs, sessions, earlier backups); work records and
+- `--keep-work`: also archives and deletes conversation data (history, logs, sessions, crash reports, previews; earlier backups stay); work records and
   pending work stay. Offered when there is pending work.
 - `--all`: first a passphrase backup and an encrypted archive of every other file it deletes, both verified and kept in the
   person's private recovery folder outside every deleted folder; then the project's `.deckent`, `DECKENT.md` and the bridge line

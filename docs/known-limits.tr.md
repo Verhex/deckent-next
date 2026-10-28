@@ -636,23 +636,30 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   elle kaldırma adımını verir. macOS/Windows servis kaldırması elledir.
   *Yol:* planın adım talimatlarını, ardından yazdırdığı program komutunu izleyin;
   [AI kurulum rehberine](ai-install.tr.md#kaldırma) bakın.
-- **Her şeyi sil yalnız proje klasörü kurulumunda eksiksizdir.** Projenin kendi `.deckent` klasöründe `--all`, oradaki her Deckent
-  dosyasını, init'in yazdığı `DECKENT.md` ve köprü satırını ve bu klasörün paylaşılmayan kasa dilimini önce arşivler (şifreli,
-  yedek setinin yanında, doğrulanmış), sonra siler; Git'in izlediği, tanınmayan ve bağlantılı dosyalar kalır, klasörleri de kalır.
-  Veri kökü paylaşılan global ev olan kurulum alpha.56 davranışını korur: yalnız yedeklenmiş yetki dosyaları silinir. Önbellek
-  klasöründeki yabancı dosya, değiştirilmiş `DECKENT.md`, Git'in izlediği `CLAUDE.md`, bir deponun çalışma ağaçlarınca paylaşılan
-  kasa ve bu klasörün talimat güveni kaydı kalır. Yedek sınırlarını aşan arşiv hiçbir şey silinmeden reddedilir.
-  `deckent backup restore --set <path>` dosyaları yeniden var olanların üzerine yazmadan geri getirir; köprü satırı yeniden eklenmez.
-  *Yol:* listelenen dosyaları inceleyin; geri yüklemeden sonra köprüler için `deckent init` çalıştırın.
+- **Her şeyi sil yalnız proje klasörü kurulumunda eksiksizdir.** Projenin kendi `.deckent` klasöründe `--all`, adlarını Deckent
+  sahibinin yazdığı dosyaları önce arşivler (şifreli, ilk silmeden önce doğrulanmış), sonra siler. init'in yazdığı `DECKENT.md` ve
+  köprüyü de kaldırır: init'in baştan oluşturduğu dosya bütün olarak gider, aksi halde yalnız o satır gider ve diğer her bayt kalır.
+  Bu klasörün paylaşılmayan kasa dilimi (kendi dosyaları) ve talimat güveni deposundaki kayıtları da gider. Bir Deckent klasöründeki
+  başka her dosya ile Git'in izlediği, bağlantılı ya da değiştirilmiş dosyalar kalır ve listelenir (klasörleri de kalır). Veri kökü
+  paylaşılan global ev olan kurulum alpha.56 davranışını korur: yalnız yedeklenmiş yetki dosyaları silinir. Yapılandırılmış hiçbir
+  hedefin adlandırmadığı bir ref'e bağlı talimat güveni kayıtları kalır. İşi koru seçeneği önceki yedekleri yerinde bırakır.
+  `deckent backup restore --set <path>` dosyaları ve köprü satırını geri getirir. Başka içerikle yeniden var olan bir dosyanın
+  üzerine ya da bir bağlantı üzerinden asla yazmaz: böyle bir dosya korunur ve adıyla söylenir.
+  *Yol:* listelenen dosyaları inceleyin; korunan dosyayı kenara alıp aynı geri yüklemeyi yeniden çalıştırın.
 - **Force ve servis sınırlıdır.** `--force` kişinin kendi yetkisiyle işleri iptal eder, onayları reddeder ve kuyruktaki teslimleri
-  geri çeker (ret kapsamı adıyla söyler); sonucu bilinmeyen işlem kapatılmaz. Deckent'in kaydetmediği birim yalnız
-  `--disable-unit` ile ve bütün K4 koşulları sağlanırsa kapatılır; aksi halde komut yazdırılır. El yapımı başlatıcılar yalnız
-  `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur. Kaldırma `require-approval` politika kararını reddeder
-  (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez.
+  geri çeker. İşler ve onaylar karttan önce karara bağlanır; teslimin sahibi çağrı anında ve ilk olarak karar verir. Ret kapsamı
+  adıyla söyler; sonucu bilinmeyen işlem kapatılmaz. Deckent'in kaydetmediği birim yalnız `--disable-unit` ile, bütün K4 koşulları
+  sağlanırsa kapatılır. Bunun için etkinleştirme bağlantılarının kartın bağladıklarıyla tam aynı olması gerekir; yeniden başlayan
+  örnek yeni iş tutuyorsa birim asla kapatılmaz. Niyet ve sonuç makbuzları geri alma komutuyla birlikte kurtarma klasöründe kalır;
+  aksi halde komut yazdırılır. El yapımı başlatıcılar yalnız `~/.local/bin` ve `~/bin` içinde, bu klasörü adlandırıyorsa bulunur.
+  Kaldırma `require-approval` politika kararını reddeder (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez. Bir
+  yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.
-- **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur;
-  Git izleme bilgisi okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. Yarım son silme yalnız kalan baytlar ve silme yetkisi yeniden doğrulanınca sürer; yoksa
-  dosyalar kalır, yönetilen yedekten geri yükleme kullanılabilir. Bilinmeyen adım bilinmiyor kalır.
+- **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur; Git
+  izleme bilgisi okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. Yarım son silme yalnız kalan baytlar, Git
+  izlemesi, arşiv ve silme yetkisi yeniden doğrulanınca sürer; yoksa dosyalar kalır, yönetilen yedekten geri yükleme
+  kullanılabilir. Bilinmeyen adım bilinmiyor kalır. Kurtarma konumu size özel olmalı ve kaldırmanın değiştirdiği her klasörün
+  dışında bulunmalıdır; aksi halde hiçbir şey başlamaz.
   *Yol:* veriyi koruyan kaldırmayı seçin ya da bildirilen engeli çözün; tahmin edilen yolları silmeyin.
 
 ## Masaüstü ve diğer yüzeyler

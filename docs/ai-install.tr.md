@@ -77,7 +77,7 @@ Kişi gerçek terminalde `deckent uninstall` çalıştırır. Menü, her biri ke
 
 - `--keep-data` (varsayılan): önbellekler silinir ve çalışan servis durur; iş kayıtları, ayarlar ve geçmiş kalır. Klasör emekli
   edilir: oradaki bir sonraki `deckent`, önceki veriyle devam edilip edilmeyeceğini bir kez sorar.
-- `--keep-work`: konuşma verisini de (geçmiş, kayıtlar, oturumlar, önceki yedekler) arşivleyip siler; iş kayıtları ve bekleyen
+- `--keep-work`: konuşma verisini de (geçmiş, kayıtlar, oturumlar, çökme raporları, önizlemeler; önceki yedekler kalır) arşivleyip siler; iş kayıtları ve bekleyen
   işler kalır. Bekleyen iş varken sunulur.
 - `--all`: önce parolalı bir yedek ve sildiği diğer her dosyanın şifreli arşivi, ikisi de doğrulanmış ve silinen her klasörün
   dışındaki kişisel kurtarma klasöründe; ardından projenin `.deckent` klasörü, init'in yazdığı `DECKENT.md` ve köprü satırı
