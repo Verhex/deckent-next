@@ -1,5 +1,10 @@
 {
-  "shards": 16,
+  "shards": 20,
   "maxForks": 2,
-  "shardOneReservedMs": 75000
+  "shardOneReservedMs": 107000,
+  "durationDrift": {
+    "maxRatio": 2,
+    "minObservedMs": 5000,
+    "maxUnweightedFiles": 5
+  }
 }

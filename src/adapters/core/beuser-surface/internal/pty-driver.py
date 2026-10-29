@@ -154,12 +154,16 @@ def main():
         quiet_end = time.monotonic() + limits['quietMs'] / 1000
         while time.monotonic() < end and state == 'ready':
             reap()
-            if eof:
+            if eof and (not until_exit or status is not None):
                 break
             wait_end = end if until_exit or wait_full else min(end, quiet_end)
             remaining = wait_end - time.monotonic()
             if remaining <= 0:
                 break
+            if eof:
+                # PTY slave closed before the child became waitable: poll the exit within the same bound.
+                time.sleep(min(limits['quietMs'] / 1000, remaining, 0.005))
+                continue
             readable, _, _ = select.select([fd], [], [], remaining)
             if readable and receive_output():
                 quiet_end = time.monotonic() + limits['quietMs'] / 1000

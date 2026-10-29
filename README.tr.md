@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.57`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README geçerli sürümü anlatır: **ön sürüm `1.0.0-alpha.57`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -534,8 +534,9 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 ## Yol haritası
 
-Tarih sözü verilmez; sıra verilir. Alpha.56 çekirdek katmanları, kurtarma kartlarını ve imzalı Hub paket yönetimini;
-rehberli ilk kullanımı, ChatGPT ile sohbet girişini ve güvenli kaldırmayı içerir. Korunan katman anahtarları kapalı başlar;
+Tarih sözü verilmez; sıra verilir. Alpha.57 çekirdek katmanları, kurtarma kartlarını ve imzalı Hub paket yönetimini;
+rehberli ilk kullanımı, ChatGPT ile sohbet girişini, güvenli kaldırmayı ve kabulü henüz açık ilk BeUser yolculuk
+yürüyüşlerini içerir. Korunan katman anahtarları kapalı başlar;
 gerçek kullanım kanıtları ve ChatGPT planındaki Codex işçisinin etkinleştirilmesi beta öncesi kapılardır. Beta bu katmanları
 gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi yanında başlar.
 

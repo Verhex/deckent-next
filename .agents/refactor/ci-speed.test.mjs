@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { partitionTests, inventoryDigest, validateShards, SHARDS } from '../../scripts/ci-test-plan.mjs';
+import { partitionTests, inventoryDigest, validateShards, SHARDS, durationDrift, observedDurations } from '../../scripts/ci-test-plan.mjs';
+import { refreshedWeights } from '../../scripts/ci-test-weights.mjs';
 import { validateHostedChecks, REQUIRED_CHECKS } from '../../scripts/land-hosted-check.mjs';
 import { sealBuild, validateBuild } from '../../scripts/ci-build-artifact.mjs';
 import { writeBuildIdentity } from '../../scripts/build-identity.mjs';
@@ -32,6 +33,21 @@ test('shard 1 starts with its reserved native/host/smoke cost, so Vitest files m
   assert.equal(reserved[0].files.length, 0);
   assert.equal(reserved[0].durationMs, 2500);
   assert.deepEqual(reserved.flatMap(bin => bin.files).sort(), [...files].sort());
+});
+test('drift guard flags a file over the ratio and unweighted files over the allowance; refresh weights the whole inventory', () => {
+  const limits = { maxRatio: 2, minObservedMs: 5000, maxUnweightedFiles: 1 }, files = ['tests/a.test.ts', 'tests/b.test.ts', 'tests/c.test.ts', 'tests/d.test.ts', 'tests/e.test.ts'];
+  const receipts = [{ inventoryDigest: inventoryDigest(files), runId: '7', attempt: '1', sha: 'a'.repeat(40), node: '24', files: [
+    { file: files[0], durationMs: 9000.2 }, { file: files[1], durationMs: 4900 }, { file: files[2], durationMs: 20 }, { file: files[3], durationMs: 0 }] },
+  { inventoryDigest: inventoryDigest(files), runId: '7', attempt: '1', sha: 'a'.repeat(40), node: '26', files: [{ file: files[4], durationMs: 30 }] }];
+  const observed = observedDurations(receipts), current = { [files[0]]: 4000, [files[1]]: 1000 };
+  assert.deepEqual(observed, { [files[0]]: 9001, [files[1]]: 4900, [files[2]]: 20, [files[3]]: 0, [files[4]]: 30 });
+  // a: 9001 > 2 x 4000; b is 4.9x but under the floor; d ran no test, so it is not unweighted drift.
+  assert.deepEqual(durationDrift(files, observed, current, limits), { slow: [{ file: files[0], observedMs: 9001, weightMs: 4000 }],
+    unweighted: [files[2], files[4]], drifted: true });
+  const refreshed = refreshedWeights(receipts);
+  assert.deepEqual(refreshed.source.medianFallbackFiles, [files[3]]);
+  assert.equal(durationDrift(files, observed, refreshed.durationMs, limits).drifted, false);
+  assert.throws(() => refreshedWeights(receipts.slice(0, 1)), /complete inventory/);
 });
 test('aggregate accepts exact coverage and preserves actual skip counts', () => {
   const r = receipts(); r[0].files[0].counts.skipped = 1;

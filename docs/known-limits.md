@@ -9,12 +9,16 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.57 has landed (PRs #120 and #121) and is live. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
-## BeUser B1 integration candidate (unreleased alpha.57)
+## BeUser B1 journey walks (alpha.57)
 
-The source candidate binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. C7 assembled-package proof, independent review, hosted CI and owner acceptance are open.
+Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.
+
+- **Yes/no letters are not accepted everywhere in `deckent init`.** The first card shows the `y` key next to its yes answer and takes `y`; the guided setup window that follows shows no letter and silently ignores `y`. *Impact:* a person (or a BeUser persona) pressing `y` there sees nothing happen. *Workaround:* press Enter to choose the highlighted answer.
+- **A BeUser journey always starts in an empty realm.** The journey data names start states, but no code prepares them, so journeys that need an installed Deckent (uninstall, BeUser itself) stop at "Start setup?". *Impact:* those journeys report red without reaching the branch they test. *Workaround:* none yet; read such a red as "start state missing", not as a product verdict on that branch.
+- **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
 
 ## Platforms: tried and not tried
 
