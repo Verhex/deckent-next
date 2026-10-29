@@ -18,7 +18,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 - **Yes/no letters are not accepted everywhere in `deckent init`.** The first card shows the `y` key next to its yes answer and takes `y`; the guided setup window that follows shows no letter and silently ignores `y`. *Impact:* a person (or a BeUser persona) pressing `y` there sees nothing happen. *Workaround:* press Enter to choose the highlighted answer.
 - **A BeUser journey always starts in an empty realm.** The journey data names start states, but no code prepares them, so journeys that need an installed Deckent (uninstall, BeUser itself) stop at "Start setup?". *Impact:* those journeys report red without reaching the branch they test. *Workaround:* none yet; read such a red as "start state missing", not as a product verdict on that branch.
-- **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container (for example the Codex workspace sandbox) cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
+- **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
 
 ## Platforms: tried and not tried
 
