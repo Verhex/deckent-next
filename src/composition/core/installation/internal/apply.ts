@@ -3,9 +3,9 @@ import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, localPrincipalChannel, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
-import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
+import { assertAuthorityWitness, InstallationPublicationApplication, InstallationPublicationError, suppliedPolicyWithinTemplate, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
 import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
@@ -42,7 +42,7 @@ export async function configuredInstallationBinding(projectRoot: string) {
 /** Explicit local operator action. No model, worker, or supplied profile can grant consent. */
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); // Snapshot and validate before the lock or bootstrap directory.
-  const initial = await prepareSuppliedInstallation(projectRoot, supplied, operator); await preflightEvidence(initial, operator);
+  const initial = await prepareSuppliedInstallation(projectRoot, supplied, operator); await assertSuppliedAuthority(initial); await preflightEvidence(initial, operator);
   await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite(); // before the journal or any bootstrap directory
   return executeInstallation(projectRoot, operator, lockTimeout(initial), initial.material.authoredProfile);
 }
@@ -51,9 +51,15 @@ export async function resumeInstallation(projectRoot: string, input: Installatio
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); const recovery = retained(await observeBootstrapState(projectRoot));
   if (!recovery) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   const initial = await prepareSuppliedInstallation(projectRoot, recovery.material.authoredProfile, { allowShutdown: operator.allowShutdown }, recovery.material.configuration);
-  validateInstallationRecovery(recovery, initial); await preflightEvidence(initial, operator);
+  validateInstallationRecovery(recovery, initial); await assertSuppliedAuthority(initial); await preflightEvidence(initial, operator);
   await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite();
   return executeInstallation(projectRoot, operator, lockTimeout(initial));
+}
+/** H (owner 2026-10-29): a supplied policy beyond the unwitnessed first-run template (U4E) is an authority write like `init policy --modes|--upgrade
+ * --apply`: the SEC-1 witness (Core: this process's controlling terminal), never the MCP actor, before evidence or any write. The proposal digest binds
+ * this exact profile, so the journal-locked re-preparation publishes nothing else. */
+async function assertSuppliedAuthority(prepared: PreparedInstallation) {
+  if (!suppliedPolicyWithinTemplate(prepared.preview)) await assertAuthorityWitness('installationProfilePolicy', localPrincipalChannel(), { attest: () => attestLocalInteractiveTerminal() });
 }
 async function preflightEvidence(prepared: PreparedInstallation, operator: InstallationApplyChoices) {
   if ((await inspectPreparedInstallation(prepared, operator.dockerExecutable)).proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');

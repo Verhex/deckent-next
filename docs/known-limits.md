@@ -141,6 +141,19 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   script and AI tools can no longer make these changes, and there is no approval-request path for them yet. *Workaround:* run
   `deckent secret set NAME --main` (or `--project`; hidden prompt), `deckent secret store`, `deckent config set <key> <value>` or the
   terminal's `/provider`, `/config` and mode switch in your own interactive terminal.
+- **A fresh install sets up its own starting authority without a witness; changing it later needs one.** Headless
+  `deckent init --yes` (or `init policy --apply`) on a fresh project writes the product-fixed first-run policy and bindings, creates
+  the installation and project identities and switches the secret store to the encrypted store, with no person at a terminal. The
+  switch is decided by the template's own `first-run-secret-switch` rule, written by the same install a moment earlier: before it
+  there is no authority to protect, and the content is fixed by the product, not chosen by the caller. Profile and mode authority
+  stay pending until the person's first witnessed terminal open. Afterwards `deckent secret store` (the runtime store switch) is an
+  authority change and needs the terminal witness like the changes above. A supplied profile (`deckent init apply --profile`, or
+  `init resume`) is published without a witness only while every rule it carries stays inside what the template would give the
+  installing person; anything wider (edit or shell tools allowed without asking, grants to the MCP actor or to everyone) is refused
+  with `AUTHORITY_WITNESS_REQUIRED` off an interactive terminal, before any evidence step or write. *Impact:* whoever can run a first
+  install on a fresh project gets the template's starting authority (never more), and an agent can still run a template-bounded
+  supplied install unattended; this gate checks the terminal, not the AI-agent marker, the same as `init policy --upgrade --apply`.
+  *Workaround:* run first installs yourself; apply a wider supplied profile in your own interactive terminal.
 - **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
   peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
   and the Landlock realm cannot open a unix socket at all. A process your account runs outside a sandbox (a host-realm call

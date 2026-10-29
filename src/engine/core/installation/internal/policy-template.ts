@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { governedPolicyDigest, type AuthorityDocumentStore, type AuthorityRevision } from '#engine/core/policy/index.js';
-import { resolvePolicyBindings } from '#domain/index.js';
+import { delegationWithin, resolvePolicyBindings } from '#domain/index.js';
 import { bindSystemPolicyRows, planSystemPolicyRows, systemPolicyRowsPublicationEvent } from '#engine/core/system-policy-rows/index.js';
 import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, RECOVERY_ROLLOUT, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
@@ -10,7 +10,7 @@ import { uninstallOperationDescriptors } from './uninstall-plan.js';
 import environmentRegistry from './execution-environments.json' with { type: 'json' };
 import { NERVOUS_RULES_SEED, loadNervousRules } from '#engine/core/nervous/index.js';
 import { installerAuthorityChangeEvent } from './authority-audit.js';
-import type { AuditEvent } from '#domain/index.js';
+import type { AuditEvent, Policy } from '#domain/index.js';
 
 // Tool names + operation ids as data (engine may not import the adapters defining them); pinned against the real tool specs and
 // Core operation descriptors by tests/contracts/installation/first-run-template-catalog.test.ts. Product-fixed template content,
@@ -56,6 +56,13 @@ type ServiceIdentity = Readonly<{ scopeId: string; serviceId: string }>;
  * non-secret default derived from the scope. One rule for the fresh install and the exact upgrade. */
 export function firstRunServiceIdentity(scopeId: string, configured: ServiceIdentity | null): ServiceIdentity {
   return Object.freeze({ scopeId, serviceId: configured?.scopeId === scopeId ? configured.serviceId : firstRunServiceId(scopeId) });
+}
+/** H (owner 2026-10-29): a supplied profile's policy stays inside the unwitnessed first-run template (U4E) when each allow/require-approval rule, per named
+ * principal, lies inside that principal's template authority by the I2 delegation bound; deny/restrictions only narrow; `all`, v2 or unboundable is outside. */
+export function suppliedPolicyWithinTemplate(preview: { readonly scopeId: string; readonly principal: Person; readonly policy: Policy; readonly shutdown: { readonly serviceIdentity: ServiceIdentity | null } }): boolean {
+  const template = firstRunPolicyTemplate({ scopeId: preview.scopeId, principal: preview.principal, ...FIRST_RUN_TOOL_NAMES, serviceId: firstRunServiceIdentity(preview.scopeId, preview.shutdown.serviceIdentity).serviceId });
+  const baseline = resolvePolicyBindings(template.policy, template.bindings), within = (rule: Policy['grants'][number], principal: Person) => { try { return delegationWithin(baseline, principal, [rule]).ok; } catch { return false; } };
+  return preview.policy.schemaVersion === 1 && preview.policy.grants.every(rule => rule.effect === 'deny' || (rule.principals !== 'all' && rule.principals.every(principal => within(rule, principal))));
 }
 /** What the first-run installer did with `service.identity`: `written` (the audited config write, or the journaled first config), `planned` (preview),
  * `kept` (already configured for this scope), `other-scope` (configured for another scope: kept, never overwritten), `skipped` (the upgrade was

@@ -141,6 +141,19 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD --main` (ya da `--project`; gizli istem),
   `deckent secret store`, `deckent config set <anahtar> <değer>` ya da terminalin `/provider`, `/config` ve mod değiştirmesini kendi
   etkileşimli terminalinizde kullanın.
+- **Yeni kurulum kendi başlangıç yetkisini tanıksız kurar; sonradan değiştirmek tanık ister.** Yeni bir projede başsız
+  `deckent init --yes` (ya da `init policy --apply`), ürünün sabit ilk çalıştırma policy'sini ve bindings dosyasını yazar, kurulum
+  ve proje kimliklerini oluşturur ve sır deposunu şifreli depoya geçirir; terminalde bir kişi gerekmez. Geçişi, aynı kurulumun bir
+  an önce yazdığı şablonun kendi `first-run-secret-switch` kuralı karara bağlar: ondan önce korunacak bir yetki yoktur ve içerik
+  çağıran tarafından seçilmez, ürün tarafından sabittir. Profil ve mod yetkisi kişinin terminalde tanıklı ilk açılışına kadar
+  beklemede kalır. Sonrasında `deckent secret store` (çalışma zamanı depo geçişi) bir yetki değişikliğidir ve yukarıdaki
+  değişiklikler gibi terminal tanığı ister. Verilen bir profil (`deckent init apply --profile` ya da `init resume`) yalnız taşıdığı
+  her kural şablonun kuran kişiye vereceğinin içinde kaldığı sürece tanıksız yayımlanır; daha genişi (sormadan izin verilen düzenleme
+  ya da kabuk araçları, MCP aktörüne ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
+  yazmadan önce `AUTHORITY_WITNESS_REQUIRED` ile reddedilir. *Etki:* yeni bir projede ilk kurulumu çalıştırabilen kişi şablonun
+  başlangıç yetkisini alır (fazlasını değil) ve bir ajan şablonla sınırlı verilen bir kurulumu gözetimsiz çalıştırabilir; bu kapı
+  yapay zekâ ajanı işaretine değil terminale bakar, `init policy --upgrade --apply` ile aynı. *Geçici çözüm:* ilk kurulumları
+  kendiniz çalıştırın; daha geniş verilen bir profili kendi etkileşimli terminalinizde uygulayın.
 - **Runtime soketi sandbox'taki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** Runtime servisi kendi PID, mount ve
   user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü runtime soket dizinlerini gizler ve Landlock
   realm'i hiç unix soketi açamaz. Hesabınızın sandbox dışında çalıştırdığı bir süreç (tam erişimli bir turda onaylanan host
