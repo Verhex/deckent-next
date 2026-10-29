@@ -953,6 +953,7 @@
   "models.budget.revised": "{scope} kapsamının bütçesi değişti: ayda {usd} USD (revizyon {revision}).",
   "models.budget.unfrozen": "Aşım dondurması kaldırıldı.",
   "models.budget.replayed": "(zaten kayıtlı; hiçbir şey değişmedi)",
+  "models.budget.unchanged": "{scope} kapsamının bütçesi zaten ayda {usd} USD (revizyon {revision}); hiçbir şey değişmedi.",
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "{scope} kapsamının henüz harcama bütçesi yok. Oluşturun: deckent models create-budget --scope {scope} --usd <tutar> (ya da /model → Bütçe oluştur).",
   "agent.spend.budgetAbsent": "Bu kapsamda harcama bütçesi yok. /model → Bütçe oluştur.",
   "error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE": "Model listesi okunamadı: {cause}.",

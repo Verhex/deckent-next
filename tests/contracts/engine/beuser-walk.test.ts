@@ -3,9 +3,9 @@ import { expect, it, vi } from 'vitest';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProjection, evaluatePolicy, type AuditRecord } from '#domain/index.js';
 import { sha256, createHmacIntegrity, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
-import { BeuserContractError, BEUSER_ARRANGE_REGISTRY, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen, type BeuserArrangeStep } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, BEUSER_ARRANGE_REGISTRY, BEUSER_WALK_RULES, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen, type BeuserArrangeStep } from '#engine/core/beuser-contract/index.js';
 import { createBeuserTranscript } from '#engine/core/beuser-evidence/index.js';
-import { BeuserApplication, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
+import { BeuserApplication, BeuserController, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
   correctBeuserModelOutput, type BeuserWalkPorts, type BeuserArrangement } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
 import { sealApproval, verifyApproval } from '#engine/core/approval/index.js';
@@ -69,7 +69,7 @@ it('walks the actual approval-card Enter action and consumes harness readback, n
   expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed', filesystemProof: { schemaVersion: 1, source: 'daemon-attested' }, verdict: { outcome: 'GREEN' } });
   expect(h.ports.surface.press).toHaveBeenCalledWith(expect.anything(), 'Enter');
   expect(h.ports.surface.argv).not.toHaveBeenCalled();
-  expect(h.ports.models.walker).toHaveBeenCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false });
+  expect(h.ports.models.walker).toHaveBeenCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false, remainingSteps: 4, remainingWaitMs: 100 });
   expect(h.ports.evidence.readback).toHaveBeenCalledOnce();
 });
 
@@ -107,23 +107,31 @@ it('prompt-injected extra tools or verdict fields make the walk invalid instead 
 
 it('stops a same-screen/action loop and enforces persona wait and step patience before the next effect', async () => {
   // Walk17 S2: the same key on an unchanged screen stops on its second repeat (a first repeat may be a swallowed key); the walker sees its own
-  // last actions and that the screen did not change.
+  // last actions, that the screen did not change, and (walk18) the steps and wait patience it has left.
   const stuck = harness(), looped = vi.fn(async () => {});
   stuck.ports.surface.press = stuck.ports.surface.look; stuck.ports.stopped = looped;
   expect(await stuck.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'loop' });
-  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(3); expect(looped).toHaveBeenCalledOnce();
+  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(3); expect(looped).toHaveBeenCalledExactlyOnceWith(expect.anything(), { kind: 'press', key: 'Enter' }, 'loop');
   const press = { kind: 'press', key: 'Enter' };
-  expect(vi.mocked(stuck.ports.models.walker).mock.calls.map(call => call[3])).toEqual([{ recentActions: [], screenUnchanged: false },
-    { recentActions: [press], screenUnchanged: true }, { recentActions: [press, press], screenUnchanged: true }]);
-  // Looking is observation, never a loop: only the persona's patience ends it.
-  const loop = harness();
-  loop.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'look' } });
-  expect(await loop.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'bound' });
-  expect(loop.ports.surface.look).toHaveBeenCalledTimes(5);
+  expect(vi.mocked(stuck.ports.models.walker).mock.calls.map(call => call[3])).toEqual([{ recentActions: [], screenUnchanged: false, remainingSteps: 4, remainingWaitMs: 100 },
+    { recentActions: [press], screenUnchanged: true, remainingSteps: 3, remainingWaitMs: 100 }, { recentActions: [press, press], screenUnchanged: true, remainingSteps: 2, remainingWaitMs: 100 }]);
+  // Walk18: only observing an unchanged screen is stuck too (RED `observing`, threshold from the limits registry), never a silent patience end.
+  const loop = harness(), observed = vi.fn(async () => {});
+  loop.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'look' } }); loop.ports.stopped = observed;
+  expect(await loop.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'observing' });
+  expect(loop.ports.surface.look).toHaveBeenCalledTimes(BEUSER_WALK_RULES.observeStop); expect(observed).toHaveBeenCalledExactlyOnceWith(expect.anything(), { kind: 'look' }, 'observing');
   const wait = harness();
   wait.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms: 101 } });
   expect(await wait.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'bound' });
   expect(wait.ports.surface.wait).not.toHaveBeenCalled();
+  // Walk18 SELF: a budget cycle whose screens differ only by a revision number is a loop; a stepper changing one number per press is not.
+  const at = (text: string, sequence: number): BeuserScreen => ({ binding, sequence, text, digest: sha256(text) });
+  const walk = (texts: readonly string[], action: { kind: 'press'; key: string }) => { const controller = new BeuserController(context(), summary);
+    try { texts.forEach((text, index) => { const screen = at(text, index + 1); controller.action(screen, action); controller.acted(screen, action); }); return null; }
+    catch (error) { return error instanceof Error ? error.message : 'thrown'; } finally { controller.close(); } };
+  expect(walk(['Providers: budget 5 USD (revision 1)', 'Set 5 USD? (revision 1)', 'Providers: budget 5 USD (revision 2)', 'Set 5 USD? (revision 2)',
+    'Providers: budget 5 USD (revision 3)'], { kind: 'press', key: 'Enter' })).toBe('loop');
+  expect(walk(['1', '2', '3', '4', '5', '6'].map(usd => `Budget ${usd} USD`), { kind: 'press', key: 'ArrowRight' })).toBeNull();
 });
 
 it('cancellation reaches an in-flight model; destruction without absence proof quarantines and cannot retain GREEN', async () => {
@@ -394,9 +402,16 @@ it('corrects an invalid walker answer with typed feedback before executing the r
   vi.mocked(h.ports.decode).mockImplementationOnce(() => { throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID'); });
   expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed' });
   expect(h.ports.models.walker).toHaveBeenCalledTimes(2);
-  expect(h.ports.models.walker).toHaveBeenLastCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false }, 'BEUSER_MODEL_OUTPUT_INVALID');
+  expect(h.ports.models.walker).toHaveBeenLastCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false, remainingSteps: 3, remainingWaitMs: 100 }, 'BEUSER_MODEL_OUTPUT_INVALID');
   expect(h.ports.surface.press).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'Enter');
   expect(h.ports.surface.type).not.toHaveBeenCalled();
+  // Walk18: an action the surface refuses before any input (unknown key name, empty or control text) is a correction, never the walk's end.
+  const refused = harness();
+  vi.mocked(refused.ports.surface.press).mockRejectedValueOnce(new BeuserContractError('BEUSER_ACTION_INVALID'));
+  expect(await refused.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed' });
+  expect(refused.ports.surface.press).toHaveBeenCalledTimes(2);
+  expect(refused.ports.models.walker).toHaveBeenLastCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }),
+    { recentActions: [{ kind: 'press', key: 'Enter', refused: 'BEUSER_ACTION_INVALID' }], screenUnchanged: true, remainingSteps: 3, remainingWaitMs: 100 }, 'BEUSER_ACTION_INVALID');
 });
 it('exhausts existing persona patience on invalid output with no action and retains the typed failure through cleanup', async () => {
   const h = harness();
@@ -405,6 +420,11 @@ it('exhausts existing persona patience on invalid output with no action and reta
   expect(h.ports.models.walker).toHaveBeenCalledTimes(summary.patience.maxSteps);
   expect(h.ports.surface.press).not.toHaveBeenCalled();
   expect(h.ports.evidence.readback).not.toHaveBeenCalled();
+  // A walker that keeps choosing refused actions ends with that typed code; refusals never count toward a loop.
+  const refused = harness();
+  vi.mocked(refused.ports.surface.press).mockRejectedValue(new BeuserContractError('BEUSER_ACTION_INVALID'));
+  expect(await refused.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_ACTION_INVALID', cleanup: 'destroyed' });
+  expect(refused.ports.surface.press).toHaveBeenCalledTimes(summary.patience.maxSteps);
 });
 it('bounds evaluator format corrections by admitted calls and preserves cancellation and unrelated failures', async () => {
   const ctx = { ...context(), limits: { ...limits, maxCalls: 2 } }, call = vi.fn(async (error?: 'BEUSER_MODEL_OUTPUT_INVALID') => { expect(error).toBeOneOf([undefined, 'BEUSER_MODEL_OUTPUT_INVALID']); throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID'); });

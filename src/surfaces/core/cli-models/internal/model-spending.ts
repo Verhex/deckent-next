@@ -8,7 +8,7 @@ import { parseProviderSpendManagementCommand, type ProviderSpendManagementComman
 import type { ProviderSpendManagementResult, ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
-import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUsd } from './budget.js';
+import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUnchangedLine, scopeBudgetUsd } from './budget.js';
 
 export type ProviderSpendAccountInspectionHandler = (root: string, query: ProviderSpendAccountQuery,
   options: ConfigLoadOptions) => Promise<ProviderSpendAccountInspection>;
@@ -116,10 +116,10 @@ async function budgetCommand(args: Parsed, context: ModelCommandContext, locale:
   if (!context.manageProviderSpend || (args.action === 'revise-budget' && !context.inspectProviderSpendAccount)) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env, heal: false }, scopeId = args.scope!;
   // A malformed scope or command id is a usage error (the domain parser refuses it before anything is sent).
-  const built = (build: () => ProviderSpendManagementCommand) => { try { return build(); } catch (error) { if (error instanceof DeckentError) throw error; throw ErrorRegistry.createError('CLI_USAGE'); } };
-  const command = args.action === 'create-budget' ? built(() => scopeBudgetCreateCommand(scopeId, usd, 'cli', args.commandId))
-    : await context.inspectProviderSpendAccount!(root, { schemaVersion: 1, scopeId, current: true }, options)
-      .then(current => built(() => scopeBudgetRevisionCommand(current, usd, args.unfreeze === true, 'cli', args.commandId)));
+  const built = (build: () => ProviderSpendManagementCommand | null) => { try { return build(); } catch (error) { if (error instanceof DeckentError) throw error; throw ErrorRegistry.createError('CLI_USAGE'); } };
+  const current = args.action === 'create-budget' ? null : await context.inspectProviderSpendAccount!(root, { schemaVersion: 1, scopeId, current: true }, options);
+  const command = current ? built(() => scopeBudgetRevisionCommand(current, usd, args.unfreeze === true, 'cli', args.commandId)) : built(() => scopeBudgetCreateCommand(scopeId, usd, 'cli', args.commandId));
+  if (!command) { emit(scopeBudgetUnchangedLine(current!, locale), sinks); return; }
   const result = await context.manageProviderSpend(root, command, options);
   emit(result, { ...sinks, json: args.json, render: value => scopeBudgetLine(value, locale) });
 }

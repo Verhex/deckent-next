@@ -213,6 +213,20 @@ bounds, and retain the admitted deadline. There is no extra retry limit or model
 substitution. Invalid actions never reach the surface, and model assessments do
 not replace harness readback or the existing acceptance owner.
 
+The walker message (instructions revision 3, walk18 2026-10-29) also carries
+`remainingSteps` (decisions left within the persona's step patience, this one
+included), `remainingWaitMs` and `keys`, the contract key names (`BEUSER_KEYS`)
+a press may use besides one printable character. The surface resolves the
+spellings screens show (`Esc`, `PgUp`/`PgDn`, `Return`, `↑↓←→`, `Up`/`Down`/
+`Left`/`Right`) to those names through the same contract table. An action the
+surface refuses before any input is sent (an unknown key name, empty or control
+text) is `BEUSER_ACTION_INVALID` (EN/TR): the refusal is retained as an action row
+(kind, reason and a bounded key name; typed text withheld), the session stays
+open, and the walker is asked again with that code inside the same correction
+bound, seeing the refused action in its history. Repeated refusals end the walk
+with that typed code; refusals never count toward a loop. A transport or render
+failure stays `BEUSER_SURFACE_INVALID`, closes the surface and is never retried.
+
 ## Interrupted walk diagnostics
 
 The surface records every walker action before sending it, including look and bounded wait
@@ -222,11 +236,17 @@ Each redacted event is retained separately; the private terminal record's option
 walks whose acceptance evidence could not be finalized. Recorded supervision reads the same
 optional schema; older terminal records and reports remain readable.
 
-The same key or text on the same screen stops on its second repeat, before a third effect (walk17
-S2, 2026-10-29: a first repeat may be a key the product swallowed); `look` and `wait` are observation
-and never count, so a walker that only observes ends at its patience bound (unknown), not RED. Each
-walker call carries its own last three actions (typed text withheld) and whether its last action left
-the screen unchanged. A stop's friction event retains the blocked
+The stuck rules are registry data (`assets/beuser/limits.json` `walk`, registry revision
+`beuser-limits-2`) and stop before the effect. The `loopStop`th (3) identical key or text on one
+screen is a `loop` (walk17 S2, 2026-10-29: a first repeat may be a key the product swallowed): on
+the exact screen, or after a cycle through other screens back to a screen that differs only in its
+numbers (walk18: a budget change cycle bumped its revision each time). Screens are compared with
+digits masked in one place (`beuserSettledScreen`); consecutive presses on one such screen, as a
+number stepper does, are not a cycle. The `observeStop`th (4) consecutive `look`/`wait` on one
+digit-masked screen is `observing` (walk18: a walker that only observes is stuck, not a silent
+patience bound). Both are RED `persona-stuck` findings with their reason. Each walker call carries
+its own last three actions (typed text withheld, refused ones marked) and whether its last action
+left the screen unchanged. A stop's friction event retains the blocked
 proposal as metadata (typed plaintext omitted) and identifies its screen. The walk report's optional `findings`
 contains a named `persona-stuck` RED diagnostic for that branch/persona with the last redacted
 screen, its transcript reference/digest, controller validity and event artifact references.

@@ -17,8 +17,9 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
   for (const row of report.cleanup ?? []) rows.push(t('beuser.report.cleanup', { branch: safe(row.branch), state: row.state,
     source: filesystemSources[row.filesystemProof.source] }, locale));
   for (const finding of report.findings ?? []) {
-    rows.push(t('beuser.report.stuck', { branch: safe(finding.branch), persona: safe(finding.persona), outcome: finding.outcome,
-      screenRef: safe(finding.screenRef), screen: safe(finding.screen), refs: finding.evidenceRefs.map(safe).join(', ') }, locale));
+    const values = { branch: safe(finding.branch), persona: safe(finding.persona), outcome: finding.outcome,
+      screenRef: safe(finding.screenRef), screen: safe(finding.screen), refs: finding.evidenceRefs.map(safe).join(', ') };
+    rows.push(finding.reason === 'observing' ? t('beuser.report.observing', values, locale) : t('beuser.report.stuck', values, locale));
   }
   for (const segment of report.segments) {
     const verdict = segment.verdict;

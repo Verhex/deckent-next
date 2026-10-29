@@ -26,6 +26,13 @@ export const beuserSurfaceCommandSchema = z.object({ schemaVersion: z.literal(1)
     z.object({ kind: z.literal('wait'), ms: z.number().int().positive().safe() }).strict()]),
 }).strict().readonly();
 export type BeuserSurfaceCommand = z.infer<typeof beuserSurfaceCommandSchema>;
+/** Key names a walker may press (a single printable character presses itself); screen hint spellings name the same keys. Terminal vocabulary,
+ * not policy: the surface maps each name to its bytes and the walker receives this list. */
+export const BEUSER_KEYS = Object.freeze(['Enter', 'Escape', 'Tab', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft', 'Home', 'End',
+  'PageUp', 'PageDown', 'Delete', 'Ctrl+C', 'Ctrl+D', 'Ctrl+O'] as const);
+export type BeuserKeyName = typeof BEUSER_KEYS[number];
+export const BEUSER_KEY_ALIASES: ReadonlyMap<string, BeuserKeyName> = new Map([['Esc', 'Escape'], ['PgUp', 'PageUp'], ['PgDn', 'PageDown'], ['Return', 'Enter'],
+  ['↑', 'ArrowUp'], ['↓', 'ArrowDown'], ['→', 'ArrowRight'], ['←', 'ArrowLeft'], ['Up', 'ArrowUp'], ['Down', 'ArrowDown'], ['Right', 'ArrowRight'], ['Left', 'ArrowLeft']]);
 /** A kind-level policy grant alone never establishes own-Run/Attempt/transcript/realm custody. */
 export function assertBeuserAccess(admitted: BeuserContext, requested: unknown, actor: unknown, resource: { readonly kind: string; readonly id: string }, action: string): void {
   admitted.signal.throwIfAborted();
@@ -70,12 +77,15 @@ export type BeuserModelRole = 'beuser-walker' | 'beuser-evaluator';
 export type BeuserModelResult = Readonly<{ state: 'invoked'; receipt: BeuserModelReceipt }>
   | Readonly<{ state: 'unavailable'; code: 'BEUSER_MODEL_UNAVAILABLE'; reason: RoleModelRefusal | 'maker-unknown' | 'independence' }>;
 export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
-/** The walker's own last actions, oldest first, and whether its last action left the screen unchanged (walk17 S2). */
-export type BeuserWalkerHistory = Readonly<{ recentActions: readonly unknown[]; screenUnchanged: boolean }>;
+/** The walker's own last actions, oldest first, whether its last action left the screen unchanged (walk17 S2), and (walk18) the persona's
+ * model decisions left including this one and wait patience left. */
+export type BeuserWalkerHistory = Readonly<{ recentActions: readonly unknown[]; screenUnchanged: boolean; remainingSteps: number; remainingWaitMs: number }>;
+/** Typed feedback for a correction: an unparseable answer, or an action the surface refused before any input was sent. */
+export type BeuserCorrection = 'BEUSER_MODEL_OUTPUT_INVALID' | 'BEUSER_ACTION_INVALID';
 /** Input construction keeps the rubric out of the walker call; provider/model selection is the existing role/active/budget path. */
 export interface ModelPort {
-  walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen, history: BeuserWalkerHistory, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
-  evaluate(context: BeuserContext, transcriptDigest: string, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
+  walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen, history: BeuserWalkerHistory, outputError?: BeuserCorrection): Promise<BeuserModelResult>;
+  evaluate(context: BeuserContext, transcriptDigest: string, outputError?: BeuserCorrection): Promise<BeuserModelResult>;
   cancel(context: BeuserContext, invocationId: string): Promise<void>;
 }
 /** Trusted start-state arrangement of the admitted target, before the persona's first look. The target is the context binding,

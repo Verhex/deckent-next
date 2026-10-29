@@ -192,6 +192,7 @@ it('diagnostic references stay unique, bound to their branch and backed by a cap
     screen: 'Permission question', screenRef: 'screen', screenDigest: '2'.repeat(64), evidenceRefs: [trace[0]!.artifactRef], controllerValidity: 'unknown' };
   const diagnostic = { schemaVersion: 1, trace, finding };
   expect(beuserDiagnosticSchema.parse(diagnostic).finding).toEqual(finding);
+  expect(beuserDiagnosticSchema.parse({ ...diagnostic, finding: { ...finding, reason: 'observing' } }).finding?.reason).toBe('observing'); // Walk18.
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, trace: [...trace, ...trace] }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, branch: 'foreign-task' } }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, screenRef: 'not-captured' } }).success).toBe(false);

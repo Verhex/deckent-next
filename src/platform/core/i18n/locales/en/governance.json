@@ -953,6 +953,7 @@
   "models.budget.revised": "Budget changed for scope {scope}: {usd} USD a month (revision {revision}).",
   "models.budget.unfrozen": "The overrun freeze is lifted.",
   "models.budget.replayed": "(already recorded; nothing changed)",
+  "models.budget.unchanged": "Budget for scope {scope} is already {usd} USD a month (revision {revision}); nothing changed.",
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "Scope {scope} has no spending budget yet. Create one: deckent models create-budget --scope {scope} --usd <amount> (or /model → Create budget).",
   "agent.spend.budgetAbsent": "This scope has no spending budget. /model → Create budget.",
   "error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE": "The model list could not be read: {cause}.",
