@@ -32,8 +32,10 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       const measured = pinned.measurement;
       if (!measured || measured.quality !== 'provider-count') throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
       const tokens = measured.promptTokens + completionTokens;
-      if (!profile?.contextWindowTokens || !Number.isSafeInteger(measured.promptTokens) || measured.promptTokens < 0
-        || !Number.isSafeInteger(tokens) || tokens > profile.contextWindowTokens || (measured.windowTokens !== null && tokens > measured.windowTokens)
+      // The window comes from the pinned profile or, for a local server that reports it with the count (vLLM /tokenize max_model_len), from the measurement.
+      const window = profile?.contextWindowTokens ?? measured.windowTokens;
+      if (!profile || !window || !Number.isSafeInteger(window) || !Number.isSafeInteger(measured.promptTokens) || measured.promptTokens < 0
+        || !Number.isSafeInteger(tokens) || tokens > window || (measured.windowTokens !== null && tokens > measured.windowTokens)
         || tokens > remaining.tokens || profile.limits.timeoutMs > ctx.limits.maxWallMs
         || profile.limits.responseMaxBytes > ctx.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
       const local = profile.schemaVersion === 2 && profile.billingAxis === 'local' && providerSpendLocalZeroTariffProfile(profile)

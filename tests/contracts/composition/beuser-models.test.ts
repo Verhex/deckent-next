@@ -152,6 +152,20 @@ it('respects the measured served window even when the configured context is larg
 });
 
 
+it('uses the measured served window when a connected local profile records no context window, and refuses when neither exists', async () => {
+  const windowless = { ...localProfile, contextWindowTokens: undefined };
+  const h = harness();
+  mocks.prepare.mockResolvedValue({ profile: windowless, spending: null,
+    measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: 196608 } });
+  await h.call();
+  expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  mocks.invoke.mockClear();
+  mocks.prepare.mockResolvedValue({ profile: windowless, spending: null,
+    measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null } });
+  await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(mocks.invoke).not.toHaveBeenCalled();
+});
+
 it('production local preflight detects a typed counter, reserves prompt plus completion at zero cost and refuses missing endpoints or wrong models before send', async () => {
   // Config, policy, activation, preflight, codec and HTTP transport are real; the provider is a loopback server.
   const nativeSend = httpTransport.sendNativeJsonHttp;
