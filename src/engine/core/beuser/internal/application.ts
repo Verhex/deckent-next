@@ -1,5 +1,5 @@
 import { beuserVerdictSchema, type BeuserVerdict, type BeuserWalkerSummary } from '#domain/index.js';
-import { BeuserContractError, assertBeuserAccess, type BeuserContext, type RealmPort, type EvidencePort, type BeuserRealmObservation } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, assertBeuserAccess, type BeuserContext, type RealmPort, type EvidencePort, type BeuserRealmObservation, type BeuserFilesystemProof } from '#engine/core/beuser-contract/index.js';
 import { BeuserController, BeuserWalkStopped, beuserBounded, beuserDeadline, type BeuserExecutionBudget } from './controller.js';
 import { walkBeuser } from './walker.js';
 import { encodeCommandProjection } from '#domain/index.js';
@@ -18,6 +18,7 @@ export interface BeuserWalkPorts extends WalkerPorts {
 export interface BeuserWalkResult {
   readonly binding: BeuserContext['binding']; readonly verdict: BeuserVerdict | null;
   readonly state: 'completed' | 'unknown' | 'invalid'; readonly reason: string | null;
+  readonly filesystemProof?: BeuserFilesystemProof;
   readonly cleanup: 'destroyed' | 'quarantined' | 'unknown'; readonly transcriptDigest: string | null;
 }
 export class BeuserApplication {
@@ -28,6 +29,7 @@ export class BeuserApplication {
     if (sha256(encodeCommandProjection('beuser-persona:1', summary)) !== context.binding.personaDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     const controller = new BeuserController(context, summary, this.budget);
     let verdict: BeuserVerdict | null = null, state: BeuserWalkResult['state'] = 'unknown', reason: string | null = null;
+    let filesystemProof: BeuserFilesystemProof = { schemaVersion: 1, source: 'unknown' };
     let transcriptDigest: string | null = null, cleanup: BeuserWalkResult['cleanup'] = 'unknown';
     const checkRealm = (observation: BeuserRealmObservation, expected: BeuserRealmObservation['state']) => {
       assertBeuserAccess(controller.context, observation.binding, context.principal, { kind: 'beuser-sandbox', id: observation.binding.realmId }, 'create');
@@ -58,6 +60,7 @@ export class BeuserApplication {
       assertBeuserAccess(cleanupContext, context.binding, context.principal, { kind: 'beuser-sandbox', id: context.binding.realmId }, 'destroy');
       const destroyed = await beuserBounded(deadline.signal, () => this.ports.realm.destroy(cleanupContext));
       assertBeuserAccess(cleanupContext, destroyed.binding, context.principal, { kind: 'beuser-sandbox', id: destroyed.binding.realmId }, 'destroy');
+      filesystemProof = destroyed.filesystemProof ?? filesystemProof;
       if (destroyed.state === 'destroyed' && destroyed.evidenceRefs.length) cleanup = 'destroyed';
     } catch { /* Uncertain destruction never becomes proof of absence. */ }
     finally { deadline.close(); }
@@ -104,7 +107,7 @@ export class BeuserApplication {
       }
       finally { readDeadline.close(); }
     }
-    return Object.freeze({ binding: context.binding, verdict, state, reason, cleanup, transcriptDigest });
+    return Object.freeze({ binding: context.binding, verdict, state, reason, cleanup, filesystemProof, transcriptDigest });
   }
 }
 

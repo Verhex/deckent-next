@@ -64,7 +64,8 @@ it('pins one campaign Run and one Task per persona/branch/repeat without coding 
 
 it('walks the actual approval-card Enter action and consumes harness readback, never model verdict text or argv', async () => {
   const h = harness();
-  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed', verdict: { outcome: 'GREEN' } });
+  vi.mocked(h.ports.realm.destroy).mockResolvedValue({ binding, state: 'destroyed', evidenceRefs: ['absence'], filesystemProof: { schemaVersion: 1, source: 'daemon-attested' } });
+  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed', filesystemProof: { schemaVersion: 1, source: 'daemon-attested' }, verdict: { outcome: 'GREEN' } });
   expect(h.ports.surface.press).toHaveBeenCalledWith(expect.anything(), 'Enter');
   expect(h.ports.surface.argv).not.toHaveBeenCalled();
   expect(h.ports.models.walker).toHaveBeenCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }));

@@ -5,7 +5,7 @@ B1 is admitted for alpha.57; this branch is an author candidate, not a release o
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|
 | Identity and policy | Domain BeUser contract v1; system-policy-rows registry 1/1; narrow evaluator workload floor | Template remains 18. Fresh install includes the data revision in the original publication targets and plan digest. Upgrade publishes template and data together through the authority writer, with sealed audit and a data-bound expect token. Committed replay retains its original exact-byte check; later governed edits require upgrade. Deleted permissions stay deleted; read/startup never grants rows |
-| Realm | BeuserRealmApplication and DockerBeuserRealmRuntime | Private reopenable Attempt custody, full file-manifest verification and streaming transport are wired. Destruction needs independent kernel/cgroup/merged-root absence; inaccessible evidence remains unknown |
+| Realm | BeuserRealmApplication and DockerBeuserRealmRuntime | Private reopenable Attempt custody, full file-manifest verification and streaming transport are wired. Destruction needs pinned kernel process/cgroup absence and explicitly sourced filesystem proof (owner amendment A, 2026-10-29); missing evidence remains quarantined |
 | Terminal | C3 Python stdlib PTY plus pinned xterm headless/Unicode 11 | Private boot v1 uses one packaged `boot.schema.json` for the C2 producer and both Python modes: `entry`, exact `commands` tuples, bounded resources and opaque `secretFds`. Both ends reject missing/unknown fields as `BEUSER_SURFACE_INVALID` before launch. Packaged `.py`/`.json` assets and private channel are wired. The opaque secret FD producer and verified reset remain open; capture stays fail-closed. Real terminal proof is C7 |
 | Controller | C4 campaign, bounded execution/model budget, reliability and supervisor wrappers | C2 created observations reach admission without pretending to carry containment proof; admitted observations still require evidence. Every completed or interrupted walk reads controller A audit and sealed approval records through verified ports after cleanup. Any authority write or approval decision attributed to its BeUser identity invalidates the walk; no time cutoff silently excludes a retained violation. Attributed authority writes or approval decisions invalidate the walk and use the existing refusal/Nervous feed; missing, unreadable or over-bound evidence remains unknown. Verdict readback follows proven outer cleanup; quarantine has no verdict readback. Configured Run admission, task-bound reservation ids and C4 supervisor dispatch are wired. A dry admission exercises the real ledger and pool without a realm or model |
 | Evidence | C5 transcript/readback, installed beuser@1 evaluator, retained-output verification, report schema | Existing TaskEvaluationApplication owns acceptance. Every BeUser criterion returns the combined outcome/authorization/safety verdict, including calibration and cleanup gates; a selected diagnostic dimension cannot bypass RED or unknown. harness-readback metadata is carried by metrics and DeliverySummary without relabelling; the human acceptance renderer names harness readback in EN/TR |
@@ -38,7 +38,7 @@ count, so BeUser refuses before inference. Local zero-tariff calls keep zero mon
 A sealed realm cannot export, back up or restore its ledger, even inside the realm. Required-backup
 uninstall branches remain named unknown. Unsupported private systemd branches remain unknown and do
 not block alpha.57; host Docker/D-Bus sockets, host HOME and additional privileges are never a workaround.
-Uncertain cleanup retains quarantine/unknown; Docker rm exit is not proof of three independent absences. Persistent cancellation, reconciliation and output recovery select the recorded adapter/version. BeUser v1 reopens its exact realm custody and original grant-derived evaluator identity, without a surface, model or launch; unknown adapter/version is a typed refusal. The BeUser walk binds its supervisor-profile validator when recording dispatch. A recovered realm without a terminal receipt remains execution-unknown after proven destruction; no exit code is invented. Its exact container absence can be consumed by the existing lost-dispatch recovery owner.
+Uncertain cleanup retains quarantine/unknown; Docker rm exit alone is not destruction proof. Persistent cancellation, reconciliation and output recovery select the recorded adapter/version. BeUser v1 reopens its exact realm custody and original grant-derived evaluator identity, without a surface, model or launch; unknown adapter/version is a typed refusal. The BeUser walk binds its supervisor-profile validator when recording dispatch. A recovered realm without a terminal receipt remains execution-unknown after proven destruction; no exit code is invented. Its exact container absence can be consumed by the existing lost-dispatch recovery owner.
 
 ## Limits and remaining proof
 
@@ -54,7 +54,7 @@ without widening the bound. Call counts and monetary reservations remain consume
 profile with verified literal-loopback/zero-tariff evidence is accepted at zero cost; paid profiles
 still require a quote in the envelope's currency. Existing invocation authorization and fresh
 profile/spending pins remain authoritative.
-The controller audit scan is limited by the recorded BeUser byte/time bounds; an incomplete scope scan remains unknown. Recovery uses current local management access with the retained profile/custody; inaccessible kernel/cgroup/filesystem proof stays quarantined. The real calibration cohort remains open. Author source wiring and dry admission do not prove an assembled journey.
+The controller audit scan is limited by the recorded BeUser byte/time bounds; an incomplete scope scan remains unknown. Recovery uses current local management access with the retained profile/custody; missing kernel/cgroup custody or unavailable accepted filesystem proof stays quarantined. The real calibration cohort remains open. Author source wiring and dry admission do not prove an assembled journey.
 The current final-state probe observes installation existence; preserved-data, card, receipt-location,
 forbidden-effect and target lifecycle summaries remain unknown. Only a single final readback reference is
 admitted. The secret FD producer/reset, full milestone probes and measured call/cost/reliability evidence
@@ -167,3 +167,27 @@ This reports an observed failure to progress, not a proven product root cause or
 verdict. Cleanup uncertainty remains separately unknown; the diagnostic grants no authority,
 calibration, safety pass or independent acceptance. Only retained screen observations count as
 walked; missing verdict coverage remains explicitly unknown.
+
+
+## Realm destruction assurance (owner amendment A, 2026-10-29)
+
+Before storage inspection, the adapter writes kernel snapshot v2 with exact binding/incarnation,
+container ID, PID/start time, an observed container cgroup and host namespace identities. Storage
+observation cannot discard this record. Reinspection never replaces the original pin. Legacy pins
+remain readable for direct kernel filesystem proof; missing pins cannot be reconstructed after removal.
+
+A merged root observed through the guarded canonical path keeps the existing direct absence rule.
+If that root is unavailable at capture, destruction requires both pinned process and cgroup paths
+absent, the same captured local daemon identity, typed `No such container` for the exact ID, and an
+empty `container ls --all --no-trunc --quiet` result for the exact incarnation label. A failed daemon
+query, changed daemon, surviving process/cgroup, listed incarnation or missing pin stays quarantined.
+An originally observable root never falls back to daemon assurance after a later read failure.
+
+Removal artifacts v2 retain `filesystemAbsent` only for direct filesystem observation. The separate
+`filesystemProof` v1 source is `kernel-proven`, `daemon-attested` or `unknown`; the realm decision,
+private custody, walk/terminal result and persisted report preserve it. Human reports label both
+assurances in EN/TR; legacy documents without the optional field remain readable without inventing
+an assurance. Daemon attestation describes the daemon-managed container lifecycle, not secure disk
+erasure, independent observation of every storage object, or absence of open mounts/file descriptors.
+It proves no ERP/CRM business result and grants no recovery for existing pins-less quarantines.
+Author fixtures are not assembled-host, independent-review or release acceptance.

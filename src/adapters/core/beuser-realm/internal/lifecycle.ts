@@ -3,7 +3,7 @@ import { chmod, lstat, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/pr
 import { join } from 'node:path';
 import { constants } from 'node:fs';
 import { sha256, HOST_LIMITS_REGISTRY } from '#platform/index.js';
-import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmRuntime, type BeuserRealmRemoval } from '#engine/index.js';
+import { BEUSER_GENESIS_PATH, beuserRealmRemoved, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmRuntime, type BeuserRealmRemoval } from '#engine/index.js';
 import { pinBeuserLimits, type BeuserContext } from '#engine/index.js';
 import { BeuserContainerMissing, BEUSER_REALM_RECIPE as recipe, canonicalRealmPath, checkHandle, dockerRealmCommand, pathContains,
   NANOSECONDS_PER_SECOND, pinRealmOptions, privateControllerRoot, realmFileIdentity, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
@@ -14,7 +14,7 @@ export interface BeuserRealmDependencies {
   readonly retainEvidence: BeuserEvidenceRetention;
   /** Existing package/build custody, including absence of secrets, host state and embedded symlinks/volumes. */
   verifyPackage(context: BeuserContext, packageRoot: string): Promise<boolean>;
-  /** Independent supervisor readback after removal: actual process, cgroup and private filesystem absence. */
+  /** Independent supervisor readback after removal: kernel process/cgroup and explicitly sourced filesystem proof. */
   removalEvidence(context: BeuserContext, handle: BeuserRealmHandle): Promise<BeuserRealmRemoval>;
 }
 export class DockerBeuserRealmRuntime implements BeuserRealmRuntime {
@@ -93,8 +93,8 @@ export class DockerBeuserRealmRuntime implements BeuserRealmRuntime {
       || raw[0].Config?.Labels?.['deckent.beuser.incarnation'] !== handle.incarnation)) return refuseRealm();
     if (present) await this.#command(['container', 'rm', '--force', '--volumes', handle.containerId], context);
     const proof = await this.dependencies.removalEvidence(context, handle);
-    if (!proof.processesAbsent || !proof.cgroupAbsent || !proof.filesystemAbsent || !proof.evidenceRefs.length) return proof;
-    // Only after independent absence readback may this controller remove its exact private directory.
+    if (!beuserRealmRemoved(proof)) return proof;
+    // Only after the accepted, explicitly sourced removal readback may this controller remove its exact private directory.
     await this.control(handle);
     const names = await import('node:fs/promises').then(fs => fs.readdir(handle.controlDirectory));
     if (names.some(name => !['genesis.json', 'container.id'].includes(name))) return refuseRealm();
@@ -104,6 +104,6 @@ export class DockerBeuserRealmRuntime implements BeuserRealmRuntime {
     }
     await rm(handle.controlDirectory, { recursive: true });
     const absent = await lstat(handle.controlDirectory).then(() => false, error => { if (error.code === 'ENOENT') return true; throw error; });
-    return { ...proof, filesystemAbsent: absent, evidenceRefs: [...proof.evidenceRefs, `beuser-control-removed:sha256:${sha256(handle.controlIdentity)}`] };
+    return { ...proof, filesystemAbsent: proof.filesystemAbsent && absent, ...(absent ? {} : { filesystemProof: { schemaVersion: 1 as const, source: 'unknown' as const } }), evidenceRefs: [...proof.evidenceRefs, `beuser-control-removed:sha256:${sha256(handle.controlIdentity)}`] };
   }
 }

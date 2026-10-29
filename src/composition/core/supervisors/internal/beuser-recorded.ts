@@ -4,7 +4,7 @@ import { beuserBindingSchema } from '#domain/index.js';
 import { beuserEvidenceSchema, type ArtifactStore } from '#capabilities/index.js';
 import { beuserPrivateRecord } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, BeuserContractError, SupervisorError, beuserEvaluatorFor, beuserBindingDigest, sameSandboxRequest, sandboxResultSchema,
-  beuserDiagnosticSchema, type DispatchRecord, type DispatchStore, type ExecutionSupervisor, type SupervisorProfileSource, type SandboxRequest, type BeuserContext } from '#engine/index.js';
+  beuserDiagnosticSchema, beuserFilesystemProofSchema, type DispatchRecord, type DispatchStore, type ExecutionSupervisor, type SupervisorProfileSource, type SandboxRequest, type BeuserContext } from '#engine/index.js';
 import { sha256, inspectProductDirectory, type ResolvedConfig, type ProductLayout } from '#platform/index.js';
 import { profileData } from './beuser-profile.js';
 import { openConfiguredBeuserRealmOwner } from './beuser-realm.js';
@@ -27,7 +27,7 @@ export function recordedBeuserSupervisor(recorded: DispatchRecord, input: {
     const read = await beuserPrivateRecord(directory, `terminal-${sha256(JSON.stringify(recorded.request.identity))}`, limits.maxArtifactBytes).read();
     if (read.kind !== 'ready') return null;
     const value = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(),
-      reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), evidence: beuserEvidenceSchema.nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
+      reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: beuserEvidenceSchema.nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
     if (beuserBindingDigest(value.binding) !== beuserBindingDigest(data.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return value;
   };

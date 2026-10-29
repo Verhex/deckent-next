@@ -61,5 +61,9 @@
   "beuser.setup.cancel": "Vazgeç",
   "beuser.setup.result": "BeUser kurulumu: {status}; içerik: {digest}.",
   "error.BEUSER_CANDIDATE_MISMATCH": "Aday manifesti veya paket kimliği kabul edilen referansla eşleşmiyor.",
-  "remedy.BEUSER_CANDIDATE_MISMATCH": "BeUser profilini tam staged adaydan yeniden üretin; ardından setup önizlemesini tekrarlayın."
+  "remedy.BEUSER_CANDIDATE_MISMATCH": "BeUser profilini tam staged adaydan yeniden üretin; ardından setup önizlemesini tekrarlayın.",
+  "beuser.report.cleanup": "Realm temizliği {branch}: {state}; dosya sistemi kanıtı: {source}.",
+  "beuser.report.filesystem.kernel-proven": "kernel-proven (doğrudan dosya sistemi yokluğu)",
+  "beuser.report.filesystem.daemon-attested": "daemon-attested (daemon beyanı; bağımsız dosya sistemi kanıtı yok)",
+  "beuser.report.filesystem.unknown": "bilinmiyor"
 }

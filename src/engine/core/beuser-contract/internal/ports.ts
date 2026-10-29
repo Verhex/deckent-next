@@ -39,9 +39,14 @@ export function assertBeuserAccess(admitted: BeuserContext, requested: unknown, 
     || resource.kind === 'beuser-transcript' && resource.id !== own.transcriptId
     || resource.kind === 'beuser-sandbox' && resource.id !== own.realmId) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
 }
+export const beuserFilesystemProofSchema = z.object({ schemaVersion: z.literal(1),
+  source: z.enum(['kernel-proven', 'daemon-attested', 'unknown']),
+}).strict().readonly();
+export type BeuserFilesystemProof = z.infer<typeof beuserFilesystemProofSchema>;
 export interface BeuserRealmObservation {
   readonly binding: BeuserBinding;
   readonly state: 'created' | 'admitted' | 'destroyed' | 'quarantined' | 'unknown';
+  readonly filesystemProof?: BeuserFilesystemProof | undefined;
   readonly evidenceRefs: readonly string[];
 }
 export interface RealmPort {

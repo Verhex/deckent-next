@@ -60,3 +60,13 @@ it('reports a critical persona refused before its first screen as unknown, with 
   expect(() => formatBeuserReport({ ...value, criticalCoverage: [{ criterion: 'Ayse', walked: 0, valid: 1, invalid: 0, unknown: 0 }] }, { json: true, locale: 'en' })).toThrow();
   expect(() => formatBeuserReport({ ...value, criticalCoverage: [{ criterion: 'Ayse', walked: 0, valid: 0, invalid: 0, unknown: 2 }] }, { json: true, locale: 'en' })).toThrow();
 });
+
+
+it('reports daemon-attested filesystem proof separately in EN/TR and locale-free JSON', () => {
+  const value = { ...report(), cleanup: [{ branch: 'onboarding', state: 'destroyed', filesystemProof: { schemaVersion: 1, source: 'daemon-attested' } }] };
+  expect(JSON.parse(formatBeuserReport(value, { json: true, locale: 'tr' }))).toEqual(value);
+  const tr = formatBeuserReport(value, { json: false, locale: 'tr' }), en = formatBeuserReport(value, { json: false, locale: 'en' });
+  expect(tr).toContain('daemon-attested'); expect(tr).toContain('bağımsız dosya sistemi kanıtı yok');
+  expect(en).toContain('daemon-attested'); expect(en).toContain('no independent filesystem proof');
+  expect(() => formatBeuserReport({ ...value, cleanup: [{ ...value.cleanup[0], filesystemProof: { schemaVersion: 1, source: 'rm-exit' } }] }, { json: true, locale: 'en' })).toThrow();
+});

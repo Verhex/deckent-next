@@ -12,6 +12,10 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
     t('beuser.report.calibration', { ...report.calibration, revision: safe(report.calibration.revision) }, locale),
     t('beuser.report.reliability', report.reliability, locale),
     t('beuser.report.cost', { cost: report.cost ?? unknown, currency: safe(report.currency), elapsedMs: report.elapsedMs ?? unknown }, locale)];
+  const filesystemSources = { 'kernel-proven': t('beuser.report.filesystem.kernel-proven', {}, locale),
+    'daemon-attested': t('beuser.report.filesystem.daemon-attested', {}, locale), unknown: t('beuser.report.filesystem.unknown', {}, locale) };
+  for (const row of report.cleanup ?? []) rows.push(t('beuser.report.cleanup', { branch: safe(row.branch), state: row.state,
+    source: filesystemSources[row.filesystemProof.source] }, locale));
   for (const finding of report.findings ?? []) {
     rows.push(t('beuser.report.stuck', { branch: safe(finding.branch), persona: safe(finding.persona), outcome: finding.outcome,
       screenRef: safe(finding.screenRef), screen: safe(finding.screen), refs: finding.evidenceRefs.map(safe).join(', ') }, locale));

@@ -1,4 +1,4 @@
-import { assertBeuserAccess, pinBeuserLimits, BeuserContractError, type BeuserContext, type BeuserRealmObservation, type RealmPort } from '#engine/core/beuser-contract/index.js';
+import { assertBeuserAccess, pinBeuserLimits, BeuserContractError, type BeuserContext, type BeuserRealmObservation, type BeuserFilesystemProof, type RealmPort } from '#engine/core/beuser-contract/index.js';
 import type { BeuserBinding } from '#domain/index.js';
 import { beuserBindingDigest } from './seal.js';
 
@@ -8,8 +8,15 @@ export interface BeuserRealmHandle {
 }
 export interface BeuserRealmReadback { readonly valid: boolean; readonly evidenceRefs: readonly string[] }
 export interface BeuserRealmRemoval {
+  readonly filesystemProof?: BeuserFilesystemProof;
   readonly processesAbsent: boolean; readonly cgroupAbsent: boolean; readonly filesystemAbsent: boolean;
   readonly evidenceRefs: readonly string[];
+}
+/** Daemon attestation never changes the meaning of direct filesystem absence. */
+export function beuserRealmRemoved(proof: BeuserRealmRemoval): boolean {
+  return proof.processesAbsent && proof.cgroupAbsent && proof.evidenceRefs.length > 0
+    && (proof.filesystemAbsent && (!proof.filesystemProof || proof.filesystemProof.source === 'kernel-proven')
+      || !proof.filesystemAbsent && proof.filesystemProof?.source === 'daemon-attested');
 }
 /** Trusted supervisor I/O. `publish` persists immutable custody before any container starts. */
 export interface BeuserRealmRuntime {
@@ -40,8 +47,8 @@ export class BeuserRealmApplication implements RealmPort {
       || lease.handle && beuserBindingDigest(lease.handle.binding) !== beuserBindingDigest(context.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return lease;
   }
-  private async record(context: BeuserContext, state: BeuserRealmObservation['state'], evidenceRefs: readonly string[]) {
-    const observation = Object.freeze({ binding: context.binding, state, evidenceRefs: Object.freeze([...evidenceRefs]) });
+  private async record(context: BeuserContext, state: BeuserRealmObservation['state'], evidenceRefs: readonly string[], filesystemProof?: BeuserFilesystemProof) {
+    const observation = Object.freeze({ binding: context.binding, state, ...(filesystemProof ? { filesystemProof } : {}), evidenceRefs: Object.freeze([...evidenceRefs]) });
     await this.custody.settle(context, observation);
     return observation;
   }
@@ -87,7 +94,7 @@ export class BeuserRealmApplication implements RealmPort {
     if (!lease.handle) return this.record(cleanup, 'quarantined', []);
     try {
       const proof = await this.runtime.remove(cleanup, lease.handle);
-      return await this.record(cleanup, proof.processesAbsent && proof.cgroupAbsent && proof.filesystemAbsent && proof.evidenceRefs.length ? 'destroyed' : 'quarantined', proof.evidenceRefs);
+      return await this.record(cleanup, beuserRealmRemoved(proof) ? 'destroyed' : 'quarantined', proof.evidenceRefs, proof.filesystemProof);
     } catch { return this.record(cleanup, 'quarantined', lease.observation.evidenceRefs); }
   }
   async reconcile(context: BeuserContext): Promise<BeuserRealmObservation> { return this.destroy(context); }

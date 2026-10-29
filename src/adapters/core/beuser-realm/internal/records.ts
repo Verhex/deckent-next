@@ -2,7 +2,8 @@ import { constants } from 'node:fs';
 import { lstat, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { jsonRecordDirectory, type JsonRecordFile } from '#platform/index.js';
-import { BeuserContractError } from '#engine/index.js';
+import type { ArtifactStore } from '#capabilities/index.js';
+import { BeuserContractError, type BeuserContext } from '#engine/index.js';
 import { canonicalRealmPath } from './realm.js';
 /** Private, bounded controller metadata. Read-only consumers never create a directory or a record. */
 export function beuserPrivateRecord(directory: string, name: string, maxBytes: number): JsonRecordFile {
@@ -25,4 +26,11 @@ export function beuserPrivateRecord(directory: string, name: string, maxBytes: n
     async write(value) { if (Buffer.byteLength(JSON.stringify(value)) > maxBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE'); await check(true); await file.write(value); },
     async remove() { await check(false); await file.remove(); },
   };
+}
+
+export async function retainBeuserJson(artifacts: ArtifactStore, context: BeuserContext, value: unknown): Promise<string> {
+  const bytes = Buffer.from(JSON.stringify(value));
+  if (bytes.length > context.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+  const receipt = await artifacts.put(context.binding.identity.scopeId, bytes);
+  return `sha256:${receipt.digest}`;
 }

@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { lstat, mkdir, readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { lstat, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type BeuserCandidateManifest } from '#domain/index.js';
 import { DockerBeuserRealmRuntime } from './lifecycle.js';
@@ -11,11 +11,13 @@ import { measureInstalledPackage } from '#adapters/core/installation-artifacts/i
 import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type BeuserRealmChannel, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
-  type SandboxRequest } from '#engine/index.js';
-import { jsonRecordDirectory, withConfigWriteLock, sha256, type JsonRecordFile } from '#platform/index.js';
+  type SandboxRequest, beuserFilesystemProofSchema } from '#engine/index.js';
+import { jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
+import { createBeuserRemovalReadback } from './removal.js';
+import { retainBeuserJson } from './records.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 
-const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)) }).strict();
+const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)), filesystemProof: beuserFilesystemProofSchema.optional() }).strict();
 const handleSchema = z.object({ binding: beuserBindingSchema, incarnation: z.string().uuid(), containerId: z.string(), controlDirectory: z.string(), controlIdentity: z.string() }).strict();
 const recordSchema = z.object({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
   lease: z.object({ handle: handleSchema.nullable(), observation: observationSchema }).strict() }).strict();
@@ -69,12 +71,6 @@ export async function createBeuserRealmCustody(input: { readonly context: Beuser
     }),
   };
 }
-export async function retainBeuserJson(artifacts: ArtifactStore, context: BeuserContext, value: unknown): Promise<string> {
-  const bytes = Buffer.from(JSON.stringify(value));
-  if (bytes.length > context.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
-  const receipt = await artifacts.put(context.binding.identity.scopeId, bytes);
-  return `sha256:${receipt.digest}`;
-}
 /** Real package measurement is repeated before creation. The selected package is never the controller installation. */
 export function createBeuserRealm(input: { readonly context: BeuserContext; readonly options: BeuserRealmOptions; readonly custody: BeuserRealmCustody;
   readonly artifacts: ArtifactStore; readonly measurement: { readonly digest: string; readonly limits: Parameters<typeof measureInstalledPackage>[1];
@@ -125,42 +121,6 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
     } };
   }, async cancel() { /* C4 owns bounded destruction of the entire realm, including escaped driver descendants. */ } };
 }
-/** Host kernel/merged-root readback is independent of `docker rm`. Unobservable local-daemon paths stay unknown. */
-export function createBeuserRemovalReadback(options: BeuserRealmOptions, artifacts: ArtifactStore, file: JsonRecordFile) {
-  const snapshotSchema = z.object({ bindingDigest: z.string(), incarnation: z.string().uuid(), containerId: z.string(),
-    pid: z.number().int().positive(), start: z.string(), cgroup: z.string(), mergedRoot: z.string() }).strict();
-  const absent = async (path: string) => lstat(path).then(() => false, error => { if (error.code === 'ENOENT') return true; throw error; });
-  return {
-    async capture(ctx: BeuserContext, evidence: { kind: string; value: string; incarnation: string; bindingDigest: string }) {
-      if (evidence.kind !== 'containment') return;
-      const value = JSON.parse(evidence.value) as { id: string; state: { Pid: number } };
-      if (!Number.isSafeInteger(value.state.Pid) || value.state.Pid <= 0 || !/^[a-f0-9]{64}$/u.test(value.id)) return refuse();
-      try {
-        const raw = JSON.parse(await dockerRealmCommand(options)(['container', 'inspect', value.id], ctx)) as { GraphDriver?: { Data?: { MergedDir?: string } } }[];
-        const mergedRoot = raw[0]?.GraphDriver?.Data?.MergedDir;
-        const cgroupRow = (await readFile(`/proc/${value.state.Pid}/cgroup`, 'utf8')).trim().split('\n').find(row => row.startsWith('0::/'));
-        const group = cgroupRow?.slice(3);
-        if (!mergedRoot || !group || group === '/' || group.includes('..') || !mergedRoot.startsWith('/') || mergedRoot.includes('..')) return;
-        await canonicalRealmPath(mergedRoot, 'directory');
-        const start = (await readFile(`/proc/${value.state.Pid}/stat`, 'utf8')).split(') ').at(-1)!.split(' ')[19]!;
-        await file.write(snapshotSchema.parse({ bindingDigest: evidence.bindingDigest, incarnation: evidence.incarnation, containerId: value.id,
-          pid: value.state.Pid, start, cgroup: resolve('/sys/fs/cgroup', `.${group}`), mergedRoot }));
-      } catch { /* A remote or inaccessible daemon cannot supply local kernel custody. Never manufacture absence. */ }
-    },
-    async read(ctx: BeuserContext, handle: BeuserRealmHandle) {
-      const unknown = { processesAbsent: false, cgroupAbsent: false, filesystemAbsent: false, evidenceRefs: [] as string[] };
-      try {
-        const read = await file.read(); if (read.kind !== 'ready') return unknown;
-        const pin = snapshotSchema.parse(read.value);
-        if (pin.bindingDigest !== beuserBindingDigest(ctx.binding) || pin.incarnation !== handle.incarnation || pin.containerId !== handle.containerId) return unknown;
-        const processesAbsent = await absent(`/proc/${pin.pid}`), cgroupAbsent = await absent(pin.cgroup), filesystemAbsent = await absent(pin.mergedRoot);
-        const proof = { bindingDigest: pin.bindingDigest, incarnation: pin.incarnation, containerId: pin.containerId, processesAbsent, cgroupAbsent, filesystemAbsent };
-        return { processesAbsent, cgroupAbsent, filesystemAbsent, evidenceRefs: [await retainBeuserJson(artifacts, ctx, proof)] };
-      } catch { return unknown; }
-    },
-  };
-}
-
 /** Read through the target's own guarded, read-only identity adapter; return allowlisted values only. */
 export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions): Promise<unknown> {
   const script = `
