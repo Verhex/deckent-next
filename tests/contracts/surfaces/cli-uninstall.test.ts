@@ -4,7 +4,7 @@ import { createUninstallPlan, type UninstallInventory } from '#engine/core/insta
 import { uninstallCommand, uninstallPlanLines, uninstallDetailLines, uninstallSummaryLines } from '#surfaces/core/cli-installation/index.js';
 import { CLI_COMMANDS, main } from '#surfaces/core/cli/index.js';
 import { CLI_CATALOG, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
-const card = vi.hoisted(() => ({ requests: [] as { title: string; body?: readonly string[]; initial?: string; options: readonly { id: string }[] }[], interactive: true, answers: [] as string[] }));
+const card = vi.hoisted(() => ({ requests: [] as { title: string; body?: readonly string[]; initial?: string; options: readonly { id: string; role?: string }[] }[], interactive: true, answers: [] as string[] }));
 vi.mock('#surfaces/core/cli-human/index.js', async original => ({ ...await original<object>(),
   cliMode: () => ({ mode: card.interactive ? 'interactive' : 'plain' }),
   askCliCard: async (request: typeof card.requests[number]) => { card.requests.push(request); return card.answers.shift() ?? 'cancel'; },
@@ -43,12 +43,14 @@ it('offers the tiers in one card, checks before the single confirmation, preview
   expect(await uninstallCommand(['uninstall'], context)).toBe(1);
   expect(card.requests).toHaveLength(1); expect(card.requests[0]!.body).toEqual(uninstallSummaryLines(plan, 'en')); expect(card.requests[0]!.initial).toBe('keep-data');
   expect(card.requests[0]!.body!.join('\n')).toContain('will be stopped'); expect(card.requests[0]!.options.map(option => option.id)).toEqual(['keep-data', 'all', 'details', 'cancel']);
+  // walk16: the tier menu is a true choice (no letters); the final confirmation is a yes/no card, so it shows and takes (y)/(n).
+  expect(card.requests[0]!.options.map(option => option.role)).toEqual([undefined, undefined, undefined, undefined]);
   expect(applies).toBe(0);
   // Menu choice → the plan card: what is removed comes first, the absent entry is collapsed, the action names the stop.
   card.requests.length = 0; card.answers.push('keep-data', 'apply');
   expect(await uninstallCommand(['uninstall'], context)).toBe(0);
   expect(card.requests[1]!.body).toEqual(uninstallPlanLines(plan, 'en')); expect(card.requests[1]!.body![0]).toMatch(/^Will be removed: cache/u);
-  expect(card.requests[1]!.body!.join('\n')).toContain('Not present: 1 items');
+  expect(card.requests[1]!.body!.join('\n')).toContain('Not present: 1 items'); expect(card.requests[1]!.options.map(option => option.role)).toEqual(['yes', 'no']);
   // --yes skips only the final card; the plan body is still printed.
   card.requests.length = 0; output = '';
   expect(await uninstallCommand(['uninstall', '--keep-data', '--yes'], context)).toBe(0);
@@ -89,6 +91,7 @@ it('offers force for running work before any card and prints a kept image\'s ste
   card.requests.length = 0; card.answers.push('cancel');
   await expect(uninstallCommand(['uninstall', '--keep-data'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE', params: { runs: '1' } });
   expect(card.requests[0]!.options.map(option => option.id)).toEqual(['force', 'cancel']); expect(asked).toHaveLength(1);
+  expect(card.requests[0]!.options.map(option => option.role)).toEqual(['yes', 'no']);
   // The menu keeps a tier whose refusal the person can resolve: running work blocks every tier, yet the choice leads to the force offer.
   card.requests.length = 0; card.answers.push('all', 'cancel');
   await expect(uninstallCommand(['uninstall'], context)).rejects.toMatchObject({ code: 'UNINSTALL_WORK_ACTIVE' });
@@ -142,14 +145,14 @@ it('asks nothing when no tier would remove or stop anything: no menu, only the n
 it('the reopen card counts unknown results from a fresh preview, says when it could not check, and "Not now" keeps the folder retired', async () => {
   const { mkdir, mkdtemp, rm, lstat } = await import('node:fs/promises'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
   const { retireInstallation } = await import('#platform/index.js'), card = await import('#surfaces/core/cli-human/internal/card.js');
-  const asked: { body?: readonly string[] }[] = [], ask = vi.spyOn(card, 'askCliCard').mockImplementation(async request => { asked.push(request); return 'cancel'; });
+  const asked: { body?: readonly string[]; options: readonly { role?: string }[] }[] = [], ask = vi.spyOn(card, 'askCliCard').mockImplementation(async request => { asked.push(request); return 'cancel'; });
   const { reopenRetiredFolder } = await import('#surfaces/core/cli-human/internal/reopen.js'), project = await mkdtemp(join(tmpdir(), 'deckent-reopen-'));
   try {
     const data = join(project, '.deckent'), config = { productLayout: { root: data }, projectRoot: project };
     await mkdir(data, { mode: 0o700 }); await retireInstallation(data, { installationId: 'i', planDigest: 'd', tier: 'keep-data' });
     const uncertain = { kind: 'effect', scopeId: 's', id: 'erp-1', target: null };
     expect(await reopenRetiredFolder(config, 'en', {}, { previewUninstall: async () => ({ work: { complete: true, uncertain: [uncertain, { ...uncertain, id: 'erp-2' }] } }) })).toBe(false);
-    expect(asked[0]!.body!.join('\n')).toContain('2 results of earlier work are still unknown');
+    expect(asked[0]!.body!.join('\n')).toContain('2 results of earlier work are still unknown'); expect(asked[0]!.options.map(option => option.role)).toEqual(['yes', 'no']);
     expect(await reopenRetiredFolder(config, 'tr', {}, { previewUninstall: async () => { throw new Error('unreadable'); } })).toBe(false);
     expect(asked[1]!.body!.join('\n')).toContain('denetlenemedi');
     // R12: an incomplete observation is "could not check", never zero unknown results.

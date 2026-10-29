@@ -1,14 +1,15 @@
 import { useRef, useState } from 'react';
 import { Text, render, useApp, useWindowSize } from 'ink';
 import { colorCapability } from '#platform/index.js';
-import { QuestionRows, Window, WindowStackProvider, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
+import { QuestionRows, Window, WindowStackProvider, questionStep, type QuestionOption, type QuestionState } from '#surfaces/core/terminal-window/index.js';
 import { RenderGlyphsContext, prefersAsciiGlyphs, resolveRenderGlyphs, span, truncateEnd, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 
 /** One step of the guided `deckent init` window (I-S4): the setup controller (surfaces/core/setup) decides every row and answer; this view
  * only draws them. `rows`, `heights` and `optionRows` are constant across steps, so the window keeps one height and its bottom row never moves:
- * row `i` fills exactly `heights[i]` display rows (default 1, R05). `initial` is the highlighted option (the recommended answer; Enter accepts it). */
-export type SetupWindowModel = Readonly<{ title: string; rows: readonly string[]; heights?: readonly number[]; options: readonly Readonly<{ id: string; label: string }>[];
+ * row `i` fills exactly `heights[i]` display rows (default 1, R05). `initial` is the highlighted option (the recommended answer; Enter accepts it).
+ * An option's yes/no `role` makes the shared question contract show and take (y)/(n) on it. */
+export type SetupWindowModel = Readonly<{ title: string; rows: readonly string[]; heights?: readonly number[]; options: readonly QuestionOption[];
   optionRows: number; initial: number; hints: string; position: string; reveal: number }>;
 /** A text row in at least `rows` display rows: wrapped by words and never cut (FIX9: a narrower terminal shows the whole reason, the window scrolls),
  * blank rows after a short one; a one-row line (a stage, the command) is cut with "…". */

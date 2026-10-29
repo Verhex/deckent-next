@@ -70,7 +70,7 @@ export function mcpTrustCard(raw: unknown, locale: Locale): CliCardRequest {
     : [line.label ? `${mcpSafe(line.label)}: ${mcpSafe(line.text)}` : `  ${mcpSafe(line.text)}`]);
   const note = (raw as { note?: unknown }).note;
   return { title: mcpSafe(shown.title), body: [...body, ...(typeof note === 'string' && note ? [mcpSafe(note)] : [])],
-    options: [{ id: 'yes', label: t('climodels.card.yes', {}, locale), key: 'y' }, { id: 'no', label: t('climodels.card.no', {}, locale), key: 'n' }] };
+    options: [{ id: 'yes', label: t('climodels.card.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('climodels.card.no', {}, locale), role: 'no' }] };
 }
 
 /** One card on the person's terminal, bounded by the session approval time (silence answers nothing); null = cancelled, nothing applies. */
@@ -81,8 +81,8 @@ export async function askMcpCard(context: CommandContext, locale: Locale, reques
     ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}),
     ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
 }
-export const mcpConfirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('climodels.card.apply', {}, locale), key: 'y' },
-  { id: 'cancel', label: t('climodels.card.cancel', {}, locale), key: 'n' }];
+export const mcpConfirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('climodels.card.apply', {}, locale), role: 'yes' },
+  { id: 'cancel', label: t('climodels.card.cancel', {}, locale), role: 'no' }];
 export const mcpCancelled = (context: CommandContext, locale: Locale): void => {
   emit(t('climodels.card.cancelled', {}, locale), { level: 'warning', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 };

@@ -58,10 +58,10 @@ export async function uninstallCommand(argv: readonly string[], context: Install
     const work = uninstallResolvable(blocker, plan) && blocker !== 'service-managed' && !query.force, unit = blocker === 'service-managed' && !query.disableUnit && uninstallResolvable(blocker, plan);
     const error = uninstallBlockerError(plan)!;
     if (yes || !(work || unit)) { print(uninstallPlanLines(plan, locale)); throw error; }
-    const offer = work ? { id: 'force', label: blocker === 'uncertain-effects' ? t('cli.uninstall.uncertain.offer', {}, locale) : t('cli.uninstall.force.offer', {}, locale) }
-      : { id: 'unit', label: t('cli.uninstall.unit.offer', { unit: safe(plan.service.unit ?? '') }, locale) };
+    const offer = work ? { id: 'force', label: blocker === 'uncertain-effects' ? t('cli.uninstall.uncertain.offer', {}, locale) : t('cli.uninstall.force.offer', {}, locale), role: 'yes' as const }
+      : { id: 'unit', label: t('cli.uninstall.unit.offer', { unit: safe(plan.service.unit ?? '') }, locale), role: 'yes' as const };
     const answer = await ask({ title, body: [error.localize?.(locale).message ?? error.message], initial: 'cancel',
-      options: [offer, { id: 'cancel', label: work ? t('cli.uninstall.force.reconcile', {}, locale) : t('cli.uninstall.unit.manual', {}, locale) }] });
+      options: [offer, { id: 'cancel', label: work ? t('cli.uninstall.force.reconcile', {}, locale) : t('cli.uninstall.unit.manual', {}, locale), role: 'no' }] });
     if (answer !== offer.id) { print(uninstallPlanLines(plan, locale)); throw error; }
     plan = await preview(root, query = work ? { ...query, force: true } : { ...query, disableUnit: true }, options);
   }
@@ -74,7 +74,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
       if (yes) { print([title, ...uninstallPlanLines(current, locale)]); return true; }
       const label = current.backup.required ? t('cli.uninstall.apply.purge', {}, locale) : current.steps.stopService ? t('cli.uninstall.apply.stop', {}, locale) : t('cli.uninstall.apply.remove', {}, locale);
       // An irreversible deletion keeps Cancel preselected; keeping data preselects the action like the rest of the menu.
-      return await ask({ title, body: uninstallPlanLines(current, locale), initial: current.backup.required ? 'cancel' : 'apply', options: [{ id: 'apply', label }, cancel] }) === 'apply';
+      return await ask({ title, body: uninstallPlanLines(current, locale), initial: current.backup.required ? 'cancel' : 'apply', options: [{ id: 'apply', label, role: 'yes' }, { ...cancel, role: 'no' }] }) === 'apply';
     },
   }, options, signal);
   const messages = uninstallMessages(locale);

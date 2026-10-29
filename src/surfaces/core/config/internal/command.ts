@@ -134,8 +134,8 @@ async function offerOperationsBaseline(context: ConfigCommandContext, root: stri
   const offer = await operationsBaselineOffer(root, context.openOwnerBaselineInstallation, options, locale);
   if (!offer) return;
   const ttlMs = (await loadConfig(root, options)).approvals.sessionTtlMs;
-  const answer = await askCliCard({ title: offer.title, body: [...offer.lines], options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, locale), key: 'y' },
-    { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), key: 'n' }] }, { locale, env: context.env ?? process.env, signal: AbortSignal.timeout(ttlMs) });
+  const answer = await askCliCard({ title: offer.title, body: [...offer.lines], options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, locale), role: 'yes' },
+    { id: 'no', label: t('cli.init.policyModes.cardNo', {}, locale), role: 'no' }] }, { locale, env: context.env ?? process.env, signal: AbortSignal.timeout(ttlMs) });
   const lines = answer === 'apply' ? await applyOperationsBaseline(root, context.openOwnerBaselineInstallation!, offer, locale) : [offer.later];
   emit(lines.join('\n'), { ...sinks, json: false });
 }

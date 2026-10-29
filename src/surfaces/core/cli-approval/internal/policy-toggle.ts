@@ -12,7 +12,7 @@ type Ask = CardAsk;
 const onOff = (state: 'allowed' | 'denied' | 'partial', locale: Locale) => state === 'allowed' ? t('cli.policy.on', {}, locale) : state === 'partial' ? t('cli.policy.partial', {}, locale) : t('cli.policy.off', {}, locale);
 /** The preview card's title: what is switched, and which way. */
 export const toggleTitle = (action: 'grant' | 'revoke' | 'narrow', what: string, locale: Locale) => action === 'narrow' ? t('policy.mcp.narrow', {}, locale) : action === 'grant' ? t('cli.policy.toggle.turnOn', { what }, locale) : t('cli.policy.toggle.turnOff', { what }, locale);
-const applyOptions = (locale: Locale) => [{ id: APPLY, label: t('cli.policy.toggle.apply', {}, locale), key: 'y' }, { id: NO, label: t('cli.policy.toggle.no', {}, locale), key: 'n' }];
+const applyOptions = (locale: Locale) => [{ id: APPLY, label: t('cli.policy.toggle.apply', {}, locale), role: 'yes' as const }, { id: NO, label: t('cli.policy.toggle.no', {}, locale), role: 'no' as const }];
 
 /**
  * The delegation preview card in plain words: whose AI actor, which scope, the step and the change (off → on), then every step's state and the

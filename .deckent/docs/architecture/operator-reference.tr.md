@@ -52,6 +52,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   İki plan da yalnız kural ekler; sizin yazdığınız çakışan kurallar korunur.
 - `deckent init` rehberli kurulumdur: planı ve eksik kalanı, her adımın tam komutuyla gösterir;
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
+  Kurulum penceresinde ve kartlarında ↑↓ (ya da j/k) gezer, Enter vurgulu yanıtı gönderir, Esc kapatır; her evet/hayır sorusu
+  (y) ve (n) gösterir ve kabul eder. Birkaç yanıt arasından seçimde (dil, profil) harf yoktur.
 - `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi ve
   algıladığı host aracı köprülerini önizler. Docker kodlama işçileri onu okumaz; onlar
   [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif) bölümündeki işçi dosyasını alır.

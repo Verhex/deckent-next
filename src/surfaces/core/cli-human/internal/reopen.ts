@@ -11,7 +11,7 @@ export async function reopenRetiredFolder(config: unknown, locale: Locale, env: 
     .then(plan => plan.work.complete ? plan.work.uncertain.length : null, () => null) : undefined;
   const open = count === undefined || count === 0 ? [] : [count === null ? t('cli.uninstall.reopen.unchecked', {}, locale) : t('cli.uninstall.reopen.uncertain', { count: String(count) }, locale)];
   const answer = await askCliCard({ title: t('cli.uninstall.reopen.title', {}, locale), body: [t('cli.uninstall.reopen.body', {}, locale), ...open], initial: 'continue',
-    options: [{ id: 'continue', label: t('cli.uninstall.reopen.continue', {}, locale) }, { id: 'cancel', label: t('cli.uninstall.reopen.cancel', {}, locale) }] }, { locale, env });
+    options: [{ id: 'continue', label: t('cli.uninstall.reopen.continue', {}, locale), role: 'yes' }, { id: 'cancel', label: t('cli.uninstall.reopen.cancel', {}, locale), role: 'no' }] }, { locale, env });
   if (answer === 'continue') await reopenInstallation(root);
   return answer === 'continue';
 }

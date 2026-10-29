@@ -13,7 +13,7 @@ export type TaskDeliveryIo = Readonly<{ locale: Locale; ask: TaskCardAsk; print:
   /** The read-only diff of the previewed patch (the CLI's own patch-preview view). */
   diff: (preview: DeliveryPreview) => Promise<void> }>;
 
-const yesNo = (locale: Locale) => [{ id: 'yes', label: t('cli.task.menu.yes', {}, locale), key: 'y' }, { id: 'no', label: t('cli.task.menu.no', {}, locale), key: 'n' }];
+const yesNo = (locale: Locale) => [{ id: 'yes', label: t('cli.task.menu.yes', {}, locale), role: 'yes' as const }, { id: 'no', label: t('cli.task.menu.no', {}, locale), role: 'no' as const }];
 const shown = <T>(items: readonly T[]) => ({ items: items.slice(0, REGISTRY.menu.filesShown), omitted: Math.max(0, items.length - REGISTRY.menu.filesShown) });
 
 /**
@@ -48,8 +48,8 @@ function previewCard(preview: DeliveryPreview, locale: Locale): CliCardRequest {
     ...(preview.summary === undefined ? [] : preview.summary ? renderDeliverySummary(preview.summary, locale, { omit: ['title', 'operation', 'change'] }) : ticketSummaryBlock(null, undefined, locale)),
     preview.queueTarget ? t('cli.task.menu.deliver.queue', { target: preview.queueTarget }, locale)
       : preview.adoptionTargets.length ? t('cli.task.menu.deliver.targets', { targets: preview.adoptionTargets.join(', ') }, locale) : t('cli.task.menu.deliver.refOnly', {}, locale),
-  ], options: [{ id: 'deliver', label: t('cli.task.menu.deliver.go', {}, locale), key: 'y' }, { id: 'diff', label: t('cli.task.menu.action.diff', {}, locale), key: 'd' },
-    { id: 'no', label: t('cli.task.menu.no', {}, locale), key: 'n' }] };
+  ], options: [{ id: 'deliver', label: t('cli.task.menu.deliver.go', {}, locale), role: 'yes' }, { id: 'diff', label: t('cli.task.menu.action.diff', {}, locale), key: 'd' },
+    { id: 'no', label: t('cli.task.menu.no', {}, locale), role: 'no' }] };
 }
 
 /**

@@ -18,7 +18,7 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
     return () => clearInterval(timer);
   }, [stage]);
   const close = () => { controller.current?.abort(); onClose(); };
-  const options = stage === 'background' ? [{ id: 'no', label: t('siwc.card.onlyTyping', {}, port.locale) }, { id: 'yes', label: t('siwc.card.backgroundYes', {}, port.locale) }]
+  const options = stage === 'background' ? [{ id: 'no', label: t('siwc.card.onlyTyping', {}, port.locale), role: 'no' as const }, { id: 'yes', label: t('siwc.card.backgroundYes', {}, port.locale), role: 'yes' as const }]
     : stage === 'api' ? [{ id: 'no', label: t('siwc.card.apiOff', {}, port.locale) }, ...targets.map((row, index) => ({ id: String(index), label: terminalSafeText(row.id) }))]
       : stage === 'result' ? [...(result?.state === 'disconnected' ? [{ id: 'new-account', label: t('siwc.card.otherAccount', {}, port.locale) }] : []), { id: 'close', label: t('siwc.card.close', {}, port.locale) }, ...(result?.connectionId && result.state !== 'disconnected' ? [{ id: 'usage', label: t('siwc.usage.title', {}, port.locale) }, { id: 'revoke', label: t('siwc.card.revokeConsent', {}, port.locale) }, { id: 'logout', label: t('siwc.revoke.title', {}, port.locale) }] : [])] : [];
   const lines = stage === 'background' ? [t('siwc.card.body', {}, port.locale), t('siwc.privacy.body', {}, port.locale), t('siwc.card.connectedAppOnly', {}, port.locale), t('siwc.card.background', {}, port.locale)]

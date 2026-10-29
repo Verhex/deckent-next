@@ -165,9 +165,11 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
   it('interrupted after the permissions (Esc): the next run shows them done and asks the unsaved selections again', async () => {
     await access(cli);
     const f = await fixture();
+    // BeUser walk16: the yes/no cards of the same flow take the letter they show, (y) on the question and (y) on its apply step.
     const run = await f.pty('interrupt', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b']]);
+      ['No (n)', 'y'], ['Apply now (y)', 'y'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    expect(run.output).toContain('Yes (y)'); expect(run.output).toContain('Not now (n)');
     expect(run.status).toBe(0);
     expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured',
       'core:language': 'needs-answer:setup.reason.languageDetected' });

@@ -45,7 +45,7 @@ export async function signersCommand(action: SignerAction, args: { readonly id?:
   }
   emit(scopeNotice(scope, locale), sinks);
   const card = async (title: string, body: string[]) => await io.ask({ title, body,
-    options: [{ id: 'apply', label: t('agents.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), key: 'n' }] }) === 'apply';
+    options: [{ id: 'apply', label: t('agents.card.apply', {}, locale), role: 'yes' }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), role: 'no' }] }) === 'apply';
   const cancelled = () => { emit(t('agents.cancelled', {}, locale), { level: 'warning', ...sinks }); return EXIT_CODES.error; };
   const input = async () => readJsonInput(resolvePath(io.root, args.input!), io.inputMaxBytes,
     { subject: 'cli.input.subject.agent', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);

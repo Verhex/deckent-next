@@ -51,6 +51,8 @@ one section; other sections link to it.
   Either plan only adds rules; conflicting rules you wrote are kept.
 - `deckent init` is the guided setup: it shows the plan and what is still missing, with the exact command for each step;
   `deckent init --yes --scope <id>` installs a fresh first-run policy, sets the language and runs the final check.
+  In the setup window and its cards, ↑↓ (or j/k) move, Enter sends the highlighted answer and Esc closes; every yes/no question
+  shows and takes (y) and (n). A choice among several answers (language, profile) has no letters.
 - `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads, and which
   host-tool bridges it detects. Docker coding workers do not read it; they get the worker file described in
   [Worker instructions and discovery](#worker-instructions-and-discovery).

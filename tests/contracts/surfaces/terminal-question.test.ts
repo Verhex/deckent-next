@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { render } from 'ink';
 import { PassThrough, Writable } from 'node:stream';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { QuestionWindow, WindowStackProvider, questionStep, type QuestionOption } from '#surfaces/core/terminal-window/index.js';
+import { QuestionWindow, WindowStackProvider, optionKey, questionStep, type QuestionOption } from '#surfaces/core/terminal-window/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import type { Key } from 'ink';
@@ -39,6 +39,20 @@ describe('question model', () => {
     const both = questionStep('multi', options, { at: 0, ticked: ['c'] }, ' ', key());
     expect(both.kind === 'move' && questionStep('multi', options, both.state, '', key({ return: true }))).toEqual({ kind: 'submit', ids: ['a', 'c'] });
     expect(questionStep('multi', options, at(0), 'y', key())).toEqual({ kind: 'ignored' });
+  });
+  it('a yes/no question derives (y)/(n) from its answers in every locale: y and n answer, Enter sends the highlighted one; other answers keep their own letter', () => {
+    const at = (n: number) => ({ at: n, ticked: [] as string[] });
+    // The answer role, not the call site, owns the letter; an answer without a role ("Not now" beside a real No) is letterless; ids and order are free.
+    const yesNo = [{ id: 'later', label: 'Not now' }, { id: 'apply', label: 'Apply', role: 'yes' }, { id: 'cancel', label: 'Cancel', role: 'no' }] as QuestionOption[];
+    expect(questionStep('single', yesNo, at(0), 'y', key())).toEqual({ kind: 'submit', ids: ['apply'] });
+    expect(questionStep('single', yesNo, at(0), 'N', key())).toEqual({ kind: 'submit', ids: ['cancel'] });
+    expect(questionStep('single', yesNo, at(0), '', key({ return: true }))).toEqual({ kind: 'submit', ids: ['later'] });
+    expect(questionStep('single', yesNo, at(0), '3', key())).toEqual({ kind: 'move', state: at(2) });
+    expect(questionStep('multi', yesNo, at(0), 'y', key())).toEqual({ kind: 'ignored' });
+    expect(yesNo.map(option => optionKey(option))).toEqual([undefined, 'y', 'n']);
+    expect(optionKey({ id: 'session', label: 'Session', key: 's' })).toBe('s');
+    // @ts-expect-error a yes/no answer never carries a hand-written letter
+    expect(optionKey({ id: 'odd', label: 'Odd', role: 'yes', key: 'x' })).toBe('y');
   });
 });
 

@@ -14,8 +14,8 @@ export async function askAdminCard(context: AdminCommandContext, locale: Locale,
     ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
 }
 /** Apply / cancel answers; nothing is preselected, so Enter alone decides nothing. */
-export const confirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('cli.admin.card.apply', {}, locale), key: 'y' },
-  { id: 'cancel', label: t('cli.admin.card.cancel', {}, locale), key: 'n' }];
+export const confirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('cli.admin.card.apply', {}, locale), role: 'yes' },
+  { id: 'cancel', label: t('cli.admin.card.cancel', {}, locale), role: 'no' }];
 /** The command's stdout/stderr sinks as `emit` takes them. */
 export const adminSinks = (context: AdminCommandContext) => ({ ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 /** "Cancelled; nothing was changed." on stderr (a person's own answer, not an error). */

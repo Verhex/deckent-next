@@ -313,3 +313,45 @@ it('N3: a long reason wraps whole at 72 columns (no "…" cut); a one-row stage 
   await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 200)); stdin.write('\r');
   await closed;
 });
+/** Mounts the real guided window on a fake TTY with one controller model; returns the drawn text and the answers the window sent. */
+async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel) {
+  const { PassThrough, Writable } = await import('node:stream'), { mountSetupWindow } = await import('#surfaces/core/project-instructions/index.js');
+  const { DECISION_ARM_DEFAULT } = await import('#surfaces/core/terminal-window/index.js');
+  let frame = '';
+  const sent: string[] = [];
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 40 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const closed = mountSetupWindow(model, async id => { sent.push(id); return null; }, { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
+  await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 200));
+  const text = () => frame.replace(/\u001b\[[0-9;?]*[A-Za-z]/gu, ''); // eslint-disable-line no-control-regex
+  return { text, sent, press: async (keys: string) => { stdin.write(keys); await new Promise(resolve => setTimeout(resolve, 150)); },
+    close: async () => { if (!sent.length) stdin.write('\u001b'); await closed; } };
+}
+it('walk16: every yes/no stage of the guided window shows and takes (y)/(n), "Not now" beside a real No stays letterless; language has no letters, Enter still sends', async () => {
+  const controller = createSetupController({ context: harness().context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+  // A true multi-choice question (the language): no letters, a typed y is not an answer, Enter sends the highlighted (recommended) one.
+  const language = await setupWindowAt(controller.model());
+  try {
+    expect(language.text()).toContain('2. Türkçe'); expect(language.text()).not.toMatch(/\d\. [^\n]* \([a-z]\)/u);
+    await language.press('y'); expect(language.sent).toEqual([]);
+    await language.press('\r'); expect(language.sent).toEqual(['tr']);
+  } finally { await language.close(); }
+  await controller.step('en'); await controller.step('yes'); await controller.step('core:solo');
+  const permissions = controller.model();
+  expect(permissions.rows[4]).toMatch(/^> 5\. Permissions · needs your answer/u);
+  for (const [typed, answer] of [['y', 'yes'], ['n', 'no']] as const) {
+    const view = await setupWindowAt(permissions);
+    try {
+      expect(view.text()).toContain('1. Yes (y)'); expect(view.text()).toContain('2. No (n)');
+      expect(view.text()).toContain('3. Not now'); expect(view.text()).not.toContain('Not now (');
+      await view.press(typed); expect(view.sent).toEqual([answer]);
+    } finally { await view.close(); }
+  }
+  // The apply step that follows asks yes or not now: Apply takes y, "Not now" (its only no) takes n.
+  const apply = (await controller.step('yes'))!;
+  const view = await setupWindowAt(apply);
+  try {
+    expect(view.text()).toContain('1. Apply now (y)'); expect(view.text()).toContain('2. Not now (n)');
+    await view.press('n'); expect(view.sent).toEqual(['later']);
+  } finally { await view.close(); }
+});

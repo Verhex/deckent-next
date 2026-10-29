@@ -142,7 +142,7 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   const preview = await run(false);
   if (preview.status !== 'preview') { show(preview); return; }
   const answer = await askCliCard({ title: t('clisetup.coding.card.title', {}, locale), body: templateLines(output(preview), locale),
-    options: [{ id: 'apply', label: t('clisetup.coding.card.apply', {}, locale), key: 'y' }, { id: 'no', label: t('clisetup.coding.card.cancel', {}, locale), key: 'n' }] }, io);
+    options: [{ id: 'apply', label: t('clisetup.coding.card.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('clisetup.coding.card.cancel', {}, locale), role: 'no' }] }, io);
   if (answer !== 'apply') { emit(t('clisetup.coding.card.cancelled', {}, locale), { ...sinks, json: false }); return; }
   show(await run(true));
 }

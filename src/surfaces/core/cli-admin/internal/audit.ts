@@ -84,8 +84,8 @@ async function rebaselineCommand(argv: readonly string[], context: AdminCommandC
     const [title, ...body] = t('cli.audit.rebaseline.card', { scope: terminalSafeText(scopeId), status: renderAuditStatus(current.status, locale), reason: renderAuditReason(current.reason, locale),
       text: terminalSafeText(reason), head: current.head?.sequence ?? 0, headDigest: current.head?.digest.slice(0, 12) ?? '—', policy: current.policyDigest.slice(0, 12),
       producers: current.producersDigest.slice(0, 12) }, locale).split('\n');
-    return await askAdminCard(context, locale, { title: title!, body, options: [{ id: 'apply', label: t('cli.audit.rebaseline.apply', {}, locale), key: 'y' },
-      { id: 'cancel', label: t('cli.admin.card.cancel', {}, locale), key: 'n' }] }) === 'apply';
+    return await askAdminCard(context, locale, { title: title!, body, options: [{ id: 'apply', label: t('cli.audit.rebaseline.apply', {}, locale), role: 'yes' },
+      { id: 'cancel', label: t('cli.admin.card.cancel', {}, locale), role: 'no' }] }) === 'apply';
   });
   if (!result) { emit(t('cli.audit.rebaseline.declined', {}, locale), { level: 'error', ...adminSinks(context) }); return EXIT_CODES.error; }
   emit(result, { json, ...adminSinks(context), render: () => t('cli.audit.rebaseline.done', { scope: terminalSafeText(result.scopeId), sequence: result.checkpoint?.checkpoint.sequence ?? 0,

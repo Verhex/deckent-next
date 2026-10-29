@@ -12,7 +12,7 @@ import { contentLines, view } from './render.js';
 
 export interface WriteContext { readonly root: string; readonly options: ConfigLoadOptions; readonly locale: Locale; readonly scope: ScopeResolution; readonly inputMaxBytes: number; readonly usage?: string;
   readonly ask: (request: CliCardRequest) => Promise<string | null>; readonly resolve: (id: string) => Promise<MemoryInspection> }
-export const cardOptions = (locale: Locale) => [{ id: 'apply', label: t('memory.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('memory.card.cancel', {}, locale), key: 'n' }];
+export const cardOptions = (locale: Locale) => [{ id: 'apply', label: t('memory.card.apply', {}, locale), role: 'yes' as const }, { id: 'cancel', label: t('memory.card.cancel', {}, locale), role: 'no' as const }];
 const content = (value: MemoryContent, locale: Locale): string[] => [safeCell(value.title), ...contentLines(value, locale)];
 
 /**

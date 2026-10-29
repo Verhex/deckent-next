@@ -15,8 +15,8 @@ export async function askModelsCard(context: ModelCommandContext, locale: Locale
     ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) });
 }
 /** Apply / cancel answers; nothing is preselected, so Enter alone decides nothing. */
-export const modelsConfirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('climodels.card.apply', {}, locale), key: 'y' },
-  { id: 'cancel', label: t('climodels.card.cancel', {}, locale), key: 'n' }];
+export const modelsConfirmOptions = (locale: Locale): readonly CliCardOption[] => [{ id: 'apply', label: t('climodels.card.apply', {}, locale), role: 'yes' },
+  { id: 'cancel', label: t('climodels.card.cancel', {}, locale), role: 'no' }];
 export const reportModelsCancelled = (context: ModelCommandContext, locale: Locale): void => {
   emit(t('climodels.card.cancelled', {}, locale), { level: 'warning', ...modelsSinks(context) });
 };

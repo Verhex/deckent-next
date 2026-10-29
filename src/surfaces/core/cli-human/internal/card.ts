@@ -2,9 +2,10 @@ import type { Readable } from 'node:stream';
 import { ErrorRegistry, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { detectCliMode } from './mode.js';
 import { lendHeldInput } from './input-hold.js';
+import type { QuestionOption } from '#surfaces/core/terminal-window/index.js';
 
-/** One answer of a CLI card; `key` is the single letter that answers at once (`y`, `s`, `a`, `n`). */
-export type CliCardOption = Readonly<{ id: string; label: string; key?: string }>;
+/** One answer of a CLI card (the terminal's question option): a yes/no answer declares `role` (the card shows and takes (y)/(n)); others may show a `key`. */
+export type CliCardOption = QuestionOption;
 /** A card: title, body lines (untrusted text is redacted and made terminal-safe), answers; `initial` preselects one (none: Enter alone answers nothing). */
 export type CliCardRequest = Readonly<{ title: string; body?: readonly string[]; options: readonly CliCardOption[]; initial?: string }>;
 export type CliCardIo = Readonly<{ locale: Locale; stdin?: Readable & { isTTY?: boolean; setRawMode?: unknown }; stdout?: unknown; env?: NodeJS.ProcessEnv;
@@ -12,7 +13,7 @@ export type CliCardIo = Readonly<{ locale: Locale; stdin?: Readable & { isTTY?: 
 
 /**
  * Who may be asked: both streams a real terminal with raw mode and a person at it (never an agent, CI, pipe or dumb terminal), and a card
- * with at least one answer and distinct answer ids. Refuses with `TERMINAL_TTY_REQUIRED` / `CLI_USAGE` before anything is drawn.
+ * with at least one answer and distinct answer ids (a card with a yes/no answer has exactly one yes and one no). Refuses with `TERMINAL_TTY_REQUIRED` / `CLI_USAGE` before anything is drawn.
  * The card view itself (terminal window + question rows, Ink) mounts after this gate; it loads lazily, never at CLI start.
  */
 export function cliCardGate(request: CliCardRequest, io: CliCardIo): Readonly<{ stdin: Readable & { isTTY?: boolean }; stdout: unknown; env: NodeJS.ProcessEnv }> {
@@ -20,6 +21,8 @@ export function cliCardGate(request: CliCardRequest, io: CliCardIo): Readonly<{ 
   const mode = detectCliMode({ env, stdin, stdout: stdout as { isTTY?: boolean }, ...(io.agentEnvironment ? { agentEnvironment: io.agentEnvironment } : {}) });
   if (mode.mode !== 'interactive' || typeof (stdin as { setRawMode?: unknown }).setRawMode !== 'function') throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   if (!request.options.length || new Set(request.options.map(option => option.id)).size !== request.options.length) throw ErrorRegistry.createError('CLI_USAGE');
+  const roles = (role: 'yes' | 'no') => request.options.filter(option => option.role === role).length;
+  if ((roles('yes') || roles('no')) && (roles('yes') !== 1 || roles('no') !== 1)) throw ErrorRegistry.createError('CLI_USAGE');
   return { stdin, stdout, env };
 }
 
@@ -29,10 +32,10 @@ export type StandingAnswer = 'once' | 'session' | 'always' | 'no';
  * whatever the caller asked for; `session`/`always` appear only when offered. No option is preselected.
  */
 export function standingCardOptions(locale: Locale, offer: Readonly<{ session?: boolean; always?: boolean; hardFloor: boolean }>): readonly CliCardOption[] {
-  return Object.freeze([{ id: 'once', label: t('terminal.approval.window.choice.once', {}, locale), key: 'y' },
+  return Object.freeze([{ id: 'once', label: t('terminal.approval.window.choice.once', {}, locale), role: 'yes' },
     ...(offer.session ? [{ id: 'session', label: t('terminal.approval.window.choice.session', {}, locale), key: 's' }] : []),
     ...(offer.always && !offer.hardFloor ? [{ id: 'always', label: t('terminal.approval.window.choice.always', {}, locale), key: 'a' }] : []),
-    { id: 'no', label: t('terminal.approval.window.choice.no', {}, locale), key: 'n' }]);
+    { id: 'no', label: t('terminal.approval.window.choice.no', {}, locale), role: 'no' }]);
 }
 
 /**
