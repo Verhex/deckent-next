@@ -6,11 +6,11 @@ import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
 import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
-  openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
+  openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, createBeuserArrange, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
-  readBeuserControllerAudit, verifyApproval, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
+  readBeuserControllerAudit, verifyApproval, beuserArrangeSteps, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
 import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -63,6 +63,10 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   const models = { ...model.models, async walker(...args: Parameters<typeof model.models.walker>) { const answer = await model.models.walker(...args);
     if (answer.state === 'invoked') walkerMakers.push(answer.receipt.maker); return answer; } };
   const started = performance.now();
+  const arrange: BeuserArrangement = { steps: beuserArrangeSteps(data.startState), port: createBeuserArrange({ realm, custody, options: runtimeOptions, language: data.summary.language }),
+    async record(ctx, receipt) { const row = recorder.append(ctx, { binding: ctx.binding, kind: 'arrange', atMs: Math.floor(performance.now() - started),
+      evidenceRef: `${context.binding.transcriptId}:arrange:${trace.length + 1}`, text: JSON.stringify(receipt) });
+    trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef: await retainBeuserJson(artifacts, ctx, row) }); } };
   const probe = async (): Promise<BeuserReadback> => {
     const handle = (await custody.load(context))?.handle; if ((await realm.observe(context)).state !== 'admitted' || !handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     // Values only. No ledger, key, backup, receipt bytes or arbitrary persona-authored command crosses this boundary.
@@ -76,7 +80,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     const evaluated = controllerValidity === 'valid' ? await correctBeuserModelOutput(ctx, data.summary.patience, async outputError => {
       const answer = await models.evaluate(ctx, transcript.transcriptDigest, outputError);
       if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-evaluator' || answer.receipt.invocation.receipt.outcome?.state !== 'responded') return null;
-      return { answer, experience: decodeBeuserEvaluatorOutput(answer.receipt.invocation, transcript.evidenceRefs) };
+      return { answer, experience: decodeBeuserEvaluatorOutput(answer.receipt.invocation, transcript.transcript.filter(row => row.entry.kind !== 'arrange').map(row => row.entry.evidenceRef)) };
     }) : null;
     const experience = evaluated?.experience ?? { verdict: 'unknown' as const, evidenceRefs: [] };
     evidence = beuserEvidenceSchema.parse({ schemaVersion: 1, binding: ctx.binding, transcript: transcript.transcript, readbacks,
@@ -99,7 +103,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     finally { approvals.close(); }
   }, false, 'read');
   return { custody, realm, removal, refusal, async walk(budget: BeuserExecutionBudget) {
-    const ports = { realm, surface, initialCommand: launch.initialCommand, models, decode: model.decode, evidence: evidencePort, refusal,
+    const ports = { realm, surface, initialCommand: launch.initialCommand, models, decode: model.decode, evidence: evidencePort, refusal, arrange,
       async controllerAudit(ctx: BeuserContext) {
         try { controllerValidity = await withControllerAudit(ports => readBeuserControllerAudit(ctx, ports)); }
         catch { controllerValidity = 'unknown'; }

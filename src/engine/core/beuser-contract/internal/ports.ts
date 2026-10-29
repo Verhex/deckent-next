@@ -9,6 +9,7 @@ import type { TaskEvaluationApplication, TaskEvaluationCommand } from '#engine/c
 import type { RoleModelRefusal } from '#domain/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { BeuserContractError, type BeuserLimits } from './limits.js';
+import type { BeuserArrangeStep } from './arrange.js';
 
 /** Supported locales come from the product registry; the pure domain shape carries a locale identity. */
 export function pinBeuserWalkerSummary(input: unknown): BeuserWalkerSummary {
@@ -74,6 +75,12 @@ export interface ModelPort {
   walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
   evaluate(context: BeuserContext, transcriptDigest: string, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
   cancel(context: BeuserContext, invocationId: string): Promise<void>;
+}
+/** Trusted start-state arrangement of the admitted target, before the persona's first look. The target is the context binding,
+ * not a realm: the product CLI exec adapter is the first implementation; results are parsed and gated by the engine. */
+export interface BeuserArrangePort {
+  run(context: BeuserContext, step: BeuserArrangeStep): Promise<unknown>;
+  observe(context: BeuserContext): Promise<unknown>;
 }
 export interface EvidencePort {
   append(context: BeuserContext, entry: BeuserTranscriptEntry): Promise<void>;

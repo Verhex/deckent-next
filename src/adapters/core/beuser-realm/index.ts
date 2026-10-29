@@ -7,7 +7,7 @@ export { probeBeuserSystemd } from './internal/systemd.js';
 export type { BeuserSystemdCapability } from './internal/systemd.js';
 export type { BeuserRealmEvidence, BeuserEvidenceRetention } from './internal/admission.js';
 
-export { readBeuserInstallationSummary, createBeuserRealmCustody, createBeuserRealm, createBeuserChannel } from './internal/custody.js';
+export { readBeuserInstallationSummary, createBeuserRealmCustody, createBeuserRealm, createBeuserChannel, createBeuserArrange } from './internal/custody.js';
 export { beuserPrivateRecord, retainBeuserJson } from './internal/records.js';
 export { readBeuserCandidate } from './internal/candidate.js';
 export { verifyBeuserDistribution } from './internal/distribution.js';

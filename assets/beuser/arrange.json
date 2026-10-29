@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "revision": "beuser-arrange-1",
+  "steps": [
+    {
+      "kind": "cli",
+      "id": "installed",
+      "version": 1,
+      "args": ["init", "--yes", "--scope", "beuser-realm", "--json"],
+      "timeoutMs": 25000,
+      "readback": { "key": "installation", "expected": "installed" }
+    }
+  ],
+  "states": [
+    { "id": "T1", "steps": [{ "id": "installed", "version": 1 }] },
+    { "id": "fresh-own-installation", "steps": [{ "id": "installed", "version": 1 }] }
+  ]
+}

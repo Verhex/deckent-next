@@ -4,13 +4,14 @@ import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { verifiedPrincipalSchema, beuserEvaluatorPrincipalRef } from '#domain/index.js';
 import { beuserBindingSchema } from '#domain/core/beuser/index.js';
-import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { pinBeuserLimits, BEUSER_ARRANGE_REGISTRY, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { BeuserRealmApplication, createBeuserRealmSeal, beuserBindingDigest, type BeuserRealmCustody, type BeuserRealmHandle, type BeuserRealmLease, type BeuserRealmRuntime } from '#engine/core/beuser-realm/index.js';
 import { DockerBeuserRealmRuntime, canonicalRealmPath, pinRealmOptions, inspectBeuserRealm, BEUSER_REALM_RECIPE, probeBeuserSystemd, type BeuserRealmCommand, type BeuserEvidenceRetention } from '#adapters/core/beuser-realm/index.js';
 import { readlink } from 'node:fs/promises';
 import { generateKeyPairSync } from 'node:crypto';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
-import { readBeuserCandidate, verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
+import { readBeuserCandidate, verifyBeuserDistribution, createBeuserArrange } from '#adapters/core/beuser-realm/index.js';
+import { execFileSync } from 'node:child_process';
 import { sha256, redactForRecord } from '#platform/index.js';
 
 const retain: BeuserEvidenceRetention = async (_context, evidence) => `fixture-retained:${evidence.digest}`;
@@ -54,7 +55,7 @@ function harness(ctx = context()) {
   };
   return { ctx, handle, custody, runtime, app: new BeuserRealmApplication(runtime, custody) };
 }
-it('admits only retained binding and fresh inspection; cleanup works after cancellation and cannot reuse a terminal realm', async () => {
+it('admits only retained binding and fresh inspection; arrange exec is TTY-less after admission; cleanup works after cancellation and cannot reuse a terminal realm', async () => {
   const h = harness(); const made = await h.app.create(h.ctx);
   expect((await h.app.admit(h.ctx, made)).state).toBe('admitted');
   const cancelled = AbortSignal.abort();
@@ -63,6 +64,37 @@ it('admits only retained binding and fresh inspection; cleanup works after cance
   await expect(h.app.create(h.ctx)).rejects.toThrow('already claimed');
   expect(h.runtime.create).toHaveBeenCalledOnce();
   await expect(h.app.admit(h.ctx, made)).rejects.toMatchObject({ code: 'BEUSER_TARGET_NOT_SANDBOX' });
+  {
+    const r = harness(), fresh = await r.app.create(r.ctx), calls: string[][] = [], step = BEUSER_ARRANGE_REGISTRY.steps[0]!;
+    const options = { controllerRoot: '/fixture/controller', packageRoot: '/fixture/package', executable: '/usr/bin/docker', image: 'sha256:' + 'a'.repeat(64),
+      uid: 1000, gid: 1001, memoryBytes: 1048576, nanoCpus: 1000000000, pids: 10, filesystemBytes: 1048576 };
+    const command: BeuserRealmCommand = async args => { calls.push([...args]);
+      return JSON.stringify(args.includes(JSON.stringify([step.args, step.timeoutMs, r.ctx.limits.maxArtifactBytes]))
+        ? { exitCode: 0, stdoutBytes: 1, stdoutDigest: '0'.repeat(64) } : { installation: 'installed' }); };
+    const arrange = createBeuserArrange({ realm: r.app, custody: r.custody, options, language: 'tr', command });
+    await expect(arrange.run(r.ctx, step)).rejects.toMatchObject({ code: 'BEUSER_TARGET_NOT_SANDBOX' });
+    expect(calls).toEqual([]);
+    await r.app.admit(r.ctx, fresh);
+    expect(await arrange.run(r.ctx, step)).toEqual({ exitCode: 0, stdoutBytes: 1, stdoutDigest: '0'.repeat(64) });
+    expect(await arrange.observe(r.ctx)).toEqual({ installation: 'installed' });
+    for (const args of calls) {
+      expect(args.slice(0, 4)).toEqual(['container', 'exec', '--user', '1000:1001']);
+      expect(args.slice(0, args.indexOf(r.handle.containerId)).filter(arg => /^-(i|t|it|ti)$|^--(interactive|tty)/u.test(arg))).toEqual([]);
+      expect(args.join('\n')).not.toMatch(/pty-driver|TERM=/u);
+    }
+    const exec = calls[0]!, at = exec.indexOf(r.handle.containerId);
+    expect(exec.slice(0, at).join(' ')).toContain('--env LANG=tr --env LC_ALL=tr --env HOME=/realm/home --env DECKENT_GLOBAL_HOME=/realm/home/.deckent');
+    // The exact in-realm wrapper, pointed at a probe instead of the packaged CLI: offered input never reaches the child, no terminal, exit code returned.
+    const [node, ...tail] = exec.slice(at + 1), entry = `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`;
+    expect(node).toBe(BEUSER_REALM_RECIPE.nodeExecutable);
+    const script = tail[tail.indexOf('--eval') + 1]!, base = await mkdtemp(join(tmpdir(), 'beuser-arrange-')); roots.push(base);
+    expect(script.split(entry)).toHaveLength(2);
+    const probe = join(base, 'probe.mjs'), seen = JSON.stringify({ tty: false, stdin: 0 });
+    await writeFile(probe, "import { readFileSync } from 'node:fs'; process.stdout.write(JSON.stringify({ tty: Boolean(process.stdin.isTTY || process.stdout.isTTY), stdin: readFileSync(0).length })); process.exit(7);");
+    const ran = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '--eval', script.replace(entry, probe), JSON.stringify([['init', '--json'], 5000, 4096])],
+      { input: 'y\n', encoding: 'utf8' })) as unknown;
+    expect(ran).toEqual({ exitCode: 7, stdoutBytes: Buffer.byteLength(seen), stdoutDigest: sha256(seen) });
+  }
 });
 it('refuses wrong nonce/generation and forged observations before runtime inspection even with the admitted evaluator', async () => {
   const h = harness(); const made = await h.app.create(h.ctx);

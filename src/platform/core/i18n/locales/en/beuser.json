@@ -62,6 +62,8 @@
   "beuser.setup.result": "BeUser setup: {status}; content: {digest}.",
   "error.BEUSER_CANDIDATE_MISMATCH": "The candidate manifest or package identity does not match the admitted reference.",
   "remedy.BEUSER_CANDIDATE_MISMATCH": "Regenerate the BeUser profile from the exact staged candidate, then preview setup again.",
+  "error.BEUSER_START_STATE_UNMET": "The BeUser start state could not be arranged or read back, so the persona did not start.",
+  "remedy.BEUSER_START_STATE_UNMET": "Keep the branch unknown and inspect the retained arrange record. A start state that needs a person's witness is never forced or retried.",
   "beuser.report.cleanup": "Realm cleanup {branch}: {state}; filesystem proof: {source}.",
   "beuser.report.filesystem.kernel-proven": "kernel-proven (direct filesystem absence)",
   "beuser.report.filesystem.daemon-attested": "daemon-attested (daemon statement; no independent filesystem proof)",

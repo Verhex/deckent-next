@@ -9,7 +9,10 @@ import manifest from '../../../assets/beuser/calibration/manifest.json' with { t
 import good from '../../../assets/beuser/calibration/known-good.json' with { type: 'json' };
 import bad from '../../../assets/beuser/calibration/known-bad.json' with { type: 'json' };
 import { beuserBindingSchema, beuserSealedRubricSchema } from '#domain/core/beuser/index.js';
-import { pinBeuserWalkerSummary, BEUSER_LIMITS_REGISTRY } from '#engine/core/beuser-contract/index.js';
+import { pinBeuserWalkerSummary, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserArrangeRegistrySchema } from '#engine/core/beuser-contract/index.js';
+import { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
+import { BEUSER_REALM_RECIPE } from '#adapters/core/beuser-realm/index.js';
+import arrange from '../../../assets/beuser/arrange.json' with { type: 'json' };
 import { beuserReliabilityPolicySchema } from '#engine/core/beuser/index.js';
 import { beuserCalibrationSchema, beuserDigest, beuserReadbackSchema, beuserParametersSchema,
   beuserEvidenceSchema, evaluateBeuserEvidence } from '#capabilities/core/evaluation-evidence/index.js';
@@ -75,7 +78,7 @@ it('loads all seven assets through frozen C1/C5 parsers and resolves every perso
   beuserReliabilityPolicySchema.parse(manifest.reliabilityPolicy);
 });
 
-it('retains the entire uninstall and onboarding catalogs, explicit unknown variants and bounded self journey', () => {
+it('retains the entire uninstall and onboarding catalogs, explicit unknown variants, bounded self journey and catalogued v3 start states', () => {
   expect(uninstall.branches.map(row => row.id)).toEqual(Array.from({ length: 23 }, (_, index) => `U-B${index + 1}`));
   expect(uninstall.rubric.parameters.requiredBranches).toEqual(uninstall.branches.slice(0, 13).map(row => row.id));
   expect(uninstall.rubric.parameters.initialStateCatalog.map(row => row.id)).toEqual([
@@ -102,6 +105,31 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
   expect(onboarding.rubric.parameters.workerBoundary).toBe('actual-worker-execution-and-durable-target-readback-not-terminal-fallback');
   expect(self.rubric.parameters.recursion).toMatchObject({ maxDepth: 1, selfInChildCohort: false });
   expect(self.rubric.parameters.recursion.childJourneyIds).toEqual(['uninstall-v2', 'onboarding']);
+  {
+    const person = personas.personas[0]!, branch = onboarding.branches[0]!;
+    const v2 = { schemaVersion: 2, binding, summary: { ...person, journeyId: onboarding.journeyId, goal: branch.goal.tr }, limitsRevision: BEUSER_LIMITS_REGISTRY.profiles[0]!.revision,
+      candidateRoot: '/fixture/candidate', packageDigest: 'a'.repeat(64), candidateManifest: { sha256: 'a'.repeat(64), fileCount: 3, sourceCommit: '1'.repeat(40), sourceTreeSha256: 'b'.repeat(64), version: 'fixture' },
+      size: { columns: 80, rows: 24, scrollback: 100 }, bounds: { quietMs: 10, inactivityMs: 100, maxInputBytes: 1024 }, completionTokens: 1024, rubric: onboarding.rubric,
+      choices: { 'beuser-walker': { channelId: 'c', modelId: 'w' }, 'beuser-evaluator': { channelId: 'c', modelId: 'e' } }, contributorModels: [{ vendorId: 'maker' }],
+      entry: { mode: 'pty', nodeExecutable: BEUSER_REALM_RECIPE.nodeExecutable, args: [] },
+      probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'terminal-state', key: 'installation', expected: 'installed' }], calibration: manifest.calibration };
+    const startState = { schemaVersion: 1, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, steps: [{ id: 'installed', version: 1 }] };
+    const ok = (value: object) => beuserJourneyProfileSchema.safeParse(value).success;
+    expect(ok(v2)).toBe(true);
+    expect(ok({ ...v2, schemaVersion: 3, startState })).toBe(true);
+    expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, steps: [] } })).toBe(true);
+    expect(ok({ ...v2, startState })).toBe(false);
+    expect(ok({ ...v2, schemaVersion: 3 })).toBe(false);
+    for (const steps of [[{ id: 'installed', version: 2 }], [{ id: 'git-fixture', version: 1 }], [{ id: 'installed', version: 1, args: ['--global'] }]])
+      expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, steps } })).toBe(false);
+    expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, catalogRevision: 'other' } })).toBe(false);
+    // Catalog invariants live in code: exact structured CLI tuples and resolvable state mappings only.
+    expect(beuserArrangeRegistrySchema.safeParse(arrange).success).toBe(true);
+    const step = arrange.steps[0]!;
+    for (const steps of [[{ ...step, args: ['init', '--yes'] }], [{ ...step, args: ['init', '--json', 'a\nb'] }], [{ ...step, kind: 'shell' }], [step, step]])
+      expect(beuserArrangeRegistrySchema.safeParse({ ...arrange, steps }).success).toBe(false);
+    expect(beuserArrangeRegistrySchema.safeParse({ ...arrange, states: [{ id: 'T1', steps: [{ id: 'missing', version: 1 }] }] }).success).toBe(false);
+  }
 });
 
 it('keeps rubric and oracle fields outside strict walker summaries and neutral calibration presentations', () => {

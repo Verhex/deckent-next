@@ -1,7 +1,7 @@
 # Architecture
 
 Current architecture contracts of Deckent Next: what each part guarantees and which component owns each state transition. Read the product
-direction (Northstar) first, then the document map, then contracts by area (including [BeUser B1 source integration and open C6/C7 proof](.deckent/docs/architecture/modules/beuser.md)). Finished work is in COMPLETED-PLAN.md; reasons are in the decision log.
+direction (Northstar) first, then the document map, then contracts by area (including [BeUser B1 source integration, start-state arrangement and open C6/C7 proof](.deckent/docs/architecture/modules/beuser.md)). Finished work is in COMPLETED-PLAN.md; reasons are in the decision log.
 
 ## Northstar — owner 2026-09-17
 

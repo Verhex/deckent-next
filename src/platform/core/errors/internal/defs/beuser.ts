@@ -17,5 +17,6 @@ export const beuserErrors: ErrorDefinitions = Object.freeze({
   BEUSER_SURFACE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_BUSY', p, l), suggestion: t('remedy.BEUSER_SURFACE_BUSY', p, l) }) },
   BEUSER_CAPTURE_BLOCKED: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_CAPTURE_BLOCKED', p, l), suggestion: t('remedy.BEUSER_CAPTURE_BLOCKED', p, l) }) },
   BEUSER_SURFACE_EOF: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_EOF', p, l), suggestion: t('remedy.BEUSER_SURFACE_EOF', p, l) }) },
+  BEUSER_START_STATE_UNMET: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_START_STATE_UNMET', p, l), suggestion: t('remedy.BEUSER_START_STATE_UNMET', p, l) }) },
   BACKUP_REALM_SEALED: { category: 'error', render: (p, l) => ({ message: t('error.BACKUP_REALM_SEALED', p, l), suggestion: t('remedy.BACKUP_REALM_SEALED', p, l) }) },
 });

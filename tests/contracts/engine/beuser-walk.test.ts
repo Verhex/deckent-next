@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProjection, evaluatePolicy, type AuditRecord } from '#domain/index.js';
-import { sha256, createHmacIntegrity } from '#platform/index.js';
+import { sha256, createHmacIntegrity, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
-import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, BEUSER_ARRANGE_REGISTRY, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
+import { createBeuserTranscript } from '#engine/core/beuser-evidence/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
   correctBeuserModelOutput, type BeuserWalkPorts } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
@@ -194,7 +195,7 @@ it('the real dispatch owner replays an uncertain launch without invoking the sup
   expect(execute).toHaveBeenCalledOnce();
 });
 
-it('C2 created observation must reach C4 admission before the first surface action', async () => {
+it('C2 created observation must reach C4 admission, then the gated catalogued start state, before the first surface action', async () => {
   let lease: BeuserRealmLease | null = null;
   const inspect = vi.fn(async () => ({ valid: true, evidenceRefs: ['fixture-containment', 'fixture-kernel'] }));
   const handle = { binding, incarnation: 'fixture-incarnation', containerId: 'a'.repeat(64), controlDirectory: '/fixture/private', controlIdentity: '1:2' };
@@ -210,6 +211,38 @@ it('C2 created observation must reach C4 admission before the first surface acti
   const result = await new BeuserApplication(ports).walk(context(), summary);
   console.info('R1 observed', { state: result.state, cleanup: result.cleanup, admissionInspections: inspect.mock.calls.length });
   expect(inspect).toHaveBeenCalledOnce();
+  {
+    const step = { ...BEUSER_ARRANGE_REGISTRY.steps[0]!, timeoutMs: limits.maxWaitMs - 1 };
+    const arrangement = (installation: string, exitCode: number) => ({ steps: [step], record: vi.fn(async () => {}),
+      port: { run: vi.fn(async () => ({ exitCode, stdoutBytes: 2, stdoutDigest: '0'.repeat(64) })), observe: vi.fn(async () => ({ installation })) } });
+    const met = harness(), arranged = arrangement('installed', 0);
+    met.ports.arrange = arranged;
+    expect(await met.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
+    expect(arranged.port.run).toHaveBeenCalledWith(expect.anything(), step);
+    expect(vi.mocked(arranged.port.run).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(met.ports.surface.look).mock.invocationCallOrder[0]!);
+    expect(arranged.record).toHaveBeenCalledWith(expect.anything(), { id: 'installed', version: 1, exitCode: 0, stdoutBytes: 2, stdoutDigest: '0'.repeat(64),
+      readback: { key: 'installation', expected: 'installed', met: true } });
+    // A witness refusal (non-zero exit) or a readback mismatch is unknown: no persona, no RED, no refusal audit; cleanup still runs.
+    for (const [installation, exitCode] of [['absent', 0], ['installed', 78]] as const) {
+      const unmet = harness(), held = arrangement(installation, exitCode);
+      unmet.ports.arrange = held;
+      expect(await unmet.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_START_STATE_UNMET', verdict: null, cleanup: 'destroyed', transcriptDigest: null });
+      expect(held.port.observe).toHaveBeenCalledTimes(exitCode === 0 ? 1 : 0);
+      expect(held.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ exitCode, readback: expect.objectContaining({ met: false }) }));
+      for (const port of [unmet.ports.surface.look, unmet.ports.surface.argv, unmet.ports.models.walker, unmet.ports.refusal]) expect(port).not.toHaveBeenCalled();
+    }
+    // A catalogued timeout beyond the admitted wait bound is refused before any arrangement effect.
+    const unbounded = harness(), late = arrangement('installed', 0);
+    unbounded.ports.arrange = { ...late, steps: [BEUSER_ARRANGE_REGISTRY.steps[0]!] };
+    expect(await unbounded.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_LIMITS_UNAVAILABLE' });
+    expect(late.port.run).not.toHaveBeenCalled();
+    // Arrange rows are harness setup, never persona actions: they neither consume nor satisfy the walker step bound.
+    const wide = { ...context(), limits: pinBeuserLimits({ ...limits, maxTranscriptBytes: 100000 }) }, recorder = createBeuserTranscript(wide, EMPTY_KNOWN_SECRETS);
+    for (let index = 0; index <= limits.maxSteps; index++) recorder.append(wide, { binding, atMs: index, kind: 'arrange', evidenceRef: `arrange-${index}`, text: '{}' });
+    expect(recorder.inspect(wide).filter(row => row.entry.kind === 'action' || row.entry.kind === 'screen')).toEqual([]);
+    for (let index = 0; index < limits.maxSteps; index++) recorder.append(wide, { binding, atMs: 99, kind: 'action', evidenceRef: `action-${index}`, text: '{}' });
+    expect(() => recorder.append(wide, { binding, atMs: 99, kind: 'action', evidenceRef: 'over', text: '{}' })).toThrow('BEUSER_INPUT_INVALID');
+  }
 });
 
 it('reads retained acceptance only after destruction, and never reads a verdict for quarantined cleanup', async () => {
