@@ -49,6 +49,8 @@ versioned ledger, protocol and migrations; principal, scope, policy and audit ca
 - Extend an existing test file before adding one.
 - No `it.each` fan-out unless each row is a distinct real risk; one negative per real risk.
 - Test counts are never progress; the proved behavior is. Source: owner decision 2026-10-24 ([test discipline](../../../.deckent/docs/decisions/owner-decisions.md#test-disiplini-2026-10-24)).
+- Tests guard regressions; they do not accept a surface. Acceptance is the BeUser walk of the journey on the
+  assembled release (`deckent-beuser`). Run targeted tests per law 7, never bulk loads in place of that walk.
 
 ## Never cut
 

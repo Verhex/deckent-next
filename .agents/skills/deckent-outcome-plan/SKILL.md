@@ -26,6 +26,8 @@ Plan/evaluate against explicit acceptance; deterministic scheduling and authoriz
   operation/effect chain in scope; do not impose an illustrative legacy hierarchy.
 - Preserve installation/company/resource/principal boundaries and the standalone Core contract;
   Enterprise/ERP adapters extend registries and ports rather than introducing a second flow.
+- For each person- or company-facing surface the outcome claims, write its journey spec (`deckent-beuser`)
+  before implementation; the acceptance boundary is that journey, not the cards' own tests.
 
 ## Dependency and ownership DAG
 
@@ -71,6 +73,8 @@ Define producer → application → adapter → actual consumer proof, exact rev
 and relevant negative paths: denial, cancellation, replay, partial effect, timeout and recovery.
 Separate source checks, author tests, retained execution, current surface evidence and independent
 review. Mark unavailable platforms or consumers explicitly; tests alone cannot prove live behavior.
+A claimed surface's proof contract names its BeUser walk: personas, installs, walkers and the assembled
+release state it runs on after the narrow cards land (`deckent-beuser`).
 Set finite time/cost/retry bounds from the actual task and current policy, changed-evidence
 requirements, rollback or reconciliation path, stop conditions and escalation points.
 For uncertain effects preserve `unknown` until reconciliation rather than promising a safe retry.

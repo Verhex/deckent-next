@@ -906,6 +906,19 @@ Kaynak: DOCS-A56 owner kartı, dış `proof/ALPHA56-2026-10-24/PLAN-B-OWNER-TEST
 - **Politika yükseltmesi (2026-10-27):** güncel DOCS-A56 ataması owner'ın canlı ve N1'de v16–v18 yükseltmesini uyguladığını bildirir; eski “owner yükseltmesi bekleniyor” notunun yerini alır. Recovery-rule/template versioning sorusu v17/v18 sonrasında da AÇIK; ürün kurulumlarının geneline otomatik yükseltme sonucu çıkarılmaz.
 - **Lead kararları owner cevabı değildir:** FIX9 imaj kartının hazır imajı/arka plan build'ini önseçmesi ve tek kurulu scope'u `init --yes` ile yeniden kullanması; FIX11 kökten imzalı online anahtar delegasyonu (90 gün/5 dk registry varsayılanı, yank yeni içeriği de durdurur); bubblewrap 0.13.0'da kalma ve 0.13.1 imzalayan değişikliğinin ayrı güven kararını beklemesi. Ayrıntı ve kaynak [mimari karar günlüğünde](../architecture/decisions.md).
 
+<a id="beuser-2026-10-27"></a>
+
+## Owner kararı — 2026-10-27: kabul = kişi/kurum yolculuğu (BeUser)
+
+Neden: alpha.56 `deckent uninstall` ~12 bin test ve güvenlik incelemesinden geçti ama ilk gerçek kullanımda beş yerden kırıldı; dar kartlar kendi testleri ve incelemesiyle kabul ediliyor, sürümden önce kimse kişinin yolunu yürümüyordu. Owner: “Önerini kabul ediyorum, iş metodolojimize bunu ekle: kabul = kullanıcı / kurum yolculuğu; dar kapsamdan sonra toplanmış sürümün durumu … sürekli test koşmak yerine bu süreçleri yazdıktan sonra AI araçlarına test ettirelim — hermetik test yerine BeUser mekanizması. Bunu skill haline getirelim.”
+
+- Bir yüzey kurulmadan önce yolculuk haritası (her başlangıç durumu, menü seçimi ve CLI bayrak ikizi, sonuç, sonraki adımlı ret; solo ve kurum kişileri) kanıtlanmış araçlardan türetilerek yazılır.
+- Dar kartlar indikten sonra toplanmış sürüm adayında, tercihen yazardan farklı üreticinin AI ajanları kişiyi canlandırarak gerçek kurulumda her dalı yürür; transkript ve dal başına hüküm saklanır. Yüzey ancak her dal yeşil yüründüğünde biter.
+- Hermetik testler gerçek riskler için yalın regresyon korumasıdır; CI zorunlu kalır, kabul modeli değildir ve yürüyüşün yerine toplu test koşulmaz. Doğrulama sıklığı Kanun 7'dedir.
+- Paketteki bir yüzeyde bulunan eksik aynı pakette düzeltilir, ertelenmez.
+- Owner düzeltmesi (aynı akşam, bağlayıcı): “BeUser bunun adı bu, baştan sona AI yürüyecek ki o bana feedback versin; ben zaten uğraşmadan o fark etsin.” Yürüyücü, kendi kurduğu atılabilir BeUser sandbox kurulumunda kişi adımları dahil her dalı persona olarak yürür (`synthetic-person` etiketi; gerçek onay kanıtı değildir); canlı, N1, owner projeleri ve müşteri sistemlerinde kişi ve AI tabanları aynen geçerlidir. Owner adım yürümez, raporu okur.
+- Yöntem `deckent-beuser` skill'idir. BeUser'ın Deckent ürününe alınması (persona popülasyonları, teslim kabulüne yerleşme) ayrı bir ürün paketidir; owner aynı gün tasarımını istedi, owner kararlarından sonra planlanır.
+
 <a id="ker17-mcp-deck-grant-2026-10-28"></a>
 
 ## PRE-8 değişikliği — 2026-10-28: MCP `$DECK:` anahtarı proje iznine bağlı (KER-17)

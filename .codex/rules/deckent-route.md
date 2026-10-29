@@ -4,9 +4,9 @@ Moment → skill. Load the smallest set; `deckent-next-refactor` is the shared m
 | Moment | Load |
 |---|---|
 | Session start, after compact or an authority change | `deckent-authority-bootstrap` |
-| Planning a package, wave or lane brief (law check table + İki bakış) | `deckent-outcome-plan`; contracts and boundaries: `solution-architect` |
+| Planning a package, wave or lane brief (law check table + İki bakış); material decision to the owner | `deckent-outcome-plan` (clean-context law auditor before the owner decision); contracts and boundaries: `solution-architect` |
 | Dispatching lanes, fan-in | `deckent-parallel-execution`; mechanics: `superpowers:dispatching-parallel-agents`, `superpowers:using-git-worktrees` |
-| Material decision to the owner (package scope, architecture/authority, law change) | clean-context law auditor, per `deckent-outcome-plan` |
+| Journey spec before a person-facing surface; BeUser walk on the assembled release after its cards land | `deckent-beuser` |
 | Completion, assigned card audit, handling a REVISE | `deckent-closure`; `superpowers:receiving-code-review` |
 | Watching runs or N1 work; incident | `deckent-observe`; `deckent-readonly-audit` → `deckent-recovery` |
 | Design, Desktop, Terminal UX | `deckent-design-dna` first; user-level generic design skills are not used for Deckent |
