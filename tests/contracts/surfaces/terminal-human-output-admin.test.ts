@@ -36,7 +36,7 @@ describe.each([
     usage: ['Live spend account', 'Provider spend account: not available in this terminal.', 'This conversation', 'Reports: 2', 'Prompt: 38,643 tokens',
       'Completion: 3,215 tokens', 'Reasoning: at least 1,200 tokens (not measured in 1 of 2 reports)', 'Cache read: not measured', 'Cache write: not measured',
       'Cache write (5 min): not measured', 'Cache write (1 hour): not measured', 'Cache hit ratio: not measured', 'Net cache benefit: not measured',
-      'A measurement or account snapshot, not an invoice.', 'Spend budgets of this scope', 'No spend budget is configured for this scope (provider_spending).'],
+      'A measurement or account snapshot, not an invoice.'],
   }],
   ['tr', {
     status: [`Deckent çalışıyor · sürüm ${VERSION} · model Qwen 3 8B (yerel sunucu)`, 'Ayrıntı',
@@ -48,7 +48,7 @@ describe.each([
     usage: ['Canlı harcama hesabı', 'Sağlayıcı harcama hesabı: bu terminalde kullanılamıyor.', 'Bu konuşma', 'Rapor: 2', 'İstem: 38.643 token', 'Yanıt: 3.215 token',
       'Akıl yürütme: en az 1.200 token (2 raporun 1 tanesinde ölçülmedi)', 'Önbellekten okunan: ölçülmedi', 'Önbelleğe yazılan: ölçülmedi',
       'Önbelleğe yazılan (5 dk): ölçülmedi', 'Önbelleğe yazılan (1 saat): ölçülmedi', 'Önbellek isabet oranı: ölçülmedi', 'Önbellekten net kazanç: ölçülmedi',
-      'Bir ölçüm ya da hesap görüntüsüdür, fatura değildir.', 'Bu kapsamın harcama bütçeleri', 'Bu kapsam için harcama bütçesi yapılandırılmamış (provider_spending).'],
+      'Bir ölçüm ya da hesap görüntüsüdür, fatura değildir.'],
   }],
 ] as const)('human output (%s)', (locale, expected) => {
   it.each(['status', 'scope', 'model', 'usage'] as const)('/%s', async name => {
