@@ -33,7 +33,6 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
-    "native",
     "assets",
     "README.md",
     "LICENSE",

@@ -178,7 +178,7 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   if (declarations.problems.length) throw new Error(`published declarations are not self-contained:\n${declarations.problems.join('\n')}`);
   for (const file of files.filter(file => !file.endsWith('.js') && !file.endsWith('.d.ts'))) { const target = join(stage, 'dist', relative(dist, file)); mkdirSync(dirname(target), { recursive: true }); cpSync(file, target); }
   // KER-04: every listed top-level file ships (the PUB-AI install guide `docs/ai-install*.md` was listed but never staged).
-  for (const extra of new Set(['assets', 'native', 'README.md', 'LICENSE', ...(source.files ?? []).filter(entry => entry !== 'dist')])) if (existsSync(join(root, extra))) {
+  for (const extra of new Set(['assets', 'README.md', 'LICENSE', ...(source.files ?? []).filter(entry => entry !== 'dist')])) if (existsSync(join(root, extra))) {
     mkdirSync(dirname(join(stage, extra)), { recursive: true }); cpSync(join(root, extra), join(stage, extra), { recursive: true }); }
   // KER-04/S-11: a shipped document links to the source at this build's commit for any file the package does not carry.
   for (const doc of ['README.md', ...(source.files ?? []).filter(entry => entry.endsWith('.md'))]) if (existsSync(join(stage, doc))) writeFileSync(join(stage, doc),
