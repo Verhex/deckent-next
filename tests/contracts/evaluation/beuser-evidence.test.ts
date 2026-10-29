@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { beuserBindingSchema } from '#domain/core/beuser/index.js';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, evaluatePolicy } from '#domain/index.js';
 import { createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback, createBeuserEvaluationPort } from '#engine/core/beuser-evidence/index.js';
-import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { beuserDiagnosticSchema, pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { snapshotKnownSecrets, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, createInstalledTerminalEvaluator, validateInstalledCriterion, type BeuserEvidence } from '#capabilities/core/evaluation-evidence/index.js';
 import { TaskEvaluationApplication, resolveExecutionRegistry, verifyDispatchEvaluationEvidence } from '#engine/index.js';
@@ -182,4 +182,17 @@ describe.skipIf(process.platform === 'win32')('real retained dispatch and TaskEv
     expect(boundedRead).toHaveBeenCalledTimes(1);
     expect(createHash('sha256').update(f.content).digest('hex')).toBe(f.file.digest);
   });
+});
+
+it('diagnostic references stay unique, bound to their branch and backed by a captured screen', () => {
+  grant({ kind: 'beuser-transcript', id: 'transcript' }, 'inspect');
+  const trace = [{ evidenceRef: 'screen', kind: 'screen', artifactRef: 'sha256:' + '1'.repeat(64) }];
+  const finding = { schemaVersion: 1, binding, branch: 't', persona: 'buyer', code: 'persona-stuck', reason: 'loop', outcome: 'RED',
+    screen: 'Permission question', screenRef: 'screen', screenDigest: '2'.repeat(64), evidenceRefs: [trace[0]!.artifactRef], controllerValidity: 'unknown' };
+  const diagnostic = { schemaVersion: 1, trace, finding };
+  expect(beuserDiagnosticSchema.parse(diagnostic).finding).toEqual(finding);
+  expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, trace: [...trace, ...trace] }).success).toBe(false);
+  expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, branch: 'foreign-task' } }).success).toBe(false);
+  expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, screenRef: 'not-captured' } }).success).toBe(false);
+  expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, evidenceRefs: ['sha256:' + '3'.repeat(64)] } }).success).toBe(false);
 });

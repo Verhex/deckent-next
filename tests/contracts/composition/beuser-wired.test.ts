@@ -10,6 +10,8 @@ import { evaluatorEvidence } from '#capabilities/index.js';
 import { BEUSER_LIMITS_REGISTRY, BeuserRealmApplication, deliveryEvidenceKindSchema } from '#engine/index.js';
 import { expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
+import * as engine from '#engine/index.js';
+import * as platform from '#platform/index.js';
 import { walkConfiguredBeuser, readConfiguredBeuserReport, admitConfiguredBeuserWalk, setupConfiguredBeuser } from '#composition/core/beuser/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { recordedExecutionSupervisor, validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
@@ -217,4 +219,74 @@ it.skipIf(process.platform !== 'linux')('setup and admission refuse a controller
     expect(() => validateBeuserSupervisorProfile({ schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1,
       parameters: invalid.registry.profiles[0].parameters })).toThrow('BEUSER_INPUT_INVALID');
   } finally { await f.dispose(); }
+});
+
+it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted action artifacts and a named RED finding with proven or unknown cleanup', async () => {
+  for (const cleanupProven of [false, true]) {
+    const f = await reportFixture();
+    try {
+      vi.spyOn(platform, 'getConfigKnownSecrets').mockReturnValue(platform.snapshotKnownSecrets([{ name: 'FIXTURE', value: 'fixture-private' }]));
+      vi.spyOn(adapters, 'createBeuserRealm').mockImplementation(input => new BeuserRealmApplication({
+        async create(ctx, publish) { const handle = { binding: ctx.binding, incarnation: '12345678-1234-4234-8234-123456789abc', containerId: 'a'.repeat(64),
+          controlDirectory: input.options.controllerRoot, controlIdentity: 'fixture-owned' }; await publish(handle); return handle; },
+        async inspect() { return { valid: true, evidenceRefs: ['fixture-containment'] }; },
+        async remove() { return { processesAbsent: cleanupProven, cgroupAbsent: cleanupProven, filesystemAbsent: cleanupProven, evidenceRefs: cleanupProven ? ['fixture-absence'] : [] }; },
+      }, input.custody));
+      const keys: string[] = [];
+      vi.spyOn(adapters, 'createBeuserChannel').mockImplementation(input => ({ binding: input.context.binding,
+        verify: async () => {}, cancel: async () => {}, async open() {
+          const output = new PassThrough(), sink = new Writable({ write(chunk, _encoding, done) {
+            const command = JSON.parse(String(chunk));
+            if (command.op === 'input') keys.push(command.text);
+            output.write(JSON.stringify({ id: command.id, data: Buffer.from('\x1b[2J\x1b[HPermissions card: credential=fixture-private').toString('base64'),
+              state: 'ready', exitCode: null, columns: 80, rows: 24 }) + '\n'); done();
+          } });
+          return { input: sink, output, cancel: async () => {} };
+        } }));
+      // External model I/O only: real decode/controller/realm custody/dispatch/report below.
+      const model = vi.spyOn(engine, 'createBeuserModelPort').mockReturnValue({
+        walker: vi.fn(async () => ({ state: 'invoked', receipt: { role: 'beuser-walker', maker: 'fixture-walker', invocation: {
+          receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: '{"kind":"type","text":"fixture-private"}' } }] } },
+        } } })), evaluate: vi.fn(), cancel: vi.fn(),
+      } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
+      const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
+      expect(keys).toEqual(['fixture-private']); // The repeated action is detected before a second effect.
+      expect(model).toHaveBeenCalled();
+      expect(report).toMatchObject({ counts: { walked: 1 }, findings: [{ branch: 'persona', persona: 'person', code: 'persona-stuck', outcome: 'RED', reason: 'loop' }],
+        unknown: cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }], reliability: { completed: 0, attempted: 1 } });
+      const { terminal } = await f.records();
+      expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown', evidence: null });
+      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['action', 'screen', 'action', 'screen', 'friction']);
+      const config = await loadComposedConfig(f.root, { ...f.options, heal: false });
+      const artifacts = new adapters.FileArtifactStore({ root: join(f.root, '.deckent', 'artifacts'), maxBytes: config.artifacts.maxBytes });
+      for (const row of terminal.diagnostic.trace) {
+        const digest = row.artifactRef.slice('sha256:'.length);
+        const bytes = await readFile(join(f.root, '.deckent', 'artifacts', sha256('scope'), digest));
+        const artifact = await artifacts.read('scope', { schemaVersion: 1, scopeId: 'scope', digest, byteLength: bytes.length });
+        expect(sha256(artifact)).toBe(digest);
+        expect(Buffer.from(artifact).toString()).not.toContain('fixture-private');
+        if (row.kind === 'friction') expect(JSON.parse(JSON.parse(Buffer.from(artifact).toString()).text)).toEqual({
+          reason: 'loop', screenRef: report.findings?.[0]?.screenRef, proposedAction: { kind: 'type' } });
+      }
+      expect(report.findings?.[0]?.screen).toContain('Permissions card');
+      expect(report.findings?.[0]?.evidenceRefs).toEqual(terminal.diagnostic.trace.map((row: { artifactRef: string }) => row.artifactRef));
+      expect(await readConfiguredBeuserReport(f.root, 'scope', undefined, f.options)).toEqual(report);
+      for (const locale of ['tr', 'en'] as const) {
+        const text = formatBeuserReport(report, { locale, json: false });
+        expect(text).toContain('RED'); expect(text).toContain('Permissions card'); expect(text).toContain('persona');
+        expect(text).toContain(terminal.diagnostic.trace.at(-1).artifactRef);
+      }
+      const storage = await openConfiguredAttemptStore(f.root, f.options);
+      try {
+        const request = { protocolVersion: 1 as const, identity: terminal.binding.identity, workspace: f.candidate, argv: ['--help'] };
+        const record = (await storage.store.readDispatch(request))!;
+        const manager = recordedExecutionSupervisor(record, { config, layout: config.productLayout, store: storage.store, artifacts });
+        expect(await manager.observe(request)).toMatchObject({ result: cleanupProven ? { kind: 'exited', exitCode: 1 } : { kind: 'unknown' } });
+        if (cleanupProven) expect(await manager.collectOutputFiles!(request)).toEqual([]);
+        else await expect(manager.collectOutputFiles!(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
+        expect(keys).toEqual(['fixture-private']);
+      } finally { storage.store.close(); }
+      expect(JSON.stringify({ report, terminal })).not.toContain('fixture-private');
+    } finally { await f.dispose(); }
+  }
 });

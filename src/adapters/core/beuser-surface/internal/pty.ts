@@ -195,12 +195,12 @@ export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurfac
     await request(command); return screen();
   });
   return {
-    look: context => execute(context, async () => { capture.assertOpen(); await request({ op: 'read', ms: bounds.quietMs }); return screen(); }),
+    look: context => action(context, { op: 'read', ms: bounds.quietMs }, { kind: 'look' }),
     type: (context, text) => action(context, { op: 'input', text: literalInput(text, bounds.maxInputBytes) }, { kind: 'type' }),
     press: (context, key) => action(context, { op: 'input', text: atomicKey(key, renderer.applicationCursor) }, { kind: 'press', key }, true),
     wait: (context, ms) => {
       positive(ms); if (ms > admitted.limits.maxWaitMs) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
-      return execute(context, async () => { capture.assertOpen(); await request({ op: 'read', ms }); return screen(); });
+      return action(context, { op: 'read', ms }, { kind: 'wait', ms });
     },
     argv: (context, command) => {
       const validated = catalogCommand(command, catalog, bounds.maxInputBytes);

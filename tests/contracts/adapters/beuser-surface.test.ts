@@ -111,7 +111,7 @@ it('a secret-marked malicious reply is blocked before render or artifact capture
   secret = true;
   const before = f.events.length;
   await expect(f.surface.look(context)).rejects.toThrow('BEUSER_CAPTURE_BLOCKED');
-  expect(f.events).toHaveLength(before);
+  expect(f.events.slice(before).map(event => ({ action: event.action, screen: event.screen, process: event.process }))).toEqual([{ action: { kind: 'look' }, screen: undefined, process: undefined }]);
   expect(JSON.stringify(f.events)).not.toContain('MUST-NOT-EXPORT');
 });
 
@@ -163,7 +163,7 @@ it('bounds hanging transport, floods, steps and cancellation without a hidden re
   expect(hanging.realm.open).toHaveBeenCalledTimes(1);
   const flood = fixture(() => ({ data: Buffer.from('x'.repeat(limits.maxTranscriptBytes + 1)).toString('base64') }));
   await expect(flood.surface.look(context)).rejects.toThrow('BEUSER_SURFACE_LIMIT');
-  expect(flood.events).toHaveLength(0);
+  expect(flood.events.map(event => ({ action: event.action, screen: event.screen, process: event.process }))).toEqual([{ action: { kind: 'look' }, screen: undefined, process: undefined }]);
   const controller = new AbortController(), cancelled = fixture(() => null);
   const cancelledContext = { ...context, signal: controller.signal };
   const active = createBeuserSurface({ ...cancelled.options, context: cancelledContext });
@@ -267,4 +267,16 @@ it.skipIf(process.platform !== 'linux')('real argv hang and raw byte flood have 
   const flood = await pythonFixture('argv', `process.stdout.write('x'.repeat(${limits.maxTranscriptBytes + 1}));`);
   await expect(flood.surface.argv(context, { commandId: 'approval-decide', args: ['allow'] })).rejects.toThrow();
   expect(flood.events.filter(event => event.entry.kind === 'screen')).toHaveLength(0);
+});
+
+it('retains each look, wait, type and atomic press in order, with wait duration and no typed plaintext', async () => {
+  const f = fixture();
+  await f.surface.look(context);
+  await f.surface.wait(context, 25);
+  await f.surface.type(context, 'private typed value');
+  await f.surface.press(context, 'Enter');
+  const actions = f.events.filter(event => event.action).map(event => event.action);
+  expect(actions).toEqual([{ kind: 'look' }, { kind: 'wait', ms: 25 }, { kind: 'type' }, { kind: 'press', key: 'Enter' }]);
+  expect(JSON.stringify(f.events)).not.toContain('private typed value');
+  expect(f.commands.map(command => command['op'])).toEqual(['read', 'read', 'input', 'input']);
 });

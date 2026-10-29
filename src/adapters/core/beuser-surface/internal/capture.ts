@@ -4,7 +4,7 @@ import type { BeuserContext } from '#engine/index.js';
 import type { RenderedScreen } from './screen.js';
 import { BeuserSurfaceError } from './input.js';
 
-export interface HarnessAction { readonly kind: 'look' | 'type' | 'press' | 'wait' | 'argv' | 'resize' | 'capture-reset'; readonly key?: string; readonly commandId?: string; readonly evidenceRef?: string }
+export interface HarnessAction { readonly kind: 'look' | 'type' | 'press' | 'wait' | 'argv' | 'resize' | 'capture-reset'; readonly ms?: number; readonly key?: string; readonly commandId?: string; readonly evidenceRef?: string }
 export interface HarnessProcess { readonly state: 'ready' | 'eof'; readonly exitCode: number | null }
 export interface HarnessEvent { readonly entry: BeuserTranscriptEntry; readonly screen?: RenderedScreen; readonly action?: HarnessAction; readonly process?: HarnessProcess }
 export type HarnessSink = (context: BeuserContext, event: HarnessEvent) => Promise<void>;

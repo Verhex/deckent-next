@@ -8,7 +8,7 @@ import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
 import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
   openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
-  pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
+  beuserDiagnosticSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
 import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
@@ -34,19 +34,22 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   const channel = createBeuserChannel({ context, realm, custody, options: runtimeOptions, boot: { mode: data.entry.mode,
     entry: launch.entry, commands: launch.commands, maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
   const known = getConfigKnownSecrets(config), recorder = createBeuserTranscript(context, known), readbacks: BeuserReadback[] = [];
-  let lastEvent: HarnessEvent | null = null;
+  let lastEvent: HarnessEvent | null = null, lastScreen: import('#engine/index.js').BeuserScreen | null = null;
+  const trace: BeuserDiagnostic['trace'] = [];
   const sink = async (ctx: BeuserContext, event: HarnessEvent) => {
     assertBeuserAccess(context, event.entry.binding, ctx.principal, { kind: 'beuser-transcript', id: context.binding.transcriptId }, 'inspect');
     const payload = JSON.stringify({ kind: event.entry.kind, screen: event.screen, action: event.action, process: event.process });
     if (sha256(payload) !== event.entry.digest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     const row = recorder.append(ctx, { binding: event.entry.binding, kind: event.entry.kind, atMs: event.entry.atMs,
       evidenceRef: event.entry.evidenceRef, text: payload });
-    await retainBeuserJson(artifacts, ctx, row); lastEvent = event;
+    const artifactRef = await retainBeuserJson(artifacts, ctx, row);
+    trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef }); lastEvent = event;
   };
   let capturedSurface: ReturnType<typeof createBeuserSurface> | undefined;
   const getSurface = () => capturedSurface ??= createBeuserSurface({ context, realm: channel, size: data.size, bounds: data.bounds, catalog: launch.catalog, sink });
   const safeScreen = async (work: () => Promise<import('#engine/index.js').BeuserScreen>) => {
-    try { const value = await work(); const text = redactForRecord(value.text, known); return { ...value, text, digest: sha256(text) }; }
+    try { const value = await work(); const text = redactForRecord(value.text, known);
+      lastScreen = { ...value, text, digest: sha256(text) }; return lastScreen; }
     catch (error) { if (error instanceof BeuserSurfaceError) throw new BeuserContractError(error.code); throw error; }
   };
   const surface: import('#engine/index.js').SurfacePort = {
@@ -104,6 +107,13 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
       },
       async record(screen: { readonly sequence: number }) { const row = recorder.inspect(context).find(item => item.entry.sequence === screen.sequence);
         if (!row) throw new BeuserContractError('BEUSER_INPUT_INVALID'); await evidencePort.append(context, row.entry); },
+      async stopped(screen: import('#engine/index.js').BeuserScreen, action: import('#engine/index.js').BeuserSurfaceCommand['action']) {
+        const row = recorder.append(context, { binding: context.binding, kind: 'friction', evidenceRef: `${context.binding.transcriptId}:loop`,
+          atMs: Math.floor(performance.now() - started), text: JSON.stringify({ reason: 'loop', screenRef: `${context.binding.transcriptId}:${screen.sequence}`,
+            proposedAction: action.kind === 'type' ? { kind: 'type' } : action }) });
+        const artifactRef = await retainBeuserJson(artifacts, context, row);
+        trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef });
+      },
       async finished() {
         if (lastEvent?.process?.state !== 'eof') return false;
         const readback = await probe(); readbacks.push(readback);
@@ -112,7 +122,12 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
       } };
     const result = await new BeuserApplication(ports, budget).walk(context, pinBeuserWalkerSummary(data.summary));
     if (capturedSurface && !context.signal.aborted) await capturedSurface.close(context);
-    return { result, evidence };
+    const diagnostic = beuserDiagnosticSchema.parse({ schemaVersion: 1, trace,
+      finding: result.reason === 'loop' && lastScreen ? { schemaVersion: 1, binding: context.binding, branch: context.binding.identity.taskId,
+        persona: data.summary.personaId, code: 'persona-stuck', reason: 'loop', outcome: 'RED', controllerValidity,
+        screen: lastScreen.text, screenRef: `${context.binding.transcriptId}:${lastScreen.sequence}`, screenDigest: lastScreen.digest,
+        evidenceRefs: trace.map(row => row.artifactRef) } : null });
+    return { result, evidence, diagnostic };
   } };
 }
 
@@ -136,7 +151,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
     if (!lease?.handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); return `beuser-${lease.handle.incarnation}`; };
   const readTerminal = async () => {
     const read = await terminal.read(); if (read.kind !== 'ready') return null;
-    const record = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), evidence: z.unknown().nullable() }).strict().parse(read.value);
+    const record = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), evidence: z.unknown().nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
     if (beuserBindingDigest(record.binding) !== beuserBindingDigest(context.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return record;
   };
@@ -146,10 +161,10 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
       // The dispatch grant was committed before this call. Publish actual container custody before start.
       const admitted = { ...context, signal: AbortSignal.any([context.signal, ...(signal ? [signal] : [])]) };
       harness = await createConfiguredBeuserHarness(root, admitted, request, profile, store, artifacts, owner, options, id => hooks?.created(id) ?? Promise.resolve());
-      const { result, evidence } = await harness.walk(budget);
+      const { result, evidence, diagnostic } = await harness.walk(budget);
       const lease = await harness.custody.load({ ...context, signal: new AbortController().signal });
       const observed = lease?.handle ? beuserWalkSandboxResult(`beuser-${lease.handle.incarnation}`, result) : null;
-      await terminal.write({ binding: context.binding, result: observed, reason: result.reason, cleanup: result.cleanup, evidence });
+      await terminal.write({ binding: context.binding, result: observed, reason: result.reason, cleanup: result.cleanup, evidence, diagnostic });
       // A pre-publish refusal has custody but no process result. Keep dispatch unresolved without inventing a handle.
       if (!observed) throw noHandle;
       return observed;
@@ -185,7 +200,8 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
     }
     const held = await readTerminal();
     const evidence = held?.evidence ? beuserEvidenceSchema.parse(held.evidence) : null;
-    return { ...outcome, reason: held?.reason ?? null, cleanup: held?.cleanup ?? 'unknown', walked: evidence?.transcript.some(row => row.entry.kind === 'screen') ?? false };
+    return { ...outcome, reason: held?.reason ?? null, cleanup: held?.cleanup ?? 'unknown', diagnostic: held?.diagnostic,
+      walked: held?.diagnostic?.trace.some(row => row.kind === 'screen') ?? evidence?.transcript.some(row => row.entry.kind === 'screen') ?? false };
   } finally { budget.close(); }
 }
 

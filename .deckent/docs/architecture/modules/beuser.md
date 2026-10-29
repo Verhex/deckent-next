@@ -149,3 +149,21 @@ as feedback, consume the existing call/token/cost budget and walker step/patienc
 bounds, and retain the admitted deadline. There is no extra retry limit or model
 substitution. Invalid actions never reach the surface, and model assessments do
 not replace harness readback or the existing acceptance owner.
+
+## Interrupted walk diagnostics
+
+The surface records every walker action before sending it, including look and bounded wait
+(duration included). Typed plaintext remains omitted and secret-step capture stays blocked.
+Each redacted event is retained separately; the private terminal record's optional version-1
+`diagnostic.trace` maps transcript references and kinds to immutable artifact hashes, including
+walks whose acceptance evidence could not be finalized. Recorded supervision reads the same
+optional schema; older terminal records and reports remain readable.
+
+A repeated screen/action stops before a duplicate effect; a friction event retains the blocked
+proposal as metadata (typed plaintext omitted) and identifies its screen. The walk report's optional `findings`
+contains a named `persona-stuck` RED diagnostic for that branch/persona with the last redacted
+screen, its transcript reference/digest, controller validity and event artifact references.
+This reports an observed failure to progress, not a proven product root cause or acceptance
+verdict. Cleanup uncertainty remains separately unknown; the diagnostic grants no authority,
+calibration, safety pass or independent acceptance. Only retained screen observations count as
+walked; missing verdict coverage remains explicitly unknown.
