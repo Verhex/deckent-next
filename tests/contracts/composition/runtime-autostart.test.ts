@@ -10,7 +10,7 @@ import { afterEach, expect, it } from 'vitest';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
 import { encodeServiceFrame, ServiceFrameDecoder } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
-import { awaitRuntimeServiceRestart, runtimeMonotonicDeadline, RUNTIME_SERVICE_AUTOSTART_ENV } from '#engine/index.js';
+import { awaitRuntimeServiceRestart, describeRuntimeServiceWithin, runtimeMonotonicDeadline, RUNTIME_SERVICE_AUTOSTART_ENV, type RuntimeServiceDescriptor } from '#engine/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
 
 const roots: string[] = [], peers: Server[] = [], sockets: Socket[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
@@ -207,5 +207,27 @@ it('RESTART-HUNT: the restart loop launches once only for the startable refusal;
       startable: async error => error === unsafe && healable, wait: async () => undefined, pollMs: 1 });
     if (healable) await expect(result).resolves.toBe(ready); else await expect(result).rejects.toBe(unsafe);
     expect(starts).toBe(healable ? 1 : 0);
+  }
+});
+it('RESTART-HUNT: a refusal the predicate no longer confirms (the launched start healed in between) is judged by one fresh describe, never thrown stale', async () => {
+  const unsafe = (reason = 'parent-mode') => ErrorRegistry.createError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { params: { reason } });
+  const descriptor = { processId: 7 } as RuntimeServiceDescriptor;
+  const judge = async (answers: Array<Error | RuntimeServiceDescriptor>, startable?: () => Promise<boolean>) => {
+    let calls = 0;
+    const result = await describeRuntimeServiceWithin(async () => { const next = answers[calls++]!; if (next instanceof Error) throw next; return next; },
+      runtimeMonotonicDeadline(1_000), startable).catch((error: unknown) => error);
+    return { result, calls };
+  };
+  const stale = async () => false; // the predicate's own look already sees the healed 0700 (or absent) directory
+  expect(await judge([unsafe(), ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE')], stale)).toEqual({ result: { descriptor: null, code: 'LOCAL_RUNTIME_UNAVAILABLE' }, calls: 2 });
+  expect(await judge([unsafe(), descriptor], stale)).toEqual({ result: { descriptor, code: null }, calls: 2 });
+  // A state that really stays refused (content planted after the launch) or a different fresh refusal throws the fresh error after one re-look.
+  for (const fresh of [unsafe(), unsafe('parent-owner')]) { const seen = await judge([unsafe(), fresh], stale); expect(seen.result).toBe(fresh); expect(seen.calls).toBe(2); }
+  const transport = ErrorRegistry.createError('LOCAL_RUNTIME_TRANSPORT');
+  const healing = await judge([unsafe(), transport], stale); expect(healing.result).toBe(transport); expect(healing.calls).toBe(2); // the start poll tolerates it as not-ready
+  // Without a predicate (uninstall) or for another code, the first refusal is final.
+  const first = unsafe();
+  for (const [answers, startable] of [[[first, descriptor], undefined], [[transport, descriptor], stale]] as const) {
+    const seen = await judge([...answers], startable); expect(seen.result).toBe(answers[0]); expect(seen.calls).toBe(1);
   }
 });
