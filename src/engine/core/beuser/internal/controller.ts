@@ -5,21 +5,22 @@ import type { BeuserWalkerSummary } from '#domain/index.js';
 const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;
 
 export class BeuserWalkStopped extends Error {
-  constructor(readonly reason: 'bound' | 'loop' | 'drift' | 'leak' | 'unknown' | 'cancelled') { super(reason); }
+  constructor(readonly reason: 'bound' | 'loop' | 'drift' | 'leak' | 'unknown' | 'cancelled' | 'deadline') { super(reason); }
 }
 /** A timeout stops waiting even if a broken adapter ignores cancellation. Its effect then remains uncertain. */
 export async function beuserBounded<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
-  signal.throwIfAborted();
+  const stopped = () => new BeuserWalkStopped(signal.reason instanceof DOMException && signal.reason.name === 'TimeoutError' ? 'deadline' : 'cancelled');
+  if (signal.aborted) throw stopped();
   let stop!: () => void;
-  const aborted = new Promise<never>((_, reject) => { stop = () => reject(new BeuserWalkStopped('cancelled')); signal.addEventListener('abort', stop, { once: true }); });
-  try { return await Promise.race([Promise.resolve().then(() => { signal.throwIfAborted(); return work(); }), aborted]); }
+  const aborted = new Promise<never>((_, reject) => { stop = () => reject(stopped()); signal.addEventListener('abort', stop, { once: true }); });
+  try { return await Promise.race([Promise.resolve().then(() => { if (signal.aborted) throw stopped(); return work(); }), aborted]); }
   finally { signal.removeEventListener('abort', stop); }
 }
 /** Node timers have a signed 32-bit delay; long configured deadlines are scheduled in chunks, never clamped to 1ms. */
 export function beuserDeadline(ms: number): { signal: AbortSignal; close(): void } {
   const controller = new AbortController(), end = performance.now() + ms;
   let timer: ReturnType<typeof setTimeout>;
-  const next = () => { const left = end - performance.now(); if (left <= 0) controller.abort(); else timer = setTimeout(next, Math.min(left, NODE_SIGNED_INTEGER_CEILING)); };
+  const next = () => { const left = end - performance.now(); if (left <= 0) controller.abort(new DOMException('BeUser deadline', 'TimeoutError')); else timer = setTimeout(next, Math.min(left, NODE_SIGNED_INTEGER_CEILING)); };
   next();
   return { signal: controller.signal, close: () => { clearTimeout(timer); controller.abort(); } };
 }

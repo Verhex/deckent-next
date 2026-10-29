@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { beuserPersonaCoverage } from '#engine/index.js';
 import { formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
 
 // Synthetic report data exercises presentation only; these are not measured BeUser quality or cost results.
@@ -45,4 +46,17 @@ it('shows EN/TR walk/report help without a host effect and refuses incomplete, d
     env: { CLAUDECODE: '1' }, stdin: { isTTY: true } as never, stdout: ttyOut, setupBeuser: setup,
   })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
   expect(setup).not.toHaveBeenCalled();
+});
+
+it('reports a critical persona refused before its first screen as unknown, with the safe root reason in EN/TR and JSON', () => {
+  const value = { ...report(), unknown: [{ branch: 'Ayse', reason: 'BEUSER_TARGET_NOT_SANDBOX' },
+    { branch: 'Ayse', reason: 'BEUSER_CLEANUP_UNPROVEN' }],
+    criticalCoverage: [beuserPersonaCoverage('Ayse', null)] };
+  expect(value.criticalCoverage).toEqual([{ criterion: 'Ayse', walked: 0, valid: 0, invalid: 0, unknown: 1 }]);
+  expect(JSON.parse(formatBeuserReport(value, { json: true, locale: 'tr' }))).toEqual(value);
+  const tr = formatBeuserReport(value, { json: false, locale: 'tr' }), en = formatBeuserReport(value, { json: false, locale: 'en' });
+  for (const output of [tr, en]) { expect(output).toContain('BEUSER_TARGET_NOT_SANDBOX'); expect(output).toContain('BEUSER_CLEANUP_UNPROVEN'); }
+  expect(tr).toContain('hedefi reddetti'); expect(en).toContain('refused a target');
+  expect(() => formatBeuserReport({ ...value, criticalCoverage: [{ criterion: 'Ayse', walked: 0, valid: 1, invalid: 0, unknown: 0 }] }, { json: true, locale: 'en' })).toThrow();
+  expect(() => formatBeuserReport({ ...value, criticalCoverage: [{ criterion: 'Ayse', walked: 0, valid: 0, invalid: 0, unknown: 2 }] }, { json: true, locale: 'en' })).toThrow();
 });

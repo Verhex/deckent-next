@@ -1,4 +1,4 @@
-export { BeuserApplication } from './internal/application.js';
+export { BeuserApplication, beuserWalkSandboxResult } from './internal/application.js';
 export type { BeuserWalkPorts, BeuserWalkResult } from './internal/application.js';
 export { beuserEvaluatorFor, beuserPersonaDigest, pinBeuserCampaign, admitBeuserCampaign, admitBeuserAttempt, assertBeuserRequestIdentity, reserveBeuserAttempts } from './internal/admission.js';
 export type { BeuserCampaign, BeuserExecutionProfile } from './internal/admission.js';

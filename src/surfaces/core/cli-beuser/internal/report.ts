@@ -1,5 +1,5 @@
 import { createBeuserReport } from '#engine/index.js';
-import { t, terminalSafeText, type Locale } from '#platform/index.js';
+import { t, ErrorRegistry, terminalSafeText, type Locale } from '#platform/index.js';
 
 /** One typed report for human and JSON consumers. Reading/rendering it grants no walk or acceptance authority. */
 export function formatBeuserReport(input: unknown, options: { readonly json: boolean; readonly locale: Locale }): string {
@@ -23,6 +23,10 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
   }
   for (const row of report.criticalCoverage) rows.push(t('beuser.report.coverage', { ...row, criterion: safe(row.criterion) }, locale));
   for (const row of report.unwalked) rows.push(t('beuser.report.unwalked', { branch: safe(row.branch), reason: safe(row.reason) }, locale));
-  for (const row of report.unknown) rows.push(t('beuser.report.unknownBranch', { branch: safe(row.branch), reason: safe(row.reason) }, locale));
+  for (const row of report.unknown) {
+    const reason = ErrorRegistry.get(row.reason, locale);
+    rows.push(t('beuser.report.unknownBranch', { branch: safe(row.branch), reason: safe(row.reason) }, locale));
+    if (reason) rows.push(safe(reason.message));
+  }
   return rows.join('\n');
 }

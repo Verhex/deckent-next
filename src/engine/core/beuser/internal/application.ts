@@ -6,6 +6,7 @@ import { encodeCommandProjection } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { pinBeuserWalkerSummary } from '#engine/core/beuser-contract/index.js';
 
+import type { SandboxResult } from '#engine/core/supervisor/index.js';
 import type { BeuserControllerValidity } from './controller-audit.js';
 
 type WalkerPorts = Parameters<typeof walkBeuser>[1];
@@ -42,7 +43,8 @@ export class BeuserApplication {
       if (!/^[a-f0-9]{64}$/u.test(finalized.transcriptDigest) || !finalized.evidenceRefs.length) throw new BeuserWalkStopped('unknown');
       transcriptDigest = finalized.transcriptDigest;
     } catch (error) {
-      reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code : 'unknown';
+      reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code
+        : error instanceof DOMException && error.name === 'TimeoutError' ? 'deadline' : error instanceof DOMException && error.name === 'AbortError' ? 'cancelled' : 'unknown';
       if (reason === 'BEUSER_TARGET_NOT_SANDBOX') {
         state = 'invalid';
         // No cleanup/effect follows a failed audit append. Caller retains custody for reconciliation.
@@ -95,7 +97,8 @@ export class BeuserApplication {
           }
         }
       } catch (error) {
-        reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code : 'unknown';
+        reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code
+        : error instanceof DOMException && error.name === 'TimeoutError' ? 'deadline' : error instanceof DOMException && error.name === 'AbortError' ? 'cancelled' : 'unknown';
         if (reason === 'drift' || reason === 'BEUSER_TARGET_NOT_SANDBOX') state = 'invalid';
         if (reason === 'BEUSER_TARGET_NOT_SANDBOX') await this.ports.refusal(context);
       }
@@ -103,4 +106,14 @@ export class BeuserApplication {
     }
     return Object.freeze({ binding: context.binding, verdict, state, reason, cleanup, transcriptDigest });
   }
+}
+
+/** A refusal is a failed walk, not a fabricated timeout. Cleanup remains independently unproven. */
+export function beuserWalkSandboxResult(handle: string, walk: BeuserWalkResult): SandboxResult {
+  const interruptCause = walk.reason === 'cancelled' ? 'cancel' : walk.reason === 'deadline' ? 'deadline' : undefined;
+  return { handle, result: walk.cleanup === 'destroyed'
+    ? { kind: 'exited', exitCode: walk.reason !== null || walk.state === 'invalid' ? 1 : 0 }
+    : { kind: 'unknown', reasonCode: walk.reason ?? 'BEUSER_CLEANUP_UNPROVEN' },
+    stdout: '', stderr: '', outputCompleteness: 'complete', interrupted: interruptCause !== undefined,
+    ...(interruptCause ? { interruptCause } : {}) };
 }

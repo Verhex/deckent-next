@@ -3,8 +3,8 @@ import { expect, it, vi } from 'vitest';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProjection, evaluatePolicy, type AuditRecord } from '#domain/index.js';
 import { sha256, createHmacIntegrity } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
-import { pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
-import { BeuserApplication, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
+import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
+import { BeuserApplication, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
   type BeuserWalkPorts } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
 import { sealApproval, verifyApproval } from '#engine/core/approval/index.js';
@@ -281,4 +281,33 @@ it('controller readback detects a sealed approval decision by BeUser and holds m
   expect(await readBeuserControllerAudit(unknown, { audit: { list: () => [] }, approvals: rows })).toBe('unknown');
   const h = harness(); h.ports.controllerAudit = async () => { throw new Error('AUDIT_UNAVAILABLE'); };
   expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'unknown', verdict: null });
+});
+
+it('retains a realm refusal as the root terminal code while cleanup stays unproven, without fabricating a deadline', async () => {
+  const h = harness();
+  const error = new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
+  error.message += ' /private/host credential=hidden';
+  h.ports.realm.create = vi.fn(async () => { throw error; });
+  h.ports.realm.destroy = vi.fn(async () => { throw new Error('unproven'); });
+  const result = await h.app.walk(context(), summary);
+  expect(result).toMatchObject({ state: 'invalid', reason: 'BEUSER_TARGET_NOT_SANDBOX', cleanup: 'quarantined' });
+  const terminal = beuserWalkSandboxResult('fixture-handle', result);
+  expect(terminal).toMatchObject({ result: { kind: 'unknown', reasonCode: 'BEUSER_TARGET_NOT_SANDBOX' }, interrupted: false });
+  expect(terminal).not.toHaveProperty('interruptCause');
+  expect(JSON.stringify(terminal)).not.toMatch(/private|hidden/);
+  expect(h.ports.surface.look).not.toHaveBeenCalled();
+  expect(h.ports.refusal).toHaveBeenCalledOnce();
+});
+
+it('distinguishes a real wall deadline from person cancellation at the terminal boundary', async () => {
+  const h = harness(), ctx = context();
+  h.ports.realm.create = vi.fn(async () => new Promise<never>(() => {}));
+  const result = await h.app.walk({ ...ctx, limits: { ...ctx.limits, maxWallMs: 20, maxWaitMs: 10, cleanupDeadlineMs: 20 } }, summary);
+  expect(result.reason).toBe('deadline');
+  expect(beuserWalkSandboxResult('fixture-handle', result)).toMatchObject({ interrupted: true, interruptCause: 'deadline' });
+  const cancelled = harness(), abort = new AbortController();
+  cancelled.ports.realm.create = vi.fn(async () => { abort.abort(); return new Promise<never>(() => {}); });
+  const stopped = await cancelled.app.walk(context(abort.signal), summary);
+  expect(stopped.reason).toBe('cancelled');
+  expect(beuserWalkSandboxResult('fixture-handle', stopped)).toMatchObject({ interrupted: true, interruptCause: 'cancel' });
 });

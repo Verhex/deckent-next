@@ -102,3 +102,5 @@ directory or record returns `BEUSER_REPORT_NOT_FOUND` with the walk next step. C
 unsafe paths and access failures retain their refusal instead of becoming an empty report.
 A failed harness preparation closes its execution-budget timer before returning the refusal, so an
 unavailable Docker prerequisite does not keep the CLI process alive until the walk deadline.
+
+Walk reports retain the typed root refusal separately from unproven cleanup; EN/TR explanations use the error catalog, never raw adapter messages. Only cancellation or an actual deadline sets an interrupt cause. Critical coverage includes selected personas with no verdict as unknown, even before the first screen; unknown coverage does not imply that the persona walked. Older retained reports remain readable and are not rewritten.
