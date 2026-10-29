@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type BeuserCandidateManifest } from '#domain/index.js';
 import { DockerBeuserRealmRuntime } from './lifecycle.js';
-import { dockerRealmCommand, canonicalRealmPath, BEUSER_REALM_RECIPE, type BeuserRealmOptions } from './realm.js';
+import { dockerRealmCommand, canonicalRealmPath, BEUSER_REALM_RECIPE, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 import { readBeuserCandidate } from './candidate.js';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
 import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type BeuserRealmChannel, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
-  type SandboxRequest, beuserFilesystemProofSchema } from '#engine/index.js';
+  type SandboxRequest, type BeuserArrangePort, beuserFilesystemProofSchema } from '#engine/index.js';
 import { jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { createBeuserRemovalReadback } from './removal.js';
 import { retainBeuserJson } from './records.js';
@@ -122,7 +122,7 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
   }, async cancel() { /* C4 owns bounded destruction of the entire realm, including escaped driver descendants. */ } };
 }
 /** Read through the target's own guarded, read-only identity adapter; return allowlisted values only. */
-export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions): Promise<unknown> {
+export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, command = dockerRealmCommand(options)): Promise<unknown> {
   const script = `
 const target = '${BEUSER_REALM_RECIPE.packageTarget}';
 const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js');
@@ -134,5 +134,26 @@ const installation = read.status === 'available' ? 'installed'
 console.log(JSON.stringify({ installation, preservedData: 'unknown', card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'unknown' }));
 `;
 
-  return JSON.parse(await dockerRealmCommand(options)(['container', 'exec', handle.containerId, BEUSER_REALM_RECIPE.nodeExecutable, '--input-type=module', '--eval', script], context)) as unknown;
+  return JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, handle.containerId, BEUSER_REALM_RECIPE.nodeExecutable, '--input-type=module', '--eval', script], context)) as unknown;
+}
+const recipe = BEUSER_REALM_RECIPE, cli = `${recipe.packageTarget}/dist/composition/core/cli/internal/entry.js`;
+// In-realm wrapper: the CLI child gets /dev/null stdin and pipes only, so the product's own witness check sees no terminal. Exit codes are data.
+const arrangeScript = `const { spawnSync } = await import('node:child_process'), { createHash } = await import('node:crypto');
+const [args, timeout, maxBuffer] = JSON.parse(process.argv[1]);
+const run = spawnSync(process.execPath, [${JSON.stringify(cli)}, ...args], { stdio: ['ignore', 'pipe', 'ignore'], timeout, maxBuffer, killSignal: 'SIGKILL' });
+const out = run.stdout ?? Buffer.alloc(0);
+console.log(JSON.stringify({ exitCode: run.error ? null : run.status, stdoutBytes: out.length, stdoutDigest: createHash('sha256').update(out).digest('hex') }));`;
+/** First BeUser arrange adapter: product CLI tuples over TTY-less `exec` (no --interactive/--tty) with explicit uid:gid and locale.
+ * Never the PTY driver: input through it is person-equivalent for the product's terminal witness. */
+export function createBeuserArrange(input: { readonly realm: BeuserRealmApplication; readonly custody: BeuserRealmCustody; readonly options: BeuserRealmOptions;
+  readonly language: string; readonly command?: BeuserRealmCommand }): BeuserArrangePort {
+  const { realm, custody, options, language } = input, command = input.command ?? dockerRealmCommand(options);
+  const admitted = async (ctx: BeuserContext) => { const handle = (await custody.load(ctx))?.handle;
+    return (await realm.observe(ctx)).state === 'admitted' && handle?.containerId ? handle : refuse(); };
+  return {
+    run: async (ctx, step) => JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, '--workdir', recipe.workTarget,
+      ...[`LANG=${language}`, `LC_ALL=${language}`, `HOME=${recipe.home}`, `DECKENT_GLOBAL_HOME=${recipe.home}/.deckent`].flatMap(env => ['--env', env]),
+      (await admitted(ctx)).containerId, recipe.nodeExecutable, '--input-type=module', '--eval', arrangeScript, JSON.stringify([step.args, step.timeoutMs, ctx.limits.maxArtifactBytes])], ctx)) as unknown,
+    observe: async ctx => readBeuserInstallationSummary(ctx, await admitted(ctx), options, command),
+  };
 }

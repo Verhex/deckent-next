@@ -90,8 +90,10 @@ and the existing strict journey profile contract (journey/persona/rubric pins, t
 manifest reference, finite limits revision, explicit walker/evaluator choices and launch/probe data).
 A profile author supplies this document; setup does not fabricate missing journey or model data.
 The packaged [B1 example](../../../../assets/beuser/setup-profile.example.md) builds one
-provisional onboarding/Ayşe document from installed references and the measured candidate;
-it carries no host paths or credentials and does not claim complete journey coverage.
+provisional document for the named journeys from installed references and the measured candidate:
+each journey's first branch and persona, that branch's own probe set and a v3 start state derived
+from the arrange catalog, printing the branch's unarranged start states. It carries no host paths
+or credentials and does not claim complete journey coverage.
 
 Journey profile `schemaVersion: 2` replaces inline `files` with `candidateManifest`:
 raw manifest `sha256`, complete measured `fileCount` (including both metadata files),
@@ -127,6 +129,38 @@ no handle, exit or destruction proof is invented, and replay does not launch aga
 failures share the engine's finite BeUser error contract, so production look/argv refusals retain their
 catalog code without trusting arbitrary exception codes or messages. Recorded management reads the
 same optional reason/cleanup metadata and still requires actual handle and terminal evidence.
+
+## Start state (profile v3, alpha.58)
+
+Journey profile `schemaVersion: 3` requires `startState` (`schemaVersion: 1`, the installed
+`catalogRevision` and an ordered list of catalog step references); v2 profiles stay valid and
+start in today's unarranged realm. The versioned catalog [`assets/beuser/arrange.json`](../../../../assets/beuser/arrange.json)
+holds `kind`-discriminated steps and a state map (named steps, or a typed unknown reason). Invariants
+are code: a `cli` step is an exact product argv tuple carrying `--json`, without control characters;
+duplicate steps and unresolvable state references refuse the catalog, and a profile step absent
+from the installed revision refuses as `BEUSER_INPUT_INVALID` at setup, admission and walk.
+
+After realm admission and before the persona's first look, the engine runs each step through
+`BeuserArrangePort` and gates it on its own readback. The port's target is the admitted binding,
+not a realm; the first adapter (`createBeuserArrange`) runs the packaged CLI over
+`docker container exec` without `--interactive`/`--tty`, with explicit `--user uid:gid`,
+`LANG`/`LC_ALL`, realm HOME and workdir, through a fixed in-realm wrapper whose child has `/dev/null`
+stdin and pipes only. It never uses the PTY driver: anything sent through the driver is
+person-equivalent for the product's terminal witness, so a witnessed command honestly refuses here.
+Step count is bounded by `maxSteps`, and a step timeout must stay below `maxWaitMs`. A non-zero
+exit, a timeout or a readback mismatch stops the branch as `BEUSER_START_STATE_UNMET` before any
+persona action: unknown, never RED or a refusal audit, no retry, cleanup unchanged.
+Each step leaves one transcript row of kind `arrange` (contract v2) with the step reference, exit
+code, stdout size/digest and readback result; target output is never retained. `arrange` rows are
+not persona actions or screens, so they neither consume the step bound nor count as walked, and the
+evaluator model cannot cite them as experience evidence. The readback exec now also passes the realm
+user explicitly. Catalog revision `beuser-arrange-1` arranges only an installed Deckent
+(`init --yes --scope beuser-realm --json`, readback `installation: installed`), measured in a
+disposable no-network realm-equivalent container. That state relies on the kept headless
+first-install decision (U4E). The remaining journey start states are listed for the next catalog
+revision; witness-requiring and realm-external states stay unknown, and no flag or PTY step
+bypasses the witness. An ERP/CRM journey adds its own fixture step kind and adapter through the
+general effect contract without changing Core.
 
 ## Walker/evaluator model output
 

@@ -62,6 +62,8 @@
   "beuser.setup.result": "BeUser kurulumu: {status}; içerik: {digest}.",
   "error.BEUSER_CANDIDATE_MISMATCH": "Aday manifesti veya paket kimliği kabul edilen referansla eşleşmiyor.",
   "remedy.BEUSER_CANDIDATE_MISMATCH": "BeUser profilini tam staged adaydan yeniden üretin; ardından setup önizlemesini tekrarlayın.",
+  "error.BEUSER_START_STATE_UNMET": "BeUser başlangıç durumu hazırlanamadı ya da geri okunamadı; persona başlatılmadı.",
+  "remedy.BEUSER_START_STATE_UNMET": "Dalı bilinmiyor olarak bırakın ve saklanan hazırlık kaydını inceleyin. Kişinin tanıklığını isteyen başlangıç durumu zorlanmaz, yeniden denenmez.",
   "beuser.report.cleanup": "Realm temizliği {branch}: {state}; dosya sistemi kanıtı: {source}.",
   "beuser.report.filesystem.kernel-proven": "kernel-proven (doğrudan dosya sistemi yokluğu)",
   "beuser.report.filesystem.daemon-attested": "daemon-attested (daemon beyanı; bağımsız dosya sistemi kanıtı yok)",

@@ -2,6 +2,7 @@ import { beuserVerdictSchema, type BeuserVerdict, type BeuserWalkerSummary } fro
 import { BeuserContractError, assertBeuserAccess, type BeuserContext, type RealmPort, type EvidencePort, type BeuserRealmObservation, type BeuserFilesystemProof } from '#engine/core/beuser-contract/index.js';
 import { BeuserController, BeuserWalkStopped, beuserBounded, beuserDeadline, type BeuserExecutionBudget } from './controller.js';
 import { walkBeuser } from './walker.js';
+import { arrangeBeuserStart, type BeuserArrangement } from './arrange.js';
 import { encodeCommandProjection } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { pinBeuserWalkerSummary } from '#engine/core/beuser-contract/index.js';
@@ -14,6 +15,8 @@ export interface BeuserWalkPorts extends WalkerPorts {
   readonly realm: RealmPort; readonly evidence: EvidencePort;
   readonly controllerAudit: (context: BeuserContext) => Promise<BeuserControllerValidity>;
   readonly refusal: (context: BeuserContext) => Promise<void>;
+  /** Trusted start state; runs on the admitted realm before the first look. Absent: today's empty realm. */
+  readonly arrange?: BeuserArrangement | undefined;
 }
 export interface BeuserWalkResult {
   readonly binding: BeuserContext['binding']; readonly verdict: BeuserVerdict | null;
@@ -39,6 +42,7 @@ export class BeuserApplication {
     try {
       const created = checkRealm(await controller.call('beuser-sandbox', 'create', ctx => this.ports.realm.create(ctx)), 'created');
       checkRealm(await controller.call('beuser-sandbox', 'create', ctx => this.ports.realm.admit(ctx, created)), 'admitted');
+      if (this.ports.arrange) await arrangeBeuserStart(controller, this.ports.arrange);
       await walkBeuser(controller, this.ports);
       const finalized = await controller.call('beuser-transcript', 'inspect', ctx => this.ports.evidence.finalize(ctx));
       assertBeuserAccess(controller.context, finalized.binding, context.principal, { kind: 'beuser-transcript', id: finalized.binding.transcriptId }, 'inspect');
