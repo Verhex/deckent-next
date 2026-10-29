@@ -5,7 +5,7 @@ import { sha256, createHmacIntegrity } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
 import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
-  type BeuserWalkPorts } from '#engine/core/beuser/index.js';
+  correctBeuserModelOutput, type BeuserWalkPorts } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
 import { sealApproval, verifyApproval } from '#engine/core/approval/index.js';
 import { AuditApplication } from '#engine/core/audit/index.js';
@@ -310,4 +310,33 @@ it('distinguishes a real wall deadline from person cancellation at the terminal 
   const stopped = await cancelled.app.walk(context(abort.signal), summary);
   expect(stopped.reason).toBe('cancelled');
   expect(beuserWalkSandboxResult('fixture-handle', stopped)).toMatchObject({ interrupted: true, interruptCause: 'cancel' });
+});
+
+it('corrects an invalid walker answer with typed feedback before executing the real approval-card action', async () => {
+  const h = harness();
+  vi.mocked(h.ports.decode).mockImplementationOnce(() => { throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID'); });
+  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed' });
+  expect(h.ports.models.walker).toHaveBeenCalledTimes(2);
+  expect(h.ports.models.walker).toHaveBeenLastCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), 'BEUSER_MODEL_OUTPUT_INVALID');
+  expect(h.ports.surface.press).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'Enter');
+  expect(h.ports.surface.type).not.toHaveBeenCalled();
+});
+it('exhausts existing persona patience on invalid output with no action and retains the typed failure through cleanup', async () => {
+  const h = harness();
+  vi.mocked(h.ports.decode).mockImplementation(() => { throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID'); });
+  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_MODEL_OUTPUT_INVALID', cleanup: 'destroyed' });
+  expect(h.ports.models.walker).toHaveBeenCalledTimes(summary.patience.maxSteps);
+  expect(h.ports.surface.press).not.toHaveBeenCalled();
+  expect(h.ports.evidence.readback).not.toHaveBeenCalled();
+});
+it('bounds evaluator format corrections by admitted calls and preserves cancellation and unrelated failures', async () => {
+  const ctx = { ...context(), limits: { ...limits, maxCalls: 2 } }, call = vi.fn(async (error?: 'BEUSER_MODEL_OUTPUT_INVALID') => { expect(error).toBeOneOf([undefined, 'BEUSER_MODEL_OUTPUT_INVALID']); throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID'); });
+  await expect(correctBeuserModelOutput(ctx, summary.patience, call)).rejects.toThrow('BEUSER_MODEL_OUTPUT_INVALID');
+  expect(call.mock.calls).toEqual([[undefined], ['BEUSER_MODEL_OUTPUT_INVALID']]);
+  call.mockClear();
+  await expect(correctBeuserModelOutput({ ...ctx, signal: AbortSignal.abort() }, summary.patience, call)).rejects.toThrow();
+  expect(call).not.toHaveBeenCalled();
+  const refused = vi.fn(async () => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); });
+  await expect(correctBeuserModelOutput(ctx, summary.patience, refused)).rejects.toThrow('BEUSER_TARGET_NOT_SANDBOX');
+  expect(refused).toHaveBeenCalledOnce();
 });

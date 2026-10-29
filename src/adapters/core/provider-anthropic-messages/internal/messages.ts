@@ -51,6 +51,7 @@ function thinkingOf(request: OpenAiChatTextRequest, definition: AnthropicMessage
  * is refused: forced tool use is a 400 on Opus 5.5 / Sonnet 5.5 / Fable 5.1.
  */
 export function anthropicMessagesBody(request: OpenAiChatTextRequest, definition: AnthropicMessagesDefinition, scopeId: string, stream = request.stream === true) {
+  if (request.response_format) invalid(); // No declared JSON-object dialect in this adapter; never silently drop the constraint.
   const system: string[] = [], wire: Wire[] = [];
   const tools = request.tools?.map(tool => ({ name: tool.function.name,
     ...(tool.function.description === undefined ? {} : { description: tool.function.description }), input_schema: tool.function.parameters }));

@@ -5,6 +5,8 @@
   "remedy.BEUSER_TARGET_NOT_SANDBOX": "Keep the result invalid. Reconcile the same Attempt and retained realm custody; do not change to a host target.",
   "error.BEUSER_LIMITS_UNAVAILABLE": "A complete finite BeUser limits profile is unavailable.",
   "remedy.BEUSER_LIMITS_UNAVAILABLE": "Provide a complete registry profile through the installation owner; missing values do not admit a walk.",
+  "error.BEUSER_MODEL_OUTPUT_INVALID": "The BeUser model returned an invalid JSON action or assessment.",
+  "remedy.BEUSER_MODEL_OUTPUT_INVALID": "Inspect the model connection and output contract. Correction attempts use the existing call, patience and time limits.",
   "error.BEUSER_MODEL_UNAVAILABLE": "No active, authorized model satisfies this BeUser role. Inspect deckent models roles and deckent models list before reopening deckent beuser setup.",
   "remedy.BEUSER_MODEL_UNAVAILABLE": "Inspect deckent models roles and deckent models list; correct the person’s role/active-model choice, then reopen deckent beuser setup.",
   "error.BEUSER_SURFACE_UNAVAILABLE": "The isolated BeUser terminal driver is unavailable.",

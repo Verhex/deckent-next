@@ -4,3 +4,4 @@ export { validateBeuserSupervisorProfile } from '#composition/core/supervisors/i
 export { beuserJourneyLaunch } from './internal/launch.js';
 export { configuredBeuserModels } from './internal/models.js';
 export { setupConfiguredBeuser, type BeuserSetupInput } from './internal/setup.js';
+export { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput } from './internal/model-contract.js';

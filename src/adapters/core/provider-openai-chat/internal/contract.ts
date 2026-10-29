@@ -91,5 +91,5 @@ function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer'
 export function parseOpenAiChatTextRequest(input: unknown, definition: Pick<OpenAiChatHttpDefinition, 'maxOutputTokens'>): OpenAiChatTextRequest {
   return parseOpenAiChatProtocolRequest(input, definition, wellFormedModelJson);
 }
-export { OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY } from '#domain/index.js';
+export { OPENAI_CHAT_JSON_OBJECT_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY } from '#domain/index.js';
 export type OpenAiChatTextRequest = ProtocolTextRequest;

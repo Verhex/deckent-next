@@ -9,6 +9,7 @@ export const beuserErrors: ErrorDefinitions = Object.freeze({
   BEUSER_CANDIDATE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_CANDIDATE_MISMATCH', p, l), suggestion: t('remedy.BEUSER_CANDIDATE_MISMATCH', p, l) }) },
   BEUSER_TARGET_NOT_SANDBOX: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_TARGET_NOT_SANDBOX', p, l), suggestion: t('remedy.BEUSER_TARGET_NOT_SANDBOX', p, l) }) },
   BEUSER_LIMITS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_LIMITS_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_LIMITS_UNAVAILABLE', p, l) }) },
+  BEUSER_MODEL_OUTPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_MODEL_OUTPUT_INVALID', p, l), suggestion: t('remedy.BEUSER_MODEL_OUTPUT_INVALID', p, l) }) },
   BEUSER_MODEL_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_MODEL_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_MODEL_UNAVAILABLE', p, l) }) },
   BEUSER_SURFACE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_SURFACE_UNAVAILABLE', p, l) }) },
   BEUSER_SURFACE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_INVALID', p, l), suggestion: t('remedy.BEUSER_SURFACE_INVALID', p, l) }) },

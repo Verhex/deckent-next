@@ -127,3 +127,25 @@ no handle, exit or destruction proof is invented, and replay does not launch aga
 failures share the engine's finite BeUser error contract, so production look/argv refusals retain their
 catalog code without trusting arbitrary exception codes or messages. Recorded management reads the
 same optional reason/cleanup metadata and still requires actual handle and terminal evidence.
+
+## Walker/evaluator model output
+
+The versioned English instructions in `assets/beuser/model-instructions.json` are
+system messages. Persona, goal and redacted screen remain data in the walker user
+message; sealed rubric and harness evidence reach only the evaluator. The model
+binding can explicitly declare `response-format-json-object` v1 as `supported`
+under `openai-chat-completions` v1. BeUser then requests JSON object output through
+the common governed chat command; chat sends `response_format`, while the Responses
+dialect sends `text.format`. No support is inferred from an endpoint or model name.
+Bindings without that capability retain instructions and strict local validation;
+existing connections require a governed catalog/binding update to declare support.
+
+The codec accepts one complete object or one complete `json` fence and validates
+exact action/assessment fields. Separate provider reasoning is never an answer;
+unmarked inline reasoning, prose, extra keys, multiple objects, truncated output
+and evaluator references absent from the transcript are invalid. Format failures
+carry `BEUSER_MODEL_OUTPUT_INVALID` in EN/TR. Corrections send only that typed error
+as feedback, consume the existing call/token/cost budget and walker step/patience
+bounds, and retain the admitted deadline. There is no extra retry limit or model
+substitution. Invalid actions never reach the surface, and model assessments do
+not replace harness readback or the existing acceptance owner.

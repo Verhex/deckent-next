@@ -6,8 +6,8 @@ import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
 import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
-  openSqliteApprovalStore, openLocalIntegrityAuthority, extractOpenAiChatTextFromInvocation, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
-import { BeuserApplication, beuserWalkSandboxResult, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
+  openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
+import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
@@ -18,6 +18,7 @@ import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createBeuserChannel, retainBeuserJson } from '#adapters/index.js';
 import { openConfiguredBeuserRealmOwner } from '#composition/core/supervisors/index.js';
+import { decodeBeuserEvaluatorOutput } from './model-contract.js';
 import { configuredBeuserModels } from './models.js';
 import { beuserJourneyLaunch } from './launch.js';
 
@@ -69,17 +70,16 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   let evidence: z.infer<typeof beuserEvidenceSchema> | null = null, controllerValidity: BeuserControllerValidity = 'unknown';
   const evidencePort = createBeuserEvidencePort(context, recorder, async ctx => {
     const lease = await custody.load(ctx), transcript = recorder.finalize(ctx);
-    const evaluated = controllerValidity === 'valid' ? await models.evaluate(ctx, transcript.transcriptDigest) : null;
-    let experience: { verdict: 'pass' | 'friction' | 'fail' | 'unknown'; evidenceRefs: string[] } = { verdict: 'unknown', evidenceRefs: [] };
-    if (evaluated?.state === 'invoked' && evaluated.receipt.invocation.receipt.outcome?.state === 'responded') {
-      const text = extractOpenAiChatTextFromInvocation(evaluated.receipt.invocation);
-      const parsed = z.object({ verdict: z.enum(['pass', 'friction', 'fail', 'unknown']), evidenceRefs: z.array(z.string()) }).strict().safeParse(text ? JSON.parse(text) : null);
-      if (parsed.success && parsed.data.evidenceRefs.every(ref => transcript.evidenceRefs.includes(ref))) experience = parsed.data;
-    }
+    const evaluated = controllerValidity === 'valid' ? await correctBeuserModelOutput(ctx, data.summary.patience, async outputError => {
+      const answer = await models.evaluate(ctx, transcript.transcriptDigest, outputError);
+      if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-evaluator' || answer.receipt.invocation.receipt.outcome?.state !== 'responded') return null;
+      return { answer, experience: decodeBeuserEvaluatorOutput(answer.receipt.invocation, transcript.evidenceRefs) };
+    }) : null;
+    const experience = evaluated?.experience ?? { verdict: 'unknown' as const, evidenceRefs: [] };
     evidence = beuserEvidenceSchema.parse({ schemaVersion: 1, binding: ctx.binding, transcript: transcript.transcript, readbacks,
       validity: controllerValidity, cleanup: { state: lease?.observation.state === 'destroyed' ? 'destroyed' : 'unknown', atMs: Math.floor(performance.now() - started),
         evidenceRef: lease?.observation.evidenceRefs.at(-1) ?? 'cleanup-unproven' },
-      experience: { ...experience, maker: evaluated?.state === 'invoked' ? evaluated.receipt.maker : null,
+      experience: { ...experience, maker: evaluated?.answer.receipt.maker ?? null,
         sourceMakers: [...beuserSourceMakers(data.contributorModels), ...walkerMakers] } });
     return evaluateBeuserEvidence({ binding: ctx.binding, producer: { owner, profileDigest: beuserDigest(profile) }, fileName: 'beuser-evidence',
       dimension: 'outcome', probes: data.probes, calibration: data.calibration }, evidence).result;

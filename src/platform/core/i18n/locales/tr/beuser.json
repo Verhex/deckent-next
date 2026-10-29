@@ -5,6 +5,8 @@
   "remedy.BEUSER_TARGET_NOT_SANDBOX": "Sonucu geçersiz tutun. Aynı işçi denemesi ve saklanan kutu sahipliğini uzlaştırın; host hedefine geçmeyin.",
   "error.BEUSER_LIMITS_UNAVAILABLE": "Tam ve sonlu BeUser limit profili bulunamıyor.",
   "remedy.BEUSER_LIMITS_UNAVAILABLE": "Kurulum sahibi tam registry profilini sağlamalı; eksik değerlerle yürüyüş başlamaz.",
+  "error.BEUSER_MODEL_OUTPUT_INVALID": "BeUser modeli geçersiz bir JSON eylemi veya değerlendirmesi döndürdü.",
+  "remedy.BEUSER_MODEL_OUTPUT_INVALID": "Model bağlantısını ve çıktı sözleşmesini inceleyin. Düzeltme denemeleri mevcut çağrı, sabır ve süre sınırlarını kullanır.",
   "error.BEUSER_MODEL_UNAVAILABLE": "Bu BeUser rolünü karşılayan etkin ve yetkili model yok. deckent beuser setup öncesinde deckent models roles ve deckent models list ile seçimleri inceleyin.",
   "remedy.BEUSER_MODEL_UNAVAILABLE": "deckent models roles ve deckent models list ile rolü ve aktif modeli inceleyin; kişinin seçimini düzeltip deckent beuser setup komutunu yeniden açın.",
   "error.BEUSER_SURFACE_UNAVAILABLE": "Yalıtılmış BeUser terminal sürücüsü kullanılamıyor.",

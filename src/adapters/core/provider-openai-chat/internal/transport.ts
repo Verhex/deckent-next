@@ -5,7 +5,7 @@ import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_DEFAULT_DIALECT, isOpenAiChatHttpAdapter, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
   openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
@@ -100,6 +100,7 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     [dialect.tokenLimitField]: nativeRequest.max_completion_tokens, stream: streamed,
     ...(tiered ? { service_tier: nativeRequest.service_tier ?? OPENAI_RESERVATION_POLICY.expectedServiceTier } : {}),
     ...(streamed && dialect.streamUsage === 'include' ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
+    ...(nativeRequest.response_format ? { response_format: nativeRequest.response_format } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
     ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}),
     ...(cacheSalt ? { cache_salt: cacheSalt } : {}), ...(providerFields ?? {}) });
@@ -205,10 +206,11 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
         || (parsedProfile.data.adapter.version === 6) !== (adapterDefinition.dialect?.protocol === 'responses')) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
       const request = parseOpenAiChatTextRequest(nativeRequest, adapterDefinition);
       if (request.model !== binding.model.nativeId) throw new OpenAiChatHttpError('OPENAI_CHAT_MODEL_MISMATCH');
-      const declares = (id: string) => binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+      const declares = (id: string) => binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY && protocol.version === OPENAI_CHAT_COMPLETIONS_VERSION
         && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
       // Tools and the thinking switch are sent only to a model whose binding declares them supported (catalog data, not a request flag).
-      if ((request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
+      if ((request.response_format && !declares(OPENAI_CHAT_JSON_OBJECT_CAPABILITY))
+        || (request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
         declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined,

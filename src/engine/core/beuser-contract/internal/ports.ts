@@ -66,8 +66,8 @@ export type BeuserModelResult = Readonly<{ state: 'invoked'; receipt: BeuserMode
 export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
 /** Input construction keeps the rubric out of the walker call; provider/model selection is the existing role/active/budget path. */
 export interface ModelPort {
-  walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen): Promise<BeuserModelResult>;
-  evaluate(context: BeuserContext, transcriptDigest: string): Promise<BeuserModelResult>;
+  walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
+  evaluate(context: BeuserContext, transcriptDigest: string, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
   cancel(context: BeuserContext, invocationId: string): Promise<void>;
 }
 export interface EvidencePort {

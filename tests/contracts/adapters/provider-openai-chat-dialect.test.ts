@@ -104,3 +104,29 @@ describe('OpenAI chat adapter v5: provider dialects', () => {
     await expect(native.prepare(profile(4, withoutDialect), binding, body)).resolves.toBeDefined();
   });
 });
+
+it('gates JSON object output on the exact typed connection capability and preserves the chat wire', async () => {
+  const adapter = definitionOf('local-openai'), native = createOpenAiChatNativePort();
+  const profile = { schemaVersion: 1, id: 'p', version: 1, scopeId: 'scope',
+    reference: { providerId: 'local', providerVersion: 1, modelId: 'm', modelVersion: 1 }, bindingDigest: 'a'.repeat(64),
+    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter, allocation: { id: 'a', maxCalls: null, maxInFlight: 1 }, limits };
+  const binding = (capabilities: { id: string; version: number; state: string }[], version = 'v1') => ({ encodingVersion: 1,
+    provider: { id: 'local', version: 1 }, model: { id: 'm', version: 1, nativeId: 'm', protocols: [{ family: 'openai-chat-completions', version, capabilities }] } });
+  const body = { model: 'm', messages: [{ role: 'system', content: 'Return JSON only.' }], max_completion_tokens: 32, response_format: { type: 'json_object' } };
+  for (const capabilities of [[], [{ id: 'response-format-json-object', version: 1, state: 'unsupported' }],
+    [{ id: 'response-format-json-object', version: 2, state: 'supported' }]]) {
+    await expect(native.prepare(profile, binding(capabilities), body)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' });
+  }
+  const supported = [{ id: 'response-format-json-object', version: 1, state: 'supported' }];
+  await expect(native.prepare(profile, binding(supported, 'v2'), body)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' });
+  const prepared = await native.prepare(profile, binding(supported), body) as { body: string };
+  expect(JSON.parse(prepared.body)).toMatchObject({ response_format: { type: 'json_object' }, model: 'm' });
+  expect(() => prepareOpenAiChatHttpRequest(adapter.definition, limits, { ...body, response_format: { type: 'invalid' } })).toThrow('OPENAI_CHAT_REQUEST_INVALID');
+});
+it('maps JSON object output to the Responses dialect text.format field', () => {
+  const route = providerConnectKind('openai-api')!.connect!.protocolRoutes![0]!;
+  const definition = { ...definitionOf('openai-api').definition as object, dialect: route.dialect };
+  const body = bodyOf(definition, { response_format: { type: 'json_object' } });
+  expect(body['text']).toEqual({ format: { type: 'json_object' } });
+  expect(body).not.toHaveProperty('response_format');
+});

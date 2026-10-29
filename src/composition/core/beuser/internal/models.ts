@@ -1,5 +1,5 @@
 import { createBeuserModelPort, BeuserCallBudget, BeuserContractError, providerSpendLocalZeroTariff, providerSpendLocalZeroTariffProfile, type BeuserContext, type BeuserModelComposition } from '#engine/index.js';
-import { openSqliteModelActivationReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
+import { openSqliteModelActivationReader } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { invokeConfiguredModelAs, prepareConfiguredModelAs } from '#composition/core/model-invocation/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
@@ -7,6 +7,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { modelInvocationCommandSchema, openAiChatUsageSchema } from '#domain/index.js';
 import { currencyAmountText } from '#platform/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
+import { beuserModelMessages, decodeBeuserWalkerOutput } from './model-contract.js';
 
 /** Role/activation/catalog and invocation authority are re-read for every call. No host fallback or hidden model substitution. */
 export function configuredBeuserModels(root: string, options: ConfigLoadOptions, context: BeuserContext,
@@ -25,7 +26,7 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
     },
     async prepare(ctx, role, reference, input, remaining) {
       const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: ctx.binding.identity.scopeId, options,
-        messages: [{ role: 'user', content: JSON.stringify(role === 'beuser-evaluator' ? { input, evidence: evaluatorInput() } : input) }] }, false, reference, { maxCompletionTokens: completionTokens });
+        messages: beuserModelMessages(role, input, role === 'beuser-evaluator' ? evaluatorInput() : undefined) }, false, reference, { maxCompletionTokens: completionTokens, jsonOutput: 'if-supported' });
       const pinned = await prepareConfiguredModelAs(root, prepared.command, ctx.principal, options, ctx.signal);
       const profile = pinned.profile;
       const spending = pinned.spending;
@@ -61,10 +62,5 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
     } },
     async cancel() { throw new BeuserContractError('BEUSER_INPUT_INVALID'); },
   }, budget);
-  return { models, decode: (value: Parameters<typeof extractOpenAiChatTextFromInvocation>[0]) => {
-    const text = extractOpenAiChatTextFromInvocation(value); if (!text) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Object.keys(parsed).some(key => !['kind', 'key', 'text', 'ms'].includes(key))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    return { schemaVersion: 1, binding: context.binding, action: parsed };
-  } };
+  return { models, decode: (value: Parameters<typeof decodeBeuserWalkerOutput>[0]) => decodeBeuserWalkerOutput(value, context.binding) };
 }

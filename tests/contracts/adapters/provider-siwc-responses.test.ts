@@ -49,6 +49,7 @@ it('encodes the allowlisted SIWC dialect and complete tool history; unsupported 
   expect(() => siwcResponsesBody({ ...request, reasoning_effort: 'high' })).toThrow();
   expect(() => siwcResponsesBody({ ...request, tool_choice: 'required' })).toThrow();
   expect(() => siwcResponsesBody({ ...request, service_tier: 'priority' })).toThrow();
+  expect(() => siwcResponsesBody({ ...request, response_format: { type: 'json_object' } })).toThrow('OPENAI_CHAT_REQUEST_INVALID');
   expect(siwcResponsesBody({ ...request, tool_choice: 'none' })).not.toHaveProperty('tools');
 });
 it('parses only visible models[] entries in server order, preserving slugs and rejecting malformed/duplicate/oversized input', () => {

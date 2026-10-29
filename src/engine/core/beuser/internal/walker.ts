@@ -1,7 +1,7 @@
 import { BeuserContractError, beuserSurfaceCommandSchema, assertBeuserAccess, type ModelPort, type SurfacePort, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
 import { beuserBindingSchema } from '#domain/index.js';
 import { BeuserController, BeuserWalkStopped } from './controller.js';
-import type { BeuserWalkerDecode } from './models.js';
+import { correctBeuserModelOutput, type BeuserWalkerDecode } from './models.js';
 
 /** Only native model output is decoded; a model-authored verdict is never a completion signal. */
 export async function walkBeuser(controller: BeuserController, ports: {
@@ -17,12 +17,15 @@ export async function walkBeuser(controller: BeuserController, ports: {
     controller.screen(screen);
     await controller.call('beuser-transcript', 'inspect', () => ports.record(screen));
     if (await controller.call('attempt', 'evaluate', () => ports.finished(screen))) return;
-    controller.step();
-    controller.modelCall();
-    const answer = await controller.call('attempt', 'evaluate', context => ports.models.walker(context, controller.summary, screen), true);
-    if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-walker'
-      || answer.receipt.invocation.receipt.outcome?.state !== 'responded') throw new BeuserWalkStopped('unknown');
-    const decoded = ports.decode(answer.receipt.invocation);
+    const decoded = await correctBeuserModelOutput(controller.context, controller.summary.patience, async outputError => {
+      controller.step();
+      controller.modelCall();
+      const answer = await controller.call('attempt', 'evaluate', context => outputError
+        ? ports.models.walker(context, controller.summary, screen, outputError) : ports.models.walker(context, controller.summary, screen), true);
+      if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-walker'
+        || answer.receipt.invocation.receipt.outcome?.state !== 'responded') throw new BeuserWalkStopped('unknown');
+      return ports.decode(answer.receipt.invocation);
+    });
     const target = typeof decoded === 'object' && decoded !== null && 'binding' in decoded ? decoded.binding : null;
     if (!beuserBindingSchema.safeParse(target).success) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     const parsed = beuserSurfaceCommandSchema.safeParse(decoded);

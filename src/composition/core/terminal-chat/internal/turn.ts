@@ -4,7 +4,7 @@ import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCom
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -56,7 +56,7 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
  */
 /** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean, pinned?: ModelReference,
-  settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off' }> = {}) {
+  settings: Readonly<{ maxCompletionTokens?: number; reasoning?: 'off'; jsonOutput?: 'if-supported' }> = {}) {
   const config = await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>;
   const configuredChat = readTerminalChatConfig(config);
   if (!configuredChat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
@@ -70,10 +70,14 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
   if (thinkingOff && !binding.definition.model.protocols.some(protocol => protocol.family === openAiChatProtocol.family
     && protocol.version === openAiChatProtocol.version && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_ENABLE_THINKING_CAPABILITY
       && capability.version === 1 && capability.state === 'supported'))) throw ErrorRegistry.createError('MODEL_INVOCATION_REASONING_UNSUPPORTED');
+  const jsonOutput = settings.jsonOutput === 'if-supported' && binding.definition.model.protocols.some(protocol => protocol.family === openAiChatProtocol.family
+    && protocol.version === openAiChatProtocol.version && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_JSON_OBJECT_CAPABILITY
+      && capability.version === 1 && capability.state === 'supported'));
   const nativeRequest = {
     model: binding.definition.model.nativeId,
     messages: input.messages.map(message => ({ role: message.role, content: message.content })),
     max_completion_tokens: chat.maxCompletionTokens,
+    ...(jsonOutput ? { response_format: { type: 'json_object' } } : {}),
     ...(thinkingOff ? { chat_template_kwargs: { enable_thinking: false } } : {}),
     ...(streamed ? { stream: true, stream_options: { include_usage: true } } : { stream: false }),
   } as unknown as JsonObject;
