@@ -70,29 +70,35 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
 const roots: string[] = [];
 const services: { pid: number; root: string }[] = [];
 // /proc answers for a pid: present, gone (ENOENT/ESRCH) or unknown (any other read error, e.g. EACCES or EIO).
-async function procRead(pid: number, name: 'cmdline' | 'environ'): Promise<string | 'missing' | 'unknown'> {
+async function procRead(pid: number, name: 'cmdline' | 'environ' | 'stat'): Promise<string | 'missing' | 'unknown'> {
   try { return await readFile(`/proc/${pid}/${name}`, 'utf8'); } catch (error) {
     return ['ENOENT', 'ESRCH'].includes(String((error as NodeJS.ErrnoException).code)) ? 'missing' : 'unknown';
   }
 }
+// A zombie has exited and writes nothing more; its parent may reap it later.
+async function processState(pid: number): Promise<'exited' | 'running' | 'unknown'> {
+  const stat = await procRead(pid, 'stat');
+  if (stat === 'missing') return 'exited';
+  if (stat === 'unknown') return 'unknown';
+  const state = stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3);
+  return state === 'Z' || state === 'X' ? 'exited' : state ? 'running' : 'unknown';
+}
 // A runtime service the terminal started, identified by its own printed pid and this case's root only (never signals anything else).
 // It may still be writing its state after an accepted shutdown, so the caller removes the root only when this answers 'absent'.
+// A live pid that no longer matches the identity proves nothing about the service: 'unknown', the root is kept.
 async function stopOwnService(pid: number, root: string, waitMs = 10_000, kill: (pid: number, signal: NodeJS.Signals) => void = process.kill) {
-  const command = await procRead(pid, 'cmdline');
-  if (command === 'missing') return 'absent';
-  if (command === 'unknown') return 'unknown';
-  if (!command.includes('runtime')) return 'absent';
-  const environ = await procRead(pid, 'environ');
-  if (environ === 'missing') return 'absent';
-  if (environ === 'unknown') return 'unknown';
-  if (!environ.includes(root)) return 'absent';
+  const initial = await processState(pid);
+  if (initial !== 'running') return initial === 'exited' ? 'absent' : 'unknown';
+  const command = await procRead(pid, 'cmdline'), environ = await procRead(pid, 'environ');
+  if (command === 'missing' || environ === 'missing') return await processState(pid) === 'exited' ? 'absent' : 'unknown';
+  if (command === 'unknown' || environ === 'unknown' || !command.includes('runtime') || !environ.includes(root)) return 'unknown';
   try { kill(pid, 'SIGTERM'); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ESRCH') return 'absent';
     throw error;
   }
   for (const end = Date.now() + waitMs; ;) {
-    const state = await procRead(pid, 'cmdline');
-    if (state === 'missing') return 'absent';
+    const state = await processState(pid);
+    if (state === 'exited') return 'absent';
     if (state === 'unknown') return 'unknown';
     if (Date.now() >= end) return 'alive';
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -109,9 +115,9 @@ afterEach(async () => {
 
 describe.skipIf(process.platform !== 'linux')('stopOwnService', () => {
   // A stand-in service: argv carries 'runtime', env carries the root, and it prints 'ready' once its handlers are installed.
-  async function standIn(root: string, ignoreTerm: boolean) {
+  async function standIn(root: string, ignoreTerm: boolean, role = 'runtime') {
     const program = `${ignoreTerm ? 'process.on("SIGTERM", () => {}); ' : ''}setInterval(() => {}, 1000); process.stdout.write("ready");`;
-    const child = spawn(process.execPath, ['-e', program, 'runtime'], { env: { ...process.env, I_S5_ROOT: root }, stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn(process.execPath, ['-e', program, role], { env: { ...process.env, I_S5_ROOT: root }, stdio: ['ignore', 'pipe', 'ignore'] });
     const closed = new Promise(resolve => child.once('close', resolve));
     const stop = async () => { child.kill('SIGKILL'); await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 5000))]); };
     try {
@@ -131,6 +137,19 @@ describe.skipIf(process.platform !== 'linux')('stopOwnService', () => {
     try {
       await expect(stopOwnService(service.pid, root, 1000, gone)).resolves.toBe('absent');
       expect(kills).toEqual([service.pid]);
+    } finally { await service.stop(); }
+  });
+
+  it.each([
+    { label: 'command', role: 'other', env: (root: string) => root },
+    { label: 'root', role: 'runtime', env: () => join(tmpdir(), 'deckent-i-s5-other-root') },
+  ])('treats a live pid whose $label does not match as unknown and never signals it', async ({ role, env }) => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-i-s5-stop-')); roots.push(root);
+    const service = await standIn(env(root), false, role);
+    const kills: number[] = [];
+    try {
+      await expect(stopOwnService(service.pid, root, 300, pid => { kills.push(pid); })).resolves.toBe('unknown');
+      expect(kills).toEqual([]);
     } finally { await service.stop(); }
   });
 
