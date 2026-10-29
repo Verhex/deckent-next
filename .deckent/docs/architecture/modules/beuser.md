@@ -43,3 +43,31 @@ forbidden-effect and target lifecycle summaries remain unknown. Only a single fi
 admitted. The secret FD producer/reset, full milestone probes and measured call/cost/reliability evidence
 remain explicit gaps; none is replaced with success or an unrestricted host command. Reports retain null
 cost when no verified amount is available. No live, hosted, other-platform or independent acceptance is claimed.
+
+## Execution profile installation
+
+`deckent beuser setup --profile <path> --scope <id>` previews a bounded admission document on the
+person's terminal; `--apply` displays its content and digest on a person card, and `--json` returns
+the same result as structured data. The document uses the existing admission schema: `poolId`,
+`executionSlots`, `inFlightSlots`, `ordering` and `registry`. Its profiles must all use `beuser@1`
+and the existing strict journey profile contract (journey/persona/rubric pins, exact candidate
+manifest, finite limits revision, explicit walker/evaluator choices and launch/probe data).
+A profile author supplies this document; setup does not fabricate missing journey or model data.
+The packaged [B1 example](../../../../assets/beuser/setup-profile.example.md) builds one
+provisional onboarding/Ayşe document from installed references and the measured candidate;
+it carries no host paths or credentials and does not claim complete journey coverage.
+
+The composition validates the candidate manifest and requires both selected model roles to have an
+active, configured invocation reference. It creates no model role, activation, provider, credential
+or policy permission. `ConfigApplication.submit` owns the protected `admission` write, including
+policy, the person's terminal witness, compare-and-set and sealed audit. The existing installation
+pool owner provisions the matching pool separately; a failed pool step is returned explicitly and
+can be reconciled by repeating setup. An equal registry is not rewritten; a different existing
+registry or pool is refused for governed reconciliation. `beuser.*` remains a protected root;
+execution profiles continue to live in the general execution registry.
+
+Missing walk profiles return `BEUSER_PROFILE_REQUIRED` with the setup next step. A missing report
+directory or record returns `BEUSER_REPORT_NOT_FOUND` with the walk next step. Corrupt records,
+unsafe paths and access failures retain their refusal instead of becoming an empty report.
+A failed harness preparation closes its execution-budget timer before returning the refusal, so an
+unavailable Docker prerequisite does not keep the CLI process alive until the walk deadline.

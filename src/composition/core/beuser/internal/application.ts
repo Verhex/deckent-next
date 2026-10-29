@@ -127,7 +127,9 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
   const directory = join(await prepareProductDirectory(c.layout, 'crashes'), 'beuser-custody'), name = sha256(JSON.stringify(request.identity));
   const terminal = beuserPrivateRecord(directory, `terminal-${name}`, context.limits.maxArtifactBytes), owner = `beuser-${name}`;
   const budget = new BeuserExecutionBudget(context.limits);
-  let harness = await createConfiguredBeuserHarness(root, context, request, profile, store, artifacts, owner, options);
+  let harness: Awaited<ReturnType<typeof createConfiguredBeuserHarness>>;
+  try { harness = await createConfiguredBeuserHarness(root, context, request, profile, store, artifacts, owner, options); }
+  catch (error) { budget.close(); throw error; }
   const handle = async () => { const lease = await harness.custody.load({ ...context, signal: new AbortController().signal });
     if (!lease?.handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); return `beuser-${lease.handle.incarnation}`; };
   const readTerminal = async () => {
@@ -181,14 +183,19 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
 export async function readConfiguredBeuserReport(root: string, scopeId: string, runId: string | undefined, options: ConfigLoadOptions = {}): Promise<BeuserReport> {
   try {
     const c = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'read');
-    const crashes = await inspectProductDirectory(c.layout, 'crashes'), directory = (name: string) => beuserPrivateRecord(join(crashes, 'beuser-reports'), name, c.config.artifacts.maxBytes);
+    const crashes = await inspectProductDirectory(c.layout, 'crashes').catch((error: unknown) => {
+      if ((error as { code?: string }).code === 'MANAGED_FILE_MISSING') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
+      throw error;
+    }), directory = (name: string) => beuserPrivateRecord(join(crashes, 'beuser-reports'), name, c.config.artifacts.maxBytes);
     if (runId === undefined) {
       const latest = await directory(sha256(JSON.stringify([scopeId, c.principal.issuer, c.principal.subject]))).read();
+      if (latest.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
       if (latest.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
       runId = z.object({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.string().min(1) }).strict().parse(latest.value).runId;
     }
     await new RunPolicyAuthorization(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes)).authorize('inspect', { scopeId, runId }, c.principal);
     const read = await directory(sha256(JSON.stringify([scopeId, runId]))).read();
+    if (read.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
     if (read.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
     const envelope = z.object({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.literal(runId), report: beuserReportSchema }).strict().parse(read.value);
     const report = envelope.report;

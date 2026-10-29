@@ -13,15 +13,22 @@ import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { measureInstalledPackage, beuserPrivateRecord } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, beuserEvaluatorFor, createBeuserReport } from '#engine/index.js';
 import { sha256, clearConfigCache, prepareProductDirectory } from '#platform/index.js';
+import { ModelActivationApplication, ModelBindingApplication } from '#engine/index.js';
+import { encodeModelBindingDefinition } from '#domain/index.js';
+import { setupConfiguredBeuser } from '#composition/core/beuser/index.js';
+import { responsesFixture } from '../support/openai-responses.js';
+import { runInTerminal, lastJson } from '../support/terminal-cli.js';
 
-it.skipIf(process.platform !== 'linux')('dry admission reserves the exact Attempt and persistent cancellation reopens only its BeUser realm owner', async () => {
+it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact Attempt and persistent cancellation reopens only its BeUser realm owner', async () => {
   const base = await mkdtemp(join(tmpdir(), 'beuser-admission-')), root = join(base, 'project'), candidate = join(base, 'candidate');
   try {
     await mkdir(root); await mkdir(candidate); await mkdir(join(candidate, 'dist'));
     await writeFile(join(candidate, 'package.json'), JSON.stringify({ name: 'test-candidate', version: '1.0.0', files: ['dist'] }));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'export {};\n');
-    const options = { env: { HOME: join(base, 'home'), USERPROFILE: join(base, 'home') } };
+    const options = { env: { HOME: join(base, 'home'), USERPROFILE: join(base, 'home'), DECKENT_GLOBAL_HOME: join(base, 'global') } };
     await applyPolicyTemplateInstallation(root, 'scope', options);
+    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_PROFILE_REQUIRED' });
+    await expect(readConfiguredBeuserReport(root, 'scope', undefined, options)).rejects.toMatchObject({ code: 'BEUSER_REPORT_NOT_FOUND' });
     const storage = await openConfiguredAttemptStore(root, options);
     const max = { maxFiles: 100, maxFileBytes: 100000, maxTotalBytes: 1000000, maxDepth: 10 };
     const measured = await measureInstalledPackage(candidate, max), files = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
@@ -41,11 +48,56 @@ it.skipIf(process.platform !== 'linux')('dry admission reserves the exact Attemp
     expect(() => validateBeuserSupervisorProfile({ schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1,
       parameters: { ...parameters, entry: { ...parameters.entry, mode: 'argv', args: [] } } })).toThrow('BEUSER_INPUT_INVALID');
     const configPath = join(root, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
-    config.admission = { poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'beuser-fixture',
+    const admission = { poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'beuser-fixture',
       profiles: [{ id: 'persona', version: 1, adapter: { id: 'beuser', version: 1 }, parameters }], kinds: [{ kind: 'journey', profile: { id: 'persona', version: 1 }, workspaceDelivery: 'none' }],
       evaluators: [{ id: 'beuser', version: 1, implementation: { id: 'beuser', version: 1 } }] } };
+    storage.store.close();
+    const profilePath = join(base, 'profile.json');
+    await writeFile(profilePath, JSON.stringify(admission));
+    const cli = join(process.cwd(), 'dist/composition/core/cli/internal/entry.js');
+    const argv = [process.execPath, cli, 'beuser', 'setup', '--profile', profilePath, '--scope', 'scope', '--lang', 'en', '--json', '--apply'];
+    const env = { ...options.env, DECKENT_GLOBAL_HOME: join(base, 'global'), TERM: 'xterm-256color', PATH: process.env.PATH };
+    const missingProfile = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--journey', 'journey', '--candidate', candidate, '--scope', 'scope', '--json', '--lang', 'tr'], root, env);
+    expect(missingProfile.code).toBe(1); expect(missingProfile.output).toContain('BEUSER_PROFILE_REQUIRED'); expect(missingProfile.output).toContain('deckent beuser setup');
+    const refused = await runInTerminal(argv, root, env);
+    expect(refused.code).toBe(1); expect(refused.output).toContain('BEUSER_MODEL_UNAVAILABLE'); expect(refused.output).toContain('models roles');
+    await expect(adapters.withMcpPrincipal(() => setupConfiguredBeuser(root, { scopeId: 'scope', profile: profilePath, apply: false }, options)))
+      .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    const ai = await runInTerminal(argv, root, { ...env, CLAUDECODE: '1' });
+    expect(ai.code).toBe(1); expect(ai.output).toContain('AUTHORITY_WITNESS_REQUIRED');
+    expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined();
+    const f = responsesFixture('http://127.0.0.1:1/v1/responses'), reference = { ...f.profile.reference, providerId: 'fixture-channel', modelId: 'fixture-model' };
+    const modelDefinition = { ...f.definition, provider: { id: reference.providerId, version: 1 }, model: { ...f.definition.model, id: reference.modelId, nativeId: reference.modelId } };
+    const catalog = { schemaVersion: 1, revision: 'fixture', providers: [{ ...modelDefinition.provider, models: [modelDefinition.model] }] };
+    const bindingPin = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: sha256(encodeModelBindingDefinition(modelDefinition as never)) };
+    config.provider_catalog = catalog;
+    config.provider_invocation_profiles = { schemaVersion: 1, profiles: [{ ...f.profile, reference, bindingDigest: bindingPin.digest }] };
+    const model_roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture', roles: [], exceptions: [], models: [
+      { channelId: reference.providerId, modelId: reference.modelId, version: 1, tier: 'frontier', roles: ['beuser-walker', 'beuser-evaluator'] }] }] };
+    await mkdir(options.env.DECKENT_GLOBAL_HOME, { recursive: true, mode: 0o700 });
+    await writeFile(join(options.env.DECKENT_GLOBAL_HOME, 'config.json'), JSON.stringify({ model_roles }), { mode: 0o600 });
     await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
-    try { await storage.store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 } }); } finally { storage.store.close(); }
+    const principalForSeed = { ...adapters.readLocalOsIdentity(), scopeIds: ['scope'] };
+    const activation = new ModelActivationApplication({ verify: async () => principalForSeed }, { authorize: async () => ({ revision: 'fixture', ruleId: 'fixture' }) },
+      new ModelBindingApplication({ read: async () => catalog as never }), async () => adapters.openSqliteModelActivationStore(storage.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }), () => 1);
+    await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'fixture', expectedBinding: bindingPin });
+    parameters.choices = { 'beuser-walker': { channelId: reference.providerId, modelId: reference.modelId }, 'beuser-evaluator': { channelId: reference.providerId, modelId: reference.modelId } };
+    await writeFile(profilePath, JSON.stringify(admission));
+    const installed = await runInTerminal(argv, root, env, [{ when: '↑↓ choose · Enter confirm · Esc cancel', send: 'y' }]);
+    expect(installed.output).toContain('Install BeUser profile'); expect(installed.output).toContain('Apply (y)');
+    expect(installed.code, installed.output).toBe(0); expect(lastJson(installed.output)).toMatchObject({ status: 'applied', pool: { status: 'created' } });
+    const beforeReplay = await readFile(configPath, 'utf8');
+    const replayed = await runInTerminal(argv, root, env, [{ when: '↑↓ choose · Enter confirm · Esc cancel', send: 'y' }]);
+    expect(replayed.code, replayed.output).toBe(0); expect(lastJson(replayed.output)).toMatchObject({ status: 'current', pool: { status: 'current' } });
+    expect(await readFile(configPath, 'utf8')).toBe(beforeReplay);
+    await writeFile(profilePath, JSON.stringify({ ...admission, executionSlots: 2 }));
+    const conflict = await runInTerminal(argv, root, env, [{ when: '↑↓ choose · Enter confirm · Esc cancel', send: 'y' }]);
+    expect(conflict.code).toBe(1); expect(conflict.output).toContain('BEUSER_SETUP_CONFLICT');
+    expect(await readFile(configPath, 'utf8')).toBe(beforeReplay);
+    await writeFile(profilePath, JSON.stringify(admission));
+    const emptyReport = await runInTerminal([process.execPath, cli, 'beuser', 'report', '--scope', 'scope', '--json', '--lang', 'en'], root, env);
+    expect(emptyReport.code).toBe(1); expect(emptyReport.output).toContain('BEUSER_REPORT_NOT_FOUND'); expect(emptyReport.output).toContain('deckent beuser walk');
+    clearConfigCache();
     const admitted = await admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options);
     expect(admitted.principal).toEqual(beuserEvaluatorFor(admitted.c.principal, 'scope'));
     const definition = admitted.definitions[0]!;
@@ -131,6 +183,12 @@ it.skipIf(process.platform !== 'linux')('dry admission reserves the exact Attemp
     policy.grants.push({ id: 'deny-report', effect: 'deny', principals: 'all', scopes: ['scope'], actions: ['inspect'], resource: { kind: 'run', ids: [admitted.runId] } });
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
     await expect(readConfiguredBeuserReport(root, 'scope', undefined, options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    // The assembled CLI passes the installed-profile/Run/pool checks. This fixture has no execution Docker config,
+    // so it stops before any realm, model or external effect and reports that separate prerequisite truthfully.
+    const walked = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--scope', 'scope', '--journey', 'journey', '--candidate', candidate, '--json'], root, env);
+    expect(walked.code, walked.output).toBe(0);
+    expect(lastJson(walked.output)).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'EXECUTION_NOT_CONFIGURED' }] });
+    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked }, null, 2));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'changed;\n');
     await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
     // A foreign candidate is refused before creating another Run, without a verify=true test adapter.

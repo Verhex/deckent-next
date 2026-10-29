@@ -4588,7 +4588,8 @@
         "src/platform/core/output",
         "src/platform/core/errors",
         "src/platform/core/config",
-        "src/surfaces/core/cli-kit"
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "SURFACES"
     },
@@ -4631,7 +4632,13 @@
         "src/composition/core/supervisors",
         "src/adapters/core/approval-store",
         "src/adapters/core/local-keyring",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/adapters/core/installation-profile-file",
+        "src/composition/core/config",
+        "src/composition/core/installation",
+        "src/engine/core/model-activation",
+        "src/platform/core/config-fields",
+        "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
     },
@@ -4808,6 +4815,7 @@
   },
   "markdown": {
     "trackedAllow": [
+      "assets/beuser/setup-profile.example.md",
       "README.md",
       "README.tr.md",
       "CONTRIBUTING.md",
