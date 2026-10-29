@@ -1,4 +1,4 @@
-// lint-arch: the single architecture gate for deckent (fail-closed; only hardcode debt has a shrink-only baseline).
+// lint-arch: the single architecture gate for deckent (fail-closed; shrink-only baselines: hardcode debt, host words/paths, src size lock).
 // Rules come from arch.json. Checks:
 //  1. package import direction + public-API-only cross-package imports (index.ts), internal/ isolation
 //  2. observability is never imported; apps import only surfaces
@@ -7,6 +7,16 @@
 //  4. model/flow literals only in the registry allowlist
 //  5. no product source writes .md files (docs are not product output)
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
+//  6b. size lock (budgets.sizeLock; DOSYA-BOYUT step 1, owner 2026-10-18): long lines game the line budgets (src lines over 200
+//     chars: ~1800 on 2026-10-23, 2976 at a0e54e83a). Each src TS file stays within four targets; debt is what lies beyond one:
+//     bytes; lineExcess = chars (UTF-16 units) beyond lineChars, summed over lines; functionExcess = lines beyond functionLines,
+//     summed over outermost functions (TypeScript AST; a nested function's lines count once, in its parent); imports = distinct
+//     specifiers of static import declarations (re-exports are API composition and import() is lazy: neither counts).
+//     A file in debt keeps a per-file ceiling in the ceilings list, like the word ratchet: unlisted debt is red, a ceiling may
+//     only fall, stale entries go. --size-lock-refresh lowers and removes ceilings, never raises or adds; a justified growth is
+//     re-locked by hand in that list, so the raise shows in the diff. Targets 2026-10-29 from the a0e54e83a src distribution:
+//     bytes 20000 (p95 17827), lineChars 200 (owner's measure; p98 of lines), functionLines 80 (p95 of the longest function
+//     75), imports 10 (p95 10). JSON catalogs/data and native sources are outside the lock.
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
 //  9. structural guards (arch.json guards): src never imports outside src except assets/, tests never import .agents,
 //     host vocabulary absent from src and host home paths absent from docs/skills/rules/fixtures (shrink-only allowlists), vendor-slug caps per layer, claim/delivery/adoption files only in the effect owner
@@ -17,13 +27,15 @@ import { collectConfigBindings } from './config-bindings.mjs';
 import { lintConfigVocabulary } from './config-vocabulary.mjs';
 import { lintDependencies, loadRegistry, ownsImport, packageName } from './dependencies.mjs';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+
+const SIZE_METRICS = ['bytes', 'lineExcess', 'functionExcess', 'imports'];
 
 // Fresh per-call state: fixture edits, policies and Git history are always re-read.
 export function analyzeArchitecture(root, { mode = 'full', today = new Date().toISOString().slice(0, 10) } = {}) {
 const ROOT = resolve(root);
-if (!['full', 'hardcode-only', 'hardcode-inventory'].includes(mode)) throw new Error('Invalid architecture mode');
+if (!['full', 'hardcode-only', 'hardcode-inventory', 'size-lock-refresh'].includes(mode)) throw new Error('Invalid architecture mode');
 const arch = JSON.parse(readFileSync(join(ROOT, 'arch.json'), 'utf8'));
 const violations = [], warnings = [], messages = [];
 const packageNames = Object.keys(arch.packages);
@@ -58,6 +70,7 @@ if (mode === 'hardcode-only' || mode === 'hardcode-inventory') {
   }
   return { code: violations.length ? 1 : 0, out: messages.join('') + output };
 }
+if (mode === 'size-lock-refresh') return refreshSizeLock();
 const appFiles = walk(join(ROOT, 'apps'), isTs);
 const tsConfig = ts.parseJsonConfigFileContent(JSON.parse(readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')), ts.sys, ROOT);
 const program = ts.createProgram(tsConfig.fileNames, tsConfig.options);
@@ -872,6 +885,86 @@ let testCases = 0;
 for (const file of walk(join(ROOT, 'tests'), (p) => /\.test\.tsx?$/.test(p))) testCases += (readFileSync(file, 'utf8').match(TEST_CASE) ?? []).length;
 if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCases} test cases > budget ${arch.budgets.testCases}`);
 
+// ---- 6b: size lock (header 6b): debt beyond a target may not grow; a listed ceiling may only fall.
+function sizeLockPolicy() {
+  const lock = arch.budgets?.sizeLock;
+  if (!lock || typeof lock.ceilings !== 'string' || !lock.ceilings
+    || !['bytes', 'lineChars', 'functionLines', 'imports'].every(key => Number.isSafeInteger(lock[key]) && lock[key] >= 1)) {
+    fail('budget-config', 'arch.json', 'budgets.sizeLock needs a ceilings file and positive integer bytes, lineChars, functionLines and imports');
+    return null;
+  }
+  let rows;
+  try { rows = JSON.parse(readFileSync(join(ROOT, lock.ceilings), 'utf8')); } catch (error) { fail('size-lock', lock.ceilings, error.message); return null; }
+  if (!Array.isArray(rows)) { fail('size-lock', lock.ceilings, 'must be a JSON array of {file, ...ceilings}'); return null; }
+  const entries = new Map();
+  for (const row of rows) {
+    const metrics = Object.keys(row ?? {}).filter(key => key !== 'file');
+    if (typeof row?.file !== 'string' || entries.has(row.file) || !metrics.length
+      || metrics.some(key => !SIZE_METRICS.includes(key) || !Number.isSafeInteger(row[key]) || row[key] < 1)) fail('size-lock', lock.ceilings, `invalid or duplicate entry ${JSON.stringify(row)}`);
+    else entries.set(row.file, row);
+  }
+  return { ...lock, entries, targets: { bytes: lock.bytes, lineExcess: 0, functionExcess: 0, imports: lock.imports } };
+}
+function sizeOf(file, source, lock) {
+  const buffer = readFileSync(file), text = buffer.toString('utf8');
+  const size = { bytes: buffer.length, lineExcess: 0, functionExcess: 0, imports: 0, longLines: 0, longestLine: [0, 0], longFunctions: 0, longestFunction: [0, 0] };
+  text.split('\n').forEach((line, index) => {
+    if (line.length > lock.lineChars) { size.lineExcess += line.length - lock.lineChars; size.longLines++; }
+    if (line.length > size.longestLine[0]) size.longestLine = [line.length, index + 1];
+  });
+  source ??= ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const visit = node => {
+    if (!ts.isFunctionLike(node) || !node.body) { ts.forEachChild(node, visit); return; }
+    const first = source.getLineAndCharacterOfPosition(node.getStart(source)).line, lines = source.getLineAndCharacterOfPosition(node.end).line - first + 1;
+    if (lines > lock.functionLines) { size.functionExcess += lines - lock.functionLines; size.longFunctions++; }
+    if (lines > size.longestFunction[0]) size.longestFunction = [lines, first + 1];
+  };
+  visit(source);
+  size.imports = new Set(source.statements.filter(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)).map(node => node.moduleSpecifier.text)).size;
+  return size;
+}
+// The entry that locks a file at its current debt: printed by the gate for a deliberate re-lock; the refresh only lowers to it.
+function sizeEntry(path, size, lock) {
+  return { file: path, ...Object.fromEntries(SIZE_METRICS.filter(metric => size[metric] > lock.targets[metric]).map(metric => [metric, size[metric]])) };
+}
+function refreshSizeLock() {
+  const lock = sizeLockPolicy();
+  // A broken list or invalid targets are never rewritten: fix them by hand first.
+  if (!lock || violations.length) return { code: 1, out: violations.map(v => `✗ [${v.rule}] ${v.file} — ${v.message}\n`).join('') };
+  const rows = [];
+  let lowered = 0;
+  for (const file of srcFiles) {
+    const path = rel(file), entry = lock.entries.get(path);
+    if (!entry) continue;
+    const current = sizeEntry(path, sizeOf(file, undefined, lock), lock), row = { file: path };
+    for (const metric of SIZE_METRICS) if (entry[metric] !== undefined && current[metric] !== undefined) {
+      row[metric] = Math.min(entry[metric], current[metric]);
+      if (row[metric] < entry[metric]) lowered++;
+    }
+    if (Object.keys(row).length > 1) rows.push(row);
+  }
+  rows.sort((a, b) => a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
+  writeFileSync(join(ROOT, lock.ceilings), rows.length ? `[\n${rows.map(row => `  ${JSON.stringify(row)}`).join(',\n')}\n]\n` : '[]\n');
+  return { code: 0, out: `size-lock refresh: ${lock.ceilings} ${lock.entries.size} → ${rows.length} entries, ${lowered} ceiling(s) lowered; nothing raised or added (lint-arch shows what stays red)\n` };
+}
+const sizeLock = sizeLockPolicy();
+if (sizeLock) {
+  const unseen = new Set(sizeLock.entries.keys()), refresh = 'node scripts/lint-arch.mjs --size-lock-refresh';
+  const detail = (metric, size) => metric === 'lineExcess' ? ` (${size.longLines} line(s) over ${sizeLock.lineChars} chars, longest ${size.longestLine[0]} at line ${size.longestLine[1]})`
+    : metric === 'functionExcess' ? ` (${size.longFunctions} function(s) over ${sizeLock.functionLines} lines, longest ${size.longestFunction[0]} at line ${size.longestFunction[1]})` : '';
+  for (const file of srcFiles) {
+    const path = rel(file), entry = sizeLock.entries.get(path), size = sizeOf(file, program.getSourceFile(file), sizeLock);
+    unseen.delete(path);
+    const over = SIZE_METRICS.filter(metric => size[metric] > (entry?.[metric] ?? sizeLock.targets[metric]));
+    const loose = SIZE_METRICS.filter(metric => entry?.[metric] !== undefined && (size[metric] < entry[metric] || size[metric] <= sizeLock.targets[metric]));
+    if (over.length) fail('size-lock', path, `${over.map(metric => `${metric} ${size[metric]} > ${entry?.[metric] !== undefined ? `locked ${entry[metric]}` : `target ${sizeLock.targets[metric]}`}${detail(metric, size)}`).join('; ')}`
+      + `; split the file, or re-lock it deliberately in ${sizeLock.ceilings}: ${JSON.stringify(sizeEntry(path, size, sizeLock))}`);
+    if (loose.length) fail('size-lock', path, `${loose.map(metric => `${metric} ${size[metric]} ${size[metric] <= sizeLock.targets[metric] ? `is within target ${sizeLock.targets[metric]}, locked` : '< locked'} ${entry[metric]}`).join('; ')}`
+      + `; lower the lock (shrink-only): ${refresh}`);
+  }
+  for (const path of unseen) fail('size-lock', path, `stale ${sizeLock.ceilings} entry: no such src file; ${refresh} removes it`);
+}
+
 // ---- 7: tracked markdown
 const tracked = (() => { try { return execFileSync('git', ['ls-files', '--', '*.md'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return []; } })();
 const allow = new Set(arch.markdown.trackedAllow);
@@ -900,7 +993,7 @@ if (vocab?.enforce) {
 }
 
 // ---- report
-const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s), ${warnings.length} warning(s)`;
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${sizeLock?.entries.size ?? 0} size-locked files, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s), ${warnings.length} warning(s)`;
 const report = [...violations.map(v => `✗ [${v.rule}] ${v.file} — ${v.message}`), ...warnings.map(w => `⚠ [${w.rule}] ${w.file} — ${w.message}`), summary].join('\n') + '\n';
 return { code: violations.length === 0 ? 0 : 1, out: messages.join('') + report };
 }

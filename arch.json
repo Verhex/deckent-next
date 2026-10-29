@@ -4787,6 +4787,13 @@
     ],
     "tierLines": {
       "composition/enterprise": 4000
+    },
+    "sizeLock": {
+      "ceilings": "scripts/size-lock.json",
+      "bytes": 20000,
+      "lineChars": 200,
+      "functionLines": 80,
+      "imports": 10
     }
   },
   "i18n": {

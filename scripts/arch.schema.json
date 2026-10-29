@@ -81,12 +81,47 @@
         "testCases",
         "designTargetLines",
         "fileRoots",
-        "textExtensions"
+        "textExtensions",
+        "sizeLock"
       ],
       "properties": {
         "maxLinesPerFile": {
           "type": "integer",
           "minimum": 1
+        },
+        "sizeLock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ceilings",
+            "bytes",
+            "lineChars",
+            "functionLines",
+            "imports"
+          ],
+          "description": "Shrink-only src size lock (lint-arch 6b): per-file targets for src TS files; a file beyond one keeps a per-file ceiling in the ceilings list, lowered by --size-lock-refresh and raised only by hand.",
+          "properties": {
+            "ceilings": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "lineChars": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "functionLines": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "imports": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         },
         "designTargetLines": {
           "type": "integer",

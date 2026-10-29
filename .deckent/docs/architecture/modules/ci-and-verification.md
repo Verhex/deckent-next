@@ -1,5 +1,32 @@
 # CI and verification tooling — module note
 
+**Size lock (DOSYA-BOYUT step 1; owner 2026-10-18, admitted again 2026-10-29).**
+Reason: long lines game the line budgets. `src` lines over 200 characters were ~1800 on 2026-10-23 (1872 at `c9653b6ab`)
+and are 2976 in 830 files at `a0e54e83a`; `errors/registry.ts` grew from 106 KB to 133 KB. lint-arch section 6b now
+locks four metrics of every `src` TypeScript file at that state. Debt is what lies beyond a target:
+`bytes` (file size); `lineExcess` (characters, as UTF-16 units, beyond `lineChars`, summed over lines); `functionExcess`
+(lines beyond `functionLines`, summed over outermost functions from the gate's existing TypeScript program, so a nested
+function counts once, inside its parent); `imports` (distinct specifiers of static `import` declarations, external and
+type-only included; re-exports are API composition and `import()` is lazy, so neither counts).
+Targets live in `arch.json` `budgets.sizeLock`, chosen from the `a0e54e83a` distribution of 2108 files:
+`bytes` 20000 (p95 17,827; 81 files above), `lineChars` 200 (the owner's own measure; p98 of all `src` lines; 830 files),
+`functionLines` 80 (p95 of the longest function per file 75; 94 files), `imports` 10 (p95 10; 98 files).
+A file within every target must stay within them. The 862 files in debt keep per-file ceilings in `scripts/size-lock.json`
+(one line per file, only the metrics in debt); the first list is the gate's own entries on an empty list at `a0e54e83a`.
+Like the host-word ratchet: debt above a ceiling or without one is red and prints the entry that would lock it; a ceiling
+above the current value is red until lowered; an entry whose file is gone or back within target is stale and red;
+invalid targets or entries fail closed. `node scripts/lint-arch.mjs --size-lock-refresh` (about 1 s, no type program)
+lowers and removes ceilings and never raises or adds one. Workflow: edit, run lint-arch, run the refresh after a
+shrink, stage `scripts/size-lock.json` with the change. Growth is answered by splitting; a justified growth is re-locked
+by the lead by replacing that file's line with the printed entry, so the raise is visible in the diff and the reason
+goes in the commit message. Measured cost: replaying the last 72 commits that touched `src` TypeScript
+(`120e1cc87`..`f9a932111`) against this lock, 50 would have changed the list and 36 would have needed a raise or a split
+(bytes 38, lineExcess 27, imports 13, functionExcess 13). lint-arch wall time, base and new gate run alternately on the
+same tree: 10.22–10.46 s versus 10.33–10.35 s; the new section's own work measures about 90 ms.
+Limits: JSON catalogs and data (`governance.json` is 174 KB) and native or `.mjs` sources under `src` are outside the lock;
+a per-file sum lets one long line or function grow while another shrinks by the same amount. Splitting files (step 2)
+is separate PLAN work. Author proof: external `<refactor-work>/proof/BETA-ISLER-2026-10-29/PAKET-1/lanes/D/HANDBACK.md`.
+
 **CI-BWRAP-CACHE (owner card 2026-10-15; landed in alpha.40).**
 CI's exact lock/recipe/driver/verifier/architecture cache now retains built outputs and fetched APKs.
 A hit verifies its input identity and all file/APK checksums, then the committed binary/source/license
