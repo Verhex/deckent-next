@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { access, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -69,17 +69,48 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
 `;
 const roots: string[] = [];
 const services: { pid: number; root: string }[] = [];
+const running = (pid: number) => readFile(`/proc/${pid}/cmdline`, 'utf8').then(() => true, () => false);
+// A runtime service the terminal started, identified by its own printed pid and this case's root only. It may still be writing its
+// state after an accepted shutdown, so the caller removes the root only when this answers 'absent'.
+async function stopOwnService(pid: number, root: string, waitMs = 10_000, kill: (pid: number, signal: NodeJS.Signals) => void = process.kill) {
+  const command = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
+  if (!command.includes('runtime') || !(await readFile(`/proc/${pid}/environ`, 'utf8').catch(() => '')).includes(root)) return 'absent';
+  try { kill(pid, 'SIGTERM'); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return 'absent';
+    throw error;
+  }
+  for (const end = Date.now() + waitMs; Date.now() < end;) {
+    if (!await running(pid)) return 'absent';
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  return await running(pid) ? 'alive' : 'absent';
+}
 afterEach(async () => {
   clearConfigCache();
-  // A runtime service the terminal started and the case did not stop (a failed assertion): stopped here, by its own printed pid only.
-  // A service already told to shut down may still be writing its state, so the root is removed only after the process is gone.
-  for (const { pid, root } of services.splice(0)) {
-    const command = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
-    if (!command.includes('runtime') || !(await readFile(`/proc/${pid}/environ`, 'utf8').catch(() => '')).includes(root)) continue;
-    process.kill(pid, 'SIGTERM');
-    for (let n = 0; n < 200 && await readFile(`/proc/${pid}/cmdline`, 'utf8').then(() => true, () => false); n++) await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+  const kept: string[] = [];
+  for (const { pid, root } of services.splice(0)) if (await stopOwnService(pid, root) === 'alive') kept.push(root);
+  const removable = roots.splice(0).filter(root => !kept.some(home => home === root || home.startsWith(`${root}/`)));
+  await Promise.all(removable.map(root => rm(root, { recursive: true, force: true })));
+  if (kept.length) throw new Error(`Runtime service still running after shutdown; root kept: ${kept.join(', ')}`);
+});
+
+describe('stopOwnService', () => {
+  it('treats a service that exits between the identity read and SIGTERM as absent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-i-s5-stop-')); roots.push(root);
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'runtime'], { env: { ...process.env, I_S5_ROOT: root } });
+    await new Promise(resolve => child.once('spawn', resolve));
+    const gone = (pid: number) => { process.kill(pid, 'SIGKILL'); throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' }); };
+    await expect(stopOwnService(child.pid!, root, 1000, gone)).resolves.toBe('absent');
+  });
+
+  it('reports a service still alive at the deadline so its root is kept', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-i-s5-stop-')); roots.push(root);
+    const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)', 'runtime'],
+      { env: { ...process.env, I_S5_ROOT: root } });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    try { await expect(stopOwnService(child.pid!, root, 300)).resolves.toBe('alive'); }
+    finally { child.kill('SIGKILL'); }
+  });
 });
 type Steps = ReadonlyArray<readonly [string, string]>;
 type Run = { status?: number | string; output: string; timeout?: string };
