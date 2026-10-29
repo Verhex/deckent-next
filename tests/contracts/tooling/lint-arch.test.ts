@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm, cp } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix } from 'node:path';
 import { promisify } from 'node:util';
@@ -20,12 +20,13 @@ const emptyRegistry = { schemaVersion: 2, policy: { reviewIntervalDays: { P0: 30
 type ArchPatch = (arch: any) => void;
 async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}, patch?: ArchPatch): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
-  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string }; tiers: { enforce: boolean }; imports: { enforce: boolean }; markdown: { trackedAllow: string[] }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
+  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string }; tiers: { enforce: boolean }; imports: { enforce: boolean }; markdown: { trackedAllow: string[] }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] }; budgets: { sizeLock: { ceilings: string } } };
   arch.tiers.enforce = tiersEnforce;
   arch.imports.enforce = importsEnforce;
   await cp(fileURLToPath(new URL('../../../scripts', import.meta.url)), join(root, 'scripts'), { recursive: true });
   arch.hardcodeRatchet.frozen = [];
   await writeFile(join(root, arch.hardcodeRatchet.allowlist), '[]');
+  await writeFile(join(root, arch.budgets.sizeLock.ceilings), '[]');
   const packages = Object.keys(arch.packages);
   await writeFile(join(root, 'package.json'), JSON.stringify({ imports: Object.fromEntries(packages.map(p => [`#${p}/*`, `./dist/${p}/*`])),
     dependencies: deps.dependencies ?? {}, devDependencies: deps.devDependencies ?? {} }));
@@ -302,7 +303,7 @@ describe('lint-arch unit contract', () => {
     expect(result.out).not.toContain('domain decision function schema');
   });
 
-  it('enforces canonical vocabulary and the aggregate 2,000-line unit budget', async () => {
+  it('enforces canonical vocabulary, the aggregate 2,000-line unit budget and the growth-only src size lock', async () => {
     const root = await fixture({
       'src/platform/core/large/index.ts': 'export {};\n',
       'src/platform/core/large/internal/a.ts': '// line\n'.repeat(1001),
@@ -312,6 +313,50 @@ describe('lint-arch unit contract', () => {
     const result = await lint(root);
     expect(result.out).toContain('[unit-budget]');
     expect(result.out).toContain('[vocabulary]');
+    // Size lock on small targets: 12 lines, 297 bytes; one 50-char line; an 8-line function holding a 5-line one; two imports.
+    const x = `${["import { y } from './y.js';", "import type { Stats } from 'node:fs';", 'export function outer(): number {', '  const inner = (): number => {',
+      '    const a = y;', '    const b = a + y;', '    return b;', '  };', '  return inner();', '}', 'export const s: Stats | null = null;', `export const w = '${'w'.repeat(30)}';`].join('\n')}\n`;
+    const path = 'src/engine/core/a/internal/x.ts', refresh = 'node scripts/lint-arch.mjs --size-lock-refresh';
+    const sized = await fixture({ 'src/engine/core/a/index.ts': "export * from './internal/x.js';\nexport * from './internal/y.js';\n",
+      'src/engine/core/a/internal/y.ts': 'export const y = 1;\n', [path]: x }, true, false, {},
+    arch => { arch.budgets.sizeLock = { ...arch.budgets.sizeLock, bytes: 200, bytesStep: 100, lineChars: 40, functionLines: 4, imports: 1 }; });
+    const ceilings = join(sized, 'scripts/size-lock.json'), entry = { file: path, bytes: 300, lineExcess: 10, functionExcess: 4, imports: 2 };
+    // Unlisted debt is red and prints its entry (bytes in whole steps); the nested function counts once, in its parent; re-exports are not imports.
+    const unlisted = await lint(sized);
+    expect(unlisted.out).toContain(`[size-lock] ${path} — bytes 297 > target 200; lineExcess 10 > target 0 (1 line(s) over 40 chars, longest 50 at line 12); functionExcess 4 > target 0 (1 function(s) over 4 lines, longest 8 at line 3); imports 2 > target 1;`);
+    expect(unlisted.out).toContain(JSON.stringify(entry));
+    expect(unlisted.out).not.toContain('[size-lock] src/engine/core/a/index.ts');
+    // Growth inside the bytes step passes; a new long line beyond the step is red on both metrics.
+    await writeFile(ceilings, JSON.stringify([entry]));
+    await writeFile(join(sized, path), `${x}//\n`);
+    const locked = await lint(sized);
+    expect(locked.code, locked.out).toBe(0);
+    await writeFile(join(sized, path), `${x}${'/'.repeat(45)}\n`);
+    expect((await lint(sized)).out).toContain(`[size-lock] ${path} — bytes 343 > locked 300; lineExcess 15 > locked 10 (2 line(s) over 40 chars, longest 50 at line 12); split the file`);
+    // Growth and an unlocked metric are red, so are stale entries (within target, missing file); a ceiling above the current value is only counted.
+    await writeFile(join(sized, path), x);
+    await writeFile(ceilings, JSON.stringify([{ file: path, bytes: 250, lineExcess: 12, functionExcess: 4 }, { file: 'src/engine/core/a/internal/y.ts', imports: 3 },
+      { file: 'src/engine/core/gone/index.ts', bytes: 999 }]));
+    const loose = await lint(sized);
+    expect(loose.out).toContain(`[size-lock] ${path} — bytes 297 > locked 250; imports 2 > target 1; split the file`);
+    expect(loose.out).not.toContain('lineExcess 10');
+    expect(loose.out).toContain('3 size-locked files (1 with slack for --size-lock-refresh)');
+    expect(loose.out).toContain(`[size-lock] src/engine/core/a/internal/y.ts — imports 0 is within target 1, locked 3; stale entry: ${refresh} removes it`);
+    expect(loose.out).toContain('[size-lock] src/engine/core/gone/index.ts — stale scripts/size-lock.json entry: no such src file');
+    // The refresh only lowers and removes: the 250-byte ceiling is not raised and the unlocked imports metric is not added.
+    const refreshed = analyzeArchitecture(sized, { mode: 'size-lock-refresh' });
+    expect(refreshed.out).toContain('3 → 1 entries, 1 ceiling(s) lowered');
+    expect(JSON.parse(await readFile(ceilings, 'utf8'))).toEqual([{ file: path, bytes: 250, lineExcess: 10, functionExcess: 4 }]);
+    const after = await lint(sized);
+    expect(after.code).toBe(1);
+    expect(after.out).toContain(`[size-lock] ${path} — bytes 297 > locked 250; imports 2 > target 1; split the file`);
+    // A broken list is refused and never rewritten.
+    const broken = JSON.stringify([{ file: path, byte: 1 }]);
+    await writeFile(ceilings, broken);
+    const refused = analyzeArchitecture(sized, { mode: 'size-lock-refresh' });
+    expect(refused.code).toBe(1);
+    expect(refused.out).toContain('invalid or duplicate entry');
+    expect(await readFile(ceilings, 'utf8')).toBe(broken);
   });
 
 });

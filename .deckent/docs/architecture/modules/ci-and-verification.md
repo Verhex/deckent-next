@@ -1,5 +1,37 @@
 # CI and verification tooling — module note
 
+**Size lock (DOSYA-BOYUT step 1; owner 2026-10-18, admitted again 2026-10-29; D2 growth-only rule, owner 2026-10-29).**
+Reason: long lines game the line budgets. `src` lines over 200 characters were ~1800 on 2026-10-23 (1872 at `c9653b6ab`)
+and are 2994 at `5eb3939e3`; `errors/registry.ts` grew from 106 KB to 133 KB. lint-arch section 6b locks four metrics of
+every `src` TypeScript file. Debt is what lies beyond a target:
+`bytes` (file size); `lineExcess` (characters, as UTF-16 units, beyond `lineChars`, summed over lines); `functionExcess`
+(lines beyond `functionLines`, summed over outermost functions from the gate's existing TypeScript program, so a nested
+function counts once, inside its parent); `imports` (distinct specifiers of static `import` declarations, external and
+type-only included; re-exports are API composition and `import()` is lazy, so neither counts).
+Targets live in `arch.json` `budgets.sizeLock`, chosen from the `a0e54e83a` distribution of 2108 files:
+`bytes` 20000 (p95 17,827), `lineChars` 200 (the owner's own measure; p98 of all `src` lines),
+`functionLines` 80 (p95 of the longest function per file 75), `imports` 10 (p95 10).
+A file within every target must stay within them. Files in debt keep per-file ceilings in `scripts/size-lock.json` (one line
+per file, only the metrics in debt; 864 files at `5eb3939e3`, written from the gate's own entries on an empty list). A
+`bytes` ceiling is kept in whole `bytesStep` units (2000), so edits inside the step leave the list alone; the other ceilings
+are exact. Only growth is red: debt above its ceiling or without one (the message prints the entry that would lock it), an
+entry for a metric back within target and an entry for a missing file; invalid targets or entries fail closed. A ceiling
+above the current value is not red: the summary counts such files and `node scripts/lint-arch.mjs --size-lock-refresh`
+(about 1 s, no type program) lowers and removes ceilings, never raising or adding one. The lead runs the refresh when
+integrating a batch or after a split. Growth is answered by splitting or by wrapping the long line; a justified growth is
+re-locked by the lead by replacing that file's line with the printed entry, so the raise is visible in the diff and the
+reason goes in the commit message.
+Why growth-only (D2): replaying the last 72 first-parent commits that touched `src` TypeScript (`120e1cc87`..`f9a932111`),
+the first strict lock (every shrink had to lower its ceiling, exact bytes) turned 50 of them red, 14 only to lower or remove
+a ceiling; this rule turns 29 red (28 for growth, 1 only for a stale entry), and bytes growth needing a split or raise falls
+from 24 commits to 8. Summed
+excess was kept over per-file maxima (longest line, longest function): maxima saved 5 more of the 72 commits, but four of
+those added a long line to a file that already had one and the fifth lengthened one: the growth this lock exists to stop.
+Limits: a locked file may grow up to its next 2000-byte boundary unnoticed; a ceiling stays loose until the refresh runs;
+one long line or function may grow while another shrinks by the same amount; JSON catalogs and data (`governance.json`
+is 174 KB) and native or `.mjs` sources under `src` are outside the lock. Splitting files (step 2) is separate PLAN work.
+Author proof: external `<refactor-work>/proof/ANALIZ-2026-10-29/D2/HANDOFF.md`.
+
 **CI-BWRAP-CACHE (owner card 2026-10-15; landed in alpha.40).**
 CI's exact lock/recipe/driver/verifier/architecture cache now retains built outputs and fetched APKs.
 A hit verifies its input identity and all file/APK checksums, then the committed binary/source/license
