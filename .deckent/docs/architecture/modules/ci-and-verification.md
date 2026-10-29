@@ -220,14 +220,14 @@ Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29). `scripts/ci-test-du
 `gh run download <run> -p 'shard-*' -D <dir>` per hosted run, then `node scripts/ci-test-weights.mjs refresh <dir>...` writes the
 per-file maximum of the shard `receipt.json` reporter durations across every given run, Node job and shard (rounded up to ms)
 and refuses receipts that do not cover one complete inventory. All-skipped zero-duration files keep the median fallback.
-The required collector (`ci-aggregate.mjs`, verify job, after complete-coverage validation) runs the same guard
-(`durationDrift`, thresholds in `durationDrift` of `ci-test-config.json`): a file at or above `minObservedMs` that ran over
+The separate `duration weight drift (node N)` job runs `node scripts/ci-test-weights.mjs check` on every shard receipt of the
+run (`durationDrift`, thresholds in `durationDrift` of `ci-test-config.json`): a file at or above `minObservedMs` that ran over
 `maxRatio` × its weight (median fallback when unweighted), or more than `maxUnweightedFiles` files that ran without a weight,
-becomes a `::warning` annotation and a step-summary line. It warns rather than fails: weights can only come from a hosted run,
-so a new heavy test cannot be weighted before its first run, and runner variance must not block the required check.
-`node scripts/ci-test-weights.mjs check [--durations PATH] <dir>...` runs the guard offline and exits 1 on drift; it also reads
-a shard cancelled at the job limit after Vitest finished (its receipt exists; a job cut mid-Vitest has none). Release step: before a
-release PR merges, run `check` on its hosted run's shard artifacts (or read the verify warnings); on drift, `refresh` from that
+becomes a `::warning` annotation, a step-summary line and a red job. The job runs whenever prepare succeeded, also when a shard
+was cut at the job limit (the case the guard exists for: shard artifacts upload under `if: always()`, and `check` accepts an
+incomplete receipt set; a job cut mid-Vitest has no receipt). It is not a required check and the required collector is unchanged:
+a new heavy test cannot be weighted before its first hosted run. The same command runs offline (exit 1 on drift).
+Release step: a red drift job, or drift from `check` on the shard artifacts, blocks the release PR until `refresh` from that
 run's artifacts (both Nodes; add the previous main run when available), commit the weights and rerun hosted CI.
 Proof (external `proof/ANALIZ-2026-10-29/LANES-STEP1/A/`): the a57 weights flagged 15 slow files (terminal-onboarding-pty
 148.3 s vs 45.1 s, uninstall 48.5 vs 11.9 s, toolchain-refresh 41.6 vs 15.5 s) and 21 unweighted files on the a57 runs;

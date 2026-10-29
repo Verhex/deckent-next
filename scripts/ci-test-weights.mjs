@@ -1,6 +1,6 @@
 // Scheduling weights from hosted shard receipts (`gh run download RUN -p 'shard-*' -D DIR`): `refresh` rewrites
-// ci-test-durations.json, `check` runs the same drift guard as the CI collector and exits 1 on drift.
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+// ci-test-durations.json, `check` runs the drift guard (the CI drift job, or offline) and exits 1 on drift.
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DURATION_DRIFT, durationDrift, inventoryDigest, observedDurations } from './ci-test-plan.mjs';
@@ -19,10 +19,11 @@ export function readReceipts(directories) {
 }
 
 // Every receipt must describe one inventory, and together they must observe all of it.
-export function receiptInventory(receipts) {
+// `complete: false` accepts the receipts of a run whose shards were cut at the job limit (the drift job); refresh needs every file.
+export function receiptInventory(receipts, { complete = true } = {}) {
   const digests = new Set(receipts.map(receipt => receipt.inventoryDigest));
   const files = [...new Set(receipts.flatMap(receipt => (receipt.files ?? []).map(row => row.file)))].sort();
-  if (digests.size !== 1 || inventoryDigest(files) !== [...digests][0]) throw new Error('Receipts do not cover one complete inventory');
+  if (digests.size !== 1 || (complete && inventoryDigest(files) !== [...digests][0])) throw new Error('Receipts do not cover one complete inventory');
   return { digest: [...digests][0], files };
 }
 
@@ -71,9 +72,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(`Weighted ${weights.source.files}/${weights.source.inventoryFiles} files from ${receipts.length} receipts`);
   } else {
     const durations = JSON.parse(readFileSync(durationsPath, 'utf8')).durationMs;
-    const result = durationDrift(receiptInventory(receipts).files, observedDurations(receipts), durations);
-    for (const line of driftReport(result)) console.log(line);
-    console.log(`Duration drift: ${result.drifted ? 'DRIFT' : 'none'} (${result.slow.length} slow, ${result.unweighted.length} unweighted)`);
+    const result = durationDrift(receiptInventory(receipts, { complete: false }).files, observedDurations(receipts), durations);
+    const annotate = process.env.GITHUB_ACTIONS === 'true' ? '::warning file=scripts/ci-test-durations.json,title=CI duration weight drift::' : '';
+    for (const line of driftReport(result)) console.log(`${annotate}${line}`);
+    const summary = `Duration drift: ${result.drifted ? 'DRIFT' : 'none'} (${result.slow.length} slow, ${result.unweighted.length} unweighted)`;
+    console.log(summary);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
     process.exitCode = result.drifted ? 1 : 0;
   }
 }
