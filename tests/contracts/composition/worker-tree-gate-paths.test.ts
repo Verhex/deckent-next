@@ -23,8 +23,9 @@ it('keeps coding-tree and isolated BeUser launches behind their own admitted gat
   const admitted = beuser.indexOf("await policy.authorizeIdentity('execute', request.identity, c.principal)"), selected = beuser.indexOf('selectReservedTaskProfile(await store.loadRun(');
   expect(admitted).toBeGreaterThan(-1); expect(selected).toBeGreaterThan(admitted);
   expect(beuser.indexOf('if (!isDeepStrictEqual(profile,')).toBeGreaterThan(selected);
-  expect(beuser.indexOf('let harness = await createConfiguredBeuserHarness(')).toBeGreaterThan(selected);
-  expect(beuser.indexOf('new DispatchApplication(')).toBeGreaterThan(beuser.indexOf('let harness = await createConfiguredBeuserHarness('));
+  const harness = beuser.indexOf('harness = await createConfiguredBeuserHarness(');
+  expect(harness).toBeGreaterThan(beuser.indexOf('if (!isDeepStrictEqual(profile,'));
+  expect(beuser.indexOf('new DispatchApplication(')).toBeGreaterThan(harness);
   expect(beuser).toContain('id => hooks?.created(id)');
   expect(builders.filter(path => /\.execute\(/u.test(files.find(file => file.path === path)!.text))).toEqual([BEUSER, TASK]);
   const controller = 'src/engine/core/beuser/internal/supervisor.ts';
