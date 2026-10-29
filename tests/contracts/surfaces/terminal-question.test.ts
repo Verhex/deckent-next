@@ -19,7 +19,7 @@ const key = (patch: Partial<Key> = {}): Key => ({ upArrow: false, downArrow: fal
 
 describe('question model', () => {
   const options: QuestionOption[] = [{ id: 'a', label: 'A', key: 'y' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C', key: 'n' }];
-  it('moves with arrows, j/k and digits, submits with Enter or an option letter, cancels with Esc/Ctrl+C, ignores paste and other keys', () => {
+  it('moves with arrows, j/k and digits, submits with Enter or an option letter (yes/no letters derived from the answer role), cancels with Esc/Ctrl+C, ignores paste and other keys', () => {
     const at = (n: number) => ({ at: n, ticked: [] as string[] });
     expect(questionStep('single', options, at(0), '', key({ downArrow: true }))).toEqual({ kind: 'move', state: at(1) });
     expect(questionStep('single', options, at(2), 'j', key())).toEqual({ kind: 'move', state: at(2) });
@@ -39,9 +39,7 @@ describe('question model', () => {
     const both = questionStep('multi', options, { at: 0, ticked: ['c'] }, ' ', key());
     expect(both.kind === 'move' && questionStep('multi', options, both.state, '', key({ return: true }))).toEqual({ kind: 'submit', ids: ['a', 'c'] });
     expect(questionStep('multi', options, at(0), 'y', key())).toEqual({ kind: 'ignored' });
-  });
-  it('a yes/no question derives (y)/(n) from its answers in every locale: y and n answer, Enter sends the highlighted one; other answers keep their own letter', () => {
-    const at = (n: number) => ({ at: n, ticked: [] as string[] });
+    // A yes/no question derives (y)/(n) from its answers in every locale: y and n answer, Enter sends the highlighted one; other answers keep their own letter.
     // The answer role, not the call site, owns the letter; an answer without a role ("Not now" beside a real No) is letterless; ids and order are free.
     const yesNo = [{ id: 'later', label: 'Not now' }, { id: 'apply', label: 'Apply', role: 'yes' }, { id: 'cancel', label: 'Cancel', role: 'no' }] as QuestionOption[];
     expect(questionStep('single', yesNo, at(0), 'y', key())).toEqual({ kind: 'submit', ids: ['apply'] });

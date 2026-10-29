@@ -198,7 +198,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] R
     .rejects.toMatchObject({ code: 'RUNTIME_AUTOSTART_FAILED' });
   expect(launched).toBe(1);
 });
-it('RESTART-HUNT: the restart loop launches once only for the startable refusal; any other unsafe refusal throws without a launch', async () => {
+it('RESTART-HUNT: the restart loop launches once only for the startable refusal; any other unsafe refusal throws without a launch; a refusal the predicate no longer confirms is judged by one fresh describe', async () => {
   const unsafe = ErrorRegistry.createError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { params: { reason: 'parent-mode' } });
   const ready = { mode: 'started', instanceId: 'i', pid: 1, logPath: null, shutdownAvailable: true, build: null, configDigest: undefined, idleStopMs: null } as const;
   for (const healable of [true, false]) {
@@ -208,9 +208,8 @@ it('RESTART-HUNT: the restart loop launches once only for the startable refusal;
     if (healable) await expect(result).resolves.toBe(ready); else await expect(result).rejects.toBe(unsafe);
     expect(starts).toBe(healable ? 1 : 0);
   }
-});
-it('RESTART-HUNT: a refusal the predicate no longer confirms (the launched start healed in between) is judged by one fresh describe, never thrown stale', async () => {
-  const unsafe = (reason = 'parent-mode') => ErrorRegistry.createError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { params: { reason } });
+  // A refusal the predicate no longer confirms (the launched start healed in between) is judged by one fresh describe, never thrown stale.
+  const refusal = (reason = 'parent-mode') => ErrorRegistry.createError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { params: { reason } });
   const descriptor = { processId: 7 } as RuntimeServiceDescriptor;
   const judge = async (answers: Array<Error | RuntimeServiceDescriptor>, startable?: () => Promise<boolean>) => {
     let calls = 0;
@@ -219,14 +218,14 @@ it('RESTART-HUNT: a refusal the predicate no longer confirms (the launched start
     return { result, calls };
   };
   const stale = async () => false; // the predicate's own look already sees the healed 0700 (or absent) directory
-  expect(await judge([unsafe(), ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE')], stale)).toEqual({ result: { descriptor: null, code: 'LOCAL_RUNTIME_UNAVAILABLE' }, calls: 2 });
-  expect(await judge([unsafe(), descriptor], stale)).toEqual({ result: { descriptor, code: null }, calls: 2 });
+  expect(await judge([refusal(), ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE')], stale)).toEqual({ result: { descriptor: null, code: 'LOCAL_RUNTIME_UNAVAILABLE' }, calls: 2 });
+  expect(await judge([refusal(), descriptor], stale)).toEqual({ result: { descriptor, code: null }, calls: 2 });
   // A state that really stays refused (content planted after the launch) or a different fresh refusal throws the fresh error after one re-look.
-  for (const fresh of [unsafe(), unsafe('parent-owner')]) { const seen = await judge([unsafe(), fresh], stale); expect(seen.result).toBe(fresh); expect(seen.calls).toBe(2); }
+  for (const fresh of [refusal(), refusal('parent-owner')]) { const seen = await judge([refusal(), fresh], stale); expect(seen.result).toBe(fresh); expect(seen.calls).toBe(2); }
   const transport = ErrorRegistry.createError('LOCAL_RUNTIME_TRANSPORT');
-  const healing = await judge([unsafe(), transport], stale); expect(healing.result).toBe(transport); expect(healing.calls).toBe(2); // the start poll tolerates it as not-ready
+  const healing = await judge([refusal(), transport], stale); expect(healing.result).toBe(transport); expect(healing.calls).toBe(2); // the start poll tolerates it as not-ready
   // Without a predicate (uninstall) or for another code, the first refusal is final.
-  const first = unsafe();
+  const first = refusal();
   for (const [answers, startable] of [[[first, descriptor], undefined], [[transport, descriptor], stale]] as const) {
     const seen = await judge([...answers], startable); expect(seen.result).toBe(answers[0]); expect(seen.calls).toBe(1);
   }
