@@ -187,8 +187,9 @@ export function createBeuserRemovalReadback(options: BeuserRealmOptions, artifac
 /** Read through the target's own guarded, read-only identity adapter; return allowlisted values only. */
 export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, nodeExecutable: string): Promise<unknown> {
   const script = `
-const { FileInstallationIdentityStore } = await import('${BEUSER_REALM_RECIPE.packageTarget}/dist/adapters/core/installation-files/index.js');
-const { resolveProductLayout, getConfigFieldDefault } = await import('${BEUSER_REALM_RECIPE.packageTarget}/dist/platform/index.js');
+const target = '${BEUSER_REALM_RECIPE.packageTarget}';
+const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js');
+const { resolveProductLayout, getConfigFieldDefault } = await import(target + '/dist/platform/index.js');
 const layout = resolveProductLayout({ projectRoot: '${BEUSER_REALM_RECIPE.workTarget}' });
 const read = await new FileInstallationIdentityStore(layout, getConfigFieldDefault('installation').writeLockTimeoutMs).read();
 const installation = read.status === 'available' ? 'installed'

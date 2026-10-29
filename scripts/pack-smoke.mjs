@@ -196,7 +196,7 @@ async function terminalCheck() {
     { status: session.status, timedOut: session.timedOut, ...l, sample: session.text.replace(/\s+/gu, ' ').slice(0, 300) });
 
   const piped = run([bin('deckent'), 'terminal', 'session'], { cwd: project, input: '/status\n/nope\n/exit\n', timeout: 20_000 });
-  const p = expect(`${piped.stdout}${piped.stderr}`, [words(en['terminal.status.chat']), `${en['terminal.workline.unknownCommand']}: /nope`],
+  const p = expect(`${piped.stdout}${piped.stderr}`, [words(en['terminal.status.chat']), `${en['terminal.session.unknown'].split('{command}')[0]}/nope`],
     [en['terminal.session.prompt'].trim(), en['terminal.session.banner'], en['terminal.session.closed']]);
   verdict('sessionPiped', piped.status === 0 && !p.missing.length && !p.unexpected.length, { status: piped.status, ...p, stderr: piped.stderr.trim().slice(-300) });
 
