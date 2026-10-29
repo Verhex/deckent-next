@@ -86,14 +86,18 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
 export async function admitConfiguredBeuserWalk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate: string },
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal) {
   const c = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
-  const registry = executionRegistrySchema.parse(c.config.admission?.registry);
+  if (c.config.admission === null) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');
+  const parsed = executionRegistrySchema.safeParse(c.config.admission?.registry);
+  if (!parsed.success) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+  const registry = parsed.data;
   const selected = registry.kinds.flatMap(kind => {
     const profile = registry.profiles.find(p => p.id === kind.profile.id && p.version === kind.profile.version)!;
     if (profile.adapter.id !== 'beuser' || profile.adapter.version !== 1) return [];
     const data = beuserJourneyProfileSchema.parse(profile.parameters);
     return data.summary.journeyId === input.journey ? [{ kind, profile, data }] : [];
   });
-  if (!selected.length || selected.some(row => !isDeepStrictEqual(row.data.calibration, selected[0]!.data.calibration))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+  if (!selected.length) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');
+  if (selected.some(row => !isDeepStrictEqual(row.data.calibration, selected[0]!.data.calibration))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
   const candidateRoot = await canonicalRealmPath(resolve(input.candidate), 'directory');
   const runId = randomUUID(), principal = beuserEvaluatorFor(c.principal, input.scopeId);
   const profiles = new Map<string, typeof registry.profiles[number]>();

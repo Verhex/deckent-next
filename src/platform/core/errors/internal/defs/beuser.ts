@@ -2,6 +2,9 @@ import { t } from '#platform/core/i18n/index.js';
 import type { ErrorDefinitions } from '../definition.js';
 /** B1 refuses uncertain targets without echoing raw paths, terminal content or credentials. */
 export const beuserErrors: ErrorDefinitions = Object.freeze({
+  BEUSER_PROFILE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_PROFILE_REQUIRED', p, l), suggestion: t('remedy.BEUSER_PROFILE_REQUIRED', p, l) }) },
+  BEUSER_REPORT_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_REPORT_NOT_FOUND', p, l), suggestion: t('remedy.BEUSER_REPORT_NOT_FOUND', p, l) }) },
+  BEUSER_SETUP_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SETUP_CONFLICT', p, l), suggestion: t('remedy.BEUSER_SETUP_CONFLICT', p, l) }) },
   BEUSER_INPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_INPUT_INVALID', p, l), suggestion: t('remedy.BEUSER_INPUT_INVALID', p, l) }) },
   BEUSER_TARGET_NOT_SANDBOX: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_TARGET_NOT_SANDBOX', p, l), suggestion: t('remedy.BEUSER_TARGET_NOT_SANDBOX', p, l) }) },
   BEUSER_LIMITS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_LIMITS_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_LIMITS_UNAVAILABLE', p, l) }) },

@@ -48,7 +48,8 @@ const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revis
  * Children inherit the family handler; existing handlers retain argument validation and execution. Handler actions and catalog
  * actions are kept equal by `cli-grouped-help.test.ts` (both directions). */
 export const CLI_CATALOG = [
-  { name: 'beuser', group: 'work', summary: 'beuser.help.summary', detail: 'beuser.help.family', args: '<walk|report>', bare: {}, children: [
+  { name: 'beuser', group: 'work', summary: 'beuser.help.summary', detail: 'beuser.help.family', args: '<setup|walk|report>', bare: {}, children: [
+    action('setup', 'work', 'beuser.help.setup.summary', 'beuser.help.setup', { requires: ['--profile <path>'] }),
     action('walk', 'work', 'beuser.help.walk.summary', 'beuser.help.walk', { requires: ['--journey <id>', '--candidate <path>'] }),
     action('report', 'observe', 'beuser.help.report.summary', 'beuser.help.report'),
   ] },
