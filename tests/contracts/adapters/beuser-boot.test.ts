@@ -142,6 +142,22 @@ it.skipIf(process.platform !== 'linux')('production boot argv twin launches the 
   expect(f.diagnostics).toEqual([]);
 });
 
+it.skipIf(process.platform !== 'linux')('argv twin whose PTY closes before the child is waitable settles as exit, not timeout', async () => {
+  // Closing stdio first makes the driver see EOF before the exit status: the order a loaded runner produced by chance.
+  const f = await producer('argv', `
+    const fs = require('node:fs');
+    if (!require('node:tty').isatty(0) || process.argv.at(-1) !== 'allow') process.exit(32);
+    fs.writeSync(1, 'Closed early allow'); fs.closeSync(0); fs.closeSync(1); fs.closeSync(2);
+    setTimeout(() => process.exit(0), 200);`);
+  const controller = new BeuserController(context, pinBeuserWalkerSummary(personas.personas[0]));
+  const finished = vi.fn(async (screen: { text: string }) => { expect(screen.text).toBe('Closed early allow'); return true; });
+  const models = { walker: vi.fn(), evaluate: vi.fn(), cancel: vi.fn() };
+  try { await walkBeuser(controller, { surface: f.surface, initialCommand: f.journey.initialCommand, finished, models, decode: vi.fn(), record: vi.fn() }); }
+  finally { controller.close(); }
+  expect(finished).toHaveBeenCalledOnce();
+  expect(f.diagnostics).toEqual([]);
+});
+
 it.skipIf(process.platform !== 'linux')('production rejects malformed boot before driver spawn', async () => {
   const f = await producer('pty', 'process.stdout.write("MUST-NOT-START")');
   f.boot.entry.splice(0);

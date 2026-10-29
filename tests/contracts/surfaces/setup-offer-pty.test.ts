@@ -72,9 +72,12 @@ const services: { pid: number; root: string }[] = [];
 afterEach(async () => {
   clearConfigCache();
   // A runtime service the terminal started and the case did not stop (a failed assertion): stopped here, by its own printed pid only.
+  // A service already told to shut down may still be writing its state, so the root is removed only after the process is gone.
   for (const { pid, root } of services.splice(0)) {
     const command = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
-    if (command.includes('runtime') && (await readFile(`/proc/${pid}/environ`, 'utf8').catch(() => '')).includes(root)) process.kill(pid, 'SIGTERM');
+    if (!command.includes('runtime') || !(await readFile(`/proc/${pid}/environ`, 'utf8').catch(() => '')).includes(root)) continue;
+    process.kill(pid, 'SIGTERM');
+    for (let n = 0; n < 200 && await readFile(`/proc/${pid}/cmdline`, 'utf8').then(() => true, () => false); n++) await new Promise(resolve => setTimeout(resolve, 50));
   }
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -174,7 +177,6 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     if (pid) {
       const stop = await f.deckent(['runtime', 'shutdown', '--reason', 'I-S5 test cleanup']);
       expect(stop.stdout + stop.stderr).toContain('shutdown accepted');
-      services.splice(0);
     }
   }, 240_000);
 
