@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, type TestContext } from 'vitest';
 import { modelActivationTargetId, type ModelActivationInspection, type ModelActivationResult,
   type ModelBindingInspection } from '#engine/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
@@ -16,7 +16,7 @@ import { mcpPrincipalRef } from '#domain/index.js';
 const execute = promisify(execFile), roots: string[] = [];
 const sdk = resolve('dist/index.js'), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterAll(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function bounded<T>(promise: Promise<T>, label: string, milliseconds = 10_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try { return await Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds); })]); }
@@ -64,80 +64,104 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
   }
 }
 
-it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — shares exact activation state across SDK, compiled CLI and stdio MCP without catalog resurrection', async () => {
-  await Promise.all([sdk, cli, mcp].map(path => access(path).catch(() => { throw new Error('BUILD_REQUIRED'); })));
-  const root = await mkdtemp(join(tmpdir(), 'deckent-model-activation-surface-')); roots.push(root);
-  const project = join(root, 'project'), home = join(root, 'home'), data = join(root, 'data');
-  await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(home, { mode: 0o700 }), mkdir(data, { mode: 0o700 })]);
-  const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
-  const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
+describe.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — shares exact activation state across SDK, compiled CLI and stdio MCP without catalog resurrection', () => {
+  // One activation ledger flows through the steps in order; each step spawns its own SDK, CLI and MCP children under the default test bound.
+  let stepFailed = false;
+  const step = (name: string, body: () => Promise<void>) => it(name, async (context: TestContext) => {
+    if (stepFailed) context.skip('an earlier step of the shared activation ledger failed');
+    context.onTestFailed(() => { stepFailed = true; }); // Also covers a timed-out step, which never reaches a catch.
+    await body();
+  });
+  const env: Record<string, string> = {}, reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'provider', version: 1,
     models: [{ id: 'model', version: 1, nativeId: 'vendor/native:model', protocols: [{ family: 'responses', version: '1', capabilities: [] }] }] }] };
-  const configPath = join(project, '.deckent/config.json'), config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog };
-  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
-  const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
-  const seed = await openSqliteModelActivationStore(ledger, sqlite); seed.close();
   const target = modelActivationTargetId(reference), principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   const grant = { id: 'model-owner', effect: 'allow', actions: ['activate', 'deactivate', 'inspect'], scopes: ['scope-a'], principals,
     resource: { kind: 'model-activation', ids: [target] } };
-  const policyPath = join(data, 'policy.json'); await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-1', restrictions: [], grants: [grant] }), { mode: 0o600 });
-  const observedResult = await callSdk<ModelBindingInspection>(project, env, 'binding', reference); expect(observedResult.ok).toBe(true);
-  const observed = (observedResult as { ok: true; value: ModelBindingInspection }).value;
-  if (observed.status !== 'declared') throw new Error('FIXTURE_BINDING_MISSING');
-  const activate = { schemaVersion: 1 as const, action: 'activate' as const, commandId: 'activate-a', scopeId: 'scope-a', reference,
-    expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: observed.binding };
-  const activationResult = await callSdk<ModelActivationResult>(project, env, 'admit', activate); expect(activationResult.ok).toBe(true);
-  const activated = (activationResult as { ok: true; value: ModelActivationResult }).value;
-  expect(activated).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });
-
   const flags = ['--scope', 'scope-a', '--provider', 'provider', '--provider-version', '1', '--model', 'model', '--model-version', '1', '--json'];
-  const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'activation', ...flags],
-    { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout);
-  const inspected = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
-  expect(inspected.ok).toBe(true); expect(cliInspection).toEqual((inspected as { ok: true; value: ModelActivationInspection }).value);
-  expect(cliInspection.activation).toEqual(activated.receipt.record);
+  let project: string, data: string, configPath: string, config: Record<string, unknown>, ledger: string, policyPath: string;
+  let observed: Extract<ModelBindingInspection, { status: 'declared' }>, activated: ModelActivationResult;
+  let activate: Record<string, unknown>;
 
-  await writeFile(configPath, JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite } }), { mode: 0o600 }); clearConfigCache();
-  const deactivate = { schemaVersion: 1, action: 'deactivate', commandId: 'deactivate-a', scopeId: 'scope-a', reference,
-    expectedRevision: 1, expectedBinding: observed.binding };
-  // Owner authority is not MCP authority: the same command must fail without a named /mcp rule, with no ledger mutation.
-  const beforeMcpGrant = createHash('sha256').update(await readFile(ledger)).digest('hex');
-  await callMcp(project, env, 'admit_model_activation', deactivate, 'POLICY_DENIED');
-  expect(createHash('sha256').update(await readFile(ledger)).digest('hex')).toBe(beforeMcpGrant);
-  const mcpGrant = { ...grant, id: 'model-mcp', principals: principals.map(mcpPrincipalRef) };
-  await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-mcp', restrictions: [], grants: [grant, mcpGrant] }), { mode: 0o600 });
-  const mcpResult = await callMcp(project, env, 'admit_model_activation', deactivate);
-  expect(mcpResult).toMatchObject({ replayed: false, receipt: { record: { state: 'inactive', revision: 2 } } });
-  const inactiveResult = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
-  expect(inactiveResult.ok).toBe(true); const inactive = (inactiveResult as { ok: true; value: ModelActivationInspection }).value;
-  expect(inactive.activation).toEqual((mcpResult as { receipt: { record: unknown } }).receipt.record);
-  expect(await callSdk(project, env, 'admit', activate)).toEqual({ ok: true, value: { replayed: true, receipt: activated.receipt } });
-  const stillInactive = await callSdk(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
-  expect(stillInactive.ok && stillInactive.value.activation).toEqual(inactive.activation);
+  beforeAll(async () => {
+    await Promise.all([sdk, cli, mcp].map(path => access(path).catch(() => { throw new Error('BUILD_REQUIRED'); })));
+    const root = await mkdtemp(join(tmpdir(), 'deckent-model-activation-surface-')); roots.push(root);
+    project = join(root, 'project'); data = join(root, 'data'); const home = join(root, 'home');
+    await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(home, { mode: 0o700 }), mkdir(data, { mode: 0o700 })]);
+    Object.assign(env, { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' });
+    configPath = join(project, '.deckent/config.json'); config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog };
+    await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
+    ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+    const seed = await openSqliteModelActivationStore(ledger, sqlite); seed.close();
+    policyPath = join(data, 'policy.json'); await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-1', restrictions: [], grants: [grant] }), { mode: 0o600 });
+  });
 
-  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
-  const activateFlags = ['models', 'activate', ...flags.slice(0, -1), '--command-id', 'activate-b', '--expected-revision', '2',
-    '--binding-digest', observed.binding.digest, '--catalog-revision', catalog.revision, '--json'];
-  const cliActivated = JSON.parse((await execute(process.execPath, [cli, ...activateFlags],
-    { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout);
-  expect(cliActivated).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 3 } } });
-  const mcpInspection = await callMcp(project, env, 'inspect_model_activation', { schemaVersion: 1, scopeId: 'scope-a', reference });
-  const sdkInspection = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
-  expect(sdkInspection.ok).toBe(true); expect(mcpInspection).toEqual((sdkInspection as { ok: true; value: ModelActivationInspection }).value);
-  const humanEn = (await execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1), '--lang', 'en'],
-    { cwd: project, env, timeout: 10_000 })).stdout;
-  const humanTr = (await execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1), '--lang', 'tr'],
-    { cwd: project, env, timeout: 10_000 })).stdout;
-  // U2-S4: the state reads On/Off and the notice names what writes activation records (read-only views never reconcile them).
-  expect(humanEn).toContain('saved activation state: On'); expect(humanEn).toContain('read-only views never reconcile them');
-  expect(humanTr).toContain('kayıtlı etkinlik durumu: Açık'); expect(humanTr).toContain('salt okunur görünümler bunları eşitlemez');
-  await expect(execute(process.execPath, [cli, 'models', 'activation', '--scope', 'scope-a', '--provider', 'provider'],
-    { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_ARGUMENT_MISSING') });
-  await expect(execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1).map(value => value === 'scope-a' ? 'wrong-scope' : value)],
-    { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('POLICY_DENIED') });
+  step('SDK activates the declared binding and the compiled CLI inspection equals the SDK inspection', async () => {
+    const observedResult = await callSdk<ModelBindingInspection>(project, env, 'binding', reference); expect(observedResult.ok).toBe(true);
+    const binding = (observedResult as { ok: true; value: ModelBindingInspection }).value;
+    if (binding.status !== 'declared') throw new Error('FIXTURE_BINDING_MISSING');
+    observed = binding;
+    activate = { schemaVersion: 1 as const, action: 'activate' as const, commandId: 'activate-a', scopeId: 'scope-a', reference,
+      expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: observed.binding };
+    const activationResult = await callSdk<ModelActivationResult>(project, env, 'admit', activate); expect(activationResult.ok).toBe(true);
+    activated = (activationResult as { ok: true; value: ModelActivationResult }).value;
+    expect(activated).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });
 
-  await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-2', restrictions: [], grants: [] }), { mode: 0o600 });
-  const beforeDeny = createHash('sha256').update(await readFile(ledger)).digest('hex');
-  expect(await callSdk(project, env, 'admit', activate)).toEqual({ ok: false, code: 'POLICY_DENIED' });
-  expect(createHash('sha256').update(await readFile(ledger)).digest('hex')).toBe(beforeDeny);
+    const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'activation', ...flags],
+      { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout);
+    const inspected = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
+    expect(inspected.ok).toBe(true); expect(cliInspection).toEqual((inspected as { ok: true; value: ModelActivationInspection }).value);
+    expect(cliInspection.activation).toEqual(activated.receipt.record);
+  });
+
+  step('stdio MCP deactivates only under its own grant and an SDK replay does not resurrect the removed catalog', async () => {
+    await writeFile(configPath, JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite } }), { mode: 0o600 }); clearConfigCache();
+    const deactivate = { schemaVersion: 1, action: 'deactivate', commandId: 'deactivate-a', scopeId: 'scope-a', reference,
+      expectedRevision: 1, expectedBinding: observed.binding };
+    // Owner authority is not MCP authority: the same command must fail without a named /mcp rule, with no ledger mutation.
+    const beforeMcpGrant = createHash('sha256').update(await readFile(ledger)).digest('hex');
+    await callMcp(project, env, 'admit_model_activation', deactivate, 'POLICY_DENIED');
+    expect(createHash('sha256').update(await readFile(ledger)).digest('hex')).toBe(beforeMcpGrant);
+    const mcpGrant = { ...grant, id: 'model-mcp', principals: principals.map(mcpPrincipalRef) };
+    await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-mcp', restrictions: [], grants: [grant, mcpGrant] }), { mode: 0o600 });
+    const mcpResult = await callMcp(project, env, 'admit_model_activation', deactivate);
+    expect(mcpResult).toMatchObject({ replayed: false, receipt: { record: { state: 'inactive', revision: 2 } } });
+    const inactiveResult = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
+    expect(inactiveResult.ok).toBe(true); const inactive = (inactiveResult as { ok: true; value: ModelActivationInspection }).value;
+    expect(inactive.activation).toEqual((mcpResult as { receipt: { record: unknown } }).receipt.record);
+    expect(await callSdk(project, env, 'admit', activate)).toEqual({ ok: true, value: { replayed: true, receipt: activated.receipt } });
+    const stillInactive = await callSdk(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
+    expect(stillInactive.ok && stillInactive.value.activation).toEqual(inactive.activation);
+  });
+
+  step('compiled CLI reactivates and the stdio MCP inspection equals the SDK inspection', async () => {
+    await writeFile(configPath, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
+    const activateFlags = ['models', 'activate', ...flags.slice(0, -1), '--command-id', 'activate-b', '--expected-revision', '2',
+      '--binding-digest', observed.binding.digest, '--catalog-revision', catalog.revision, '--json'];
+    const cliActivated = JSON.parse((await execute(process.execPath, [cli, ...activateFlags],
+      { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout);
+    expect(cliActivated).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 3 } } });
+    const mcpInspection = await callMcp(project, env, 'inspect_model_activation', { schemaVersion: 1, scopeId: 'scope-a', reference });
+    const sdkInspection = await callSdk<ModelActivationInspection>(project, env, 'inspect', { schemaVersion: 1, scopeId: 'scope-a', reference });
+    expect(sdkInspection.ok).toBe(true); expect(mcpInspection).toEqual((sdkInspection as { ok: true; value: ModelActivationInspection }).value);
+  });
+
+  step('compiled CLI renders the state in English and Turkish, refuses bad arguments and scope, and an empty policy denies without mutation', async () => {
+    const humanEn = (await execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1), '--lang', 'en'],
+      { cwd: project, env, timeout: 10_000 })).stdout;
+    const humanTr = (await execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1), '--lang', 'tr'],
+      { cwd: project, env, timeout: 10_000 })).stdout;
+    // U2-S4: the state reads On/Off and the notice names what writes activation records (read-only views never reconcile them).
+    expect(humanEn).toContain('saved activation state: On'); expect(humanEn).toContain('read-only views never reconcile them');
+    expect(humanTr).toContain('kayıtlı etkinlik durumu: Açık'); expect(humanTr).toContain('salt okunur görünümler bunları eşitlemez');
+    await expect(execute(process.execPath, [cli, 'models', 'activation', '--scope', 'scope-a', '--provider', 'provider'],
+      { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_ARGUMENT_MISSING') });
+    await expect(execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1).map(value => value === 'scope-a' ? 'wrong-scope' : value)],
+      { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('POLICY_DENIED') });
+
+    await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: 'policy-2', restrictions: [], grants: [] }), { mode: 0o600 });
+    const beforeDeny = createHash('sha256').update(await readFile(ledger)).digest('hex');
+    expect(await callSdk(project, env, 'admit', activate)).toEqual({ ok: false, code: 'POLICY_DENIED' });
+    expect(createHash('sha256').update(await readFile(ledger)).digest('hex')).toBe(beforeDeny);
+  });
 });

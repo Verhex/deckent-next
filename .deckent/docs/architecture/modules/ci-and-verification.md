@@ -205,5 +205,29 @@ practice: each merge and each live/N1 switch needs owner approval, and hosted PR
 the directory run no hooks, and clones do not inherit the setting. Measured times: external `proof/CI-LOCAL-2026-10-06/review.md`.
 
 Shard balance (alpha.55): shard 1 also runs the native, host and smoke suites after Vitest, so its bin starts at
-`shardOneReservedMs` (75 s, `scripts/ci-test-config.json`) and the planner (`scripts/ci-test-plan.mjs`) moves Vitest files to the other
-shards accordingly.
+`shardOneReservedMs` (`scripts/ci-test-config.json`) and the planner (`scripts/ci-test-plan.mjs`) moves Vitest files to the other
+shards accordingly. CI-DRIFT (owner 2026-10-29; 16 shards and every timeout unchanged) set it from 75 s to 107 s: bins are
+summed per-file time, while shard 1's extra cost is wall time, so reserve = post-Vitest wall × two-fork Vitest parallelism =
+67.94 s (maximum of the four shard-1 jobs of runs 40865256809 and 40865219414: 67.94/63.16/67.56/47.62 s, Vitest
+"Duration" line to the artifact upload step) × 1.574 (median of summed reporter time / Vitest duration over the same 64 jobs,
+range 1.479–1.634) = 106.9 s.
+
+Weight refresh and drift guard (CI-DRIFT, owner 2026-10-29). `scripts/ci-test-durations.json` is generated, not hand-edited:
+`gh run download <run> -p 'shard-*' -D <dir>` per hosted run, then `node scripts/ci-test-weights.mjs refresh <dir>...` writes the
+per-file maximum of the shard `receipt.json` reporter durations across every given run, Node job and shard (rounded up to ms)
+and refuses receipts that do not cover one complete inventory. All-skipped zero-duration files keep the median fallback.
+The required collector (`ci-aggregate.mjs`, verify job, after complete-coverage validation) runs the same guard
+(`durationDrift`, thresholds in `durationDrift` of `ci-test-config.json`): a file at or above `minObservedMs` that ran over
+`maxRatio` × its weight (median fallback when unweighted), or more than `maxUnweightedFiles` files that ran without a weight,
+becomes a `::warning` annotation and a step-summary line. It warns rather than fails: weights can only come from a hosted run,
+so a new heavy test cannot be weighted before its first run, and runner variance must not block the required check.
+`node scripts/ci-test-weights.mjs check [--durations PATH] <dir>...` runs the guard offline and exits 1 on drift; it also reads
+a shard cancelled at the job limit after Vitest finished (its receipt exists; a job cut mid-Vitest has none). Release step: before a
+release PR merges, run `check` on its hosted run's shard artifacts (or read the verify warnings); on drift, `refresh` from that
+run's artifacts (both Nodes; add the previous main run when available), commit the weights and rerun hosted CI.
+Proof (external `proof/ANALIZ-2026-10-29/LANES-STEP1/A/`): the a57 weights flagged 15 slow files (terminal-onboarding-pty
+148.3 s vs 45.1 s, uninstall 48.5 vs 11.9 s, toolchain-refresh 41.6 vs 15.5 s) and 21 unweighted files on the a57 runs;
+weights from either run passed on the other; the old plan's predicted jobs over 360 s were exactly the cancelled shards
+(9 and 11 on 7c624d18d, 9, 11 and 13 on 0742d2246). Predicted worst job with the refreshed weights and 107 s reserve: 346 s of 360 s
+with per-file maxima and 43 s setup, ~354 s with the 51 s maximum observed setup; the margin is small and is a scheduling estimate,
+not a latency guarantee.
