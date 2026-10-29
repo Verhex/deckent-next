@@ -10,17 +10,31 @@ const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: tru
   entry.isDirectory() ? sources(join(dir, entry.name)) : entry.name.endsWith('.ts') ? [join(dir, entry.name)] : []);
 const files = sources(join(ROOT, 'src')).map(path => ({ path: relative(ROOT, path).split(sep).join('/'), text: readFileSync(path, 'utf8') }));
 const sites = (needle: RegExp) => files.filter(file => needle.test(file.text)).map(file => file.path).sort();
-const TASK = 'src/composition/core/execution/internal/task.ts';
+const TASK = 'src/composition/core/execution/internal/task.ts', BEUSER = 'src/composition/core/beuser/internal/application.ts';
 
-it('has exactly one production launch site, and it is the gated one', () => {
+it('keeps coding-tree and isolated BeUser launches behind their own admitted gates', () => {
   // A container launch happens only through DispatchApplication.execute (it claims the one dispatch fence of an attempt). Every module
-  // that builds a DispatchApplication is listed; only the configured task calls `.execute(` — the others reconcile, cancel, recover output
-  // or release a recorded dispatch — and engine users see a `Pick<DispatchApplication, …>` without `execute`.
+  // that builds a DispatchApplication is listed; configured coding tasks and admitted BeUser tasks call `.execute(` — the others reconcile, cancel,
+  // recover output or release a recorded dispatch. Only the bounded BeUser controller receives an execute-capable dispatch port.
   const builders = sites(/new DispatchApplication\(/u);
-  expect(builders).toEqual(['src/composition/core/execution/internal/task.ts', 'src/composition/core/runs/internal/cancellation-runtime.ts',
+  expect(builders).toEqual([BEUSER, 'src/composition/core/execution/internal/task.ts', 'src/composition/core/runs/internal/cancellation-runtime.ts',
     'src/composition/core/runs/internal/reconcile.ts', 'src/composition/core/runs/internal/recover-output.ts', 'src/engine/core/workspace-patch/internal/custody.ts']);
-  expect(builders.filter(path => /\.execute\(/u.test(files.find(file => file.path === path)!.text))).toEqual([TASK]);
-  for (const file of files) for (const pick of file.text.matchAll(/Pick<DispatchApplication,([^>]*)>/gu)) expect(pick[1], file.path).not.toContain('execute');
+  const beuser = files.find(file => file.path === BEUSER)!.text;
+  const admitted = beuser.indexOf("await policy.authorizeIdentity('execute', request.identity, c.principal)"), selected = beuser.indexOf('selectReservedTaskProfile(await store.loadRun(');
+  expect(admitted).toBeGreaterThan(-1); expect(selected).toBeGreaterThan(admitted);
+  expect(beuser.indexOf('if (!isDeepStrictEqual(profile,')).toBeGreaterThan(selected);
+  expect(beuser.indexOf('let harness = await createConfiguredBeuserHarness(')).toBeGreaterThan(selected);
+  expect(beuser.indexOf('new DispatchApplication(')).toBeGreaterThan(beuser.indexOf('let harness = await createConfiguredBeuserHarness('));
+  expect(beuser).toContain('id => hooks?.created(id)');
+  expect(builders.filter(path => /\.execute\(/u.test(files.find(file => file.path === path)!.text))).toEqual([BEUSER, TASK]);
+  const controller = 'src/engine/core/beuser/internal/supervisor.ts';
+  const executePorts = files.flatMap(file => [...file.text.matchAll(/Pick<DispatchApplication,([^>]*)>/gu)]
+    .filter(pick => pick[1]!.includes('execute')).map(pick => ({ path: file.path, members: pick[1]!.trim() })));
+  expect(executePorts).toEqual([{ path: controller, members: "'execute' | 'cancel' | 'reconcile' | 'recoverOutput' | 'release'" }]);
+  const guarded = files.find(file => file.path === controller)!.text;
+  expect(guarded).toContain('await this.guard(context, request, false); return this.dispatch.execute(request, credential, context.signal)');
+  expect(guarded).toContain('assertBeuserRequestIdentity(checked, request.identity)');
+  expect(guarded).toContain("assertBeuserAccess(checked, checked.binding, checked.principal, { kind: 'attempt', id: request.identity.attemptId }, 'evaluate')");
   expect(sites(/\.supervisor\.execute\(/u)).toEqual(['src/engine/core/dispatch/internal/application.ts']);
   // A provider connection for a worker and a launch-capable supervisor are built only there (open.ts is the test/runtime assembly that never
   // launches; its supervisor is not exported from the public SDK).
