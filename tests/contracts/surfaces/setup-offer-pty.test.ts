@@ -69,47 +69,76 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
 `;
 const roots: string[] = [];
 const services: { pid: number; root: string }[] = [];
-const running = (pid: number) => readFile(`/proc/${pid}/cmdline`, 'utf8').then(() => true, () => false);
-// A runtime service the terminal started, identified by its own printed pid and this case's root only. It may still be writing its
-// state after an accepted shutdown, so the caller removes the root only when this answers 'absent'.
+// /proc answers for a pid: present, gone (ENOENT/ESRCH) or unknown (any other read error, e.g. EACCES or EIO).
+async function procRead(pid: number, name: 'cmdline' | 'environ'): Promise<string | 'missing' | 'unknown'> {
+  try { return await readFile(`/proc/${pid}/${name}`, 'utf8'); } catch (error) {
+    return ['ENOENT', 'ESRCH'].includes(String((error as NodeJS.ErrnoException).code)) ? 'missing' : 'unknown';
+  }
+}
+// A runtime service the terminal started, identified by its own printed pid and this case's root only (never signals anything else).
+// It may still be writing its state after an accepted shutdown, so the caller removes the root only when this answers 'absent'.
 async function stopOwnService(pid: number, root: string, waitMs = 10_000, kill: (pid: number, signal: NodeJS.Signals) => void = process.kill) {
-  const command = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
-  if (!command.includes('runtime') || !(await readFile(`/proc/${pid}/environ`, 'utf8').catch(() => '')).includes(root)) return 'absent';
+  const command = await procRead(pid, 'cmdline');
+  if (command === 'missing') return 'absent';
+  if (command === 'unknown') return 'unknown';
+  if (!command.includes('runtime')) return 'absent';
+  const environ = await procRead(pid, 'environ');
+  if (environ === 'missing') return 'absent';
+  if (environ === 'unknown') return 'unknown';
+  if (!environ.includes(root)) return 'absent';
   try { kill(pid, 'SIGTERM'); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ESRCH') return 'absent';
     throw error;
   }
-  for (const end = Date.now() + waitMs; Date.now() < end;) {
-    if (!await running(pid)) return 'absent';
+  for (const end = Date.now() + waitMs; ;) {
+    const state = await procRead(pid, 'cmdline');
+    if (state === 'missing') return 'absent';
+    if (state === 'unknown') return 'unknown';
+    if (Date.now() >= end) return 'alive';
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  return await running(pid) ? 'alive' : 'absent';
 }
 afterEach(async () => {
   clearConfigCache();
   const kept: string[] = [];
-  for (const { pid, root } of services.splice(0)) if (await stopOwnService(pid, root) === 'alive') kept.push(root);
+  for (const { pid, root } of services.splice(0)) if (await stopOwnService(pid, root) !== 'absent') kept.push(root);
   const removable = roots.splice(0).filter(root => !kept.some(home => home === root || home.startsWith(`${root}/`)));
   await Promise.all(removable.map(root => rm(root, { recursive: true, force: true })));
-  if (kept.length) throw new Error(`Runtime service still running after shutdown; root kept: ${kept.join(', ')}`);
+  if (kept.length) throw new Error(`Runtime service still running or unknown after shutdown; root kept: ${kept.join(', ')}`);
 });
 
-describe('stopOwnService', () => {
+describe.skipIf(process.platform !== 'linux')('stopOwnService', () => {
+  // A stand-in service: argv carries 'runtime', env carries the root, and it prints 'ready' once its handlers are installed.
+  async function standIn(root: string, ignoreTerm: boolean) {
+    const program = `${ignoreTerm ? 'process.on("SIGTERM", () => {}); ' : ''}setInterval(() => {}, 1000); process.stdout.write("ready");`;
+    const child = spawn(process.execPath, ['-e', program, 'runtime'], { env: { ...process.env, I_S5_ROOT: root }, stdio: ['ignore', 'pipe', 'ignore'] });
+    const closed = new Promise(resolve => child.once('close', resolve));
+    const stop = async () => { child.kill('SIGKILL'); await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 5000))]); };
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('stand-in service not ready in 5 s')), 5000);
+        child.stdout.once('data', () => { clearTimeout(timer); resolve(); });
+      });
+    } catch (error) { await stop(); throw error; }
+    return { pid: child.pid!, stop };
+  }
+
   it('treats a service that exits between the identity read and SIGTERM as absent', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-i-s5-stop-')); roots.push(root);
-    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'runtime'], { env: { ...process.env, I_S5_ROOT: root } });
-    await new Promise(resolve => child.once('spawn', resolve));
-    const gone = (pid: number) => { process.kill(pid, 'SIGKILL'); throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' }); };
-    await expect(stopOwnService(child.pid!, root, 1000, gone)).resolves.toBe('absent');
+    const service = await standIn(root, false);
+    const kills: number[] = [];
+    const gone = (pid: number) => { kills.push(pid); process.kill(pid, 'SIGKILL'); throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' }); };
+    try {
+      await expect(stopOwnService(service.pid, root, 1000, gone)).resolves.toBe('absent');
+      expect(kills).toEqual([service.pid]);
+    } finally { await service.stop(); }
   });
 
   it('reports a service still alive at the deadline so its root is kept', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-i-s5-stop-')); roots.push(root);
-    const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)', 'runtime'],
-      { env: { ...process.env, I_S5_ROOT: root } });
-    await new Promise(resolve => setTimeout(resolve, 300));
-    try { await expect(stopOwnService(child.pid!, root, 300)).resolves.toBe('alive'); }
-    finally { child.kill('SIGKILL'); }
+    const service = await standIn(root, true);
+    try { await expect(stopOwnService(service.pid, root, 300)).resolves.toBe('alive'); }
+    finally { await service.stop(); }
   });
 });
 type Steps = ReadonlyArray<readonly [string, string]>;
