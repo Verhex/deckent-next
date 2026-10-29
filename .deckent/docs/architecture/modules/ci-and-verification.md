@@ -39,7 +39,7 @@ The matrix uses more runners (36 jobs versus 20); equal test-fork count is not e
 Test/job timeouts are unchanged. Final-revision receipts and negative proof are external in `proof/CI-STABILITY-2026-10-19/REPORT.md`;
 author/hosted checks do not establish independent review, release or owner acceptance.
 CI-DRIFT (owner 2026-10-29, conditional amendment of the shard count): after the weight refresh, hosted PR #122 run 40877332203
-(exact `8f414ed36`, 32/32 test jobs green) measured test-job wall times of 220–353 s, median 311 s, against the 6-minute job limit:
+(exact `8f414ed36`, 32/32 test jobs green) measured test-job wall times of 220–353 s, median 313 s, against the 6-minute job limit:
 2 % headroom at the maximum and 13 % at the median, below the owner's 20 % condition, so the count is 20 shards (40 test forks per
 Node version, 44 jobs per run). Forks per runner and every timeout stay unchanged.
 The complete inventory comes from Vitest itself, not a changed-file filter. New files always enter the partition.
