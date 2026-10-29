@@ -41,7 +41,7 @@ export async function changeConfiguredDeliveryDismissal(root: string, input: { r
   await withScopeAudit(c, audit => audit.record(deliveryDismissalEvent({ ...input, principal: c.principal, policyRevision: c.document.revision, atMs: Date.now() }))); } catch (error) { throw queryFailure(error); } }
 /** The scope's dismissed tasks (none without an integrity key yet: recording one creates it); any other failure is the caller's to show. `limit` bounds the records read. */
 export const inspectConfiguredDismissedDeliveries = (root: string, scopeId: string, limit: number, options: ConfigLoadOptions) => loadConfiguredScopeContext(root, scopeId, options, 'read')
-  .then(c => withScopeAudit(c, audit => dismissedDeliveries(audit, scopeId, limit), false)).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'INTEGRITY_KEY_UNAVAILABLE') return [] as ReturnType<typeof dismissedDeliveries>; throw queryFailure(error); });
+  .then(c => withScopeAudit(c, audit => dismissedDeliveries(audit, scopeId, limit), false, 'read')).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'INTEGRITY_KEY_UNAVAILABLE') return [] as ReturnType<typeof dismissedDeliveries>; throw queryFailure(error); });
 /** Local SDK/CLI producer; paths, principal, session and Git options never come from the wire. */
 export async function deliverWorkspaceIntegrationWithConfirmation(root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions, confirmation?: EffectConfirmation) {
   try {

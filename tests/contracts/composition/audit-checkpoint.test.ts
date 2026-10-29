@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -11,10 +11,11 @@ import { auditCheckpointFixture } from '../support/audit-checkpoint.js';
 import { verifyAudit, type AuditVerifyQuery } from '../../../src/index.js';
 import { checkpointConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { homeEnv } from '../support/host-platform.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 
 // C-ADMIN: the rebaseline confirmation is the terminal's CLI card (Ink, PTY-proven); here the person's answer is injected at the card launcher.
 const cliCard = vi.hoisted(() => ({ answer: null as string | null, requests: [] as unknown[] }));
@@ -26,6 +27,24 @@ vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
 });
 const roots: string[] = [];
 afterEach(async () => { cliCard.answer = null; cliCard.requests = []; vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+
+it.skipIf(process.platform === 'win32')('separates existing-key audit writes from read-only observation and refuses a missing key', async () => {
+  const f = await auditCheckpointFixture(); roots.push(f.root);
+  const c = await loadConfiguredScopeContext(f.root, 's', f.options, 'read');
+  const original = await withScopeAudit(c, audit => audit.load('s', 'event'), false, 'read');
+  const event = { ...original!.event, eventId: 'existing-key-write' };
+  await expect(withScopeAudit(c, audit => audit.record(event), false)).resolves.toMatchObject({ event, sequence: 2 });
+  const before = { bytes: await readFile(f.ledger), mtimeMs: (await stat(f.ledger)).mtimeMs };
+  await expect(withScopeAudit(c, audit => audit.load('s', event.eventId), false, 'read')).resolves.toMatchObject({ event });
+  expect({ bytes: await readFile(f.ledger), mtimeMs: (await stat(f.ledger)).mtimeMs }).toEqual(before);
+  await expect(withScopeAudit(c, audit => audit.record({ ...event, eventId: 'observer-write' }), false, 'read'))
+    .rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+  const missing = { ...c, config: { ...c.config, approvals: { ...c.config.approvals, keyFile: 'missing-audit.key' } } };
+  await expect(withScopeAudit(missing, audit => audit.record(event), false)).rejects.toMatchObject({ code: 'INTEGRITY_KEY_UNAVAILABLE' });
+  await expect(withScopeAudit(missing, audit => audit.load('s', 'event'), true, 'read')).rejects.toMatchObject({ code: 'INTEGRITY_KEY_UNAVAILABLE' });
+  await expect(stat(join(productResourcePath(c.layout, 'approvals'), 'missing-audit.key'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(withScopeAudit(c, audit => audit.load('s', 'observer-write'), false, 'read')).resolves.toBeNull();
+});
 
 it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share read-only verification/export; policy rewrite is visible on every surface', async () => {
   const f = await auditCheckpointFixture(); roots.push(f.root); const query: AuditVerifyQuery = { schemaVersion: 1, scopeId: 's' };

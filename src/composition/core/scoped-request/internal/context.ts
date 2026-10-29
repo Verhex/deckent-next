@@ -27,11 +27,11 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   return Object.freeze({ config, layout, document, principal, projectId, installationId, identity: Object.freeze({ installation, project }),
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
 }
-/** One use of this scope's sealed audit ledger; producers create a key on first use, false opens a read-only ledger and needs an existing key. */
+/** Key creation and ledger access are independent: producers may require an existing key; observers open read-only without creating one. */
 export async function withScopeAudit<T>(context: { path(): Promise<string>; readonly layout: ProductLayout; readonly config: Pick<ResolvedConfig, 'storage' | 'approvals'> },
-  work: (audit: AuditApplication) => T | Promise<T>, createKey = true): Promise<T> {
-  const path = await context.path(), store = createKey ? await openSqliteAuditStore(path, context.config.storage.sqlite, 'forbid') : await openReadOnlyAuditStore(path, context.config.storage.sqlite);
-  try { return await work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, createKey))); } finally { store.close(); }
+  work: (audit: AuditApplication) => T | Promise<T>, createKey = true, access: ScopeAccess = 'write'): Promise<T> {
+  const path = await context.path(), store = access === 'read' ? await openReadOnlyAuditStore(path, context.config.storage.sqlite) : await openSqliteAuditStore(path, context.config.storage.sqlite, 'forbid');
+  try { return await work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, access === 'write' && createKey))); } finally { store.close(); }
 }
 async function accessIdentity<T extends { readonly status: string; readonly reason?: string; readonly pendingWrite?: true }>(store: { read(): Promise<T>; loadOrCreate(): Promise<unknown> }, access: ScopeAccess) {
   return readIdentity(async () => {

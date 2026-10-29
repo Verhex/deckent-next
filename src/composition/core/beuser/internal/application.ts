@@ -92,7 +92,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     try { return await work({ audit, approvals: (after, limit) =>
       approvals.store.list(context.binding.identity.scopeId, after, limit).map(row => verifyApproval(row, integrity)) }); }
     finally { approvals.close(); }
-  }, false);
+  }, false, 'read');
   return { custody, realm, removal, refusal, async walk(budget: BeuserExecutionBudget) {
     const ports = { realm, surface, initialCommand: launch.initialCommand, models, decode: model.decode, evidence: evidencePort, refusal,
       async controllerAudit(ctx: BeuserContext) {

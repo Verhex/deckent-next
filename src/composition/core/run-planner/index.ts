@@ -121,7 +121,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
 }
 /** BeUser D-08: the newest refused work requests of one scope (none when the scope has no audit key yet). */
 export async function inspectConfiguredRefusedRequests(root: string, scopeId: string, limit: number, options: ConfigLoadOptions = {}) {
-  try { const c = await loadConfiguredScopeContext(root, scopeId, options, 'read'); return await withScopeAudit(c, audit => listRefusedRunRequests(audit, scopeId, limit), false); }
+  try { const c = await loadConfiguredScopeContext(root, scopeId, options, 'read'); return await withScopeAudit(c, audit => listRefusedRunRequests(audit, scopeId, limit), false, 'read'); }
   catch { return []; }
 }
 export { transitionConfiguredRunIntent } from './internal/intents.js';
