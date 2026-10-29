@@ -13,8 +13,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 
 it('keeps BeUser target, surface and sealed-backup refusals typed and localized without exposing internal detail', () => {
   const errors = [new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'), new BeuserSurfaceError('BEUSER_SURFACE_INVALID'), new BeuserTransferError(),
-    new BeuserContractError('BEUSER_PROFILE_REQUIRED'), new BeuserContractError('BEUSER_REPORT_NOT_FOUND')];
-  const codes = ['BEUSER_TARGET_NOT_SANDBOX', 'BEUSER_SURFACE_INVALID', 'BACKUP_REALM_SEALED', 'BEUSER_PROFILE_REQUIRED', 'BEUSER_REPORT_NOT_FOUND'];
+    new BeuserContractError('BEUSER_PROFILE_REQUIRED'), new BeuserContractError('BEUSER_REPORT_NOT_FOUND'), new BeuserContractError('BEUSER_CANDIDATE_MISMATCH')];
+  const codes = ['BEUSER_TARGET_NOT_SANDBOX', 'BEUSER_SURFACE_INVALID', 'BACKUP_REALM_SEALED', 'BEUSER_PROFILE_REQUIRED', 'BEUSER_REPORT_NOT_FOUND', 'BEUSER_CANDIDATE_MISMATCH'];
   errors.forEach((error, index) => {
     error.message += ' /private/target/raw-screen credential=hidden';
     const mapped = queryFailure(error);

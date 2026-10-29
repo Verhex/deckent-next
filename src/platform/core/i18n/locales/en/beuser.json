@@ -56,5 +56,7 @@
   "beuser.setup.change": "Scope: {scope}; approved content: {digest}. Install this execution registry and pool.",
   "beuser.setup.apply": "Apply",
   "beuser.setup.cancel": "Cancel",
-  "beuser.setup.result": "BeUser setup: {status}; content: {digest}."
+  "beuser.setup.result": "BeUser setup: {status}; content: {digest}.",
+  "error.BEUSER_CANDIDATE_MISMATCH": "The candidate manifest or package identity does not match the admitted reference.",
+  "remedy.BEUSER_CANDIDATE_MISMATCH": "Regenerate the BeUser profile from the exact staged candidate, then preview setup again."
 }

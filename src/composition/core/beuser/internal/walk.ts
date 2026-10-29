@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { beuserBindingSchema, executionProfileDefinitionSchema, executionRegistrySchema } from '#domain/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, beuserParametersSchema, evaluateBeuserEvidence } from '#capabilities/index.js';
-import { openSqliteAttemptStore, FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, verifyBeuserDistribution, measureInstalledPackage } from '#adapters/index.js';
+import { openSqliteAttemptStore, FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, type BeuserReport, type SandboxRequest } from '#engine/index.js';
 import { sha256, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -104,9 +104,9 @@ export async function admitConfiguredBeuserWalk(root: string, input: { readonly 
   const definitions: ReturnType<typeof beuserParametersSchema.parse>[] = [];
   for (const { profile, data } of selected) {
     const limits = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === data.limitsRevision);
-    if (!limits || data.candidateRoot !== candidateRoot || !await verifyBeuserDistribution(candidateRoot, data.files, c.config.installation.packageMeasurement, data.binding.candidate.stateDigest)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    const measured = await measureInstalledPackage(candidateRoot, c.config.installation.packageMeasurement);
-    if (measured.measurementDigest !== data.packageDigest || measured.declaredMissing.length) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+    if (!limits || data.candidateRoot !== candidateRoot) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+    await readBeuserCandidate(candidateRoot, data.candidateManifest, c.config.installation.packageMeasurement,
+      data.packageDigest, data.binding.candidate.stateDigest);
     signal.throwIfAborted();
     const taskId = profile.id, binding = beuserBindingSchema.parse({ ...data.binding,
       identity: { scopeId: input.scopeId, runId, taskId, attemptId: randomUUID(), generation: 1, layoutRevision: c.layout.revision },

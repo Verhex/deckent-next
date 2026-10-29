@@ -5,7 +5,10 @@ provisional, uncalibrated preparation data, not evidence that a journey passed.
 It creates an ordinary admission JSON document for `deckent beuser setup`.
 Candidate paths and manifests depend on the exact installed package: generate
 the document outside the package after building, rather than shipping host paths
-or fabricated hashes. Regenerate it whenever the candidate changes.
+or fabricated hashes. Regenerate it whenever the candidate changes. Profile v2 carries only the manifest
+SHA-256, full file count and source/package identity. The complete staged
+`manifest.json` stays in the candidate; setup, walk and realm admission reload and
+verify it. Inline v1 profiles must be regenerated; no JSON limit is raised.
 
 Run the following from the built Deckent package directory. Supply the candidate
 directory, a new output filename, the walker's channel/model, the evaluator's
@@ -40,6 +43,11 @@ if (!limits?.provisional) throw new Error('Review this example against the insta
 const candidateRoot = await realpath(candidate);
 const measured = await measureInstalledPackage(candidateRoot, getConfigFieldDefault('installation').packageMeasurement);
 if (measured.declaredMissing.length) throw new Error('Incomplete candidate package');
+const release = await json(candidateRoot + '/release.json');
+const manifest = measured.files.find(file => file.path === 'manifest.json');
+if (!manifest) throw new Error('A staged candidate manifest is required');
+const candidateManifest = { sha256: manifest.sha256, fileCount: measured.files.length,
+  sourceCommit: release.sourceCommit, sourceTreeSha256: release.sourceTreeSha256, version: measured.packageVersion };
 const files = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
 const binding = { schemaVersion: 1,
   identity: { scopeId: 'pending-admission', runId: 'pending-admission', taskId: 'ayse',
@@ -49,8 +57,8 @@ const binding = { schemaVersion: 1,
   candidateDigest: measured.measurementDigest, personaDigest: beuserPersonaDigest(summary),
   journeyDigest: beuserDigest(journey), rubricDigest: journey.rubric.digest,
   realmId: 'pending-admission', nonce: randomUUID(), transcriptId: 'pending-admission' };
-const parameters = { schemaVersion: 1, binding, summary, limitsRevision: limits.revision,
-  candidateRoot, packageDigest: measured.measurementDigest, files,
+const parameters = { schemaVersion: 2, binding, summary, limitsRevision: limits.revision,
+  candidateRoot, packageDigest: measured.measurementDigest, candidateManifest,
   size: { columns: 100, rows: 30, scrollback: 1000 },
   bounds: { quietMs: 100, inactivityMs: 1000, maxInputBytes: 4096 }, completionTokens: 4096,
   rubric: journey.rubric,

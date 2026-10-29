@@ -23,6 +23,6 @@ export async function openConfiguredBeuserRealmOwner(c: { readonly config: Resol
     image: control.imageId, uid: userInfo().uid, gid: userInfo().gid, memoryBytes: control.memoryBytes, nanoCpus: control.cpus * 1_000_000_000,
     pids: control.pids, filesystemBytes: control.tmpBytes });
   const removal = createBeuserRemovalReadback(runtimeOptions, artifacts, beuserPrivateRecord(directory, `kernel-${sha256(JSON.stringify(context.binding.identity))}`, context.limits.maxArtifactBytes));
-  const realm = createBeuserRealm({ context, options: runtimeOptions, custody, artifacts, measurement: { digest: data.packageDigest, files: data.files, limits: config.installation.packageMeasurement }, capture: removal.capture, removal: removal.read });
+  const realm = createBeuserRealm({ context, options: runtimeOptions, custody, artifacts, measurement: { digest: data.packageDigest, candidateManifest: data.candidateManifest, limits: config.installation.packageMeasurement }, capture: removal.capture, removal: removal.read });
   return { data, custody, runtimeOptions, removal, realm };
 }

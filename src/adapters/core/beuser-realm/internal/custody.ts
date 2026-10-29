@@ -1,17 +1,18 @@
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { lstat, mkdir, readFile, readdir, open } from 'node:fs/promises';
-import { join, resolve, relative } from 'node:path';
+import { lstat, mkdir, readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { z } from 'zod';
-import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema } from '#domain/index.js';
+import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type BeuserCandidateManifest } from '#domain/index.js';
 import { DockerBeuserRealmRuntime } from './lifecycle.js';
 import { dockerRealmCommand, canonicalRealmPath, BEUSER_REALM_RECIPE, type BeuserRealmOptions } from './realm.js';
+import { readBeuserCandidate } from './candidate.js';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
 import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type BeuserRealmChannel, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
   type SandboxRequest } from '#engine/index.js';
-import { jsonRecordDirectory, withConfigWriteLock, sha256, REDACTION_PATTERNS, REDACTION_GATE_PATTERNS, type JsonRecordFile } from '#platform/index.js';
+import { jsonRecordDirectory, withConfigWriteLock, sha256, type JsonRecordFile } from '#platform/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 
 const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)) }).strict();
@@ -19,13 +20,6 @@ const handleSchema = z.object({ binding: beuserBindingSchema, incarnation: z.str
 const recordSchema = z.object({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
   lease: z.object({ handle: handleSchema.nullable(), observation: observationSchema }).strict() }).strict();
 const refuse = (): never => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); };
-// Distribution admission uses credential rules; record redaction keeps its broader assignment classifier.
-const distributionPatterns = [...REDACTION_PATTERNS.filter(row => row.gate), ...REDACTION_GATE_PATTERNS]
-  .map(row => new RegExp('distributionSource' in row ? row.distributionSource : row.source, row.flags.replace('g', '')));
-const hasDistributionCredential = (text: string): boolean => {
-  const decoded = text.replace(/\\r\\n|\\[rn]/gu, '\n');
-  return distributionPatterns.some(pattern => pattern.test(decoded));
-};
 /** The supervisor's per-Attempt custody file is never a scheduler or a launch grant. Dispatch remains the owner. */
 export async function createBeuserRealmCustody(input: { readonly context: BeuserContext; readonly request: SandboxRequest;
   readonly store: Pick<DispatchStore, 'readDispatch'>; readonly owner: string; readonly directory: string; readonly timeoutMs: number }): Promise<BeuserRealmCustody> {
@@ -84,42 +78,18 @@ export async function retainBeuserJson(artifacts: ArtifactStore, context: Beuser
 /** Real package measurement is repeated before creation. The selected package is never the controller installation. */
 export function createBeuserRealm(input: { readonly context: BeuserContext; readonly options: BeuserRealmOptions; readonly custody: BeuserRealmCustody;
   readonly artifacts: ArtifactStore; readonly measurement: { readonly digest: string; readonly limits: Parameters<typeof measureInstalledPackage>[1];
-    readonly files: readonly { readonly path: string; readonly sha256: string; readonly size: number }[] };
+    readonly candidateManifest: BeuserCandidateManifest };
   readonly capture: ReturnType<typeof createBeuserRemovalReadback>['capture'];
   readonly removal: (context: BeuserContext, handle: BeuserRealmHandle) => ReturnType<ConstructorParameters<typeof DockerBeuserRealmRuntime>[1]['removalEvidence']> }) {
   const runtime = new DockerBeuserRealmRuntime(input.options, {
-    async verifyPackage(_context, root) { const measured = await measureInstalledPackage(root, input.measurement.limits);
-      return measured.declaredMissing.length === 0 && measured.measurementDigest === input.measurement.digest
-        && await verifyBeuserDistribution(root, input.measurement.files, input.measurement.limits, input.context.binding.candidate.stateDigest); },
+    async verifyPackage(_context, root) {
+      await readBeuserCandidate(root, input.measurement.candidateManifest, input.measurement.limits,
+        input.measurement.digest, input.context.binding.candidate.stateDigest);
+      return true;
+    },
     async retainEvidence(ctx, evidence) { await input.capture(ctx, evidence); return retainBeuserJson(input.artifacts, ctx, evidence); }, removalEvidence: input.removal,
   });
   return new BeuserRealmApplication(runtime, input.custody);
-}
-/** The mounted tree includes dependencies: package.files measurement alone cannot certify those or reject extra host state. */
-export async function verifyBeuserDistribution(root: string, files: readonly { readonly path: string; readonly sha256: string; readonly size: number }[],
-  limits: Parameters<typeof measureInstalledPackage>[1], digest: string): Promise<boolean> {
-  if (sha256(JSON.stringify(files)) !== digest || !files.length || files.length > limits.maxFiles || new Set(files.map(file => file.path)).size !== files.length) return false;
-  const allowed = new Map(files.map(file => [file.path, file])); let count = 0, total = 0;
-  const visit = async (directory: string, depth: number): Promise<boolean> => {
-    if (depth > limits.maxDepth) return false;
-    for (const name of await readdir(directory)) {
-      if (++count > limits.maxFiles || name.startsWith('.') || name === 'AGENTS.md' || name === 'CLAUDE.md' || /[\p{Cc}\p{Cs}]/u.test(name)) return false;
-      const path = join(directory, name), info = await lstat(path);
-      if (info.isSymbolicLink()) return false;
-      if (info.isDirectory()) { if (!await visit(path, depth + 1)) return false; continue; }
-      const expected = allowed.get(relative(root, path).split('\\').join('/'));
-      if (!info.isFile() || info.nlink !== 1 || !expected || info.size !== expected.size || info.size > limits.maxFileBytes || (total += info.size) > limits.maxTotalBytes) return false;
-      const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-      try { const before = await handle.stat(); if (before.dev !== info.dev || before.ino !== info.ino) return false;
-        const bytes = await handle.readFile(), after = await handle.stat();
-        if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || sha256(bytes) !== expected.sha256 || hasDistributionCredential(bytes.toString('utf8'))) return false;
-      } finally { await handle.close(); }
-      allowed.delete(relative(root, path).split('\\').join('/'));
-    }
-    return true;
-  };
-  await canonicalRealmPath(root, 'directory');
-  return await visit(root, 0) && allowed.size === 0;
 }
 /** Private pipes to the packaged driver inside the exact, re-admitted container. No public executable/socket path. */
 export function createBeuserChannel(input: { readonly context: BeuserContext; readonly realm: BeuserRealmApplication; readonly custody: BeuserRealmCustody;

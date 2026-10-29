@@ -69,12 +69,24 @@ config values are outside this distribution scan. Record redaction and worker-tr
 person's terminal; `--apply` displays its content and digest on a person card, and `--json` returns
 the same result as structured data. The document uses the existing admission schema: `poolId`,
 `executionSlots`, `inFlightSlots`, `ordering` and `registry`. Its profiles must all use `beuser@1`
-and the existing strict journey profile contract (journey/persona/rubric pins, exact candidate
-manifest, finite limits revision, explicit walker/evaluator choices and launch/probe data).
+and the existing strict journey profile contract (journey/persona/rubric pins, typed candidate
+manifest reference, finite limits revision, explicit walker/evaluator choices and launch/probe data).
 A profile author supplies this document; setup does not fabricate missing journey or model data.
 The packaged [B1 example](../../../../assets/beuser/setup-profile.example.md) builds one
 provisional onboarding/Ayşe document from installed references and the measured candidate;
 it carries no host paths or credentials and does not claim complete journey coverage.
+
+Journey profile `schemaVersion: 2` replaces inline `files` with `candidateManifest`:
+raw manifest `sha256`, complete measured `fileCount` (including both metadata files),
+`sourceCommit`, `sourceTreeSha256` and package `version`. The candidate's staged
+`manifest.json` remains the full hash/mode inventory. Setup, walk admission and realm
+creation share the same loader: bounded stable package measurement recomputes the
+manifest digest, checks file count/package measurement and source identity against
+both release metadata and the manifest-pinned build identity, then runs the existing
+full distribution and credential verifier. Any mismatch returns localized
+`BEUSER_CANDIDATE_MISMATCH` before launch. Neither metadata record is excluded.
+Old inline journey profiles must be regenerated; generic JSON guards, supervisor
+adapter v1, binding/evidence contracts, ledger and protocol versions are unchanged.
 
 The composition validates the candidate manifest and requires both selected model roles to have an
 active, configured invocation reference. It creates no model role, activation, provider, credential

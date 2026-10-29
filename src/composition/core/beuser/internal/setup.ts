@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { executionRegistrySchema } from '#domain/index.js';
-import { readInstallationProfileFile, verifyBeuserDistribution, measureInstalledPackage, openSqliteModelActivationReader, canonicalRealmPath } from '#adapters/index.js';
+import { readInstallationProfileFile, readBeuserCandidate, openSqliteModelActivationReader, canonicalRealmPath } from '#adapters/index.js';
 import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY } from '#engine/index.js';
 import { CONFIG_FIELDS, ErrorRegistry, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { configPersonWitness, createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -31,9 +31,9 @@ export async function setupConfiguredBeuser(root: string, input: BeuserSetupInpu
       if (!data.success) throw invalid();
       const p = data.data;
       if (!BEUSER_LIMITS_REGISTRY.profiles.some(limit => limit.revision === p.limitsRevision)) throw ErrorRegistry.createError('BEUSER_LIMITS_UNAVAILABLE');
-      if (await canonicalRealmPath(p.candidateRoot, 'directory') !== p.candidateRoot
-        || !await verifyBeuserDistribution(p.candidateRoot, p.files, c.config.installation.packageMeasurement, p.binding.candidate.stateDigest)
-        || (await measureInstalledPackage(p.candidateRoot, c.config.installation.packageMeasurement)).measurementDigest !== p.packageDigest) throw invalid();
+      if (await canonicalRealmPath(p.candidateRoot, 'directory') !== p.candidateRoot) throw invalid();
+      await readBeuserCandidate(p.candidateRoot, p.candidateManifest, c.config.installation.packageMeasurement,
+        p.packageDigest, p.binding.candidate.stateDigest);
       for (const role of ['beuser-walker', 'beuser-evaluator'] as const) {
         const target = p.choices[role], held = await inspectRoleModelsInScope(sources, role, input.scopeId, Date.now());
         if (!held.models.some(row => row.channelId === target.channelId && row.modelId === target.modelId && row.active)

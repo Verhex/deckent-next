@@ -5,6 +5,10 @@ import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 export const BEUSER_CONTRACT_VERSION = 1;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const competence = counterSchema.max(4);
+/** Package adapter pin; the complete inventory stays in the candidate, outside bounded execution JSON. */
+export const beuserCandidateManifestSchema = z.object({ sha256: digest, fileCount: counterSchema.positive(),
+  sourceCommit: z.string().regex(/^[a-f0-9]{40}$/u), sourceTreeSha256: digest, version: id }).strict().readonly();
+export type BeuserCandidateManifest = z.infer<typeof beuserCandidateManifestSchema>;
 /** Generic acceptance subject: a package, ERP record/configuration or another versioned target. */
 export const acceptanceSubjectSchema = z.object({ adapter: id, version: id, evidenceRef: id, stateDigest: digest, environmentDigest: digest }).strict().readonly();
 /** Only this summary reaches the walker. Persona describes behaviour, never authority. */

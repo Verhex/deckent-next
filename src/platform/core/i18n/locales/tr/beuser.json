@@ -56,5 +56,7 @@
   "beuser.setup.change": "Kapsam: {scope}; onaylanan içerik: {digest}. Yürütme registry’si ve havuzu kurulacak.",
   "beuser.setup.apply": "Uygula",
   "beuser.setup.cancel": "Vazgeç",
-  "beuser.setup.result": "BeUser kurulumu: {status}; içerik: {digest}."
+  "beuser.setup.result": "BeUser kurulumu: {status}; içerik: {digest}.",
+  "error.BEUSER_CANDIDATE_MISMATCH": "Aday manifesti veya paket kimliği kabul edilen referansla eşleşmiyor.",
+  "remedy.BEUSER_CANDIDATE_MISMATCH": "BeUser profilini tam staged adaydan yeniden üretin; ardından setup önizlemesini tekrarlayın."
 }

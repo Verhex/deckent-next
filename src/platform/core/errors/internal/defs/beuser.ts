@@ -6,6 +6,7 @@ export const beuserErrors: ErrorDefinitions = Object.freeze({
   BEUSER_REPORT_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_REPORT_NOT_FOUND', p, l), suggestion: t('remedy.BEUSER_REPORT_NOT_FOUND', p, l) }) },
   BEUSER_SETUP_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SETUP_CONFLICT', p, l), suggestion: t('remedy.BEUSER_SETUP_CONFLICT', p, l) }) },
   BEUSER_INPUT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_INPUT_INVALID', p, l), suggestion: t('remedy.BEUSER_INPUT_INVALID', p, l) }) },
+  BEUSER_CANDIDATE_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_CANDIDATE_MISMATCH', p, l), suggestion: t('remedy.BEUSER_CANDIDATE_MISMATCH', p, l) }) },
   BEUSER_TARGET_NOT_SANDBOX: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_TARGET_NOT_SANDBOX', p, l), suggestion: t('remedy.BEUSER_TARGET_NOT_SANDBOX', p, l) }) },
   BEUSER_LIMITS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_LIMITS_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_LIMITS_UNAVAILABLE', p, l) }) },
   BEUSER_MODEL_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_MODEL_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_MODEL_UNAVAILABLE', p, l) }) },

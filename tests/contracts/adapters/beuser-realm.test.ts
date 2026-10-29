@@ -10,7 +10,7 @@ import { DockerBeuserRealmRuntime, canonicalRealmPath, pinRealmOptions, inspectB
 import { readlink } from 'node:fs/promises';
 import { generateKeyPairSync } from 'node:crypto';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
-import { verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
+import { readBeuserCandidate, verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
 import { sha256, redactForRecord } from '#platform/index.js';
 
 const retain: BeuserEvidenceRetention = async (_context, evidence) => `fixture-retained:${evidence.digest}`;
@@ -232,4 +232,31 @@ it.skipIf(process.platform !== 'linux')('refuses credential-bearing, foreign and
   await writeFile(target, 'export {};');
   await writeFile(join(root, 'foreign.txt'), 'foreign'); await refused(clean.files, clean.digest);
   await rm(join(root, 'foreign.txt')); await rm(target); await refused(clean.files, clean.digest);
+});
+
+
+it('reloads the full candidate manifest, pins source identity and refuses tampering before realm admission', async () => {
+  const { root, target } = await distributionFixture();
+  await writeFile(target, 'export {};');
+  const source = { sourceCommit: '1'.repeat(40), sourceTreeSha256: '2'.repeat(64) };
+  await writeFile(join(root, 'dist/build-identity.json'), JSON.stringify(source));
+  const initial = await measureInstalledPackage(root, packageLimits);
+  const manifest = JSON.stringify(Object.fromEntries(initial.files.map(file => [file.path, `${file.sha256}:${file.mode.toString(8)}`])));
+  await writeFile(join(root, 'manifest.json'), manifest);
+  await writeFile(join(root, 'release.json'), JSON.stringify({ schemaVersion: 1, packageVersion: '1', ...source, manifestSha256: sha256(manifest) }));
+  const measured = await measureInstalledPackage(root, packageLimits), full = await distribution(root);
+  const reference = { sha256: sha256(manifest), fileCount: measured.files.length, ...source, version: '1' };
+  const read = (pin = reference) => readBeuserCandidate(root, pin, packageLimits, measured.measurementDigest, full.digest);
+  expect((await read()).files.map(file => file.path)).toContain('manifest.json');
+  expect((await read()).files.map(file => file.path)).toContain('release.json');
+  await expect(read({ ...reference, sourceCommit: '3'.repeat(40) })).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+  await expect(read({ ...reference, sourceTreeSha256: '4'.repeat(64) })).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+  await expect(read({ ...reference, version: 'other-candidate' })).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+  await expect(read({ ...reference, fileCount: reference.fileCount - 1 })).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+  await expect(read({ ...reference, sha256: '0'.repeat(64) })).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+  await writeFile(join(root, 'manifest.json'), manifest + '\n');
+  await expect(read()).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+  await writeFile(join(root, 'manifest.json'), manifest);
+  await writeFile(join(root, 'foreign.txt'), 'foreign');
+  await expect(read()).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
 });

@@ -14,7 +14,7 @@ import { measureInstalledPackage, beuserPrivateRecord } from '#adapters/index.js
 import { BEUSER_LIMITS_REGISTRY, beuserEvaluatorFor, createBeuserReport } from '#engine/index.js';
 import { sha256, clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { ModelActivationApplication, ModelBindingApplication } from '#engine/index.js';
-import { encodeModelBindingDefinition } from '#domain/index.js';
+import { encodeModelBindingDefinition, executionProfileDefinitionSchema } from '#domain/index.js';
 import { setupConfiguredBeuser } from '#composition/core/beuser/index.js';
 import { responsesFixture } from '../support/openai-responses.js';
 import { runInTerminal, lastJson } from '../support/terminal-cli.js';
@@ -31,6 +31,12 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     await expect(readConfiguredBeuserReport(root, 'scope', undefined, options)).rejects.toMatchObject({ code: 'BEUSER_REPORT_NOT_FOUND' });
     const storage = await openConfiguredAttemptStore(root, options);
     const max = { maxFiles: 100, maxFileBytes: 100000, maxTotalBytes: 1000000, maxDepth: 10 };
+    const source = { sourceCommit: '1'.repeat(40), sourceTreeSha256: '2'.repeat(64) };
+    await writeFile(join(candidate, 'dist/build-identity.json'), JSON.stringify(source));
+    const inventory = await measureInstalledPackage(candidate, max);
+    const manifest = JSON.stringify(Object.fromEntries(inventory.files.map(file => [file.path, `${file.sha256}:${file.mode.toString(8)}`])));
+    await writeFile(join(candidate, 'manifest.json'), manifest);
+    await writeFile(join(candidate, 'release.json'), JSON.stringify({ schemaVersion: 1, packageVersion: '1.0.0', ...source, manifestSha256: sha256(manifest) }));
     const measured = await measureInstalledPackage(candidate, max), files = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
     const summary = { schemaVersion: 1, personaId: 'person', journeyId: 'journey', language: 'tr', role: 'buyer', goals: ['purchase'],
       knowledgeBoundary: [], accessibility: [], initialKnowledge: [], goal: 'request goods', competency: { computer: 1, domain: 4, product: 0 },
@@ -39,12 +45,19 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     const binding = { schemaVersion: 1, identity: { scopeId: 'untrusted', runId: 'untrusted', taskId: 'untrusted', attemptId: 'untrusted', layoutRevision: 'untrusted', generation: 1 },
       candidate: { adapter: 'installed-package', version: '1.0.0', evidenceRef: 'package', stateDigest: sha256(JSON.stringify(files)), environmentDigest: 'b'.repeat(64) },
       candidateDigest: 'c'.repeat(64), personaDigest: 'd'.repeat(64), journeyDigest: 'e'.repeat(64), rubricDigest: 'f'.repeat(64), realmId: 'untrusted', nonce: '12345678-1234-4234-8234-123456789abc', transcriptId: 'untrusted' };
-    const parameters = { schemaVersion: 1, binding, summary, limitsRevision: BEUSER_LIMITS_REGISTRY.profiles[0]!.revision, candidateRoot: candidate, packageDigest: measured.measurementDigest,
-      files, size: { columns: 80, rows: 24, scrollback: 100 }, bounds: { quietMs: 10, inactivityMs: 100, maxInputBytes: 1024 }, completionTokens: 1024,
+    const parameters = { schemaVersion: 2, binding, summary, limitsRevision: BEUSER_LIMITS_REGISTRY.profiles[0]!.revision, candidateRoot: candidate, packageDigest: measured.measurementDigest,
+      candidateManifest: { sha256: sha256(manifest), fileCount: files.length, ...source, version: '1.0.0' }, size: { columns: 80, rows: 24, scrollback: 100 }, bounds: { quietMs: 10, inactivityMs: 100, maxInputBytes: 1024 }, completionTokens: 1024,
       rubric: { schemaVersion: 1, journeyId: 'journey', version: 1, digest: 'f'.repeat(64), parameters: {} },
       choices: { 'beuser-walker': { channelId: 'configured', modelId: 'walker' }, 'beuser-evaluator': { channelId: 'configured', modelId: 'evaluator' } },
       contributorModels: [{ vendorId: 'source-maker' }], entry: { mode: 'pty', nodeExecutable: '/usr/bin/node', args: ['--help'] },
       probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'readback', key: 'installation', expected: 'installed' }], calibration };
+    const inline = { ...parameters, schemaVersion: 1, files: Array.from({ length: 4114 }, () => files[0]!) };
+    const definitionInput = { id: 'persona', version: 1, adapter: { id: 'beuser', version: 1 }, parameters };
+    expect(executionProfileDefinitionSchema.safeParse(definitionInput).success).toBe(true);
+    const oversized = executionProfileDefinitionSchema.safeParse({ ...definitionInput, parameters: inline });
+    expect(oversized.success).toBe(false);
+    if (!oversized.success) expect(oversized.error.issues).toContainEqual(expect.objectContaining({ message: 'JSON_VALUE_INVALID', path: ['parameters'] }));
+    expect(() => validateBeuserSupervisorProfile({ schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1, parameters: inline })).toThrow('BEUSER_INPUT_INVALID');
     expect(() => validateBeuserSupervisorProfile({ schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1,
       parameters: { ...parameters, entry: { ...parameters.entry, mode: 'argv', args: [] } } })).toThrow('BEUSER_INPUT_INVALID');
     const configPath = join(root, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -190,7 +203,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     expect(lastJson(walked.output)).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'EXECUTION_NOT_CONFIGURED' }] });
     if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked }, null, 2));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'changed;\n');
-    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
+    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
     // A foreign candidate is refused before creating another Run, without a verify=true test adapter.
     await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate: root }, options)).rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
   } finally { clearConfigCache(); await rm(base, { recursive: true, force: true }); }
