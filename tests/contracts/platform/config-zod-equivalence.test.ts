@@ -68,7 +68,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     // Incomplete literal `.default({ maxBytes: 16777216 })`: maxInputs and patchPreview come from the inner schema.
     expect(d.artifacts).toEqual({ maxBytes: 16_777_216, maxInputs: 64, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } });
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
-      identityProbe: { timeoutMs: 2000, outputBytes: 65_536 }, machineIdentity: { source: null }, requireMachineBinding: false,
+      identityProbe: { timeoutMs: 2000, outputBytes: 65_536 }, machineIdentity: { source: null }, requireMachineBinding: false, uninstallRecoveryRoot: null,
       packageMeasurement: { maxFiles: 8192, maxFileBytes: 67_108_864, maxTotalBytes: 536_870_912, maxDepth: 32 } });
     expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, assuranceProducers: [{ id: 'core.turn-bound', version: 1 }], keyFile: 'authority.key', approverNoteMaxChars: 500 });
     // INIT-D7 (alpha.48 J1a): `cli.agentEnvironment` is a nested array default of the `cli` object; it must apply when `cli` itself defaults.
