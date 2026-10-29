@@ -4,7 +4,7 @@
 
 Use this guide when a person asks you to install Deckent. Ask for their target folder and the verified package artifact.
 Deckent runs on the person's infrastructure; installation does not authorize their business operations.
-This guide covers the alpha.56 candidate. It is not a claim that alpha.56, an npm package or the website has been released.
+This guide was written for alpha.56 and has not yet been re-checked against alpha.57 (uninstall v2). It is not a claim that an npm package or the website has been released.
 For the last released version's source-install path, use the README.
 
 ## Prepare and install

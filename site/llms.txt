@@ -2,7 +2,7 @@
 
 > Deckent is a customer-installed Agent Control & Execution Plane for authorized, isolated work and durable business processes. Secure Core runs independently; proprietary Enterprise is separate.
 
-These Markdown sources describe a pre-release. Read the AI installation guide first and preserve its person-only steps. The alpha.56 guide is candidate documentation; npm publication and site deployment are separate release gates.
+These Markdown sources describe a pre-release. Read the AI installation guide first and preserve its person-only steps. The guide was written for alpha.56 and is not yet re-checked against alpha.57; npm publication and site deployment are separate release gates.
 
 ## Installation
 

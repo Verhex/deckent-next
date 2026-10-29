@@ -9,12 +9,16 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.56 main'e indi (PR #117). Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.57 main'e indi (PR #120 ve #121) ve canlıda. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
-## BeUser B1 entegrasyon adayı (yayımlanmamış alpha.57)
+## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
-Kaynak adayı walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel kalıcı realm kayıtlarını, private transport'u, C4/C5 kanıtını, TaskEvaluation ve Run raporunu bağlar. R3-B izin verisini init/upgrade yayınının içine alır; replay özgün byte denetimini korur. Dry admission yazar kanıtıdır, gerçek realm yolculuğu değildir. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; ölçülmeyen alanlar unknown/null kalır. Sonlu limits profili provisional'dır. Mühürlü ledger hiçbir yolda export/backup/restore olamaz; yedek bağımlı dallar unknown kalır. Desteklenmeyen private systemd unknown/non-blocking'dir. Host socket/bus çözümü yoktur. Native adoption/tam surfaces B2/B4'tür. C7 birleşik paket kanıtı, bağımsız inceleme, hosted CI ve owner kabulü açıktır.
+Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel kalıcı realm kayıtlarını, private transport'u, C4/C5 kanıtını, TaskEvaluation ve Run raporunu bağlar. R3-B izin verisini init/upgrade yayınının içine alır; replay özgün byte denetimini korur. Dry admission yazar kanıtıdır, gerçek realm yolculuğu değildir. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; ölçülmeyen alanlar unknown/null kalır. Sonlu limits profili provisional'dır. Mühürlü ledger hiçbir yolda export/backup/restore olamaz; yedek bağımlı dallar unknown kalır. Desteklenmeyen private systemd unknown/non-blocking'dir. Host socket/bus çözümü yoktur. Native adoption/tam surfaces B2/B4'tür. Birleşik sürümde host üzerindeki ilk yürüyüş üç yolculuğu koştu; üçü de kırmızı çıktı, yani yolculuk kabulü ve owner kabulü açıktır.
+
+- **`deckent init` içinde evet/hayır harfleri her yerde kabul edilmez.** İlk kart evet cevabının yanında `y` tuşunu gösterir ve `y` alır; ardından gelen rehberli kurulum penceresi harf göstermez ve `y`'yi sessizce yok sayar. *Etki:* orada `y`'ye basan kişi (ya da BeUser personası) hiçbir şey olmadığını görür. *Yol:* vurgulu cevabı seçmek için Enter'a basın.
+- **BeUser yolculuğu her zaman boş realm'de başlar.** Yolculuk verisi başlangıç durumlarını adlandırır ama onları hazırlayan kod yoktur; kurulu Deckent gerektiren yolculuklar (kaldırma, BeUser'ın kendisi) "Kuruluma başla?" ekranında durur. *Etki:* bu yolculuklar sınadıkları dala ulaşmadan kırmızı raporlanır. *Yol:* henüz yok; böyle bir kırmızıyı o dal hakkında ürün hükmü değil "başlangıç durumu eksik" diye okuyun.
+- **BeUser yürüyüşleri host'un Docker'ını ister.** Yürüyüş realm konteynerini user namespace ile başlatır; bunları sağlamayan bir sandbox (ör. Codex çalışma alanı sandbox'ı) reddedilir, bu beklenen davranıştır. *Yol:* profili herhangi bir yerde hazırlayın, `deckent beuser walk` komutunu Docker'lı bir host'ta çalıştırın.
 
 ## Platformlar: denenenler ve denenmeyenler
 
