@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
-import { ErrorRegistry, DeckentError } from '#platform/index.js';
+import { ErrorRegistry, DeckentError, terminalSafeText } from '#platform/index.js';
 
 export interface JsonInputErrors { readonly subject?: string; readonly limit: string; readonly invalid: string; readonly tty: string; readonly unavailable: string }
 /** Bounded transport parsing only; the caller validates its operation schema. */
@@ -34,6 +34,10 @@ export async function readJsonInput(source: string, maxBytes: number, errors: Js
     } finally { await file.close(); }
   } catch (error) {
     if (error instanceof DeckentError) throw error;
-    throw inputError(errors.unavailable);
+    // BeUser KER-06: the refusal names the person's own path and why it could not be read (a bounded cause, never the OS text).
+    if (source === '-') throw inputError(errors.unavailable);
+    const code = (error as { code?: unknown } | null)?.code;
+    const reason = code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : code === 'EACCES' || code === 'EPERM' ? 'denied' : code === 'ELOOP' ? 'link' : 'unreadable';
+    throw inputError(errors.unavailable, { path: terminalSafeText(source), reason });
   }
 }

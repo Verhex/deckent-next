@@ -49,7 +49,8 @@ Ask the person to open `deckent` in that folder and complete the setup screens. 
   witness a person's decision. Never simulate a terminal, alter policy files or swap commands to bypass a refusal.
 - Decide any paid API budget. First-install budget is zero USD; no-spend paths are offered first. The API budget screen
   offers a 10 USD preset that the person can accept or change; do not accept it for them.
-- Confirm uninstall and any purge backup/confirmation card themselves. Knowing the installation name grants no authority.
+- Confirm uninstall, its tier, `--force`, `--disable-unit` and the backup passphrase themselves. Knowing the installation name
+  grants no authority, and `--yes` does not replace the person at their terminal.
 
 After their steps, run `deckent doctor --json` again and report the exact remaining failures and warnings. Report the scope,
 package version supplied by the artifact, completed steps, person-only steps still pending and the next action. Doctor green
@@ -71,15 +72,28 @@ You may inspect the removal plan without applying it:
 deckent uninstall --dry-run --json
 ```
 
-The person runs `deckent uninstall` at a real terminal to review and confirm removal. By default the ledger, audit and identity
-keys, secret store and project data remain. Reinstall adopts the retained installation. Worker images stay until a complete
-usage-reference contract exists; use only the exact manual step shown on the card. macOS/Windows service removal is manual.
+The person runs `deckent uninstall` at a real terminal. A menu offers three tiers, each with a flag of its own; you may preview
+any of them with `--dry-run` or `--json` (for example `deckent uninstall --all --dry-run --json`):
 
-For data removal the person runs `deckent uninstall --purge`. It requires a managed backup and the person's confirmation;
-only files with proven ownership, restore coverage and deletion authority are eligible. Company retention and unready folders
-stay. A moved or unsafe authority file blocks purge; choose the data-keeping path or fix the reported cause. A partial purge
-resumes only after the remaining bytes and authority are verified again; uncertainty keeps the files.
+- `--keep-data` (default): caches go and the running service stops; work records, settings and history stay. The folder is
+  retired: the next `deckent` there asks once whether to continue with the earlier data.
+- `--keep-work`: also archives and deletes conversation data (history, logs, sessions, crash reports, previews; earlier backups stay); work records and
+  pending work stay. Offered when there is pending work.
+- `--all`: first a passphrase backup and an encrypted archive of every other file it deletes, both verified and kept in the
+  person's private recovery folder outside every deleted folder; then the project's `.deckent`, `DECKENT.md` and the bridge line
+  init wrote are deleted. Files the project's Git tracks and unknown files stay and are listed; a folder goes only when empty.
+  `deckent backup restore` with that backup set brings everything back.
 
-Read per-step results: interrupted, blocked or unknown is not complete. The final output gives the package-manager removal
-command derived from the installed package identity and, for purge, the backup location. Hand that final removal step to the
+Every check runs before the one confirmation, and nothing is asked when there is nothing to remove. A refusal names its
+cause and next step: running work (`--force` cancels it with the person's own authority and never closes an unknown result),
+a service manager that restarts the service (`--disable-unit` separately approves disabling a user unit only when the manager
+proves the exact fragment and link set and exclusive ledger custody fences startup; its unit file stays), queued deliveries
+(`--all --force` withdraws through their queue owner after that owner authorizes each delivery before the card), policy,
+retention or legal hold, or a moved or unsafe authority file. When Git tracking cannot be
+read, every project file is treated as possibly tracked and kept.
+`--yes` skips only the final card; the plan is still printed. Worker images stay; use only the exact command on the card.
+macOS/Windows service removal is manual. A partial deletion resumes only after the remaining bytes and authority are verified again.
+
+Read per-step results: interrupted, blocked or unknown is not complete. The output prints the program removal command when
+the install method is proven (for example `npm uninstall -g deckent`), otherwise general guidance. Hand that final step to the
 person; do not guess its package name or delete folders/images yourself.

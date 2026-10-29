@@ -170,3 +170,20 @@ it('Astra 2761 R1 (K3): the first-task screen reads the host run-here answer; wh
   const closed = firstTaskBody({ ...open, localRun: false }, 'en').join(' ');
   expect(closed).toContain('closed for this setup'); expect(closed).not.toContain('runs here in the terminal');
 });
+it('A57 merge: a saved conversation notice keeps the closed local-run explanation and Esc submits no first task', async () => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { firstTaskScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-task.js');
+  const { until } = await import('../support/workline-harness.js');
+  let frame = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 160, rows: 60 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const signal = new AbortController(), pool = { id: 'work:pool', state: 'ready' } as SetupStage;
+  const model = { schemaVersion: 1 as const, steps: [], completed: 0, total: 1,
+    snapshot: { ...snapshot, localRun: false, plan: { ...snapshot.plan, stages: [pool] } } };
+  const answer = firstTaskScreen(model, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never, signal: signal.signal }, undefined, 'Saved conversation: use /resume');
+  try {
+    await until(() => frame.includes('Saved conversation: use /resume'), 'first-task conversation notice');
+    expect(frame).toContain('closed for this setup'); expect(frame).not.toContain('runs here in the terminal');
+    stdin.write('\u001b'); expect(await answer).toBe('later');
+  } finally { signal.abort(); await answer; stdin.destroy(); stdout.destroy(); }
+});

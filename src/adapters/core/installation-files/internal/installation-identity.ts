@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { stat } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { stat, open, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { BEUSER_GENESIS_PATH, parseBeuserRealmSeal, assertUnsealedInstallation, type BeuserRealmSeal } from '#engine/index.js';
 import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, installationIdentityRecordSchema,
   installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, type InstallationBindingCapture, type InstallationIdentityChoice } from '#domain/index.js';
 import { assessInstallationBinding, InstallationIdentityError, type InstallationBindingCapability, type InstallationIdentityStore,
   type InstallationBindingSource, type InstallationIdentityRead } from '#engine/index.js';
-import type { ProductLayout } from '#platform/index.js';
+import { productResourcePath, HOST_LIMITS_REGISTRY, type ProductLayout } from '#platform/index.js';
 import { IdentityFile } from './identity-file.js';
 import { localInstallationBindingSource, type InstallationBindingSettings } from './installation-binding.js';
 
@@ -15,17 +17,39 @@ type Outcome = 'unsupported' | 'match' | 'bind' | 'strengthen' | 'relocated';
 function assess(record: IdentityRecord, captured: InstallationBindingCapability): Outcome {
   if ('status' in captured) return 'unsupported';
   // A v1 record on a machine-capable host keeps the explicit-consent rule: it may be a copy from a host without machine identity.
-  if (record.schemaVersion !== 2) return captured.strength === 'weak' ? 'bind' : 'relocated';
+  if (record.schemaVersion === 1) return captured.strength === 'weak' ? 'bind' : 'relocated';
   return assessInstallationBinding(record.binding, captured);
 }
-const bound = (installationId: string, binding: InstallationBindingCapture, lastResolution: unknown) =>
-  boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding: retainedInstallationBinding(binding), lastResolution });
-const identity = (record: IdentityRecord) => installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.installationId });
+const bound = (installationId: string, binding: InstallationBindingCapture, lastResolution: unknown, realmSeal?: BeuserRealmSeal) =>
+  realmSeal ? installationIdentityRecordSchema.parse({ schemaVersion: 3, installationId, binding: retainedInstallationBinding(binding), lastResolution, realmSeal })
+    : boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding: retainedInstallationBinding(binding), lastResolution });
+const identity = (record: IdentityRecord) => installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.installationId, ...('realmSeal' in record && record.realmSeal ? { realmSeal: record.realmSeal } : {}) });
 
 /** One local metadata transition owner. Binding evidence detects relocation; it grants no authority. */
 export class FileInstallationIdentityStore implements InstallationIdentityStore {
   constructor(private readonly layout: ProductLayout, private readonly lockTimeoutMs?: number,
-    private readonly bindingSource?: InstallationBindingSource, private readonly settings: InstallationBindingSettings = {}) {}
+    private readonly bindingSource?: InstallationBindingSource, private readonly settings: InstallationBindingSettings = {},
+    private readonly genesis: () => Promise<BeuserRealmSeal | undefined> = readBeuserGenesis) {}
+  /** Trusted bootstrap provider only; never a CLI flag, environment switch or deserialized command. */
+  private async checkSeal(record: IdentityRecord) {
+    const genesis = await this.genesis();
+    if (genesis && (!('realmSeal' in record) || JSON.stringify(record.realmSeal) !== JSON.stringify(genesis))) throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID');
+  }
+  /** Read-only raw marker gate, before any ledger/key/target access. Forged or incomplete markers also refuse. */
+  static async assertTransferAllowed(layout?: ProductLayout): Promise<void> {
+    const genesis = await readBeuserGenesis();
+    if (genesis) assertUnsealedInstallation({ realmSeal: genesis });
+    if (!layout) return;
+    const path = join(productResourcePath(layout, 'installationIdentity'), 'identity.json');
+    let file;
+    try { file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
+    try {
+      const info = await file.stat();
+      if (!info.isFile() || info.size > HOST_LIMITS_REGISTRY.processFileReadBytes) throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID');
+      assertUnsealedInstallation(JSON.parse(await file.readFile('utf8')));
+    } finally { await file.close(); }
+  }
   private source() { return this.bindingSource ?? localInstallationBindingSource(this.layout, this.settings); }
   /** Required machine binding refuses every installation-bound write without machine-strength evidence; reads only report it. */
   private requireMachine(captured: InstallationBindingCapability) {
@@ -39,8 +63,9 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       parse: value => installationIdentityRecordSchema.parse(value),
       prepare,
       create: async captured => {
-        const installationId = randomUUID(), binding = captured ?? await prepare();
-        return 'status' in binding ? installationIdentitySchema.parse({ schemaVersion: 1, installationId }) : bound(installationId, binding, null);
+        const installationId = randomUUID(), binding = captured ?? await prepare(), seal = await this.genesis();
+        if (seal && 'status' in binding) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
+        return 'status' in binding ? installationIdentitySchema.parse({ schemaVersion: 1, installationId }) : bound(installationId, binding, null, seal);
       },
       isError: (error: unknown) => error instanceof InstallationIdentityError,
       error: reason => new InstallationIdentityError(({ INVALID: 'INSTALLATION_IDENTITY_INVALID', INCOMPLETE: 'INSTALLATION_IDENTITY_INVALID', UNAVAILABLE: 'INSTALLATION_IDENTITY_UNAVAILABLE',
@@ -54,6 +79,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     }
     const source = this.source(), record = await this.file(() => source.capture()).load();
     if (!record) return { status: 'unavailable', reason: 'not-created', bindingCapability: 'not-observed' };
+    await this.checkSeal(record);
     const captured = await source.capture(), outcome = assess(record, captured);
     if (outcome === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
     if ('status' in captured) return { status: 'available', value: identity(record), bindingCapability: 'unsupported' };
@@ -68,6 +94,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
    * not depend on the location; the location is bound later, at first publication).
    */
   async admitWrite(): Promise<void> {
+    await this.genesis();
     if (process.platform === 'win32' || this.layout.platform !== 'posix') return this.requireMachine({ status: 'unsupported' });
     const record = await this.file(() => this.source().capture()).load();
     if (!record) {
@@ -75,6 +102,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       while (!(await stat(root).then(info => info.isDirectory(), () => false)) && dirname(root) !== root) root = dirname(root);
       return this.requireMachine(await (this.bindingSource ?? localInstallationBindingSource({ ...this.layout, root }, this.settings)).capture());
     }
+    await this.checkSeal(record);
     const captured = await this.source().capture();
     if (assess(record, captured) === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
     this.requireMachine(captured);
@@ -84,24 +112,28 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     const source = this.source(); let prepared: InstallationBindingCapability | undefined;
     // A refused first use (required machine binding) stops before the record directory exists; nothing is left that reads as lost.
     const file = this.file(async () => { prepared = await source.capture(); this.requireMachine(prepared); return prepared; });
-    const record = await file.loadOrCreate(), captured = prepared ?? await source.capture(), outcome = assess(record, captured);
+    const record = await file.loadOrCreate(); await this.checkSeal(record);
+    const captured = prepared ?? await source.capture(), outcome = assess(record, captured);
     // Relocation first, as on the read path, so the operator sees the `--keep` / `--new` choice before the required-binding refusal.
     if (outcome === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
     if (!prepared) this.requireMachine(captured);
     if (outcome !== 'bind' && outcome !== 'strengthen') return identity(record);
     // Re-capture and re-assess under the lock: a concurrent writer may already have recorded the binding, or the host may have changed.
     return identity(await file.update(async current => {
+      await this.checkSeal(current);
       const fresh = await source.capture(); this.requireMachine(fresh);
       const again = assess(current, fresh);
       if (again === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
       if ((again !== 'bind' && again !== 'strengthen') || 'status' in fresh) return current;
-      return bound(current.installationId, fresh, current.schemaVersion === 2 ? current.lastResolution : null);
+      return bound(current.installationId, fresh, current.schemaVersion !== 1 ? current.lastResolution : null, 'realmSeal' in current ? current.realmSeal : undefined);
     }));
   }
   async resolveRelocation(choice: InstallationIdentityChoice, principal: { readonly issuer: string; readonly subject: string }) {
     if (!installationIdentityChoiceSchema.safeParse(choice).success) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
     const source = this.source();
     const record = await this.file(() => source.capture()).update(async current => {
+      await this.checkSeal(current);
+      if ('realmSeal' in current && current.realmSeal) throw new InstallationIdentityError('INSTALLATION_IDENTITY_RESOLUTION_INVALID');
       const captured = await source.capture();
       if ('status' in captured) throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNSUPPORTED');
       this.requireMachine(captured); // `--keep` cannot bypass required machine binding by recording a weak one.
@@ -116,4 +148,18 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     if (record.schemaVersion !== 2 || !record.lastResolution) throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID');
     return record.lastResolution;
   }
+}
+
+/** Only an exact read-only mount can mark a real init as sealed; a writable file or caller environment cannot. */
+export async function readBeuserGenesis(): Promise<BeuserRealmSeal | undefined> {
+  let file;
+  try { file = await open(BEUSER_GENESIS_PATH, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID'); }
+  try {
+    const info = await file.stat(), mounts = await readFile('/proc/self/mountinfo', 'utf8');
+    const mounted = mounts.split('\n').some(line => { const fields = line.split(' '); return fields[4] === BEUSER_GENESIS_PATH && fields[5]?.split(',').includes('ro'); });
+    if (!mounted || !info.isFile() || info.nlink !== 1 || info.size > HOST_LIMITS_REGISTRY.processFileReadBytes || (info.mode & (constants.S_IWUSR | constants.S_IWGRP | constants.S_IWOTH))) throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID');
+    return parseBeuserRealmSeal(JSON.parse(await file.readFile('utf8')));
+  } catch { throw new InstallationIdentityError('INSTALLATION_IDENTITY_INVALID'); }
+  finally { await file.close(); }
 }

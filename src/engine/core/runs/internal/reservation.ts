@@ -19,7 +19,7 @@ export interface RunAdmissionFilter {
   prepare(run: RunSnapshot, principal: VerifiedPrincipal, now: number): Promise<readonly string[]>;
   excluded(run: RunSnapshot, actor: RunReservation['actor'], now: number): readonly string[];
 }
-export interface ReservationRuntime { now(): number; attemptId(): string }
+export interface ReservationRuntime { now(): number; attemptId(taskId: string): string }
 /** Whether the effective policy document gates any task — through an explicit rule or one only a bound role carries
  * (H34 S2 follow-up) — so a caller must supply a {@link RunAdmissionFilter}. Composition stays behind this
  * application-service function; it never calls the domain decision directly.
@@ -87,7 +87,7 @@ export class RunReservationApplication {
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,
-        attemptId: identitySchema.parse(this.runtime.attemptId()), generation: Math.max(run.progress.find(task => task.taskId === taskId)?.inputAnswer?.source.generation ?? 0, ...(run.previousBindings ?? []).filter(row => row.identity.taskId === taskId).map(row => row.identity.generation)) + 1 }));
+        attemptId: identitySchema.parse(this.runtime.attemptId(taskId)), generation: Math.max(run.progress.find(task => task.taskId === taskId)?.inputAnswer?.source.generation ?? 0, ...(run.previousBindings ?? []).filter(row => row.identity.taskId === taskId).map(row => row.identity.generation)) + 1 }));
       await this.authorization.authorize('reserve', command, principal);
       await this.poolAuthorization.authorize(policy.poolId, command.scopeId, principal);
       return this.project(await this.store.reserveRunTasks({ commandId: command.commandId, actor,

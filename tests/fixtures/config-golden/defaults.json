@@ -142,6 +142,7 @@
     },
     "profileMaxBytes": 1048576,
     "requireMachineBinding": false,
+    "uninstallRecoveryRoot": null,
     "writeLockTimeoutMs": 2000
   },
   "layout": {

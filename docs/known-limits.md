@@ -11,6 +11,11 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 Deckent is a pre-release. Nothing here is a promise of a date.
 Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
+
+## BeUser B1 integration candidate (unreleased alpha.57)
+
+The source candidate binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. C7 assembled-package proof, independent review, hosted CI and owner acceptance are open.
+
 ## Platforms: tried and not tried
 
 - **Tried:** Linux and Windows through WSL2 (the supported execution path). Hosted checks run on Ubuntu with Node 24 and
@@ -383,8 +388,6 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
 - **There is no rollback window in the terminal.** Rolling back an adoption is a command-line step; the terminal shows the
   adoption's command id and the `deckent task integration-rollback --adoption-command-id` hint. *Workaround:* run that
   command, or move the branch back with Git yourself, using the commit shown in the `Adopted:` line.
-- **After a delivery the terminal window does not reopen** for that task, although some messages say `/deliver` opens it
-  again. *Workaround:* adopt from the command line, as in the previous item.
 - **The adoption window cannot pre-filter verification Runs by commit.** It lists accepted verification Runs of the configured
   kind; one that verified a different commit is refused at adoption and the window returns to the choice.
 - **A verification Run cannot be created from the terminal.** *Workaround:* run the `deckent run create ...
@@ -426,7 +429,7 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   (`deckent operation` alone lists the configured operation catalog, not the commands that ran.)
 - **`deckent operation execute` takes the command as JSON on a terminal too.** There is no guided flow yet (catalog operation →
   target → parameters from a schema → preview → approval → wait on one screen); `--schema` prints the contract and a bad document
-  names its field. *Impact:* a person writes the command document by hand or uses a script.
+  names its field; `--example` writes a starting command for this catalog. *Impact:* a person edits a JSON document.
 - **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
   retry it by itself and the record keeps the target busy. When the target can confirm afterwards, resend the same command id and
   its evidence settles the record; if it cannot, the record stays unresolved. `EFFECT_OUTCOME_UNKNOWN` names this next step and
@@ -434,13 +437,14 @@ Alpha.56 has landed (PR #117). Released mechanisms and the remaining scenario/pl
   record must settle first, but it cannot name that earlier command: you must know its command id. *Impact:* a person cannot close
   an unresolved record yet. Closing
   it with a human declaration (with attached evidence, not counted as acceptance) is planned.
-- **The approval card for an operation shows the operation, the target and a 12-character input digest,** not the fields it will
-  write. *Impact:* the approver cannot see an amount or status. *Workaround:* inspect the input file before approving.
+- **The approval card for an operation lists the input fields as sent, not the target's resulting record.** Each top-level
+  field is one line (named by the catalog's optional `inputLabels`, credentials redacted, long inputs counted); the input digest
+  stays on the first line. *Impact:* you see what is sent, not a computed before/after of the ERP record.
 - **Ten of the seventeen reasons an ERP result may be not accepted have no readable text** (six about evidence, four
   about compensation); you see the code.
 - **A read operation returns only the record version,** not the business data.
-- **Each operation is a hand-written JSON command** with its own command id, idempotency key and expected version, and the
-  operation catalog and target configuration are not described in user documents.
+- **Each operation is a hand-written JSON command** with its own command id, idempotency key and expected version, . `deckent operation --example`
+  prints a filled catalog and target with every field explained, and `deckent operation execute --example` a command for it.
 - **ERP effect results are not yet written to the audit trail as their own events.** Authority and policy changes are audited;
   the generic effect path records its result in the ledger.
 - **Enterprise SSO, fleet management and the central policy service are not available.** The policy module's remaining
@@ -632,8 +636,9 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Hub networking needs distribution wiring.** Alpha.56 supplies signed packages, local source/trust cards,
   cached offline verification and governed transport ports. Search, remote inspection and publication refuse
   `HUB_CONNECTION_UNAVAILABLE` without the bound first-use, authentication and trust services. No public Hub/source is
-  enabled by default; public opening remains a separate owner gate. *Workaround:* use verified offline bundles and the
-  [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
+  enabled by default; public opening remains a separate owner gate. *Workaround:* grant yourself the Hub cells with
+  `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` (a card), then use verified offline bundles
+  and the [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
 - **Hub online keys need a root-signed delegation.** Bundles and revocation feeds carry `hub-key-delegation:1`, scoped
   to attestation/feed purpose and a validity window (registry defaults: at most 90 days and 5 min clock skew). New content
   needs the trusted clock inside that window; skew does not extend it, and a yanked/revoked key cannot sign new content.
@@ -642,16 +647,51 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Skills with support files are refused by owner decision (2026-10-26, H6).** SKILL.md-only skills may be used; a skill
   requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
   *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
-- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews; application needs the
-  person's real-terminal card. Ledger, audit/identity keys, secrets and project data stay by default. Images remain until a
-  complete usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
-  *Workaround:* follow the plan's per-item instructions, then the package removal command it prints; see the
+- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews any tier; application needs the
+  person's real-terminal card. Keep-data removes only caches, stops the service and retires the folder: the service stays down
+  until the person opens `deckent` there and chooses Continue. Images remain until a complete usage-reference contract exists;
+  the card provides the exact manual step. macOS/Windows service removal is manual.
+  *Workaround:* follow the plan's per-item instructions, then the printed program command; see the
   [AI installation guide](ai-install.md#uninstall).
-- **Purge is bounded by ownership, backup and delete authority.** `deckent uninstall --purge` removes only covered files
-  after a managed backup and person confirmation. Company retention and unready folders stay, with their paths shown.
-  Moved/unsafe authority files stop purge before it starts. A partial final purge resumes only after remaining bytes and
-  delete authority are re-verified; otherwise files stay and managed backup restore remains available. An unknown step
-  stays unknown. *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
+- **Delete everything is complete only for a project-folder installation.** In a project's own `.deckent`, `--all` archives
+  (encrypted, verified before the first removal) and deletes the files whose names their Deckent owner writes. It also removes
+  `DECKENT.md` and the bridge init wrote: a file init created whole goes whole, otherwise only that exact line goes and every other
+  byte stays. This folder's unshared vault slice (its own files) and its records in the instruction-trust store go too. Any
+  other file under a Deckent folder, and Git-tracked, linked or changed files, stay and are listed (and keep their folder). An
+  installation whose data root is the shared global home keeps the alpha.56 behaviour: only the backed-up authority files go.
+  Instruction-trust records tied to a ref that no configured target names stay. This folder's entries in the shared legacy trust
+  snapshot are forgotten and a restore does not bring them back: that trust is asked again. The ledger lock file goes only when Git
+  does not track it and it is empty. Keep-work keeps earlier ledger backups where they are; it archives and deletes config backups
+  and a worker workspace only when the ledger proves it idle: its lease has the workspace owner's form and names this exact attempt,
+  whose Run is terminal, and its delivery is not owed or was adopted. Any other workspace (no such Run, another scope, output not yet
+  delivered, an unreadable lease) is kept, listed and counted as possibly pending work, so the menu offers keep-work.
+  Delete everything treats it as pending work: refused without `--force`; with `--force` it is archived in the encrypted backup,
+  then deleted, and the card names how many. Files that worker-image builds
+  and toolchain updates write under `workspaces/toolchains` are members; other files there stay and are listed.
+  `deckent backup restore --set <path>` brings files and the bridge line back. It never writes over a file that exists again with
+  other content, nor through a link: such a file is kept and named.
+  *Workaround:* review the listed files; move a kept file aside and run the same restore again.
+- **Force and the service have bounded reach.** `--force` cancels runs, rejects approvals and withdraws queued deliveries with
+  the person's own authority. Every step's owner decision (runs, approvals, each delivery, the removals and their approval) is
+  taken before the card, without writing anything: a removal approval is refused before the card when the person's decide grant
+  names approval ids one by one, a four-eyes rule applies, or a policy raises its assurance above what the card attests (the
+  peer level). Queue withdrawal preflight uses the queue owner's typed identity in the approved plan and the same policy
+  authorization, without opening SQLite or creating its sidecars; after the card the existing queue owner rechecks and cancels
+  with CAS and audit. A missing identity or denied authority names the delivery, its scope and next step.
+  Unknown results are never closed. `--disable-unit` separately approves a user unit only when the running manager's
+  fragment, search path, reload state and disable dry-run links agree with the card, with no Also/Alias or drop-ins and no
+  other cgroup process. After governed shutdown, exclusive ledger custody fences new startup through disable and removal.
+  A new instance or changed evidence refuses with the exact manual command. The fragment stays; receipts record the actual
+  changed links and exact link-restoration commands, without restarting the service. Hand-made launchers are found only in `~/.local/bin` and `~/bin` when they name this folder. Uninstall
+  refuses a `require-approval` policy decision (`POLICY_APPROVAL_UNSUPPORTED`): approved removal cannot be modelled yet. An AI
+  agent or CI caller (marker variables) is refused through the SDK as through the CLI.
+  *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.
+- **A partial deletion resumes only after re-verification.** Moved/unsafe authority files stop the data tier before it starts;
+  when Git tracking cannot be read, every project file counts as possibly tracked and stays. A partial final deletion resumes
+  only after the remaining bytes, Git tracking, the archive and delete authority are verified again; otherwise files stay and
+  managed backup restore remains available. An unknown step stays unknown. The recovery location must be private and lie outside
+  every folder the removal changes; otherwise nothing starts.
+  *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
 
 ## Desktop and other surfaces
 

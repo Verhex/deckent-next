@@ -15,13 +15,25 @@ export function agentLines(agentId: string, content: AgentContent, locale: Local
     content.skills.length ? t('agents.view.skills', { skills: skillRefs(content) }, locale) : t('agents.view.skills.none', {}, locale),
     content.parentAgentId ? t('agents.view.parent', { id: safeCell(content.parentAgentId) }, locale) : t('agents.view.parent.none', {}, locale)];
 }
+/** BeUser E-09: the org tree as `ps --forest` shows processes — each agent under its manager, siblings in the listed order (newest change first);
+ * an agent whose manager is not listed starts its own tree. Cycle-safe: an agent is shown once. */
+function forest(items: readonly AgentDefinition[]): readonly (readonly [AgentDefinition, number])[] {
+  const ids = new Set(items.map(item => item.agentId)), shown = new Set<string>(), out: [AgentDefinition, number][] = [];
+  const visit = (item: AgentDefinition, depth: number) => {
+    if (shown.has(item.agentId)) return; shown.add(item.agentId); out.push([item, depth]);
+    for (const child of items) if (child.content.parentAgentId === item.agentId) visit(child, depth + 1);
+  };
+  for (const item of items) if (!item.content.parentAgentId || !ids.has(item.content.parentAgentId)) visit(item, 0);
+  for (const item of items) visit(item, 0);
+  return out;
+}
 export function agentTable(items: readonly AgentDefinition[], locale: Locale, context: AgentsCommandContext): string {
   const now = Date.now();
   return renderCliTable([{ header: t('agents.column.id', {}, locale) }, { header: t('agents.column.name', {}, locale), shrink: true }, { header: t('agents.column.revision', {}, locale) },
     { header: t('agents.column.parent', {}, locale) }, { header: t('agents.column.workClasses', {}, locale) }, { header: t('agents.column.skills', {}, locale) },
     { header: t('agents.column.changed', {}, locale) }],
-  items.map(item => [item.agentId, item.content.name, item.revision, item.content.parentAgentId ?? '-', item.content.workClasses.join(', '), item.content.skills.length,
-    formatAgo(item.provenance.definedAtMs, now, locale)]), cliTableStyle(context));
+  forest(items).map(([item, depth]) => [`${'  '.repeat(Math.max(0, depth - 1))}${depth ? '└ ' : ''}${item.agentId}`, item.content.name, item.revision, item.content.parentAgentId ?? '-',
+    item.content.workClasses.join(', '), item.content.skills.length, formatAgo(item.provenance.definedAtMs, now, locale)]), cliTableStyle(context));
 }
 export function skillTable(items: readonly ReadableSkillDefinition[], locale: Locale, context: AgentsCommandContext): string {
   const now = Date.now();

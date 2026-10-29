@@ -5,10 +5,10 @@ export { useWorklinePanel, type LocalExecution, type ResumePickerItem, type Work
 export { LedgerEntryRow, isToolStep, rowSpaceBefore, stepSpaceBefore, type LedgerEntryLabels } from './internal/ledger-entry.js';
 export { liveRunEntry, LIVE_WINDOW_MAX_ROWS, LiveWatchWindow, MonitorWindow, liveWindowClosedText, liveWindowLines, liveWindowStatus, liveWindowTitle, type TaskWindowAction, type LiveWindowData, type LiveWindowKind,
   type LiveWindowLabels, type LiveWindowRenderLabels, type LiveWindowView, type MonitorWindowLoader, type MonitorWindowRender, type WorkerPanelLabels } from './internal/live-windows.js';
-export { TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels } from './internal/transcript-page.js';
+export { TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels } from '#surfaces/core/terminal-ledger/index.js';
 
 export { systemSummaryEntry } from './internal/system-summary.js';
-export { JobWindow, openingWorkText, queueRowSummaries, runDetailLines, runJobWindow, runListStateText, type JobWindowLabels } from './internal/job-windows.js';
+export { JobWindow, openingWorkText, queueRowSummaries, runDetailLines, runJobWindow, runListStateText, runStateText, type JobWindowLabels } from './internal/job-windows.js';
 export { dispatchWorkCommand } from './internal/job-command.js';
 export { runControlActions } from './internal/run-control.js';
 export { openTaskAction } from './internal/task-actions.js';

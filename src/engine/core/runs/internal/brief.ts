@@ -27,6 +27,8 @@ export const resultBriefSchema = z.object({ schemaVersion: z.literal(1), attempt
   /** This receipt belongs to the Run; it does not prove this individual worker patch landed. */
   runDelivery: briefDeliverySchema.nullable(), openIssues: z.array(text).readonly().nullable(),
   failedTests: briefFailedTestsSchema.optional(), deliveryOutlook: briefDeliveryOutlookSchema.optional(),
+  /** BeUser M-33 (additive; the outlook keeps its wire values): a person set this awaiting patch aside, or the set-aside records could not be read (typed code). */
+  setAside: z.literal(true).optional(), dismissalUnread: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/u).optional(),
 }).strict().readonly();
 export type ResultBrief = z.infer<typeof resultBriefSchema>;
 export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
@@ -48,12 +50,12 @@ export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
     effort: input?.effort ?? null, contextRefs: refs });
 }
 export function projectResultBrief(attemptId: string | null, evaluation: ResultBrief['evaluation'], report: WorkerFinalReportResult | null = null,
-  runDelivery: ResultBrief['runDelivery'] = null, extra: Pick<ResultBrief, 'failedTests' | 'deliveryOutlook'> = {}): ResultBrief {
+  runDelivery: ResultBrief['runDelivery'] = null, extra: Pick<ResultBrief, 'failedTests' | 'deliveryOutlook' | 'setAside' | 'dismissalUnread'> = {}): ResultBrief {
   // Revalidate and redact all claim leaves, including optional handoff/shared notes. Sealing never promotes these to acceptance.
   const scrub = (value: unknown): unknown => typeof value === 'string' ? safe(value) : Array.isArray(value) ? value.map(scrub)
     : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, leaf]) => [key, scrub(leaf)])) : value;
   const claim = report ? workerFinalReportResultSchema.parse(scrub(report)) : null;
   return resultBriefSchema.parse({ schemaVersion: 1, attemptId, claimLabel: 'CLAIM', report: claim, evaluation,
     runDelivery: runDelivery ? scrub(runDelivery) : null, openIssues: claim?.status === 'reported' ? claim.report.openIssues : null,
-    ...(extra.failedTests ? { failedTests: scrub(extra.failedTests) } : {}), ...(extra.deliveryOutlook ? { deliveryOutlook: extra.deliveryOutlook } : {}) });
+    ...extra, ...(extra.failedTests ? { failedTests: scrub(extra.failedTests) } : {}) });
 }

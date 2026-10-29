@@ -6,6 +6,9 @@ export const clisetupErrors: ErrorDefinitions = Object.freeze({
   // CONFIG-PARTIAL-CLI: params partial (time | size) and found when the listed values are partial; the sentence says which limit cut them.
   CLI_CONFIG_VALUE_MISSING: { category: 'usage', render: (p, l) => ({ message: [t('error.CLI_CONFIG_VALUE_MISSING', p, l),
     ...(p['partial'] === 'time' ? [t('error.CLI_CONFIG_VALUE_MISSING.partialTime', p, l)] : p['partial'] === 'size' ? [t('error.CLI_CONFIG_VALUE_MISSING.partialSize', p, l)] : [])].join(' ') }) },
+  // BeUser KER-05: `config set <key> <value>` whose value is not JSON; same params as CLI_CONFIG_VALUE_MISSING, exit 2, nothing written.
+  CLI_CONFIG_VALUE_NOT_JSON: { category: 'usage', render: (p, l) => ({ message: [t('error.CLI_CONFIG_VALUE_NOT_JSON', p, l),
+    ...(p['partial'] === 'time' ? [t('error.CLI_CONFIG_VALUE_MISSING.partialTime', p, l)] : p['partial'] === 'size' ? [t('error.CLI_CONFIG_VALUE_MISSING.partialSize', p, l)] : [])].join(' ') }) },
   // C-SETUP: `coding template` without a provider or kind off a terminal; lists the admitted choices, exit 2.
   CLI_CODING_TEMPLATE_CHOICE_MISSING: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_TEMPLATE_CHOICE_MISSING', p, l) }) },
   // C-SETUP root cause of CODING_TEMPLATE_TOOLCHAIN_REQUIRED on a working installation: the configured image is not the image the admitted

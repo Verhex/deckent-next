@@ -1,4 +1,4 @@
-export { EffectApplication, effectInputDigest, effectWireKey, taskScopedIdempotencyKey, EffectTargetError, OperationPolicyAuthorization, refuseRequiredApproval } from './internal/application.js';
+export { EffectApplication, operationInputDescriber, effectInputDigest, effectWireKey, taskScopedIdempotencyKey, EffectTargetError, OperationPolicyAuthorization, refuseRequiredApproval } from './internal/application.js';
 export type { OperationCatalog, EffectApplyRequest, EffectTarget, EffectTargets, EffectStore, EffectApprovalGate, EffectApprovalContext, EffectAdmission,
   EffectApprovalPendingRequest, EffectApprovalPending, EffectOutcome, EffectResult } from './internal/application.js';
 export { applySandboxWriteSet, describeSandboxWriteSet, sandboxWriteClockVerdict } from './internal/sandbox-writes.js';

@@ -5,13 +5,14 @@ import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import { getPolicyVocabulary } from '../../../src/index.js';
 import { evaluatePolicy } from '#domain/index.js';
+import vocabularyV1 from '../../fixtures/policy-vocabulary-v1.json' with { type: 'json' };
 const exec = promisify(execFile);
 it('exposes the same versioned action/resource matrix through compiled CLI and SDK without requiring a project', async () => {
   const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'policy', 'vocabulary', '--json'], { cwd: tmpdir() });
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
 });
 it('publishes the versioned policy action/resource matrix through the SDK', () => {
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['backup', 'config', 'decision', 'memory', 'hub', 'agent-catalog', 'skill-signer', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'task-decision', 'run-decision', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'mcp-server', 'permission-mode', 'agent-tool-call', 'secret', 'work-target', 'execution-environment', 'installation', 'monitor', 'policy', 'recovery-action', 'nervous-rule']);
+  expect(getPolicyVocabulary()).toEqual(vocabularyV1); // B1's real transcript/sandbox consumers join the published v1 matrix.
   // I-POL v13 (owner A48-D3, MON-NAMES, CA-1): Docker install, installation repair, monitor scope names and everyone's standing approvals.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'execution-environment')!.actions).toEqual(['install']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'installation')!.actions).toEqual(['repair', 'inspect', 'uninstall', 'purge']);

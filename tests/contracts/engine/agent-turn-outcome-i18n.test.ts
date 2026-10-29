@@ -21,6 +21,14 @@ describe('terminal turn-outcome catalog guard', () => {
     expect(producers).not.toMatch(/note:\s*['"`][A-Z]/);
   });
 
+  // BeUser KER-15: a switched-off model's failed round names the way back (activate it or pick another in /model), no silent substitute.
+  it.each(['en', 'tr'] as const)('a MODEL_NOT_ACTIVATED round says how to switch the model on or pick another (%s)', async locale => {
+    const result = await runAgentTurn({ language: locale, messages: [{ role: 'user', content: 'hi' }], tools: [], signal: new AbortController().signal, emit: () => undefined }, {
+      invokeRound: async () => ({ status: 'failed', state: 'MODEL_NOT_ACTIVATED' }), authorize: async () => 'allow', describe: () => null,
+      execute: async () => ({ status: 'ok', text: '' }), now: () => 1 });
+    expect(result.finish).toBe('error'); expect(result.note).toContain('deckent models activate'); expect(result.note).toContain('/model'); expect(result.note).toContain('MODEL_NOT_ACTIVATED');
+  });
+
   for (const locale of ['en', 'tr'] as const) {
     it.each(['content-filter', 'context-window', 'network-error', 'resource-exhausted', 'aborted'] as const)(`${locale}: provider %s keeps usage and closes without a retry or tool effect`, async providerStop => {
       let sends = 0, executions = 0;

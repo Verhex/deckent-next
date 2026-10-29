@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, getConfigValue,
+  resolveLocale, getConfigValue, unexpectedQueryFailure,
 } from '../../../src/platform/index.js';
 
 describe('errors, output and locale public contracts', () => {
@@ -95,8 +95,39 @@ describe('errors, output and locale public contracts', () => {
       expect((await readdir(join(root, '.deckent/crashes'))).some(name => name.endsWith('.tmp'))).toBe(false);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
+  it('BeUser E-05: an unexpected query failure of a local command leaves a private record under its diagnostic id and the error line names it; without the installation\'s known secrets no detail is kept', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-diag-'));
+    try {
+      const failure = unexpectedQueryFailure(new Error('boom password=sample-secret')), id = String(failure.params?.['diagnosticId']);
+      let text = '';
+      expect(await reportFatal(failure, { root, env: {}, locale: 'en', argv: ['deckent', 'hub'], stderr: { write(value: string) { text += value; } } })).toBe(1);
+      const name = (await readdir(join(root, '.deckent/crashes'))).find(entry => entry.includes(id))!;
+      const path = join(root, '.deckent/crashes', name), record = JSON.parse(await readFile(path, 'utf8'));
+      // No readable installation config here, so no known-secret snapshot: the record keeps code, time, command and id only (fail closed).
+      expect(record).toMatchObject({ schemaVersion: 1, diagnosticId: id, name: 'QUERY_UNEXPECTED_FAILURE', message: '' });
+      expect(JSON.stringify(record)).not.toContain('sample-secret'); expect(text).toContain(id); expect(text).toContain(path);
+      if (process.platform !== 'win32') expect((await stat(path)).mode & 0o777).toBe(0o600);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
   it('redacts admitted bearer, URL passwords, bounded argv assignments and environment assignments', () => {
     for (const text of ['Bearer example-secret-12345', 'https://user:example-secret@host', '--password=example-secret', 'API_KEY=example-secret']) expect(redactSensitive(text)).not.toContain('example-secret');
     expect(() => getConfigValue({}, 'constructor')).toThrow();
   });
+});
+
+// Merge regression: the existing config/spending witness guidance and uninstall's person-only guidance share one code.
+it('keeps contextual witness guidance in both locales and never offers an automatic unit card when disable is refused', () => {
+  for (const locale of ['en', 'tr'] as const) {
+    const witness = (operation: string) => formatHumanError(ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation } }), { noColor: true, locale });
+    expect(witness('config set permission_mode')).toContain('permission_mode');
+    expect(witness('models.create-budget')).toContain('deckent models create-budget');
+    expect(witness('models.reconcile-spending')).toContain('deckent models reconcile-spending');
+    expect(witness('manageProviderSpend')).toContain('deckent models revise-budget');
+    expect(witness('uninstall')).toContain('deckent uninstall --dry-run');
+    expect(witness('uninstall')).toContain('CI');
+    const command = 'systemctl --user disable --now deckent.service';
+    const refused = formatHumanError(ErrorRegistry.createError('UNINSTALL_SERVICE_RUNNING', { params: { unit: 'deckent.service', command } }), { noColor: true, locale });
+    expect(refused).toContain(command);
+    expect(refused).not.toContain('deckent uninstall --disable-unit');
+  }
 });

@@ -105,8 +105,10 @@
   "terminal.render.toolTracked": "tracked files: {deleted} deleted, {overwritten} overwritten",
   "terminal.render.toolSandboxNone": "sandbox: none",
   "terminal.render.toolSandboxDegraded": "sandbox: degraded",
-  "terminal.session.banner": "Deckent terminal session (line mode). Commands: /status, /exit.",
-  "terminal.service.started": "Runtime service started in the background (pid {pid}, log {log}); it keeps running after the terminal closes. {stop}",
+  "terminal.session.banner": "Deckent terminal session (line mode). Commands: /status, /help, /exit.",
+  "terminal.session.help": "Line mode commands: /status (service and model), /context (instruction files in use), /help, /exit. Any other line is sent to the model as your message. Other slash commands (/model, /config, /usage …) need the full terminal: run deckent in an interactive terminal.",
+  "terminal.session.unknown": "Unknown command in line mode: {command}. /help lists the line mode commands.",
+  "terminal.service.started": "Runtime service started in the background (pid {pid}); it keeps running after the terminal closes. deckent runtime describe shows it; deckent runtime --help says how to stop it.",
   "terminal.service.connected": "Runtime service connected ({instance}). {stop}",
   "terminal.service.stopHint": "Stop it with `deckent runtime shutdown --reason \"manual stop\"`.",
   "terminal.service.stopUnavailable": "It has no configured identity, so `deckent runtime shutdown` cannot stop it (set `service.identity` and a shutdown grant).",
@@ -153,6 +155,7 @@
   "terminal.slash.resumeArgument": "<n|id>",
   "terminal.slash.clear": "Start a new conversation (this one stays saved)",
   "terminal.session.entry": "{index}. {session} · {when} · {count} messages · {preview}",
+  "terminal.session.exitHint": "To come back: deckent, then /resume to choose a saved conversation.",
   "terminal.session.none": "No earlier conversation of this scope is saved.",
   "terminal.session.notFound": "No saved conversation matches; run /resume to choose one.",
   "terminal.session.exactRequired": "Enter the exact session id or an index from the list just shown; prefixes cannot resume a conversation.",
@@ -432,5 +435,8 @@
   "terminal.mode.fullAutoRevoked": "Full-auto is no longer granted in this scope, so your stored full-auto choice is not in effect: this session runs as standart and every call is decided as standart. The installation owner can open it again with deckent init policy --scope <scope> --modes full-auto.",
   "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)",
   "terminal.session.folders.all": "All folders",
-  "terminal.session.folders.current": "This folder"
+  "terminal.session.folders.current": "This folder",
+  "terminal.session.previous": "A saved conversation is available in this folder. Open /resume to continue it.",
+  "terminal.info.doctor.poolSetup": "Work cannot start until the worker pool is set up. Open /setup to complete the missing worker and pool steps; deckent doctor lists them outside the terminal.",
+  "terminal.info.doctor.sandbox.selection": "This is the current selection, checked again for each command. Starting the runtime can prepare bundled bubblewrap, which then takes precedence over Landlock."
 }

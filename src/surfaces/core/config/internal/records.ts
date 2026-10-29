@@ -1,4 +1,4 @@
-import { relative, isAbsolute } from 'node:path';
+import { dirname, relative, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, t, type ConfigLoadOptions, type ConfigStepper, type Locale, PRODUCT_LAYOUT_REGISTRY, resolveProductLayout } from '#platform/index.js';
 import { PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_PERIOD_REGISTRY } from '#domain/index.js';
@@ -12,7 +12,7 @@ type Layer = 'project' | 'global';
 export type ConfigRecordField = Readonly<{ id: string; label: string; choices: readonly ConfigValueChoice[]; stepper?: ConfigStepper; fileSystem?: 'directory' | 'any' }>;
 export type ConfigRecordView = Readonly<{ key: string; layer: Layer; digest: string | null; note?: string | null; members: readonly Readonly<{ id: string; label: string; detail: string }>[] }>;
 export type ConfigRecordDraft = Readonly<{ fields: readonly ConfigRecordField[]; values: Readonly<Record<string, unknown>> }>;
-export type ConfigRecordPreview = Readonly<{ token: string; before: string; after: string }>;
+export type ConfigRecordPreview = Readonly<{ token: string; before: string; after: string; warning?: string }>;
 export type ConfigFileChoice = Readonly<{ path: string; label: string; kind: 'file' | 'directory' }>;
 /** Selection/preview is inert; only commit goes to the common config submit path. No JSON/text parser is exposed. */
 export interface ConfigRecordPort {
@@ -40,6 +40,12 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
   const choices = async (source: Parameters<ConfigChoiceSourcePort['list']>[0], key: string) => await sources()?.list(source, key) ?? [];
   const fieldLabels = { scopeId: t('config.records.field.scopeId', {}, locale), usd: t('config.records.field.usd', {}, locale), kind: t('config.records.field.kind', {}, locale), path: t('config.records.field.path', {}, locale), branch: t('config.records.field.branch', {}, locale), resource: t('config.records.field.resource', {}, locale) };
   const field = (id: keyof typeof fieldLabels, entries: readonly ConfigValueChoice[], stepper?: ConfigStepper): ConfigRecordField => ({ id, label: fieldLabels[id], choices: entries, ...(stepper ? { stepper } : {}) });
+  // BeUser DR2-05: moving the work source names the open results it strands, with the same rule sentence as the WORK_TARGET_CHANGED refusal.
+  // BeUser DR2-06: a branch the delivery queue will refuse (main/default, checked out) is named with the queue refusal's own words; it never blocks the change.
+  const stranded = async (found: Readonly<{ open?: number; now?: string; branch?: Readonly<Record<string, string>> }> | null | void, preview: Promise<ConfigRecordPreview>): Promise<ConfigRecordPreview> => {
+    const branch = found?.branch, warnings = [...(found?.open && found.now ? [`${t('config.workTarget.openDeliveries', { count: found.open, now: found.now }, locale)} ${t('workTarget.onlyWhereMade', {}, locale)}`] : []),
+      ...(branch ? [`${t('error.QUEUE_TARGET_BRANCH', branch, locale)} ${branch['reason'] === 'checked-out' ? t('remedy.QUEUE_TARGET_BRANCH.checkedOut', branch, locale) : t('remedy.QUEUE_TARGET_BRANCH.protected', branch, locale)}`] : [])];
+    return warnings.length ? { ...await preview, warning: warnings.join('\n') } : preview; };
   const previewValue = async (value: unknown, requestedKey?: string, action: 'set' | 'unset' = 'set'): Promise<ConfigRecordPreview> => {
     prepared = null;
     const { view, writeKey } = active(), config = await loadConfig(root, options), scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
@@ -69,7 +75,8 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
         return { id: String(i), label: typeof entry === 'string' ? entry.replace(/^refs\/heads\//u, '') : String(record['resource'] ?? record['scopeId'] ?? record['id'] ?? i + 1),
           detail: key === 'provider_spending.budgets' ? `${Number(record['limitMinorUnits']) / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd} ${String(record['currency'])}` : String(record['path'] ?? '') };
       });
-      const view = { key, layer, digest: read.digest, members, note: key === 'provider_spending.budgets' ? t('config.records.budgetNote', {}, locale) : key === 'execution.workTargets.targets' ? t('config.records.targetNote', {}, locale) : null };
+      const view = { key, layer, digest: read.digest, members, note: key === 'provider_spending.budgets' ? t('config.records.budgetNote', {}, locale) : key === 'execution.workTargets.targets' ? t('config.records.targetNote', { clone: `git clone ${root} ${root}-work` }, locale)
+        : key.startsWith('operations.') ? t('config.records.operationsNote', {}, locale) : null };
       session = { view, value: structuredClone(entries), writeKey: key === 'provider_spending.budgets' && spendingRead?.value === undefined ? 'provider_spending' : key, container, layoutRoot: config.productLayout.root }; return view;
     },
     async draft(member, selected) {
@@ -91,8 +98,9 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
         fields = [field('branch', await choices('branches', view.key))]; values = { branch: entry };
       } else if (view.key === 'execution.workTargets.targets') {
         if (member === null && value.length) throw refused();
-        const path = selected?.['path'] ?? record['path'] ?? root;
-        const branches = await sources()?.list('branches', 'execution.workTargets.targets.0.baseRef', { path: String(path) }) ?? [];
+        // BeUser D-03: no default folder (the project itself is never a valid target); the person picks or browses to a separate clone.
+        const path = selected?.['path'] ?? record['path'];
+        const branches = typeof path === 'string' ? await sources()?.list('branches', 'execution.workTargets.targets.0.baseRef', { path }) ?? [] : [];
         fields = [field('path', await choices('paths', view.key)), field('branch', branches)];
         values = { path, branch: record['baseRef'] };
       } else if (view.key === 'layout.resources') {
@@ -109,7 +117,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
       prepared = null;
       const { view, value } = active(), index = member === null ? value.length : indexOf(member), next = [...value];
       if (values === null) { if (member === null) throw refused(); next.splice(index, 1);
-        if (view.key === 'execution.workTargets.targets') return previewValue(undefined, 'execution.workTargets', 'unset');
+        if (view.key === 'execution.workTargets.targets') return stranded(await sources()?.checkWorkTarget?.(undefined), previewValue(undefined, 'execution.workTargets', 'unset'));
         if (view.key === 'layout.resources') return previewValue(Object.fromEntries(next.map(entry => [(entry as Record<string, unknown>)['resource'], (entry as Record<string, unknown>)['path']])));
         return previewValue(next); }
       if (!offered || Object.keys(values).some(key => !offered!.fields.some(field => field.id === key))) throw refused();
@@ -128,7 +136,9 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
       } else if (view.key === 'execution.workTargets.targets') {
         const prior = active().container;
         const target = { ...previous, id: previous['id'] ?? `target-${randomUUID()}`, kind: 'git', path: values['path'], baseRef: values['branch'] };
-        return previewValue({ ...prior, schemaVersion: prior?.['schemaVersion'] ?? 2, targets: [target] }, 'execution.workTargets');
+        // The same typed refusals the work path applies (project folder, product data, shared repository, missing branch), before anything is written.
+        const open = await sources()?.checkWorkTarget?.({ schemaVersion: prior?.['schemaVersion'] ?? 2, targets: [target] });
+        return stranded(open, previewValue({ ...prior, schemaVersion: prior?.['schemaVersion'] ?? 2, targets: [target] }, 'execution.workTargets'));
       } else if (view.key === 'layout.resources') {
         const chosenPath = String(values['path']), path = isAbsolute(chosenPath) ? relative(active().layoutRoot, chosenPath) : chosenPath;
         if (!path || path.startsWith('..') || isAbsolute(path)) throw refused();
@@ -145,7 +155,7 @@ export function configRecordPort(root: string, context: ConfigCommandContext, op
       return previewValue(next);
     },
     async browse(directory) {
-      const entries = await sources()?.browse?.(directory ?? (active().view.key === 'layout.resources' ? active().layoutRoot : root)) ?? [];
+      const entries = await sources()?.browse?.(directory ?? (active().view.key === 'layout.resources' ? active().layoutRoot : active().view.key === 'execution.workTargets.targets' ? dirname(root) : root)) ?? [];
       paths.clear(); for (const entry of entries) if (entry.kind === 'directory' || active().view.key === 'layout.resources') paths.add(entry.path);
       return entries;
     },

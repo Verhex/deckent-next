@@ -6,7 +6,7 @@ import { SIWC_INFERENCE as I, SIWC_REQUEST_RULES as R, SIWC_USAGE_ERRORS } from 
 /** A separate, allowlisted dialect: no API billing fields, server conversation or unsupported preview controls. */
 export function siwcResponsesBody(input: unknown) {
   const request = parseOpenAiChatTextRequest(input, { maxOutputTokens: Number.MAX_SAFE_INTEGER });
-  if (request.chat_template_kwargs || request.service_tier || request.reasoning_effort && !R.allowedFields.includes('reasoning')
+  if (request.response_format || request.chat_template_kwargs || request.service_tier || request.reasoning_effort && !R.allowedFields.includes('reasoning')
     || request.tool_choice === 'required' && !R.allowedFields.includes('tool_choice')) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const history: Record<string, unknown>[] = [];
   for (const message of request.messages) {

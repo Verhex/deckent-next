@@ -2,8 +2,8 @@
   "agentstats.help": "deckent agents stats [<ajan-id>] [--scope <id>] [--json]\n  Kapsamın ajanlarının gerçek işte nasıl sonuç verdiğini sürüm ve iş türü başına gösterir: kabul edilen sonuçlar, güven aralığı, süre, ölçülen maliyet, her başarısızlık türü ve ayrı tutulanlar; yanında iş türünün geneli ve terfili ajan. Ajan id'siyle: penceredeki her sürüm, model kırılımı, sabitlenmiş her skill ve altındaki ekibin toplamı. Sayılar ilişkidir, nedensellik değil; kabul oranıdır, doğruluk değil; yalnız işçiye ait başarısızlıklar (başarısız ölçüt, kendi raporu, kişinin reddi) sayılır.",
   "agentstats.title": "Ajan istatistikleri · ilişki, nedensellik değil · kabul oranı, doğruluk değil",
   "agentstats.mode.off": "Toplama geçişi: kapalı. Bu sayılar mühürlü metriklerden şimdi okundu.",
-  "agentstats.mode.shadow": "Toplama geçişi: gölge. İstatistik ve gölge işaretli mühürlü öneriler kaydeder; kart ve daraltma yok.",
-  "agentstats.mode.on": "Toplama geçişi: açık. İstatistik ve kartlarınız için mühürlü öneriler kaydeder; yalnız ölçümle onaylanmış (calibrated) kurallarda daraltır.",
+  "agentstats.mode.shadow": "Toplama geçişi: gölge. İstatistik ve gölge işaretli mühürlü öneriler kaydeder; kart ve daraltma yok. Bu ayardır: yalnız servis yeniden başladıktan sonra ve toplayıcının imza anahtarı varken çalışır (deckent doctor ikisini de gösterir); son geçiş satırı gerçekte neyin çalıştığını gösterir.",
+  "agentstats.mode.on": "Toplama geçişi: açık. İstatistik ve kartlarınız için mühürlü öneriler kaydeder; yalnız ölçümle onaylanmış (calibrated) kurallarda daraltır. Bu ayardır: yalnız servis yeniden başladıktan sonra ve toplayıcının imza anahtarı varken çalışır (deckent doctor ikisini de gösterir); son geçiş satırı gerçekte neyin çalıştığını gösterir.",
   "agentstats.registry": "Kurallar {revision} ({status}) · {rows} metrik satırı okundu{truncated}",
   "agentstats.registry.provisional": "başlangıç değerleri, henüz ölçülmedi",
   "agentstats.registry.calibrated": "gerçek işte kişinin kararlarıyla uyuştu: kabul oranı, doğruluk değil",
@@ -44,5 +44,6 @@
   "agentstats.help.action.stats": "mühürlü işten ajan istatistiklerini göster (ilişki, kabul oranı)",
   "agentstats.mode.label.shadow": "gölge",
   "agentstats.mode.label.on": "açık",
-  "agentstats.signer.unavailable": "Katalog imza anahtarının hazır olup olmadığı okunamadı."
+  "agentstats.signer.unavailable": "Katalog imza anahtarının hazır olup olmadığı okunamadı.",
+  "agentstats.noWork": "    Bu ajan ve WorkClass için henüz mühürlü iş yok: emek, başarısızlık ve model satırları ilk kabul ya da ret edilen görevden sonra görünür."
 }

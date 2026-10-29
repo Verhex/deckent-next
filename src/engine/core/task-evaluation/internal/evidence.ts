@@ -1,3 +1,7 @@
+import { beuserDigest, beuserEvidenceSchema, beuserParametersSchema, type BeuserEvidence } from '#capabilities/index.js';
+import { createHash } from 'node:crypto';
+import { hasSecret } from '#platform/index.js';
+import type { DispatchRecord } from '#engine/core/dispatch/index.js';
 import { taskEvaluationSchema, sameAttemptIdentity } from '#domain/index.js';
 import { verifyEvaluationEvidence, type EvaluationEvidenceLimits, type ArtifactStore } from '#capabilities/index.js';
 import { dispatchRecordSchema, verifyRetainedOutputEnvelope, verifyRetainedFileReceipts, type DispatchStore } from '#engine/core/dispatch/index.js';
@@ -34,7 +38,13 @@ export async function verifyDispatchEvaluationEvidence(evaluationInput: unknown,
       },
     }, limits);
     if (retainedBytes) {
-      try { await verifyRetainedFileReceipts(artifacts, verifyRetainedOutputEnvelope(retainedBytes, record.data.request.identity)); }
+      try {
+        const output = verifyRetainedOutputEnvelope(retainedBytes, record.data.request.identity);
+        // maxEvidenceItems bounds manifest references; retained files belong to that verified output envelope.
+        const totalBytes = (receipt?.byteLength ?? 0) + (output.files ?? []).reduce((sum, file) => sum + (file.status === 'collected' ? file.receipt.byteLength : 0), 0);
+        if (totalBytes > limits.maxTotalBytes) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
+        await verifyRetainedFileReceipts(artifacts, output);
+      }
       catch { unlinked = true; throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED'); }
     }
     return verified;
@@ -42,4 +52,33 @@ export async function verifyDispatchEvaluationEvidence(evaluationInput: unknown,
     if (unlinked) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
     throw error;
   }
+}
+
+/** Dispatch and criterion come from the authenticated evaluation owner. Never accepts a caller-supplied artifact link. */
+export async function readBeuserDispatchEvidence(dispatch: DispatchRecord, parameters: unknown, artifacts: Pick<ArtifactStore, 'read'>,
+  limits: EvaluationEvidenceLimits): Promise<BeuserEvidence | null> {
+  const pinned = beuserParametersSchema.parse(parameters), scopeId = dispatch.request.identity.scopeId;
+  if (beuserDigest(pinned.binding.identity) !== beuserDigest(dispatch.request.identity) || dispatch.owner !== pinned.producer.owner
+    || beuserDigest(dispatch.profile) !== pinned.producer.profileDigest || dispatch.launch !== 'granted' || !dispatch.terminal || !dispatch.output) {
+    throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
+  }
+  let remaining = limits.maxTotalBytes;
+  const read = async (receipt: NonNullable<DispatchRecord['output']>) => {
+    if (receipt.scopeId !== scopeId || receipt.byteLength > remaining) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
+    remaining -= receipt.byteLength;
+    const bytes = await artifacts.read(scopeId, receipt);
+    if (bytes.byteLength !== receipt.byteLength || createHash('sha256').update(bytes).digest('hex') !== receipt.digest) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
+    return bytes;
+  };
+  const envelope = verifyRetainedOutputEnvelope(await read(dispatch.output), dispatch.request.identity);
+  if ((envelope.files?.length ?? 0) + 1 > limits.maxEvidenceItems) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
+  const file = envelope.files?.find(f => f.name === pinned.fileName);
+  if (!file || file.status !== 'collected') return null;
+  const bytes = await read(file.receipt);
+  let data;
+  try { data = beuserEvidenceSchema.safeParse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))); }
+  catch { return null; }
+  if (!data.success || hasSecret(JSON.stringify(data.data))) return null;
+  // An interrupted process can retain partial observations but cannot prove the complete lifecycle.
+  return dispatch.terminal.interrupted === false ? data.data : null;
 }

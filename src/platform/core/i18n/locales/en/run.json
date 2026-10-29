@@ -364,6 +364,7 @@
   "error.SUPERVISOR_NOT_TERMINAL": "The supervisor has no terminal evidence; execution custody is retained.",
   "error.SUPERVISOR_RELEASE_UNCONFIRMED": "Supervisor release is unconfirmed; reconciliation is required.",
   "error.QUERY_UNEXPECTED_FAILURE": "Unexpected operation failure ({errorClass}); diagnostic: {diagnosticId}",
+  "error.QUERY_UNEXPECTED_FAILURE.recorded": "Unexpected operation failure ({errorClass}); diagnostic: {diagnosticId}. Details for support (secrets removed): {record}",
   "error.RUN_PROGRESSION_PARKED": "Run progression is parked after the configured failure limit. Inspect its failure code, correct the cause, then explicitly resume before its deadline. Live execution custody is retained.",
   "error.DISPATCH_PREPARATION_ABORTED": "Deckent did not start task {task} again: the dispatch preparation of attempt {attempt} ended abnormally {aborts} time(s) (bound {bound}; last phase: {phase}). The Run is parked so a crashing service does not restart the same preparation in a loop; no worker was started.",
   "error.DISPATCH_PREPARATION_ABORTED.summary": "Deckent parked this Run: a worker's dispatch preparation ended abnormally (the service process died) as often as runRuntime.maxPreparationAborts allows. No worker was started.",

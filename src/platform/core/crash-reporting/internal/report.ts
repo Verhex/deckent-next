@@ -2,11 +2,12 @@ import { mkdir, open, rename, unlink, readdir, lstat, readFile } from 'node:fs/p
 import { join } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { PACKAGE_VERSION } from '#platform/core/common/index.js';
-import { DeckentError, ErrorRegistry, exitCodeFor, redactSensitive, type ExitCode } from '#platform/core/errors/index.js';
+import { DeckentError, ErrorRegistry, exitCodeFor, redactSensitive, takeQueryErrorRecord, type ExitCode } from '#platform/core/errors/index.js';
 import { colorTier, type ColorOptions } from '#platform/core/output/index.js';
 import { emit, type OutputSink } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
 import { resolveProductPaths, productResourcePath } from '#platform/core/host/index.js';
+import { getConfigKnownSecrets, loadConfig } from '#platform/core/config/index.js';
 import type { Environment } from '#platform/core/host/index.js';
 
 export function formatHumanError(error: DeckentError, options: ColorOptions & { locale?: Locale } = {}): string {
@@ -73,12 +74,37 @@ export async function writeCrashArtifact(error: unknown, root: string, argv: rea
   } catch { return null; }
   finally { if (temp) await unlink(temp).catch(() => {}); }
 }
+/**
+ * BeUser E-05 (lead 2026-10-28): an unexpected query failure of a local command is findable by its diagnostic id. One crash artifact named after the
+ * id (same private 0700/0600 directory, same retention), its message the diagnostic record the runtime service logs (`takeQueryErrorRecord` with the
+ * installation's known secrets); when they cannot be read the record keeps code, time, command and id only. The path is returned for the error line.
+ */
+export async function writeDiagnosticRecord(failure: DeckentError, root: string, argv: readonly string[] = process.argv, env: Environment = process.env,
+  configOptions: Omit<Parameters<typeof loadConfig>[1] & object, 'env' | 'heal'> = {}): Promise<string | null> {
+  const diagnosticId = failure.params?.['diagnosticId'];
+  if (failure.code !== 'QUERY_UNEXPECTED_FAILURE' || typeof diagnosticId !== 'string' || !/^[a-f0-9-]{36}$/.test(diagnosticId)) return null;
+  // The installation's own known-secret snapshot (the one the service redacts with); unresolved → the record keeps no detail (fail closed).
+  const known = await loadConfig(root, { ...configOptions, env, heal: false }).then(getConfigKnownSecrets, () => null);
+  const detail = known ? takeQueryErrorRecord(failure, known) : undefined;
+  const record = Object.assign(new Error(detail ?? ''), { name: failure.code, stack: undefined });
+  try {
+    const directory = productResourcePath(resolveProductPaths(root, { env }), 'crashes');
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    if ((await lstat(directory)).isSymbolicLink()) return null;
+    const target = join(directory, `crash-${Date.now()}-${process.pid}-${diagnosticId}.json`), handle = await open(target, 'wx', 0o600);
+    try { await handle.writeFile(JSON.stringify({ ...buildCrashArtifact(record, root, argv), stack: null, diagnosticId })); await handle.sync(); } finally { await handle.close(); }
+    await pruneCrashes(directory, env);
+    return target;
+  } catch { return null; }
+}
 /** Fatal path is best effort, including broken stderr and hostile error objects. */
 export async function reportFatal(error: unknown, options: { root?: string; argv?: readonly string[]; env?: Environment; stderr?: OutputSink; json?: boolean; locale?: Locale } = {}): Promise<ExitCode> {
   let code: ExitCode = 1;
   try {
     code = error === undefined ? 1 : exitCodeFor(error);
-    const typed = error instanceof DeckentError ? error : ErrorRegistry.createError('UNKNOWN', { message: error instanceof Error ? error.message : String(error) });
+    let typed = error instanceof DeckentError ? error : ErrorRegistry.createError('UNKNOWN', { message: error instanceof Error ? error.message : String(error) });
+    const recorded = typed.code === 'QUERY_UNEXPECTED_FAILURE' ? await writeDiagnosticRecord(typed, options.root ?? process.cwd(), options.argv, options.env) : null;
+    if (recorded) typed = ErrorRegistry.createError('QUERY_UNEXPECTED_FAILURE', { params: { ...typed.params, record: recorded } });
     const locale = options.locale ?? resolveLocale(undefined, options.env);
     emit({ code: typed.code, ...(typed.params && Object.keys(typed.params).length ? { params: Object.fromEntries(Object.entries(typed.params).map(([key, value]) => [key, typeof value === 'string' ? redactSensitive(value) : value])) } : {}), message: redactSensitive(typed.localize?.(locale).message ?? typed.message) }, { level: 'critical', ...(options.json === undefined ? {} : { json: options.json }),
       ...(options.stderr ? { stderr: options.stderr } : {}), render: () => formatHumanError(typed, { ...(options.locale ? { locale: options.locale } : {}), env: options.env ?? process.env, isTTY: process.stderr.isTTY ?? false }) });

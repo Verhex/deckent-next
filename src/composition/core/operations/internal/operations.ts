@@ -1,9 +1,9 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, getConfigKnownSecrets, isSensitiveConfigKey, redactForRecord, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import { LocalOsSessionAuthority, createLocalPeerSession, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
   resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
-import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, runtimeOperationQuerySchema, type EffectOutcome } from '#engine/index.js';
+import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, operationInputDescriber, runtimeOperationQuerySchema, type EffectOutcome } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -40,7 +40,9 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     const journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     try {
       const broker = new OperationApprovalBroker(journal.store, integrity, source, clock,
-        { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
+        { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs, // BeUser: the card shows what the input changes
+          describe: operationInputDescriber(catalog, text => redactForRecord(text, getConfigKnownSecrets(config)), isSensitiveConfigKey,
+            count => t('approval.operation.moreFields', { count }, resolveLocale(undefined, options.env, config.language))) });
       const application = new EffectApplication(catalog, targets, store, broker, sessions, policy, clock, { producer: PRINCIPAL_EFFECT_PRODUCER });
       return await use(application, (waitScope, approvalId, wait) => awaitOperationApproval(journal.store, integrity, { scopeId: waitScope, approvalId },
         () => clock.sample().wallMs, clock.sample().wallMs + wait.timeoutMs, wait.signal, wait.pollMs));

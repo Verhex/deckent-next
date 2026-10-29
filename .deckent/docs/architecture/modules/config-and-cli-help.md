@@ -14,6 +14,14 @@ are masked before subtree selection; every string also passes through the existi
 Writes carry VerifiedPrincipal, scope, command id, explicit project/default or global target, and optional inspect
 preimage digest (`--expect`; CLI `--expect absent` asserts no target document yet). Existing policy vocabulary adds `config/write`; first-run template v4 grants it to the
 verified local owner. Global writes also require installation-wide delegation. Deny fails closed. T3 adds approval-aware `submit` with subject `config-change`; allow-only `set`/`unset` retain `POLICY_APPROVAL_UNSUPPORTED` for require-approval. The previewed digest, accept window, policy recheck and consumed approval audit are specified in ARCHITECTURE’s T3 contract. Terminal `/config` selections use the same approval-aware submit path; embeddings without a principal write route remain read only.
+Catalog declarations also preserve dependent invocation-profile bindings. A governed `provider_catalog` write that
+would invalidate a profile is refused before audit/publication with `CONFIG_MODEL_PROFILE_REBIND_REQUIRED` and
+localized next steps: remove affected profiles through governed config in every authored layer, apply the declaration,
+then reconnect the exact models in their scopes. The guard runs during preview, approval preparation and publication
+under the layer lock, including global profiles masked by a project catalog. A revision-only change with identical
+bindings is allowed. Existing stale profiles remain refused at invocation with a reconnect suggestion; there is no
+implicit profile rewrite or activation authority in a catalog write.
+
 Reads require no config-write grant. Composition supplies verified scope context; the engine plans, adapters own IO.
 
 Authored object overlays validate supplied members against the original registry nodes (including union branches);

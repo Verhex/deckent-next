@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
 import { BackupApplication, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority } from '#engine/index.js';
 import { PolicyFileError, FileBackupStorage, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
-import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease } from '#adapters/index.js';
+import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore, uninstallRestoreRelease, uninstallRecoveryDirectory, hasUninstallArchive, restoreUninstallArchive, uninstallArchiveRoots } from '#adapters/index.js';
 import { ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -18,7 +18,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
   try {
     let config: ResolvedConfig;
     try {
-      if (command.action === 'restore' && !await lstat(join(resolve(projectRoot), '.deckent/config.json')).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) throw ErrorRegistry.createError('BACKUP_STATE_MISSING');
+      if (command.action === 'restore' && !hasUninstallArchive(command.set) && !await lstat(join(resolve(projectRoot), '.deckent/config.json')).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) throw ErrorRegistry.createError('BACKUP_STATE_MISSING');
       // Astra 2471 R1: only restore may complete an installation held by an unfinished restore; create/verify refuse the hold.
       config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {}, ...(command.action === 'restore' ? { restoreHold: 'admit' as const } : {}) }); }
     catch (error) {
@@ -35,7 +35,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     const existingPolicy = await lstat(productResourcePath(layout, 'policy')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const identity = readLocalOsIdentity();
     // Restoring exactly the final set of an interrupted purge ends that purge (its hold) once the restore succeeded.
-    const release = command.action === 'restore' ? await uninstallRestoreRelease(layout.root, { ...identity, scopeIds: [] }, config.installation.profileMaxBytes, command.set) : null;
+    const release = command.action === 'restore' ? await uninstallRestoreRelease(uninstallRecoveryDirectory(config, options.env ?? process.env), layout.root, { ...identity, scopeIds: [] }, config.installation.profileMaxBytes, command.set) : null;
     let document, authority: BackupAuthority;
     // Astra 2471 R1: a held installation's policy pair is what the interrupted restore left; only then may restore fall back to the set's policy.
     const current = existingPolicy && await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load().catch(async error => {
@@ -86,7 +86,17 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     // C-PRIO J1: a recovery audit lives next to the set, so a set that does not exist is refused before that audit is written (no stray
     // audit folder, never AUDIT_UNAVAILABLE for a mistyped path). Any other refusal of an existing set (unsafe, modified) is audited as before.
     if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'BACKUP_SET_NOT_FOUND') throw error; });
-    const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority);
-    const result = await app.execute(command, passphrase); await release?.(); return result;
+    const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority, Date.now, async () => {
+      await FileInstallationIdentityStore.assertTransferAllowed(layout);
+      // A completed purge may leave an identity directory containing foreign files. Restore owns that retained loss;
+      // a missing record is not a new identity. Genesis/raw markers are refused before this observation and by storage.
+      const record = await lstat(join(productResourcePath(layout, 'installationIdentity'), 'identity.json'))
+        .catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+      if (!record) return undefined;
+      const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
+      return identity.status === 'available' ? identity.value : undefined;
+    });
+    // Lead 2026-10-27: a set an uninstall archived files beside also brings those files back (never over a file that exists again).
+    const result = await app.execute(command, passphrase); if (command.action === 'restore') await restoreUninstallArchive(command.set, uninstallArchiveRoots(resolve(projectRoot), dirname(globalConfigPath), options.env), passphrase, limits); await release?.(); return result;
   } finally { recovered?.close(); }
 }

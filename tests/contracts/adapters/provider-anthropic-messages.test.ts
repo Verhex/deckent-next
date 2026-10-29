@@ -99,6 +99,7 @@ it('maps the neutral request onto the Messages wire: system lifted, tool calls a
   const plain = { model: MODEL, max_completion_tokens: 64, messages: [{ role: 'user' as const, content: 'x' }] };
   expect(anthropicMessagesBody(plain, configured, 'scope')).toMatchObject({ thinking: { type: 'adaptive', display: 'summarized' }, cache_control: { type: 'ephemeral', ttl: '1h' } });
   expect(anthropicMessagesBody({ ...plain, chat_template_kwargs: { enable_thinking: false } }, configured, 'scope')).toMatchObject({ thinking: { type: 'between_tools' } });
+  expect(() => anthropicMessagesBody({ ...plain, response_format: { type: 'json_object' } }, definition, 'scope')).toThrow('OPENAI_CHAT_REQUEST_INVALID');
   // Reasoning off without a profile-declared off mode, forced tool use, prefill and a stray system message are refused before any call.
   expect(() => anthropicMessagesBody({ ...plain, chat_template_kwargs: { enable_thinking: false } }, definition, 'scope')).toThrow();
   expect(() => anthropicMessagesBody({ ...plain, tools: [tool], tool_choice: 'required' }, definition, 'scope')).toThrow();

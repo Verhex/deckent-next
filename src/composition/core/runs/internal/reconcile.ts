@@ -1,8 +1,9 @@
+import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { inspectProductDirectory, jsonRecordDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { openLocalIntegrityAuthority, FileArtifactStore, openSqliteAttemptStore, recordedDockerSupervisor } from '#adapters/index.js';
+import { openLocalIntegrityAuthority, FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { AuditApplication, LostDispatchApplication, dispatchFenceReceiptId, removeDispatchLaunchRecord, authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -27,14 +28,14 @@ export async function reconcileAttemptFor(projectRoot: string, input: AttemptIde
       const dispatchStore: DispatchStore & RunBoundDispatchStore = store;
       const recorded = await dispatchStore.loadBoundDispatch(identity);
       if (!recorded) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+      const run = await store.loadRun(identity.scopeId, identity.runId), attempt = await store.load(identity.scopeId, identity.attemptId);
+      if (!run || !attempt) throw new DispatchError('DISPATCH_NOT_ADMITTED');
       const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
-      const supervisor = recordedDockerSupervisor(recorded.profile);
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
+      const supervisor = recordedExecutionSupervisor(recorded, { config, layout, store, artifacts });
       const app = new DispatchApplication(dispatchStore, supervisor, verifier, authorization, principal.id, artifacts);
       const fenced = await store.loadRunReceipt(identity.scopeId, dispatchFenceReceiptId(identity, recorded.owner)), settled = step && !fenced ? await app.reconcile(recorded.request) : null;
       if (settled ? settled.kind === 'unresolved' : fenced) {
-        const run = await store.loadRun(identity.scopeId, identity.runId), attempt = await store.load(identity.scopeId, identity.attemptId);
-        if (!run || !attempt) throw new DispatchError('DISPATCH_NOT_ADMITTED');
         const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
         const recovery = new LostDispatchApplication(store, verifier, authorization, {
           observe: record => supervisor.observe(record.request),

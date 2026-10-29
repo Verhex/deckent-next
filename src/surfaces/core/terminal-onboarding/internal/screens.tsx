@@ -11,7 +11,7 @@ import { guideScreen } from './guides.js';
 import { settleOnboardingReady } from './ready.js';
 import { firstCommitScreen } from './first-commit.js';
 /** The same session drives first open and /setup; no Workline/composer is mounted in this loop. */
-export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: 'workers'): Promise<FirstTaskIntent | null> {
+export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: 'workers', conversationNotice?: string): Promise<FirstTaskIntent | null> {
   if (io.signal?.aborted) return null;
   await port.assertPerson();
   const initial = await port.observe({}), session = createOnboardingSession(port, initial, revisit, focus);
@@ -20,7 +20,7 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
     const model = session.model(), step = model.steps[0], locale = io.locale;
     if (!step) return null;
     if (step.kind === 'first-task') {
-      const result = await firstTaskScreen(model, io);
+      const result = await firstTaskScreen(model, io, undefined, conversationNotice);
       if (result === 'later' && !model.snapshot.deferred.includes(FIRST_TASK_DONE)) await session.defer(step); // AYSE-R2-04: after a first task, Esc only closes
       if (typeof result === 'object') await port.defer(FIRST_TASK_DONE, model.snapshot.plan.planDigest).catch(() => undefined);
       return typeof result === 'object' ? result : null;

@@ -128,7 +128,9 @@ export async function evolutionCommand(action: EvolutionAction, args: Args, cont
       && row.key.kind === 'agent' && row.key.agentId === agentId && row.key.revision === revision && row.key.workClass === workClass) ?? null;
   const author = shown.item.provenance.author;
   const body = [t('agentsevo.card.move', { id: safeCell(agentId), revision, workClass: safeCell(workClass), from: standingLabel(standing.standing, locale), to: standingLabel(TO[action], locale) }, locale),
-    ...suggestion ? suggestionLines(suggestion, locale) : [t('agentsevo.card.noSuggestion', { id: safeCell(agentId) }, locale)],
+    ...suggestion ? suggestionLines(suggestion, locale) : [t('agentsevo.card.noSuggestion', { id: safeCell(agentId) }, locale),
+      // BeUser E-09: promoting without any sealed evidence is the person's own judgement; the card says so in words.
+      ...action === 'promote' ? [t('agentsevo.card.zeroEvidence', {}, locale)] : []],
     ...author.ai ? [t('agentsevo.card.aiAuthor', { author: safeCell(`${author.issuer}:${author.subject}`) }, locale)] : [],
     ...standing.basis.kind === 'inherited' ? [t('agentsevo.view.inherited', { from: standing.basis.fromRevision ?? '-' }, locale)] : [],
     '', effect(action, locale)];

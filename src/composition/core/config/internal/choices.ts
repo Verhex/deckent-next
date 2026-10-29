@@ -32,7 +32,7 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     const scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
     if (source === 'environment') return values(Object.keys(env).filter(key => env[key] !== undefined).sort());
     if (source === 'docker-executables' || source === 'git-executables') return values(await discoverConfigExecutables(source === 'docker-executables' ? 'docker' : 'git', env, limits), basename);
-    if (source === 'paths') return values([...new Set([root, dirname(root), config.productLayout.root])], basename);
+    if (source === 'paths') return values(keyPath.startsWith('execution.workTargets') ? [] : [...new Set([root, dirname(root), config.productLayout.root])], basename); // D-03: browse to a clone
     // /etc holds one `machine-id` at most: once it is found the list is complete, whatever cut the listing.
     if (source === 'machine-files') { const found = await discoverConfigFiles('/etc', limits), id = found.values.filter(path => basename(path) === 'machine-id'); return values({ values: id, partial: !id.length && found.partial }, basename); }
     if (source === 'key-files') { const found = await discoverConfigFiles(await inspectProductDirectory(config.productLayout, 'approvals'), limits); return values({ ...found, values: found.values.filter(path => /\.key$/u.test(path) && basename(path) !== 'prefix-cache-salt.key').map(path => basename(path)) }); }

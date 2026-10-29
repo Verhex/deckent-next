@@ -47,6 +47,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     machineIdentity: z.object({ source: z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'MACHINE_IDENTITY_SOURCE_ABSOLUTE')
       .nullable().default(null) }).strict().default({}),
     requireMachineBinding: z.boolean().default(false),
+    // K7 (owner 2026-10-27): the person's uninstall recovery root (receipts, tombstone, archive and backup); null: the registry default (XDG state).
+    // A protected root: only the person's terminal changes it, and every plan checks it lies outside each folder it deletes.
+    uninstallRecoveryRoot: z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'UNINSTALL_RECOVERY_ROOT_ABSOLUTE').nullable().default(null),
     imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
       outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
     packageMeasurement: z.object({
@@ -113,9 +116,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
    * evaluation records, nothing verified) | on (an independent pass verifies). S4B-5 (owner S-M6/S-M8/S-M9): `context.mode` off (customer default:
    * no memory read at Run admission) | shadow (the worker part is computed and sealed, never sent) | on (verified entries reach the worker prompt). */
   memoryAutomation: field('memory.config.section', { state: 'bound', consumers: ['src/composition/core/memory'] }, 'restart', z.object({
-    extraction: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
-    verification: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
-    context: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
+    extraction: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off').describe('memory.config.extraction.mode') }).strict().default({}),
+    verification: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off').describe('memory.config.verification.mode') }).strict().default({}),
+    context: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off').describe('memory.config.context.mode') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
   /** S8-2 (S8-DESIGN §4, §9; protected: no AI writes it): the catalog aggregator pass `mode` off (customer default: no pass runs) | shadow | on
    * (S8-2 writes only the pass record in both; suggestions, cards and narrowing arrive in S8-3/S8-4); `overlay` replaces registry rule rows or
    * lowers bounds of the Core `catalog-evolution` registry, checked by the domain at use (an invalid overlay is CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE). */
@@ -131,7 +134,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** S6R-5 (owner Q-R2, lead on s6r4 Q1; protected: no AI writes it): `off` (customer default) freezes no recovery bounds at admission (never a
      * continuation); `shadow` freezes them and a decision only seals what it would do; `live` lets the recovery decision continue a lost task under
      * the owner's standing grant. The stricter of a Run's frozen mode and this one applies. */
-    recovery: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off') }).strict().default({}),
+    recovery: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off').describe('config.field.runRuntime.recovery.mode') }).strict().default({}),
     maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),

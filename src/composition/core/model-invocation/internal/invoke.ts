@@ -1,4 +1,5 @@
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
+import { isDeepStrictEqual } from 'node:util';
 import { t } from '#platform/index.js';
 import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 import { randomUUID } from 'node:crypto';
@@ -14,16 +15,32 @@ export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) { return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, delivery); }
 /** S4B-3: a composition-root workload (the memory evaluator) invokes under its own verified principal and grants (V5); no client channel reaches it. */
-export async function invokeConfiguredModelAs(projectRoot: string, input: ModelInvocationCommand, principal: Awaited<ReturnType<typeof loadInvocationContext>>['principal'], options: ConfigLoadOptions = {}) {
-  return invoke(input, async scopeId => Object.freeze({ ...await loadInvocationContext(projectRoot, scopeId, options, 'write'), principal }), options, undefined, undefined, undefined, undefined, 'feature');
+export async function invokeConfiguredModelAs(projectRoot: string, input: ModelInvocationCommand, principal: Awaited<ReturnType<typeof loadInvocationContext>>['principal'], options: ConfigLoadOptions = {}, signal?: AbortSignal,
+  guard?: { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void }) {
+  return invoke(input, async scopeId => Object.freeze({ ...await loadInvocationContext(projectRoot, scopeId, options, 'write'), principal }), options, signal, undefined, undefined, undefined, 'feature', undefined, guard);
+}
+/** Code-only feature preflight: checked profile, native quote and exact-request provider count, without a model call or claim. */
+export async function prepareConfiguredModelAs(projectRoot: string, input: ModelInvocationCommand, principal: Awaited<ReturnType<typeof loadInvocationContext>>['principal'], options: ConfigLoadOptions = {}, signal?: AbortSignal): Promise<{ profile: import('#domain/index.js').ModelInvocationProfile | null; spending: import('#engine/index.js').ModelInvocationSpending | null; measurement: import('#engine/index.js').ModelInvocationMeasurement | null }> {
+  const context = Object.freeze({ ...await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), principal });
+  let spending: import('#engine/index.js').ModelInvocationSpending | null = null;
+  let selected: import('#domain/index.js').ModelInvocationProfile | null = null;
+  const app = application(context, options, undefined, true, 'feature', async profile => {
+    await configuredContinuationPin(input)?.(profile);
+    if (selected && !isDeepStrictEqual(selected, profile)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
+    selected = profile;
+  }, value => { spending = value; });
+  await app.preview(input, undefined, signal);
+  const measurement = await app.measure(input, undefined, signal);
+  return { profile: selected, spending, measurement };
 }
 export async function previewConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}) { try { return await application(await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), options).preview(input); } catch (error) { throw queryFailure(error); } }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) { return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta); }
-async function invoke(input: ModelInvocationCommand, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, entry: 'raw' | 'feature' = 'raw', onNotice?: (text: string) => void | Promise<void>) {
+async function invoke(input: ModelInvocationCommand, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, entry: 'raw' | 'feature' = 'raw', onNotice?: (text: string) => void | Promise<void>,
+  guard?: { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void }) {
   try {
     const command = parsedCommand(input), context = await loadContext(command.scopeId);
-    const app = application(context, options, host, false, entry, configuredContinuationPin(input));
+    const app = application(context, options, host, false, entry, guard ? async profile => { await configuredContinuationPin(input)?.(profile); await guard.profile(profile); } : configuredContinuationPin(input), guard?.spending);
     const result = await app.invoke(command, undefined, signal, delivery, onDelta).catch(error => modelSpendRefusal(context, command.scopeId, error));
     if (entry !== 'feature' || !onDelta || !onNotice) return result;
     const next = await prepareConfiguredSiwcContinuation(context, options, command, result, value => app.preview(value, undefined, signal),
@@ -50,7 +67,7 @@ function parsedCommand(input: ModelInvocationCommand) {
   if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   return parsed.data as ModelInvocationCommand;
 }
-export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false, entry: 'raw' | 'feature' = 'raw', profileGuard?: (profile: import('#domain/index.js').ModelInvocationProfile) => Promise<void>) {
+export function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost, readOnly = false, entry: 'raw' | 'feature' = 'raw', profileGuard?: (profile: import('#domain/index.js').ModelInvocationProfile) => Promise<void>, observeSpending?: (value: import('#engine/index.js').ModelInvocationSpending) => void) {
   // One trusted clock for pricing and durable invocation records (I40).
   const clock = host?.clock ?? new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock, readOnly);
   const verifier = { async verify() { return context.principal; } }, bindings = new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } });
@@ -64,7 +81,8 @@ export function application(context: Awaited<ReturnType<typeof loadInvocationCon
       return profile;
     } },
     configuredNative.natives, async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
-    { invocationId: randomUUID, ownerId: () => host?.ownerId ?? randomUUID(), now: () => clock.sample().wallMs, ...(host ? { register: host.controllers.register.bind(host.controllers) } : {}) }, configuredNative.spending, async command => {
+    { invocationId: randomUUID, ownerId: () => host?.ownerId ?? randomUUID(), now: () => clock.sample().wallMs, ...(host ? { register: host.controllers.register.bind(host.controllers) } : {}) }, observeSpending ? { ...configuredNative.spending,
+      async authorize(input, signal) { const value = await configuredNative.spending.authorize(input, signal); observeSpending(value); return value; } } : configuredNative.spending, async command => {
       const config = await context.freshConfig();
       return new ModelActivationApplication(verifier, new ModelActivationPolicyAuthorization(context.policy), bindings,
         async () => openSqliteModelActivationStore(await context.path(), config.storage.sqlite, 'forbid'), () => clock.sample().wallMs,

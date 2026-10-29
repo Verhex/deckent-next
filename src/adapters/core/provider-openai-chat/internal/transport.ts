@@ -5,7 +5,7 @@ import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_DEFAULT_DIALECT, isOpenAiChatHttpAdapter, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
   openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
@@ -45,25 +45,23 @@ const responseSchema = z.object({ id: z.string().min(1), object: z.literal('chat
 /** Largest `/tokenize` answer read (the server lists every token id: ~7 bytes each, so a 131k-token prompt is about 1 MiB). */
 export const OPENAI_CHAT_TOKENIZE_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 const tokenizeSchema = z.object({ count: z.number().int().nonnegative().safe(), max_model_len: z.number().int().positive().safe().optional() }).passthrough();
-/** Legacy deadline for a counter: 2 s plus 250 ms per KiB of request, at most 30 s (never the round's own timeout). */
+/** Counter deadline: 2 s plus 250 ms per KiB of request, at most 30 s and bounded by the profile timeout. */
 const tokenizeTimeoutMs = (bodyBytes: number) => Math.min(30_000, 2_000 + Math.ceil(bodyBytes / 1024) * 250);
 /**
  * Provider count of exactly what the round sends (T-L5): the same model, messages and tools as the prepared body, posted to the
- * same-origin `tokenizeEndpoint`. Any failure — status, timeout, cancel, malformed answer — is null: the caller then uses a tagged
- * upper bound, and a counter never fails a turn.
+ * same-origin explicit endpoint or local root route. Any failure — status, timeout, cancel, malformed answer — is null:
+ * consumers may use a tagged upper bound; BeUser refuses before inference when no measured count exists.
  */
-async function countPreparedOpenAiChatRequest(prepared: PreparedOpenAiChatRequest, options: OpenAiChatNativePortOptions, signal?: AbortSignal) {
-  const endpoint = prepared.definition.tokenizeEndpoint;
-  if (!endpoint) return null;
+async function countPreparedOpenAiChatRequest(prepared: PreparedOpenAiChatRequest, endpoint: string, options: OpenAiChatNativePortOptions, signal?: AbortSignal) {
   // The thinking switch changes the rendered prompt (an empty thinking block), so the count carries it too (measured = sent).
-  const body = JSON.stringify({ model: prepared.request.model, messages: prepared.request.messages,
+  const body = JSON.stringify({ model: prepared.request.model, messages: prepared.request.messages, add_generation_prompt: true,
     ...(prepared.request.tools ? { tools: prepared.request.tools } : {}),
     ...(prepared.request.chat_template_kwargs ? { chat_template_kwargs: prepared.request.chat_template_kwargs } : {}) });
   try {
     const result = await sendNativeJsonHttp({ definition: { endpoint, authentication: prepared.definition.authentication,
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) },
     limits: { requestMaxBytes: prepared.limits.requestMaxBytes, responseMaxBytes: OPENAI_CHAT_TOKENIZE_RESPONSE_MAX_BYTES,
-      timeoutMs: tokenizeTimeoutMs(Buffer.byteLength(body, 'utf8')) },
+      timeoutMs: Math.min(prepared.limits.timeoutMs, tokenizeTimeoutMs(Buffer.byteLength(body, 'utf8'))) },
     body, adapter: adapterOf(prepared.definition) },
     { ...(options.resolveCredential ? { resolveCredential: options.resolveCredential } : {}), parseResponse: raw => {
       let value: unknown;
@@ -102,6 +100,7 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     [dialect.tokenLimitField]: nativeRequest.max_completion_tokens, stream: streamed,
     ...(tiered ? { service_tier: nativeRequest.service_tier ?? OPENAI_RESERVATION_POLICY.expectedServiceTier } : {}),
     ...(streamed && dialect.streamUsage === 'include' ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
+    ...(nativeRequest.response_format ? { response_format: nativeRequest.response_format } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
     ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}),
     ...(cacheSalt ? { cache_salt: cacheSalt } : {}), ...(providerFields ?? {}) });
@@ -178,7 +177,7 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
 export const openAiChatProtocol = Object.freeze({ family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION });
 /** Structural native port for the engine resolver. Only preparation validates the profile and binding; it has no network effect. */
 export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions = {}): ModelInvocationNativePort {
-  const preparedTokens = new WeakSet<object>(), countable = new WeakSet<object>();
+  const preparedTokens = new WeakSet<object>(), countable = new WeakMap<object, string>();
   return Object.freeze({
     responseBytesUpperBound(prepared: unknown): bigint {
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
@@ -207,17 +206,21 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
         || (parsedProfile.data.adapter.version === 6) !== (adapterDefinition.dialect?.protocol === 'responses')) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
       const request = parseOpenAiChatTextRequest(nativeRequest, adapterDefinition);
       if (request.model !== binding.model.nativeId) throw new OpenAiChatHttpError('OPENAI_CHAT_MODEL_MISMATCH');
-      const declares = (id: string) => binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+      const declares = (id: string) => binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY && protocol.version === OPENAI_CHAT_COMPLETIONS_VERSION
         && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
       // Tools and the thinking switch are sent only to a model whose binding declares them supported (catalog data, not a request flag).
-      if ((request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
+      if ((request.response_format && !declares(OPENAI_CHAT_JSON_OBJECT_CAPABILITY))
+        || (request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
         declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined,
         options.providerRequestFields?.(adapterDefinition, request), parsedProfile.data.scopeId);
       preparedTokens.add(prepared);
-      // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
-      if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(prepared);
+      // Local profiles may probe the protocol route; only a typed answer for this exact request proves a counter, never the URL.
+      if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.set(prepared, adapterDefinition.tokenizeEndpoint);
+      else if (parsedProfile.data.schemaVersion === 2 && parsedProfile.data.billingAxis === 'local'
+        && adapterDefinition.dialect?.protocol !== 'responses') countable.set(prepared,
+        adapterDefinition.tokenizeEndpoint ?? new URL('/tokenize', adapterDefinition.endpoint).href);
       return prepared;
     },
     async send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult> {
@@ -229,7 +232,8 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
     async measure(prepared: unknown, signal?: AbortSignal) {
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       preparedTokens.delete(prepared);
-      return countable.has(prepared) ? countPreparedOpenAiChatRequest(prepared as PreparedOpenAiChatRequest, options, signal) : null;
+      const endpoint = countable.get(prepared);
+      return endpoint ? countPreparedOpenAiChatRequest(prepared as PreparedOpenAiChatRequest, endpoint, options, signal) : null;
     },
   });
 }

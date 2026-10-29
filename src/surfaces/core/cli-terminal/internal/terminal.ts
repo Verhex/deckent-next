@@ -9,12 +9,12 @@ import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels, type SlashWindowLabels } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
-import { terminalComposerLabels, terminalHandoffLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
+import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { terminalDeliveryPort } from './deliver-port.js';
-import { deliveryWindowLabels, pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
 import { mcpPanelPort } from './mcp-panel.js';
 import { secretGrantCardPort } from './secret-grant-card.js';
@@ -95,71 +95,6 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
   return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
-function modeStopWords(locale: Locale) {
-  return { standart: t('terminal.mode.stop.standart', {}, locale), 'ask-edits': t('terminal.mode.stop.ask-edits', {}, locale),
-    'full-auto': t('terminal.mode.stop.full-auto', {}, locale), 'full-access': t('terminal.mode.stop.full-access', {}, locale) } as const;
-}
-
-/** SLASH-WINDOWS (owner 2026-10-08): the words of the `/reasoning`, `/scratch` and unknown-command windows; absent where the terminal cannot draw a list. */
-function slashWindowLabels(locale: Locale): SlashWindowLabels {
-  return { picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), hints: t('terminal.window.hints', {}, locale), infoHints: t('terminal.window.infoHints', {}, locale), typedArgument: t('terminal.window.typedArgument', {}, locale),
-    reasoning: { title: t('terminal.window.reasoning.title', {}, locale), thinkingOn: t('terminal.window.reasoning.thinkingOn', {}, locale), thinkingOnDetail: t('terminal.window.reasoning.thinkingOnDetail', {}, locale), thinkingOff: t('terminal.window.reasoning.thinkingOff', {}, locale),
-      thinkingOffDetail: t('terminal.window.reasoning.thinkingOffDetail', {}, locale), previewOn: t('terminal.window.reasoning.previewOn', {}, locale), previewOnDetail: t('terminal.window.reasoning.previewOnDetail', {}, locale), previewOff: t('terminal.window.reasoning.previewOff', {}, locale),
-      previewOffDetail: t('terminal.window.reasoning.previewOffDetail', {}, locale), current: t('terminal.window.reasoning.current', {}, locale), statusOn: t('terminal.window.reasoning.statusOn', {}, locale), statusOnHidden: t('terminal.window.reasoning.statusOnHidden', {}, locale),
-      statusOff: t('terminal.window.reasoning.statusOff', {}, locale) },
-    scratch: { title: t('terminal.window.scratch.title', {}, locale), status: t('terminal.window.scratch.status', {}, locale), folder: t('terminal.window.scratch.folder', {}, locale), more: t('terminal.window.scratch.more', {}, locale), empty: t('terminal.window.scratch.empty', {}, locale), fileDetail: t('terminal.window.scratch.fileDetail', {}, locale),
-      clear: t('terminal.window.scratch.clear', {}, locale), clearDetail: t('terminal.window.scratch.clearDetail', {}, locale), clearTitle: t('terminal.window.scratch.clearTitle', {}, locale), clearBody: t('terminal.window.scratch.clearBody', {}, locale), clearPrompt: t('terminal.window.scratch.clearPrompt', {}, locale),
-      pathTitle: t('terminal.window.scratch.pathTitle', {}, locale) },
-    unknown: { title: t('terminal.window.unknown.title', {}, locale), body: t('terminal.window.unknown.body', {}, locale), closest: t('terminal.window.unknown.closest', {}, locale), none: t('terminal.window.unknown.none', {}, locale),
-      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
-}
-
-
-function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
-  return {
-    work: workSurfaceLabels(locale),
-    banner: t('terminal.workline.banner', {}, locale), prompt: '', // workline input has no visible prompt prefix (placeholder instead); line mode keeps terminal.session.prompt
-    statusReady: t('terminal.workline.statusReady', {}, locale), statusBusy: t('terminal.workline.statusBusy', {}, locale),
-    statusCancelling: t('terminal.workline.statusCancelling', {}, locale), hint: t('terminal.workline.hint', {}, locale),
-    focus: { composer: t('tui.focus.composer', {}, locale), window: t('tui.focus.window', {}, locale), decide: t('tui.focus.decide', {}, locale) },
-    selfSourceFloor: t('terminal.mode.selfSourceFloor', {}, locale),
-    roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),
-    runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
-    watchFailed: t('terminal.workline.watchFailed', {}, locale), commandUnavailable: t('terminal.admin.partUnavailable', {}, locale), // `{part}` stays a template
-    watchDelivery: t('terminal.workline.watchDelivery', {}, locale), watchStep: t('terminal.workline.watchStep', {}, locale),
-    watchNotInitialized: t('terminal.workline.watchNotInitialized', {}, locale),
-    watchAccessDenied: t('terminal.workline.watchAccessDenied', {}, locale), watchAccessStopped: t('terminal.workline.watchAccessStopped', {}, locale),
-    watchPushFailed: t('terminal.workline.watchPushFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
-    runNotFound: t('terminal.workline.runNotFound', {}, locale), workersEmpty: t('terminal.workline.workersEmpty', {}, locale),
-    runsEmpty: t('terminal.workline.runsEmpty', {}, locale), serviceRestartUnavailable: t('terminal.service.restartUnavailable', {}, locale),
-    queued: t('terminal.workline.queued', {}, locale),
-    runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
-    watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
-    unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
-    render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale), handoff: terminalHandoffLabels(locale),
-    mentions: { attached: t('terminal.mention.attached', {}, locale), truncated: t('terminal.mention.truncated', {}, locale),
-      refused: t('terminal.mention.refused', {}, locale) },
-    mode: { current: t('terminal.mode.current', {}, locale), changed: t('terminal.mode.changed', {}, locale), inert: t('terminal.mode.inert', {}, locale),
-      unsupported: t('terminal.mode.unsupported', {}, locale), usage: t('terminal.mode.usage', {}, locale),
-      effect: { standart: t('terminal.mode.effect.standart', {}, locale), 'full-auto': t('terminal.mode.effect.full-auto', {}, locale),
-        'full-access': t('terminal.mode.effect.full-access', {}, locale) },
-      switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
-      stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
-      askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale),
-      fullAutoRevoked: t('terminal.mode.fullAutoRevoked', {}, locale) },
-    viewport: { below: t('terminal.viewport.below', {}, locale), newMessages: t('terminal.viewport.newMessages', {}, locale), search: t('terminal.viewport.search', {}, locale),
-      searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale) },
-    decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale) },
-    reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
-    copy: { sent: t('tuicopy.sent', {}, locale), none: t('tuicopy.none', {}, locale), range: t('tuicopy.range', {}, locale), usage: t('tuicopy.usage', {}, locale),
-      tooLarge: t('tuicopy.tooLarge', {}, locale), unavailable: t('tuicopy.unavailable', {}, locale) },
-    scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
-      more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
-      usage: t('terminal.scratch.usage', {}, locale) },
-  };
-}
-
-
 /**
  * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
  * a list (TERM=dumb) there are none and the slash commands stay the text commands.
@@ -211,8 +146,8 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
       if (trimmed === '/exit' || trimmed === '/quit') break;
       if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
       else if (trimmed === '/status') { emit(await status(), sinks); }
-      // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
-      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
+      else if (trimmed === '/help') { emit(t('terminal.session.help', {}, locale), sinks); } // KER-09: line mode's own commands, on stdout
+      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: t('terminal.session.unknown', { command: trimmed.split(/\s/u)[0]! }, locale) }, locale), { ...sinks, level: 'error' }); // local, never sent to the model
       else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
@@ -311,6 +246,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
+  if (!await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options)) return;
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
   let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null, configLine: string | null = null;
   if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {
@@ -327,6 +263,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
+  const sessionStore = parsed.action === 'workline' && context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
+  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
+  const previousConversation = sessions && (await sessions.list().catch(() => [])).some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined;
+  if (previousConversation) accessNotices.push({ level: 'info', text: previousConversation });
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
     const surface = await import('#surfaces/core/terminal-onboarding/index.js');
@@ -344,7 +284,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
           },
           instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
           foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
-        }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus);
+        }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus, previousConversation);
       };
       onboarding = { initial: await run(false), open: (signal, focus) => run(true, signal, focus) };
       const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
@@ -423,6 +363,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   // TESLIM-PENCERESI: the delivery window's port over the CLI's own task handlers and the composition's verified-terminal confirmation.
   const deliveryPort = terminalDeliveryPort(root, context, options);
+  // BeUser DR3-02: the configured pool's hold, read with each plan, so the card says before y that an approved Run will wait.
+  let poolHold: PlanningPoolHold | null = null;
+  const readPoolHold = async () => { poolHold = await context.inspectPoolHold?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null) ?? null; };
   const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
@@ -434,8 +377,6 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
-  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
-  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
@@ -467,9 +408,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       billingSwitch: t('siwc.switch.notice', { model: '{model}' }, locale),
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
-      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) =>
-        pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal)) : hereModel(reference).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)),
-      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
+      plan: async (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) => {
+        const result = await (pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal))
+          : hereModel(reference).then(chosen => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(chosen ? { reference: chosen } : {}) }, options, signal, observe)));
+        await readPoolHold();
+        return result;
+      },
+      lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale, poolHold) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
@@ -519,4 +464,4 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.signal ? { signal: context.signal } : {}),
   }); } finally { if (beat) clearInterval(beat); }
 }
-import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
+import { brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';

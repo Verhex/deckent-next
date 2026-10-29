@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
+import { verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
+import { sha256 } from '#platform/index.js';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { buildDist } from '../../../scripts/build-dist.mjs';
 
@@ -30,6 +33,11 @@ describe.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/script'))(
     const summary = await buildDist({ root: ROOT, out }) as { stage: string; publishable: { blockers: string[] }; licenseTexts: { unused: string[] } };
     expect(summary.publishable.blockers.filter(blocker => !blocker.startsWith('bubblewrap: '))).toEqual([]);
     expect(summary.licenseTexts.unused).toEqual([]);
+    const limits = { maxFiles: 20000, maxFileBytes: 64 * 1024 * 1024, maxTotalBytes: 256 * 1024 * 1024, maxDepth: 32 };
+    const measured = await measureInstalledPackage(summary.stage, limits);
+    expect(measured.declaredMissing).toEqual([]);
+    const distribution = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
+    expect(await verifyBeuserDistribution(summary.stage, distribution, limits, sha256(JSON.stringify(distribution)))).toBe(true);
     const specifiers = [...readFileSync(join(summary.stage, BOOTSTRAP), 'utf8').matchAll(SPECIFIERS)].map(match => match[1] ?? match[2] ?? match[3]);
     expect(specifiers.length).toBeGreaterThan(0);
     expect(specifiers.filter(spec => !spec.startsWith('node:')), 'the mounted bootstrap must stay standalone').toEqual([]);

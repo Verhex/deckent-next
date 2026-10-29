@@ -5,5 +5,5 @@ export { AgentStandingApplication, catalogAggregatorFor } from './internal/evolu
 export * from './internal/suggestions.js';
 export { signCatalogActions, canSignCatalogActions } from './internal/signing.js';
 export { AgentCatalogPolicyAuthorization } from './internal/authorization.js';
-export { catalogCommandDigest, personaDigest, registeredWorkClassIds, skillContentDigest, skillSetDigest, skillSignatureMessage } from './internal/digests.js';
+export { catalogCommandDigest, personaDigest, registeredWorkClassIds, configuredWorkClassIds, skillContentDigest, skillSetDigest, skillSignatureMessage } from './internal/digests.js';
 export { agentPromptBytes, agentPromptParts, agentSelectionSummary, pinnedAgentSkills, selectTaskAgents, selectTaskAgentsFrom } from './internal/selection.js';

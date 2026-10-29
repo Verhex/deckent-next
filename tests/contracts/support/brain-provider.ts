@@ -18,6 +18,7 @@ import { proposalFixture } from './run-proposal.js';
 /** Real configured application, SQLite and pricing; only the external HTTP effect is a bounded in-memory fake. */
 export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string | ((body: string) => string); hold?: boolean;
   finishReason?: 'stop' | 'length'; maxOutputTokens?: number; responseMaxBytes?: number;
+  jsonOutput?: boolean;
   thinking?: 'supported' | 'unsupported' | 'unknown' | 'wrong-version' | 'wrong-protocol';
   noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number;
   /** S2 tier/role registry overlay for the fixture Brain (installation layer): a frontier Brain row by default; `null` writes none. */
@@ -56,7 +57,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   });
   const reference = { providerId: 'test-operator', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
   const model = { id: reference.modelId, version: 1, nativeId: 'vendor/model', protocols: [{ family: options.headless ? 'claude-code-stream-json' : 'openai-chat-completions', version: 'v1',
-    capabilities: [...(options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }]),
+    capabilities: [...(options.jsonOutput ? [{ id: 'response-format-json-object', version: 1, state: 'supported' }] : []), ...(options.tokenCount === undefined ? [] : [{ id: 'token-count', version: 1, state: 'supported' }]),
       ...(options.thinking && options.thinking !== 'wrong-protocol' ? [{ id: 'chat-template-enable-thinking',
         version: options.thinking === 'wrong-version' ? 2 : 1, state: options.thinking === 'wrong-version' ? 'supported' : options.thinking }] : [])] },
       ...(options.thinking === 'wrong-protocol' ? [{ family: 'other-protocol', version: 'v1',

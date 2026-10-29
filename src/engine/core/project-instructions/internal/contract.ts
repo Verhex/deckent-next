@@ -31,6 +31,9 @@ export interface InstructionInitPreview {
 export interface ProjectInstructionPort {
   inspect(): Promise<ProjectInstructionView>;
   trust(digest: string): Promise<ProjectInstructionView>;
+  /** AYSE-19: remember / read a person's decline of exactly this content (absent on a port without a record store: the window asks each time). */
+  decline?(digest: string): Promise<void>;
+  declined?(digest: string): Promise<boolean>;
   preview(bridges: readonly string[], skeleton: (name: string, commands: readonly string[]) => string): Promise<InstructionInitPreview>;
   initialize(preview: InstructionInitPreview): Promise<readonly Readonly<{ path: string; status: string }>[] >;
 }

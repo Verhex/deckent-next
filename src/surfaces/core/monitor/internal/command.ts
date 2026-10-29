@@ -77,13 +77,15 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
   const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
   const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, configOptions, query, memo);
-  const filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
+  const own = [(config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, config.service.identity?.scopeId].filter((id): id is string => typeof id === 'string');
+  const filters = { ...filtersOf(parsed), registered: own }, ascii = prefersAsciiGlyphs(env);
   let initial = parsed.scope ? await inspect(root, options) : undefined;
   if (initial) filterSnapshot(initial, filters); // Refuse unknown scope before opening the fullscreen view too.
   const load = async (memo?: MonitorSourceMemo) => { const snapshot = initial ?? await inspect(root, options, memo); initial = undefined; return snapshot; };
   if (parsed.json) { emit(filterSnapshot(await load(), filters), { ...sinks, json: true }); return; }
   if (parsed.once || !interactive(context)) {
-    emit(await load(), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters, verbose: parsed.verbose }) });
+    const refused = await refusedLine(context, root, options, config, locale);
+    emit(await load(), { ...sinks, render: snapshot => [renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters, verbose: parsed.verbose }), ...refused].join('\n') });
     return;
   }
   // The command already selected the interactive TTY lane; do not let Ink infer a different lane from ambient CI.
@@ -104,6 +106,13 @@ export async function runMonitorSlash(root: string, args: string, context: Monit
   if (parsed.once || parsed.json || parsed.help || parsed.language || parsed.noColor) return [t('monitor.slash.usage', {}, locale)];
   if (!context.inspectMonitor) throw ErrorRegistry.createError('MONITOR_UNAVAILABLE');
   const snapshot = await context.inspectMonitor(root, options, { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) });
-  return renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed), verbose: parsed.verbose,
-    slash: true }).split('\n');
+  return [...renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed), verbose: parsed.verbose,
+    slash: true }).split('\n'), ...(context.listRefusedRequests ? await refusedLine(context, root, options, await loadConfig(root, { ...options, heal: false }), locale) : [])];
+}
+/** BeUser D-08: one line for the configured scope's refused work requests (none: no line), pointing at the list. */
+async function refusedLine(context: MonitorCommandContext, root: string, options: ConfigLoadOptions, config: Record<string, unknown>, locale: Locale): Promise<string[]> {
+  const scopeId = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
+  if (typeof scopeId !== 'string' || !context.listRefusedRequests) return [];
+  const rows = await context.listRefusedRequests(root, scopeId, 1, options).catch(() => []), newest = rows[0];
+  return newest ? [t('monitor.refused', { scope: scopeId, code: newest.code, title: newest.title }, locale)] : [];
 }

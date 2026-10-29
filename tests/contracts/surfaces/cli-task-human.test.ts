@@ -321,3 +321,27 @@ it('D4: task changes without --scope name the valid scopes (CLI_SCOPE_REQUIRED),
   expect(noCommand.code).toBe(2); expect(JSON.parse(noCommand.err)).toMatchObject({ code: 'CLI_ARGUMENT_MISSING' }); expect(noCommand.err).toContain('--command-id');
   expect(calls).toEqual([]);
 });
+
+it('BeUser M-25/DR2-07: `task integration-adopt --scope --run --target` finds the delivered task, its attempt and delivery command; no delivered task is refused', async () => {
+  const root = await project(), identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a2', layoutRevision: 'l', generation: 2 };
+  const runView = (state: string) => ({ schemaVersion: 1, layout: {}, run: { schemaVersion: 3, scopeId: 's', runId: 'r', revision: 4, state: { kind: 'terminal' },
+    tasks: [{ id: 't', phase: 'accepted', resultBrief: { runDelivery: { state, commit: 'c'.repeat(40), commandId: 'delivery-1' } } }] } });
+  const calls: unknown[] = [], handlers = (state: string) => ({ async inspectRun() { return runView(state); },
+    async inspectInventory() { return { page: { entries: [{ identity: { ...identity, attemptId: 'a1', generation: 1 } }, { identity }], nextAfter: null } }; },
+    async adoptWorkspaceIntegration(_root: string, command: unknown) { calls.push(command); return { status: 'adopted', targetRef: 'refs/heads/team', fromCommit: 'f'.repeat(40), toCommit: 'c'.repeat(40), sequence: 1, verification: { status: 'none' } }; } });
+  const args = ['task', 'integration-adopt', '--scope', 's', '--run', 'r', '--target', 'refs/heads/team', '--json'];
+  expect((await run(args, handlers('delivered'), root)).code).toBe(0);
+  expect(calls).toEqual([expect.objectContaining({ identity, deliveryCommandId: 'delivery-1', targetRef: 'refs/heads/team', commandId: expect.stringMatching(/^cli-adopt-/) })]);
+  const refused = await run(args, handlers('adopted'), root);
+  expect(refused.code).not.toBe(0); expect(refused.err).toContain('ADOPTION_NOT_DELIVERED'); expect(calls).toHaveLength(1);
+});
+
+it('BeUser M-33: setting a result aside or bringing it back is the person\'s terminal act; a pipe or agent is refused before anything is recorded', async () => {
+  const root = await project(), identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a1', layoutRevision: 'l', generation: 1 }, calls: unknown[] = [];
+  const handlers = { async inspectInventory() { return { page: { entries: [{ identity }], nextAfter: null } }; }, async changeDeliveryDismissal(_root: string, input: unknown) { calls.push(input); } };
+  for (const action of ['integration-dismiss', 'integration-restore']) {
+    const refused = await run(['task', action, '--scope', 's', '--run', 'r', '--task', 't', '--json'], handlers, root);
+    expect(refused.code).not.toBe(0); expect(refused.err).toContain('AUTHORITY_WITNESS_REQUIRED');
+  }
+  expect(calls).toEqual([]);
+});

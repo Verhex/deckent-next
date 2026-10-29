@@ -22,8 +22,9 @@ export function memoryIndexText(entry: MemoryEntry): string {
   return foldMemoryText([entry.content.title, entry.content.body, ...entry.content.tags,
     ...(lesson ? [lesson.source, lesson.cause, lesson.correction, lesson.evidence] : [])].join(' '));
 }
-/** Scan fallback for a store without full-text search: every term must be a whole folded word of the entry. */
+/** Scan fallback for a store without full-text search: every term must start a folded word of the entry. */
 export function memoryEntryMatches(entry: MemoryEntry, terms: readonly string[]): boolean {
-  const words = new Set(memoryIndexText(entry).split(' ').filter(Boolean));
-  return terms.every(term => words.has(term));
+  // BeUser E-10: a term matches a word it starts (Turkish suffixes: "ton" finds "tonu"), the same rule as the index's prefix query.
+  const words = memoryIndexText(entry).split(' ').filter(Boolean);
+  return terms.every(term => words.some(word => word.startsWith(term)));
 }

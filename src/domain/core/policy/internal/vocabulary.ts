@@ -3,6 +3,8 @@
  * land with their alpha.48 consumers: until a consumer decides one, its grant allows nothing).
  */
 export const policyResources = Object.freeze({
+  beuserTranscript: Object.freeze({ kind: 'beuser-transcript' as const, actions: Object.freeze(['inspect'] as const) }),
+  beuserSandbox: Object.freeze({ kind: 'beuser-sandbox' as const, actions: Object.freeze(['create', 'destroy'] as const) }),
   backup: Object.freeze({ kind: 'backup' as const, actions: Object.freeze(['create', 'verify', 'restore'] as const) }),
   config: Object.freeze({ kind: 'config' as const, actions: Object.freeze(['write'] as const) }),
   decision: Object.freeze({kind:'decision' as const, actions:Object.freeze(['prepare','ask','record','outcome','inspect'] as const)}),

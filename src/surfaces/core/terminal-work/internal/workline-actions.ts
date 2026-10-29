@@ -4,7 +4,7 @@ import type { RunAnswerLabels, RunControlLabels } from './run-control.js';
 import type { ActiveWorkLabels } from './active-work.js';
 import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
-import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
+import { transcriptPage, type TranscriptPageLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { shortId } from '#platform/index.js';
 import { slashHelpText, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 

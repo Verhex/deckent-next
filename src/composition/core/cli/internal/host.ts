@@ -1,6 +1,6 @@
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
-import { planRuntimeRun } from '#composition/core/run-planner/index.js';
+import { inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
@@ -8,7 +8,7 @@ import { inspectConfiguredAdminPaths } from './admin-paths.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, openExternalEditor, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced, providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
-import { settledProviderCacheUsage } from '#engine/index.js';
+import { openDeliveryRuns, settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectConfiguredMemoryRollout } from '#composition/core/memory-rollout/index.js';
@@ -24,7 +24,7 @@ import { inspectConfiguredToolchainCurrency, inspectConfiguredWorkerImage, updat
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
-import { interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
+import { changeConfiguredDeliveryDismissal, checkConfiguredWorkTarget, interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConfiguredModelRole, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
@@ -42,7 +42,7 @@ import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBin
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat, terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
-import { verifyConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
+import { verifyConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
 import { assertConfiguredProjectCredential, changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
 
@@ -58,7 +58,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
   const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view, locale, process.stdin, process.stderr,
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal }));
   const host: Parameters<typeof runCli>[1] & object = { ...base, initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
-    verifyAudit: verifyConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
+    walkBeuser: async (...args) => (await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args).catch(error => { throw queryFailure(error); }),
+    readBeuserReport: async (...args) => (await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args),
+    setupBeuser: async (...args) => (await import('#composition/core/beuser/index.js')).setupConfiguredBeuser(...args).catch(error => { throw queryFailure(error); }),
+    verifyAudit: verifyConfiguredAudit, listAudit: listConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
     executeHub: (root, request, options, signal) => executeConfiguredHub(root, request, options, {}, signal), prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions, listAgents: listConfiguredAgents, inspectAgent: inspectConfiguredAgent, listSkills: listConfiguredSkills, inspectSkill: inspectConfiguredSkill, defineAgent: defineConfiguredAgent, defineSkill: defineConfiguredSkill, inspectAgentStats: inspectConfiguredAgentStats, inspectCatalogMonitor: inspectConfiguredCatalogMonitor, importSkill: importConfiguredSkill, listSigners: listConfiguredSigners, enrolSigner: enrolConfiguredSigner, addSigner: addConfiguredSigner, revokeSigner: revokeConfiguredSigner, repairSigners: repairConfiguredSigners, listSuggestions: listConfiguredSuggestions, inspectSuggestion: inspectConfiguredSuggestion, changeStanding: changeConfiguredStanding, dismissSuggestion: dismissConfiguredSuggestion, bulkStanding: bulkConfiguredStanding, listRevokedPromotions: listConfiguredRevokedPromotions, draftSuggestion: draftConfiguredSuggestion, defineFromSuggestion: defineConfiguredFromSuggestion,
     listMemory: listConfiguredMemory, searchMemory: searchConfiguredMemory, inspectMemory: inspectConfiguredMemory, proposeMemory: proposeConfiguredMemory, verifyMemory: verifyConfiguredMemory, retireMemory: retireConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
@@ -74,7 +77,10 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     readAutonomyShadow: async (projectRoot, scopeId, commandId, options) => readAutonomyShadow((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout, scopeId, commandId),
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
-    configChoiceSources: configuredConfigChoiceSources, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
+    configChoiceSources: (root, options) => ({ ...configuredConfigChoiceSources(root, options), checkWorkTarget: async workTargets => checkConfiguredWorkTarget(root, workTargets, options,
+      await inspectMonitor(root, options).then(openDeliveryRuns, () => [])) }), /* BeUser DR2-05: the open results a work-source move strands */ configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
+    listRefusedRequests: (root, scopeId, limit, options) => inspectConfiguredRefusedRequests(root, scopeId, limit, options), // BeUser D-08
+    changeDeliveryDismissal: changeConfiguredDeliveryDismissal, // BeUser M-33
     openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)
     inspectToolchainRefresh,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
@@ -159,7 +165,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     connectModel: (projectRoot, command, options) => connectConfiguredModel(projectRoot, command, options, { listSecretNames: listConfiguredSecretNames,
       describeService: (describeRoot, describeOptions) => createConfiguredRuntimeClient(describeRoot, describeOptions).describeService() }),
     releaseQuota: releaseConfiguredQuota, applyPoolCapacity: applyConfiguredPoolCapacity, inspectPoolCapacity: inspectConfiguredPoolCapacity, applyRunLifecycle: applyConfiguredRunLifecycle, applyPoolHold: applyConfiguredPoolHold, inspectPoolHold: inspectConfiguredPoolHold, // K5 typed pool hold (local, ledger-read by the service)
-    previewUninstall: (root, purge, options) => previewConfiguredUninstall(root, purge, options).catch(error => { throw queryFailure(error); }),
+    previewUninstall: (root, query, options) => previewConfiguredUninstall(root, query, options).catch(error => { throw queryFailure(error); }),
     applyUninstall: (root, input, interaction, options, signal) => applyConfiguredUninstall(root, input, interaction, options, signal).catch(error => { throw queryFailure(error); }),
     previewInstallation: async (projectRoot, input) => {
       try { return await previewSuppliedInstallation(projectRoot,

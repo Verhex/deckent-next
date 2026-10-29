@@ -54,8 +54,9 @@ entries, descendants and whole-object parents such as `terminal`, `terminal.shel
 | Standing approval of a Nervous stop action or a lost-task continuation | `recovery-action/fixture-target/apply`, `recovery-action/fixture-target/future-action`, `recovery-action/fence-attempt/apply`, `recovery-action/fence-attempt/future-action`, `recovery-action/stop-orphan/apply`, `recovery-action/stop-orphan/future-action`, `recovery-action/hand-to-human/apply`, `recovery-action/hand-to-human/future-action`, `recovery-action/continue-new-attempt/apply`, `recovery-action/continue-new-attempt/future-action` | The recovery broker applies a sealed Nervous proposal, and the recovery system continues a lost task in a new Attempt, only under the owner's standing grant (K-B, S6R-3/S6R-4); no AI holds it, Nervous itself only proposes. |
 | Promoting a Nervous rule to live | `nervous-rule/container-gone@1/promote`, `nervous-rule/container-gone@1/future-action`, `nervous-rule/fixture-target/promote`, `nervous-rule/fixture-target/future-action` | Only a person promotes an exact measured rule and version (alpha.56 G2, owner Q-A1); an AI holding this would let its own detections stop and release workers. |
 | Signer key enrol, add, revoke and log repair | `skill-signer/fixture-target/enrol`, `skill-signer/fixture-target/add`, `skill-signer/fixture-target/revoke`, `skill-signer/fixture-target/repair`, `skill-signer/fixture-target/future-action` | Only a person adds or revokes the keys AI and system principals sign catalog actions with (S8-5, owner 2026-10-23); an AI holding this would grant itself signing authority. |
+| Hub source add and remove | `hub/fixture-target/sources.add`, `hub/fixture-target/sources.remove` | Pinning or dropping a Hub source (its root key) is a person's trust decision (BeUser E-05, owner 2026-10-28 "only the person"); an AI holding this could make itself trust any publisher. |
 | Catalog suggestions and rule narrowing (every AI but the catalog aggregator) | `agent-catalog/fixture-target/suggest`, `agent-catalog/fixture-target/narrow` | Only the catalog aggregator writes suggestions and the automatic narrowing, each signed by its own key (S8-3, §9); another AI writing them could steer which agent runs without a card. |
-| Protected configuration subtrees, descendants and whole-object ancestors | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Security, isolation, admission, operations, audit, the recovery and Nervous modes, shell environment and network egress cannot be weakened through configuration. |
+| Protected configuration subtrees, descendants and whole-object ancestors | `policy`, `approvals`, `identity`, `security`, `storage`, `service`, `paths`, `shell`, `network`, `layout`, `execution`, `installation`, `company`, `enforce_principal_assurance`, `secrets`, `admission`, `operations`, `audit`, `memory`, `memoryAutomation`, `runRuntime.recovery`, `runRuntime.nervous`, `models.headless`, `toolchains.image`, `toolchains.currency.registryEndpoint`, `catalogEvolution`, `beuser`, `terminal.shell.realm`, `terminal.shell.environment`, `terminal.fetch.egress`, `terminal.fetch.allowedHosts` | Security, isolation, admission, operations, audit, the recovery and Nervous modes, shell environment and network egress cannot be weakened through configuration. |
 <!-- ai-floor:end -->
 
 There is also an application gate when deciding cards: AI/noninteractive callers cannot
@@ -282,6 +283,14 @@ that card. `--owner-baseline none --apply` removes this person's managed baselin
 rules; custom grants remain. Each batch contains at most one policy change's limit;
 `remaining` identifies further cells for the next card. Installation cells cover all
 scopes, including shared pools and the model catalog.
+
+Two person-only families are applied the same way but never by default: `hub-read`
+(`hub` inspect, search, export) and `hub-trust` (`hub` sources.add, sources.remove,
+refresh, install, update, uninstall), each written only to the named person for the
+selected scope (owner 2026-10-28). Publish, yank and revoke are in no family. Every Hub
+write still opens its own person card, and `hub` sources.add/remove is on the AI floor,
+so no AI or MCP actor can hold or be delegated a source change. Doctor warns while the
+default founder cells are missing and prints the card's command.
 
 The baseline never changes tool-call grants, permission modes or the evaluator.
 Operations enumerate the reachable registered catalog and exclude descriptors with

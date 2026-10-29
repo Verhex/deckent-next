@@ -224,7 +224,8 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
     rows.push(lineOf(why.spans, why.fields, f.why));
   } else {
     rows.push(lineOf(approvalTemplateLine(labels.scope, { project: p(input.project ?? '') }).spans, [], f.scope));
-    const rule = (cell && labels.rule[cell]) || labels.rule['unknown']!, mode = (input.mode && labels.mode[input.mode]) || labels.mode['unknown']!;
+    // BeUser D-10: a catalog operation (no tool call, an effect-class risk) asks because of its catalog entry or the policy, not a tool rule.
+    const rule = (!call && cell && labels.risk[`effect-${cell.split(' · ')[0]}`] !== undefined && labels.rule['effect-operation']) || (cell && labels.rule[cell]) || labels.rule['unknown']!, mode = (input.mode && labels.mode[input.mode]) || labels.mode['unknown']!;
     rows.push(lineOf(approvalTemplateLine(labels.why, { rule, mode }).spans, [], f.why));
   }
   rows.push(lineOf([span(riskText(cell, labels), { role: cell === 'shell-destructive' || cell === 'edit-authority' || cell === 'mcp-floor' ? 'warning' : 'muted' })], [], f.risk));

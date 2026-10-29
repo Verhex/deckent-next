@@ -178,6 +178,7 @@ it('removes unused help headings in both locales', () => {
 
 /* Help = behaviour (owner 2026-10-19). Each family's handler sources, read for the action words they dispatch on. */
 const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
+  beuser: ['cli-beuser/internal/command.ts'],
   audit: ['cli-admin/internal/audit.ts'], backup: ['cli-admin/internal/backup.ts'], terminal: ['cli-terminal/internal/terminal.ts'],
   init: ['cli-installation/internal/init.ts'], workers: ['cli-observe/internal/workers.ts'], run: ['cli-run/internal/run.ts', 'cli-run/internal/run-proposal.ts'],
   task: ['cli-task/internal/task.ts', 'delivery-queue/internal/cli.ts'], pool: ['cli-admin/internal/pool.ts'], decide: ['cli-decision/internal/command.ts'], memory: ['cli-memory/internal/command.ts'], agents: ['cli-agents/internal/command.ts', 'cli-agents/internal/signers.ts', 'cli-agents/internal/evolution.ts'],

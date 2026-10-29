@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "revision": "beuser-realm-v1",
+  "nodeExecutable": "/usr/local/bin/node",
+  "packageTarget": "/package",
+  "workTarget": "/realm",
+  "genesisTarget": "/run/deckent-beuser/genesis.json",
+  "home": "/realm/home",
+  "runtime": "/realm/runtime",
+  "network": "none",
+  "systemdProbe": ["systemd", "--user", "--unit=basic.target"]
+}

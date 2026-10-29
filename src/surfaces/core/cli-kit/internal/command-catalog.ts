@@ -48,7 +48,12 @@ const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revis
  * Children inherit the family handler; existing handlers retain argument validation and execution. Handler actions and catalog
  * actions are kept equal by `cli-grouped-help.test.ts` (both directions). */
 export const CLI_CATALOG = [
-  { name: 'uninstall', group: 'setup', summary: 'cli.uninstall.help.summary', detail: 'cli.uninstall.help', installation: 'owned', args: '[--purge] [--dry-run] [--json]', bare: 'handler' },
+  { name: 'beuser', group: 'work', summary: 'beuser.help.summary', detail: 'beuser.help.family', args: '<setup|walk|report>', bare: {}, children: [
+    action('setup', 'work', 'beuser.help.setup.summary', 'beuser.help.setup', { requires: ['--profile <path>'] }),
+    action('walk', 'work', 'beuser.help.walk.summary', 'beuser.help.walk', { requires: ['--journey <id>', '--candidate <path>'] }),
+    action('report', 'observe', 'beuser.help.report.summary', 'beuser.help.report'),
+  ] },
+  { name: 'uninstall', group: 'setup', summary: 'cli.uninstall.help.summary', detail: 'cli.uninstall.help', installation: 'owned', args: '[--keep-data|--keep-work|--all] [--force] [--disable-unit] [--yes] [--dry-run [--verbose]] [--json]', bare: 'handler' },
   { name: 'hub', group: 'work', summary: 'hub.help.summary', detail: 'hub.help', args: '[--scope <id>] [--input <file|->]', children: [
     { name: 'sources', group: 'work', summary: 'hub.help.action.sources', detail: 'hub.help', bare: 'handler', children: ['list', 'add', 'remove'].map(name => action(name, 'work', `hub.help.action.sources.${name}` as MessageKey, 'hub.help')) },
     ...['search', 'inspect', 'install', 'update', 'uninstall', 'verify', 'export', 'refresh', 'cards', 'publish', 'yank', 'revoke'].map(name => action(name, 'work', `hub.help.action.${name}` as MessageKey, 'hub.help')),
@@ -58,12 +63,14 @@ export const CLI_CATALOG = [
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do', args: '--request <text> [--scope <id>]', bare: { requires: ['--request <text>'] } },
   { name: 'audit', group: 'setup', summary: 'cli.audit.summary', detail: 'cli.audit.help', args: '[--scope <id>]', bare: { read: 'verify' }, children: [
     action('verify', 'setup', 'cli.audit.summary', 'cli.audit.help'),
+    action('list', 'setup', 'cli.audit.list.summary', 'cli.audit.help'), action('show', 'setup', 'cli.audit.show.summary', 'cli.audit.help'),
     action('rebaseline', 'setup', 'cli.audit.rebaseline.summary', 'cli.audit.help', { requires: ['--reason <text>'] }),
   ] },
   { name: 'backup', group: 'setup', summary: 'cli.help.summary.backup', detail: 'cli.help.backup', installation: 'owned', args: '[<action> --scope <id> --set <path>]', bare: 'handler', children: [
-    action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup'),
+    // BeUser S-06: a create without its set, a restore without its target name the missing flag (CLI_ARGUMENT_MISSING), not "invalid arguments".
+    action('create', 'setup', 'cli.help.action.backup.create', 'cli.help.backup', { requires: ['--set <path>'] }),
     action('verify', 'setup', 'cli.help.action.backup.verify', 'cli.help.backup'),
-    action('restore', 'setup', 'cli.help.action.backup.restore', 'cli.help.backup'),
+    action('restore', 'setup', 'cli.help.action.backup.restore', 'cli.help.backup', { requires: ['--target <project>'], picks: true }),
   ] },
   { name: 'terminal', group: 'start', summary: 'cli.help.summary.terminal', detail: 'cli.help.terminal', args: '[--scope <id>] [--full-access]', bare: 'handler', children: [
     action('workline', 'start', 'cli.help.action.workline', 'cli.help.terminal'),
@@ -120,6 +127,8 @@ export const CLI_CATALOG = [
     action('integration-deliver', 'work', 'cli.help.action.integration-deliver', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--candidate-command-id <id>'] }),
     action('integration-adopt', 'work', 'cli.help.action.integration-adopt', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--delivery-command-id <id>', '--target <ref>'] }),
     action('integration-rollback', 'work', 'cli.help.action.integration-rollback', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--adoption-command-id <id>'] }),
+    action('integration-dismiss', 'work', 'cli.help.action.integration-dismiss', 'cli.help.task', { requires: [...TASK] }),
+    action('integration-restore', 'work', 'cli.help.action.integration-restore', 'cli.help.task', { requires: [...TASK] }),
     action('transcript', 'work', 'cli.help.action.transcript', 'cli.help.task', { requires: TASK, picks: true }),
   ] },
   { name: 'pool', group: 'work', summary: 'cli.help.summary.pool', detail: 'cli.help.pool', args: '[--scope <id>] [--pool <id>]', bare: { read: 'status' }, children: [

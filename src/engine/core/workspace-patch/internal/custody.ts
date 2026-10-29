@@ -1,9 +1,9 @@
-import { attemptIdentitySchema, sameAttemptIdentity, workspaceDeliveryState, type AttemptIdentity, type RunSnapshot, type WorkspaceDeliveryState } from '#domain/index.js';
+import { attemptIdentitySchema, sameAttemptIdentity, workspaceDeliveryState, runSnapshotSchema, targetQueueRecordSchema, type AttemptIdentity, type RunSnapshot, type WorkspaceDeliveryState } from '#domain/index.js';
 import type { ArtifactReceipt, ArtifactStore } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { DispatchApplication, type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchInventoryStore, type DispatchRecord,
   type DispatchStore, type RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
-import type { RunWorkspaceCustodyStore, WorkspaceRequest } from '#engine/core/workspaces/index.js';
+import { gitWorkspaceIdentityTarget, gitWorkspaceRecordSchema, validGitSourceBase, type RunWorkspaceCustodyStore, type WorkspaceRequest } from '#engine/core/workspaces/index.js';
 import { workspacePatchSchema, type WorkspacePatch } from './contract.js';
 type SupervisorProfile = DispatchRecord['profile']; type Supervisor = ConstructorParameters<typeof DispatchApplication>[1];
 
@@ -164,4 +164,23 @@ export async function sweepAttemptCustodyScopes(scopeIds: readonly string[], swe
     catch (error) { results.push(Object.freeze({ schemaVersion: 1, scopeId, released: 0, detachedKept: 0, sourceBases: Object.freeze({ removed: 0, kept: 0 }), entries: [], error: failure(error) })); }
   }
   return Object.freeze(results);
+}
+type WorkRef = { readonly scopeId: string; readonly id: string };
+/** F7 (uninstall keep-work): an attempt's worker workspace is idle only when the ledger proves it: its lease parses with the workspace owner's schema,
+ * is verified by its recorded workspace owner (options/private source/fingerprint), ready and names the exact attempt the folder is named for; that attempt's Run is terminal, binds it and runs nothing (`work`, complete); no
+ * delivery or unknown result is open in its scope; and the delivery the Run owes is proven: declared none and settled (C2), or a queue ticket of
+ * this exact attempt settled as adopted. Anything else (absent run, other scope, unretained output) is not idle. Pure over `read`. */
+export async function idleAttemptWorkspace(lease: unknown, folder: string, work: { readonly complete: boolean; readonly running: readonly WorkRef[]; readonly parked: readonly WorkRef[];
+  readonly deliveries: readonly WorkRef[]; readonly uncertain: readonly Omit<WorkRef, 'id'>[] }, read: (identity: AttemptIdentity) => Promise<{ readonly run: unknown; readonly deliveries: readonly unknown[] }>, verify: (record: ReturnType<typeof gitWorkspaceRecordSchema.parse>) => Promise<boolean>) {
+  const record = gitWorkspaceRecordSchema.safeParse(lease);
+  if (!record.success) return false;
+  const { request, sourceBase, status } = record.data, identity = request.identity;
+  if (status !== 'ready' || !await verify(record.data).catch(() => false) || !validGitSourceBase(sourceBase, request) || gitWorkspaceIdentityTarget(identity, '/', { checkout: '', lease: '' }).id !== folder
+    || !work.complete || [...work.running, ...work.parked].some(ref => ref.scopeId === identity.scopeId && ref.id === identity.runId)
+    || [...work.deliveries, ...work.uncertain].some(ref => ref.scopeId === identity.scopeId)) return false;
+  const found = await read(identity), run = runSnapshotSchema.safeParse(found.run);
+  if (!run.success || run.data.state.kind !== 'terminal') return false;
+  const owed = workspaceDeliveryState(run.data, identity);
+  return owed === 'not-required' || owed === 'patch-required' && found.deliveries.some(value => { const ticket = targetQueueRecordSchema.safeParse(value);
+    return ticket.success && ticket.data.state === 'settled' && (ticket.data.outcome === 'adopted' || ticket.data.outcome === 're-prepared+adopted') && sameAttemptIdentity(ticket.data.request.identity, identity); });
 }

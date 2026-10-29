@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { AUDIT_EVENT_SCHEMA_VERSION, auditEventSchema, auditRecordSchema, AuditError } from '#domain/index.js';
-import { AuditApplication, sealAuditRecord, verifyAuditRecord, type AuditStore } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { AuditApplication, deliveryDismissalEvent, dismissedDeliveries, runRequestRefusedEvent, sealAuditRecord, verifyAuditRecord, type AuditStore } from '#engine/index.js';
+import { createHmacIntegrity, snapshotKnownSecrets } from '#platform/index.js';
 
 const integrity = createHmacIntegrity('audit-key', randomBytes(32));
 const base = {
@@ -67,4 +67,27 @@ it('the application seals inside the store append, verifies every listed record 
   // A store failure of any shape is the typed unavailable error: the caller applies no effect.
   const failing = new AuditApplication({ ...store, append: () => { throw new Error('disk'); } }, integrity);
   expect(() => failing.record(base)).toThrow(expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }));
+});
+
+it('BeUser D-08: a refused work request is sealed with a redacted one-line title (known secrets and credential patterns) and its typed code', () => {
+  const known = snapshotKnownSecrets([{ name: 'ERP_TOKEN', value: 'zz-erp-secret-value-991' }]);
+  const event = runRequestRefusedEvent({ scopeId: 'scope', principal: { issuer: 'local-os', subject: 'alperen' }, policyRevision: 'p1', commandId: 'c1',
+    request: `Approve invoices\nwith zz-erp-secret-value-991 and sk-live-abcdef1234567890abcdef ${'x'.repeat(400)}`, code: 'RUN_ADMISSION_NOT_CONFIGURED', atMs: 5, known });
+  const subject = event.subject as { kind: string; title: string; code: string; requestDigest: string };
+  expect(subject).toMatchObject({ kind: 'run-request-refused', code: 'RUN_ADMISSION_NOT_CONFIGURED' });
+  expect(subject.title).not.toContain('zz-erp-secret-value-991'); expect(subject.title).not.toContain('sk-live'); expect(subject.title).not.toContain('\n');
+  expect(subject.title.length).toBeLessThanOrEqual(200); expect(subject.requestDigest).toMatch(/^[a-f0-9]{64}$/);
+});
+
+it('BeUser M-33: the latest dismissal record of a task wins; a restored task is offered again, the others stay set aside', () => {
+  const rows: ReturnType<typeof sealAuditRecord>[] = [];
+  const store: AuditStore = { append: (event, seal) => { const record = seal(rows.length + 1); rows.push(record); return record; }, page: () => rows, increment: () => { throw new Error('unused'); }, counters: () => [],
+    recentOfKind: (scopeId, kind, since, limit) => rows.filter(r => r.event.scopeId === scopeId && r.event.subject.kind === kind && r.event.atMs >= since).reverse().slice(0, limit) };
+  const audit = new AuditApplication(store, integrity), principal = { issuer: 'local-os', subject: 'alperen' };
+  const mark = (taskId: string, action: 'dismiss' | 'restore', atMs: number) => audit.record(deliveryDismissalEvent({ scopeId: 'scope', principal, policyRevision: 'p1', runId: 'r1', taskId, attemptId: 'a-' + taskId, action, atMs }));
+  mark('t1', 'dismiss', 1); mark('t2', 'dismiss', 2); mark('t1', 'restore', 3); mark('t3', 'restore', 4);
+  expect(dismissedDeliveries(audit, 'scope', 200)).toEqual([{ runId: 'r1', taskId: 't2', atMs: 2 }]);
+  mark('t1', 'dismiss', 5);
+  expect(dismissedDeliveries(audit, 'scope', 200).map(row => row.taskId).sort()).toEqual(['t1', 't2']);
+  expect(dismissedDeliveries(audit, 'other', 200)).toEqual([]);
 });

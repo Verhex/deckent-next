@@ -54,11 +54,14 @@ export function schemaWord(schema: unknown, locale: Locale): string {
   if (!schema || typeof schema !== 'object') return '-';
   const value = schema as Record<string, unknown>;
   const options = value['anyOf'] ?? value['oneOf'];
-  if (Array.isArray(options)) return options.map(option => schemaWord(option, locale)).join(' | ');
+  if (Array.isArray(options)) return [...new Set(options.map(option => schemaWord(option, locale)))].join(' | ');
   const description = [String(value['type'] ?? '-')];
   if (Object.hasOwn(value, 'const')) description.push(String(value['const']));
   if (Array.isArray(value['enum'])) description.push(value['enum'].map(item => String(item)).join(', '));
-  for (const key of ['minimum', 'exclusiveMinimum', 'minLength', 'minItems'] as const) if (value[key] !== undefined) description.push(t('config.surface.schemaMinimum', { value: String(value[key]) }, locale));
-  for (const key of ['maximum', 'exclusiveMaximum', 'maxLength', 'maxItems'] as const) if (value[key] !== undefined) description.push(t('config.surface.schemaMaximum', { value: String(value[key]) }, locale));
+  // BeUser D-06: one bound each way, the tightest; the safe-integer limits of `.safe()` are not a person's bound and are left out.
+  const bounds = (keys: readonly string[]) => keys.map(key => value[key]).filter((item): item is number => typeof item === 'number' && Math.abs(item) !== Number.MAX_SAFE_INTEGER);
+  const low = bounds(['minimum', 'exclusiveMinimum', 'minLength', 'minItems']), high = bounds(['maximum', 'exclusiveMaximum', 'maxLength', 'maxItems']);
+  if (low.length) description.push(t('config.surface.schemaMinimum', { value: String(Math.max(...low)) }, locale));
+  if (high.length) description.push(t('config.surface.schemaMaximum', { value: String(Math.min(...high)) }, locale));
   return description.join('; ');
 }

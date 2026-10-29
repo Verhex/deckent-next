@@ -1,16 +1,14 @@
-import { openAiChatDialectSchema, type OpenAiChatDialect } from '#domain/index.js';
+import { openAiChatDialectSchema, type OpenAiChatDialect, parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest } from '#domain/index.js';
 export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from '#domain/index.js';
 import { nativeJsonHttpCertificateSchema as certificate } from '#adapters/core/provider-http-json/index.js';
-import { parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest } from '#domain/index.js';
 export const openAiChatWireObjectSchema = protocolWireObjectSchema;
 export { openAiChatUsageSchema, parseOpenAiChatHttpLimits, type OpenAiChatHttpLimits } from '#domain/index.js';
-import { OpenAiChatHttpError as ProtocolHttpError } from '#domain/index.js';
+import { OpenAiChatHttpError as ProtocolHttpError, wellFormedModelJson, type JsonObject } from '#domain/index.js';
 export const OpenAiChatHttpError = ProtocolHttpError;
 export type OpenAiChatHttpError = InstanceType<typeof ProtocolHttpError>;
 export { OPENAI_CHAT_TOOL_NAME, OPENAI_CHAT_MAX_TOOLS, OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatHttpErrorCode, type OpenAiReasoningEffort, type OpenAiChatToolCall, type OpenAiChatTextMessage, type OpenAiChatToolDefinition } from '#domain/index.js';
 import { openAiCompatiblePublishedTariffSchema, type OpenAiCompatiblePublishedTariff } from './pricing-catalog.js';
 import { z } from 'zod';
-import { wellFormedModelJson, type JsonObject } from '#domain/index.js';
 
 export const OPENAI_CHAT_HTTP_ADAPTER_ID = 'openai-chat-http' as const;
 /** v5 (T4-B K1, owner 2026-10-08, Jev d69089cf): the definition carries the provider's request dialect (`dialect`, required); v4 profiles keep
@@ -38,7 +36,7 @@ export const openRouterEndpointTariffSchema = z.object({ kind: z.literal('openro
 export type OpenRouterEndpointTariff = z.infer<typeof openRouterEndpointTariffSchema>;
 export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number; dialect?: OpenAiChatDialect;
   authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff | OpenAiCompatiblePublishedTariff | OpenRouterEndpointTariff;
-  /** vLLM-style `POST /tokenize` of the same origin (T-L5); used only when the binding declares `token-count`. */
+  /** Same-origin vLLM `POST /tokenize` (T-L5); declared bindings use it, local profiles may also probe it or the root route. */
   tokenizeEndpoint?: string }>;
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 
@@ -93,5 +91,5 @@ function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer'
 export function parseOpenAiChatTextRequest(input: unknown, definition: Pick<OpenAiChatHttpDefinition, 'maxOutputTokens'>): OpenAiChatTextRequest {
   return parseOpenAiChatProtocolRequest(input, definition, wellFormedModelJson);
 }
-export { OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY } from '#domain/index.js';
+export { OPENAI_CHAT_JSON_OBJECT_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY } from '#domain/index.js';
 export type OpenAiChatTextRequest = ProtocolTextRequest;

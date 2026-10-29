@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "resources": [
+    {
+      "kind": "beuser-transcript",
+      "actions": [
+        "inspect"
+      ]
+    },
+    {
+      "kind": "beuser-sandbox",
+      "actions": [
+        "create",
+        "destroy"
+      ]
+    },
+    {
+      "kind": "backup",
+      "actions": [
+        "create",
+        "verify",
+        "restore"
+      ]
+    },
+    {
+      "kind": "config",
+      "actions": [
+        "write"
+      ]
+    },
+    {
+      "kind": "decision",
+      "actions": [
+        "prepare",
+        "ask",
+        "record",
+        "outcome",
+        "inspect"
+      ]
+    },
+    {
+      "kind": "memory",
+      "actions": [
+        "inspect",
+        "propose",
+        "verify",
+        "retire",
+        "contest",
+        "purge"
+      ]
+    },
+    {
+      "kind": "hub",
+      "actions": [
+        "inspect",
+        "sources.add",
+        "sources.remove",
+        "install",
+        "update",
+        "uninstall",
+        "export",
+        "refresh",
+        "search",
+        "publish",
+        "yank",
+        "revoke"
+      ]
+    },
+    {
+      "kind": "agent-catalog",
+      "actions": [
+        "inspect",
+        "define",
+        "import",
+        "promote",
+        "demote",
+        "restore",
+        "retire",
+        "dismiss",
+        "suggest",
+        "narrow"
+      ]
+    },
+    {
+      "kind": "skill-signer",
+      "actions": [
+        "inspect",
+        "enrol",
+        "add",
+        "revoke",
+        "repair"
+      ]
+    },
+    {
+      "kind": "approval",
+      "actions": [
+        "inspect",
+        "decide",
+        "renew"
+      ]
+    },
+    {
+      "kind": "task",
+      "actions": [
+        "execute"
+      ]
+    },
+    {
+      "kind": "attempt",
+      "actions": [
+        "execute",
+        "release",
+        "reconcile",
+        "recover-output",
+        "cancel",
+        "evaluate",
+        "read-output",
+        "prepare-integration",
+        "deliver-integration",
+        "adopt-integration",
+        "rollback-integration"
+      ]
+    },
+    {
+      "kind": "operation",
+      "actions": [
+        "execute",
+        "compensate",
+        "inspect"
+      ]
+    },
+    {
+      "kind": "scope",
+      "actions": [
+        "inspect"
+      ]
+    },
+    {
+      "kind": "pool",
+      "actions": [
+        "use",
+        "hold",
+        "resume",
+        "inspect",
+        "set-capacity",
+        "release-quota"
+      ]
+    },
+    {
+      "kind": "run",
+      "actions": [
+        "create",
+        "inspect",
+        "cancel",
+        "reserve"
+      ]
+    },
+    {
+      "kind": "task-decision",
+      "actions": [
+        "accept",
+        "reject",
+        "answer"
+      ]
+    },
+    {
+      "kind": "run-decision",
+      "actions": [
+        "resume",
+        "close"
+      ]
+    },
+    {
+      "kind": "service",
+      "actions": [
+        "shutdown"
+      ]
+    },
+    {
+      "kind": "model-activation",
+      "actions": [
+        "activate",
+        "deactivate",
+        "inspect"
+      ]
+    },
+    {
+      "kind": "model-invocation",
+      "actions": [
+        "invoke",
+        "inspect",
+        "inspect-content",
+        "purge-content",
+        "cancel-invocation"
+      ]
+    },
+    {
+      "kind": "provider-spend-account",
+      "actions": [
+        "inspect",
+        "audit",
+        "reconcile",
+        "budget-revision"
+      ]
+    },
+    {
+      "kind": "agent-tool",
+      "actions": [
+        "invoke"
+      ]
+    },
+    {
+      "kind": "mcp-server",
+      "actions": [
+        "invoke"
+      ]
+    },
+    {
+      "kind": "permission-mode",
+      "actions": [
+        "set"
+      ]
+    },
+    {
+      "kind": "agent-tool-call",
+      "actions": [
+        "invoke"
+      ]
+    },
+    {
+      "kind": "secret",
+      "actions": [
+        "set",
+        "delete",
+        "switch"
+      ]
+    },
+    {
+      "kind": "work-target",
+      "actions": [
+        "use",
+        "adopt"
+      ]
+    },
+    {
+      "kind": "execution-environment",
+      "actions": [
+        "install"
+      ]
+    },
+    {
+      "kind": "installation",
+      "actions": [
+        "repair",
+        "inspect",
+        "uninstall",
+        "purge"
+      ]
+    },
+    {
+      "kind": "monitor",
+      "actions": [
+        "inspect-scope-diagnostics"
+      ]
+    },
+    {
+      "kind": "policy",
+      "actions": [
+        "inspect-standing-grants"
+      ]
+    },
+    {
+      "kind": "recovery-action",
+      "actions": [
+        "apply"
+      ]
+    },
+    {
+      "kind": "nervous-rule",
+      "actions": [
+        "promote"
+      ]
+    }
+  ]
+}

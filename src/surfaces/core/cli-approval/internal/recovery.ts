@@ -25,7 +25,15 @@ const actionWord = (id: string, l: Locale) => (({ 'fence-attempt': () => t('cli.
   'restart-component': () => t('cli.policy.recovery.action.restart-component', {}, l), 'alert-brain': () => t('cli.policy.recovery.action.alert-brain', {}, l),
   'hand-to-human': () => t('cli.policy.recovery.action.hand-to-human', {}, l), 'continue-new-attempt': () => t('cli.policy.recovery.action.continue-new-attempt', {}, l),
 } satisfies Record<Action, () => string>) as Partial<Record<string, () => string>>)[id]?.() ?? id;
-const rowWord = (row: RecoveryPolicyRow, l: Locale) => row.kind === 'action' ? actionWord(row.id, l) : t('cli.policy.recovery.rule', { rule: row.id }, l);
+/** BeUser D-16: what a measured rule detects, in plain words (one literal key per Core rule id); an overlay rule without text keeps its id. */
+const ruleWhen = (id: string, l: Locale) => (({ 'container-gone': () => t('cli.policy.recovery.when.container-gone', {}, l),
+  'launcher-dead-orphan': () => t('cli.policy.recovery.when.launcher-dead-orphan', {}, l), 'launcher-dead-gone': () => t('cli.policy.recovery.when.launcher-dead-gone', {}, l),
+}) as Partial<Record<string, () => string>>)[id]?.();
+const rowWord = (row: RecoveryPolicyRow, l: Locale) => {
+  if (row.kind === 'action') return actionWord(row.id, l);
+  const when = ruleWhen(row.id.split('@')[0]!, l);
+  return when ? t('cli.policy.recovery.rule.named', { when, rule: row.id }, l) : t('cli.policy.recovery.rule', { rule: row.id }, l);
+};
 const state = (row: RecoveryPolicyRow, l: Locale) => !row.available ? t('cli.policy.recovery.unavailable', {}, l) : row.managed === 'conflict' ? t('cli.policy.conflict', {}, l)
   : row.effective === 'allowed' ? t('cli.policy.on', {}, l) : t('cli.policy.off', {}, l);
 const exits = (row: RecoveryPolicyRow, l: Locale) => row.exits === null ? '-' : row.exits ? t('recovery.rollout.met', {}, l) : t('recovery.rollout.unmet', {}, l);

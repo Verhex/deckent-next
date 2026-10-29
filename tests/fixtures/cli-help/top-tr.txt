@@ -37,6 +37,9 @@ Başlarken:
       [--scope <id>] [--json]
 
 İş yürütme:
+  beuser      İzole ürün yolculuğunu yürü veya kalıcı raporunu oku.
+      setup | walk | report
+      <setup|walk|report>
   hub         İmzalı Hub paketlerini ve kaynaklarını yönetin.
       sources list|add|remove | search | inspect | install | update |
       uninstall | verify | export | refresh | cards | publish | yank | revoke
@@ -53,7 +56,8 @@ Başlarken:
       integration-inspect | integration-queue-enqueue | integration-queue-list |
       integration-queue-inspect | integration-queue-confirm |
       integration-queue-rollback | integration-deliver | integration-adopt |
-      integration-rollback | transcript
+      integration-rollback | integration-dismiss | integration-restore |
+      transcript
       --scope <id> --run <id> --task <id>
   pool        Havuzu incele, beklet veya sürdür (eylemsiz: status)
       status | set-capacity | hold | resume | quota-release
@@ -83,11 +87,13 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
-  uninstall   Bir kurulumu önizleyin veya kaldırın;
-              veri varsayılan olarak korunur.
-      [--purge] [--dry-run] [--json]
-  audit       Audit geçmişini ve checkpoint kanıtını doğrula (eylemsiz: verify)
-      verify | rebaseline
+  uninstall   Deckent’i bu klasörden kaldırır;
+              verileriniz varsayılan olarak korunur.
+      [--keep-data|--keep-work|--all] [--force] [--disable-unit]
+      [--yes] [--dry-run [--verbose]] [--json]
+  audit       Denetim kaydını (kim ne yaptı, ne zaman) ve checkpoint'lerini oku
+              ve doğrula (eylemsiz: verify)
+      verify | list | show | rebaseline
       [--scope <id>]
   backup      Kurtarma seti oluştur, doğrula ve geri yükle
       create | verify | restore

@@ -1,4 +1,5 @@
 import type { ConfigLoadOptions, ServiceManagerUnit } from '#platform/index.js';
+import type { AuditListQuery, AuditListView } from '#domain/index.js';
 import type { ServiceShutdownAdmissionResult, ShutdownCommand, ToolchainCurrencyReport } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -18,6 +19,8 @@ import type { WorkerInstructionStatusHandler, WorkerInstructionTrustHandler } fr
  * the CLI's full command context satisfies it. */
 export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'restartRuntimeService' | 'runningImageBuild' | 'configChoiceSources' | 'prepareMainSecret'> {
   verifyAudit?: AuditVerifyHandler;
+  /** BeUser S-04: one verified page of a scope's audit log (`deckent audit list`). */
+  listAudit?: (root: string, query: AuditListQuery, options: ConfigLoadOptions) => Promise<AuditListView>;
   rebaselineAudit?: AuditRebaselineHandler;
   executeBackup?: BackupHandler;
   /** S4B-4 §6.6: after a restore, how many memory purges the journal holds that the restored ledger lacks (re-applied before work starts). */

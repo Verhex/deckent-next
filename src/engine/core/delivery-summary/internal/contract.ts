@@ -33,7 +33,7 @@ type MissingVerdict = Exclude<WorkerModelVerdict, typeof DELIVERY_MODEL_VERDICTS
 const exhaustiveVerdicts: MissingVerdict extends never ? true : never = true; void exhaustiveVerdicts;
 export const deliveryModelVerdictSchema = z.enum(DELIVERY_MODEL_VERDICTS);
 export const deliveryVerificationPhaseSchema = z.enum(['accepted', 'failed', 'pending', 'cancelled', 'unknown']);
-export const deliveryEvidenceKindSchema = z.enum(['exit-code', 'operation-record', 'unknown']);
+export const deliveryEvidenceKindSchema = z.enum(['exit-code', 'operation-record', 'harness-readback', 'unknown']);
 const evidenceSchema = z.object({ evaluator: z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict(),
   kind: deliveryEvidenceKindSchema, independent: z.boolean().nullable() }).strict();
 export const DELIVERY_RISK_FLAGS = ['acceptance-unverified', 'evidence-not-independent', 'model-not-verified', 'worker-checks-failed',

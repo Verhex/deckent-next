@@ -50,6 +50,7 @@ export function responsesBody(definition: OpenAiChatHttpDefinition, request: Ope
     } else input.push({ role: message.role, content: message.content });
   }
   return { reasoningInputTokensUpperBound, body: { model: request.model, input, max_output_tokens: request.max_completion_tokens, stream: request.stream === true,
+    ...(request.response_format ? { text: { format: request.response_format } } : {}),
     store: false, include: ['reasoning.encrypted_content'], reasoning: { effort },
     service_tier: request.service_tier ?? OPENAI_RESERVATION_POLICY.expectedServiceTier,
     ...(request.tools ? { tools: request.tools.map(tool => ({ type: 'function', ...tool.function, strict: false })) } : {}),

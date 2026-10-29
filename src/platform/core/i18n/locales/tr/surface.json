@@ -598,6 +598,8 @@
   "monitor.detail.deliveryOutlook.none": "Teslim: teslim edilecek bir şey yok; bu işin kabul edilen hiçbir görevi yama taşımıyor.",
   "monitor.detail.deliveryOutlook.patchNotPrepared": "Kabul edildi · yama hazırlanamadı: bu işin kabul edilen görevi için saklanmış yama yok, bu yüzden teslim edilecek bir şey yok. Hazırlamanın neden başarısız olduğu ledger'da kayıtlı değil; tam sınırı ve yapılandırma alanını `task patch-prepare` söyler.",
   "monitor.detail.deliveryOutlook.awaiting": "Kabul edildi · yama hazır, teslim bekliyor: henüz hiçbir şey teslim edilmedi.",
+  "monitor.delivery.setAside": "kenara kondu",
+  "monitor.detail.deliveryOutlook.setAside": "Kabul edildi · yama bir kişi tarafından kenara kondu: korunuyor, hiçbir şey teslim edilmedi. /deliver onu listeler ve geri getirir.",
   "monitor.summary.patchNotPrepared": "{run} · kabul edildi · yama hazırlanamadı",
   "monitor.summary.failedTests": "{task}: {count} test başarısız, ilki: {name}",
   "monitor.detail.failedTests": "başarısız test: {count} ({shown} tanesi gösteriliyor)",
@@ -638,6 +640,7 @@
   "agent.turn.outcome.interrupted": "Tur tamamlanmadan hata oluştu; ardından başka bir işlem çalıştırılmadı. Bağlantıyı kontrol edip yeniden deneyin.",
   "agent.turn.outcome.restart": "Çalışma servisi yeniden başlatıldığı için tur kesildi. Tamamlanan araç çağrıları kayıtlıdır. İsteği yeni bir turda tekrar gönderin.",
   "agent.turn.outcome.rejected": "reddedildi",
+  "agent.turn.outcome.notActivated": "bu model bu kapsamda kapalı: terminalinizde deckent models activate ile açın (orada seçin) ya da /model ile başka bir model seçin; MODEL_NOT_ACTIVATED",
   "agent.turn.outcome.unknown": "sonuç belirsiz",
   "agent.turn.outcome.prevented": "çağrı engellendi",
   "agent.turn.outcome.providerStop": "Sağlayıcı bu turu durdurdu: {reason}. {summary}. Bu yanıttaki araçlar çalıştırılmadı. Kullanım yalnız geçerli son ölçüm varsa kesinleştirilir.",
@@ -721,5 +724,6 @@
   "doctor.auditIntegrity": "Audit bütünlüğü: {status} ({reason})",
   "task.acceptance.checkNotRun": "Kabul edilmedi: işçi çalıştıramadığı bir kabul kontrolü bildiriyor.",
   "task.acceptance.checkNotRunNext": "Sonraki adım: kontrol, işçi ortamında bir şey eksik olduğu için (bir araç, bir bağımlılık, bellek) çalışamadıysa, bunu {template} şablonunun (sürüm {version}) ortam gereksinimi olarak bildirin: yapılandırma anahtarı admission.registry, o profilin parameters.docker.environment alanı (düz bir Docker profilinde parameters.environment). deckent config get admission.registry --json ile okuyun, deckent config set admission.registry '<json>' ile geri yazın, sonra deckent runtime restart; yeni işler işçileri başlamadan önce bunun için denetlenir. Deckent hiçbir gereksinimi kendiliğinden eklemez.",
-  "monitor.blocker.environmentNotReady": "ortam hazır değil: {requirement}; kurulum sorunu, görev hatası değil; düzeltip devam ettirin"
+  "monitor.blocker.environmentNotReady": "ortam hazır değil: {requirement}; kurulum sorunu, görev hatası değil; düzeltip devam ettirin",
+  "monitor.refused": "{scope} içinde reddedilen istek: {code} · {title} (hepsi: `deckent run list`)"
 }

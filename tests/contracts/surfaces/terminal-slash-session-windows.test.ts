@@ -56,6 +56,23 @@ describe('/clear really clears', () => {
     expect(saved[1]).not.toBe(saved[0]);
   });
 
+  it('KER-16: /clear refreshes the configured default label without pinning the old conversation model', async () => {
+    const seen: Array<readonly { role: string; content: string }[]> = [], options: Array<Record<string, unknown> | undefined> = [];
+    const choice = { reference: { providerId: 'catalog-provider', providerVersion: 1, modelId: 'catalog-model', modelVersion: 1 },
+      label: 'Saved default', providerLabel: 'Catalog provider', group: 'catalog-provider', detail: '', blocked: null, exact: '', command: null, configured: true };
+    const view = mountWorkline({ labels: withWindows, model: 'Choose a model', streamTurn: answering(seen, options) as never,
+      sessions: { async save() { /* no write needed */ }, async list() { return []; }, async load() { return null; } },
+      panels: { ports: { model: { async inspect() { return { title: '', choices: [choice], notes: [], defaultBlocked: null }; } } }, labels: terminalPanelLabels('en') } });
+    await ready(view);
+    await send(view, '/clear\r');
+    await until(() => frameOf(view).includes('Saved default'), 'configured default label');
+    expect(frameOf(view)).toContain('Catalog provider');
+    expect(frameOf(view)).not.toContain('Choose a model');
+    await send(view, 'new conversation\r');
+    await until(() => seen.length === 1, 'fresh turn');
+    expect(options[0]?.['reference']).toBeUndefined();
+  });
+
   it.each(['non-TTY output', 'clearScreen off (TERM=dumb)'] as const)('with %s /clear sends no escape sequence and still starts a new conversation', async mode => {
     const port = { async save() { /* unused */ }, async list() { return []; }, async load() { return null; } };
     const view = mountWorkline({ labels: withWindows, sessions: port, ...(mode === 'non-TTY output' ? {} : { clearScreen: false }) });

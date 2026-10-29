@@ -183,7 +183,7 @@
   "climodels.spending.frozen": "! Frozen: new API calls wait until it is unfrozen: deckent models revise-budget --scope <id> --usd <amount> --unfreeze",
   "error.IDENTITY_PROFILE_NOT_SELECTED": "No identity profile is selected in this installation, so there is nothing to preview. Select one: deckent config set identity.profile (or pass --profile <id>).",
   "identity.profile.solo.description": "one person who holds every permission",
-  "identity.profile.team.description": "a small team: readers and contributors; a second approver can be chosen",
+  "identity.profile.team.description": "a small team: readers and contributors; a second approver can be chosen once a second person is known to the policy (company sign-in: Enterprise)",
   "identity.profile.enterprise.description": "an organization with sites and units; people start as readers",
   "identity.profile.custom.description": "your own roles; the template adds none",
   "climodels.identity.rolesOnly": "roles: {roles}",
@@ -193,6 +193,7 @@
   "climodels.identity.selected": "Profile: {profile} · {meaning}",
   "climodels.identity.selectedUnknown": "Profile: {profile} (not in the profile registry; check deckent identity profiles)",
   "climodels.identity.people": "People ({count}): {people}",
+  "climodels.identity.peopleCore": "Core knows the people who use this installation through their own account on this computer; this installation knows only you so far. A colleague with their own sign-in, roles and approvals (company identity) is an Enterprise feature. Until then, keep their work in their own installation.",
   "climodels.identity.roles": "Roles in force:",
   "climodels.identity.noBindings": "No role binding is recorded yet.",
   "climodels.identity.binding": "{roles} → {people} · scopes: {scopes}",
@@ -261,5 +262,7 @@
   "models.catalog.lifecycle.retired": "retired",
   "models.catalog.lifecycle.deprecated": "deprecated",
   "climodels.budget.usdRange": "The amount is whole US dollars from {min} to {max}: a monthly limit for every API provider of the scope.",
-  "climodels.budget.command": "deckent models {action}"
+  "climodels.budget.command": "deckent models {action}",
+  "climodels.roles.pendingFooter.filled": "New model: role pending ({count}). No role may use these models until you assign one, for example:\n  deckent models roles set --channel {channel} --model {model} --tier worker --roles <one or more of {roles}>\n--tier takes worker or frontier; --roles a comma-separated list.",
+  "climodels.roles.tierMeaning": "Tiers: worker runs ordinary tasks; frontier marks a top-capability model you trust for planning and review roles (Brain, recovery decisions). A role takes its tier or higher; the tier you set is your judgement, not a measurement."
 }

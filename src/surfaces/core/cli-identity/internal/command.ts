@@ -85,6 +85,8 @@ async function identityStatus(context: IdentityCommandContext, locale: Locale, e
   emit({ schemaVersion: 1, scopeId: scope.scopeId, profile: selection, principals: choices.principals, bindings: choices.bindings }, { ...sinks, render: () => [
     selectionLine(selection, choices.profiles, locale),
     t('climodels.identity.people', { count: choices.principals.length, people: choices.principals.map(item => terminalSafeText(item.label)).join(', ') || '-' }, locale),
+    // BeUser S-03: say truthfully how another person gets access (Core: the accounts this installation knows; a colleague's own sign-in is Enterprise).
+    ...(choices.principals.length <= 1 ? [t('climodels.identity.peopleCore', {}, locale)] : []),
     choices.bindings.length ? t('climodels.identity.roles', {}, locale) : t('climodels.identity.noBindings', {}, locale),
     ...choices.bindings.map(binding => `  ${t('climodels.identity.binding', { roles: binding.roles.map(terminalSafeText).join(', '),
       people: binding.principals.map(ref => terminalSafeText(who(ref))).join(', '), scopes: scopes(binding.scopes) }, locale)}`),

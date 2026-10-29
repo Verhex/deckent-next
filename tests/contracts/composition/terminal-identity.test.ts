@@ -155,7 +155,7 @@ it.each(['en', 'tr'])('refuses unsupported/relocated interactive startup before 
         completeTerminalChat: effect, ensureRuntimeService: effect, openTerminalHistory: effect, openTerminalSessions: effect })).toBe(78);
       expect(ensure).toHaveBeenCalledOnce(); expect(effect).not.toHaveBeenCalled();
       expect(output.join('')).toContain(code);
-      expect(output.join('')).toContain(code === 'INSTALLATION_IDENTITY_RELOCATED' ? (lang === 'en' ? 'same installation' : 'aynı kurulum')
+      expect(output.join('')).toContain(code === 'INSTALLATION_IDENTITY_RELOCATED' ? (lang === 'en' ? 'same installation' : 'Asıl kurulum hâlâ kullanılıyorsa')
         : (lang === 'en' ? 'installation identity' : 'Kurulum kimliği'));
       expect(await readdir(root)).toEqual([]);
     }

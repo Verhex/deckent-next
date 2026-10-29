@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "list": { "runsShown": 20 },
+  "list": { "runsShown": 20, "refusedShown": 5 },
   "report": { "recentShown": 10, "notCollected": ["subscriptionCalls", "localModel", "humanInterventions", "rework", "rollback"] },
   "inspect": { "exclusionsListedUpTo": 5, "denyPathsShown": 5, "denyEntryPrefix": "acknowledgedDenyPaths:" },
   "control": { "staleRetries": 2, "staleCodes": ["RUN_STORE_CONFLICT"] }

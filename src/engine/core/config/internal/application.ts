@@ -1,4 +1,5 @@
 import { assertWorkerConsentChange } from './worker-consent.js';
+import { assertCatalogProfileBindings } from './model-profiles.js';
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, protectedConfigKey, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
@@ -94,6 +95,7 @@ export class ConfigApplication {
   /** Layer validation, the person-only subscription profiles and the precondition port, in that order, over one planned document. */
   private async check(input: ConfigWriteInput, snapshot: ConfigSnapshot, document: Record<string, unknown>) {
     const checked = validateConfigLayers(snapshot, document); assertSubscriptionProfilesByPerson(input, snapshot.document, document);
+    if (configPath(input.keyPath)[0] === 'provider_catalog') assertCatalogProfileBindings(snapshot, document, checked.config);
     await assertWorkerConsentChange(input, snapshot.effective, checked.config, this.authority.witness);
     await this.authority.precondition?.(input, snapshot.effective, checked.config);
   }

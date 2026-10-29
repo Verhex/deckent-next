@@ -6,6 +6,8 @@ import { connectConfiguredModel, listConfiguredConnectionModels } from '#composi
 import { probeProviderConnection } from '#adapters/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
+import type { ModelInvocationProfile, ProviderCatalog } from '#domain/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
@@ -28,6 +30,53 @@ async function fixture(extra: Record<string, unknown>[] = [], network = false) {
 }
 
 describe.skipIf(process.platform !== 'linux')('configured seedless model connection', () => {
+  it('refuses a capability declaration that would stale a connected profile, then governed removal → declaration → reconnect sends json_object', async () => {
+    const f = await fixture([], true), options = { env: f.env };
+    const connected = await connectConfiguredModel(f.project, f.command, options, f.host);
+    const app = createConfiguredConfigApplication(f.project, options), principal = await resolveConfiguredConfigPrincipal(f.project, 'scope', options);
+    let serial = 0;
+    const set = async (keyPath: string, value: unknown) => app.submit('set', { keyPath, value, scopeId: 'scope', principal, commandId: `declare-${++serial}` });
+    const read = async () => JSON.parse(await readFile(f.path, 'utf8')) as { provider_catalog: ProviderCatalog; provider_invocation_profiles: { schemaVersion: 1; profiles: ModelInvocationProfile[] } };
+    const config = await read(), catalog = structuredClone(config.provider_catalog);
+    const model = catalog.providers.find(row => row.id === connected.reference.providerId)!.models.find(row => row.id === connected.reference.modelId)!;
+    // Only the capability changes, exactly the controller's governed declaration; no server or adapter bypass.
+    const capabilities = model.protocols[0]!.capabilities as { id: string; version: number; state: string }[];
+    capabilities.push({ id: 'response-format-json-object', version: 1, state: 'supported' });
+    const before = await readFile(f.path, 'utf8'), auditBefore = f.rows('SELECT COUNT(*) AS n FROM audit_events');
+    const refused = await set('provider_catalog', catalog).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ code: 'CONFIG_MODEL_PROFILE_REBIND_REQUIRED' });
+    for (const locale of ['en', 'tr'] as const) expect((refused as { localize: (l: 'en' | 'tr') => { suggestion: string } }).localize(locale).suggestion).toContain('models connect');
+    expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.rows('SELECT COUNT(*) AS n FROM audit_events')).toEqual(auditBefore);
+    expect(f.state.requests).toEqual([]);
+
+    // Historical/manual drift still fails closed, now with a typed, localized next step and no request sent.
+    const binding = await inspectModelBinding(f.project, connected.reference, options);
+    if (binding.status !== 'declared') throw Error('FIXTURE_BINDING');
+    const profiles = config.provider_invocation_profiles.profiles, index = profiles.findIndex(row => row.reference.providerId === connected.reference.providerId);
+    const stale = profiles.map((row, i) => i === index ? { ...row, version: row.version + 1, bindingDigest: '0'.repeat(64) } : row);
+    await set('provider_invocation_profiles', { schemaVersion: 1, profiles: stale });
+    const invoke = (id: string, current: typeof binding) => invokeConfiguredModel(f.project, { schemaVersion: 1, commandId: id, scopeId: 'scope', reference: connected.reference,
+      catalogRevision: current.catalogRevision, expectedBinding: current.binding, nativeRequest: { model: f.command.model.nativeId,
+        messages: [{ role: 'user', content: 'Return a JSON object.' }], response_format: { type: 'json_object' }, max_completion_tokens: 8, stream: true, stream_options: { include_usage: true } } }, options);
+    const conflict = await invoke('stale-profile', binding).catch((error: unknown) => error);
+    expect(conflict).toMatchObject({ code: 'MODEL_INVOCATION_PROFILE_CONFLICT' });
+    for (const locale of ['en', 'tr'] as const) expect((conflict as { localize: (l: 'en' | 'tr') => { suggestion: string } }).localize(locale).suggestion).toContain('models connect');
+    expect(f.state.requests).toEqual([]);
+
+    await set('provider_invocation_profiles', { schemaVersion: 1, profiles: profiles.filter((_, i) => i !== index) });
+    await set('provider_catalog', catalog);
+    const fresh = await connectConfiguredModel(f.project, { ...f.command, commandId: 'rebind-json-object', model: { reference: connected.reference } }, options, f.host);
+    expect(fresh).toMatchObject({ status: 'connected', steps: { declaration: 'skipped', profile: 'written', activation: 'written' } });
+    const current = await inspectModelBinding(f.project, connected.reference, options);
+    if (current.status !== 'declared') throw Error('FIXTURE_BINDING');
+    expect(current.binding.digest).not.toBe(binding.binding.digest);
+    expect((await read()).provider_invocation_profiles.profiles.find(row => row.reference.providerId === connected.reference.providerId)?.bindingDigest).toBe(current.binding.digest);
+    f.state.script = [{ content: '{"ok":true}' }];
+    expect((await invoke('json-object-rebound', current)).receipt.outcome).toMatchObject({ state: 'responded' });
+    expect(f.state.requests).toMatchObject([{ response_format: { type: 'json_object' }, model: f.command.model.nativeId }]);
+    expect(f.rows('SELECT record FROM audit_events').map(row => String(row.record)).join('')).toContain('rebind-json-object');
+  }, 60_000);
+
   it('free listing → selection → catalog/profile/activation/audit → actual runtime request carries the exact id; retry is stable', async () => {
     const f = await fixture([], true); await f.start();
     expect(await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, { env: f.env }))
@@ -121,7 +170,11 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     await listConfiguredConnectionModels(f.project, 'scope', 'local-openai', f.endpoint, { env: f.env }, f.host);
     f.setIds(['other']); const before = await readFile(f.path, 'utf8');
     const rows = f.rows('SELECT COUNT(*) AS n FROM model_catalog_models');
-    await expect(connectConfiguredModel(f.project, f.command, { env: f.env }, f.host)).rejects.toMatchObject({ code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
+    // BeUser KER-07: the refusal names the requested model and connection and what the server lists (EN/TR); an empty list says so.
+    const refused = await connectConfiguredModel(f.project, f.command, { env: f.env }, f.host).then(() => null, (error: { code: string; params?: Record<string, unknown>; localize?: (l: 'en' | 'tr') => { message: string } }) => error);
+    expect(refused).toMatchObject({ code: 'MODEL_CONNECT_MODEL_UNKNOWN', params: { models: 'other', connection: 'local-openai' } });
+    expect(refused!.localize!('en').message).toContain('local-openai at this address; it lists: other.'); expect(refused!.localize!('tr').message).toContain('listedekiler: other.');
+    f.setIds([]); expect((await connectConfiguredModel(f.project, f.command, { env: f.env }, f.host).catch((error: { localize: (l: 'en') => { message: string } }) => error.localize('en').message))).toContain('listed no models');
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect(f.rows('SELECT COUNT(*) AS n FROM model_catalog_models')).toEqual(rows);
     expect(f.state.requests).toEqual([]);

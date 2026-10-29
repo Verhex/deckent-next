@@ -55,7 +55,9 @@ export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
 export type TargetQueueOutcome = z.infer<typeof targetQueueOutcomeSchema>;
 export class TargetQueueError extends Error {
   constructor(readonly code: 'QUEUE_CONFLICT' | 'QUEUE_CAPACITY' | 'QUEUE_TARGET_BUSY' | 'QUEUE_CORRUPT' | 'QUEUE_AUTHORITY_REQUIRED'
-    | 'QUEUE_RECOVERY_REQUIRED' | 'QUEUE_CONFIRMATION_REQUIRED' | 'QUEUE_EXPIRED' | 'QUEUE_REQUEUE_EXHAUSTED') { super(code); this.name = 'TargetQueueError'; }
+    | 'QUEUE_RECOVERY_REQUIRED' | 'QUEUE_CONFIRMATION_REQUIRED' | 'QUEUE_EXPIRED' | 'QUEUE_REQUEUE_EXHAUSTED',
+    /** BeUser DR2-06: display facts of a target-branch refusal (`reason`, `ref`); never a decision input. */
+    readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'TargetQueueError'; }
 }
 /** D2b: the typed cause under which the service may re-queue a delegated ticket: a stop before any effect started, never a refusal. */
 export function queueRequeueCause(record: Pick<TargetQueueRecord, 'state' | 'batchDigest'>): 'parked' | 'expired' | null {
@@ -65,7 +67,7 @@ export function queueTerminal(state: TargetQueueState): boolean {
   return ['cancelled', 'expired', 'parked', 'settled'].includes(state);
 }
 /** Unknown is never skipped or expired; recovery needs physical custody, not a lease's wall-clock age. */
-export function queueNextState(previous: TargetQueueRecord, state: TargetQueueState): void {
+export function queueNextState(previous: Pick<TargetQueueRecord, 'state'>, state: TargetQueueState): void {
   const transitions: Readonly<Record<TargetQueueState, readonly TargetQueueState[]>> = {
     queued: ['revalidating', 'cancelled', 'expired', 'parked'], revalidating: ['verifying', 'settled', 'cancelled', 'parked', 'reconciling'],
     verifying: ['awaiting-confirmation', 'settled', 'cancelled', 'parked', 'reconciling'],

@@ -121,6 +121,17 @@ it.each(['tr', 'en'] as const)('renders session cache reads, writes and hit rati
   expect(view.stdout.frame).toContain('60.0'); expect(view.stdout.frame).not.toContain('\u001b[');
 });
 
+// BeUser AYSE-21: a scope whose budget was never created says plainly that no paid call ran here and how to allow one; no contradicting
+// "no budget configured" section follows the live account.
+it.each(['tr', 'en'] as const)('/usage without a created budget says no paid call ran here and names /model → Create budget (%s)', async locale => {
+  const root = await project();
+  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale, status: async () => '', doctor: async () => undefined,
+    context: { inspectProviderSpendAccount: async () => ({ schemaVersion: 2, scopeId: 's', budgetId: 'scope-budget', budgetRevision: 1, checkpoint: null, audit: null, spendingHistoryIntegrity: 'not-recorded' }) as never } });
+  const text = infoModelText((await admin.info.ports.usage!({ usage: EMPTY_SESSION_USAGE })).model).join('\n');
+  expect(text).toContain(locale === 'tr' ? 'ücretli çağrı yok' : 'no paid calls'); expect(text).toContain(locale === 'tr' ? '/model → Bütçe oluştur' : '/model → Create budget');
+  expect(text).not.toMatch(/provider_spending|snapshot|anlık görüntü/u);
+});
+
 it.each(['tr', 'en'] as const)('CACHE-SLICE1 /usage: raw read, 5m and 1h writes and the same-request net benefit as an estimate, negative shown as is (%s)', async locale => {
   const root = await project();
   const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale, context: {}, status: async () => '', doctor: async () => undefined });

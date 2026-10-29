@@ -5,7 +5,7 @@
       "id": "service",
       "owner": "installation",
       "kind": "service",
-      "disposable": true,
+      "removeFrom": "keep-data",
       "operation": "installation.remove-service",
       "after": [],
       "targetKind": "installation-service"
@@ -14,7 +14,7 @@
       "id": "worker-image",
       "owner": "worker-image",
       "kind": "image",
-      "disposable": true,
+      "removeFrom": "keep-data",
       "operation": "installation.remove-image",
       "after": [
         "service"
@@ -25,7 +25,7 @@
       "id": "scratch",
       "owner": "installation",
       "kind": "path",
-      "disposable": true,
+      "removeFrom": "keep-data",
       "operation": "installation.remove-cache",
       "after": [
         "service",
@@ -37,7 +37,7 @@
       "id": "treeScanCache",
       "owner": "installation",
       "kind": "path",
-      "disposable": true,
+      "removeFrom": "keep-data",
       "operation": "installation.remove-cache",
       "after": [
         "service",
@@ -49,7 +49,7 @@
       "id": "bwrap-realm",
       "owner": "installation",
       "kind": "path",
-      "disposable": true,
+      "removeFrom": "keep-data",
       "operation": "installation.remove-cache",
       "after": [
         "service",
@@ -61,7 +61,7 @@
       "id": "build-cache",
       "owner": "worker-image",
       "kind": "path",
-      "disposable": true,
+      "removeFrom": "keep-data",
       "operation": "installation.remove-cache",
       "after": [
         "service",
@@ -73,7 +73,24 @@
       "id": "durable",
       "owner": "installation",
       "kind": "path",
-      "disposable": false,
+      "removeFrom": "all",
+      "operation": "installation.remove-data",
+      "after": [
+        "service",
+        "worker-image",
+        "scratch",
+        "treeScanCache",
+        "bwrap-realm",
+        "build-cache",
+        "conversation"
+      ],
+      "targetKind": "installation-data"
+    },
+    {
+      "id": "conversation",
+      "owner": "installation",
+      "kind": "path",
+      "removeFrom": "keep-work",
       "operation": "installation.remove-data",
       "after": [
         "service",
@@ -86,5 +103,6 @@
       "targetKind": "installation-data"
     }
   ],
-  "inputMaxBytes": 4096
+  "inputMaxBytes": 4096,
+  "waitPollMs": 250
 }

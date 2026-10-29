@@ -4,7 +4,7 @@ import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, Moni
 import { monitorQuerySchema, type MonitorQuery } from './contract.js';
 import type { MonitorLedgerIndex, MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
-import { projectMonitorRun } from './derive.js';
+import { MONITOR_DISMISSED_READ, projectMonitorRun } from './derive.js';
 
 /** Finished workers (ledger terminal) shown per install, most recent first by sealed log, else launch grant; open ones are never capped. */
 export const MONITOR_FINISHED_WORKERS = 20;
@@ -109,10 +109,11 @@ export class MonitorApplication {
     const byAttempt = new Map(workers.filter(value => value.identity).map(value => [`${value.identity!.scopeId}/${value.identity!.attemptId}`, value]));
     // The application filters again: an adapter that answered more than it was asked never widens the view.
     const shownPools = reading.pools.filter(pool => visible.has(pool.poolId)), pools = new Map(shownPools.map(pool => [pool.poolId, pool]));
+    const dismissed = await this.dismissed(target, reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)), diagnostics);
     const runs = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).map(run => {
       const scopeId = run.snapshot.identity.scopeId;
       const own = new Map(run.attempts.flatMap(attempt => { const worker = byAttempt.get(`${scopeId}/${attempt.attemptId}`); return worker ? [[attempt.attemptId, worker] as const] : []; }));
-      return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt });
+      return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt, dismissed });
     }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
     const enrich = (value: WorkerObservation): MonitorWorker => {
       const id = value.identity;
@@ -157,6 +158,13 @@ export class MonitorApplication {
    * names (no Run yet) is asked the same scope decision here, and its workers are not taken. A wait of a scope the viewer may not read is never
    * shown or named: `info:brain-waits-hidden:<n>` counts them. A failed read is the problem code `brain-waits-unavailable:<CODE>`.
    */
+  /** BeUser M-33: the set-aside `scope\0run\0task` keys of the scopes whose accepted, undelivered Runs are shown; a failed read keeps them shown and says so. */
+  private async dismissed(target: MonitorTarget, runs: readonly { snapshot: { identity: { scopeId: string } }; delivery?: unknown }[], notes: string[]) {
+    const keys = new Set<string>(), read = this.ports.readDismissed; if (!read) return keys;
+    for (const scopeId of new Set(runs.filter(run => !run.delivery).map(run => run.snapshot.identity.scopeId))) {
+      try { for (const row of await read(target, scopeId, MONITOR_DISMISSED_READ)) keys.add(`${scopeId}\0${row.runId}\0${row.taskId}`); } catch (error) { notes.push('dismissed-unavailable:' + code(error)); } }
+    return keys;
+  }
   private async brainWaits(target: MonitorTarget, indexed: readonly string[], admitted: Set<string>, notes: string[]) {
     if (!this.ports.readBrainWaits) return [];
     let stored;

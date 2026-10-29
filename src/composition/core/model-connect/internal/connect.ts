@@ -111,9 +111,9 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     });
     const result = await app.connect(input);
     return result.status === 'connected' && result.tariff === 'published' ? Object.freeze({ ...result, budget: await connectBudget(projectRoot, result.scopeId, options) }) : result;
-  } catch (error) {
+  } catch (error) { const wanted = (input as { model?: { nativeId?: unknown; reference?: { modelId?: unknown } } } | null)?.model, requested = wanted?.nativeId ?? wanted?.reference?.modelId;
     if (error instanceof OAuthConnectionError) throw ErrorRegistry.createError(error.code, { params: error.reason ? { reason: error.reason } : {} });
-    if (error instanceof ModelConnectError) throw ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId).join(', ') } });
+    if (error instanceof ModelConnectError) throw ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
     if (error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
     throw error instanceof DeckentError ? error : queryFailure(error);
   }

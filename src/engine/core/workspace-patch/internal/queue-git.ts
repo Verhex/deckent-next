@@ -15,6 +15,7 @@ export function queueTicketCommandIds(scopeId: string, commandId: string) {
     verificationRun: `queue-verify-${key}`, verificationCreate: `queue-create-${key}` };
 }
 export function assertQueueGitTarget(ref: string, registered: string | undefined, allowed: readonly string[], protectedRefs: readonly string[], checkedOut: boolean): void {
-  if (registered !== ref || !allowed.includes(ref) || protectedRefs.includes(ref) || checkedOut || !/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/.test(ref))
-    throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED');
+  // BeUser DR2-06: the same refusal, now naming which rule the branch failed (the rules are unchanged; the first failing one is named).
+  const reason = !/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/.test(ref) ? 'invalid' : protectedRefs.includes(ref) ? 'protected' : checkedOut ? 'checked-out' : registered !== ref ? 'not-base' : !allowed.includes(ref) ? 'not-allowed' : null;
+  if (reason) throw new TargetQueueError('QUEUE_AUTHORITY_REQUIRED', { reason, ref: ref.slice(0, 256) });
 }

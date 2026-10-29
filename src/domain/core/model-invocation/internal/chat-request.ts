@@ -25,6 +25,7 @@ export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly
   max_completion_tokens: number; stream?: boolean; stream_options?: Readonly<{ include_usage: true }>; n?: 1;
   tools?: readonly OpenAiChatToolDefinition[]; tool_choice?: 'auto' | 'none' | 'required';
   chat_template_kwargs?: Readonly<{ enable_thinking: boolean }>; reasoning_effort?: OpenAiReasoningEffort;
+  response_format?: Readonly<{ type: 'json_object' }>;
   service_tier?: 'auto' | 'default' | 'flex' | 'priority' }>;
 /** Tool names follow the agent tool contract; ids are the provider's opaque correlation strings. */
 export const OPENAI_CHAT_TOOL_NAME = /^[a-z][a-z0-9_]{1,63}$/;
@@ -50,6 +51,7 @@ const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   tool_choice: z.union([z.literal('auto'), z.literal('none'), z.literal('required')]).optional(),
   chat_template_kwargs: z.object({ enable_thinking: z.boolean() }).strict().optional(), reasoning_effort: reasoningEffortSchema.optional(),
+  response_format: z.object({ type: z.literal('json_object') }).strict().optional(),
   // Vendor wire vocabulary; these are protocol literals, not Deckent config choices.
   service_tier: z.union([z.literal('auto'), z.literal('default'), z.literal('flex'), z.literal('priority')]).optional() }).strict()
   .refine(value => (value.stream === true) === (value.stream_options !== undefined))
@@ -74,12 +76,15 @@ export function parseOpenAiChatProtocolRequest(input: unknown, definition: Reado
     ...(data.n === 1 ? { n: 1 as const } : {}), ...(data.tools ? { tools: data.tools as OpenAiChatToolDefinition[] } : {}),
     ...(data.tool_choice ? { tool_choice: data.tool_choice } : {}),
     ...(data.chat_template_kwargs ? { chat_template_kwargs: { enable_thinking: data.chat_template_kwargs.enable_thinking } } : {}),
+    ...(data.response_format ? { response_format: data.response_format } : {}),
     ...(data.reasoning_effort ? { reasoning_effort: data.reasoning_effort } : {}), ...(data.service_tier ? { service_tier: data.service_tier } : {}) });
 }
 
 
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 /** Catalog capability a model binding must declare (state supported) before any tool definition is sent to it. */
+/** The connection explicitly supports the OpenAI JSON object wire option; never inferred from its URL. */
+export const OPENAI_CHAT_JSON_OBJECT_CAPABILITY = 'response-format-json-object';
 export const OPENAI_CHAT_TOOL_CALLS_CAPABILITY = 'tool-calls';
 /** The server counts tokens of a chat request (messages and tools, the same body the round sends) at `tokenizeEndpoint`. */
 export const OPENAI_CHAT_TOKEN_COUNT_CAPABILITY = 'token-count';

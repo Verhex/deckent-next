@@ -18,13 +18,13 @@ export function useInstructionContext(port: ProjectInstructionPort | undefined, 
     if (!port || !labels || signal.aborted) return '';
     source.current = null;
     let view = await port.inspect();
-    if (view.status === 'trust-required' && !declined.current.has(view.source.digest)) {
+    if (view.status === 'trust-required' && !declined.current.has(view.source.digest) && !await port.declined?.(view.source.digest).catch(() => false)) {
       const digest = view.source.digest;
       const abort = () => finish(false);
       const allow = await new Promise<boolean>(resolve => { answer.current = resolve; setPending(view.status === 'trust-required' ? view.source : null);
         signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); });
       signal.removeEventListener('abort', abort);
-      if (!allow) declined.current.add(digest);
+      if (!allow) { declined.current.add(digest); if (!signal.aborted) await port.decline?.(digest).catch(() => undefined); }
       else view = await port.trust(digest);
     }
     if (view.status === 'ready' && !signal.aborted) source.current = view.source;

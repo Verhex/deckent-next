@@ -49,7 +49,8 @@ Kişinin bu klasörde `deckent` açıp başlangıç ekranlarını tamamlamasın�
   etmez. Terminal taklit etmeyin, politika dosyası değiştirmeyin ve reddi aşmak için komut değiştirmeyin.
 - Ücretli API bütçesine karar vermek. İlk kurulum bütçesi sıfır USD'dir; önce harcamasız yollar sunulur. API bütçe ekranı
   kişinin kabul edebileceği ya da değiştirebileceği 10 USD seçeneği sunar; kişi adına kabul etmeyin.
-- Kaldırmayı ve purge yedek/onay kartlarını kendisi onaylamak. Kurulum adını bilmek yetki vermez.
+- Kaldırmayı, kademesini, `--force`, `--disable-unit` ve yedek parolasını kendisi onaylamak. Kurulum adını bilmek yetki
+  vermez; `--yes` terminalindeki kişinin yerini almaz.
 
 Kişi adımları tamamlayınca `deckent doctor --json` çalıştırıp kalan hata ve uyarıları aynen bildirin. Kapsamı,
 paket dosyasının sürümünü, biten adımları, kişiyi bekleyen adımları ve sıradaki eylemi söyleyin. Doctor yeşili kurulum
@@ -71,15 +72,27 @@ Kaldırma planını uygulamadan inceleyebilirsiniz:
 deckent uninstall --dry-run --json
 ```
 
-Kişi gerçek terminalde `deckent uninstall` çalıştırıp kaldırmayı inceler ve onaylar. Varsayılan olarak defter, denetim ve kimlik
-anahtarları, sır deposu ve proje verisi kalır. Yeniden kurulum korunan kurulumu benimser. İşçi imajları tam kullanım-referansı
-sözleşmesi gelene kadar kalır; yalnız kartın gösterdiği kesin elle kaldırma adımını kullanın. macOS/Windows servis kaldırması elledir.
+Kişi gerçek terminalde `deckent uninstall` çalıştırır. Menü, her biri kendi bayrağı olan üç kademe sunar; her birini
+`--dry-run` ya da `--json` ile önizleyebilirsiniz (örneğin `deckent uninstall --all --dry-run --json`):
 
-Veri silmek için kişi `deckent uninstall --purge` çalıştırır. Yönetilen yedek ve kişinin onayı gerekir;
-yalnız sahipliği, geri yükleme kapsamı ve silme yetkisi kanıtlanmış dosyalar uygundur. Şirket saklama kayıtları ve hazır olmayan
-klasörler kalır. Taşınmış veya güvensiz yetki dosyası purge'ü engeller; veriyi koruyan yolu seçin ya da bildirilen nedeni düzeltin.
-Yarım purge yalnız kalan baytlar ve yetki yeniden doğrulanınca sürer; belirsizlikte dosyalar korunur.
+- `--keep-data` (varsayılan): önbellekler silinir ve çalışan servis durur; iş kayıtları, ayarlar ve geçmiş kalır. Klasör emekli
+  edilir: oradaki bir sonraki `deckent`, önceki veriyle devam edilip edilmeyeceğini bir kez sorar.
+- `--keep-work`: konuşma verisini de (geçmiş, kayıtlar, oturumlar, çökme raporları, önizlemeler; önceki yedekler kalır) arşivleyip siler; iş kayıtları ve bekleyen
+  işler kalır. Bekleyen iş varken sunulur.
+- `--all`: önce parolalı bir yedek ve sildiği diğer her dosyanın şifreli arşivi, ikisi de doğrulanmış ve silinen her klasörün
+  dışındaki kişisel kurtarma klasöründe; ardından projenin `.deckent` klasörü, init'in yazdığı `DECKENT.md` ve köprü satırı
+  silinir. Projenin Git'inin izlediği ve tanınmayan dosyalar kalır ve listelenir; klasör yalnız boşsa silinir.
+  O yedek setiyle `deckent backup restore` hepsini geri getirir.
 
-Adım sonuçlarını okuyun: kesildi, engellendi veya bilinmiyor tamamlandı değildir. Son çıktı kurulu paketin kimliğinden türetilen
-paket yöneticisi kaldırma komutunu ve purge için yedek konumunu verir. Bu son kaldırma adımını kişiye bırakın;
+Bütün denetimler tek onaydan önce yapılır; silinecek bir şey yoksa soru sorulmaz. Ret nedenini ve sonraki adımı söyler:
+çalışan iş (`--force` kişinin kendi yetkisiyle iptal eder, sonucu bilinmeyen işlemi kapatmaz), servisi yeniden başlatan
+servis yöneticisi (`--disable-unit` kullanıcı birimini kapatmaya ayrı rızadır; manager dosya ve bağlantı kümesini kanıtlar,
+ledger kilidi yeni başlangıcı kapatır; birim dosyası kalır), kuyruktaki teslimler (`--all --force` her teslimin yetkisini karttan
+önce kendi kuyruğunun sahibinde denetler, sonra aynı sahip üzerinden geri çeker), politika,
+saklama ya da yasal saklama veya taşınmış ya da güvensiz yetki dosyası. Git izleme bilgisi
+okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. `--yes` yalnız son kartı atlar; plan yine yazdırılır. İşçi imajları kalır; yalnız kartın verdiği kesin komutu
+kullanın. macOS/Windows servis kaldırması elledir. Yarım silme yalnız kalan baytlar ve yetki yeniden doğrulanınca sürer.
+
+Adım sonuçlarını okuyun: kesildi, engellendi veya bilinmiyor tamamlandı değildir. Kurulum yöntemi kanıtlanınca çıktı programı
+kaldırma komutunu yazar (örneğin `npm uninstall -g deckent`), yoksa genel yönerge verir. Bu son adımı kişiye bırakın;
 paket adını tahmin etmeyin veya klasörleri/imajları kendiniz silmeyin.

@@ -83,13 +83,14 @@ describe('deckent terminal CLI', () => {
   it('keeps slash input local in line mode: /status answers locally, unknown commands never reach the model, piped mode starts no service', async () => {
     const f = await fixture(); const out = sink(); const sent: string[] = []; let ensured = 0;
     const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out.output, stderr: out.output,
-      stdin: Object.assign(Readable.from(['/status\n', '/nope\n', 'hi\n', '/exit\n']), { isTTY: false }), initialize() {},
+      stdin: Object.assign(Readable.from(['/status\n', '/help\n', '/nope\n', 'hi\n', '/exit\n']), { isTTY: false }), initialize() {},
       async describeTerminalChatPlan() { return plan; }, async ensureRuntimeService() { ensured++; throw new Error('unreachable'); },
       async completeTerminalChat(_root: string, input: { messages: ReadonlyArray<{ content: string }> }) { sent.push(input.messages.at(-1)!.content); return 'ok'; } });
     expect(code).toBe(0);
     expect(sent).toEqual(['hi']);
     expect(out.text()).toContain('Chat model:');
-    expect(out.text()).toContain('Unknown command: /nope');
+    // BeUser KER-09: /help answers the line-mode commands; an unknown one points to it.
+    expect(out.text()).toContain('Line mode commands: /status'); expect(out.text()).toContain('Unknown command in line mode: /nope. /help lists');
     expect(ensured).toBe(0);
   });
 

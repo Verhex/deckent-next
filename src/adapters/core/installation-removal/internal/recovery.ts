@@ -1,10 +1,9 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ErrorRegistry, sha256, uninstallHoldPath, type IntegrityAuthority } from '#platform/index.js';
+import { ErrorRegistry, sha256, uninstallHoldPath, PRIVATE_PERMISSION_MASK, type IntegrityAuthority } from '#platform/index.js';
 import type { UninstallPlan, UninstallResult } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-const PRIVATE_PERMISSION_MASK = 0o077;
 const fail = (): never => { throw ErrorRegistry.createError('UNINSTALL_RECOVERY_INVALID'); };
 const absent = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 /** Immutable authenticated plan and append-only outcome companion. Generic effect states stay exclusively in FileEffectStore. */

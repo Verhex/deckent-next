@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "groups": {
+    "authority": [
+      "global-data"
+    ],
+    "cache": [
+      "scratch",
+      "treeScanCache",
+      "bwrap-realm",
+      "build-cache"
+    ],
+    "work": [
+      "ledger",
+      "audit",
+      "approvals",
+      "runs",
+      "tasks",
+      "artifacts",
+      "fileEffects",
+      "approvalPreviews",
+      "autonomyShadow",
+      "memoryPurges",
+      "brainWaits",
+      "integrations",
+      "crashes",
+      "locks",
+      "brain",
+      "memory"
+    ],
+    "settings": [
+      "config",
+      "policy",
+      "bindings",
+      "installationJournal",
+      "onboarding",
+      "signers",
+      "instructionTrust"
+    ],
+    "identity": [
+      "installationIdentity",
+      "projectIdentity"
+    ],
+    "history": [
+      "terminalHistory",
+      "terminalSessions",
+      "runtimeLog",
+      "conversation-data"
+    ],
+    "backups": [
+      "ledgerBackups"
+    ],
+    "workspaces": [
+      "workspaces"
+    ],
+    "service": [
+      "runtimeSocket",
+      "recorded-service",
+      "unrecorded-service"
+    ],
+    "shared": [
+      "global-home",
+      "headlessLogins",
+      "workerImageBuilders"
+    ]
+  },
+  "prefixes": {
+    "image.": "images",
+    "shared.": "shared"
+  },
+  "sharedGroups": [
+    "shared",
+    "images"
+  ],
+  "listedLimit": 5
+}

@@ -62,6 +62,9 @@ describe('SQLite memory journal store', () => {
     const found = await memory.search({ schemaVersion: 1, scopeId: 's', query: 'ISTANBUL eslestirme', limit: 10 });
     expect(found).toMatchObject({ status: 'ok', method: 'full-text', complete: true });
     expect(found.status === 'ok' && found.entries.map(entry => [entry.scopeId, entry.entryId, entry.state])).toEqual([['s', 'm1', 'verified']]);
+    // BeUser E-10: a word's start finds it (Turkish suffixes), in the index and in the scan fallback alike.
+    const prefix = await memory.search({ schemaVersion: 1, scopeId: 's', query: 'istan esles', limit: 10 });
+    expect(prefix.status === 'ok' && prefix.entries.map(entry => entry.entryId)).toEqual(['m1']);
     expect(await memory.search({ schemaVersion: 1, scopeId: 's', query: 'fatura', states: ['candidate'], limit: 10 })).toMatchObject({ status: 'ok', entries: [] });
     const db = new DatabaseSync(f.path, { readOnly: true });
     try {

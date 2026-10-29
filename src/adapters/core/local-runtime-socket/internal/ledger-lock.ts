@@ -1,10 +1,13 @@
-import { closeSync } from 'node:fs';
+import { closeSync, fstatSync } from 'node:fs';
+import { readPinnedFile, removePinnedFile } from '#platform/index.js';
 import { createRequire } from 'node:module';
 import { isAbsolute, normalize } from 'node:path';
 import { LocalRuntimeSocketError } from './endpoint.js';
 interface LockModule { lockFile(path: string): number | null }
-/** A held ledger custody; `release` is idempotent. */
-export interface LedgerLock { release(): void }
+/** A held ledger custody; `release` is idempotent. `remove` (a completed project-folder purge) unlinks the lock file only while the path is
+ * still exactly the file this custody holds (same device and inode) and it is empty (R2: bytes in it are someone's), never another file; then releases. */
+export interface LedgerLock { readonly path: string; release(): void; remove(): Promise<void> }
+
 /** Owner 2026-09-28 (LEDGER-SINGLETON): one runtime service per ledger. The custody is an exclusive kernel `flock` on the
  * ledger's private companion file (`<ledger>-lock`), opened close-on-exec by the native adapter. It does not depend on the
  * configurable endpoint or on the network namespace, and the kernel frees it when the holder dies. Held by another open file
@@ -23,5 +26,7 @@ export function acquireLedgerLock(path: string): LedgerLock {
   }
   if (fd === null) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
   let held: number | null = fd;
-  return Object.freeze({ release() { if (held === null) return; const closing = held; held = null; closeSync(closing); } });
+  const release = () => { if (held === null) return; const closing = held; held = null; closeSync(closing); };
+  return Object.freeze({ path, release, async remove() { if (held === null) return; const own = fstatSync(held), now = await readPinnedFile(path).catch(() => null);
+    if (now && now.identity.dev === own.dev && now.identity.ino === own.ino && now.identity.size === 0) await removePinnedFile(path, now.identity).catch(() => undefined); release(); } });
 }

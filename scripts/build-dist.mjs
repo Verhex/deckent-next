@@ -42,6 +42,17 @@ export function standaloneImportProblems(output, label) {
   return (output?.imports ?? []).filter(item => !(item.external && item.path.startsWith('node:'))).map(item => `${label} imports ${item.path} (${item.kind})`);
 }
 const PUBLISHED_FIELDS = ['name', 'version', 'description', 'license', 'type', 'engines', 'bin', 'exports', 'imports', 'main'];
+/** BeUser KER-04/S-11: where a shipped document's link to a file the package does not carry points instead (the public source at the build commit). */
+export const SOURCE_BLOB_BASE = 'https://github.com/Verhex/deckent-next/blob';
+/** A shipped Markdown file's relative links to files outside the package become links to the same file at `base`; links to shipped files,
+ * in-page anchors and absolute URLs stay as written. `docPath`: the file's path in the package; `shipped(path)`: whether the package carries it. */
+export function rewritePackageLinks(markdown, docPath, shipped, base) {
+  return markdown.replace(/\]\(([^)\s]+)\)/gu, (whole, target) => {
+    if (/^(?:[a-z][a-z0-9+.-]*:|#|\/)/iu.test(target)) return whole;
+    const [path, anchor = ''] = target.split(/(?=#)/u), resolved = join(dirname(docPath), path).split('\\').join('/');
+    return shipped(resolved) ? whole : `](${base}/${resolved}${anchor})`;
+  });
+}
 
 /** FASTURI-OUT (owner 2026-09-29): the MCP SDK packages carry their own bundled ajv 8 + fast-uri 3.1.0 (8 HIGH advisories) behind the
  * `_shims` default validator and the `validators/ajv` subpath; Deckent always passes its own validator, so that code must not ship.
@@ -166,7 +177,12 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const declarations = vendorDeclarations({ root, stage });
   if (declarations.problems.length) throw new Error(`published declarations are not self-contained:\n${declarations.problems.join('\n')}`);
   for (const file of files.filter(file => !file.endsWith('.js') && !file.endsWith('.d.ts'))) { const target = join(stage, 'dist', relative(dist, file)); mkdirSync(dirname(target), { recursive: true }); cpSync(file, target); }
-  for (const extra of ['assets', 'native', 'README.md', 'LICENSE']) if (existsSync(join(root, extra))) cpSync(join(root, extra), join(stage, extra), { recursive: true });
+  // KER-04: every listed top-level file ships (the PUB-AI install guide `docs/ai-install*.md` was listed but never staged).
+  for (const extra of new Set(['assets', 'README.md', 'LICENSE', ...(source.files ?? []).filter(entry => entry !== 'dist')])) if (existsSync(join(root, extra))) {
+    mkdirSync(dirname(join(stage, extra)), { recursive: true }); cpSync(join(root, extra), join(stage, extra), { recursive: true }); }
+  // KER-04/S-11: a shipped document links to the source at this build's commit for any file the package does not carry.
+  for (const doc of ['README.md', ...(source.files ?? []).filter(entry => entry.endsWith('.md'))]) if (existsSync(join(stage, doc))) writeFileSync(join(stage, doc),
+    rewritePackageLinks(readFileSync(join(stage, doc), 'utf8'), doc, path => existsSync(join(stage, path)) || ['package.json', 'THIRD-PARTY-NOTICES.md', 'sbom.cdx.json'].includes(path), `${SOURCE_BLOB_BASE}/${identity.sourceCommit ?? 'main'}`));
   const bwrapLock = JSON.parse(readFileSync(join(root, 'packaging', 'bwrap', 'bwrap.lock.json'), 'utf8')), bundledDir = join(stage, 'dist', BUNDLED_DIR);
   if (bwrap) stageBundle(bwrap, bundledDir, bwrapLock);
   const bundleGaps = bundleProblems(bundledDir, bwrapLock);

@@ -54,7 +54,7 @@ export async function discoverConfiguredConnectionModel(projectRoot: string, sco
   connectionAdapter(kind, { endpoint: `${endpoint}${kind.connect!.chatPath}`, nativeId, credentialRef: providerConnectSecretName(kind, endpoint),
     maxOutputTokens: registry.profileDefaults.maxOutputTokens, currency: registry.profileDefaults.currency });
   const models = await listConfiguredConnectionModels(projectRoot, scopeId, connection, endpoint, options, host);
-  if (!models.some(model => model.nativeId === nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
+  if (!models.some(model => model.nativeId === nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN', models.slice(0, 12).map(model => ({ nativeId: model.nativeId, state: 'notInCatalog' as const }))); // KER-07: what it lists
   return discoveredProviderCatalog(kind, endpoint, nativeId, await probeLocalToolCalls(kind, endpoint, nativeId, host.discoveryOptions)); // AYSE-16: tools only when the server accepts them
 }
 

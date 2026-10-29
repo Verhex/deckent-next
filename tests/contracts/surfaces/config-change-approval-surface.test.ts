@@ -105,7 +105,10 @@ describe('the model cannot reach a config write', () => {
       .filter(path => /createConfiguredConfigApplication|configApplication!?\(|configWrite\(|terminalConfigWrite\(|configPanelPort\(/.test(readFileSync(path, 'utf8')))
       .map(path => path.replaceAll('\\', '/')).sort();
     // COLDSTART: the human CLI entry's host wiring lives in its host module (loaded only when a command runs).
-    expect(writers).toEqual(['src/composition/core/cli/internal/host.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
+    expect(writers).toEqual([
+      // B1 (11978e6db): person-witnessed setup, through the same policy/approval/digest/audit writer; AI and MCP are refused before reads.
+      'src/composition/core/beuser/internal/setup.ts',
+      'src/composition/core/cli/internal/host.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
       // POLICY-V12: `init policy --apply|--upgrade` writes a missing `service.identity` through the same governed writer (the person's own config
       // grant, digest CAS, audited). Reached only from the human CLI entry (asserted below): no SDK export, no MCP tool, no agent unit.
       'src/composition/core/installation/internal/policy-template.ts',
@@ -133,6 +136,12 @@ describe('the model cannot reach a config write', () => {
       'src/surfaces/core/config/internal/command.ts', 'src/surfaces/core/config/internal/panel.ts',
       'src/surfaces/core/config/internal/records.ts', 'src/surfaces/core/monitor/internal/command.ts']); // records.ts: the /config window's selection-only record editors (8ce20e6f)
     for (const path of writers) expect(path).not.toMatch(/agent-turn|agent-tool|\/mcp\//);
+    const beuserSetup = readFileSync('src/composition/core/beuser/internal/setup.ts', 'utf8');
+    expect(beuserSetup.indexOf("await configPersonWitness()('beuser setup')")).toBeGreaterThan(-1);
+    expect(beuserSetup.indexOf("await configPersonWitness()('beuser setup')")).toBeLessThan(beuserSetup.indexOf('await snapshotConfiguredConfig('));
+    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+      .filter(path => /setupConfiguredBeuser|beuserSetup/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/setupConfiguredBeuser|beuserSetup/);
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.
     expect(files('src').filter(path => /agent-turn|agent-tool/.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /connectConfiguredModel|connectModel|model-connect/.test(readFileSync(path, 'utf8')))).toEqual([]);

@@ -30,6 +30,8 @@ describe('question model', () => {
     expect(questionStep('single', options, at(1), '', key({ escape: true }))).toEqual({ kind: 'cancel' });
     expect(questionStep('single', options, at(1), 'c', key({ ctrl: true }))).toEqual({ kind: 'cancel' });
     expect(questionStep('single', options, at(1), 'yes', key())).toEqual({ kind: 'ignored' });
+    // BeUser E-14: a digit the card shows as an option's key answers with it (the purge reason card's "(4)"); unlabelled digits only move.
+    expect(questionStep('single', [{ id: 'r1', label: 'one', key: '1' }, { id: 'r2', label: 'two', key: '2' }], at(0), '2', key())).toEqual({ kind: 'submit', ids: ['r2'] });
     expect(questionStep('single', options, at(1), 'x', key())).toEqual({ kind: 'ignored' });
     // Multi choice: Space ticks, Enter submits the ticked ones in option order, letters never submit.
     const ticked = questionStep('multi', options, at(2), ' ', key());

@@ -1,4 +1,4 @@
-import { fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
+import { fillTemplate } from './worker-line.js';
 
 /** Lines of one `/transcript` page. A fixed bound of the screen, not a policy: page 1 is the newest lines, a later page reaches further back. */
 export const TRANSCRIPT_PAGE_LINES = 40;

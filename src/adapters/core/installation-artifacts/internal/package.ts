@@ -158,6 +158,42 @@ async function readEntries(entries: readonly Entry[], packageStat: BigIntStats, 
   return files;
 }
 
+/** Staged distribution v1 adds a complete unpacked inventory and its release record. Both records are themselves measured,
+ * never exempted from the mounted distribution. package.files is npm's inclusion list; this inventory pins actual files. */
+async function stagedInventory(root: string, cap: PackageMeasurementLimits, packageVersion: string) {
+  const metadata = ['manifest.json', 'release.json'];
+  const stats = await Promise.all(metadata.map(path => statOrMissing(resolve(root, path))));
+  if (stats.every(stat => stat === null)) return null;
+  if (stats.some(stat => stat === null)) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
+  let remaining = cap.maxTotalBytes;
+  const records = [];
+  for (const [index, path] of metadata.entries()) {
+    const read = await stableRead({ path, absolute: resolve(root, path), stat: stats[index]! }, cap, remaining);
+    remaining -= read.measurement.size; records.push(read);
+  }
+  const parse = (bytes: Buffer): Record<string, unknown> => {
+    try {
+      const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+    } catch { /* A malformed release inventory is never an ordinary package fallback. */ }
+    throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
+  };
+  const manifest = parse(records[0]!.bytes), release = parse(records[1]!.bytes);
+  if (release['schemaVersion'] !== 1 || release['packageVersion'] !== packageVersion || release['manifestSha256'] !== records[0]!.measurement.sha256
+    || !Object.hasOwn(manifest, 'package.json')) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
+  const expected = new Map<string, string>();
+  for (const [path, hashMode] of Object.entries(manifest)) {
+    safeDeclaration(path);
+    if (metadata.includes(path) || typeof hashMode !== 'string' || !/^[a-f0-9]{64}:[0-7]{1,3}$/.test(hashMode)) {
+      throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
+    }
+    expected.set(path, hashMode);
+    if (expected.size + metadata.length > cap.maxFiles) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_LIMIT');
+  }
+  // Walk each inventory root once, keeping the bounded sibling I/O instead of repeating every ancestor per file.
+  return { declarations: [...new Set([...expected.keys()].map(path => path.split('/')[0]!)), ...metadata], expected, metadata: records.map(record => record.measurement) };
+}
+
 export async function measureInstalledPackage(rootInput: string, inputLimits: PackageMeasurementLimits): Promise<InstalledPackageMeasurement> {
   if (typeof rootInput !== 'string' || !rootInput) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
   const root = resolve(rootInput), cap = limits(inputLimits);
@@ -175,13 +211,23 @@ export async function measureInstalledPackage(rootInput: string, inputLimits: Pa
     || !Array.isArray(record['files']) || !record['files'].length) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
   const declarations = record['files'].map(safeDeclaration);
   if (new Set(declarations).size !== declarations.length) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_INVALID');
-  const before = await tree(root, declarations, cap);
+  const staged = await stagedInventory(root, cap, record['version']);
+  const measuredDeclarations = staged?.declarations ?? declarations;
+  const before = await tree(root, measuredDeclarations, cap);
   const files = await readEntries(before.entries, packageStat, initialPackage.measurement, cap);
-  const after = await tree(root, declarations, cap);
+  if (staged) for (const file of files) {
+    const expected = staged.expected.get(file.path), metadata = staged.metadata.find(entry => entry.path === file.path);
+    if (expected !== undefined ? expected !== `${file.sha256}:${file.mode.toString(8)}` : !metadata || metadata.sha256 !== file.sha256 || metadata.mode !== file.mode) {
+      throw new InstallationArtifactError('INSTALLATION_ARTIFACT_CHANGED');
+    }
+  }
+  const after = await tree(root, measuredDeclarations, cap);
   if (JSON.stringify(before.observed) !== JSON.stringify(after.observed) || JSON.stringify(before.missing) !== JSON.stringify(after.missing)
     || files.find(file => file.path === 'package.json')?.sha256 !== initialPackage.measurement.sha256) throw new InstallationArtifactError('INSTALLATION_ARTIFACT_CHANGED');
+  const present = new Set(files.map(file => file.path));
+  const missing = staged ? [...staged.expected.keys(), ...staged.metadata.map(file => file.path)].filter(path => !present.has(path)).sort() : before.missing;
   const evidence = { schemaVersion: 1 as const, packageName: record['name'], packageVersion: record['version'], files: Object.freeze(files),
-    declaredMissing: Object.freeze(before.missing), dependencyCoverage: 'excluded' as const, origin: 'installed-bytes' as const };
+    declaredMissing: Object.freeze(missing), dependencyCoverage: 'excluded' as const, origin: 'installed-bytes' as const };
   const measurementDigest = digest(`deckent.installed-package.v1\n${JSON.stringify(evidence)}`);
   return Object.freeze({ ...evidence, measurementDigest });
 }

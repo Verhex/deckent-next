@@ -12,5 +12,7 @@ export * from './internal/build-identity.js';
 export * from './internal/node-support.js';
 export * from './internal/wsl-detect.js';
 export * from './internal/service-manager.js';
+export { packageRemovalCommand, handMadeLaunchers } from './internal/package-method.js';
 export * from './internal/process-liveness.js';
 export { privateIpcRoot } from './internal/private-ipc.js';
+export * from './internal/user-unit.js';

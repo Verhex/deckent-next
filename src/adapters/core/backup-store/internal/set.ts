@@ -1,3 +1,5 @@
+import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
+import { assertUnsealedInstallation } from '#engine/index.js';
 import { createRequire } from 'node:module';
 import { chmod, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -32,6 +34,7 @@ export async function locateBackupSet(set: string): Promise<void> {
   if (!names.includes('MANIFEST.sha256')) return refuse(names.some(name => (FILES as readonly string[]).includes(name)) ? 'BACKUP_MANIFEST_INVALID' : 'BACKUP_SET_NOT_FOUND', { path: set });
 }
 export async function verifyBackupSet(set: string, passphrase: string, limits: BackupLimits): Promise<VerifiedBackup> {
+  await FileInstallationIdentityStore.assertTransferAllowed();
   await locateBackupSet(set);
   if (!passphrase) return refuse('BACKUP_PASSPHRASE_REQUIRED');
   // A member that vanished after the listing changed the set; one this user cannot open is unreadable. Typed refusals pass unchanged.
@@ -52,7 +55,10 @@ export async function verifyBackupSet(set: string, passphrase: string, limits: B
     const resources = Object.fromEntries(Object.entries(state.resources).filter(([name]) => !['config', 'projectIdentity', 'installationJournal'].includes(name)));
     resolveProductLayout({ projectRoot: state.projectRoot, root: state.layoutRoot, resources });
     const identity = state.entries.find(item => item.resource === 'installationIdentity' && item.path === 'identity.json');
-    if (!identity || JSON.parse(Buffer.from(identity.content, 'base64').toString('utf8')).installationId !== state.installationId) return refuse('BACKUP_SET_INVALID');
+    if (!identity) return refuse('BACKUP_SET_INVALID');
+    const record: unknown = JSON.parse(Buffer.from(identity.content, 'base64').toString('utf8'));
+    assertUnsealedInstallation(record);
+    if (!record || typeof record !== 'object' || !('installationId' in record) || record.installationId !== state.installationId) return refuse('BACKUP_SET_INVALID');
     return new VerifiedBackup(resolve(set), state, expected.get('ledger.db')!, key);
   } catch (error) { key.fill(0); throw error; }
 }
@@ -78,6 +84,7 @@ async function readManifest(set: string, limits: BackupLimits) {
 }
 export async function createBackupSet(layout: ProductLayout, projectRoot: string, installationId: string, keyFile: string,
   destination: string, passphrase: string, limits: BackupLimits, config?: BackupConfigLayers): Promise<BackupResult> {
+  await FileInstallationIdentityStore.assertTransferAllowed(layout);
   const set = await safePath(destination);
   for (const resource of BACKUP_RESOURCES) if (inside(productResourcePath(layout, resource), set)) return refuse('BACKUP_PATH_UNSAFE');
   if ((inside(layout.root, set) && !inside(productResourcePath(layout, 'ledgerBackups'), set)) || (inside(join(projectRoot, '.deckent'), set) && !inside(productResourcePath(layout, 'ledgerBackups'), set))) return refuse('BACKUP_PATH_UNSAFE');

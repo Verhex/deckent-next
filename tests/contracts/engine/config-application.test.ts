@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ConfigApplication, ConfigApplicationError, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
 import { createDefaultConfig, validateConfig } from '../../../src/platform/core/config/index.js';
+import { ModelBindingApplication } from '#engine/index.js';
+import { registerProviderConfig } from '#adapters/index.js';
+import { parseModelInvocationProfile } from '#domain/index.js';
+import type { ConfigSnapshot } from '#engine/core/config/index.js';
 import { digestText } from '../../../src/platform/core/utils/index.js';
 
 const principal = { id: 'test', issuer: 'local-os', subject: 'test', assurance: 'os-user', scopeIds: ['test'] } as const;
@@ -129,4 +133,34 @@ it('worker consent uses the governed config transaction: a witnessed person only
   await expect(app.set({ ...write, value: [] })).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONSENT_INVALID' });
   await expect(app.set({ ...write, value: [{ ...record, id: 'ai' }], commandId: 'ai', principal: { ...principal, assurance: 'workload-verified' } })).rejects.toThrow();
   await expect(app.set({ ...write, keyPath: 'toolchains.image.providers', value: ['claude'] })).rejects.toMatchObject({ code: 'WORKER_IMAGE_PROVIDERS_READ_ONLY' });
+});
+
+
+it('a masked global catalog write cannot stale another scope profile; identical bindings and profile removal still permit writes', async () => {
+  registerProviderConfig();
+  const reference = { providerId: 'test-vendor', providerVersion: 1, modelId: 'test-model', modelVersion: 1 };
+  const catalog = { schemaVersion: 1, revision: 'before', providers: [{ id: reference.providerId, version: 1,
+    models: [{ id: reference.modelId, version: 1, nativeId: 'native', protocols: [{ family: 'test', version: 'v1', capabilities: [] }] }] }] };
+  const binding = await new ModelBindingApplication({ read: async () => catalog }).inspect(reference);
+  if (binding.status !== 'declared') throw Error('FIXTURE_BINDING');
+  const profile = parseModelInvocationProfile({ schemaVersion: 1, id: 'other-scope-profile', version: 1, scopeId: 'other-scope', reference,
+    bindingDigest: binding.binding.digest, protocol: { family: 'test', version: 'v1' }, adapter: { id: 'test', version: 1, definition: {} },
+    allocation: { id: 'test', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 1024, responseMaxBytes: 1024, timeoutMs: 1000 } });
+  const global = { provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] } };
+  const project = { provider_catalog: { ...catalog, revision: 'masking-project' } };
+  const snapshot: ConfigSnapshot = { global, project, document: global, layer: 'global', digest: null, env: {},
+    effective: validateConfig({ ...createDefaultConfig(), ...global, ...project }).config };
+  let writes = 0, audits = 0;
+  const app = new ConfigApplication({ snapshot: async () => snapshot, publish: async (input, plan) => {
+    const result = await plan(snapshot); writes++;
+    return { keyPath: input.keyPath, layer: 'global', beforeDigest: null, afterDigest: digestText(JSON.stringify(result.document)), backupPath: null, overridden: false };
+  } }, { authorize: async () => 'policy', audit: async () => { audits++; } });
+  const write = { ...command, keyPath: 'provider_catalog.providers.0.models.0.nativeId', value: 'different-native', layer: 'global' as const };
+  await expect(app.set(write)).rejects.toMatchObject({ code: 'CONFIG_MODEL_PROFILE_REBIND_REQUIRED', params: { profile: profile.id, scope: profile.scopeId } });
+  expect(writes).toBe(0); expect(audits).toBe(0);
+  await expect(app.unset({ ...write, keyPath: 'provider_catalog' })).rejects.toMatchObject({ code: 'CONFIG_MODEL_PROFILE_REBIND_REQUIRED' });
+  await app.set({ ...write, keyPath: 'provider_catalog.revision', value: 'new-revision-same-binding' });
+  expect(writes).toBe(1); expect(audits).toBe(1);
+  snapshot.global['provider_invocation_profiles'].profiles = [];
+  await app.set(write); expect(writes).toBe(2); expect(audits).toBe(2);
 });

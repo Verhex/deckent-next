@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -9,12 +9,13 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { auditCheckpointFixture } from '../support/audit-checkpoint.js';
 import { verifyAudit, type AuditVerifyQuery } from '../../../src/index.js';
-import { checkpointConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
+import { checkpointConfiguredAudit, listConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { homeEnv } from '../support/host-platform.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 
 // C-ADMIN: the rebaseline confirmation is the terminal's CLI card (Ink, PTY-proven); here the person's answer is injected at the card launcher.
 const cliCard = vi.hoisted(() => ({ answer: null as string | null, requests: [] as unknown[] }));
@@ -26,6 +27,24 @@ vi.mock('#surfaces/core/cli-human/index.js', async importOriginal => {
 });
 const roots: string[] = [];
 afterEach(async () => { cliCard.answer = null; cliCard.requests = []; vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+
+it.skipIf(process.platform === 'win32')('separates existing-key audit writes from read-only observation and refuses a missing key', async () => {
+  const f = await auditCheckpointFixture(); roots.push(f.root);
+  const c = await loadConfiguredScopeContext(f.root, 's', f.options, 'read');
+  const original = await withScopeAudit(c, audit => audit.load('s', 'event'), false, 'read');
+  const event = { ...original!.event, eventId: 'existing-key-write' };
+  await expect(withScopeAudit(c, audit => audit.record(event), false)).resolves.toMatchObject({ event, sequence: 2 });
+  const before = { bytes: await readFile(f.ledger), mtimeMs: (await stat(f.ledger)).mtimeMs };
+  await expect(withScopeAudit(c, audit => audit.load('s', event.eventId), false, 'read')).resolves.toMatchObject({ event });
+  expect({ bytes: await readFile(f.ledger), mtimeMs: (await stat(f.ledger)).mtimeMs }).toEqual(before);
+  await expect(withScopeAudit(c, audit => audit.record({ ...event, eventId: 'observer-write' }), false, 'read'))
+    .rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+  const missing = { ...c, config: { ...c.config, approvals: { ...c.config.approvals, keyFile: 'missing-audit.key' } } };
+  await expect(withScopeAudit(missing, audit => audit.record(event), false)).rejects.toMatchObject({ code: 'INTEGRITY_KEY_UNAVAILABLE' });
+  await expect(withScopeAudit(missing, audit => audit.load('s', 'event'), true, 'read')).rejects.toMatchObject({ code: 'INTEGRITY_KEY_UNAVAILABLE' });
+  await expect(stat(join(productResourcePath(c.layout, 'approvals'), 'missing-audit.key'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(withScopeAudit(c, audit => audit.load('s', 'observer-write'), false, 'read')).resolves.toBeNull();
+});
 
 it.skipIf(process.platform === 'win32')('real SDK, CLI, MCP and doctor share read-only verification/export; policy rewrite is visible on every surface', async () => {
   const f = await auditCheckpointFixture(); roots.push(f.root); const query: AuditVerifyQuery = { schemaVersion: 1, scopeId: 's' };
@@ -88,6 +107,24 @@ it.skipIf(process.platform !== 'win32')('unsupported Windows policy custody refu
   await expect(verifyAudit(root, { schemaVersion: 1, scopeId: 's' }, { env: { DECKENT_GLOBAL_HOME: join(root, 'home') } }))
     .rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
   expect(await readdir(data)).toEqual([]);
+});
+
+// BeUser S-04: the audit log is readable, not only verifiable: `audit list` pages the scope's verified records (who, what, when; --json is the
+// export), `audit show <n>` one in full, an unknown number names the list command, and a foreign scope is refused like verify.
+it.skipIf(process.platform === 'win32')('audit list and show read the verified log of the scope; a foreign scope is refused', async () => {
+  const f = await auditCheckpointFixture(); roots.push(f.root);
+  expect((await checkpointConfiguredAudit(f.root, f.installationId, f.options))[0]?.status).toBe('match');
+  const listAudit = (root: string, query: unknown) => listConfiguredAudit(root, query, f.options);
+  const run = async (...argv: string[]) => { let out = '', err = ''; const code = await main(['audit', ...argv, '--scope', 's'], { root: f.root, env: f.options.env, listAudit,
+    stdout: { write: value => { out += value; } }, stderr: { write: value => { err += value; } } }); return { code, out, err }; };
+  const json = await run('list', '--json'), view = JSON.parse(json.out) as { records: { sequence: number; event: { eventId: string; subject: { kind: string } } }[]; next: number | null };
+  expect(json.code).toBe(0); expect(view.records.length).toBeGreaterThan(0); expect(view.records.map(record => record.sequence)).toEqual(view.records.map((_, index) => index + 1));
+  const text = await run('list', '--limit', '1');
+  expect(text.out).toContain('Audit log of scope s'); expect(text.out).toContain(`#1 · `); expect(text.out).toContain(view.records[0]!.event.subject.kind);
+  if (view.records.length > 1) expect(text.out).toContain('deckent audit list --scope s --after 1');
+  const shown = await run('show', '1', '--json'); expect(JSON.parse(shown.out).event.eventId).toBe(view.records[0]!.event.eventId);
+  const missing = await run('show', String(view.records.length + 50)); expect(missing.code).not.toBe(0); expect(missing.err).toContain('deckent audit list --scope s');
+  await expect(listAudit(f.root, { schemaVersion: 1, scopeId: 'foreign' })).rejects.toBeDefined();
 });
 
 it('a throwing verifier, an unverified scope and an unavailable result are never healthy: doctor degraded with the reason, audit verify non-zero', async () => {

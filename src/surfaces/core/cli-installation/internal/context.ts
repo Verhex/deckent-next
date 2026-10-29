@@ -16,7 +16,7 @@ export interface InstallationCommandContext {
   onLocale?: (locale: Locale) => void;
   /** The locale the host resolved once for this call (config language included). */
   locale?: Locale;
-  previewUninstall?: (root: string, purge: boolean, options: ConfigLoadOptions) => Promise<import('#engine/index.js').UninstallPlan>;
+  previewUninstall?: (root: string, query: import('#engine/index.js').UninstallQuery, options: ConfigLoadOptions) => Promise<import('#engine/index.js').UninstallPlan>;
   applyUninstall?: (root: string, input: unknown, interaction: import('#engine/index.js').UninstallInteraction,
     options: ConfigLoadOptions, signal?: AbortSignal) => Promise<import('#engine/index.js').UninstallResult>;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InstallationIdentityRead>;

@@ -40,7 +40,7 @@ const subject = (event: AuditEvent) => event.subject as Detection;
 
 it('loads the versioned seed registry: every rule provisional, every action inside the K-B standing list, no action opens an Attempt', () => {
   expect(RECOVERY_ACTIONS).toEqual(['fence-attempt', 'hold-run', 'stop-orphan', 'restart-component', 'alert-brain', 'hand-to-human']);
-  expect(rules.rules.map(entry => entry.id).sort()).toEqual(['container-gone', 'crash-loop', 'daemon-unavailable', 'daemon-unavailable-escalate',
+  expect(rules.rules.map(entry => entry.id).sort()).toEqual(['beuser-target-refusal', 'container-gone', 'crash-loop', 'daemon-unavailable', 'daemon-unavailable-escalate',
     'launcher-dead-gone', 'launcher-dead-orphan', 'policy-refusal-flood']);
   expect(rules.rules.every(entry => entry.status === 'provisional' && (RECOVERY_ACTIONS as readonly string[]).includes(entry.action))).toBe(true);
   expect(RECOVERY_ACTIONS.some(action => /attempt$/u.test(action) && action !== 'fence-attempt')).toBe(false);

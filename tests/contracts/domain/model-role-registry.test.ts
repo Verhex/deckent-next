@@ -12,9 +12,9 @@ const qwen = { id: 'qwen-interim-brain', version: 1, role: 'brain', channelId: '
 const opus = { channelId: 'anthropic-api', modelId: 'claude-opus-5-5' };
 const none = new Set<string>();
 
-it('the Core seed names exactly the owner Brain list as frontier Brain rows, and declares the four roles', () => {
+it('the Core seed names exactly the owner Brain list as frontier Brain rows, and declares the six roles', () => {
   const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, []);
-  expect(Object.fromEntries(policy.roles.map(row => [row.id, row.minimumTier]))).toEqual({ brain: 'frontier', worker: 'worker', 'recovery-decision': 'frontier', 'memory-evaluator': 'frontier' });
+  expect(Object.fromEntries(policy.roles.map(row => [row.id, row.minimumTier]))).toEqual({ brain: 'frontier', worker: 'worker', 'recovery-decision': 'frontier', 'memory-evaluator': 'frontier', 'beuser-walker': 'frontier', 'beuser-evaluator': 'frontier' });
   const brain = eligibleRoleModels(policy, 'brain', { today: '2026-10-23', active: none });
   expect(new Set(brain.map(row => row.modelId))).toEqual(new Set(['claude-opus-5-5', 'claude-fable-5-1', 'gpt-6.1-sol', 'anthropic/claude-opus-5.5',
     'anthropic/claude-fable-5.1', 'openai/gpt-6.1-sol']));

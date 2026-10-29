@@ -2,6 +2,7 @@ import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
 import { renderBriefLines, runHoldReasonText } from '#surfaces/core/monitor/index.js';
 import { shortId, t, type Locale } from '#platform/index.js';
+import { heldPoolId, runStatusKey } from '#surfaces/core/cli-human/index.js';
 import { loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
@@ -43,8 +44,7 @@ export const parkReasonText = (run: RunView, labels: JobWindowLabels): string | 
 /** S6R-6: a held Run's hold in words (the shared renderer: a system hold's catalog text and case reference, never its raw code). */
 export const runHoldText = (run: RunView, labels: JobWindowLabels) => runHoldReasonText(run.state, labels.locale);
 export function runStateText(run: RunView, labels: JobWindowLabels): string {
-  const value = run.state?.kind === 'terminal' ? run.state.outcome : run.state?.kind ?? 'unknown';
-  return labels.runStates[value] ?? labels.unknown;
+  return fillTemplate(labels.runStates[runStatusKey(run)] ?? labels.unknown, { pool: heldPoolId(run) ?? '' }); // BeUser DR3-02: one status mapping
 }
 /**
  * SLASH-WINDOWS I-5 (owner 2026-10-08, Jev 59f75361): the one opening system line when the start snapshot shows running work — runs that
@@ -86,7 +86,7 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?
       ...summaries?.[index] ?? []].map(text => ({ spans: [span(text)] }))),
     ...(run.targetQueue?.truncated ? [{ spans: [span(t('queue.truncated', {}, labels.locale), { role: 'warning' })] }] : []),
     ...run.tasks.flatMap((task, index) => [section(taskLabel(task, index)), ...(task.resultBrief
-      ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale).map(text => ({ spans: [span(text)] }))
+      ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale, { scope: run.scopeId, run: run.runId, task: task.id }).map(text => ({ spans: [span(text)] }))
       : [{ spans: [span(labels.detailsUnavailable, { role: 'warning' })] }])])];
 }
 

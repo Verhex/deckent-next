@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, attemptIdentitySchema, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema, operationEvidenceBindingReason,
+import { counterSchema, attemptIdentitySchema, sameAttemptIdentity, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema, operationEvidenceBindingReason,
   type OperationEvidenceBinding,
   type AttemptIdentity, type CriterionDefinition, type EvaluatorDefinition, type TaskEvaluation } from '#domain/index.js';
 import { PROCESS_EXIT_EVALUATOR, processExitParametersSchema, processExitTerminalEvaluator, validateInstalledProcessExitEvaluator, validateProcessExitCriterion } from './process-exit.js';
+
+import { BEUSER_EVALUATOR, beuserParametersSchema, validateInstalledBeuserEvaluator, validateBeuserCriterion, evaluateBeuserEvidence } from './beuser.js';
 
 export const OPERATION_EVIDENCE_EVALUATOR = Object.freeze({ id: 'operation-evidence', version: 1,
   implementation: Object.freeze({ id: 'operation-evidence', version: 1 }) });
@@ -11,7 +13,8 @@ const parametersSchema = z.object({ commandId: identitySchema }).strict().readon
 /** Planner metadata comes from the same installed parameter schemas that admission validates. */
 export function installedEvaluatorParameters(evaluator: EvaluatorDefinition) {
   validateInstalledEvaluator(evaluator);
-  return evaluator.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id ? processExitParametersSchema : parametersSchema;
+  return evaluator.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id ? processExitParametersSchema
+    : evaluator.implementation.id === BEUSER_EVALUATOR.id ? beuserParametersSchema : parametersSchema;
 }
 /** Structurally compatible with the existing effect store's read method. The reader owns canonical record validation;
  * this capability checks only its consumed projection, never replaces the effect contract or writes a settlement. */
@@ -39,6 +42,7 @@ export type OperationEvidenceResult = (Readonly<{ verdict: 'pass'; evidence: Ope
 /** Implementation identity selects installed code; registry aliases remain data and do not grant authority. */
 export function validateInstalledEvaluator(evaluator: EvaluatorDefinition): undefined {
   const installed = evaluatorDefinitionSchema.parse(evaluator);
+  if (installed.implementation.id === BEUSER_EVALUATOR.id) return validateInstalledBeuserEvaluator(installed);
   if (installed.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id) return validateInstalledProcessExitEvaluator(installed);
   if (installed.implementation.id !== OPERATION_EVIDENCE_EVALUATOR.implementation.id
     || installed.implementation.version !== OPERATION_EVIDENCE_EVALUATOR.implementation.version) throw new Error('TASK_EVALUATOR_INVALID');
@@ -46,6 +50,7 @@ export function validateInstalledEvaluator(evaluator: EvaluatorDefinition): unde
 }
 export function validateInstalledCriterion(evaluator: EvaluatorDefinition, criterion: CriterionDefinition): undefined {
   validateInstalledEvaluator(evaluator);
+  if (evaluator.implementation.id === BEUSER_EVALUATOR.id) return validateBeuserCriterion(evaluator, criterion);
   if (evaluator.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id) return validateProcessExitCriterion(evaluator, criterion);
   const definition = criterionDefinitionSchema.parse(criterion);
   if (definition.evaluator.id !== evaluator.id || definition.evaluator.version !== evaluator.version) throw new Error('TASK_EVALUATOR_INVALID');
@@ -110,10 +115,15 @@ export async function evaluateOperationEvidence(reader: OperationEvidenceReader,
 export function createInstalledTerminalEvaluator(reader: OperationEvidenceReader) {
   return Object.freeze({
     async evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: Readonly<{ exitCode: number | null; signal?: string | undefined }>,
-      context?: Readonly<{ identity: AttemptIdentity; binding?: OperationEvidenceBinding }>) {
+      context?: Readonly<{ identity: AttemptIdentity; binding?: OperationEvidenceBinding; beuserEvidence?: unknown }>) {
       validateInstalledCriterion(evaluator, criterion);
       if (evaluator.implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id) return processExitTerminalEvaluator.evaluate(evaluator, criterion, terminal);
       if (!context) return 'unknown' as const;
+      if (evaluator.implementation.id === BEUSER_EVALUATOR.id) {
+        if (!sameAttemptIdentity(context.identity, beuserParametersSchema.parse(criterion.parameters).binding.identity)) return 'unknown' as const;
+        const result = evaluateBeuserEvidence(criterion.parameters, context.beuserEvidence);
+        return { verdict: result.verdict, evidenceTypes: result.verdict === 'pass' ? ['retained-artifact', 'observed-readback'] : [] };
+      }
       const result = await evaluateOperationEvidence(reader, evaluator, criterion, context.identity, context.binding);
       return { verdict: result.verdict, evidenceTypes: result.verdict === 'pass' ? ['operation-settlement'] : [],
         evidenceReferences: result.verdict === 'pass' ? [{ id: result.evidence.commandId, digest: result.evidence.digest }] : [],

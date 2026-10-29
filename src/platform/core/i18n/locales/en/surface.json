@@ -598,6 +598,8 @@
   "monitor.detail.deliveryOutlook.none": "Delivery: nothing to deliver; no accepted task of this Run carries a patch.",
   "monitor.detail.deliveryOutlook.patchNotPrepared": "Accepted · patch not prepared: no retained patch exists for this Run's accepted work, so nothing can be delivered. The ledger does not record why the preparation failed; `task patch-prepare` names the exact limit and config field.",
   "monitor.detail.deliveryOutlook.awaiting": "Accepted · patch ready, awaiting delivery: nothing has been delivered yet.",
+  "monitor.delivery.setAside": "set aside",
+  "monitor.detail.deliveryOutlook.setAside": "Accepted · patch set aside by a person: it is kept and nothing was delivered. /deliver lists it and brings it back.",
   "monitor.summary.patchNotPrepared": "{run} · accepted · patch not prepared",
   "monitor.summary.failedTests": "{task}: {count} failed tests, first: {name}",
   "monitor.detail.failedTests": "failed tests: {count} (showing {shown})",
@@ -638,6 +640,7 @@
   "agent.turn.outcome.interrupted": "The turn failed before it could finish; nothing more ran.",
   "agent.turn.outcome.restart": "The turn was interrupted by a runtime service restart; the tool calls it settled are recorded. Send the request again as a new turn.",
   "agent.turn.outcome.rejected": "rejected",
+  "agent.turn.outcome.notActivated": "this model is switched off in this scope: switch it on with deckent models activate in your terminal (pick it there), or choose another model with /model; MODEL_NOT_ACTIVATED",
   "agent.turn.outcome.unknown": "unknown",
   "agent.turn.outcome.prevented": "prevented",
   "agent.turn.outcome.providerStop": "The provider stopped this turn: {reason}. {summary}. No tool from this response ran. Usage is settled only when its final measurement is valid.",
@@ -721,5 +724,6 @@
   "doctor.auditIntegrity": "Audit integrity: {status} ({reason})",
   "task.acceptance.checkNotRun": "Not accepted: the worker reports an acceptance check it could not run.",
   "task.acceptance.checkNotRunNext": "Next step: if the check could not run because the worker environment lacks something (a tool, a dependency, memory), declare it as an environment requirement of template {template} (version {version}): configuration key admission.registry, that profile's parameters.docker.environment (a plain Docker profile: parameters.environment). Read it with deckent config get admission.registry --json, write it back with deckent config set admission.registry '<json>', then deckent runtime restart; new Runs are checked for it before their worker starts. Deckent never adds a requirement by itself.",
-  "monitor.blocker.environmentNotReady": "environment not ready: {requirement}; an installation problem, not a task failure; fix it, then resume"
+  "monitor.blocker.environmentNotReady": "environment not ready: {requirement}; an installation problem, not a task failure; fix it, then resume",
+  "monitor.refused": "Refused request in {scope}: {code} · {title} (all: deckent run list)"
 }

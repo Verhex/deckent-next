@@ -1,4 +1,5 @@
 import type { ErrorDefinitions } from '../definition.js';
+import { beuserErrors } from './beuser.js';
 import { cliErrors } from './cli.js';
 import { clirunErrors } from './clirun.js';
 import { clitaskErrors } from './clitask.js';
@@ -21,6 +22,7 @@ import { recoveryErrors } from './recovery.js';
 
 /** Family fragments merged after the core table, in this fixed order (alpha.48 A2); each lane writes only its own fragment file. */
 export const ERROR_DEFINITION_FRAGMENTS: readonly (readonly [string, ErrorDefinitions])[] = Object.freeze([
+  ['beuser', beuserErrors],
   ['cli', cliErrors],
   ['clirun', clirunErrors],
   ['clitask', clitaskErrors],

@@ -44,10 +44,10 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
-  const policy = async (actions = ['execute', 'read-output', 'recover-output']) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'patch', restrictions: [], grants: [
+  const policy = async (actions = ['execute', 'read-output', 'recover-output'], extra: readonly unknown[] = []) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'patch', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    { id: 'attempt', effect: 'allow', actions, scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } },
+    { id: 'attempt', effect: 'allow', actions, scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }, ...extra,
   ] }), { mode: 0o600 });
   await policy();
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'] }],
@@ -71,7 +71,7 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
       '--layout-revision', identity.layoutRevision, '--json', ...extra], { cwd: project, env: { ...process.env, ...options.env } });
     return JSON.parse(result.stdout) as Awaited<ReturnType<typeof prepare>>;
   };
-  return { project, root, identity, options, run, prepare, preview, cli, policy, runtime, base, git, configPath };
+  return { project, root, identity, options, run, prepare, preview, cli, policy, runtime, base, git, configPath, principals };
 }
 
 /** Executed attempt with a prepared patch, source restored and a check proposal for a candidate command. */

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { effectCommandSchema, effectIntentSchema, effectProducerSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
+import { describeOperationInput, effectCommandSchema, effectIntentSchema, effectProducerSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
   evaluatePolicy, policyResources, type EffectCommand, type EffectIntentApproval, type EffectRecord, type EffectTargetRef, type OperationDescriptor, type OperationRef,
   type EffectProducer, type VerifiedPrincipal } from '#domain/index.js';
 import type { TrustedClock } from '#platform/index.js';
@@ -8,6 +8,9 @@ import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy
 
 /** Versioned operation catalog (registry/config data). */
 export interface OperationCatalog { resolve(operation: OperationRef): Promise<OperationDescriptor | null> }
+/** BeUser (lead 2026-10-28): the approval broker's `describe` for catalog operations: the input's fields under the catalog's labels (presentation only). */
+export const operationInputDescriber = (catalog: OperationCatalog, redact: (text: string) => string, sensitive: (key: string) => boolean, more: (count: number) => string) =>
+  async (command: EffectCommand, budget: number) => describeOperationInput(command.input, (await catalog.resolve(command.operation))?.inputLabels, redact, sensitive, budget, more);
 /** Failure classes a target reports: the precondition no longer holds (412-like), the request was refused before any effect,
  * or the outcome is unknown (transport/timeout/5xx after sending). */
 export class EffectTargetError extends Error {

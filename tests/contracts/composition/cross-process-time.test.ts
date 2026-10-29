@@ -70,6 +70,8 @@ describe('cross-process cancellation leases', () => {
     let raw = 1000;
     const clock = new platform.SystemTrustedClock(() => raw);
     vi.spyOn(platform, 'SystemTrustedClock').mockImplementation(function () { return clock; } as never);
+    // F3 restores only known installed adapters; this clock fixture substitutes that external supervisor boundary.
+    vi.spyOn(await import('#composition/core/supervisors/index.js'), 'recordedExecutionSupervisor').mockReturnValue({} as never);
     const cancel = vi.fn(async () => { raw = 999; return { kind: 'unresolved' as const }; });
     vi.spyOn(DispatchApplication.prototype, 'authorizeCancellation').mockResolvedValue(undefined);
     vi.spyOn(DispatchApplication.prototype, 'cancel').mockImplementation(cancel as never);

@@ -906,6 +906,21 @@ Kaynak: DOCS-A56 owner kartı, dış `proof/ALPHA56-2026-10-24/PLAN-B-OWNER-TEST
 - **Politika yükseltmesi (2026-10-27):** güncel DOCS-A56 ataması owner'ın canlı ve N1'de v16–v18 yükseltmesini uyguladığını bildirir; eski “owner yükseltmesi bekleniyor” notunun yerini alır. Recovery-rule/template versioning sorusu v17/v18 sonrasında da AÇIK; ürün kurulumlarının geneline otomatik yükseltme sonucu çıkarılmaz.
 - **Lead kararları owner cevabı değildir:** FIX9 imaj kartının hazır imajı/arka plan build'ini önseçmesi ve tek kurulu scope'u `init --yes` ile yeniden kullanması; FIX11 kökten imzalı online anahtar delegasyonu (90 gün/5 dk registry varsayılanı, yank yeni içeriği de durdurur); bubblewrap 0.13.0'da kalma ve 0.13.1 imzalayan değişikliğinin ayrı güven kararını beklemesi. Ayrıntı ve kaynak [mimari karar günlüğünde](../architecture/decisions.md).
 
+<a id="kaldirma-v2-2026-10-27"></a>
+
+## Owner kararları — 2026-10-27: UNINSTALL v2 (K1–K7)
+
+Kaynak: dış `proof/UNINSTALL-V2-2026-10-27/` (JOURNEY r2, LAW-AUDIT ve LAW-AUDIT-2 PASS, Jev `94a574c1`). Owner her satırda önerilen koşul setini kabul etti. Sözleşme kaydı [mimari karar günlüğündedir](../architecture/decisions.md).
+
+- **K1 (U10-3'ü açıkça yeniden açar):** "Her şeyi sil" proje `.deckent` klasörünü de kapsar; yalnız registry layout üyeleri, `lstat`/`O_NOFOLLOW`, realpath kapsaması ve `nlink==1`; VCS'in izlediği ve tanınmayan dosyalar kalır ve listelenir, klasör yalnız boşsa silinir; önce audit zinciri dahil doğrulanmış, plana bağlı yedek; makbuz, tombstone ve final-tail kurtarma kökünde. R31 kalkar.
+- **K2:** işçi imajları elle kalır (U10-1 aynen); kart kesin komutu yazar.
+- **K3:** governed force: kişi kendi yetkisiyle iptal eder, reddeder, geri çeker; politika, saklama, sahiplik, yol, yedek ve tanık aşılmaz; kilit çalma ya da süreç öldürme yok; bekleme config'den, sınırlı ve sonraki adımlı; D1/D2 farkında dur; belirsiz ve tutulan kalemler kapatılmaz, makbuzda ve yedekte adıyla kalır, yeniden açılışta uzlaştırılır; yönetilen kapsamda belirsiz etki varken veri silinmez.
+- **K4:** Deckent'in kaydetmediği `--user` birimi yalnız ayrı rıza `--disable-unit` ile: ana süreç describe ile bu kurulumun servisi, cgroup'ta başka süreç yok, önceki durum ve geri alma komutu makbuzda, birim dosyası değişmez, Also=/Alias= varsa yalnız komut; sıra yönetişimli kapanış → yokluk → `--now`; `systemctl` mutlak yoldan, kabuksuz. Aksi halde komut ve `UNINSTALL_SERVICE_RUNNING`.
+- **K5:** program yalnız komutla yazdırılır; komut çalışan girişin gerçek yolundan türetilir, kanıtsızsa genel yönerge.
+- **K6:** `--yes` yalnız son kartı atlar ve D0'a bağlıdır; tanık, AI/MCP/CI tabanı ve engeller kalır; plan gövdesi yine yazdırılır; parola yalnız gizli istemle; `--json` hep önizleme; plan değişirse dur.
+- **K7:** veri silen her kademede zorunlu, parolalı yedek (`--no-backup` yok), 0700/0600; oluştur → doğrula (audit dahil) → plana bağla → sil; doğrulanamazsa hiçbir şey silinmez; konum registry/korumalı config kurtarma kökü, proje klasörünün ve silinen global evin dışında; kişi silene kadar kalır.
+- **UX (owner, bağlayıcı):** kademeli menü (verileri koru varsayılan; bekleyen işleri koru yalnız bekleyen iş varken; her şeyi sil yedekle), her adımın aynı CLI ikizi; bütün denetimler onaydan önce; silinecek bir şey yoksa onay sorulmaz; kart önce silineceği, sonra kalanı ve nedenini söyler; tek başlık; çalışan servis "servis çalışıyor"dur, "iş aktif" değil; >64 geçmiş reddi düzeltilir; `--purge` → `--all` iletisi; EN/TR.
+
 <a id="beuser-2026-10-27"></a>
 
 ## Owner kararı — 2026-10-27: kabul = kişi/kurum yolculuğu (BeUser)
@@ -952,3 +967,29 @@ Kaynak: BeUser 2. tur (Deniz, Mert, Ayşe) ve temiz bağlamlı kanun denetimi `L
 - K8: owner kararı + ARCHITECTURE karar günlüğü satırı; Deniz/Mert/Ayşe r3 yürüyüşü bu koşullarla exact binary'de (ret kodu başına bir yol,
   bekletme altında, Team standart'ta Esc). Bu yürüyüş kapanış kanıtıdır; yazılmadan K8 kapanmış sayılmaz.
 
+
+## Owner kararları — 2026-10-28: BeUser E-05 Hub kurucu aileleri
+
+Kaynak: dış `proof/BEUSER-SWEEP-2026-10-27/LAW-AUDIT-E05.md` (temiz bağlam kanun denetimi, K1–K8) ve lead'in BEUSER-FIX-2 atama mesajı.
+
+- **hub-trust (owner, 2026-10-28):** “yalnız kişiye” — evet. Kişi kartla `hub-trust` ailesini alabilir: `hub` kaynağında `sources.add`,
+  `sources.remove`, `refresh`, `install`, `update`, `uninstall`; yalnız adı verilen kişiye, `ids`/`scopes` = seçilen scope, `allow`.
+  Her komutun kendi kişi kartı kalır; AI/MCP'ye asla (`sources.*` AI tabanında).
+- **hub-read (lead kararı, Jev bfba048a):** `inspect`, `search`, `export` aynı kurallarla. Yayıncı eylemleri (`publish`, `yank`, `revoke`)
+  hiçbir kurucu ailesine girmez. Varsayılan kaynak ve halka açılma (H9) bu kararın dışındadır.
+- Şablon değişmez (v18 kalır); aileler `deckent init policy --scope <id> --owner-baseline hub-read,hub-trust --apply` kartıyla verilir.
+
+## Owner kararları — 2026-10-28: BeUser teslim ve proje talimatı
+
+Kaynak: lead'in BEUSER-FIX-2 atama mesajları (Jev c10e0946, c6c1182a).
+
+- **AYSE-19 proje talimatı güven penceresi (owner, 2026-10-28, Jev c6c1182a):** pencere kalır, ama dosya içeriği (digest) başına bir kez
+  sorulur ve kişinin cevabı, ret de dahil, içerik değişene kadar hatırlanır; otomatik güven yok; sözleşme değişmez.
+- **M-33 teslim bekleyen sonucu bırakma (owner, 2026-10-28, Jev c10e0946):** Seçenek 1. Ek ve yalnız kişiye ait audit konusu
+  `delivery-dismissed {runId, taskId, attemptId, action: dismiss|restore}`, terminal tanığıyla. /deliver ve monitor bırakılan görevi
+  gizler; /deliver içindeki "bırakılanlar" listesi ve `deckent task integration-restore` geri getirir. Yama ve gözetim (custody)
+  değişmez; ledger/run şeması ve göç yok.
+
+## BeUser B1 uygulama sınırları — owner 2026-10-29
+
+Owner'ın B1 planına son eki: O-1 mutlak yasağı korunur; sealed BeUser ledger yedeklenmez/restore edilmez/export edilmez, yedek gerektiren uninstall dalları adıyla unknown kalır. Private systemd yetki genişletmeden çalışmazsa unknown'dur, alpha.57'yi bekletmez. Paket tavanlarının kesin değeri birleştirmede ölçülen ihtiyaç + küçük pay olarak owner'a rakamla bildirilir; author tavan yükseltmez. Bu kararlar implementation/gerçek realm/bağımsız kabul sonucu değildir. Kaynak: dış proof BEUSER-B1-2026-10-28/OPEN-DECISIONS.md, son “Owner kararları — 2026-10-29” eki.

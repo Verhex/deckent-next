@@ -7,11 +7,15 @@ import { deriveAcceptanceView, inspectTaskReadiness, summarizeTaskGraph, taskDep
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
+/** BeUser M-33: how many dismissal records one scope's read looks at (newest first). */
+export const MONITOR_DISMISSED_READ = 200;
 
 /** Everything the pure derivation reads about one Run; `observedAt` is the snapshot's sampling time (host clock). */
 export interface MonitorRunEvidence {
   readonly run: MonitorLedgerRun; readonly approvals: readonly MonitorLedgerApproval[]; readonly pool: MonitorLedgerPool | null;
   readonly workers: ReadonlyMap<string, WorkerObservation>; readonly observedAt: number;
+  /** BeUser M-33: set-aside `scope\0run\0task` keys; such a task owes no delivery in the outlook. */
+  readonly dismissed?: ReadonlySet<string>;
 }
 /**
  * The one blocker precedence (MONITOR-DATA): repair/human conditions outrank progress; equal codes keep graph order. `unknown` (no
@@ -143,6 +147,10 @@ function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null
  * one whose dispatch recorded no retained patch is `patch-not-prepared` (the preparation failure itself is not recorded in the ledger, so no cause is claimed),
  * else a retained patch awaits delivery; no such task means nothing to deliver. Unknown evidence (an older reader without the patch record) yields no outlook.
  */
+/** BeUser M-33: an awaiting Run whose every retained patch a person set aside (`e.dismissed`). */
+const allSetAside = (e: MonitorRunEvidence) => { const { scopeId, runId } = e.run.snapshot.identity; const ready = e.run.snapshot.graph.tasks.filter(task => task.workInput
+  && e.run.snapshot.progress.find(value => value.taskId === task.id)?.phase === 'accepted' && attemptOf(e.run, task.id)?.dispatch?.patchRecorded === true);
+  return ready.length > 0 && ready.every(task => e.dismissed?.has(`${scopeId}\0${runId}\0${task.id}`)); };
 function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): MonitorDeliveryOutlook | undefined {
   if (state !== 'accepted' || e.run.delivery || e.run.deliveryOutputPermitted === false) return undefined;
   const snapshot = e.run.snapshot; let ready = false, unknown = false;
@@ -212,5 +220,19 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     ...(costReport ? { costReport: e.run.costComparison ? recommendRunWorkCosts(costReport, e.run.costComparison.registry, e.run.costComparison.policy) : costReport } : {}),
     ...(snapshot.authority ? { authority: snapshot.authority } : {}),
     phaseCounts: Object.freeze(phaseCounts), graphSummary: summarizeTaskGraph(snapshot.graph, snapshot.progress), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
-    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}) });
+    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}),
+    ...(outlook === 'awaiting-delivery' && allSetAside(e) ? { deliverySetAside: true as const } : {}) });
 }
+/**
+ * BeUser M-33: one inspected Run's projection and which of its tasks a person set aside (task ids from `dismissed`, the latest-record rule): only a task of an
+ * awaiting Run is set aside; the outlook keeps its value. A failed read sets nothing aside and returns its typed code.
+ */
+export async function projectRunWithDismissals(e: MonitorRunEvidence, dismissed?: (limit: number) => Promise<ReadonlySet<string>>) {
+  let aside: ReadonlySet<string> = new Set(), unread: string | undefined;
+  if (dismissed) try { aside = await dismissed(MONITOR_DISMISSED_READ); } catch (error) { const code = (error as { code?: unknown } | null)?.code; unread = typeof code === 'string' ? code : 'AUDIT_UNAVAILABLE'; }
+  const projected = projectMonitorRun(e), awaiting = projected.deliveryOutlook === 'awaiting-delivery';
+  return { projected, setAside: (taskId: string) => awaiting && aside.has(taskId), ...(unread && awaiting ? { unread } : {}) };
+}
+/** BeUser DR2-05: the current project's newest Runs that still owe delivery or adoption (awaiting and not set aside, or delivered and not adopted), at most the dismissal read bound. */
+export const openDeliveryRuns = (snapshot: Readonly<{ installs: readonly Readonly<{ id: string; runs: readonly MonitorRun[] }>[] }>) => (snapshot.installs.find(install => install.id === 'current')?.runs ?? [])
+  .filter(run => (run.deliveryOutlook === 'awaiting-delivery' && !run.deliverySetAside) || run.delivery?.state === 'delivered').slice(0, MONITOR_DISMISSED_READ).map(run => ({ scopeId: run.scopeId, runId: run.runId }));

@@ -1,6 +1,7 @@
+import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, loadConfig, type ProductLayout } from '#platform/index.js';
-import { FileArtifactStore, recordedDockerSupervisor } from '#adapters/index.js';
+import { FileArtifactStore } from '#adapters/index.js';
 import { DispatchApplication, DispatchError, DispatchPolicyAuthorization, sandboxRequestSchema,
   type RunCancellationDispatchStore, type SandboxRequest, type PrincipalVerifier, type DispatchStore } from '#engine/index.js';
 import type { AttemptStore } from '#engine/index.js';
@@ -19,7 +20,7 @@ export function createRecordedCancellationDelivery(store: CancellationStore, con
     if (!recorded) throw new DispatchError('DISPATCH_NOT_ADMITTED');
     const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
     const policy = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
-    return new DispatchApplication(store, recordedDockerSupervisor(recorded.profile), verifier, policy, principal.id, artifacts);
+    return new DispatchApplication(store, recordedExecutionSupervisor(recorded, { config, layout, store, artifacts }), verifier, policy, principal.id, artifacts);
   };
   return Object.freeze({
     async authorizeCancellation(request: SandboxRequest, credential?: unknown) {

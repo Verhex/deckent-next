@@ -68,7 +68,7 @@ describe('relocation producer to actual CLI surface', () => {
     expect(startRuntimeService).not.toHaveBeenCalled();
     expect(f.output.join('')).toContain('INSTALLATION_IDENTITY_RELOCATED');
     expect(f.output.join('')).toContain('deckent init identity --keep'); expect(f.output.join('')).toContain('deckent init identity --new');
-    expect(f.output.join('')).toContain(lang === 'en' ? 'same installation' : 'aynı kurulum');
+    expect(f.output.join('')).toContain(lang === 'en' ? 'If the original installation is still in use' : 'Asıl kurulum hâlâ kullanılıyorsa'); // BeUser S-06: a copy is never kept silently
     expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;
     expect(await main(['init', 'identity', '--lang', lang], f.context)).toBe(78);
     expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;
@@ -184,11 +184,13 @@ describe('relocation producer to actual CLI surface', () => {
     expect(before.entries).not.toContain('policy.json'); expect(before.entries).not.toContain('bindings.json'); expect(before.entries).not.toContain('installation-identity');
   });
   it('an unmoved pending policy journal still recovers through the compiled CLI (Astra 2363 control)', async () => {
-    const f = await pendingPolicyFixture();
+    const f = await pendingPolicyFixture(), identity = await readFile(join(f.project, '.deckent/custom-identity/identity.json'));
     const result = await compiledCli(f.project, f.env, ['init', 'policy', '--scope', 's', '--apply', '--json']);
     expect(result.code).toBe(0);
     expect(JSON.parse(await readFile(f.journal, 'utf8'))).toMatchObject({ phase: 'committed', blockers: [] });
     await expect(stat(join(f.project, '.deckent/policy.json'))).resolves.toBeDefined();
+    expect(await readFile(join(f.project, '.deckent/custom-identity/identity.json'))).toEqual(identity);
+    await expect(stat(join(f.project, '.deckent/installation-identity'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('refuses direct service, MCP and peer admissions before ledger/transport startup', async () => {
     const f = await fixture(), before = await readFile(f.path, 'utf8');

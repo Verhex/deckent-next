@@ -41,6 +41,7 @@ export class FileBackupStorage implements BackupStoragePort {
   constructor(private readonly source: BackupSource, private readonly limits: BackupLimits) {}
   locate(set: string): Promise<void> { return locateBackupSet(set); }
   async execute(command: BackupCommand, passphrase: string): Promise<BackupResult> {
+    await FileInstallationIdentityStore.assertTransferAllowed(this.source.layout);
     if (command.action === 'create') return createBackupSet(this.source.layout, this.source.projectRoot, this.source.installationId,
       this.source.keyFile, command.set, passphrase, this.limits, await this.source.configDocument?.());
     const verified = await verifyBackupSet(command.set, passphrase, this.limits);
@@ -57,6 +58,7 @@ export class FileBackupStorage implements BackupStoragePort {
     const same = target === resolve(this.source.projectRoot);
     const customResources = Object.fromEntries(Object.entries(state.resources).filter(([key]) => !FIXED.includes(key)));
     const layout = same ? this.source.layout : resolveProductLayout({ projectRoot: target, resources: customResources });
+    await FileInstallationIdentityStore.assertTransferAllowed(layout);
     // Astra 2471 R2: the restored config names exactly the layout every resource is published into (same root keeps the current map).
     const targetResources = Object.fromEntries(Object.entries(layout.resources).filter(([key]) => !FIXED.includes(key)));
     const archivedLayout = resolveProductLayout({ projectRoot: state.projectRoot, root: state.layoutRoot, resources: customResources });
@@ -100,6 +102,7 @@ export class FileBackupStorage implements BackupStoragePort {
     let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalPlan: Awaited<ReturnType<typeof planGlobalLayer>> | null = null, globalConfig: BackupResult['globalConfig'] = null;
     const token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
     try {
+      await FileInstallationIdentityStore.assertTransferAllowed(layout);
       // Recheck under the same kernel custody the service must acquire before any migration or startup.
       if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
       await privateDirectory(stage); await writePrivate(join(stage, '.gitignore'), '*\n');

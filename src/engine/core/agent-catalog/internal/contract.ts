@@ -45,6 +45,9 @@ export const agentDefinitionFileSchema = agentContentSchema.unwrap().omit({ skil
   skills: z.array(z.object({ skillId: catalogIdSchema, revision: counterSchema.positive().optional() }).strict()).max(AGENT_CATALOG_LIMITS.skillsPerAgentMax).default([]),
   parentAgentId: catalogIdSchema.nullable().default(null) }).strict();
 export const skillDefinitionFileSchema = skillContentSchema.unwrap().extend({ skillId: catalogIdSchema }).strict();
+/** BeUser E-02: the `agents import-skill --input` file (the command adds scope, command id and revision); one schema for `--schema` and field refusals. */
+export const skillImportFileSchema = skillContentSchema.unwrap().extend({ skillId: catalogIdSchema, source: z.object({ ref: skillSourceRefSchema }).strict(),
+  pin: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null), signature: skillSignatureSchema.nullable().default(null) }).strict();
 export type AgentDefineCommand = z.infer<typeof agentDefineCommandSchema>;
 export type SkillDefineCommand = z.infer<typeof skillDefineCommandSchema>;
 export type SkillImportCommand = z.infer<typeof skillImportCommandSchema>;

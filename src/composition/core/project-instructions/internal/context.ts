@@ -30,7 +30,7 @@ export async function configuredProjectInstructions(root: string, options: Confi
   const config = await loadComposedConfig(root, { ...options, heal: false });
   const reader = await openHostProjectInstructionReader(root, options.env ?? process.env, getConfigKnownSecrets(config));
   const issued = new WeakMap<InstructionInitPreview, string>();
-  return { inspect: reader.inspect, trust: reader.trust,
+  return { inspect: reader.inspect, trust: reader.trust, decline: reader.decline, declined: reader.declined,
     async preview(bridges, skeleton) { const known = getConfigKnownSecrets(config);
       const view = await previewProjectInstructions(reader.root, bridges, (name, commands) => redactForRecord(skeleton(redactForRecord(name, known), commands), known)); issued.set(view, JSON.stringify(view)); return view; },
     async initialize(preview) {

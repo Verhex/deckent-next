@@ -109,8 +109,9 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   let subjects: unknown[];
   try { subjects = db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String(row['record'])) as { event: { subject: unknown } }).event.subject); }
   finally { db.close(); }
-  expect(subjects).toEqual(['set', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN', backend,
-    decision: { effect: 'allow', ruleId: 'first-run-secret-store' } })));
+  expect(subjects).toEqual([expect.objectContaining({ kind: 'authority-change', action: 'apply', installer: expect.objectContaining({ basis: 'system-policy-rows', packageId: 'beuser-system-policy', dataRevision: 1 }) }),
+    { kind: 'audit-checkpoint', checkpointSequence: 1, previousDigest: null }, ...['set', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN', backend,
+    decision: { effect: 'allow', ruleId: 'first-run-secret-store' } }))]);
 
   service.kill('SIGTERM'); await new Promise(done => service.once('close', done));
   // Canary scan: process output, the ledger files, and every file under the installation's data root (policy, audit, state, sockets).

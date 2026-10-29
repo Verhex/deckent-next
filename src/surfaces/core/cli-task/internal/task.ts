@@ -5,6 +5,8 @@ import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/in
 import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
+import { runQuerySchema } from '#engine/index.js';
+import { randomUUID } from 'node:crypto';
 import { runLifecycleCommandSchema, taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
 import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch, PatchScope } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
@@ -49,6 +51,17 @@ export type TaskEvaluationHandler = (root: string, command: TaskEvaluationComman
 /** Same resolution as the terminal delivery window (`resolveLatestAttempt` in cli-terminal). */
 async function latestAttempt(context: TaskCommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
   return resolveLatestAttempt(context.inspectInventory!, context.root ?? process.cwd(), scopeId, runId, taskId, { env: context.env ?? process.env });
+}
+/** The run's delivered-not-adopted task (the one named, else the only one) and its delivery command, read from the Run view; a refusal names the next step. */
+async function fillDelivered(values: Map<string, string>, context: TaskCommandContext): Promise<void> {
+  if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const run = (await context.inspectRun(context.root ?? process.cwd(), runQuerySchema.parse({ schemaVersion: 1, scopeId: values.get('--scope')!, runId: values.get('--run')! }),
+    { env: context.env ?? process.env })).run;
+  const delivered = (run?.tasks ?? []).filter(task => task.resultBrief?.runDelivery?.state === 'delivered' && task.resultBrief.runDelivery.commandId
+    && (!values.has('--task') || task.id === values.get('--task')));
+  if (delivered.length !== 1) throw ErrorRegistry.createError('ADOPTION_NOT_DELIVERED');
+  values.set('--task', delivered[0]!.id);
+  if (!values.has('--delivery-command-id')) values.set('--delivery-command-id', delivered[0]!.resultBrief!.runDelivery!.commandId!);
 }
 async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<string, string>, context: TaskCommandContext, json: boolean, usage: (flag?: string) => Error) {
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
@@ -186,9 +199,13 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   if (READS.includes(action)) await defaultReadScope(values, context, json, earlyLocale, action); else if (!values.has('--scope')) await requireChangeScope(context, earlyLocale, action);
   if (values.has('--scope') && values.has('--run')) values.set('--run', await resolveRun(context, values.get('--scope')!, values.get('--run')!));
   if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
-  const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
+  const scopeId = values.get('--scope'), runId = values.get('--run');
+  let taskId = values.get('--task');
   if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
-  const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action) && !attemptId && !layoutRevision && !generation;
+  // BeUser M-25/DR2-07: `integration-adopt --scope --run [--task] --target` finds the delivered task, its attempt and delivery command itself.
+  const lightAdopt = action === 'integration-adopt' && !attemptId && !layoutRevision && !generation;
+  if (lightAdopt && scopeId && runId) { await fillDelivered(values, context); taskId = values.get('--task'); }
+  const resolveLatest = (['patch-preview', 'transcript', 'integration-inspect', 'integration-dismiss', 'integration-restore'].includes(action) || lightAdopt) && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity, resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
   if (action === 'inspect') {
     if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
@@ -208,6 +225,16 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   const locale = commandLocale(context, values.get('--lang'));
   const options = { env: context.env ?? process.env };
   if (resolvedNotice) (json ? context.stderr ?? process.stderr : context.stdout ?? process.stdout).write(`${t('cli.task.resolvedAttempt', resolvedNotice, locale)}\n`);
+  if (action === 'integration-dismiss' || action === 'integration-restore') {
+    // BeUser M-33 (owner 2026-10-28): a person's terminal act; the composition checks the witness again and seals it. Patch and custody stay.
+    if (cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: argv.slice(0, 2).join(' ') } });
+    if (!context.changeDeliveryDismissal) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const dismiss = action === 'integration-dismiss';
+    await context.changeDeliveryDismissal(context.root ?? process.cwd(), { scopeId: identity.scopeId, runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId,
+      action: dismiss ? 'dismiss' : 'restore' }, options);
+    emit({ schemaVersion: 1, action: dismiss ? 'dismiss' : 'restore', ...identity }, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: () =>
+      dismiss ? t('cli.task.dismissed', { scope: identity.scopeId, run: identity.runId, task: identity.taskId }, locale) : t('cli.task.restored', { run: identity.runId, task: identity.taskId }, locale) }); return;
+  }
   if (action === 'integration-deliver') {
     const commandId = values.get('--command-id'), integrationCommandId = values.get('--candidate-command-id');
     if (!commandId || !integrationCommandId) throw usage(!commandId ? '--command-id' : '--candidate-command-id');
@@ -217,7 +244,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
       t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale) }); return;
   }
   if (action === 'integration-adopt' || action === 'integration-rollback') {
-    const commandId = values.get('--command-id'); if (!commandId) throw usage('--command-id');
+    const commandId = values.get('--command-id') ?? (lightAdopt ? `cli-adopt-${randomUUID()}` : undefined); if (!commandId) throw usage('--command-id');
     const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}) };
     const render = (data: Awaited<ReturnType<TaskIntegrationAdoptHandler>>) => {
       const params = { ref: data.targetRef, from: data.fromCommit, to: data.toCommit, sequence: data.sequence };

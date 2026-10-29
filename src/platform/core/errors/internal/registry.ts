@@ -65,6 +65,16 @@ function installationFileUnsafe(p: Params, l: Locale): string {
   const reason = String(p['reason']);
   return p['path'] && Object.hasOwn(reasons, reason) ? t('installation.fileUnsafeDetail', { ...p, reason: reasons[reason as keyof typeof reasons] }, l) : t('error.INSTALLATION_FILE_UNSAFE', p, l);
 }
+/** BeUser KER-06: an input file that could not be read adds its path, the bounded cause (missing | denied | link | unreadable) and the next step. */
+function inputUnavailable(base: string, p: Params, l: Locale): string {
+  switch (p['reason']) {
+    case 'missing': return `${base} ${t('cli.input.unavailable.missing', p, l)}`;
+    case 'denied': return `${base} ${t('cli.input.unavailable.denied', p, l)}`;
+    case 'link': return `${base} ${t('cli.input.unavailable.link', p, l)}`;
+    case 'unreadable': return `${base} ${t('cli.input.unavailable.unreadable', p, l)}`;
+    default: return base;
+  }
+}
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
 function patchLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -218,7 +228,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   IDENTITY_PREVIEW_SCOPE_DENIED: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_SCOPE_DENIED', p, l) }) },
   IDENTITY_PREVIEW_CONFLICT: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_CONFLICT', p, l) }) },
   IDENTITY_PREVIEW_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_LIMIT', p, l) }) },
-  IDENTITY_PREVIEW_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_UNAVAILABLE', p, l) }) },
+  IDENTITY_PREVIEW_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.IDENTITY_PREVIEW_UNAVAILABLE', p, l), p, l) }) },
   PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
   PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_MASKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_MASKED', p, l) }) },
@@ -249,11 +259,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
   CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
   CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
-  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', { ...p, subject: invocationInputSubject(p, l) }, l), p, l) }) },
   CLI_CATALOG_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_LIMIT', p, l) }) },
   CLI_CATALOG_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_INVALID', p, l) }) },
   CLI_CATALOG_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_TTY', p, l) }) },
-  CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l), p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
   MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: discoveryUnavailable(p, l) }) },
@@ -266,7 +276,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CONNECT_NOT_CONNECTABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_NOT_CONNECTABLE', p, l) }) },
   MODEL_CONNECT_ENDPOINT_FIXED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_FIXED', p, l) }) },
   MODEL_CONNECT_ENDPOINT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_ENDPOINT_INVALID', p, l) }) },
-  MODEL_CONNECT_MODEL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_MODEL_UNKNOWN', p, l) }) },
+  // KER-07: the requested model and connection are named; the models the server listed are shown, or that it listed none.
+  MODEL_CONNECT_MODEL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: typeof p['model'] !== 'string' ? t('error.MODEL_CONNECT_MODEL_UNKNOWN', p, l)
+    : p['models'] ? t('error.MODEL_CONNECT_MODEL_UNKNOWN.listed', p, l) : t('error.MODEL_CONNECT_MODEL_UNKNOWN.none', p, l) }) },
   MODEL_CONNECT_DECLARATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DECLARATION_CONFLICT', p, l) }) },
   MODEL_CONNECT_KEY_NAME_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE', p, l) }) },
   MODEL_CONNECT_SEED_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_SEED_UNAVAILABLE', p, l) }) },
@@ -305,7 +317,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   DECISION_RECORD_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.DECISION_RECORD_INVALID', p, l) }) },
   MODEL_INVOCATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_INVALID', p, l) }) },
   MODEL_INVOCATION_BINDING_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_BINDING_CONFLICT', p, l) }) },
-  MODEL_INVOCATION_PROFILE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_PROFILE_CONFLICT', p, l) }) },
+  CONFIG_MODEL_PROFILE_REBIND_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.CONFIG_MODEL_PROFILE_REBIND_REQUIRED', p, l), suggestion: t('remedy.CONFIG_MODEL_PROFILE_REBIND_REQUIRED', p, l) }) },
+  MODEL_INVOCATION_PROFILE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_PROFILE_CONFLICT', p, l), suggestion: t('remedy.MODEL_INVOCATION_PROFILE_CONFLICT', p, l) }) },
   MODEL_INVOCATION_COMMAND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_COMMAND_CONFLICT', p, l) }) },
   MODEL_INVOCATION_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_CORRUPT', p, l) }) },
   MODEL_INVOCATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_UNAVAILABLE', p, l) }) },
@@ -488,7 +501,10 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   QUEUE_CAPACITY: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CAPACITY', p, l) }) },
   QUEUE_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_TARGET_BUSY', p, l) }) },
   QUEUE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CORRUPT', p, l) }) },
-  QUEUE_AUTHORITY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_AUTHORITY_REQUIRED', p, l) }) },
+  // BeUser DR2-06: a target-branch refusal names the rule and the next step; other uses keep the human-session message.
+  QUEUE_AUTHORITY_REQUIRED: { category: 'error', render: (p, l) => p['reason'] ? { message: t('error.QUEUE_TARGET_BRANCH', p, l), suggestion: p['reason'] === 'protected' ? t('remedy.QUEUE_TARGET_BRANCH.protected', p, l)
+    : p['reason'] === 'checked-out' ? t('remedy.QUEUE_TARGET_BRANCH.checkedOut', p, l) : p['reason'] === 'not-base' ? t('remedy.QUEUE_TARGET_BRANCH.notBase', p, l)
+    : p['reason'] === 'not-allowed' ? t('remedy.QUEUE_TARGET_BRANCH.notAllowed', p, l) : t('remedy.QUEUE_TARGET_BRANCH.invalid', p, l) } : { message: t('error.QUEUE_AUTHORITY_REQUIRED', p, l) } },
   QUEUE_WORK_TARGET_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_WORK_TARGET_REQUIRED', p, l) }) },
   QUEUE_RECOVERY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_RECOVERY_REQUIRED', p, l) }) },
   QUEUE_CONFIRMATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_CONFIRMATION_REQUIRED', p, l) }) },
@@ -544,6 +560,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_TARGET_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_UNSAFE', p, l) }) },
   WORK_TARGET_IN_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IN_DATA_ROOT', p, l) }) },
   WORK_TARGET_IS_PROJECT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IS_PROJECT', p, l) }) },
+  // BeUser DR2-05: the work was made in another repository than the current work source; one rule sentence shared with the /config warning.
+  WORK_TARGET_CHANGED: { category: 'config', render: (p, l) => ({ message: `${p['made'] ? t('error.WORK_TARGET_CHANGED', p, l) : t('error.WORK_TARGET_CHANGED.unknown', p, l)} ${t('workTarget.onlyWhereMade', {}, l)}`,
+    suggestion: p['made'] ? t('remedy.WORK_TARGET_CHANGED', p, l) : t('remedy.WORK_TARGET_CHANGED.unknown', p, l) }) },
+  // BeUser D-03: a work target on an installation without coding execution would be written beside no execution settings; set coding up first.
+  WORK_TARGET_EXECUTION_MISSING: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_EXECUTION_MISSING', p, l) }) },
   WORK_TARGET_NOT_WORKTREE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_NOT_WORKTREE', p, l) }) },
   WORK_TARGET_SHARES_PROJECT_REPOSITORY: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_SHARES_PROJECT_REPOSITORY', p, l) }) },
   WORK_TARGET_ALTERNATES: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_ALTERNATES', p, l) }) },
@@ -591,7 +612,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_DENIED', p, l) }) },
   ADOPTION_TARGET_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_MISSING', p, l) }) },
   ADOPTION_TARGET_CHECKED_OUT: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_CHECKED_OUT', p, l) }) },
-  ADOPTION_BASE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_BASE_CHANGED', p, l) }) },
+  ADOPTION_BASE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_BASE_CHANGED', p, l), suggestion: t('remedy.ADOPTION_BASE_CHANGED', p, l) }) }, // BeUser DR2-08: the real next steps
   ADOPTION_NOT_DELIVERED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_NOT_DELIVERED', p, l) }) },
   ADOPTION_NOT_ACCEPTED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_NOT_ACCEPTED', p, l) }) },
   ADOPTION_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_BUSY', p, l) }) },
@@ -687,7 +708,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SUPERVISOR_CONTROL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_CONTROL_FAILED', p, l) }) },
   SUPERVISOR_NOT_TERMINAL: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_NOT_TERMINAL', p, l) }) },
   SUPERVISOR_RELEASE_UNCONFIRMED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_RELEASE_UNCONFIRMED', p, l) }) },
-  QUERY_UNEXPECTED_FAILURE: { category: 'error', render: (p, l) => ({ message: t('error.QUERY_UNEXPECTED_FAILURE', p, l) }) },
+  QUERY_UNEXPECTED_FAILURE: { category: 'error', render: (p, l) => ({ message: p['record'] === undefined ? t('error.QUERY_UNEXPECTED_FAILURE', p, l) : t('error.QUERY_UNEXPECTED_FAILURE.recorded', p, l) }) },
   RUN_PROGRESSION_PARKED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PROGRESSION_PARKED', p, l) }) },
   // Crash-loop breaker: params task, attempt, phase (last preparation phase entered, or 'unknown'), aborts, bound. Without params (the parked
   // Run's recorded failure code seen later) the summary sentence stands.
@@ -702,8 +723,10 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
   POLICY_DELEGATION_STEP_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_STEP_INVALID', p, l) }) },
   POLICY_DELEGATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_CONFLICT', p, l) }) },
-  POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
-  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SCOPE_UNKNOWN', p, l) }) },
+  // BeUser ZEY-02/D-04/E-05: a CLI refusal may carry the missing cell (operation, or cell + founder family) and its founder-baseline next step; the code stays.
+  POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: p['operation'] !== undefined ? t('error.POLICY_DENIED.operation', p, l) : p['cell'] !== undefined ? t('error.POLICY_DENIED.founder', p, l) : t('error.POLICY_DENIED', p, l) }) },
+  // KER-03: a refusal that knows the requested scope names it; both say where the usable scopes are listed.
+  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: typeof p['scope'] === 'string' ? t('error.SCOPE_UNKNOWN.named', p, l) : t('error.SCOPE_UNKNOWN', p, l) }) },
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
@@ -832,11 +855,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_CODING_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_LIMIT', p, l) }) },
   CLI_CODING_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_INVALID', p, l) }) },
   CLI_CODING_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_TTY', p, l) }) },
-  CLI_CODING_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_CODING_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_CODING_INPUT_UNAVAILABLE', p, l), p, l) }) },
   CLI_GRAPH_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_LIMIT', { ...p, limit: p.limit ?? t('cli.graph.configuredLimit', {}, l) }, l) }) },
   CLI_GRAPH_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_INVALID', { ...p, path: p.path ?? 'graph', reason: p.reason ?? t('cli.graph.expected', {}, l) }, l) }) },
   CLI_GRAPH_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_TTY', p, l) }) },
-  CLI_GRAPH_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_GRAPH_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: inputUnavailable(t('error.CLI_GRAPH_INPUT_UNAVAILABLE', p, l), p, l) }) },
   INSTALL_INSPECTION_CONTROL_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALL_INSPECTION_CONTROL_REQUIRED', p, l) }) },
   INSTALL_INSPECTION_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALL_INSPECTION_UNAVAILABLE', p, l) }) },
   INSTALLATION_EVIDENCE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_EVIDENCE_INVALID', p, l) }) },
@@ -906,18 +929,27 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_PURGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_DENIED', p, l) }) },
   UNINSTALL_LIFECYCLE_HOLD: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_LIFECYCLE_HOLD', p, l) }) },
   UNINSTALL_RECOVERY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_INVALID', p, l) }) },
-  UNINSTALL_WORK_ACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_WORK_ACTIVE', p, l) }) },
+  UNINSTALL_WORK_ACTIVE: { category: 'error', render: (p, l) => ({ message: p['workspaces'] && p['workspaces'] !== '0' ? t('error.UNINSTALL_WORK_ACTIVE_WORKSPACES', p, l) : t('error.UNINSTALL_WORK_ACTIVE', p, l) }) },
   UNINSTALL_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_MANAGED', p, l) }) },
   UNINSTALL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_INVALID', p, l) }) },
-  UNINSTALL_PLAN_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PLAN_CHANGED', p, l) }) },
+  UNINSTALL_PLAN_CHANGED: { category: 'error', render: (p, l) => ({ message: p['diff'] ? t('error.UNINSTALL_PLAN_CHANGED_DIFF', p, l) : t('error.UNINSTALL_PLAN_CHANGED', p, l) }) },
   UNINSTALL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNSUPPORTED', p, l) }) },
   UNINSTALL_BACKUP_COVERAGE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_BACKUP_COVERAGE', p, l) }) },
   UNINSTALL_OWNERSHIP: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_OWNERSHIP', p, l) }) },
   UNINSTALL_PATH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PATH_UNSAFE', p, l) }) },
   UNINSTALL_SCOPE_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_SCOPE_UNVERIFIED', p, l) }) },
   UNINSTALL_FINAL_TAIL_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_FINAL_TAIL_UNKNOWN', p, l) }) },
+  UNINSTALL_RESTORE_KEPT: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RESTORE_KEPT', p, l) }) },
+  UNINSTALL_BACKUP_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_BACKUP_DENIED', p, l) }) },
+  UNINSTALL_RECOVERY_LOCATION: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_LOCATION', p, l) }) },
   UNINSTALL_AUTHORITY_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_AUTHORITY_UNVERIFIED', p, l) }) },
-  UNINSTALL_PURGE_PROJECT_DATA: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_PROJECT_DATA', p, l) }) },
+  UNINSTALL_SERVICE_RUNNING: { category: 'error', render: (p, l) => ({ message: p['unit'] ? t('error.UNINSTALL_SERVICE_RUNNING', p, l) : t('error.UNINSTALL_SERVICE_RUNNING_UNMANAGED', p, l) }) },
+  UNINSTALL_UNCERTAIN_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_EFFECTS', p, l) }) },
+  UNINSTALL_UNCERTAIN_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_MANAGED', p, l) }) },
+  UNINSTALL_DELIVERY_QUEUED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_DELIVERY_QUEUED', p, l) }) },
+  UNINSTALL_DELIVERY_TARGET_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_DELIVERY_TARGET_REQUIRED', p, l) }) },
+  UNINSTALL_RETIRED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RETIRED', p, l) }) },
+  UNINSTALL_FLAG_MOVED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_FLAG_MOVED', p, l) }) },
   INSTALLATION_PUBLICATION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_INVALID', p, l) }) },
   INSTALLATION_PUBLICATION_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_CONFLICT', p, l) }) },
   INSTALLATION_PUBLICATION_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_CHANGED', p, l) }) },

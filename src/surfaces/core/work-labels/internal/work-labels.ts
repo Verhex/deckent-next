@@ -74,7 +74,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       attempts: t('terminal.jobs.attempts', {}, locale), delivery: t('terminal.jobs.delivery', {}, locale), unknown: t('terminal.jobs.unknown', {}, locale),
       clearSession: t('terminal.jobs.clearSession', {}, locale), clearDetail: t('terminal.jobs.clearDetail', {}, locale), kept: t('terminal.jobs.kept', {}, locale),
       closed: t('terminal.jobs.closed', {}, locale), opening: t('terminal.jobs.opening', {}, locale),
-      runStates: { 'running': t('terminal.jobs.state.running', {}, locale), 'parked': t('terminal.jobs.state.parked', {}, locale), 'completed': t('terminal.jobs.state.completed', {}, locale), 'incomplete': t('terminal.jobs.state.incomplete', {}, locale), 'failed': t('terminal.jobs.state.failed', {}, locale), 'cancelled': t('terminal.jobs.state.cancelled', {}, locale), 'unknown': t('terminal.jobs.state.unknown', {}, locale), 'integrating': t('terminal.jobs.state.integrating', {}, locale), 'integrated': t('terminal.jobs.state.integrated', {}, locale), 'delivering': t('terminal.jobs.state.delivering', {}, locale), 'delivered': t('terminal.jobs.state.delivered', {}, locale), 'adopting': t('terminal.jobs.state.adopting', {}, locale), 'adopted': t('terminal.jobs.state.adopted', {}, locale), 'rolling-back': t('terminal.jobs.state.rolling-back', {}, locale), 'rolled-back': t('terminal.jobs.state.rolled-back', {}, locale) },
+      runStates: { 'running': t('terminal.jobs.state.running', {}, locale), 'pool-held': t('terminal.jobs.state.pool-held', {}, locale), 'parked': t('terminal.jobs.state.parked', {}, locale), 'completed': t('terminal.jobs.state.completed', {}, locale), 'incomplete': t('terminal.jobs.state.incomplete', {}, locale), 'failed': t('terminal.jobs.state.failed', {}, locale), 'cancelled': t('terminal.jobs.state.cancelled', {}, locale), 'unknown': t('terminal.jobs.state.unknown', {}, locale), 'integrating': t('terminal.jobs.state.integrating', {}, locale), 'integrated': t('terminal.jobs.state.integrated', {}, locale), 'delivering': t('terminal.jobs.state.delivering', {}, locale), 'delivered': t('terminal.jobs.state.delivered', {}, locale), 'adopting': t('terminal.jobs.state.adopting', {}, locale), 'adopted': t('terminal.jobs.state.adopted', {}, locale), 'rolling-back': t('terminal.jobs.state.rolling-back', {}, locale), 'rolled-back': t('terminal.jobs.state.rolled-back', {}, locale) },
       parkReasons: { 'dependency-failed': t('terminal.jobs.parked.dependency-failed', {}, locale), 'dependency-cancelled': t('terminal.jobs.parked.dependency-cancelled', {}, locale),
         'awaiting-decision': t('terminal.jobs.parked.awaiting-decision', {}, locale), 'evaluation-not-ready': t('terminal.jobs.parked.evaluation-not-ready', {}, locale),
         'needs-input': t('terminal.jobs.parked.needs-input', {}, locale), 'operator-hold': t('terminal.jobs.parked.operator-hold', {}, locale),
@@ -187,7 +187,7 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       'fetch-listed': t('terminal.approval.window.rule.fetch-listed', {}, locale),
       'fetch-unlisted': t('terminal.approval.window.rule.fetch-unlisted', {}, locale),
       'mcp-call': t('terminal.approval.window.rule.mcp-call', {}, locale),
-      'mcp-floor': t('terminal.approval.window.rule.mcp-floor', {}, locale),
+      'mcp-floor': t('terminal.approval.window.rule.mcp-floor', {}, locale), 'effect-operation': t('terminal.approval.window.rule.effect-operation', {}, locale),
       unknown: t('terminal.approval.window.rule.unknown', {}, locale) },
     mode: {
       standart: t('terminal.approval.window.mode.standart', {}, locale),
@@ -274,7 +274,8 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     confirmRef: t('terminal.delivery.confirmRef', {}, locale), confirmHints: t('terminal.delivery.confirmHints', {}, locale),
     delivered: t('terminal.delivery.delivered', {}, locale), adoptPrompt: t('terminal.delivery.adoptPrompt', {}, locale),
     adoptTarget: t('terminal.delivery.adoptTarget', {}, locale), adoptHints: t('terminal.delivery.adoptHints', {}, locale),
-    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
+    adopting: t('terminal.delivery.adopting', {}, locale), adopted: t('terminal.delivery.adopted', {}, locale), deliveredTitle: t('terminal.delivery.deliveredTitle', {}, locale), adoptNone: t('terminal.delivery.adoptNone', {}, locale),
+    dismissHint: t('terminal.delivery.dismissHint', {}, locale), dismissed: t('terminal.delivery.dismissed', {}, locale), dismissedTitle: t('terminal.delivery.dismissedTitle', {}, locale), restored: t('terminal.delivery.restored', {}, locale), doneHints: t('terminal.delivery.doneHints', {}, locale),
     failedHints: t('terminal.delivery.failedHints', {}, locale), summaryDelivered: t('terminal.delivery.summaryDelivered', {}, locale),
     summaryAdopted: t('terminal.delivery.summaryAdopted', {}, locale), summaryLeft: t('terminal.delivery.summaryLeft', {}, locale),
     summaryFailed: t('terminal.delivery.summaryFailed', {}, locale), summaryAdoptFailed: t('terminal.delivery.summaryAdoptFailed', {}, locale), summaryNotAdopted: t('terminal.delivery.summaryNotAdopted', {}, locale), nextDefault: t('terminal.delivery.nextDefault', {}, locale),
@@ -284,6 +285,7 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
     verifyLoading: t('terminal.delivery.verifyLoading', {}, locale), verifyNone: t('terminal.delivery.verifyNone', {}, locale), verifyHow: t('terminal.delivery.verifyHow', {}, locale),
     verifyCheck: t('terminal.delivery.verifyCheck', {}, locale), verifyHints: t('terminal.delivery.verifyHints', {}, locale), verifyNoneHints: t('terminal.delivery.verifyNoneHints', {}, locale),
     verifiedBy: t('terminal.delivery.verifiedBy', {}, locale), notVerified: t('terminal.delivery.notVerified', {}, locale),
+    patchChanged: t('terminal.delivery.patchChanged', {}, locale), failedDiffHints: t('terminal.delivery.failedDiffHints', {}, locale),
     diffListHints: t('terminal.delivery.diffListHints', {}, locale), diffHints: t('terminal.delivery.diffHints', {}, locale), diffHeader: t('terminal.delivery.diffHeader', {}, locale),
     diffUnavailable: t('terminal.delivery.diffUnavailable', {}, locale), diffEmpty: t('terminal.delivery.diffEmpty', {}, locale),
     diffHidden: t('terminal.delivery.diffHidden', {}, locale), diffPosition: t('terminal.delivery.diffPosition', {}, locale),
@@ -294,5 +296,5 @@ export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
       DELIVERY_INTERACTIVE_REQUIRED: t('terminal.delivery.next.DELIVERY_INTERACTIVE_REQUIRED', {}, locale),
       DELIVERY_CONFIRMATION_DECLINED: t('terminal.delivery.next.DELIVERY_CONFIRMATION_DECLINED', {}, locale),
       ADOPTION_TARGET_DENIED: t('terminal.delivery.next.ADOPTION_TARGET_DENIED', {}, locale),
-      ADOPTION_NOT_VERIFIED: t('terminal.delivery.next.ADOPTION_NOT_VERIFIED', {}, locale) } };
+      ADOPTION_NOT_VERIFIED: t('terminal.delivery.next.ADOPTION_NOT_VERIFIED', {}, locale), ADOPTION_BASE_CHANGED: t('terminal.delivery.next.ADOPTION_BASE_CHANGED', {}, locale) } };
 }

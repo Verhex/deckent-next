@@ -86,6 +86,20 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     }
   });
 
+  it('D-10: an operation names its catalog or policy under why asked, while an undeclared tool rule stays unknown (EN/TR)', () => {
+    for (const [locale, reason] of [['en', "the operation's catalog entry or your policy asks before it runs"], ['tr', 'işlemin katalog kaydı ya da politikanız çalışmadan önce sorar']] as const) {
+      const work = workSurfaceLabels(locale), w = work.approvalWindow;
+      for (const risk of ['write', 'irreversible · authority']) {
+        const lines = approvalCardLines(base({ summary: 'purchase.approve@1 · purchase/42 · 0123456789ab', risk }), work, '', null, {}, NOW);
+        const why = lines.find(line => line.startsWith(w.field.why))!;
+        expect(why).toContain(reason); expect(why).not.toContain(w.rule['unknown']);
+        proof(`D-10 ${locale} ${risk}`, lines.join('\n'));
+      }
+      const unknown = approvalCardLines(base({ tool: 'fixture_tool', risk: null }), work, '', null, {}, NOW);
+      expect(unknown.find(line => line.startsWith(w.field.why))).toContain(w.rule['unknown']);
+    }
+  });
+
   it('shortens only the complete home prefix in the where field, retaining non-home paths and the source project', () => {
     for (const locale of ['en', 'tr'] as const) for (const [project, home, shown] of [
       ['/home/u/acme', '/home/u', '~/acme'], ['/home/u', '/home/u/', '~'], ['/home/user/acme', '/home/u', '/home/user/acme'],

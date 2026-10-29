@@ -1,5 +1,5 @@
 {
-  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi; izin verildikten sonra aynı komutu yeniden gönderin.",
+  "cli.operation.pending": "Onay bekliyor: {operation}@{version} — {kind}/{id} için {approvalId} onayı karar bekliyor (son: {expiresAt}). Hiçbir şey gönderilmedi. Kendi terminalinizde karar verin: deckent approval decide (listeden seçin; çalışma servisi açık olmalı: deckent runtime restart), sonra aynı komutu yeniden çalıştırın; izin verilince bir kez gönderilir.",
   "cli.operation.settled": "Sonuçlandı: {operation}@{version}, {kind}/{id} üzerinde (sıra {sequence}, kayıt sürümü {recordVersion}).",
   "cli.operation.inspect": "Operasyon {command}: {state} (sıra {sequence}).",
   "cli.operation.inspect.next.unknown": "Sonraki adım: {kind}/{id} üzerindeki sonuç belirsiz ve otomatik olarak yeniden gönderilmez. Kaydı hedef sistemde kontrol edin; hedef yeniden yanıt verebildiğinde aynı komutu (aynı girdiyle) bir kez daha gönderin. Deckent önce hedefin idempotency kaydına bakar ve sonucu kapatır ya da aynı koşullu yazmayı aynı idempotency anahtarıyla yeniden gönderir; ikinci bir etki oluşmaz. Sonuçlanana kadar bu kayıttaki yeni operasyonlar reddedilir.",
@@ -27,6 +27,7 @@
   "clisetup.config.expected": "{expected} türünde bir değer",
   "clisetup.config.undefined": "{key} bu kurulumda tanımlı değil (isteğe bağlı bölüm). Terminalde deckent config ile tanımlayın; ayrıntı: deckent config explain {key}",
   "error.CLI_CONFIG_VALUE_MISSING": "{key} için değer eksik. Aldığı değerler: {values}. Terminalde deckent config set {key} ile seçin ya da JSON olarak verin: deckent config set {key} <json>.",
+  "error.CLI_CONFIG_VALUE_NOT_JSON": "{key} için verilen değer JSON değil. Aldığı değerler: {values}. Metin JSON tırnağı içinde verilir, örneğin: deckent config set {key} '\"<değer>\"'.",
   "error.CLI_CONFIG_VALUE_MISSING.partialTime": "Bu liste eksik: keşif süre sınırında durdu, {found} değer bulundu.",
   "error.CLI_CONFIG_VALUE_MISSING.partialSize": "Bu liste eksik: keşif boyut sınırında durdu, {found} değer bulundu.",
   "clisetup.coding.none": "Bu kurulumda kodlama profili yok. Eklemek için: deckent coding template (terminalde adım adım) ya da deckent init.",
@@ -55,13 +56,13 @@
   "error.CODING_DISCOVERY_UNSUPPORTED": "{provider} CLI'si repo talimatları gizli (--discovery disabled) çalışamıyor: bu Deckent sürümü onun için doğrulanmış bir kapatma yolu bilmiyor. Repo talimatlarıyla çalışması için --discovery repository verin. Hiçbir şey yazılmadı.",
   "error.CLI_CODING_PREPARE_FIELD_INVALID": "Hazırlık belgesi {field} alanında uymuyor. Beklenen: schemaVersion 1, template (yürütme profili) ve invocation; bkz. deckent coding --help.",
   "clisetup.operation.empty": "Bu kurulumda tanımlı işlem yok (operations.catalog boş; {targets} hedef).",
-  "clisetup.operation.define": "İş süreci işlemleri (ERP/CRM) işlem kataloğundan gelir: deckent config → operations (katalog ve hedefler) ile tanımlayın.",
+  "clisetup.operation.define": "İş süreci işlemleri (ERP/CRM) işlem kataloğundan gelir. Her alanı açıklanmış doldurulmuş bir örnek için: deckent operation --example",
   "clisetup.operation.title": "İşlem kataloğu: {targets} hedef üzerinde {count} işlem.",
   "clisetup.operation.columns": "İşlem|Hedef|Etki|Onay|Telafi",
   "clisetup.operation.approval.required": "her zaman sorar",
   "clisetup.operation.approval.policy": "policy'ye göre",
   "clisetup.operation.noCompensation": "yok",
-  "clisetup.operation.next": "Çalıştırmak için: deckent operation execute --input <dosya|-> [--wait <ms>] · girdi sözleşmesi: deckent operation execute --schema",
+  "clisetup.operation.next": "Çalıştır: deckent operation execute --input <dosya|-> [--wait <ms>] · girdi sözleşmesi: deckent operation execute --schema\nPOLICY_DENIED ile reddedildi mi? Kayıtlı işlemlerin yetkisini kendinize verin: deckent init policy --scope <kapsam> --owner-baseline mcp-delegable --apply (her yeni kayıttan sonra yeniden gerekir).",
   "error.CLI_OPERATION_NOT_FOUND": "{scope} kapsamında {command} için kayıtlı işlem yok.",
   "error.CLI_OPERATION_INPUT_INVALID": "İşlem komutu {field} alanında uymuyor ({problem}). Hiçbir şey gönderilmedi. Sözleşme: deckent operation execute --schema",
   "clisetup.inference.next": "Ayrıntı: deckent inference plan · budget · metrics",
@@ -91,5 +92,6 @@
   "cli.coding.instructions.done.trusted": "Güvenildi (SHA-256 {digest}); buradaki sonraki iş dosyayı içerir.",
   "cli.coding.instructions.done.revoked": "Güven geri alındı (SHA-256 {digest}); buradaki sonraki iş dosya olmadan çalışır.",
   "cli.coding.instructions.done.already": "Bu içerik zaten güvenilir; hiçbir şey değiştirilmedi.",
-  "cli.coding.instructions.done.notTrusted": "Bu içerik güvenilir değil; hiçbir şey değiştirilmedi."
+  "cli.coding.instructions.done.notTrusted": "Bu içerik güvenilir değil; hiçbir şey değiştirilmedi.",
+  "config.surface.writeOnlyFlag": "--scope, --expect ve --command-id deckent config set ve unset içindir; okumalar (get, explain) bu projenin yapılandırmasını kullanır."
 }

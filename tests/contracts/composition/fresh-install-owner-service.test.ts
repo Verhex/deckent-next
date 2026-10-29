@@ -11,8 +11,8 @@ import { restartConfiguredRuntimeService, stopConfiguredRuntimeService } from '#
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
-import { DispatchInventoryPolicyAuthorization, ServicePolicyAuthorization } from '#engine/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX } from '#domain/index.js';
+import { DispatchInventoryPolicyAuthorization, ServicePolicyAuthorization, FIRST_RUN_TOOL_NAMES } from '#engine/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { clearConfigCache, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
@@ -44,7 +44,12 @@ async function installed(edit?: (policy: { revision: string; grants: { id: strin
   const env = { HOME: join(project, 'home'), PATH: process.env['PATH'] ?? '/usr/bin:/bin' }; await mkdir(env.HOME, { mode: 0o700 });
   const result = await applyPolicyTemplateInstallation(project, SCOPE);
   const policyPath = productResourcePath(resolveProductLayout({ projectRoot: project }), 'policy');
-  if (edit) await writeFile(policyPath, `${JSON.stringify(edit(JSON.parse(await readFile(policyPath, 'utf8'))))}\n`, { mode: 0o600 });
+  if (edit) {
+    // Historical upgrade fixtures predate B1's separately journaled system roles/bindings.
+    const { issuer, subject } = readLocalOsIdentity(), template = firstRunPolicyTemplate({ scopeId: SCOPE, principal: { issuer, subject }, ...FIRST_RUN_TOOL_NAMES });
+    await writeFile(policyPath, `${JSON.stringify(edit(template.policy))}\n`, { mode: 0o600 });
+    await writeFile(join(project, '.deckent/bindings.json'), `${JSON.stringify(template.bindings)}\n`, { mode: 0o600 });
+  }
   clearConfigCache();
   const errors: { readonly pass: string; readonly code: string }[] = [], pages: string[] = [];
   const observer = { onPage() { pages.push('cancellation'); }, onError(_command: unknown, error: { code: string }) { errors.push({ pass: 'cancellation', code: error.code }); },
@@ -83,7 +88,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     // `deckent runtime shutdown`: admitted on the owner's v12 rule; the service ends.
     const stopped = await stopConfiguredRuntimeService(f.project, { env: f.env });
     expect(stopped.result).toMatchObject({ replayed: false, admission: { scopeId: SCOPE, command: { serviceId: SERVICE },
-      authorization: { revision: expect.stringContaining('first-run-template-v18'), ruleId: 'first-run-service-shutdown' }, actor: { principal: { assurance: 'os-user' } } } });
+      authorization: { revision: (await createLayoutPolicySource(resolveProductLayout({ projectRoot: f.project }), process.getuid!(), 1_048_576).load()).revision, ruleId: 'first-run-service-shutdown' }, actor: { principal: { assurance: 'os-user' } } } });
     await services.at(-1)!.done;
     await expect(createConfiguredRuntimeClient(f.project, { env: f.env }).describeService()).rejects.toBeDefined();
   });

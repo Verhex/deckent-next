@@ -18,17 +18,17 @@ export { redactSensitive, unexpectedQueryFailure, takeQueryErrorRecord, reportQu
 export { EMPTY_KNOWN_SECRETS, REDACTION_CONFIG_SECRET, REDACTION_GATE_PATTERNS, REDACTION_PATTERNS, snapshotKnownSecrets, redactForRecord, redactForDecision, hasSecret } from '#platform/core/redaction/index.js';
 export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionMatch, RedactionResult } from '#platform/core/redaction/index.js';
 export { getConfigKnownSecrets } from '#platform/core/config/index.js';
-export { formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal } from '#platform/core/crash-reporting/index.js';
+export { formatHumanError, buildCrashArtifact, writeCrashArtifact, writeDiagnosticRecord, reportFatal } from '#platform/core/crash-reporting/index.js';
 export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
-export { ENVIRONMENT_KEYS, envValue, adoptProductionReact, callerEnvironment } from '#platform/core/host/index.js';
-export { isMainModule } from '#platform/core/host/index.js';
+export { ENVIRONMENT_KEYS, envValue, automationMarker, adoptProductionReact, callerEnvironment } from '#platform/core/host/index.js';
+export { isMainModule, packageRemovalCommand, handMadeLaunchers } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths, resolveProjectRoot, type ProjectRootPorts, type ProjectRootResolution } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
-export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, serviceManagerStopCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
+export { readProcessFile, detectServiceManager, serviceManagerRestartCommand, serviceManagerStopCommand, observeUserUnit, disableUserUnit, userUnitLinks, userUnitFile, type UserUnitExec, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
 export { readBuildIdentity, isSourceCheckout, type BuildIdentity } from '#platform/core/host/index.js';
 export { privateIpcRoot } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
@@ -46,14 +46,14 @@ export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
 export { createDefaultConfig, mergeConfigLayers } from '#platform/core/config/index.js';
-export { ConfigValidationError } from '#platform/core/config/index.js';
+export { ConfigValidationError, configIssue } from '#platform/core/config/index.js';
 export type { ConfigWarning } from '#platform/core/config/index.js';
 export { validateConfig, versionedConfig } from '#platform/core/config/index.js';
 export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
-export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold } from '#platform/core/config/index.js';
+export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';
@@ -89,7 +89,7 @@ export { ED25519_PKCS8_BYTES, ED25519_SPKI_BYTES, ed25519KeyId, ed25519Signer, g
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
-export { isRecord, assertSafeKeys, digestText, pathsShareTree } from '#platform/core/utils/index.js';
+export { isRecord, assertSafeKeys, digestText, pathsShareTree, pathWithin, privateLocationSafe, PRIVATE_PERMISSION_MASK, openPinnedParent, readPinnedFile, removePinnedFile, removeEmptyPinnedDirectory, restorePinnedFile, writePinnedFile, boundState, removeBoundMembers, fileDigest, type BoundMember, lineCut, PinnedFileError, type PinnedFileIdentity, type PinnedRemoval } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
 export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 

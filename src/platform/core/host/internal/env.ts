@@ -1,4 +1,5 @@
 import { PRODUCT_LAYOUT_REGISTRY } from '#platform/core/common/index.js';
+import AUTOMATION from './automation.json' with { type: 'json' };
 export type Environment = Readonly<Record<string, string | undefined>>;
 /** Documented call-time inputs; NO_COLOR is deliberately presence-based. */
 export const ENVIRONMENT_KEYS = Object.freeze([
@@ -17,6 +18,13 @@ export function envValue(env: Environment, name: string): string | undefined {
   return value === '' ? undefined : value;
 }
 
+/** An AI agent or CI caller, marked by exact environment variable names (no prefix match; any non-empty value other than 0/false): `agent`
+ * names come from the installation's `cli.agentEnvironment`, CI names from this registry. The CLI uses it to stay plain (INIT-D7); an
+ * authority operation (uninstall) also uses it as a floor at its own composition boundary, so an SDK call is held to it too (review M13). */
+export function automationMarker(env: Environment, agentNames: readonly string[]): 'agent' | 'ci' | null {
+  const marked = (names: readonly string[]) => names.some(name => { const value = envValue(env, name)?.trim().toLowerCase(); return value !== undefined && value !== '0' && value !== 'false'; });
+  return marked(agentNames) ? 'agent' : marked(AUTOMATION.ciEnvironment) ? 'ci' : null;
+}
 export function productRootOverride(env: Environment): string | undefined { return envValue(env, PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey); }
 
 /** NODE_ENV as the caller started this process, kept by `adoptProductionReact` (`value` undefined: unset); null until adopted. */

@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.56.1`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.57`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -248,26 +248,27 @@ aşağıdaki iş adımları Deckent'in kendi geliştirmesinde her gün kullanıl
 ### Bir kez yapılan kurulum
 
 İş bir işçi konteynerinde çalışır; bu yüzden Deckent'in bir işçi imajına, işin nerede çalışacağını söyleyen ayarlara, ilk
-iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` dördünü de kendi terminalinizde hazırlar. Her adımdan önce bir
-kartla sorar ve siz onaylamadan hiçbir şey yazmaz.
+iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` kurar; `deckent`i ilk açtığınızda kurulum adımları (`/setup`)
+dördünü de kendi terminalinizde hazırlar. Her adım bir kartla sorar ve siz onaylamadan hiçbir şey yazmaz.
 
 ```sh
-# 1. Projenizde: işçi imajını derleyin, yürütme ayarlarını yazın, ilk iş türünü tanımlayın ve işçi havuzunu
-#    kurun. Her adım önce bir kartla sorar.
+# 1. Projenizde: kurun, sonra terminali açıp kurulum adımlarını izleyin (işçi imajını derleyin ya da seçin, yürütme
+#    ayarları, ilk iş türü, işçi havuzu). /setup bunları sonra yeniden açar.
 deckent init
-#    Ya da yeni imaj derlemek yerine bu Docker'da zaten olan bir imajı kullanın:
-deckent init --image-id sha256:<imaj kimliği>
+deckent
+#    Terminal olmadan doctor eksik her adımı tam komutuyla yazar (aşağıya bakın):
+deckent doctor
 
 # 2. Servis zaten çalışıyorduysa yeni ayarları okusun diye yeniden başlatın
 deckent runtime restart
 ```
 
 İmaj derlemesi Docker ve ağ kullanır (temel imaj ve kodlama CLI'ları); kartı, bir şey başlamadan önce boyutu ve süre
-sınırını söyler. Yürütme ayarları `deckent init`'in bulduğu Docker ve Git'i ve yeni imajı yazar; diğer değerler
+sınırını söyler. Yürütme ayarları kurulum adımının bulduğu Docker ve Git'i ve imajı yazar; diğer değerler
 varsayılanında kalır (`deckent config explain execution`). İlk iş türü, seçtiğiniz kodlama CLI'ı üzerinde `coding`'dir
 (`codex`, `claude` ya da `cursor`; Cursor işçisi bir katalog adımı daha ister, işletim başvurusuna bakın); havuzu
-`workers`, bir çalışma yuvasıyla. Başka bir iş türü, havuz adı ya da kapasite için veya terminal olmadan, `deckent init`
-ve `deckent doctor` eksik adımları tam komutlarıyla yazar, örneğin:
+`workers`, bir çalışma yuvasıyla. Başka bir iş türü, havuz adı ya da kapasite için veya terminal olmadan,
+`deckent doctor` eksik adımları tam komutlarıyla yazar, örneğin:
 
 ```sh
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
@@ -375,7 +376,7 @@ deckent run list                          # bu kapsamın Run'ları, en yenisi ö
 deckent approval list                     # önce bekleyen onaylar, kalan süreyle
 deckent report --scope my-project --run <id>   # bir Run'ın maliyet ve kabul kanıtı
 deckent audit verify                      # denetim geçmişini doğrula
-deckent backup create                     # doğrulanabilir bir kurtarma seti yaz
+deckent backup create --scope <kimlik> --set <klasör>   # doğrulanabilir bir kurtarma seti yaz (parola istemde)
 deckent policy grants --mine              # kalıcı "her zaman" izinleriniz
 deckent memory                            # kapsamın hafıza günlüğü: olgular ve dersler
 deckent agents                            # kapsamın ajanları ve skill'leri
@@ -492,8 +493,8 @@ anlatır.
   isterseniz zamanlanmış, doğrulanabilir kurtarma setleri için `deckent backup create|verify|restore`.
 - **İmzalı içeriği yönetin**: imzalı ajan ve skill paketlerini içe aktarıp doğrulayın, güven ve iptal kayıtlarını inceleyin,
   değişiklikleri kapsama bağlı kartlarla kararlaştırın. Halka açık Hub bağlantısı dağıtım kurulumu ister; varsayılan kaynak açılmaz.
-- **Kurulumu önizleyerek kaldırın**: `deckent uninstall --dry-run --json` planı gösterir. Uygulamak kendi terminalinizde
-  kart ister; veriler varsayılan kalır, purge yönetilen yedek ve kanıtlanmış sahiplik gerektirir. İmajlar korunur.
+- **Kurulumu önizleyerek kaldırın**: `deckent uninstall` verilerimi koru (varsayılan), bekleyen işleri koru ve her şeyi sil
+  (önce yedek) seçeneklerini sunar; `--dry-run --json` her planı gösterir. Uygulamak terminal kartı ister; imajlar korunur.
   Adımları ve kalan sınırları [AI kurulum rehberi](docs/ai-install.tr.md#kaldırma) anlatır.
 - **Kodda olan, henüz gerçek kullanımda kanıtlanmamış çekirdek katmanlar**: sistem her iş türü için işçi modelini
   görebildiğiniz bir listeden seçer; hafıza kabul edilen işten dolar ve onu siz ya da bağımsız bir değerlendirici doğrular;
@@ -540,7 +541,7 @@ gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilme
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.56<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Betadan önce · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.57<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Betadan önce · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```

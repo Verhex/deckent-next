@@ -1,6 +1,6 @@
 export { WorkspacePatchApplication } from './internal/application.js';
 export type { WorkspacePatchSource, WorkspacePatchStore, RunBoundTaskStore } from './internal/application.js';
-export { AttemptCustodyReleaseApplication, sweepAttemptCustodyScopes } from './internal/custody.js';
+export { AttemptCustodyReleaseApplication, sweepAttemptCustodyScopes, idleAttemptWorkspace } from './internal/custody.js';
 export type { AttemptCustodyOutcome, AttemptCustodyHoldReason, AttemptCustodyRetention, AttemptCustodySweep, AttemptCustodySweepEntry, AttemptWorkspaceCustody, AttemptCustodyPorts, SourceBaseSweep } from './internal/custody.js';
 export { classifyPatchScope, assertPatchScope, PATCH_SCOPE_MATCHER, PATCH_SCOPE_ERROR_PATHS } from './internal/scope.js';
 export type { PatchScope, PatchScopeMode } from './internal/scope.js';
@@ -45,7 +45,7 @@ export { createWorkspaceQueuePreparation } from './internal/queue-preparation.js
 export { workspaceQueueShadow } from './internal/queue-shadow.js';
 export type { WorkspaceQueueShadowPorts } from './internal/queue-shadow.js';
 export { assertIntegrationBase } from './internal/git-integration-base.js';
-export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY } from './internal/git-queue-target.js';
+export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY, QUEUE_PROTECTED_BASE_REFS, queueTargetConfigRefusal } from './internal/git-queue-target.js';
 export { createWorkspaceQueueEffects } from './internal/queue-effects.js';
 export { createWorkspaceQueueAdmission } from './internal/queue-admission.js';
 export { reattemptCommandIds, reattemptEligibility, reattemptGraph, stepDeliveryReattempt, stepWorkspaceQueueReattempt } from './internal/reattempt.js';
@@ -53,3 +53,4 @@ export type { DeliveryReattemptPorts, ReattemptEffects, WorkspaceReattemptContex
 export { assertRunDeliveryIntent, stepRunDelivery, stepWorkspaceRunDelivery } from './internal/run-intent.js';
 export type { RunDeliveryPorts, RunDeliveryStep, WorkspaceRunDeliveryContext } from './internal/run-intent.js';
 export { workspacePatchChangeFacts } from './internal/effect-summary.js';
+export { assertSameWorkSource } from './internal/work-source.js';

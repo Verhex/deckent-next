@@ -346,6 +346,7 @@ describe('--schema and acceptance wording', () => {
   it('says what an acceptance rests on (law 1)', () => {
     expect(acceptanceEvidenceText({ id: 'process-exit', version: 1 }, 'tr')).toBe('kabul: çıkış kodu · içerik bağımsız doğrulanmadı');
     expect(acceptanceEvidenceText({ id: 'process-exit', version: 1 }, 'en')).toBe('accepted on: exit code · content not independently verified');
+    expect(acceptanceEvidenceText({ id: 'beuser', version: 1 }, 'en')).toContain('harness readback');
     expect(acceptanceEvidenceText({ id: 'operation-evidence', version: 1 }, 'tr')).toBe('kabul: sistemin geri okuduğu işlem kaydı · işçi beyanı değil, sistem doğruladı');
     expect(acceptanceEvidenceText({ id: 'ext:erp-posting', version: 2 }, 'en')).toBe('accepted on: evaluator ext:erp-posting@2 · what it checks is not known to this version');
   });

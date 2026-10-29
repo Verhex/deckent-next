@@ -120,5 +120,7 @@ export interface MonitorPorts {
   /** f4: the install's active Brain quota waits (host state, before any Run exists); the application shows only those of scopes the viewer
    * may read, as it does Runs. Absent: not read. `truncated`: more were stored than the store's bound reads. */
   readBrainWaits?(target: MonitorTarget): Promise<Readonly<{ records: readonly import('#domain/index.js').BrainQuotaWaitRecord[]; truncated: boolean }>>;
+  /** BeUser M-33: a scope's set-aside results (the person's `delivery-dismissed` records, latest wins); the delivery outlook leaves them out. Absent: not read. */
+  readDismissed?(target: MonitorTarget, scopeId: string, limit: number): Promise<readonly Readonly<{ runId: string; taskId: string }>[]>;
   now(): number;
 }

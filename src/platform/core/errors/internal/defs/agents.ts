@@ -16,7 +16,8 @@ export const agentsErrors: ErrorDefinitions = Object.freeze({
   AGENT_ORG_DEPTH: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_ORG_DEPTH', p, l) }) },
   AGENT_PARENT_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_PARENT_NOT_FOUND', p, l) }) },
   AGENT_SKILL_NOT_PINNED: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_SKILL_NOT_PINNED', p, l) }) },
-  AGENT_WORK_CLASS_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_WORK_CLASS_UNKNOWN', p, l) }) },
+  // BeUser E-02: the CLI adds the installation's WorkClasses (`known`); other transports keep the plain sentence.
+  AGENT_WORK_CLASS_UNKNOWN: { category: 'error', render: (p, l) => ({ message: p['known'] === undefined ? t('error.AGENT_WORK_CLASS_UNKNOWN', p, l) : t('error.AGENT_WORK_CLASS_UNKNOWN.known', p, l) }) },
   SKILL_IMPORT_UNPINNED: { category: 'error', render: (p, l) => ({ message: t('error.SKILL_IMPORT_UNPINNED', p, l) }) },
   SKILL_IMPORT_PIN_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.SKILL_IMPORT_PIN_MISMATCH', p, l) }) },
   SKILL_IMPORT_UNSIGNED: { category: 'error', render: (p, l) => ({ message: t('error.SKILL_IMPORT_UNSIGNED', p, l) }) },

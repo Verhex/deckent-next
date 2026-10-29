@@ -104,7 +104,7 @@ describe('memory journal application (sole transition owner)', () => {
     const listed = await application.list({ schemaVersion: 1, scopeId: 'other', limit: 10 });
     expect(listed.status === 'ok' && listed.entries.map(entry => entry.entryId)).toEqual(['m2']);
   });
-  it('a store without full-text search falls back to a bounded scan with folded whole words, and says which method answered', async () => {
+  it('a store without full-text search falls back to a bounded scan with folded word prefixes, and says which method answered', async () => {
     const { application } = app({ fullText: false }); await application.propose(propose());
     const found = await application.search({ schemaVersion: 1, scopeId: 's', query: 'ESLESTIRME irsaliyesiz', limit: 10 });
     expect(found).toMatchObject({ status: 'ok', method: 'scan', complete: true, terms: ['eslestirme', 'irsaliyesiz'] });

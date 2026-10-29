@@ -33,3 +33,21 @@ it('plans only missing person cells, excludes AI floors, preserves custom rules,
   const many: OwnerBaselineCell[] = Array.from({ length: 40 }, (_, index) => ({ family: 'mcp-delegable', kind: 'operation', actions: ['execute'], ids: [`erp.${index}`], scope: 'selected' }));
   expect(planOwnerBaseline(files.policy, files.bindings, { ...input, families: ['mcp-delegable'], candidates: many })).toMatchObject({ remaining: 8, added: expect.any(Array) });
 });
+it('E-05: hub-read/hub-trust write only the person\'s exact scope cells (not MCP-filtered); an AI never holds a source change; publish/yank/revoke stay out', () => {
+  const files = template(), candidates = ownerBaselineCells(mcpCapabilityRegistry.list(), []);
+  const input = { person, explicit: false, scopeId: 's', families: ['hub-read', 'hub-trust'], candidates, peopleLimit: 10, digest };
+  const planned = planOwnerBaseline(files.policy, files.bindings, input);
+  expect(planned.status).toBe('plan');
+  expect(planned.added.map(rule => [rule.resource.kind, rule.actions, rule.resource.ids, rule.scopes, rule.principals])).toEqual([
+    ['hub', ['inspect', 'search', 'export'], ['s'], ['s'], [person]],
+    ['hub', ['sources.add', 'sources.remove', 'refresh', 'install', 'update', 'uninstall'], ['s'], ['s'], [person]]]);
+  expect(planOwnerBaseline(planned.policy, files.bindings, input)).toMatchObject({ status: 'current' });
+  const after = resolvePolicyBindings(planned.policy, files.bindings), ask = (principal: Record<string, unknown>, action: string) =>
+    evaluatePolicy(after, { principal: { id: 'p', scopeIds: ['s'], ...principal } as never, scopeId: 's', action, resource: { kind: 'hub', id: 's' } }).decision;
+  expect(ask({ ...person, assurance: 'os-user' }, 'sources.add')).toBe('allow');
+  expect(ask({ ...person, assurance: 'os-user' }, 'publish')).toBe('deny');
+  // Even an explicit full hub grant to the MCP actor cannot pin or drop a source: the floor runs before policy.
+  const mcp = mcpPrincipalRef(person), delegated = resolvePolicyBindings({ ...files.policy, grants: [{ id: 'mcp-hub', effect: 'allow', principals: [mcp], scopes: 'all', actions: 'all', resource: { kind: 'hub', ids: 'all' } }] }, files.bindings);
+  for (const action of ['sources.add', 'sources.remove']) expect(evaluatePolicy(delegated, { principal: { id: 'ai', ...mcp, assurance: 'workload-verified', scopeIds: ['s'] }, scopeId: 's', action, resource: { kind: 'hub', id: 's' } }).decision).toBe('deny');
+  expect(planOwnerBaseline(files.policy, files.bindings, { ...input, person: mcp })).toMatchObject({ status: 'unavailable' });
+});

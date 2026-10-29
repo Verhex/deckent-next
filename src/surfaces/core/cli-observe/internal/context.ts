@@ -13,6 +13,8 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
   /** BeUser D-05: the read-only monitor snapshot (ledger, no service), read by doctor for Runs parked after repeated failures. */
   inspectMonitor?: import('#surfaces/core/monitor/index.js').MonitorHandler;
+  /** BeUser S-11: the same `mcp list` read (no start) for doctor's outbound inventory; names, transport, URL and realm only. */
+  runMcpCommand?: (root: string, request: { readonly verb: 'list'; readonly health: false }, options: ConfigLoadOptions, ask: () => Promise<null>) => Promise<unknown>;
   // C-DOCTOR: the same read-only catalog listing as `deckent models list` (model retirement rows); read-soft, never a runtime-service view.
   inspectCatalogMonitor?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;

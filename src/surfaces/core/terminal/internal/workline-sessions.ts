@@ -16,6 +16,8 @@ export interface ConversationSessionLabels {
   readonly locale?: 'en' | 'tr';
   /** `{index}. {session} · {when} · {count} messages · {preview}` */
   readonly entry: string;
+  /** BeUser AYSE-22: the line printed after the terminal closes when conversations are saved (how to come back). */
+  readonly exitHint?: string;
   readonly hiddenCount?: string;
   readonly none: string; readonly notFound: string; readonly unavailable: string; readonly saveFailed: string;
   readonly exactRequired?: string; readonly listStale?: string;
@@ -40,7 +42,8 @@ type ContextView = Omit<Extract<TurnDelta, { kind: 'context' }>, 'kind'>;
 function done(entries: readonly WorkLedgerEntry[], resumePicker?: readonly ResumePickerItem[]): SessionCommandResult {
   return resumePicker && resumePicker.length > 0 ? { entries, resumePicker } : { entries };
 }
-const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+// BeUser AYSE-24: the person's own clock (this machine's time zone), never UTC without a zone.
+const when = (ms: number) => { const d = new Date(ms), two = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`; };
 const BAR_CELLS = 20;
 
 /**

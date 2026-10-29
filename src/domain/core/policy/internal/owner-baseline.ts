@@ -4,14 +4,42 @@ import { anchorsPerson, namesPerson, policyNamedPeople } from './first-run-templ
 import { aiAuthorityFloor } from './ai-floor.js';
 import { evaluatePolicy } from './evaluate.js';
 import { POLICY_CHANGE_MAX } from './administer.js';
+import { policyResources } from './vocabulary.js';
 import { policyFileSchema, policyGrantSchema, resolvePolicyBindings, type PolicyGrant } from './schema.js';
 import { sameMcpCapabilityRule } from './mcp-capabilities.js';
 
-export const OWNER_BASELINE_FAMILIES = ['mcp-delegable', 'decision-steps'] as const;
+/**
+ * The founder-baseline families, one registry for the planner, the CLI parser, the `/policy` card and doctor (law audit E-05 K4). `default` families
+ * are what the founder card completes; a `personOnly` family lists its own exact cells (`cells`, actions from the policy vocabulary) and is never
+ * filtered by the MCP floor, because its cells are written only to the named person and every one of them stays a person's act at its command
+ * (E-05 K1–K3: `hub-read` lead decision, Jev bfba048a; `hub-trust` owner YES 2026-10-28 "yalnız kişiye"; publish/yank/revoke in neither).
+ */
+export const OWNER_BASELINE_FAMILY_REGISTRY = Object.freeze([
+  Object.freeze({ id: 'mcp-delegable', default: true, personOnly: false }),
+  Object.freeze({ id: 'decision-steps', default: true, personOnly: false }),
+  Object.freeze({ id: 'hub-read', default: false, personOnly: true, cells: Object.freeze([Object.freeze({ kind: policyResources.hub.kind,
+    actions: pick(policyResources.hub.actions, ['inspect', 'search', 'export']) })]) }),
+  Object.freeze({ id: 'hub-trust', default: false, personOnly: true, cells: Object.freeze([Object.freeze({ kind: policyResources.hub.kind,
+    actions: pick(policyResources.hub.actions, ['sources.add', 'sources.remove', 'refresh', 'install', 'update', 'uninstall']) })]) }),
+] as const);
+/** Only vocabulary actions: a renamed action fails at load, never silently grants nothing. */
+function pick<T extends string>(vocabulary: readonly T[], wanted: readonly T[]): readonly T[] {
+  if (wanted.some(action => !vocabulary.includes(action))) throw new Error('OWNER_BASELINE_FAMILY_INVALID');
+  return Object.freeze([...wanted]);
+}
+export type OwnerBaselineFamily = typeof OWNER_BASELINE_FAMILY_REGISTRY[number]['id'];
+export const OWNER_BASELINE_FAMILIES: readonly OwnerBaselineFamily[] = Object.freeze(OWNER_BASELINE_FAMILY_REGISTRY.map(family => family.id));
+export const OWNER_BASELINE_DEFAULT_FAMILIES: readonly OwnerBaselineFamily[] = Object.freeze(OWNER_BASELINE_FAMILY_REGISTRY.filter(family => family.default).map(family => family.id));
+const personOnlyFamily = (id: string) => OWNER_BASELINE_FAMILY_REGISTRY.some(family => family.id === id && family.personOnly);
+/** The person-only families' own cells (resource id and scope = the selected scope), ready for the planner's candidates. */
+export function personOnlyBaselineCells(): readonly OwnerBaselineCell[] {
+  return OWNER_BASELINE_FAMILY_REGISTRY.flatMap(family => 'cells' in family ? family.cells.map(cell => ({ family: family.id, kind: cell.kind, actions: [...cell.actions], ids: 'scope' as const, scope: 'selected' as const })) : []);
+}
 export const OWNER_BASELINE_PREFIX = 'owner-baseline-';
 type Person = { readonly issuer: string; readonly subject: string };
-export interface OwnerBaselineCell { readonly family: typeof OWNER_BASELINE_FAMILIES[number]; readonly kind: string; readonly actions: readonly string[];
-  readonly ids: 'all' | readonly string[]; readonly scope: 'selected' | 'installation' }
+/** `ids: 'scope'` names the selected scope itself as the resource id (a Hub source set is the scope's). */
+export interface OwnerBaselineCell { readonly family: OwnerBaselineFamily; readonly kind: string; readonly actions: readonly string[];
+  readonly ids: 'all' | 'scope' | readonly string[]; readonly scope: 'selected' | 'installation' }
 export interface OwnerBaselineState { readonly id: string; readonly kind: string; readonly actions: readonly string[]; readonly ids: 'all' | readonly string[];
   readonly scopes: 'all' | readonly string[]; readonly before: string; readonly after: string }
 export interface OwnerBaselinePlan {
@@ -49,12 +77,13 @@ export function planOwnerBaseline(policyDocument: unknown, bindings: unknown, in
     && (held.resource.ids === 'all' || want.resource.ids !== 'all' && want.resource.ids.every(id => held.resource.ids.includes(id)));
   const wanted = input.candidates.filter(cell => input.families.includes(cell.family)).flatMap(cell => {
     if (['agent-tool', 'agent-tool-call', 'mcp-server'].includes(cell.kind)) return [];
-    const ids = cell.ids === 'all' ? ['owner-baseline-target'] : cell.ids;
-    const actions = cell.actions.filter(action => !ids.some(id => aiAuthorityFloor({ issuer: 'mcp' }, { kind: cell.kind, id }, action)));
+    const selection = cell.ids === 'scope' ? [scopeId] : cell.ids, ids = selection === 'all' ? ['owner-baseline-target'] : selection;
+    // A person-only family's cells are its own exact list (written only to this person); the MCP floor bounds what the person may delegate.
+    const actions = personOnlyFamily(cell.family) ? [...cell.actions] : cell.actions.filter(action => !ids.some(id => aiAuthorityFloor({ issuer: 'mcp' }, { kind: cell.kind, id }, action)));
     if (!actions.length || !ids.length) return [];
-    const id = `${OWNER_BASELINE_PREFIX}${cell.family}-${input.digest(JSON.stringify([cell.kind, actions, cell.ids, cell.scope])).slice(0, 16)}`;
+    const id = `${OWNER_BASELINE_PREFIX}${cell.family}-${input.digest(JSON.stringify([cell.kind, actions, selection, cell.scope])).slice(0, 16)}`;
     return [policyGrantSchema.parse({ id, effect: 'allow', principals: [person], scopes: cell.scope === 'installation' ? 'all' : [scopeId],
-      actions, resource: { kind: cell.kind, ids: cell.ids } })];
+      actions, resource: { kind: cell.kind, ids: selection } })];
   });
   const conflicts = wanted.filter(want => grants.some(held => held.id === want.id && !sameMcpCapabilityRule(held, want))).map(rule => rule.id);
   const missing = [...new Map(wanted.filter(want => !grants.some(held => covers(held, want))).map(rule => [rule.id, rule])).values()];

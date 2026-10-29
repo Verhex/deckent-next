@@ -33,7 +33,7 @@ describe('configured config through real policy, ledger audit and atomic writer'
     expect(result.backupPath).not.toBeNull(); expect(await readFile(result.backupPath!, 'utf8')).toBe(bytes);
     expect(JSON.parse(await readFile(f.path, 'utf8'))).toMatchObject({ max_workers: 3 });
     const db = new DatabaseSync(productResourcePath(resolveProductLayout({ projectRoot: f.root }), 'ledger'), { readOnly: true });
-    try { const rows = db.prepare('SELECT record FROM audit_events').all(); expect(rows).toHaveLength(2); const recorded = JSON.stringify(rows); expect(recorded).toContain('config-change'); expect(recorded).not.toContain('"value"'); } finally { db.close(); }
+    try { const rows = db.prepare('SELECT record FROM audit_events').all(); expect(rows).toHaveLength(3); expect(JSON.parse(String(rows[0]!['record'])).event.subject).toMatchObject({ kind: 'authority-change', action: 'apply', installer: { basis: 'system-policy-rows', packageId: 'beuser-system-policy', dataRevision: 1 } }); const recorded = JSON.stringify(rows); expect(recorded).toContain('config-change'); expect(recorded).not.toContain('"value"'); } finally { db.close(); }
     await f.app.unset({ ...f.command, commandId: 'c3', keyPath: 'max_workers' }); expect((await loadConfig(f.root, f.options)).max_workers).toBe('auto');
   });
   it('refuses invalid value, stale preimage, secrets and denied authority without file changes', async () => {

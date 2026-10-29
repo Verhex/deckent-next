@@ -4,7 +4,7 @@ import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, projectRunStop, projectStopCause, resolveWorkerUsage, type StopCause, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
   type MonitorWorker } from '#engine/index.js';
 import { boundNamedScopes, describeDiagnostics, mapBlocks, span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
-import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, agoText, blockerLabel, quotaWaitText, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processExitText, processLabel, runStateLabel,
+import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, shownOutlook, type ShownDeliveryOutlook, agoText, blockerLabel, quotaWaitText, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processExitText, processLabel, runStateLabel,
   taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, notAcceptedNextStep, stopCauseText, blockerDetailText, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { formatBytes, formatKnown, formatUsd, untitledWorkName } from '#surfaces/core/cli-human/index.js';
@@ -20,7 +20,7 @@ import { installName, installsBlocks, installState, problemsSpan } from './insta
  * blocks. Every time is relative to the snapshot's `observedAt` (the age as observed, stable for a given snapshot). The blocker is the
  * engine's; this surface only words and orders it.
  */
-export interface MonitorFilters { readonly install?: string; readonly scope?: string }
+export interface MonitorFilters { readonly install?: string; readonly scope?: string; /** KER-10: this install's own configured scopes (terminal, service). */ readonly registered?: readonly string[] }
 export interface MonitorView { readonly header: readonly MonitorLine[]; readonly tabs: Readonly<Record<MonitorTab, readonly MonitorBlock[]>> }
 /** PB-MON-UX markers: ✓ fine, ! needs attention, ○ off/absent, ● the install is reachable, → the next step (ASCII `+ ! o * ->`). */
 interface Marks { readonly states: Readonly<Record<MonitorRunState, string>>; readonly warn: string; readonly ok: string; readonly on: string; readonly off: string; readonly sep: string;
@@ -42,7 +42,7 @@ const observedEnd = (run: MonitorRun) => {
     .sort((a, b) => b.endedAtMs! - a.endedAtMs!)[0] ?? null;
   return endedObserved(last);
 };
-const OUTLOOK_ROLE: Readonly<Record<NonNullable<MonitorRun['deliveryOutlook']>, MonitorRole>> = { none: 'muted', 'patch-not-prepared': 'warning', 'awaiting-delivery': 'info' };
+const OUTLOOK_ROLE: Readonly<Record<ShownDeliveryOutlook, MonitorRole>> = { none: 'muted', 'patch-not-prepared': 'warning', 'awaiting-delivery': 'info', 'set-aside': 'muted' };
 const DELIVERY_ROLE: Readonly<Record<MonitorDeliveryState, MonitorRole>> = { integrating: 'info', integrated: 'info', delivering: 'info', delivered: 'success',
   adopting: 'info', adopted: 'success', 'rolling-back': 'warning', 'rolled-back': 'warning' };
 
@@ -52,7 +52,8 @@ const timeText = (ms: number | null | undefined) => ms === null || ms === undefi
 export function filterSnapshot(snapshot: MonitorSnapshot, filters: MonitorFilters): MonitorSnapshot {
   if (filters.install === undefined && filters.scope === undefined) return snapshot;
   const scope = filters.scope;
-  if (scope !== undefined && !snapshot.installs.some(install => (filters.install === undefined || install.id === filters.install) && install.scopeIds.includes(scope))) {
+  // KER-10: the install's own scope with nothing recorded yet is an empty view, not an unknown scope (the ledger lists only scopes with records).
+  if (scope !== undefined && !filters.registered?.includes(scope) && !snapshot.installs.some(install => (filters.install === undefined || install.id === filters.install) && install.scopeIds.includes(scope))) {
     throw ErrorRegistry.createError('SCOPE_UNKNOWN', { params: { scope } });
   }
   const installs = snapshot.installs.filter(install => filters.install === undefined || install.id === filters.install).map(install => scope === undefined ? install : {
@@ -109,8 +110,8 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, ver
       if (start === null || end === null) return t('monitor.time.unknown', {}, locale);
       return `${observedEnd(run) ? `${marks.approx} ` : ''}${durationText(end - start, locale)}`;
     },
-    deliveryText: (run: MonitorRun) => run.delivery ? deliveryLabel(run.delivery.state, locale) : run.deliveryOutlook ? deliveryOutlookLabel(run.deliveryOutlook, locale) : '—',
-    deliveryRole: (run: MonitorRun): MonitorRole | undefined => run.delivery ? DELIVERY_ROLE[run.delivery.state] : run.deliveryOutlook ? OUTLOOK_ROLE[run.deliveryOutlook] : 'muted',
+    deliveryText: (run: MonitorRun) => run.delivery ? deliveryLabel(run.delivery.state, locale) : run.deliveryOutlook ? deliveryOutlookLabel(shownOutlook(run.deliveryOutlook, run.deliverySetAside)!, locale) : '—',
+    deliveryRole: (run: MonitorRun): MonitorRole | undefined => run.delivery ? DELIVERY_ROLE[run.delivery.state] : run.deliveryOutlook ? OUTLOOK_ROLE[shownOutlook(run.deliveryOutlook, run.deliverySetAside)!] : 'muted',
     serviceText: (install: MonitorInstall) => !install.service ? t('monitor.service.none', {}, locale)
       : install.service.state === 'running' ? t('monitor.service.running', { pid: install.service.processId ?? '—' }, locale)
         : install.service.state === 'stopped' ? t('monitor.service.stopped', {}, locale) : t('monitor.service.unknown', {}, locale),
@@ -249,7 +250,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]; }),
     run.delivery === undefined ? [span(t('monitor.detail.deliveryUnknown', {}, locale), 'muted')]
-      : run.delivery === null ? [span(run.deliveryOutlook ? deliveryOutlookDetail(run.deliveryOutlook, locale) : t('monitor.detail.deliveryNone', {}, locale), run.deliveryOutlook ? OUTLOOK_ROLE[run.deliveryOutlook] : 'muted')]
+      : run.delivery === null ? [span(run.deliveryOutlook ? deliveryOutlookDetail(shownOutlook(run.deliveryOutlook, run.deliverySetAside)!, locale) : t('monitor.detail.deliveryNone', {}, locale), run.deliveryOutlook ? OUTLOOK_ROLE[shownOutlook(run.deliveryOutlook, run.deliverySetAside)!] : 'muted')]
       : [span(t('monitor.detail.delivery', { state: deliveryLabel(run.delivery.state, locale), commit: run.delivery.commit ?? '—' }, locale), DELIVERY_ROLE[run.delivery.state])],
   ];
 }

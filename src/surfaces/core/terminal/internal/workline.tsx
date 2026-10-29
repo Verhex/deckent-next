@@ -26,7 +26,7 @@ import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContex
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
-import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
+import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from '#surfaces/core/terminal-conversation/index.js';
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
@@ -316,6 +316,7 @@ export function WorklineApp(props: WorklineProps) {
   // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
   // conversation's own pin, or none (the configured model) — never another conversation's.
   const [, setModelGeneration] = useState(0);
+  const [configuredLabels, setConfiguredLabels] = useState<{ model?: string; provider?: string } | null>(null);
   const pinnedModels = useRef(new Map<string, ModelPanelReference>());
   const pinnedLabels = useRef(new Map<string, { model: string; provider: string }>());
   // CACHE-SLICE1: a switch over a large context asks first (registry threshold); "new context" keeps the person's own instructions, never silently.
@@ -492,13 +493,13 @@ export function WorklineApp(props: WorklineProps) {
       const words = labels.delivery;
       if (!deliveries.available || !words || !ledger) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
       try {
-        const targets = deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)]);
+        const targets = await deliveries.offered(deliveries.candidates([...await loadRunViewsForWatch(ledger), ...completion.tracked.map(item => item.run)])); // M-33: set-aside rows last
         if (!targets.length) {
           await panel.pick(execution, { kind: 'window', title: words.pickerTitle, body: [words.none], hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
           push([systemSummaryEntry(words.none)]); return true;
         }
-        const picked = targets.length === 1 ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
-          [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: true }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
+        const picked = targets.length === 1 && targets[0]!.setAside === undefined ? '0' : await panel.pick(execution, { kind: 'job-picker', title: words.pickerTitle, rows: targets.map(target =>
+          [span(projectHumanPickerText(target.title, props.knownSecrets).label, { bold: target.setAside === undefined }), span(` · ${shortId(target.runId)} · ${target.taskId}`, { role: 'muted' })]) },
         targets.map((_, index) => String(index)));
         if (picked !== null && !execution.signal.aborted) deliveries.open(targets[Number(picked)]!, 'foreground');
       } catch (error) { push([notice('error', errorText(error))]); }
@@ -562,6 +563,11 @@ export function WorklineApp(props: WorklineProps) {
         // Owner 2026-10-08: the terminal's scrollback goes too (ED 3); only on a TTY that takes escape sequences (`clearScreen`, see the prop).
         // Full window: the view itself empties; ED 3 still drops the terminal's own scrollback (the screen is the view's, so no ED 2).
         if (slash.command === 'clear' && result.entries.length) {
+          if (props.panels?.ports.model) {
+            const current = await props.panels.ports.model.inspect().catch(() => null);
+            const configured = current?.choices.find(choice => choice.configured);
+            setConfiguredLabels(configured ? { model: configured.label, provider: configured.providerLabel ?? configured.group } : {});
+          }
           if (fullscreenMode) { stdout.stdout.write(CLEAR_SCROLLBACK); setBannerShown(false); }
           else if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK);
           reset();
@@ -694,7 +700,7 @@ export function WorklineApp(props: WorklineProps) {
   const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette);
   const transcriptExit = props.transcriptExit;
   useLayoutEffect(() => { if (transcriptExit && fullscreenMode) transcriptExit.current = transcript.text; }, [transcriptExit, fullscreenMode, transcript]);
-  const statusNode = <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? props.model} provider={pinnedLabels.current.get(sessionId())?.provider ?? props.provider}
+  const statusNode = <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? (configuredLabels === null ? props.model : configuredLabels.model)} provider={pinnedLabels.current.get(sessionId())?.provider ?? (configuredLabels === null ? props.provider : configuredLabels.provider)}
     state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
     queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
     selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)}
@@ -810,4 +816,7 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
       ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.handover ? { handover: context.handover } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}),
       ...(context.clipboard ? { clipboard: context.clipboard } : {}),
       ...(context.notify ? { notify: context.notify } : {}) }) });
+  // BeUser AYSE-22: like Claude Code, closing says how to come back to the saved conversation.
+  const out = stdout ?? process.stdout, hint = props.sessions ? props.labels.sessions?.exitHint : undefined;
+  if (hint && out.isTTY) try { out.write(`${hint}\n`); } catch { /* the terminal is gone */ }
 }

@@ -18,6 +18,7 @@ const ruleSchema = z.discriminatedUnion('id', [
   z.object({ id: z.literal('daemon-unavailable-escalate'), ...base, afterMs: positive }).strict(),
   z.object({ id: z.literal('crash-loop'), ...base }).strict(),
   z.object({ id: z.literal('policy-refusal-flood'), ...base }).strict(),
+  z.object({ id: z.literal('beuser-target-refusal'), ...base, action: z.literal('alert-brain') }).strict(),
 ]);
 export type NervousRule = z.infer<typeof ruleSchema>;
 type RuleId = NervousRule['id'];
@@ -40,5 +41,6 @@ export function loadNervousRules(input: unknown): NervousRules {
 /** Pure (alpha.56 G2): a proposal of a rule a person promoted at exactly its id and version reads `live`; any other keeps its seeded status. */
 export function promoteNervousRule<P extends Readonly<{ rule: Readonly<{ id: string; version: number; status: (typeof NERVOUS_RULE_STATUSES)[number] }> }>>(proposal: P,
   promoted: ((ruleId: string, version: number) => boolean) | undefined): P {
+  if (proposal.rule.id === 'beuser-target-refusal') return { ...proposal, rule: { ...proposal.rule, status: 'provisional' } };
   return proposal.rule.status !== 'live' && promoted?.(proposal.rule.id, proposal.rule.version) === true ? { ...proposal, rule: { ...proposal.rule, status: 'live' } } : proposal;
 }

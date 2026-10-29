@@ -48,6 +48,22 @@ const AUTHORITY = ['deckent secret grant DECKENT_ANTHROPIC_KEY --scope s --json'
 const ORDINARY = ['exec 3<>/dev/tcp/127.0.0.1/8080 && printf \'GET / HTTP/1.0\\r\\n\\r\\n\' >&3 && cat <&3', 'exec 2>/dev/null', 'script -qc "npm test" /dev/null', 'git commit -m "secret set later"', 'echo deckent secret grant', 'deckent secret list', 'deckent init policy --preview',
   'bash -c "npm run build"', 'unbuffer npm test'];
 
+it.skipIf(process.platform !== 'linux')('BeUser walk and harness entries retain the authority floor for direct, quoted and prefixed launches', async () => {
+  for (const command of ['deckent beuser walk --journey onboarding --candidate candidate',
+    'node dist/composition/core/cli/internal/entry.js beuser walk --journey onboarding --candidate candidate',
+    'python3 dist/adapters/core/beuser-surface/internal/pty-driver.py',
+    './dist/adapters/core/beuser-surface/internal/pty-driver.py',
+    'env python3 "dist/adapters/core/beuser-surface/internal/pty-driver.py"',
+    'node dist/adapters/core/beuser-surface/index.js', 'node dist/composition/core/beuser/index.js',
+    'bash -c \'python3 "dist/adapters/core/beuser-surface/internal/pty-driver.py"\'']) {
+    expect(classify(command), command).toBe(true);
+    expect(await decide(command), command).toBe('require-approval');
+    expect(await decide(command, ai), command).toBe('deny');
+  }
+  expect(classify('deckent beuser report')).toBe(false);
+  expect(classify('echo dist/adapters/core/beuser-surface/internal/pty-driver.py')).toBe(false);
+});
+
 describe.skipIf(process.platform !== 'linux')('PRE-8 authority commands are the edit-authority floor in every mode', () => {
   it.each(AUTHORITY)('full access asks the person for %s (red before: allowed without a card)', async command => {
     expect(await decide(command)).toBe('require-approval');

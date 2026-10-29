@@ -1,11 +1,12 @@
 import { runProposalCommand } from './run-proposal.js';
 import { cliUsage, commandLocale, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
-import { cliMode } from '#surfaces/core/cli-human/index.js';
+import { cliMode, renderInputSchema } from '#surfaces/core/cli-human/index.js';
+import { projectInputSchema } from '#engine/index.js';
 import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand, type WorkerAdmissionWarning } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
-import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
+import { taskGraphSchema, validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { RunCommandContext } from './context.js';
 import { renderRunCancellation } from './cancellation.js';
 import { renderRunInspect } from './run-inspect.js';
@@ -45,9 +46,11 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
   if (action === 'propose' || action === 'inspect-proposal') return runProposalCommand(argv, context, earlyLocale);
   if (!hasCliAction('run', action)) throw usage();
+  // BeUser D-12: the graph file's contract (JSON Schema), without a project; a bad graph names its field and points here.
+  if (action === 'create' && argv.includes('--schema')) { emit(renderInputSchema(projectInputSchema(taskGraphSchema as never)), { json: false, ...(context.stdout ? { stdout: context.stdout } : {}) }); return; }
   const control = action === 'cancel' || action === 'close' || action === 'hold' || action === 'resume';
   const allowed = action === 'list' ? ['--scope', '--limit', '--lang'] : action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
-    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(action === 'hold' ? ['--reason'] : action === 'resume' ? ['--task', '--answer', '--quota'] : [])];
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(control ? ['--reason'] : []), ...(action === 'resume' ? ['--task', '--answer', '--quota'] : [])];
   const values = new Map<string, string>(); let json = false, verbose = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -124,6 +127,8 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     ].join('\n') });
     return;
   }
+  // BeUser D-09: a person's card takes --reason for every control (the help says so); the typed path records one only for hold.
+  if (values.has('--reason') && action !== 'hold') throw usage('--reason');
   if (action === 'close' || action === 'resume' || action === 'hold') {
     const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : '--expected-revision');

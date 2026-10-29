@@ -1,7 +1,7 @@
-import { AuthorityChangeError, AgentCatalogStoreError, DecisionApplicationError, MemoryJournalError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
+import { BeuserContractError, BeuserTransferError, AuthorityChangeError, AgentCatalogStoreError, DecisionApplicationError, MemoryJournalError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
 import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, MemoryError, AgentCatalogError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError, ModelRoleError, CatalogEvolutionError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError, NervousError, type ProviderSpendAccount } from '#engine/index.js';
-import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
+import { BeuserSurfaceError, OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
 import { UninstallError, InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
@@ -21,10 +21,11 @@ const delegationRefusalParams = (facts: NonNullable<AuthorityChangeError['refusa
   people: facts.people.map(person => terminalSafeText(`${person.issuer}/${person.subject}`)).join(', ') });
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
+  if (error instanceof BeuserContractError || error instanceof BeuserTransferError || error instanceof BeuserSurfaceError) return registeredFailure(error.code);
   // alpha.56 U5-S1: the bound's refusal names the cell it stopped at and a hint chosen from display facts (never a decision input).
   if (error instanceof AuthorityChangeError && error.refusal) return registeredFailure(error.code, { params: delegationRefusalParams(error.refusal) });
   if (error instanceof AuthorityChangeError || error instanceof PolicyChangeError || error instanceof DecisionDelegationError || error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof MemoryJournalError || error instanceof MemoryError || error instanceof AgentCatalogStoreError || error instanceof AgentCatalogError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
-    || error instanceof TargetQueueError || error instanceof CandidateBindingError || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError || error instanceof NervousError || error instanceof CatalogEvolutionError) return registeredFailure(error.code);
+    || error instanceof TargetQueueError || error instanceof CandidateBindingError || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError || error instanceof NervousError || error instanceof CatalogEvolutionError) return registeredFailure(error.code, error instanceof TargetQueueError && error.params ? { params: error.params } : undefined);
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof RunLifecycleError && error.approvalId) return registeredFailure(error.code, { params: { approvalId: error.approvalId } });
   if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
