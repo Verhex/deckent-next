@@ -155,7 +155,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v18-/) });
+    // R3-B: unapplied BeUser system rows share this one installer publication, keyed spr1-…; otherwise the template-upgrade key.
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^(policy-template-upgrade-v18-[a-f0-9]{64}|spr1-[a-f0-9]{32}-[a-f0-9]{32})$/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
     // The same upgrade run again adds the remaining v15 and v16 rules (each run add-only and idempotent); a third run is current.
