@@ -41,7 +41,7 @@
   "beuser.help.walk.summary": "Sabitlenmiş yolculuğu izole alanda yürü.",
   "beuser.help.report.summary": "Kalıcı BeUser yolculuk raporunu oku.",
   "beuser.help.walk": "deckent beuser walk --journey <id> --candidate <path> [--scope <id>] [--json] [--lang en|tr]\nİş başlamadan kayıtlı yolculuk, aday, politika ve sonlu sınırlar doğrulanır. İptalde belirsiz imha kanıtı korunur.",
-  "beuser.help.report": "deckent beuser report [--run <id>] [--scope <id>] [--json] [--lang en|tr]\nKalıcı raporu Run inceleme yetkisiyle okur. Simüle, kalibre edilmemiş; rapor benimseme yetkisi vermez.\nRun seçilmezse bu kişinin son kalıcı raporu okunur.",
+  "beuser.help.report": "deckent beuser report [--run <id>] [--scope <id>] [--json] [--lang en|tr]\nKalıcı raporu iş inceleme yetkisiyle okur. Simüle, kalibre edilmemiş; rapor benimseme yetkisi vermez.\nİş seçilmezse bu kişinin son kalıcı raporu okunur.",
   "beuser.acceptance.harnessReadback": "yalıtılmış yürüyüşün sonuç okuması",
   "beuser.installation.systemRows": "Sistem izin verisi {digest}: {status}; neden {reason}; çakışma {conflicts}; geri verilmeyen {withheld}."
 }

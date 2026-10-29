@@ -725,5 +725,5 @@
   "task.acceptance.checkNotRun": "Kabul edilmedi: işçi çalıştıramadığı bir kabul kontrolü bildiriyor.",
   "task.acceptance.checkNotRunNext": "Sonraki adım: kontrol, işçi ortamında bir şey eksik olduğu için (bir araç, bir bağımlılık, bellek) çalışamadıysa, bunu {template} şablonunun (sürüm {version}) ortam gereksinimi olarak bildirin: yapılandırma anahtarı admission.registry, o profilin parameters.docker.environment alanı (düz bir Docker profilinde parameters.environment). deckent config get admission.registry --json ile okuyun, deckent config set admission.registry '<json>' ile geri yazın, sonra deckent runtime restart; yeni işler işçileri başlamadan önce bunun için denetlenir. Deckent hiçbir gereksinimi kendiliğinden eklemez.",
   "monitor.blocker.environmentNotReady": "ortam hazır değil: {requirement}; kurulum sorunu, görev hatası değil; düzeltip devam ettirin",
-  "monitor.refused": "{scope} içinde reddedilen istek: {code} · {title} (hepsi: deckent run list)"
+  "monitor.refused": "{scope} içinde reddedilen istek: {code} · {title} (hepsi: `deckent run list`)"
 }
