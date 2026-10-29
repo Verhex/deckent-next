@@ -46,6 +46,18 @@ cost when no verified amount is available. No live, hosted, other-platform or in
 
 ## Execution profile installation
 
+The distribution contract hashes every mounted file, including dev-release v1 `manifest.json` and
+`release.json`; neither metadata file is exempt from BeUser verification. For a staged dev-release,
+the complete unpacked inventory in `manifest.json` supplies required paths and hash/mode pins, bound
+by `release.json` schema v1, package version and manifest hash. Both metadata records are measured
+with the same bounded, stable regular-file reads. A partial or corrupt pair refuses measurement.
+For an ordinary npm package, literal `package.json.files` declarations remain required. Native
+artifacts ship inside `dist`; no root `native` directory is declared by new packages. An older
+stage's npm inclusion list may still name that absent directory; its complete unpacked inventory
+is the installed-file contract. Missing inventory files remain `declaredMissing`; changed bytes or
+modes refuse measurement. The pinned full distribution verifier still rejects missing and foreign
+files, including files outside npm's inclusion list. These byte checks grant no release authority.
+
 `deckent beuser setup --profile <path> --scope <id>` previews a bounded admission document on the
 person's terminal; `--apply` displays its content and digest on a person card, and `--json` returns
 the same result as structured data. The document uses the existing admission schema: `poolId`,
