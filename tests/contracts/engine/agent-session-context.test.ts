@@ -89,11 +89,11 @@ describe('session context block per mode', () => {
     for (const [command] of AGENT_SESSION_SURFACES) expect(registry.has(command.split(' ')[0]!)).toBe(true);
   });
 
-  it('joins the v10 system prompt only when given, after the tools and before the working style', async () => {
+  it('joins the v11 system prompt only when given, after the tools and before the working style', async () => {
     const base = { projectRoot: '/p', layout: resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/data' }), tools: TOOLS, language: 'tr' as const,
       model: { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1, nativeId: 'Qwen3.8-27B' } };
     const without = renderAgentTurnSystemPrompt(base), withSession = renderAgentTurnSystemPrompt({ ...base, session: await snapshot('standart') });
-    expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(10);
+    expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(11);
     expect(without).not.toContain('Session context v1');
     expect(withSession.indexOf('Session context v1')).toBeGreaterThan(withSession.indexOf('\nTools:\n'));
     expect(withSession.indexOf('Session context v1')).toBeLessThan(withSession.indexOf('\nWorking style:\n'));
