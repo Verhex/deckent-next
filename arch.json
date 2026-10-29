@@ -4904,6 +4904,7 @@
     "trackedAllowGlobs": [
       ".agents/skills/deckent-agentic-ux/*.md",
       ".agents/skills/deckent-authority-bootstrap/*.md",
+      ".agents/skills/deckent-beuser/*.md",
       ".agents/skills/deckent-closure/*.md",
       ".agents/skills/deckent-design-critic/*.md",
       ".agents/skills/deckent-design-dna/*.md",

@@ -921,6 +921,19 @@ Kaynak: dış `proof/UNINSTALL-V2-2026-10-27/` (JOURNEY r2, LAW-AUDIT ve LAW-AUD
 - **K7:** veri silen her kademede zorunlu, parolalı yedek (`--no-backup` yok), 0700/0600; oluştur → doğrula (audit dahil) → plana bağla → sil; doğrulanamazsa hiçbir şey silinmez; konum registry/korumalı config kurtarma kökü, proje klasörünün ve silinen global evin dışında; kişi silene kadar kalır.
 - **UX (owner, bağlayıcı):** kademeli menü (verileri koru varsayılan; bekleyen işleri koru yalnız bekleyen iş varken; her şeyi sil yedekle), her adımın aynı CLI ikizi; bütün denetimler onaydan önce; silinecek bir şey yoksa onay sorulmaz; kart önce silineceği, sonra kalanı ve nedenini söyler; tek başlık; çalışan servis "servis çalışıyor"dur, "iş aktif" değil; >64 geçmiş reddi düzeltilir; `--purge` → `--all` iletisi; EN/TR.
 
+<a id="beuser-2026-10-27"></a>
+
+## Owner kararı — 2026-10-27: kabul = kişi/kurum yolculuğu (BeUser)
+
+Neden: alpha.56 `deckent uninstall` ~12 bin test ve güvenlik incelemesinden geçti ama ilk gerçek kullanımda beş yerden kırıldı; dar kartlar kendi testleri ve incelemesiyle kabul ediliyor, sürümden önce kimse kişinin yolunu yürümüyordu. Owner: “Önerini kabul ediyorum, iş metodolojimize bunu ekle: kabul = kullanıcı / kurum yolculuğu; dar kapsamdan sonra toplanmış sürümün durumu … sürekli test koşmak yerine bu süreçleri yazdıktan sonra AI araçlarına test ettirelim — hermetik test yerine BeUser mekanizması. Bunu skill haline getirelim.”
+
+- Bir yüzey kurulmadan önce yolculuk haritası (her başlangıç durumu, menü seçimi ve CLI bayrak ikizi, sonuç, sonraki adımlı ret; solo ve kurum kişileri) kanıtlanmış araçlardan türetilerek yazılır.
+- Dar kartlar indikten sonra toplanmış sürüm adayında, tercihen yazardan farklı üreticinin AI ajanları kişiyi canlandırarak gerçek kurulumda her dalı yürür; transkript ve dal başına hüküm saklanır. Yüzey ancak her dal yeşil yüründüğünde biter.
+- Hermetik testler gerçek riskler için yalın regresyon korumasıdır; CI zorunlu kalır, kabul modeli değildir ve yürüyüşün yerine toplu test koşulmaz. Doğrulama sıklığı Kanun 7'dedir.
+- Paketteki bir yüzeyde bulunan eksik aynı pakette düzeltilir, ertelenmez.
+- Owner düzeltmesi (aynı akşam, bağlayıcı): “BeUser bunun adı bu, baştan sona AI yürüyecek ki o bana feedback versin; ben zaten uğraşmadan o fark etsin.” Yürüyücü, kendi kurduğu atılabilir BeUser sandbox kurulumunda kişi adımları dahil her dalı persona olarak yürür (`synthetic-person` etiketi; gerçek onay kanıtı değildir); canlı, N1, owner projeleri ve müşteri sistemlerinde kişi ve AI tabanları aynen geçerlidir. Owner adım yürümez, raporu okur.
+- Yöntem `deckent-beuser` skill'idir. BeUser'ın Deckent ürününe alınması (persona popülasyonları, teslim kabulüne yerleşme) ayrı bir ürün paketidir; owner aynı gün tasarımını istedi, owner kararlarından sonra planlanır.
+
 <a id="ker17-mcp-deck-grant-2026-10-28"></a>
 
 ## PRE-8 değişikliği — 2026-10-28: MCP `$DECK:` anahtarı proje iznine bağlı (KER-17)
