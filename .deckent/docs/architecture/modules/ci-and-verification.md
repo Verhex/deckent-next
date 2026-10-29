@@ -38,6 +38,10 @@ eight pre-existing skips. Their two-fork per-file maxima refresh all scheduling 
 The matrix uses more runners (36 jobs versus 20); equal test-fork count is not equal CPU/RAM reservation or resource savings.
 Test/job timeouts are unchanged. Final-revision receipts and negative proof are external in `proof/CI-STABILITY-2026-10-19/REPORT.md`;
 author/hosted checks do not establish independent review, release or owner acceptance.
+CI-DRIFT (owner 2026-10-29, conditional amendment of the shard count): after the weight refresh, hosted PR #122 run 40877332203
+(exact `8f414ed36`, 32/32 test jobs green) measured test-job wall times of 220–353 s, median 311 s, against the 6-minute job limit:
+2 % headroom at the maximum and 13 % at the median, below the owner's 20 % condition, so the count is 20 shards (40 test forks per
+Node version, 44 jobs per run). Forks per runner and every timeout stay unchanged.
 The complete inventory comes from Vitest itself, not a changed-file filter. New files always enter the partition.
 The required collector rejects missing/duplicate shards or files, wrong SHA/Node/run/attempt, failed/cancelled/pending
 execution, collection/unhandled errors and missing native/host/smoke success. Native binaries and dist are bound to
@@ -60,7 +64,7 @@ and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes
 PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
 activate/change a remote merge queue or ruleset. Main push runs the same full sharded suite
 (owner 2026-10-06): admin merges bypass the PR gate, so this is main's post-merge full signal; on this public repository
-standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 36 (2 prepare, 32 test shards, 2 required verify). Native macOS/Windows full suites stay in a separate daily/manual
+standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 44 (2 prepare, 40 test shards, 2 required verify; 36 before CI-DRIFT). Native macOS/Windows full suites stay in a separate daily/manual
 workflow with visible failures; this scheduling does not resolve existing platform debt or claim platform acceptance.
 The full author scan exposed a genuine first integrity-key creation race during concurrent secret changes.
 Write-mode key custody now holds the existing bounded configuration path lock through create/read/fsync/close;
@@ -206,7 +210,7 @@ the directory run no hooks, and clones do not inherit the setting. Measured time
 
 Shard balance (alpha.55): shard 1 also runs the native, host and smoke suites after Vitest, so its bin starts at
 `shardOneReservedMs` (`scripts/ci-test-config.json`) and the planner (`scripts/ci-test-plan.mjs`) moves Vitest files to the other
-shards accordingly. CI-DRIFT (owner 2026-10-29; 16 shards and every timeout unchanged) set it from 75 s to 107 s: bins are
+shards accordingly. CI-DRIFT (owner 2026-10-29; every timeout unchanged) set it from 75 s to 107 s: bins are
 summed per-file time, while shard 1's extra cost is wall time, so reserve = post-Vitest wall × two-fork Vitest parallelism =
 67.94 s (maximum of the four shard-1 jobs of runs 40865256809 and 40865219414: 67.94/63.16/67.56/47.62 s, Vitest
 "Duration" line to the artifact upload step) × 1.574 (median of summed reporter time / Vitest duration over the same 64 jobs,
