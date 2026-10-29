@@ -79,5 +79,5 @@ export function evaluateBeuserEvidence(parameters: unknown, input: unknown): { v
     authorization: dimensions.authorization, safety: dimensions.safety, experience: data.experience.verdict, validity: data.validity,
     independence: independent ? 'independent' : data.experience.maker === null || data.experience.sourceMakers.includes(null) ? 'unknown' : 'reduced',
     evidenceRefs: [...refs, data.cleanup.evidenceRef] });
-  return { verdict: dimensions[params.dimension], dimensions: Object.freeze(dimensions), result };
+  return { verdict: values.includes('fail') ? 'fail' : values.includes('unknown') ? 'unknown' : 'pass', dimensions: Object.freeze(dimensions), result };
 }

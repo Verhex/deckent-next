@@ -85,12 +85,12 @@ it('accepts only captured metadata through EvidencePort and denies inspect befor
 });
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture(missingFile = false, contentInput: unknown = document()) {
+async function fixture(missingFile = false, contentInput: unknown = document(), outcomeOnly = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-beuser-evidence-')); roots.push(root);
   const path = join(root, 'ledger.db'), options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 'full' as const };
   const open = async () => { const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store); return store; };
   const store = await open(), actor = { id: 'author', issuer: 'test', subject: 'fixture' };
-  const definitions = ['outcome', 'authorization', 'safety'].map(dimension => ({ id: dimension, version: 1, description: `Observe ${dimension}`,
+  const definitions = (outcomeOnly ? ['outcome'] : ['outcome', 'authorization', 'safety']).map(dimension => ({ id: dimension, version: 1, description: `Observe ${dimension}`,
     evaluator: { id: 'beuser', version: 1 }, parameters: { ...parameters, dimension } }));
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'journey', dependencies: [], acceptanceCriteria: definitions.map(d => d.id) }], criterionDefinitions: definitions };
   const execution = resolveExecutionRegistry(graph, { schemaVersion: 1, revision: 'beuser-fixture',
@@ -127,6 +127,20 @@ describe.skipIf(process.platform === 'win32')('real retained dispatch and TaskEv
     const first = await port.evaluate(context, f.command); expect(first.snapshot.progress[0]?.phase).toBe('accepted'); expect(f.writes()).toBe(1);
     const reopened = await f.open(); expect(await f.app(reopened).execute(f.command)).toEqual(first); expect(f.writes()).toBe(1);
     f.deny(); await expect(f.app(reopened).execute(f.command)).rejects.toThrow('POLICY_DENIED'); expect(f.writes()).toBe(1);
+  });
+  it('holds a sole outcome criterion when installation passes but security is unknown or failed', async () => {
+    grant({ kind: 'attempt', id: 'a' }, 'evaluate');
+    for (const forbiddenEffect of ['unknown', 'present'] as const) {
+      const data = document(), observed = { ...summary, forbiddenEffect };
+      const recorder = createBeuserTranscript(context, EMPTY_KNOWN_SECRETS);
+      recorder.append(context, { binding, atMs: 2, kind: 'readback', evidenceRef: 'readback', text: JSON.stringify(observed) });
+      const f = await fixture(false, { ...data, transcript: recorder.finalize(context).transcript, readbacks: [{ ...readback, summary: observed }] }, true);
+      const result = await f.app().execute(f.command);
+      expect(result.snapshot.progress[0]?.phase).not.toBe('accepted');
+      expect(result.snapshot.progress[0]?.phase).toBe(forbiddenEffect === 'unknown' ? 'awaiting-decision' : 'failed');
+    }
+    const positive = await fixture(false, document(), true);
+    expect((await positive.app().execute(positive.command)).snapshot.progress[0]?.phase).toBe('accepted');
   });
   it('rejects inspect/evaluate/replay denial with zero evaluation writes', async () => {
     grant({ kind: 'attempt', id: 'a' }, 'evaluate'); const f = await fixture(); f.deny();

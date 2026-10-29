@@ -604,7 +604,8 @@
         "src/capabilities/core/run-planner",
         "src/composition/core/siwc",
         "src/adapters/core/siwc-worker",
-        "src/engine/core/run-limits"
+        "src/engine/core/run-limits",
+        "src/composition/core/supervisors"
       ],
       "plan": "EXECUTION"
     },
@@ -4574,7 +4575,8 @@
         "src/engine/core/runs",
         "src/engine/core/supervisor",
         "src/platform/core/integrity",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/domain/core/approval"
       ],
       "plan": "EXECUTION"
     },
@@ -4658,7 +4660,6 @@
         "src/composition/core/terminal-chat",
         "src/domain/core/beuser",
         "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
         "src/domain/core/run",
         "src/engine/core/beuser",
         "src/engine/core/beuser-contract",
@@ -4671,11 +4672,35 @@
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",
         "src/platform/core/config",
-        "src/platform/core/errors",
         "src/platform/core/i18n",
         "src/platform/core/integrity",
         "src/platform/core/managed-files",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/composition/core/supervisors",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/approval"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/supervisors": {
+      "dependencies": [
+        "src/domain/core/beuser",
+        "src/domain/core/primitives",
+        "src/capabilities/core/artifacts",
+        "src/capabilities/core/evaluation-evidence",
+        "src/adapters/core/beuser-realm",
+        "src/adapters/core/docker-supervisor",
+        "src/engine/core/beuser",
+        "src/engine/core/beuser-contract",
+        "src/engine/core/beuser-realm",
+        "src/engine/core/dispatch",
+        "src/engine/core/supervisor",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/platform/core/integrity",
+        "src/platform/core/managed-files",
+        "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
     }

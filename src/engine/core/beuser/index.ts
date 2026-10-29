@@ -12,3 +12,5 @@ export { BeuserExecutionSupervisor, BeuserDispatch } from './internal/supervisor
 export type { BeuserSupervisorCustody, BeuserDispatchPort } from './internal/supervisor.js';
 export { beuserRefusalEvent } from './internal/events.js';
 export { recordBeuserRefusal } from './internal/nervous.js';
+export { readBeuserControllerAudit } from './internal/controller-audit.js';
+export type { BeuserControllerValidity } from './internal/controller-audit.js';
