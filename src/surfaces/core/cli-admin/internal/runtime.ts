@@ -1,5 +1,5 @@
 import { renderAuditReason } from '#surfaces/core/doctor/index.js';
-import { ErrorRegistry, EXIT_CODES, emit, formatDuration, loadConfig, readBuildIdentity, serviceManagerStopCommand, t, terminalSafeText, type DeckentError, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
+import { assertRuntimeServiceStoppable, ErrorRegistry, EXIT_CODES, emit, formatDuration, loadConfig, readBuildIdentity, t, terminalSafeText, type DeckentError, type ConfigLoadOptions, type ExitCode, type Locale, type ProductLayout } from '#platform/index.js';
 import { configServiceState, shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand, type BackupScheduleObserver } from '#engine/index.js';
@@ -176,10 +176,9 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
   }
   const { reason, ...ids } = shutdown;
   if (action === 'shutdown' && !force && context.runtimeServiceManager && context.describeRuntimeService) {
-    // BeUser alpha.56.1 (Selin): a service its manager runs is stopped through that manager (else the next terminal starts a second, unmanaged
-    // service); `--force` is the person's explicit override. An unreadable service falls through to the typed refusals below.
-    const managed = await context.describeRuntimeService(root, options).then(descriptor => context.runtimeServiceManager!(descriptor.processId), () => null);
-    if (managed) throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerStopCommand(managed), action: 'stop' } });
+    // BeUser alpha.56.1 (Selin), F3: the stop check MCP and the SDK share; `--force` is the person's explicit override, which no AI or script
+    // surface has. An unreadable service falls through to the typed refusals below; a failed manager lookup still refuses.
+    await context.describeRuntimeService(root, options).then(descriptor => assertRuntimeServiceStoppable(descriptor.processId, context.runtimeServiceManager!), () => undefined);
   }
   if (action === 'shutdown' && Object.keys(ids).length === 0 && context.stopRuntimeService) {
     // No identity fields: the system builds the governed command from the live descriptor. Owner CLI review 2026-10-19: a person confirms on a

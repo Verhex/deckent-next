@@ -1,4 +1,4 @@
-export { createConfiguredRuntimeClient, configuredTargetQueueTerminal } from './internal/client.js';
+export { createConfiguredRuntimeClient, createGuardedRuntimeClient, guardRuntimeServiceStop, configuredTargetQueueTerminal } from './internal/client.js';
 export { withQueueContext, assertQueueWorkTarget } from './internal/queue-context.js';
 export { invokeRuntimeModel, invokeRuntimeModelStream, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation,
   runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile } from './internal/model-client.js';

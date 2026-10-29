@@ -1,8 +1,8 @@
-import { attestLocalInteractiveTerminal, localPrincipalChannel, LocalRuntimeSocketError, prepareRuntimeSocket, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
-import { ErrorRegistry, ManagedFileError, type ConfigLoadOptions } from '#platform/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalChannel, LocalRuntimeSocketError, prepareRuntimeSocket, querySystemdMainPid, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
+import { ErrorRegistry, ManagedFileError, assertRuntimeServiceStoppable, detectServiceManager, SERVICE_MANAGER_QUERY_BOUNDS, type ConfigLoadOptions, type ServiceManagerUnit } from '#platform/index.js';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { runtimeTargetQueueTerminal, createRuntimeQueueSubmission, createRuntimeRequestTransport, createRuntimeServiceClient,
-  type RuntimeServiceDelivery, type EffectOutcome, type RuntimeOperationQuery } from '#engine/index.js';
+  type RuntimeServiceDelivery, type EffectOutcome, type RuntimeOperationQuery, type ShutdownCommand } from '#engine/index.js';
 import type { EffectCommand, EffectRecord } from '#domain/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -31,6 +31,15 @@ const clientPorts = (projectRoot: string, options: ConfigLoadOptions) => ({ atte
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   return createRuntimeServiceClient<ConfiguredRuntimeOperations>(clientPorts(projectRoot, options));
 }
+/** F3: a shutdown of a service its manager runs is refused before any request is sent (`assertRuntimeServiceStoppable`); an unreadable descriptor
+ * is that read's own typed refusal, so nothing is sent either. */
+export const guardRuntimeServiceStop = (client: ConfiguredRuntimeClient, managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null>): ConfiguredRuntimeClient =>
+  Object.freeze({ ...client, async shutdownService(command: ShutdownCommand, signal?: AbortSignal) {
+    await assertRuntimeServiceStoppable((await client.describeService(signal)).processId, managerOf); return client.shutdownService(command, signal); } });
+/** The SDK's and MCP's client, with this host's manager lookup and no override. Uninstall's governed stop (K4 custody) and the CLI host, whose
+ * surface decides the person's `--force`, use the plain client above. */
+export const createGuardedRuntimeClient = (projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient => guardRuntimeServiceStop(
+  createConfiguredRuntimeClient(projectRoot, options), pid => detectServiceManager(pid, unit => querySystemdMainPid(unit, SERVICE_MANAGER_QUERY_BOUNDS, options.env ?? process.env)));
 /** CLI/Terminal only (DESIGN §6): submission and the TTY-bound confirmation. The SDK client above stays inspect/list; the service refuses MCP submission. */
 export function configuredTargetQueueTerminal(projectRoot: string, options: ConfigLoadOptions = {}) {
   const ports = clientPorts(projectRoot, options), interactive = async () => { if (localPrincipalChannel() === 'mcp' || !await attestLocalInteractiveTerminal()) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED'); };
