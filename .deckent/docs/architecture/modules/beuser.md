@@ -37,9 +37,11 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit is not proof of thr
 
 The limits registry contains one `b1-dogfood-provisional-1` profile. Its finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
-and replacement. Each model call reserves the existing adapter's UTF-8 prompt upper bound plus the
-requested completion cap, rather than the entire model context window. An envelope that exceeds the
-window or remaining token budget is refused before invocation. Valid final provider usage can reduce
+and replacement. Each model call reserves the invocation adapter's measured prompt count, including
+the served template, plus the requested completion cap. A missing, unsupported or failed counter
+refuses the call as `BEUSER_LIMITS_UNAVAILABLE` before inference; a byte-based estimate cannot admit
+a strict token reservation. The preview, count and send retain the same profile pin. An envelope that
+exceeds the configured or provider-reported window or remaining budget is refused before invocation. Valid final provider usage can reduce
 only that call's token reservation once; missing or uncertain usage retains it, and an overrun refuses
 without widening the bound. Call counts and monetary reservations remain consumed. A typed local
 profile with verified literal-loopback/zero-tariff evidence is accepted at zero cost; paid profiles

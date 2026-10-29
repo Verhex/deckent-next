@@ -1,4 +1,5 @@
 import { configuredContinuationPin, prepareConfiguredSiwcContinuation } from './continuation.js';
+import { isDeepStrictEqual } from 'node:util';
 import { t } from '#platform/index.js';
 import { configuredModelInvocationDeliverySurfaces } from './delivery-audit.js';
 import { randomUUID } from 'node:crypto';
@@ -18,14 +19,19 @@ export async function invokeConfiguredModelAs(projectRoot: string, input: ModelI
   guard?: { profile(profile: import('#domain/index.js').ModelInvocationProfile): Promise<void>; spending(value: import('#engine/index.js').ModelInvocationSpending): void }) {
   return invoke(input, async scopeId => Object.freeze({ ...await loadInvocationContext(projectRoot, scopeId, options, 'write'), principal }), options, signal, undefined, undefined, undefined, 'feature', undefined, guard);
 }
-/** Code-only feature preflight: reuse the same checked profile and native quote, without claiming or sending a model call. */
-export async function prepareConfiguredModelAs(projectRoot: string, input: ModelInvocationCommand, principal: Awaited<ReturnType<typeof loadInvocationContext>>['principal'], options: ConfigLoadOptions = {}, signal?: AbortSignal): Promise<{ profile: import('#domain/index.js').ModelInvocationProfile | null; spending: import('#engine/index.js').ModelInvocationSpending | null }> {
+/** Code-only feature preflight: checked profile, native quote and exact-request provider count, without a model call or claim. */
+export async function prepareConfiguredModelAs(projectRoot: string, input: ModelInvocationCommand, principal: Awaited<ReturnType<typeof loadInvocationContext>>['principal'], options: ConfigLoadOptions = {}, signal?: AbortSignal): Promise<{ profile: import('#domain/index.js').ModelInvocationProfile | null; spending: import('#engine/index.js').ModelInvocationSpending | null; measurement: import('#engine/index.js').ModelInvocationMeasurement | null }> {
   const context = Object.freeze({ ...await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), principal });
   let spending: import('#engine/index.js').ModelInvocationSpending | null = null;
   let selected: import('#domain/index.js').ModelInvocationProfile | null = null;
-  const app = application(context, options, undefined, true, 'feature', async profile => { await configuredContinuationPin(input)?.(profile); selected = profile; }, value => { spending = value; });
+  const app = application(context, options, undefined, true, 'feature', async profile => {
+    await configuredContinuationPin(input)?.(profile);
+    if (selected && !isDeepStrictEqual(selected, profile)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
+    selected = profile;
+  }, value => { spending = value; });
   await app.preview(input, undefined, signal);
-  return { profile: selected, spending };
+  const measurement = await app.measure(input, undefined, signal);
+  return { profile: selected, spending, measurement };
 }
 export async function previewConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}) { try { return await application(await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), options).preview(input); } catch (error) { throw queryFailure(error); } }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */

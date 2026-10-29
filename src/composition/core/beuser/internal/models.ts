@@ -1,5 +1,5 @@
 import { createBeuserModelPort, BeuserCallBudget, BeuserContractError, providerSpendLocalZeroTariff, providerSpendLocalZeroTariffProfile, type BeuserContext, type BeuserModelComposition } from '#engine/index.js';
-import { openSqliteModelActivationReader, extractOpenAiChatTextFromInvocation, openAiChatPromptUpperBound } from '#adapters/index.js';
+import { openSqliteModelActivationReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { invokeConfiguredModelAs, prepareConfiguredModelAs } from '#composition/core/model-invocation/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
@@ -29,8 +29,12 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       const pinned = await prepareConfiguredModelAs(root, prepared.command, ctx.principal, options, ctx.signal);
       const profile = pinned.profile;
       const spending = pinned.spending;
-      const tokens = openAiChatPromptUpperBound(prepared.command.nativeRequest) + completionTokens;
-      if (!profile?.contextWindowTokens || !Number.isSafeInteger(tokens) || tokens > profile.contextWindowTokens || tokens > remaining.tokens || profile.limits.timeoutMs > ctx.limits.maxWallMs
+      const measured = pinned.measurement;
+      if (!measured || measured.quality !== 'provider-count') throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+      const tokens = measured.promptTokens + completionTokens;
+      if (!profile?.contextWindowTokens || !Number.isSafeInteger(measured.promptTokens) || measured.promptTokens < 0
+        || !Number.isSafeInteger(tokens) || tokens > profile.contextWindowTokens || (measured.windowTokens !== null && tokens > measured.windowTokens)
+        || tokens > remaining.tokens || profile.limits.timeoutMs > ctx.limits.maxWallMs
         || profile.limits.responseMaxBytes > ctx.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
       const local = profile.schemaVersion === 2 && profile.billingAxis === 'local' && providerSpendLocalZeroTariffProfile(profile)
         && !spending?.budget && (!spending?.quote || providerSpendLocalZeroTariff(profile, spending.quote));

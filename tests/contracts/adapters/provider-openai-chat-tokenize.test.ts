@@ -44,11 +44,13 @@ it('accepts a tokenize endpoint only on the same origin as the completion endpoi
 it('counts exactly the messages and tools the round sends, with the served window, and never fails a turn when the counter does', async () => {
   const server = await fixture(json({ count: 321, max_model_len: 131072, tokens: [1, 2, 3], token_strs: null }));
   const port = createOpenAiChatNativePort();
-  const prepared = await port.prepare(profile(`${server.origin}/v1/chat/completions`, `${server.origin}/tokenize`), binding(), native);
+  const prepared = await port.prepare(profile(`${server.origin}/v1/chat/completions`, `${server.origin}/tokenize`),
+    binding([...counted, { id: 'chat-template-enable-thinking', version: 1, state: 'supported' }]),
+    { ...native, chat_template_kwargs: { enable_thinking: false } });
   expect(await port.measure!(prepared)).toEqual({ promptTokens: 321, windowTokens: 131072 });
   expect(server.requests).toHaveLength(1); expect(server.requests[0]!.url).toBe('/tokenize');
   // The count is of the same prompt the round sends: identical model, messages and tools; no sampling fields.
-  expect(JSON.parse(server.requests[0]!.body)).toEqual({ model: MODEL, messages: native.messages, tools });
+  expect(JSON.parse(server.requests[0]!.body)).toEqual({ model: MODEL, messages: native.messages, tools, chat_template_kwargs: { enable_thinking: false } });
   // A prepared request is single use for measure as for send.
   await expect(port.measure!(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' });
 

@@ -2,6 +2,10 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { CORE_MODEL_ROLES, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type ModelInvocationCommand, type ModelInvocationProfile } from '#domain/index.js';
 import { BeuserCallBudget, providerSpendEvidenceDigest, type BeuserContext } from '#engine/index.js';
 import type { ModelInvocationResult, ModelInvocationSpending } from '#engine/core/model-invocation/index.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import * as httpTransport from '#adapters/core/provider-http-json/index.js';
+import { brainProviderFixture } from '../support/brain-provider.js';
 import { configuredBeuserModels } from '#composition/core/beuser/index.js';
 
 const mocks = vi.hoisted(() => ({ scope: vi.fn(), catalog: vi.fn(), activation: vi.fn(), command: vi.fn(), prepare: vi.fn(), invoke: vi.fn() }));
@@ -10,7 +14,8 @@ vi.mock('#composition/core/model-activation/index.js', () => ({ inspectConfigure
 vi.mock('#composition/core/model-invocation/index.js', () => ({ prepareConfiguredModelAs: mocks.prepare, invokeConfiguredModelAs: mocks.invoke }));
 vi.mock('#composition/core/terminal-chat/index.js', () => ({ prepareTerminalChatCommand: mocks.command }));
 vi.mock('#adapters/index.js', async original => ({ ...await original<typeof import('#adapters/index.js')>(),
-  openSqliteModelActivationReader: async () => ({ loadRecord: mocks.activation, close() {} }) }));
+  openSqliteModelActivationReader: async (...args: Parameters<typeof import('#adapters/index.js').openSqliteModelActivationReader>) => args[0] === '/fixture.sqlite'
+    ? { loadRecord: mocks.activation, close() {} } : (await original<typeof import('#adapters/index.js')>()).openSqliteModelActivationReader(...args) }));
 
 const target = CORE_MODEL_ROLES.models.find(row => row.roles.includes('beuser-walker'))!;
 const reference = { providerId: target.channelId, providerVersion: 1, modelId: 'catalog-model', modelVersion: 1 };
@@ -48,12 +53,12 @@ beforeEach(() => {
   mocks.catalog.mockResolvedValue({ schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: target.channelId, access: 'allowed', models: [{ modelId: target.modelId, model: { vendorId: 'anthropic' } }] }] });
   mocks.activation.mockResolvedValue({ state: 'active' });
   mocks.command.mockResolvedValue({ command });
-  mocks.prepare.mockResolvedValue({ profile: localProfile, spending: null });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: localProfile, spending: null });
   mocks.invoke.mockResolvedValue({ receipt: { claim: { invocationId: 'invocation' }, outcome: { state: 'responded' } }, response: { usage: null } } as unknown as ModelInvocationResult);
 });
 
 it('reserves the small prompt plus completion for a 196k-window local unmetered model and exhausts the token envelope on the third call', async () => {
-  // {messages:[{role:user,content:hi}],tools:[]} is 56 UTF-8 bytes; registry overhead is 64+16, plus 10 completion = 146.
+  // Provider measures 136 prompt tokens, including its template; plus 10 completion = 146.
   const h = harness({ maxTokens: 300 });
   await expect(h.call()).resolves.toMatchObject({ state: 'invoked' });
   expect(h.budget.remaining()).toEqual({ calls: 9, tokens: 154, cost: 1, currency: 'USD' });
@@ -66,9 +71,10 @@ it('reserves the small prompt plus completion for a 196k-window local unmetered 
 it('refuses oversized and multibyte prompts before invoking rather than clipping the reservation to the model window', async () => {
   const h = harness();
   mocks.command.mockResolvedValue({ command: { ...command, nativeRequest: { ...command.nativeRequest, messages: [{ role: 'user', content: '界'.repeat(100000) }] } } });
+  mocks.prepare.mockResolvedValueOnce({ profile: localProfile, spending: null, measurement: { quality: 'provider-count', promptTokens: 300000, windowTokens: null } });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
   expect(h.budget.remaining()).toMatchObject({ calls: 10, tokens: 131072 });
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, contextWindowTokens: 145 }, spending: null });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, contextWindowTokens: 145 }, spending: null });
   mocks.command.mockResolvedValue({ command });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
   expect(mocks.invoke).not.toHaveBeenCalled();
@@ -100,13 +106,13 @@ it('keeps the reservation for unknown, missing, malformed or thrown provider res
 
 it('requires a quote for paid profiles and refuses a local label without literal-loopback and zero-tariff evidence', async () => {
   const h = harness();
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, billingAxis: 'metered' }, spending: null });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, billingAxis: 'metered' }, spending: null });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, adapter: { ...localProfile.adapter, definition: { ...localProfile.adapter.definition, endpoint: 'https://remote.example/v1/chat/completions' } } }, spending: null });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, adapter: { ...localProfile.adapter, definition: { ...localProfile.adapter.definition, endpoint: 'https://remote.example/v1/chat/completions' } } }, spending: null });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, adapter: { ...localProfile.adapter, definition: { ...localProfile.adapter.definition, tariff: { kind: 'operator-static', inputMinorUnitsPerMillionTokens: 1, outputMinorUnitsPerMillionTokens: 0 } } } }, spending: null });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, adapter: { ...localProfile.adapter, definition: { ...localProfile.adapter.definition, tariff: { kind: 'operator-static', inputMinorUnitsPerMillionTokens: 1, outputMinorUnitsPerMillionTokens: 0 } } } }, spending: null });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, billingAxis: 'metered' }, spending: { quote: { currency: 'EUR' }, budget: null } as unknown as ModelInvocationSpending });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, billingAxis: 'metered' }, spending: { quote: { currency: 'EUR' }, budget: null } as unknown as ModelInvocationSpending });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
   expect(mocks.invoke).not.toHaveBeenCalled();
   expect(h.budget.remaining()).toMatchObject({ calls: 10, tokens: 131072, cost: 1 });
@@ -114,13 +120,80 @@ it('requires a quote for paid profiles and refuses a local label without literal
 
 it('accepts the existing local zero quote and keeps paid same-currency quote amounts inside the money envelope', async () => {
   const h = harness();
-  mocks.prepare.mockResolvedValue({ profile: localProfile, spending: { budget: null, quote: quote() } });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: localProfile, spending: { budget: null, quote: quote() } });
   await h.call();
   expect(h.budget.remaining().cost).toBe(1);
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, billingAxis: 'metered' }, spending: { budget: {}, quote: quote(6) } });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, billingAxis: 'metered' }, spending: { budget: {}, quote: quote(6) } });
   await h.call();
   expect(h.budget.remaining().cost).toBe(0.94);
-  mocks.prepare.mockResolvedValue({ profile: { ...localProfile, billingAxis: 'metered' }, spending: { budget: {}, quote: quote(95) } });
+  mocks.prepare.mockResolvedValue({ measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: null }, profile: { ...localProfile, billingAxis: 'metered' }, spending: { budget: {}, quote: quote(95) } });
   await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
   expect(mocks.invoke).toHaveBeenCalledTimes(2);
+});
+
+
+it('refuses a missing or untrusted counter before spending any call or token reservation', async () => {
+  const h = harness();
+  for (const measurement of [null, { quality: 'upper-bound', promptTokens: 1, windowTokens: null }]) {
+    mocks.prepare.mockResolvedValueOnce({ profile: localProfile, spending: null, measurement });
+    await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  }
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  expect(h.budget.remaining()).toMatchObject({ calls: 10, tokens: 131072, cost: 1 });
+});
+
+it('respects the measured served window even when the configured context is larger', async () => {
+  const h = harness();
+  mocks.prepare.mockResolvedValue({ profile: localProfile, spending: null,
+    measurement: { quality: 'provider-count', promptTokens: 136, windowTokens: 145 } });
+  await expect(h.call()).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(mocks.invoke).not.toHaveBeenCalled();
+});
+
+
+it('production preflight counts the rendered request through the provider adapter, reserving template tokens before inference and refusing unsupported counters', async () => {
+  // Only catalog projection and the remote HTTP effect are substituted. Config, policy, activation, preflight and native codec are real.
+  const f = await brainProviderFixture({ noCharge: true, budget: null, tokenCount: { count: 700, max_model_len: 1000 }, contextWindow: 2000, maxOutputTokens: 32,
+    modelRoles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'beuser-fixture', roles: [], exceptions: [], models: [
+      { channelId: 'test-operator', modelId: 'vendor/model', version: 1, tier: 'frontier', roles: ['beuser-walker', 'beuser-evaluator'] }] }] } });
+  try {
+    const scoped = await vi.importActual<typeof import('#composition/core/scoped-request/index.js')>('#composition/core/scoped-request/index.js');
+    const invocation = await vi.importActual<typeof import('#composition/core/model-invocation/index.js')>('#composition/core/model-invocation/index.js');
+    const terminal = await vi.importActual<typeof import('#composition/core/terminal-chat/index.js')>('#composition/core/terminal-chat/index.js');
+    mocks.scope.mockImplementation(scoped.loadConfiguredScopeContext);
+    mocks.prepare.mockImplementation(invocation.prepareConfiguredModelAs);
+    mocks.invoke.mockImplementation(invocation.invokeConfiguredModelAs);
+    mocks.command.mockImplementation(terminal.prepareTerminalChatCommand);
+    mocks.catalog.mockResolvedValue({ schemaVersion: 1, scopeId: 's', channels: [{ channelId: f.reference.providerId, access: 'allowed',
+      models: [{ modelId: 'vendor/model', model: { vendorId: 'anthropic' } }] }] });
+    const ctx: BeuserContext = { ...context, binding: { ...context.binding, identity: { ...context.binding.identity, scopeId: 's' } },
+      principal: { ...context.principal, scopeIds: ['s'] }, limits: { ...limits, maxTokens: 710, maxWallMs: 5000, maxArtifactBytes: 20000 } };
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    policy.grants.push({ id: 'beuser-invoke', effect: 'allow', scopes: ['s'], principals: [{ issuer: ctx.principal.issuer, subject: ctx.principal.subject }],
+      actions: ['invoke'], resource: { kind: 'model-invocation', ids: 'all' } });
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    const budget = new BeuserCallBudget(ctx.limits), choice = { channelId: f.reference.providerId, modelId: 'vendor/model' };
+    const { models } = configuredBeuserModels(f.project, f.options, ctx, { 'beuser-walker': choice, 'beuser-evaluator': choice },
+      [{ vendorId: 'fixture-contributor' }], budget, 10, () => ({ template: 'fixture-evidence' }));
+    const send = vi.mocked(httpTransport.sendNativeJsonHttp), effect = send.getMockImplementation()!;
+    send.mockImplementation(async (...args) => {
+      if (args[0].definition.endpoint.endsWith('/chat')) expect(budget.remaining().tokens).toBe(0);
+      return effect(...args);
+    });
+    await expect(models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked' });
+    expect(f.posts).toBe(1);
+    const measured = JSON.parse(f.counterBodies[0]!), sent = JSON.parse(f.bodies[0]!);
+    expect(measured).toEqual({ model: sent.model, messages: sent.messages });
+    expect(measured.messages[0].content).toContain('fixture-evidence');
+    expect(budget.remaining().tokens).toBe(698); // Final usage 12; only tokens are returned.
+    await expect(models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+    expect(f.posts).toBe(1); // Template expansion no longer fits; rejected before inference.
+    // A connection without a tokenizer endpoint cannot supply a measured count.
+    const configPath = join(f.project, '.deckent/config.json');
+    delete (f.config.provider_invocation_profiles.profiles[0]!.adapter.definition as Record<string, unknown>).tokenizeEndpoint;
+    await writeFile(configPath, JSON.stringify(f.config));
+    const { clearConfigCache } = await import('#platform/index.js'); clearConfigCache();
+    await expect(models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+    expect(f.posts).toBe(1); expect(f.counterBodies).toHaveLength(2);
+  } finally { await f.close(); }
 });
