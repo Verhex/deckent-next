@@ -36,7 +36,7 @@ export const openRouterEndpointTariffSchema = z.object({ kind: z.literal('openro
 export type OpenRouterEndpointTariff = z.infer<typeof openRouterEndpointTariffSchema>;
 export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number; dialect?: OpenAiChatDialect;
   authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff | OpenAiCompatiblePublishedTariff | OpenRouterEndpointTariff;
-  /** vLLM-style `POST /tokenize` of the same origin (T-L5); used only when the binding declares `token-count`. */
+  /** Same-origin vLLM `POST /tokenize` (T-L5); declared bindings use it, local profiles may also probe it or the root route. */
   tokenizeEndpoint?: string }>;
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 

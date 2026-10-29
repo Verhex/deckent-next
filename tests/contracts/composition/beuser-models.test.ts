@@ -4,6 +4,7 @@ import { BeuserCallBudget, providerSpendEvidenceDigest, type BeuserContext } fro
 import type { ModelInvocationResult, ModelInvocationSpending } from '#engine/core/model-invocation/index.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createServer } from 'node:http';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { configuredBeuserModels } from '#composition/core/beuser/index.js';
@@ -151,9 +152,33 @@ it('respects the measured served window even when the configured context is larg
 });
 
 
-it('production preflight counts the rendered request through the provider adapter, reserving template tokens before inference and refusing unsupported counters', async () => {
-  // Only catalog projection and the remote HTTP effect are substituted. Config, policy, activation, preflight and native codec are real.
-  const f = await brainProviderFixture({ noCharge: true, budget: null, tokenCount: { count: 700, max_model_len: 1000 }, contextWindow: 2000, maxOutputTokens: 32,
+it('production local preflight detects a typed counter, reserves prompt plus completion at zero cost and refuses missing endpoints or wrong models before send', async () => {
+  // Config, policy, activation, preflight, codec and HTTP transport are real; the provider is a loopback server.
+  const nativeSend = httpTransport.sendNativeJsonHttp;
+  const counterBodies: Record<string, unknown>[] = [], sentBodies: Record<string, unknown>[] = [];
+  let mode: 'count' | 'missing' | 'wrong-model' = 'count';
+  let beforeSend = () => {};
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = []; req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/tokenize') {
+        counterBodies.push(body);
+        if (mode === 'missing' || body['model'] !== (mode === 'wrong-model' ? 'other-served-model' : 'vendor/model')) {
+          res.statusCode = 404; res.end(JSON.stringify({ error: 'unavailable model or endpoint' })); return;
+        }
+        res.end(JSON.stringify({ count: 700, max_model_len: 1000 })); return;
+      }
+      beforeSend(); sentBodies.push(body);
+      res.end(JSON.stringify({ id: 'fake-local', object: 'chat.completion', created: 1, model: 'vendor/model', choices: [
+        { index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '{}' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } }));
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('fixture address');
+  const f = await brainProviderFixture({ noCharge: true, budget: null, contextWindow: 2000, maxOutputTokens: 32,
     modelRoles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'beuser-fixture', roles: [], exceptions: [], models: [
       { channelId: 'test-operator', modelId: 'vendor/model', version: 1, tier: 'frontier', roles: ['beuser-walker', 'beuser-evaluator'] }] }] } });
   try {
@@ -168,6 +193,12 @@ it('production preflight counts the rendered request through the provider adapte
       models: [{ modelId: 'vendor/model', model: { vendorId: 'anthropic' } }] }] });
     const ctx: BeuserContext = { ...context, binding: { ...context.binding, identity: { ...context.binding.identity, scopeId: 's' } },
       principal: { ...context.principal, scopeIds: ['s'] }, limits: { ...limits, maxTokens: 710, maxWallMs: 5000, maxArtifactBytes: 20000 } };
+    const configPath = join(f.project, '.deckent/config.json');
+    const profile = f.config.provider_invocation_profiles.profiles[0]! as Record<string, unknown>;
+    profile['schemaVersion'] = 2; profile['billingAxis'] = 'local';
+    f.config.provider_invocation_profiles.profiles[0]!.adapter.definition.endpoint = `http://127.0.0.1:${address.port}/v1/chat/completions`;
+    await writeFile(configPath, JSON.stringify(f.config));
+    const { clearConfigCache } = await import('#platform/index.js'); clearConfigCache();
     const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
     policy.grants.push({ id: 'beuser-invoke', effect: 'allow', scopes: ['s'], principals: [{ issuer: ctx.principal.issuer, subject: ctx.principal.subject }],
       actions: ['invoke'], resource: { kind: 'model-invocation', ids: 'all' } });
@@ -175,25 +206,27 @@ it('production preflight counts the rendered request through the provider adapte
     const budget = new BeuserCallBudget(ctx.limits), choice = { channelId: f.reference.providerId, modelId: 'vendor/model' };
     const { models } = configuredBeuserModels(f.project, f.options, ctx, { 'beuser-walker': choice, 'beuser-evaluator': choice },
       [{ vendorId: 'fixture-contributor' }], budget, 10, () => ({ template: 'fixture-evidence' }));
-    const send = vi.mocked(httpTransport.sendNativeJsonHttp), effect = send.getMockImplementation()!;
-    send.mockImplementation(async (...args) => {
-      if (args[0].definition.endpoint.endsWith('/chat')) expect(budget.remaining().tokens).toBe(0);
-      return effect(...args);
-    });
-    await expect(models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked' });
-    expect(f.posts).toBe(1);
-    const measured = JSON.parse(f.counterBodies[0]!), sent = JSON.parse(f.bodies[0]!);
-    expect(measured).toEqual({ model: sent.model, messages: sent.messages });
-    expect(measured.messages[0].content).toContain('fixture-evidence');
-    expect(budget.remaining().tokens).toBe(698); // Final usage 12; only tokens are returned.
+    vi.mocked(httpTransport.sendNativeJsonHttp).mockImplementation(nativeSend);
+    beforeSend = () => { expect(budget.remaining()).toEqual({ calls: 9, tokens: 0, cost: 1, currency: 'USD' }); };
+    await expect(models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { invocation: { receipt: { outcome: { state: 'responded' } } } } });
+    expect(sentBodies).toHaveLength(1);
+    const measured = counterBodies[0]!, sent = sentBodies[0]!;
+    expect(measured).toEqual({ model: sent['model'], messages: sent['messages'], add_generation_prompt: true });
+    expect(JSON.stringify(measured['messages'])).toContain('fixture-evidence');
+    expect(budget.remaining()).toEqual({ calls: 9, tokens: 698, cost: 1, currency: 'USD' });
     await expect(models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
-    expect(f.posts).toBe(1); // Template expansion no longer fits; rejected before inference.
-    // A connection without a tokenizer endpoint cannot supply a measured count.
-    const configPath = join(f.project, '.deckent/config.json');
-    delete (f.config.provider_invocation_profiles.profiles[0]!.adapter.definition as Record<string, unknown>).tokenizeEndpoint;
-    await writeFile(configPath, JSON.stringify(f.config));
-    const { clearConfigCache } = await import('#platform/index.js'); clearConfigCache();
-    await expect(models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
-    expect(f.posts).toBe(1); expect(f.counterBodies).toHaveLength(2);
-  } finally { await f.close(); }
+    expect(sentBodies).toHaveLength(1); // Template expansion no longer fits; rejected before inference.
+    for (const failure of ['missing', 'wrong-model'] as const) {
+      mode = failure;
+      const freshBudget = new BeuserCallBudget(ctx.limits);
+      const fresh = configuredBeuserModels(f.project, f.options, ctx, { 'beuser-walker': choice, 'beuser-evaluator': choice },
+        [{ vendorId: 'fixture-contributor' }], freshBudget, 10, () => ({}));
+      await expect(fresh.models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+      expect(sentBodies).toHaveLength(1);
+      expect(freshBudget.remaining()).toEqual({ calls: 10, tokens: 710, cost: 1, currency: 'USD' });
+    }
+    expect(counterBodies).toHaveLength(4);
+  } finally {
+    await f.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });

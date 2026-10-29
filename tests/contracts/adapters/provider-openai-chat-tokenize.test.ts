@@ -50,7 +50,7 @@ it('counts exactly the messages and tools the round sends, with the served windo
   expect(await port.measure!(prepared)).toEqual({ promptTokens: 321, windowTokens: 131072 });
   expect(server.requests).toHaveLength(1); expect(server.requests[0]!.url).toBe('/tokenize');
   // The count is of the same prompt the round sends: identical model, messages and tools; no sampling fields.
-  expect(JSON.parse(server.requests[0]!.body)).toEqual({ model: MODEL, messages: native.messages, tools, chat_template_kwargs: { enable_thinking: false } });
+  expect(JSON.parse(server.requests[0]!.body)).toEqual({ model: MODEL, messages: native.messages, add_generation_prompt: true, tools, chat_template_kwargs: { enable_thinking: false } });
   // A prepared request is single use for measure as for send.
   await expect(port.measure!(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' });
 
@@ -75,4 +75,29 @@ it('sends no counter request when the binding does not declare token-count or th
     expect(await port.measure!(prepared)).toBeNull();
   }
   expect(server.requests).toEqual([]);
+});
+
+
+it('detects a local counter from its typed answer for the bound model without catalog capabilities or an explicit endpoint', async () => {
+  const server = await fixture(json({ count: 37, max_model_len: 4096 }));
+  const local = { ...profile(`${server.origin}/v1/chat/completions`), schemaVersion: 2, billingAxis: 'local' };
+  const port = createOpenAiChatNativePort();
+  expect(await port.measure!(await port.prepare(local, binding([counted[0]]), native))).toEqual({ promptTokens: 37, windowTokens: 4096 });
+  expect(server.requests.map(row => row.url)).toEqual(['/tokenize']);
+  expect(JSON.parse(server.requests[0]!.body)).toEqual({ model: MODEL, messages: native.messages, add_generation_prompt: true, tools });
+  await expect(port.prepare(local, binding([counted[0]]), { ...native, model: 'another-model' })).rejects.toMatchObject({ code: 'OPENAI_CHAT_MODEL_MISMATCH' });
+  expect(server.requests).toHaveLength(1);
+});
+
+
+it('bounds a local capability probe by the profile timeout and honors cancellation without inference', async () => {
+  const server = await fixture(() => {});
+  const local = { ...profile(`${server.origin}/v1/chat/completions`), schemaVersion: 2, billingAxis: 'local',
+    limits: { ...profile(server.origin).limits, timeoutMs: 30 } };
+  const port = createOpenAiChatNativePort();
+  expect(await port.measure!(await port.prepare(local, binding([counted[0]]), native))).toBeNull();
+  expect(server.requests.map(row => row.url)).toEqual(['/tokenize']);
+  const abort = new AbortController(); abort.abort();
+  expect(await port.measure!(await port.prepare(local, binding([counted[0]]), native), abort.signal)).toBeNull();
+  expect(server.requests).toHaveLength(1);
 });

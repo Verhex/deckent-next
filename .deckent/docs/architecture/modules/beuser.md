@@ -28,6 +28,13 @@ activation, budget and cancellation stay on the existing invocation path. Core d
 scheduler, acceptance writer or module-specific effect flow. ERP/CRM adapters can supply general
 acceptance subjects and durable readback without Git or a test suite.
 
+Model preflight reserves the provider-measured prompt count plus the completion limit through the
+existing invocation measurement port. A local OpenAI-compatible profile can probe same-origin
+`POST /tokenize` with the exact bound model, messages, tools, template options and
+`add_generation_prompt: true`; a valid typed count establishes availability for that request.
+Missing endpoints, rejected models, invalid counts, cancellation and bounded timeout leave no measured
+count, so BeUser refuses before inference. Local zero-tariff calls keep zero monetary cost.
+
 A sealed realm cannot export, back up or restore its ledger, even inside the realm. Required-backup
 uninstall branches remain named unknown. Unsupported private systemd branches remain unknown and do
 not block alpha.57; host Docker/D-Bus sockets, host HOME and additional privileges are never a workaround.
