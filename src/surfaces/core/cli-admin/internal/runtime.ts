@@ -177,7 +177,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
   const { reason, ...ids } = shutdown;
   if (action === 'shutdown' && !force && context.runtimeServiceManager && context.describeRuntimeService) {
     // BeUser alpha.56.1 (Selin), F3: the stop check MCP and the SDK share; `--force` is the person's explicit override, which no AI or script
-    // surface has. An unreadable service falls through to the typed refusals below; a failed manager lookup still refuses.
+    // surface has. An unreadable service falls through to the typed refusals below; a rejected manager lookup fails the command.
     await context.describeRuntimeService(root, options).then(descriptor => assertRuntimeServiceStoppable(descriptor.processId, context.runtimeServiceManager!), () => undefined);
   }
   if (action === 'shutdown' && Object.keys(ids).length === 0 && context.stopRuntimeService) {

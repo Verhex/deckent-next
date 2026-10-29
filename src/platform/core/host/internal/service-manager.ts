@@ -51,8 +51,8 @@ export const serviceManagerStopCommand = (found: ServiceManagerUnit): string => 
 /**
  * F3: the one stop check every caller surface shares (the CLI unless the person's `--force`, MCP, the SDK), before any shutdown request
  * is sent: a runtime service its manager runs is stopped through that manager, else the next terminal starts a second, unmanaged service.
- * A lookup that fails rejects; it never means "not managed". Uninstall's governed stop under K4 custody does not pass here (it stops such
- * a service on purpose, before it disables the unit).
+ * A rejected lookup propagates (never "not managed"); an unanswered systemd query is no proof of a manager (`detectServiceManager`, CI-108).
+ * Uninstall's governed stop under K4 custody does not pass here (it stops such a service on purpose, before it disables the unit).
  */
 export async function assertRuntimeServiceStoppable(processId: number | undefined,
   managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null>): Promise<void> {
