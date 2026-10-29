@@ -4734,12 +4734,12 @@
     "maxLinesPerFile": 1500,
     "packageLines": {
       "platform": 25000,
-      "domain": 10800,
+      "domain": 10900,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 40000,
+      "adapters": 39400,
       "surfaces": 45000,
-      "composition": 12000
+      "composition": 11900
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
