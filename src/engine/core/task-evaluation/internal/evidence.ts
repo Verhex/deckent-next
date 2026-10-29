@@ -40,8 +40,9 @@ export async function verifyDispatchEvaluationEvidence(evaluationInput: unknown,
     if (retainedBytes) {
       try {
         const output = verifyRetainedOutputEnvelope(retainedBytes, record.data.request.identity);
+        // maxEvidenceItems bounds manifest references; retained files belong to that verified output envelope.
         const totalBytes = (receipt?.byteLength ?? 0) + (output.files ?? []).reduce((sum, file) => sum + (file.status === 'collected' ? file.receipt.byteLength : 0), 0);
-        if (totalBytes > limits.maxTotalBytes || (output.files?.length ?? 0) + verified.length > limits.maxEvidenceItems) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
+        if (totalBytes > limits.maxTotalBytes) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
         await verifyRetainedFileReceipts(artifacts, output);
       }
       catch { unlinked = true; throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED'); }
