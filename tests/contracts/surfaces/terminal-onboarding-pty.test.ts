@@ -97,11 +97,11 @@ it.skipIf(process.platform !== 'linux')('AYSE-18/22/23 PTY: empty first-task inp
     const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.language = locale; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline', notify: 'off' };
     await writeFile(configPath, JSON.stringify(config));
-    const tr = locale === 'tr', hint = tr ? 'Enter gönder' : 'Enter send', first = tr ? 'Adım 1/' : 'Step 1/', second = tr ? 'Adım 2/' : 'Step 2/';
+    const tr = locale === 'tr', hint = tr ? 'Enter gönder' : 'Enter send', first = tr ? 'Adım 1/' : 'Step 1/', second = tr ? 'Adım 2/' : 'Step 2/', third = tr ? 'Adım 3/' : 'Step 3/';
     const ready = tr ? 'Hazır!' : 'Ready!', instructions = tr ? 'Proje yönergeleri' : 'Project instructions';
     const free = tr ? 'İlk işinizi kendiniz yazın' : 'Write your own first task';
     const empty = tr ? 'Enter’dan önce bir iş yazın' : 'Write a task before pressing Enter';
-    const steps = [[first, '\u001b'], [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b[B'.repeat(20)], ['', '\r'],
+    const steps = [[first, '\u001b'], [second, '\u001b'], [third, '\u001b'], [instructions, '\u001b'], [ready, '\u001b[B'.repeat(20)], ['', '\r'],
       ['> ', '\r'], [empty, '\u001b'], [hint, '/exit\r']];
     const run = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root],
       { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
