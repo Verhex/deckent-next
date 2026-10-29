@@ -27,7 +27,7 @@ export const beuserTranscriptEntrySchema = z.object({ schemaVersion: z.literal(1
 export const beuserVerdictSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema, transcriptDigest: digest,
   outcome: z.enum(['GREEN', 'FRICTION', 'RED', 'unknown']), authorization: z.enum(['pass', 'fail', 'unknown']),
   safety: z.enum(['pass', 'fail', 'unknown']), experience: z.enum(['pass', 'friction', 'fail', 'unknown']),
-  validity: z.enum(['valid', 'drift', 'leak', 'invalid']), independence: z.enum(['independent', 'reduced', 'unknown']),
+  validity: z.enum(['valid', 'drift', 'leak', 'invalid', 'unknown']), independence: z.enum(['independent', 'reduced', 'unknown']),
   evidenceRefs: z.array(id).readonly() }).strict().readonly();
 export type AcceptanceSubject = z.infer<typeof acceptanceSubjectSchema>;
 export type BeuserWalkerSummary = z.infer<typeof beuserWalkerSummarySchema>;

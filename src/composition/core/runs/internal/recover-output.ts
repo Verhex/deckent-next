@@ -1,7 +1,8 @@
+import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { FileArtifactStore, openSqliteAttemptStore, recordedDockerSupervisor } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, parseRetainedOutputEnvelope,
   type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchStore, type RunBoundDispatchStore } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -28,7 +29,7 @@ export async function recoverConfiguredAttemptOutput(projectRoot: string, input:
       if (!recorded) throw new DispatchError('DISPATCH_NOT_ADMITTED');
       const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
-      const application = new DispatchApplication(dispatchStore, recordedDockerSupervisor(recorded.profile), verifier,
+      const application = new DispatchApplication(dispatchStore, recordedExecutionSupervisor(recorded, { config, layout, store, artifacts }), verifier,
         authorization, principal.id, artifacts);
       const recovered = await application.recoverOutput(recorded.request);
       if (!recovered.output) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');

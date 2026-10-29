@@ -2,57 +2,32 @@ import { isDeepStrictEqual } from 'node:util';
 import { join } from 'node:path';
 import { userInfo } from 'node:os';
 import { z } from 'zod';
-import { immutableJsonObjectSchema, beuserBindingSchema, beuserWalkerSummarySchema, beuserSealedRubricSchema } from '#domain/index.js';
-import { beuserParametersSchema, beuserCalibrationSchema, evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
+import { beuserBindingSchema } from '#domain/index.js';
+import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
-import { FileArtifactStore, createBeuserSurface, BEUSER_REALM_RECIPE, pinRealmOptions,
-  extractOpenAiChatTextFromInvocation, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, createBeuserSurface, BEUSER_REALM_RECIPE,
+  openSqliteApprovalStore, openLocalIntegrityAuthority, extractOpenAiChatTextFromInvocation, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
-  DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, BEUSER_LIMITS_REGISTRY, selectReservedTaskProfile,
-  type BeuserContext, type BeuserReport, type SandboxRequest, type SandboxResult, type ExecutionSupervisor, type SupervisorProfile, type BeuserRealmCustody } from '#engine/index.js';
-import { ErrorRegistry, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
+  DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
+  readBeuserControllerAudit, verifyApproval, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type SandboxResult, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
+import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { createBeuserRealmCustody, createBeuserRealm, createBeuserChannel, createBeuserRemovalReadback, retainBeuserJson } from '#adapters/index.js';
+import { createBeuserChannel, retainBeuserJson } from '#adapters/index.js';
+import { openConfiguredBeuserRealmOwner } from '#composition/core/supervisors/index.js';
 import { configuredBeuserModels } from './models.js';
 
-const positive = z.number().int().positive().safe();
-/** Installed profile data, selected by id from the governed execution registry. Never accepted as CLI JSON. */
-export const beuserJourneyProfileSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema, summary: beuserWalkerSummarySchema,
-  limitsRevision: z.string().min(1), candidateRoot: z.string().min(1), packageDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  files: z.array(z.object({ path: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/u), size: z.number().int().nonnegative().safe() }).strict()).min(1),
-  size: z.object({ columns: positive, rows: positive, scrollback: positive }).strict(),
-  bounds: z.object({ quietMs: positive, inactivityMs: positive, maxInputBytes: positive }).strict(),
-  completionTokens: positive, rubric: beuserSealedRubricSchema,
-  choices: z.object({ 'beuser-walker': z.object({ channelId: z.string(), modelId: z.string() }).strict(), 'beuser-evaluator': z.object({ channelId: z.string(), modelId: z.string() }).strict() }).strict(),
-  contributorModels: z.array(immutableJsonObjectSchema).min(1),
-  entry: z.object({ mode: z.enum(['pty', 'argv']), nodeExecutable: z.string().startsWith('/'), args: z.array(z.string()) }).strict(),
-  probes: beuserParametersSchema.unwrap().innerType().shape.probes, calibration: beuserCalibrationSchema,
-}).strict().refine(data => data.probes.every(probe => probe.readbackRef === data.probes[0]?.readbackRef));
-export type BeuserJourneyProfile = z.infer<typeof beuserJourneyProfileSchema>;
-const profileData = (profile: SupervisorProfile) => {
-  if (profile.adapterId !== 'beuser' || profile.adapterVersion !== 1) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-  return beuserJourneyProfileSchema.parse(profile.parameters);
-};
+export { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
+export type { BeuserJourneyProfile } from '#composition/core/supervisors/index.js';
+
 /** Reopenable controller custody plus an existing granted dispatch. No in-memory table can authorize a realm. */
 export async function createConfiguredBeuserHarness(root: string, context: BeuserContext, request: SandboxRequest, profile: SupervisorProfile,
   store: SqliteAttemptStore, artifacts: ArtifactStore, owner: string, options: ConfigLoadOptions = {}, created?: (id: string) => Promise<void>) {
-  const c = await loadConfiguredScopeContext(root, context.binding.identity.scopeId, options, 'write'), data = profileData(profile), config = c.config;
-  const limits = BEUSER_LIMITS_REGISTRY.profiles.find(item => item.revision === data.limitsRevision);
-  if (!limits || JSON.stringify(limits) !== JSON.stringify(context.limits)) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
-  if (beuserBindingDigest(data.binding) !== beuserBindingDigest(context.binding) || beuserDigest(request.identity) !== beuserDigest(context.binding.identity)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-  const control = config.execution?.docker; if (!control) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-  const crashes = await prepareProductDirectory(c.layout, 'crashes'), directory = join(crashes, 'beuser-custody');
-  const retainedCustody = await createBeuserRealmCustody({ context, request, store, owner, directory, timeoutMs: config.configFile.writeLockTimeoutMs });
-  const custody: BeuserRealmCustody = { ...retainedCustody, async publish(ctx, handle) { await retainedCustody.publish(ctx, handle); if (handle.containerId) await created?.(handle.containerId); } };
-  const runtimeOptions = pinRealmOptions({ controllerRoot: directory, packageRoot: data.candidateRoot, executable: control.executable,
-    image: control.imageId, uid: userInfo().uid, gid: userInfo().gid, memoryBytes: control.memoryBytes, nanoCpus: control.cpus * 1_000_000_000,
-    pids: control.pids, filesystemBytes: control.tmpBytes });
-  const removal = createBeuserRemovalReadback(runtimeOptions, artifacts, beuserPrivateRecord(directory, `kernel-${sha256(JSON.stringify(context.binding.identity))}`, context.limits.maxArtifactBytes));
-  const realm = createBeuserRealm({ context, options: runtimeOptions, custody, artifacts, measurement: { digest: data.packageDigest, files: data.files, limits: config.installation.packageMeasurement }, capture: removal.capture, removal: removal.read });
+  const c = await loadConfiguredScopeContext(root, context.binding.identity.scopeId, options, 'write'), config = c.config;
+  const { data, custody, runtimeOptions, removal, realm } = await openConfiguredBeuserRealmOwner(c, context, request, profile, store, artifacts, owner, created);
   const channel = createBeuserChannel({ context, realm, custody, options: runtimeOptions, boot: { mode: data.entry.mode,
     entry: [data.entry.nodeExecutable, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`, ...data.entry.args],
     commands: {}, maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
@@ -88,20 +63,20 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     const atMs = Math.floor(performance.now() - started), evidenceRef = data.probes[0]!.readbackRef;
     return collectBeuserReadback(context, async () => ({ schemaVersion: 1, binding: context.binding, summary, atMs, evidenceRef }));
   };
-  let evidence: z.infer<typeof beuserEvidenceSchema> | null = null;
+  let evidence: z.infer<typeof beuserEvidenceSchema> | null = null, controllerValidity: BeuserControllerValidity = 'unknown';
   const evidencePort = createBeuserEvidencePort(context, recorder, async ctx => {
     const lease = await custody.load(ctx), transcript = recorder.finalize(ctx);
-    const evaluated = await models.evaluate(ctx, transcript.transcriptDigest);
+    const evaluated = controllerValidity === 'valid' ? await models.evaluate(ctx, transcript.transcriptDigest) : null;
     let experience: { verdict: 'pass' | 'friction' | 'fail' | 'unknown'; evidenceRefs: string[] } = { verdict: 'unknown', evidenceRefs: [] };
-    if (evaluated.state === 'invoked' && evaluated.receipt.invocation.receipt.outcome?.state === 'responded') {
+    if (evaluated?.state === 'invoked' && evaluated.receipt.invocation.receipt.outcome?.state === 'responded') {
       const text = extractOpenAiChatTextFromInvocation(evaluated.receipt.invocation);
       const parsed = z.object({ verdict: z.enum(['pass', 'friction', 'fail', 'unknown']), evidenceRefs: z.array(z.string()) }).strict().safeParse(text ? JSON.parse(text) : null);
       if (parsed.success && parsed.data.evidenceRefs.every(ref => transcript.evidenceRefs.includes(ref))) experience = parsed.data;
     }
     evidence = beuserEvidenceSchema.parse({ schemaVersion: 1, binding: ctx.binding, transcript: transcript.transcript, readbacks,
-      validity: 'valid', cleanup: { state: lease?.observation.state === 'destroyed' ? 'destroyed' : 'unknown', atMs: Math.floor(performance.now() - started),
+      validity: controllerValidity, cleanup: { state: lease?.observation.state === 'destroyed' ? 'destroyed' : 'unknown', atMs: Math.floor(performance.now() - started),
         evidenceRef: lease?.observation.evidenceRefs.at(-1) ?? 'cleanup-unproven' },
-      experience: { ...experience, maker: evaluated.state === 'invoked' ? evaluated.receipt.maker : null,
+      experience: { ...experience, maker: evaluated?.state === 'invoked' ? evaluated.receipt.maker : null,
         sourceMakers: [...beuserSourceMakers(data.contributorModels), ...walkerMakers] } });
     return evaluateBeuserEvidence({ binding: ctx.binding, producer: { owner, profileDigest: beuserDigest(profile) }, fileName: 'beuser-evidence',
       dimension: 'outcome', probes: data.probes, calibration: data.calibration }, evidence).result;
@@ -110,8 +85,20 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     const nervous = new NervousApplication({ audit, now: Date.now }, NERVOUS_RULES_SEED, { live: false, approval: null, executors: {} });
     await recordBeuserRefusal(ctx, { audit, nervous, nervousContext: { owner: c.principal, policyRevision: c.document.revision }, policyRevision: c.document.revision, now: Date.now });
   });
+  const withControllerAudit = <T>(work: (ports: Parameters<typeof readBeuserControllerAudit>[1]) => Promise<T>) => withScopeAudit(c, async audit => {
+    const integrity = await openLocalIntegrityAuthority(c.layout, config.approvals.keyFile, false);
+    const approvals = openSqliteApprovalStore(await c.path(), config.storage.sqlite);
+    try { return await work({ audit, approvals: (after, limit) =>
+      approvals.store.list(context.binding.identity.scopeId, after, limit).map(row => verifyApproval(row, integrity)) }); }
+    finally { approvals.close(); }
+  }, false);
   return { custody, realm, removal, refusal, async walk(budget: BeuserExecutionBudget) {
     const ports = { realm, surface, models, decode: model.decode, evidence: evidencePort, refusal,
+      async controllerAudit(ctx: BeuserContext) {
+        try { controllerValidity = await withControllerAudit(ports => readBeuserControllerAudit(ctx, ports)); }
+        catch { controllerValidity = 'unknown'; }
+        return controllerValidity;
+      },
       async record(screen: { readonly sequence: number }) { const row = recorder.inspect(context).find(item => item.entry.sequence === screen.sequence);
         if (!row) throw new BeuserContractError('BEUSER_INPUT_INVALID'); await evidencePort.append(context, row.entry); },
       async finished() {

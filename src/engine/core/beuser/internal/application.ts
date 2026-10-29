@@ -6,9 +6,12 @@ import { encodeCommandProjection } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { pinBeuserWalkerSummary } from '#engine/core/beuser-contract/index.js';
 
+import type { BeuserControllerValidity } from './controller-audit.js';
+
 type WalkerPorts = Parameters<typeof walkBeuser>[1];
 export interface BeuserWalkPorts extends WalkerPorts {
   readonly realm: RealmPort; readonly evidence: EvidencePort;
+  readonly controllerAudit: (context: BeuserContext) => Promise<BeuserControllerValidity>;
   readonly refusal: (context: BeuserContext) => Promise<void>;
 }
 export interface BeuserWalkResult {
@@ -68,6 +71,13 @@ export class BeuserApplication {
       finally { quarantineDeadline.close(); }
       if (state !== 'invalid') state = 'unknown';
     }
+    const auditDeadline = beuserDeadline(context.limits.maxWaitMs);
+    let controllerValidity: BeuserControllerValidity = 'unknown';
+    try { controllerValidity = await beuserBounded(auditDeadline.signal, () => this.ports.controllerAudit({ ...context, signal: auditDeadline.signal })); }
+    catch { /* Missing controller evidence never grants validity. */ }
+    finally { auditDeadline.close(); }
+    if (controllerValidity === 'invalid') { state = 'invalid'; reason = 'BEUSER_TARGET_NOT_SANDBOX'; await this.ports.refusal(context); }
+    else if (controllerValidity === 'unknown' && state !== 'invalid') { state = 'unknown'; reason ??= 'unknown'; }
     // C5's retained verdict requires the outer controller's destruction proof; never read a pre-cleanup verdict.
     const remainingWallMs = context.limits.maxWallMs - (performance.now() - startedAt);
     if (cleanup === 'destroyed' && transcriptDigest && !context.signal.aborted && remainingWallMs > 0) {
@@ -79,8 +89,10 @@ export class BeuserApplication {
           const checked = beuserVerdictSchema.parse(readback.verdict);
           assertBeuserAccess(readContext, checked.binding, context.principal, { kind: 'attempt', id: checked.binding.identity.attemptId }, 'evaluate');
           if (checked.transcriptDigest !== transcriptDigest) throw new BeuserWalkStopped('drift');
-          verdict = checked;
-          state = verdict.validity !== 'valid' ? 'invalid' : verdict.outcome === 'unknown' ? 'unknown' : 'completed';
+          if (controllerValidity === 'valid' && state !== 'invalid') {
+            verdict = checked;
+            state = verdict.validity === 'unknown' ? 'unknown' : verdict.validity !== 'valid' ? 'invalid' : verdict.outcome === 'unknown' ? 'unknown' : 'completed';
+          }
         }
       } catch (error) {
         reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code : 'unknown';

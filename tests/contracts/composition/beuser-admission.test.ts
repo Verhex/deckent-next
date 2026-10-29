@@ -1,16 +1,20 @@
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import * as adapters from '#adapters/index.js';
+import { createRecordedCancellationDelivery } from '#composition/core/runs/index.js';
+import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
+import { BeuserRealmApplication } from '#engine/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { admitConfiguredBeuserWalk, readConfiguredBeuserReport } from '#composition/core/beuser/index.js';
+import { admitConfiguredBeuserWalk, readConfiguredBeuserReport, validateBeuserSupervisorProfile } from '#composition/core/beuser/index.js';
 import { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { measureInstalledPackage, beuserPrivateRecord } from '#adapters/index.js';
 import { BEUSER_LIMITS_REGISTRY, beuserEvaluatorFor, createBeuserReport } from '#engine/index.js';
-import { sha256, clearConfigCache } from '#platform/index.js';
+import { sha256, clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 
-it.skipIf(process.platform !== 'linux')('dry admission seals real Run criteria and reserves the exact Task-bound Attempt without a realm or model call', async () => {
+it.skipIf(process.platform !== 'linux')('dry admission reserves the exact Attempt and persistent cancellation reopens only its BeUser realm owner', async () => {
   const base = await mkdtemp(join(tmpdir(), 'beuser-admission-')), root = join(base, 'project'), candidate = join(base, 'candidate');
   try {
     await mkdir(root); await mkdir(candidate); await mkdir(join(candidate, 'dist'));
@@ -48,6 +52,70 @@ it.skipIf(process.platform !== 'linux')('dry admission seals real Run criteria a
     const reservation = await reserveConfiguredRunTasks(root, { schemaVersion: 1, commandId: 'reserve', scopeId: 'scope', runId: admitted.runId, expectedRevision: 0 }, options,
       taskId => admitted.definitions.find(row => row.binding.identity.taskId === taskId)!.binding.identity.attemptId);
     expect(reservation.reservation.identities).toEqual([definition.binding.identity]);
+    // Durable dispatch and custody survive closing the SQLite connection. Only external realm I/O is a fallible fixture.
+    const management = await adapters.openSqliteAttemptStore(await admitted.c.path(), admitted.c.config.storage.sqlite,
+      { now: Date.now, timeoutMs: admitted.c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile }), request = { protocolVersion: 1 as const,
+      identity: definition.binding.identity, workspace: candidate, argv: ['--help'] };
+    const profile = { schemaVersion: 1 as const, adapterId: 'beuser', adapterVersion: 1,
+      parameters: admitted.profiles.get('persona')!.parameters };
+    const owner = definition.producer.owner, claim = { request, owner };
+    try { await management.claimDispatch({ ...claim, profile });
+      await management.grantLaunch({ claim, principal: admitted.c.principal, now: 1 }); }
+    finally { management.close(); }
+    const reopened = await openConfiguredAttemptStore(root, options), ctx = { binding: definition.binding, principal: admitted.principal,
+      limits: BEUSER_LIMITS_REGISTRY.profiles[0]!, signal: new AbortController().signal };
+    const directory = join(await prepareProductDirectory(admitted.c.layout, 'crashes'), 'beuser-custody');
+    const custody = await adapters.createBeuserRealmCustody({ context: ctx, request, store: reopened.store, owner, directory,
+      timeoutMs: admitted.c.config.configFile.writeLockTimeoutMs });
+    const handle = { binding: ctx.binding, incarnation: '12345678-1234-4234-8234-123456789abc', containerId: 'a'.repeat(64),
+      controlDirectory: directory, controlIdentity: 'fixture-owned-directory' };
+    await custody.reserve(ctx); await custody.publish(ctx, handle);
+    const policyPathForCancel = join(admitted.c.layout.root, 'policy.json'), policyForCancel = JSON.parse(await readFile(policyPathForCancel, 'utf8'));
+    policyForCancel.grants.push({ id: 'explicit-cancel-card', effect: 'allow', actions: ['cancel'], scopes: ['scope'],
+      principals: [{ issuer: admitted.c.principal.issuer, subject: admitted.c.principal.subject }], resource: { kind: 'attempt', ids: [request.identity.attemptId] } });
+    await writeFile(policyPathForCancel, JSON.stringify(policyForCancel), { mode: 0o600 });
+    const artifacts = new adapters.FileArtifactStore({ root: await prepareProductDirectory(admitted.c.layout, 'artifacts'), maxBytes: admitted.c.config.artifacts.maxBytes });
+    const remove = vi.fn(async () => ({ processesAbsent: true, cgroupAbsent: false, filesystemAbsent: true, evidenceRefs: ['fixture-cgroup-unknown'] }));
+    const realm = vi.spyOn(adapters, 'createBeuserRealm').mockImplementation(input => new BeuserRealmApplication({
+      async create() { throw new Error('NO_RECOVERY_LAUNCH'); }, async inspect() { throw new Error('NO_RECOVERY_ADMISSION'); }, remove }, input.custody));
+    const docker = vi.spyOn(adapters, 'recordedDockerSupervisor');
+    // Management access comes from current config; the realm/profile/custody come from the recorded dispatch.
+    const managementConfig = { ...admitted.c.config, execution: { ...admitted.c.config.execution, docker: { executable: '/usr/bin/docker',
+      imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216,
+      logMaxSizeKiB: 64, logMaxFiles: 2, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 } } };
+    const delivery = () => createRecordedCancellationDelivery(reopened.store, managementConfig, admitted.c.layout, admitted.c.principal,
+      { verify: async () => admitted.c.principal });
+    try {
+      await reopened.store.cancelRun({ commandId: 'cancel', actor: { id: admitted.c.principal.id, issuer: admitted.c.principal.issuer, subject: admitted.c.principal.subject }, scopeId: 'scope', runId: admitted.runId,
+        expectedRevision: (await reopened.store.loadRun('scope', admitted.runId))!.revision });
+      await delivery().authorizeCancellation(request);
+      expect(remove).not.toHaveBeenCalled();
+      expect(await delivery().cancel(request)).toMatchObject({ kind: 'unresolved' });
+      expect((await custody.load(ctx))?.observation.state).toBe('quarantined');
+      const recorded = (await reopened.store.readDispatch(request))!;
+      expect(() => recordedExecutionSupervisor({ ...recorded, profile: { ...profile, adapterId: 'unknown' } },
+        { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts })).toThrow('SUPERVISOR_PROFILE_INVALID');
+      expect(() => recordedExecutionSupervisor({ ...recorded, profile: { ...profile, adapterVersion: 2 } },
+        { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts })).toThrow('SUPERVISOR_PROFILE_INVALID');
+      const manager = recordedExecutionSupervisor(recorded, { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts });
+      await expect(manager.cancel({ ...request, identity: { ...request.identity, generation: 2 } })).rejects.toThrow('SUPERVISOR_IDENTITY_CONFLICT');
+      expect(remove).toHaveBeenCalledOnce();
+      // New absence evidence, never a retry that converts the same unknown proof to success.
+      remove.mockResolvedValue({ processesAbsent: true, cgroupAbsent: true, filesystemAbsent: true, evidenceRefs: ['fixture-three-absences'] });
+      expect(await delivery().cancel(request)).toMatchObject({ kind: 'unresolved' });
+      expect((await custody.load(ctx))?.observation).toMatchObject({ state: 'destroyed', evidenceRefs: ['fixture-three-absences'] });
+      const final = recordedExecutionSupervisor((await reopened.store.readDispatch(request))!, { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts });
+      expect(await final.observe(request)).toMatchObject({ result: { kind: 'unknown', reasonCode: 'BEUSER_EXECUTION_UNRESOLVED' } });
+      expect(await final.observeCreatedAbsence?.(request, handle.containerId)).toEqual({ kind: 'created-container-absent', containerId: handle.containerId });
+      await expect(final.observeCreatedAbsence?.(request, 'b'.repeat(64))).rejects.toThrow('SUPERVISOR_IDENTITY_CONFLICT');
+      // A separate retained harness terminal fixture supplies an actual recorded result; absence alone never invents an exit code.
+      await beuserPrivateRecord(directory, `terminal-${sha256(JSON.stringify(request.identity))}`, ctx.limits.maxArtifactBytes).write({ binding: ctx.binding,
+        result: { handle: `beuser-${handle.incarnation}`, result: { kind: 'exited', exitCode: 1 }, outputCompleteness: 'partial', stdout: '', stderr: '', interrupted: true }, evidence: null });
+      expect(await delivery().cancel(request)).toMatchObject({ kind: 'terminal', record: { terminal: { exitCode: 1 } } });
+      expect(await final.observe(request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 } });
+      expect(await final.release(request)).toBe('absent');
+      expect(docker).not.toHaveBeenCalled();
+    } finally { realm.mockRestore(); docker.mockRestore(); reopened.store.close(); }
     // An explicit unknown report fixture checks persistence/query custody only, never journey acceptance.
     const report = createBeuserReport({ schemaVersion: 1, simulated: true, calibrationClaim: 'uncalibrated', cohort: 'cohort', calibration,
       counts: { defined: 1, selected: 1, walked: 0, concurrent: 0 }, segments: [], unwalked: [{ branch: 'persona', reason: 'dry-admission' }],

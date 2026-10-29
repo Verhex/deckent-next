@@ -18,3 +18,4 @@ export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle, parkConfigu
 export { proposeConfiguredRun, inspectConfiguredRunProposal } from './internal/proposals.js';
 export { releaseConfiguredQuota } from './internal/pool-hold.js';
 export { inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from './internal/worker-instructions.js';
+export { createRecordedCancellationDelivery } from './internal/cancellation-runtime.js';

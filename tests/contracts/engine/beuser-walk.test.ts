@@ -4,9 +4,10 @@ import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProj
 import { sha256, createHmacIntegrity } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
 import { pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
-import { BeuserApplication, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent,
+import { BeuserApplication, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
   type BeuserWalkPorts } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
+import { sealApproval, verifyApproval } from '#engine/core/approval/index.js';
 import { AuditApplication } from '#engine/core/audit/index.js';
 import { NervousApplication, NERVOUS_RULES_SEED } from '#engine/core/nervous/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
@@ -30,6 +31,7 @@ function harness() {
   let seq = 0, done = false;
   const screen = (): BeuserScreen => ({ binding, sequence: ++seq, text: done ? 'completed' : 'approval card', digest: (done ? '2' : '1').repeat(64) });
   const ports: { -readonly [K in keyof BeuserWalkPorts]: BeuserWalkPorts[K] } = {
+    controllerAudit: vi.fn(async () => 'valid' as const),
     realm: { create: vi.fn(async () => ({ binding, state: 'created' as const, evidenceRefs: ['create'] })), admit: vi.fn(async () => ({ binding, state: 'admitted' as const, evidenceRefs: ['admit'] })),
       observe: vi.fn(async () => ({ binding, state: 'admitted' as const, evidenceRefs: ['observe'] })), destroy: vi.fn(async () => ({ binding, state: 'destroyed' as const, evidenceRefs: ['absence'] })), quarantine: vi.fn(async () => ({ binding, state: 'quarantined' as const, evidenceRefs: ['held'] })) },
     surface: { look: vi.fn(async () => screen()), press: vi.fn(async () => { done = true; return screen(); }), type: vi.fn(async () => screen()), wait: vi.fn(async () => screen()), argv: vi.fn(async () => screen()) },
@@ -220,4 +222,63 @@ it('reads retained acceptance only after destruction, and never reads a verdict 
   uncertain.ports.realm.destroy = async () => ({ binding, state: 'quarantined', evidenceRefs: ['fixture-unknown'] });
   expect(await uncertain.app.walk(context(), summary)).toMatchObject({ cleanup: 'quarantined', state: 'unknown', verdict: null });
   expect(uncertain.ports.evidence.readback).not.toHaveBeenCalled();
+});
+
+it('reads controller A after the walk, invalidates an attributed authority row and emits a real Nervous detection', async () => {
+  const rows: AuditRecord[] = [];
+  const audit = new AuditApplication({ append: (_event, seal) => { const row = seal(rows.length + 1); rows.push(row); return row; },
+    load: (scope, id) => rows.find(row => row.event.scopeId === scope && row.event.eventId === id) ?? null,
+    page: (scope, after, limit) => rows.filter(row => row.event.scopeId === scope && row.sequence > after).slice(0, limit),
+    increment: () => { throw new Error('unused'); }, counters: () => [] }, createHmacIntegrity('fixture', randomBytes(32)));
+  const nervous = new NervousApplication({ audit, now: () => 10 }, NERVOUS_RULES_SEED, { live: false, approval: null, executors: {} });
+  const controllerPorts = { audit, approvals: () => [] };
+  // Normal Run records attributed to the same workload are not person authority writes.
+  audit.record({ schemaVersion: 1, eventId: 'ordinary-run', scopeId: 'scope', principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: 'p', atMs: 1,
+    subject: { kind: 'run-lifecycle', action: 'hold', runId: 'run', commandId: 'hold', taskId: null, revision: 1, evidence: null } });
+  // Audit principal is a strict reference, never a client's assurance.
+  expect(await readBeuserControllerAudit(context(), controllerPorts)).toBe('valid');
+  const h = harness(), read = vi.fn((ctx: BeuserContext) => readBeuserControllerAudit(ctx, controllerPorts));
+  h.ports.controllerAudit = read;
+  h.ports.refusal = ctx => recordBeuserRefusal(ctx, { audit, nervous, now: () => 10, policyRevision: 'p',
+    nervousContext: { owner: { issuer: 'host', subject: 'person' }, policyRevision: 'p' } });
+  const ref = { issuer: principal.issuer, subject: principal.subject };
+  expect(evaluatePolicy({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [{ id: 'explicit-card', principals: [ref], scopes: ['scope'],
+    actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] }, effect: 'allow' }] },
+    { principal, scopeId: 'scope', resource: { kind: 'operation', id: 'policy.administer' }, action: 'execute' }).decision).toBe('deny');
+  // The explicit grant cannot lower the workload floor. The injected row models a separate producer defect.
+  // Simulate the end-of-walk audit row, not a safer substitute operation.
+  const original = h.ports.realm.destroy;
+  h.ports.realm.destroy = async ctx => {
+    audit.record({ schemaVersion: 1, eventId: 'forbidden-authority', scopeId: 'scope', principal: ref, policyRevision: 'p', atMs: 2,
+      subject: { kind: 'authority-change', operation: { id: 'policy.administer', version: 1 }, commandId: 'bad-write', approvalId: 'bad-card', decider: ref,
+        inputDigest: 'a'.repeat(64), revision: { before: 'p', after: 'bad' }, counts: { grantsAdded: 1, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } } });
+    return original(ctx);
+  };
+  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'invalid', reason: 'BEUSER_TARGET_NOT_SANDBOX' });
+  expect(read).toHaveBeenCalledOnce();
+  expect(rows.some(row => row.event.subject.kind === 'recovery-detection')).toBe(true);
+  const missing = harness(); missing.ports.controllerAudit = async () => 'unknown';
+  expect(await missing.app.walk(context(), summary)).toMatchObject({ state: 'unknown' });
+  expect(await readBeuserControllerAudit(context(), { audit: { list() { throw new Error('AUDIT_INTEGRITY'); } }, approvals: () => [] })).toBe('unknown');
+});
+
+it('controller readback detects a sealed approval decision by BeUser and holds missing or bounded audit evidence', async () => {
+  const integrity = createHmacIntegrity('fixture', randomBytes(32));
+  const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+  const request = { schemaVersion: 1 as const, approvalId: 'controller-card', scopeId: 'scope', runId: 'run', taskId: 'task', requester: actor,
+    actionDigest: 'a'.repeat(64), policyRevision: 'p', summary: 'same approval card', createdAt: 1, expiresAt: 10 };
+  const ref = { issuer: principal.issuer, subject: principal.subject };
+  const explicit = { schemaVersion: 1, revision: 'p', restrictions: [], grants: [{ id: 'card-grant', principals: [ref], scopes: ['scope'],
+    actions: ['decide'], resource: { kind: 'approval', ids: [request.approvalId] }, effect: 'allow' }] };
+  expect(explicit.grants[0]?.resource.ids).toEqual([request.approvalId]);
+  expect(evaluatePolicy(explicit, { principal, scopeId: 'scope', resource: { kind: 'approval', id: request.approvalId }, action: 'decide' }).decision).toBe('deny');
+  const approval = sealApproval({ request, revision: 1, status: 'decided', decision: { commandId: 'card-answer', decision: 'allow', actor,
+    sessionId: 'synthetic', channel: 'fixture', reason: 'fixture producer defect', decidedAt: 2, requestDigest: 'b'.repeat(64),
+    commandDigest: 'c'.repeat(64), idempotencyKeyHash: 'd'.repeat(64) } }, integrity);
+  const rows = () => [verifyApproval(approval, integrity)];
+  expect(await readBeuserControllerAudit(context(), { audit: { list: () => [] }, approvals: rows })).toBe('invalid');
+  const unknown = { ...context(), limits: { ...limits, maxArtifactBytes: 1 } };
+  expect(await readBeuserControllerAudit(unknown, { audit: { list: () => [] }, approvals: rows })).toBe('unknown');
+  const h = harness(); h.ports.controllerAudit = async () => { throw new Error('AUDIT_UNAVAILABLE'); };
+  expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'unknown', verdict: null });
 });

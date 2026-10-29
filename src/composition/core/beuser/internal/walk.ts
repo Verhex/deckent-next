@@ -10,6 +10,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { evaluateConfiguredBeuserTask } from './evaluate.js';
+import { validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
 import { beuserJourneyProfileSchema, executeConfiguredBeuserAttempt } from './application.js';
 
 /** The CLI selects installed registry data. It supplies no profile, principal, Attempt id, probe or launch command. */
@@ -17,7 +18,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal): Promise<BeuserReport> {
   const started = performance.now();
   const { c, selected, runId, principal, profiles, definitions, candidateRoot } = await admitConfiguredBeuserWalk(root, input, options, signal);
-  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid');
+  const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile });
   const segments: BeuserReport['segments'] = [], unknown: BeuserReport['unknown'] = [];
   let walked = 0, completed = 0, attempted = 0;
   const intervals: { start: number; end: number }[] = [];
