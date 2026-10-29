@@ -163,9 +163,15 @@ export async function readBeuserInstallationSummary(context: BeuserContext, hand
 const arrangeScript = `const { spawnSync } = await import('node:child_process'), { createHash } = await import('node:crypto'), { resolve, dirname } = await import('node:path');
 const { mkdirSync, realpathSync, openSync, writeSync, closeSync, lstatSync, chmodSync, constants } = await import('node:fs');
 const [step, maxBuffer] = JSON.parse(process.argv[1]); ${inRealm}
+// Creates a missing directory one level at a time below the work target, never through a symlink: no effect lands outside it (Astra 2830).
+const safeDir = dir => { let at = work;
+  for (const part of dir.slice(work.length).split('/').filter(Boolean)) { at += '/' + part; let info;
+    try { info = lstatSync(at); } catch { mkdirSync(at, { mode: 0o700 }); info = lstatSync(at); }
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new Error('outside'); }
+  return dir; };
 let run;
 if (step.kind === 'file') {
-  try { const path = inRealm(step.path); mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  try { const path = inRealm(step.path); safeDir(dirname(path));
     if (realpathSync(dirname(path)) !== dirname(path)) throw new Error('outside');
     if (step.content !== undefined) { const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
       try { writeSync(fd, step.content); } finally { closeSync(fd); } }
@@ -173,8 +179,8 @@ if (step.kind === 'file') {
     chmodSync(path, parseInt(step.mode, 8)); run = { status: 0 };
   } catch { run = { status: 1 }; }
 } else {
-  const cwd = inRealm(step.cwd); mkdirSync(cwd, { recursive: true, mode: 0o700 });
-  run = spawnSync(step.kind === 'git' ? 'git' : process.execPath, step.kind === 'git' ? step.args : [${JSON.stringify(cli)}, ...step.args],
+  let cwd; try { cwd = safeDir(inRealm(step.cwd)); } catch { cwd = null; }
+  run = cwd === null ? { status: 1 } : spawnSync(step.kind === 'git' ? 'git' : process.execPath, step.kind === 'git' ? step.args : [${JSON.stringify(cli)}, ...step.args],
     { cwd, env: step.kind === 'git' ? ${gitEnv} : process.env, stdio: ['ignore', 'pipe', 'ignore'], timeout: step.timeoutMs, maxBuffer, killSignal: 'SIGKILL' });
 }
 const out = run.stdout ?? Buffer.alloc(0);

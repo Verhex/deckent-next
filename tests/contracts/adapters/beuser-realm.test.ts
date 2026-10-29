@@ -105,8 +105,10 @@ it('admits only retained binding and fresh inspection; arrange exec is TTY-less 
       { state: 'file', mode: '0644', sha256: (notes.readback.expected as { sha256: string }).sha256 });
     expect(look({ kind: 'path', path: join(work, 'missing'), expected: { state: 'absent' } })).toEqual({ state: 'absent' });
     await symlink(base, join(work, 'escape')); await symlink(join(base, 'target.md'), join(work, 'link.md'));
-    for (const path of ['escape/out.md', 'link.md', '../out.md']) expect(wrap({ ...notes, path }).exitCode).toBe(1);
-    for (const name of ['out.md', 'target.md']) expect(look({ kind: 'path', path: join(base, name), expected: { state: 'absent' } })).toEqual({ state: 'absent' });
+    for (const path of ['escape/out.md', 'link.md', '../out.md', 'escape/new-dir/out.md']) expect(wrap({ ...notes, path }).exitCode).toBe(1);
+    // Astra 2830: a missing descendant under a symlinked parent is never created outside the work target (file and command cwd alike).
+    expect(wrap({ kind: 'cli', args: ['--version'], cwd: 'escape/new-cwd', timeoutMs: 5000 }).exitCode).toBe(1);
+    for (const name of ['out.md', 'target.md', 'new-dir', 'new-cwd']) expect(look({ kind: 'path', path: join(base, name), expected: { state: 'absent' } })).toEqual({ state: 'absent' });
     for (const id of ['git-repository', 'team-notes-tracked', 'team-notes-committed']) expect(wrap(BEUSER_ARRANGE_REGISTRY.steps.find(row => row.id === id))).toMatchObject({ exitCode: 0 });
     expect(look({ kind: 'git', path: '.deckent/team-notes.md', expected: 'tracked' })).toBe('tracked');
     expect(look({ kind: 'git', path: 'link.md', expected: 'tracked' })).toBe('untracked');
