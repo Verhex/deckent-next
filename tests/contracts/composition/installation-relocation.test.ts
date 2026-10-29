@@ -184,11 +184,13 @@ describe('relocation producer to actual CLI surface', () => {
     expect(before.entries).not.toContain('policy.json'); expect(before.entries).not.toContain('bindings.json'); expect(before.entries).not.toContain('installation-identity');
   });
   it('an unmoved pending policy journal still recovers through the compiled CLI (Astra 2363 control)', async () => {
-    const f = await pendingPolicyFixture();
+    const f = await pendingPolicyFixture(), identity = await readFile(join(f.project, '.deckent/custom-identity/identity.json'));
     const result = await compiledCli(f.project, f.env, ['init', 'policy', '--scope', 's', '--apply', '--json']);
     expect(result.code).toBe(0);
     expect(JSON.parse(await readFile(f.journal, 'utf8'))).toMatchObject({ phase: 'committed', blockers: [] });
     await expect(stat(join(f.project, '.deckent/policy.json'))).resolves.toBeDefined();
+    expect(await readFile(join(f.project, '.deckent/custom-identity/identity.json'))).toEqual(identity);
+    await expect(stat(join(f.project, '.deckent/installation-identity'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('refuses direct service, MCP and peer admissions before ledger/transport startup', async () => {
     const f = await fixture(), before = await readFile(f.path, 'utf8');

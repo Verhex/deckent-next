@@ -59,8 +59,8 @@ it('legacy main key, no .deck: refused, one card, y → sealed grant → the sam
     env: { PATH: process.env['PATH'] ?? '', ...where.env, DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let verified = ''; verify.stdout!.on('data', chunk => { verified += String(chunk); }); verify.stderr!.on('data', chunk => { verified += String(chunk); });
   await new Promise(done => verify.once('exit', done));
-  // A fresh ledger has no checkpoint yet (status unknown, exit 1 by contract); what matters is that every record parsed and chained.
-  expect(verified).not.toContain('AUDIT_INTEGRITY'); expect(JSON.parse(verified)).toMatchObject({ scopeId: 'scope-a', head: { sequence: 1 } });
+  // B1 records the system-row publication before the grant; this fixture starts no checkpoint service. The ledger has no checkpoint yet (status unknown, exit 1 by contract); what matters is that every record parsed and chained.
+  expect(verified).not.toContain('AUDIT_INTEGRITY'); expect(JSON.parse(verified)).toMatchObject({ scopeId: 'scope-a', head: { sequence: 2 } });
 });
 
 it('off a terminal (a pipe, or a detached agent-shell-shaped child) the grant is refused before anything is read or written', async () => {

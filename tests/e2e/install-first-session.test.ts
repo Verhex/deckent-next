@@ -39,15 +39,15 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
     service.stdout.on('data', chunk => { log += String(chunk); }); service.stderr.on('data', chunk => { log += String(chunk); });
     const exited = new Promise<void>((resolve, reject) => { service.once('exit', () => resolve()); service.once('error', reject); });
     try {
-      let health: { status: string; startability: { status: string; endpoint: string; checks: unknown[] }; serviceConfig: string } | undefined;
+      let health: { status: string; auditIntegrity: { status: string }; startability: { status: string; endpoint: string; checks: unknown[] }; serviceConfig: string } | undefined;
       for (let retry = 0; retry < 100; retry++) {
         if (service.exitCode !== null) throw new Error(`runtime exited ${service.exitCode}: ${log}`);
         health = JSON.parse((await run(['doctor', '--json'])).stdout);
-        if (health?.serviceConfig === 'current') break;
+        if (health?.serviceConfig === 'current' && health.auditIntegrity.status === 'match') break;
         await wait(50);
       }
-      // Nothing is recorded on a fresh install, so audit integrity is not verified yet: shown as unknown/no-checkpoint-yet, never healthy.
-      expect(health, log).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: 'no-checkpoint-yet' }, startability: { status: 'ready', checks: [] }, serviceConfig: 'current' });
+      // B1 records system-row publication at install; service startup seals its checkpoint and verifies the matching chain.
+      expect(health, log).toMatchObject({ status: 'ready', auditIntegrity: { status: 'match', reason: 'verified' }, startability: { status: 'ready', checks: [] }, serviceConfig: 'current' });
       const endpoint = health!.startability.endpoint; roots.push(dirname(endpoint));
       expect(Buffer.byteLength(endpoint)).toBeLessThan(108); expect(endpoint).not.toContain(project);
       expect((await lstat(dirname(endpoint))).mode & 0o777).toBe(0o700);

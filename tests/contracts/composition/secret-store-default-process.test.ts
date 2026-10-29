@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallationWithSecretDefault } from '#composition/core/installation/index.js';
-import { resolveGlobalConfigPaths } from '#platform/index.js';
+import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { resolveProductLayout, resolveGlobalConfigPaths } from '#platform/index.js';
 
 // SECRET-DEFAULT (owner 2026-10-08, Jev 60bdc5e6) on the governed store switch (Jev a0284b73, 0950f08e): a fresh installation on Linux/WSL/macOS
 // selects the encrypted secret store through `deckent init policy --apply`; an existing installation, a replay or a config that already names a store is
@@ -42,7 +43,7 @@ it.skipIf(process.platform !== 'linux')('a fresh `init policy --apply` selects t
   expect(applied.code, applied.stderr).toBe(0);
   // The switch's own record is the command result (no ledger yet at this point): decided by the policy this run installed, nothing moved.
   expect(JSON.parse(applied.stdout)).toMatchObject({ status: 'installed', secretStore: { status: 'set', backend: SEALED, record: {
-    policyRevision: expect.stringContaining('first-run-template-v18'), subject: { kind: 'secret-store-switch', from: 'core.secret-store.env@1', to: SEALED,
+    policyRevision: (await createLayoutPolicySource(resolveProductLayout({ projectRoot: f.project }), process.getuid!(), 1_048_576).load()).revision, subject: { kind: 'secret-store-switch', from: 'core.secret-store.env@1', to: SEALED,
       entries: 0, downgrade: false, decision: { effect: 'allow', ruleId: 'first-run-secret-switch' } } } } });
   expect((await f.globalConfig()).secrets).toEqual({ store: SEALED });
   const before = await readFile(f.globalPath, 'utf8');

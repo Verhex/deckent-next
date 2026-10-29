@@ -130,7 +130,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     for (const result of ['Permissions: applied', 'Language: applied', 'Who uses this installation: applied', 'Starting permissions: applied']) expect(summary).toContain(result);
     for (const title of ['Model connection', 'Worker image', 'Execution environment', 'Project instructions', 'First work kind', 'Worker pool']) expect(summary).not.toContain(title);
     expect(summary).not.toContain('Final check: applied'); // KUR-14: the observed warnings settle; no read-only apply loop.
-    expect(summary).toContain('Setup is complete.');
+    expect(summary).toContain('Installation complete.'); // KUR-14: install finishes here; onboarding opens with deckent.
     // R05: the start-permission preview wraps inside the window (its last words are on screen), never cut with "…"; the profile reads as its label.
     const confirm = run.output.indexOf('Confirm the previewed permissions'), preview = screen(run.output.slice(0, confirm)); expect(preview).toMatch(/keep their approval rules\./u);
     expect(run.output).toContain('Profile Solo will start');

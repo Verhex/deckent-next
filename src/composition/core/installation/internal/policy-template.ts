@@ -5,7 +5,7 @@ import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInt
 import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, CORE_SYSTEM_POLICY_ROWS, systemPolicyRowsPublicationEvent, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, bootstrapPublishesConfig, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { policySchema, type AuditEvent } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
@@ -18,7 +18,7 @@ const identityPort = (projectRoot: string, scopeId: string, options: ConfigLoadO
 /** Fresh policy installation also initializes first-session config and ledger, without Docker or a pool. */
 async function prepare(projectRoot: string, scopeId: string, options: ConfigLoadOptions, sampled?: ProductLayout) {
   composeCore(); // v12: the shutdown rule and the first config name this scope's configured service, else the default (an unreadable config: the default).
-  const loaded = await loadComposedConfig(projectRoot, { ...options, heal: false, force: true }).catch(() => null), configured = loaded === null ? null : loaded.service.identity;
+  const loaded = await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', heal: false, force: true }).catch(() => null), configured = loaded === null ? null : loaded.service.identity;
   // g2-deckent-home: the configured data root (DECKENT_HOME, layout.root) as upgrade, doctor and the service read it; an unreadable config keeps the default.
   const service = firstRunServiceIdentity(scopeId, configured), layout = sampled ?? loaded?.productLayout ?? resolveProductLayout({ projectRoot }), identity = readLocalOsIdentity();
   const installation = getConfigFieldDefault('installation'), inspection = getConfigFieldDefault('inspection');
@@ -38,7 +38,7 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
   await installationIdentity.admitWrite(); await projectIdentity.read();
   // The first-session config is the project's bootstrap file: its own directory is its root, also when the data root moved.
   const file = (target: PolicyTemplatePublishTarget) => ({ root: target.resource === 'config' ? dirname(target.path) : layout.root, path: target.path, maxBytes });
-  const firstSession = firstSessionPublication(layout, maxBytes), config = await loadComposedConfig(projectRoot, { ...options, heal: false, force: true });
+  const firstSession = firstSessionPublication(layout, maxBytes), config = await loadComposedConfig(projectRoot, { ...options, pendingBootstrap: 'config-settled', globalOnly: bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot), heal: false, force: true });
   const result = await withInstallationJournal(projectRoot, { timeoutMs }, async journal => {
     const current = await prepare(projectRoot, scopeId, options, layout);
     if (current.prepared.preview.planDigest !== prepared.preview.planDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
