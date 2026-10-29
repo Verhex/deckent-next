@@ -112,3 +112,9 @@ A failed harness preparation closes its execution-budget timer before returning 
 unavailable Docker prerequisite does not keep the CLI process alive until the walk deadline.
 
 Walk reports retain the typed root refusal separately from unproven cleanup; EN/TR explanations use the error catalog, never raw adapter messages. Only cancellation or an actual deadline sets an interrupt cause. Critical coverage includes selected personas with no verdict as unknown, even before the first screen; unknown coverage does not imply that the persona walked. Older retained reports remain readable and are not rewritten.
+When package verification refuses before publishing a realm handle, the existing identity-bound private
+record retains the reason and cleanup state with a null process result. Dispatch remains unresolved;
+no handle, exit or destruction proof is invented, and replay does not launch again. Typed surface
+failures share the engine's finite BeUser error contract, so production look/argv refusals retain their
+catalog code without trusting arbitrary exception codes or messages. Recorded management reads the
+same optional reason/cleanup metadata and still requires actual handle and terminal evidence.

@@ -177,7 +177,8 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
       await expect(final.observeCreatedAbsence?.(request, 'b'.repeat(64))).rejects.toThrow('SUPERVISOR_IDENTITY_CONFLICT');
       // A separate retained harness terminal fixture supplies an actual recorded result; absence alone never invents an exit code.
       await beuserPrivateRecord(directory, `terminal-${sha256(JSON.stringify(request.identity))}`, ctx.limits.maxArtifactBytes).write({ binding: ctx.binding,
-        result: { handle: `beuser-${handle.incarnation}`, result: { kind: 'exited', exitCode: 1 }, outputCompleteness: 'partial', stdout: '', stderr: '', interrupted: true }, evidence: null });
+        result: { handle: `beuser-${handle.incarnation}`, result: { kind: 'exited', exitCode: 1 }, outputCompleteness: 'partial', stdout: '', stderr: '', interrupted: true },
+        reason: 'BEUSER_CANDIDATE_MISMATCH', cleanup: 'destroyed', evidence: null });
       expect(await delivery().cancel(request)).toMatchObject({ kind: 'terminal', record: { terminal: { exitCode: 1 } } });
       expect(await final.observe(request)).toMatchObject({ result: { kind: 'exited', exitCode: 1 } });
       expect(await final.release(request)).toBe('absent');

@@ -26,7 +26,8 @@ export function recordedBeuserSupervisor(recorded: DispatchRecord, input: {
     const directory = join(await inspectProductDirectory(input.layout, 'crashes'), 'beuser-custody');
     const read = await beuserPrivateRecord(directory, `terminal-${sha256(JSON.stringify(recorded.request.identity))}`, limits.maxArtifactBytes).read();
     if (read.kind !== 'ready') return null;
-    const value = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema, evidence: beuserEvidenceSchema.nullable() }).strict().parse(read.value);
+    const value = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(),
+      reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), evidence: beuserEvidenceSchema.nullable() }).strict().parse(read.value);
     if (beuserBindingDigest(value.binding) !== beuserBindingDigest(data.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return value;
   };
@@ -36,8 +37,8 @@ export function recordedBeuserSupervisor(recorded: DispatchRecord, input: {
     const handle = `beuser-${lease.handle.incarnation}`;
     if (lease.observation.state !== 'destroyed' || !lease.observation.evidenceRefs.length) return { handle, result: { kind: 'unknown' as const, reasonCode: 'BEUSER_CLEANUP_UNPROVEN' } };
     const held = await terminal();
-    if (held && held.result.handle !== handle) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
-    return { handle, result: held?.result.result ?? { kind: 'unknown' as const, reasonCode: 'BEUSER_EXECUTION_UNRESOLVED' } };
+    if (held?.result && held.result.handle !== handle) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+    return { handle, result: held?.result?.result ?? { kind: 'unknown' as const, reasonCode: 'BEUSER_EXECUTION_UNRESOLVED' } };
   };
   return {
     captureProfile: async () => recorded.profile,

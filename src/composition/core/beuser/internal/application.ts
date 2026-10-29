@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
-import { FileArtifactStore, createBeuserSurface,
+import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
   openSqliteApprovalStore, openLocalIntegrityAuthority, extractOpenAiChatTextFromInvocation, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
@@ -44,12 +44,14 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   };
   let capturedSurface: ReturnType<typeof createBeuserSurface> | undefined;
   const getSurface = () => capturedSurface ??= createBeuserSurface({ context, realm: channel, size: data.size, bounds: data.bounds, catalog: launch.catalog, sink });
-  const safeScreen = async (pending: Promise<import('#engine/index.js').BeuserScreen>) => { const value = await pending;
-    const text = redactForRecord(value.text, known); return { ...value, text, digest: sha256(text) }; };
+  const safeScreen = async (work: () => Promise<import('#engine/index.js').BeuserScreen>) => {
+    try { const value = await work(); const text = redactForRecord(value.text, known); return { ...value, text, digest: sha256(text) }; }
+    catch (error) { if (error instanceof BeuserSurfaceError) throw new BeuserContractError(error.code); throw error; }
+  };
   const surface: import('#engine/index.js').SurfacePort = {
-    look: ctx => safeScreen(getSurface().look(ctx)), type: (ctx, text) => safeScreen(getSurface().type(ctx, text)),
-    press: (ctx, key) => safeScreen(getSurface().press(ctx, key)), wait: (ctx, ms) => safeScreen(getSurface().wait(ctx, ms)),
-    argv: (ctx, command) => safeScreen(getSurface().argv(ctx, command)),
+    look: ctx => safeScreen(() => getSurface().look(ctx)), type: (ctx, text) => safeScreen(() => getSurface().type(ctx, text)),
+    press: (ctx, key) => safeScreen(() => getSurface().press(ctx, key)), wait: (ctx, ms) => safeScreen(() => getSurface().wait(ctx, ms)),
+    argv: (ctx, command) => safeScreen(() => getSurface().argv(ctx, command)),
   };
   const model = configuredBeuserModels(root, options, context, data.choices, data.contributorModels, new BeuserCallBudget(context.limits), data.completionTokens,
     () => ({ transcript: recorder.finalize(context), rubric: data.rubric }));
@@ -126,7 +128,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
   const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });
   const directory = join(await prepareProductDirectory(c.layout, 'crashes'), 'beuser-custody'), name = sha256(JSON.stringify(request.identity));
   const terminal = beuserPrivateRecord(directory, `terminal-${name}`, context.limits.maxArtifactBytes), owner = `beuser-${name}`;
-  const budget = new BeuserExecutionBudget(context.limits);
+  const budget = new BeuserExecutionBudget(context.limits), noHandle = new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
   let harness: Awaited<ReturnType<typeof createConfiguredBeuserHarness>>;
   try { harness = await createConfiguredBeuserHarness(root, context, request, profile, store, artifacts, owner, options); }
   catch (error) { budget.close(); throw error; }
@@ -134,7 +136,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
     if (!lease?.handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); return `beuser-${lease.handle.incarnation}`; };
   const readTerminal = async () => {
     const read = await terminal.read(); if (read.kind !== 'ready') return null;
-    const record = z.object({ binding: beuserBindingSchema, result: z.unknown(), reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), evidence: z.unknown().nullable() }).strict().parse(read.value);
+    const record = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), evidence: z.unknown().nullable() }).strict().parse(read.value);
     if (beuserBindingDigest(record.binding) !== beuserBindingDigest(context.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return record;
   };
@@ -145,16 +147,20 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
       const admitted = { ...context, signal: AbortSignal.any([context.signal, ...(signal ? [signal] : [])]) };
       harness = await createConfiguredBeuserHarness(root, admitted, request, profile, store, artifacts, owner, options, id => hooks?.created(id) ?? Promise.resolve());
       const { result, evidence } = await harness.walk(budget);
-      const observed = beuserWalkSandboxResult(await handle(), result);
-      await terminal.write({ binding: context.binding, result: observed, reason: result.reason, cleanup: result.cleanup, evidence }); return observed;
+      const lease = await harness.custody.load({ ...context, signal: new AbortController().signal });
+      const observed = lease?.handle ? beuserWalkSandboxResult(`beuser-${lease.handle.incarnation}`, result) : null;
+      await terminal.write({ binding: context.binding, result: observed, reason: result.reason, cleanup: result.cleanup, evidence });
+      // A pre-publish refusal has custody but no process result. Keep dispatch unresolved without inventing a handle.
+      if (!observed) throw noHandle;
+      return observed;
     },
-    async observe() { const held = await readTerminal(); if (held) {
+    async observe() { const held = await readTerminal(); if (held?.result) {
       const result = sandboxResultSchema.parse(held.result);
       return { handle: result.handle, result: result.result, ...(result.worker ? { worker: result.worker } : {}), ...(result.container ? { container: result.container } : {}) };
     }
       return { handle: await handle(), result: { kind: 'unknown', reasonCode: 'BEUSER_EXECUTION_UNRESOLVED' } }; },
     async cancel() { await harness.realm.destroy({ ...context, signal: AbortSignal.timeout(context.limits.cleanupDeadlineMs) }); return this.observe(request); },
-    async recoverOutput() { if (!(await readTerminal())) throw new BeuserContractError('BEUSER_INPUT_INVALID'); return { stdout: '', stderr: '', completeness: 'partial' }; },
+    async recoverOutput() { if (!(await readTerminal())?.result) throw new BeuserContractError('BEUSER_INPUT_INVALID'); return { stdout: '', stderr: '', completeness: 'partial' }; },
     async release() { const observation = await harness.custody.load({ ...context, signal: new AbortController().signal });
       if (observation?.observation.state !== 'destroyed') throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); return 'absent'; },
   };
@@ -170,7 +176,14 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
   });
   const dispatch = new BeuserDispatch(new DispatchApplication(store, supervisor, { verify: async () => c.principal }, policy, owner, artifacts), harness.refusal, async () => request);
   try {
-    const outcome = await dispatch.execute(context, request, undefined), held = await readTerminal();
+    let outcome;
+    try { outcome = await dispatch.execute(context, request, undefined); }
+    catch (error) {
+      const record = error === noHandle ? await store.readDispatch(request) : null;
+      if (!record) throw error;
+      outcome = { kind: 'unresolved' as const, record };
+    }
+    const held = await readTerminal();
     const evidence = held?.evidence ? beuserEvidenceSchema.parse(held.evidence) : null;
     return { ...outcome, reason: held?.reason ?? null, cleanup: held?.cleanup ?? 'unknown', walked: evidence?.transcript.some(row => row.entry.kind === 'screen') ?? false };
   } finally { budget.close(); }
