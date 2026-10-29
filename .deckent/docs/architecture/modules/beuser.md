@@ -37,7 +37,15 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit is not proof of thr
 
 The limits registry contains one `b1-dogfood-provisional-1` profile. Its finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
-and replacement. The controller audit scan is limited by the recorded BeUser byte/time bounds; an incomplete scope scan remains unknown. Recovery uses current local management access with the retained profile/custody; inaccessible kernel/cgroup/filesystem proof stays quarantined. The real calibration cohort remains open. Author source wiring and dry admission do not prove an assembled journey.
+and replacement. Each model call reserves the existing adapter's UTF-8 prompt upper bound plus the
+requested completion cap, rather than the entire model context window. An envelope that exceeds the
+window or remaining token budget is refused before invocation. Valid final provider usage can reduce
+only that call's token reservation once; missing or uncertain usage retains it, and an overrun refuses
+without widening the bound. Call counts and monetary reservations remain consumed. A typed local
+profile with verified literal-loopback/zero-tariff evidence is accepted at zero cost; paid profiles
+still require a quote in the envelope's currency. Existing invocation authorization and fresh
+profile/spending pins remain authoritative.
+The controller audit scan is limited by the recorded BeUser byte/time bounds; an incomplete scope scan remains unknown. Recovery uses current local management access with the retained profile/custody; inaccessible kernel/cgroup/filesystem proof stays quarantined. The real calibration cohort remains open. Author source wiring and dry admission do not prove an assembled journey.
 The current final-state probe observes installation existence; preserved-data, card, receipt-location,
 forbidden-effect and target lifecycle summaries remain unknown. Only a single final readback reference is
 admitted. The secret FD producer/reset, full milestone probes and measured call/cost/reliability evidence

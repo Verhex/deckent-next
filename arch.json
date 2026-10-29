@@ -4668,6 +4668,7 @@
         "src/engine/core/dispatch",
         "src/engine/core/nervous",
         "src/engine/core/policy",
+        "src/engine/core/provider-spend",
         "src/engine/core/runs",
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",

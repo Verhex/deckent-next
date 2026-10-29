@@ -1,10 +1,10 @@
-import { createBeuserModelPort, BeuserCallBudget, BeuserContractError, type BeuserContext, type BeuserModelComposition } from '#engine/index.js';
-import { openSqliteModelActivationReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
+import { createBeuserModelPort, BeuserCallBudget, BeuserContractError, providerSpendLocalZeroTariff, providerSpendLocalZeroTariffProfile, type BeuserContext, type BeuserModelComposition } from '#engine/index.js';
+import { openSqliteModelActivationReader, extractOpenAiChatTextFromInvocation, openAiChatPromptUpperBound } from '#adapters/index.js';
 import { inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { invokeConfiguredModelAs, prepareConfiguredModelAs } from '#composition/core/model-invocation/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import { modelInvocationCommandSchema } from '#domain/index.js';
+import { modelInvocationCommandSchema, openAiChatUsageSchema } from '#domain/index.js';
 import { currencyAmountText } from '#platform/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 
@@ -29,14 +29,20 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       const pinned = await prepareConfiguredModelAs(root, prepared.command, ctx.principal, options, ctx.signal);
       const profile = pinned.profile;
       const spending = pinned.spending;
-      const tokens = profile?.contextWindowTokens;
-      if (!tokens || completionTokens > tokens || tokens > remaining.tokens || profile!.limits.timeoutMs > ctx.limits.maxWallMs
-        || profile!.limits.responseMaxBytes > ctx.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
-      if ((!spending?.quote && !(profile?.schemaVersion === 2 && profile.billingAxis === 'subscription'))
+      const tokens = openAiChatPromptUpperBound(prepared.command.nativeRequest) + completionTokens;
+      if (!profile?.contextWindowTokens || !Number.isSafeInteger(tokens) || tokens > profile.contextWindowTokens || tokens > remaining.tokens || profile.limits.timeoutMs > ctx.limits.maxWallMs
+        || profile.limits.responseMaxBytes > ctx.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+      const local = profile.schemaVersion === 2 && profile.billingAxis === 'local' && providerSpendLocalZeroTariffProfile(profile)
+        && !spending?.budget && (!spending?.quote || providerSpendLocalZeroTariff(profile, spending.quote));
+      if ((!spending?.quote && !local && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription'))
         || spending?.quote && spending.quote.currency !== remaining.currency) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
       const cost = spending?.quote ? Number(currencyAmountText(spending.quote.maxChargeMinorUnits, remaining.currency, 'en', false).replaceAll(',', '')) : 0;
       pins.set(prepared.command.commandId, pinned);
       return { command: prepared.command, tokens, cost, currency: remaining.currency };
+    },
+    tokensUsed(result) {
+      const usage = openAiChatUsageSchema.safeParse(result.response?.usage);
+      return usage.success ? usage.data.total_tokens : null;
     },
     invocation: { async invoke(input, _credential, signal) {
       const command = modelInvocationCommandSchema.parse(input) as import('#domain/index.js').ModelInvocationCommand;

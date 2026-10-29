@@ -80,6 +80,18 @@ it('invocation envelope reservations are finite across reruns and remain charged
   expect(() => budget.reserve(1, 0, 'USD')).toThrow('BEUSER_LIMITS_UNAVAILABLE');
 });
 
+it('settles only its own token reservation once and never refunds call or cost limits', () => {
+  const budget = new BeuserCallBudget(limits), first = budget.reserve(60, 0.6, 'USD'), second = budget.reserve(40, 0.4, 'USD');
+  expect(() => first(61)).toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(() => first(-1)).toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(() => first(Number.NaN)).toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(budget.remaining()).toEqual({ calls: 0, tokens: 0, cost: 0, currency: 'USD' });
+  second(20); first(10);
+  expect(budget.remaining()).toEqual({ calls: 0, tokens: 70, cost: 0, currency: 'USD' });
+  expect(() => first(0)).toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(() => budget.reserve(1, 0, 'USD')).toThrow('BEUSER_LIMITS_UNAVAILABLE');
+});
+
 it('reruns receive the original execution envelope and cannot reset steps or an expired deadline', async () => {
   const bounds = { ...limits, maxSteps: 1 }, budget = new BeuserExecutionBudget(bounds);
   budget.step();

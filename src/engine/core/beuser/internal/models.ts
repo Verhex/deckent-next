@@ -11,11 +11,17 @@ export class BeuserCallBudget {
   private cost = 0;
   constructor(private readonly ceiling: BeuserContext['limits']) {}
   remaining() { return { calls: this.ceiling.maxCalls - this.calls, tokens: this.ceiling.maxTokens - this.tokens, cost: this.ceiling.maxCost - this.cost, currency: this.ceiling.currency }; }
-  reserve(tokens: number, cost: number, currency: string): void {
+  reserve(tokens: number, cost: number, currency: string): (actualTokens: number) => void {
     const left = this.remaining();
     if (!Number.isSafeInteger(tokens) || tokens <= 0 || !Number.isFinite(cost) || cost < 0 || currency !== left.currency
       || left.calls <= 0 || tokens > left.tokens || cost > left.cost) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
     this.calls++; this.tokens += tokens; this.cost += cost;
+    let settled = false;
+    return actualTokens => {
+      if (settled || !Number.isSafeInteger(actualTokens) || actualTokens < 0 || actualTokens > tokens) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+      this.tokens -= tokens - actualTokens;
+      settled = true;
+    };
   }
 }
 export interface BeuserModelComposition {
@@ -31,6 +37,8 @@ export interface BeuserModelComposition {
     input: unknown, remaining: ReturnType<BeuserCallBudget['remaining']>) => Promise<{ command: ModelInvocationCommand; tokens: number; cost: number; currency: string }>;
   readonly cancel: (context: BeuserContext, invocationId: string) => Promise<void>;
   readonly now: () => number;
+  /** Trusted codec reads final provider counters; missing usage retains the complete reservation. */
+  readonly tokensUsed?: (result: ModelInvocationResult) => number | null;
 }
 export function beuserIndependentRows<T>(rows: readonly T[], makerOf: (row: T) => string | null, contributors: readonly unknown[], walkers: readonly unknown[]) {
   return independentMakerRows(rows, row => canonicalModelMaker({ vendorId: makerOf(row) }), [...contributors, ...walkers].map(canonicalModelMaker));
@@ -57,8 +65,10 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
     const prepared = await ports.prepare(context, role, reference, input, budget.remaining());
     if (prepared.command.scopeId !== context.binding.identity.scopeId || JSON.stringify(prepared.command.reference) !== JSON.stringify(reference)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     context.signal.throwIfAborted();
-    budget.reserve(prepared.tokens, prepared.cost, prepared.currency);
+    const settleTokens = budget.reserve(prepared.tokens, prepared.cost, prepared.currency);
     const invocation = await ports.invocation.invoke(prepared.command, ports.credential, context.signal);
+    const used = invocation.receipt.outcome?.state === 'responded' ? ports.tokensUsed?.(invocation) : null;
+    if (used !== null && used !== undefined) settleTokens(used);
     invocations.set(invocation.receipt.claim.invocationId, JSON.stringify(context.binding));
     if (role === 'beuser-walker') walkers.push(model);
     return { state: 'invoked', receipt: { invocation, role, maker } };
