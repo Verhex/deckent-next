@@ -3,7 +3,7 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
 import { createServer as createSocketServer } from 'node:net';
-import { access, chmod, lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, lstat, mkdtemp, mkdir, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -406,12 +406,22 @@ describe.skipIf(process.platform !== 'linux')('RESTART-HUNT: real-binary autosta
     await mkdir(parent, { mode: 0o700 }); await chmod(parent, 0o755); // what an open-view bwrap mask leaves on the host
     return { parent, log: join(config.layout.root, 'state/runtime-service.log') };
   };
+  // The detached `runtime serve` runs in the project directory; /proc names it when the terminal never printed its pid.
+  const launchedServices = async (projectRoot: string) => {
+    const cwd = await realpath(projectRoot), found: number[] = [];
+    for (const entry of (await readdir('/proc')).filter(name => /^\d+$/u.test(name))) {
+      const own = await Promise.all([readlink(`/proc/${entry}/cwd`), readFile(`/proc/${entry}/cmdline`, 'utf8')]).catch(() => null);
+      if (own?.[0] === cwd && own[1].includes('runtime\0serve')) found.push(Number(entry));
+    }
+    return found;
+  };
   it('an own empty 0755 directory: describe refuses, the terminal launches the start once, it heals (0700, healed event) and the terminal connects', async () => {
     const f = await governedChat(), { parent, log } = await ownParent(f);
     const refused = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 }).catch((error: { stderr?: string }) => error);
     expect(String((refused as { stderr?: string }).stderr)).toContain('LOCAL_RUNTIME_ENDPOINT_UNSAFE'); // K1: the reader still refuses
     const opened = await inPty(f.projectRoot, f.env, [], [['started in the background', '/exit\r']]);
     const pid = Number(/\(pid (\d+)\)/.exec(opened.output)?.[1]); if (Number.isSafeInteger(pid) && pid > 0) daemons.push(pid);
+    else daemons.push(...await launchedServices(f.projectRoot)); // no "started" line: still stop what the terminal launched
     expect(opened.timeout, opened.output).toBeUndefined(); expect(opened.status, opened.output).toBe(0);
     expect((await lstat(parent)).mode & 0o777).toBe(0o700);
     expect(await readFile(log, 'utf8')).toMatch(/runtime socket directory had the wrong mode|Runtime soket dizininin izni yanlıştı/u);
