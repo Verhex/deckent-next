@@ -8,14 +8,15 @@ import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSche
 import { pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { BeuserController, walkBeuser } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmCustody, type BeuserRealmLease } from '#engine/core/beuser-realm/index.js';
-import { BEUSER_REALM_RECIPE, createBeuserChannel, type BeuserRealmOptions } from '#adapters/core/beuser-realm/index.js';
+import { BEUSER_REALM_RECIPE, createBeuserChannel, readBeuserInstallationSummary, type BeuserRealmCommand, type BeuserRealmOptions } from '#adapters/core/beuser-realm/index.js';
 import { createBeuserSurface, pinBeuserDriverBoot, type BeuserDriverBoot } from '#adapters/core/beuser-surface/index.js';
 import { beuserJourneyLaunch } from '#composition/core/beuser/index.js';
 import personas from '../../../assets/beuser/personas.json' with { type: 'json' };
 
+const realmCommand = vi.hoisted(() => vi.fn<BeuserRealmCommand>(async () => 'fixture-container'));
 // Only Docker transport is replaced. The production producer, validation, binding and Python are real.
 vi.mock('../../../src/adapters/core/beuser-realm/internal/realm.js', async importOriginal => ({
-  ...await importOriginal<object>(), dockerRealmCommand: () => vi.fn(async () => 'fixture-container'),
+  ...await importOriginal<object>(), dockerRealmCommand: () => realmCommand,
 }));
 vi.mock('node:child_process', async importOriginal => {
   const actual = await importOriginal<typeof import('node:child_process')>();
@@ -26,7 +27,7 @@ const driver = fileURLToPath(new URL('../../../src/adapters/core/beuser-surface/
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
   try { for (const close of closers.splice(0).reverse()) await close(); }
-  finally { vi.restoreAllMocks(); }
+  finally { vi.restoreAllMocks(); realmCommand.mockClear(); }
 });
 const context: BeuserContext = {
   binding: beuserBindingSchema.parse({ schemaVersion: 1,
@@ -69,15 +70,15 @@ async function producer(mode: 'pty' | 'argv', program: string, corrupt?: (boot: 
         first = false;
         const boot = JSON.parse(String(chunk)) as BeuserDriverBoot;
         boots.push(boot);
-        // Substitute only the container's package mount in this Docker transport fixture.
-        const wire = JSON.stringify(corrupt ? corrupt(boot) : boot).replaceAll(BEUSER_REALM_RECIPE.packageTarget, directory);
+        // Map the recipe's container runtime and package mount to this host-only transport fixture.
+        const wire = JSON.stringify(corrupt ? corrupt(boot) : boot).replaceAll(BEUSER_REALM_RECIPE.packageTarget, directory).replaceAll(BEUSER_REALM_RECIPE.nodeExecutable, process.execPath);
         return write(wire + '\n', ...args);
       }
       return write(chunk, ...args);
     });
     return child;
   });
-  const declared = { entry: { mode, nodeExecutable: process.execPath, args: ['allow'] }, summary: { journeyId: 'approval-decide' } };
+  const declared = { entry: { mode, nodeExecutable: BEUSER_REALM_RECIPE.nodeExecutable, args: ['allow'] }, summary: { journeyId: 'approval-decide' } };
   const journey = beuserJourneyLaunch(declared);
   const boot = { mode, entry: journey.entry, commands: journey.commands,
     maxBootBytes: context.limits.maxArtifactBytes, language: 'C.UTF-8' };
@@ -88,7 +89,7 @@ async function producer(mode: 'pty' | 'argv', program: string, corrupt?: (boot: 
   const surface = createBeuserSurface({ context, realm: channel, size, bounds, catalog: journey.catalog,
     sink: async (_ctx, event) => { events.push(event); } });
   closers.push(() => surface.close(context));
-  return { surface, channel, boot, boots, directory, events, launch, exits, diagnostics, journey };
+  return { surface, channel, boot, boots, directory, events, launch, exits, diagnostics, journey, options, handle };
 }
 
 it.skipIf(process.platform !== 'linux')('production boot starts the real PTY entry and preserves approval then nonce refusal', async () => {
@@ -104,12 +105,17 @@ it.skipIf(process.platform !== 'linux')('production boot starts the real PTY ent
   let screen = await f.surface.look(context);
   for (let n = 0; n < 8 && !screen.text.includes('[y/N]'); n++) screen = await f.surface.wait(context, 100);
   expect(screen.text).toContain('Approval erase fixture? [y/N]');
+  realmCommand.mockResolvedValueOnce('{"installation":"unknown"}');
+  await expect(readBeuserInstallationSummary(context, f.handle, f.options)).resolves.toEqual({ installation: 'unknown' });
+  expect(realmCommand.mock.lastCall?.[0].slice(0, 6)).toEqual([
+    'container', 'exec', f.handle.containerId, BEUSER_REALM_RECIPE.nodeExecutable, '--input-type=module', '--eval']);
   await f.surface.press(context, 'y');
   expect(await readFile(join(f.directory, 'approved'), 'utf8')).toBe('applied');
   await expect(f.surface.press({ ...context, binding: { ...context.binding, nonce: '22345678-1234-4234-8234-123456789abc' } }, 'Enter'))
     .rejects.toThrow('BEUSER_TARGET_NOT_SANDBOX');
   expect(f.boots).toHaveLength(1);
-  expect(f.boots[0]).toMatchObject({ schemaVersion: 1, mode: 'pty', nonce: context.binding.nonce, secretFds: {} });
+  expect(f.boots[0]).toMatchObject({ schemaVersion: 1, mode: 'pty', nonce: context.binding.nonce, secretFds: {},
+    entry: [BEUSER_REALM_RECIPE.nodeExecutable, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`, 'allow'] });
   expect(Object.keys(f.boots[0]!).sort()).toEqual(['columns', 'commands', 'entry', 'env', 'limits', 'maxArtifactBytes', 'mode', 'nonce', 'rows', 'schemaVersion', 'secretFds']);
 });
 
@@ -130,7 +136,7 @@ it.skipIf(process.platform !== 'linux')('production boot argv twin launches the 
   expect(() => f.surface.argv(context, { commandId: 'approval-decide', args: ['allow; rm fixture'] })).toThrow('BEUSER_SURFACE_INVALID');
   expect(f.boots).toHaveLength(1);
   expect(f.boots[0]!.commands).toEqual({ 'approval-decide': {
-    prefix: [process.execPath, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`], allowedArgs: [['allow']],
+    prefix: [BEUSER_REALM_RECIPE.nodeExecutable, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`], allowedArgs: [['allow']],
   } });
   expect(JSON.stringify(f.boots[0])).not.toContain(f.directory);
   expect(f.diagnostics).toEqual([]);

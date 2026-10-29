@@ -49,7 +49,7 @@ export async function inspectBeuserRealm(context: BeuserContext, handle: BeuserR
     || host.Memory !== options.memoryBytes || host.MemorySwap !== options.memoryBytes || host.NanoCpus !== options.nanoCpus || host.PidsLimit !== options.pids
     || host.Devices?.length || host.Binds?.length || !mountsValid || Object.keys(host.Tmpfs).sort().join(',') !== [recipe.workTarget, '/tmp'].sort().join(',')
     || Object.keys(item.NetworkSettings.Networks).some(name => name !== 'none') || Object.keys(item.NetworkSettings.Ports ?? {}).length) return refuseRealm();
-  const probeRaw = await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, handle.containerId, 'node', '--eval', BEUSER_INSPECTION_SCRIPT], context);
+  const probeRaw = await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, handle.containerId, recipe.nodeExecutable, '--eval', BEUSER_INSPECTION_SCRIPT], context);
   const probe = probeSchema.parse(JSON.parse(probeRaw)), controller = await namespaceReadback();
   const fields = probe.mounts.split('\n').map(line => line.split(' '));
   const mounted = (path: string, mode: string) => fields.some(row => row[4] === path && row[5]?.split(',').includes(mode));

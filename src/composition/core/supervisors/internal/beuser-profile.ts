@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { immutableJsonObjectSchema, beuserBindingSchema, beuserWalkerSummarySchema, beuserSealedRubricSchema, beuserCandidateManifestSchema } from '#domain/index.js';
 import { beuserParametersSchema, beuserCalibrationSchema } from '#capabilities/index.js';
 import { supervisorProfileSchema, BeuserContractError, type SupervisorProfile } from '#engine/index.js';
+import { BEUSER_REALM_RECIPE } from '#adapters/index.js';
 
 const positive = z.number().int().positive().safe();
 /** Installed profile data, selected by id from the governed execution registry. Never accepted as CLI JSON. */
@@ -13,7 +14,7 @@ export const beuserJourneyProfileSchema = z.object({ schemaVersion: z.literal(2)
   completionTokens: positive, rubric: beuserSealedRubricSchema,
   choices: z.object({ 'beuser-walker': z.object({ channelId: z.string(), modelId: z.string() }).strict(), 'beuser-evaluator': z.object({ channelId: z.string(), modelId: z.string() }).strict() }).strict(),
   contributorModels: z.array(immutableJsonObjectSchema).min(1),
-  entry: z.object({ mode: z.enum(['pty', 'argv']), nodeExecutable: z.string().startsWith('/'), args: z.array(z.string()) }).strict(),
+  entry: z.object({ mode: z.enum(['pty', 'argv']), nodeExecutable: z.literal(BEUSER_REALM_RECIPE.nodeExecutable), args: z.array(z.string()) }).strict(),
   probes: beuserParametersSchema.unwrap().innerType().shape.probes, calibration: beuserCalibrationSchema,
 }).strict().refine(data => data.candidateManifest.version === data.binding.candidate.version)
   .refine(data => data.probes.every(probe => probe.readbackRef === data.probes[0]?.readbackRef))

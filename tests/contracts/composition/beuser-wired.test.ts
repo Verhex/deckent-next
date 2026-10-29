@@ -10,7 +10,7 @@ import { evaluatorEvidence } from '#capabilities/index.js';
 import { BEUSER_LIMITS_REGISTRY, BeuserRealmApplication, deliveryEvidenceKindSchema } from '#engine/index.js';
 import { expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
-import { walkConfiguredBeuser, readConfiguredBeuserReport } from '#composition/core/beuser/index.js';
+import { walkConfiguredBeuser, readConfiguredBeuserReport, admitConfiguredBeuserWalk, setupConfiguredBeuser } from '#composition/core/beuser/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { recordedExecutionSupervisor, validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
 import { formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
@@ -92,7 +92,7 @@ async function reportFixture(mode: 'pty' | 'argv' = 'pty') {
       size: { columns: 80, rows: 24, scrollback: 100 }, bounds: { quietMs: 10, inactivityMs: 100, maxInputBytes: 1024 }, completionTokens: 1024,
       rubric: { schemaVersion: 1, journeyId: 'journey', version: 1, digest: 'f'.repeat(64), parameters: {} },
       choices: { 'beuser-walker': { channelId: 'configured', modelId: 'walker' }, 'beuser-evaluator': { channelId: 'configured', modelId: 'evaluator' } },
-      contributorModels: [{ vendorId: 'source-maker' }], entry: { mode, nodeExecutable: process.execPath, args: ['--help'] },
+      contributorModels: [{ vendorId: 'source-maker' }], entry: { mode, nodeExecutable: adapters.BEUSER_REALM_RECIPE.nodeExecutable, args: ['--help'] },
       probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'readback', key: 'installation', expected: 'installed' }],
       calibration: { revision: 'r', cohort: 'cohort', trapHits: 0, trapTotal: 0, falseRed: 0, goodTotal: 0, minimumHitRate: 1, maximumFalseRedRate: 0, k: 1, retries: 0 } };
     const configPath = join(root, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -191,4 +191,30 @@ it.skipIf(process.platform !== 'linux')('carries real driver look/argv failures 
       expect(JSON.stringify({ report, terminal })).not.toContain('/private'); expect(JSON.stringify({ report, terminal })).not.toContain('hidden');
     } finally { await f.dispose(); }
   }
+});
+
+
+it.skipIf(process.platform !== 'linux')('setup and admission refuse a controller executable before any realm can start or configuration can be installed', async () => {
+  const f = await reportFixture();
+  try {
+    const configPath = join(f.root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+    const invalid = config.admission;
+    invalid.registry.profiles[0].parameters.entry.nodeExecutable = '/controller/runtime/bin/node';
+    const profilePath = join(f.root, 'host-runtime-profile.json');
+    await writeFile(profilePath, JSON.stringify(invalid));
+    const create = vi.spyOn(adapters.DockerBeuserRealmRuntime.prototype, 'create');
+    // Host attestation is the only witness fixture; no approval is bypassed: invalid input must be refused before a write/card exists.
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+    const before = await readFile(configPath, 'utf8');
+    await expect(setupConfiguredBeuser(f.root, { scopeId: 'scope', profile: profilePath, apply: true }, f.options))
+      .rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
+    expect(await readFile(configPath, 'utf8')).toBe(before);
+    config.admission = invalid;
+    await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+    await expect(admitConfiguredBeuserWalk(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options))
+      .rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
+    expect(create).not.toHaveBeenCalled();
+    expect(() => validateBeuserSupervisorProfile({ schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1,
+      parameters: invalid.registry.profiles[0].parameters })).toThrow('BEUSER_INPUT_INVALID');
+  } finally { await f.dispose(); }
 });

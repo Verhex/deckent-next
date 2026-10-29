@@ -23,7 +23,7 @@ node --input-type=module - "$candidate" "$profile" "$walker_channel" "$walker_mo
   "$evaluator_channel" "$evaluator_model" "$environment_digest" "$contributors" <<'JS'
 import { readFile, writeFile, realpath } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { measureInstalledPackage } from './dist/adapters/index.js';
+import { BEUSER_REALM_RECIPE, measureInstalledPackage } from './dist/adapters/index.js';
 import { beuserPersonaDigest, BEUSER_LIMITS_REGISTRY } from './dist/engine/index.js';
 import { beuserDigest } from './dist/capabilities/index.js';
 import { CONFIG_FIELDS, getConfigFieldDefault, sha256 } from './dist/platform/index.js';
@@ -65,7 +65,7 @@ const parameters = { schemaVersion: 2, binding, summary, limitsRevision: limits.
   choices: { 'beuser-walker': { channelId: walkerChannel, modelId: walkerModel },
     'beuser-evaluator': { channelId: evaluatorChannel, modelId: evaluatorModel } },
   contributorModels: await json(contributors),
-  entry: { mode: 'pty', nodeExecutable: process.execPath, args: [] },
+  entry: { mode: 'pty', nodeExecutable: BEUSER_REALM_RECIPE.nodeExecutable, args: [] },
   probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'c7-final-installation',
     key: 'installation', expected: 'installed' }], calibration };
 const admission = CONFIG_FIELDS.admission.schema.parse({ poolId: 'beuser-b1-example',
@@ -82,8 +82,8 @@ The screen size, timing, completion-token and one-slot pool values above are
 finite example choices, not measured capacity or product defaults. The installed
 limits remain authoritative. Admission replaces the pending identity fields with
 fresh scope/Run/Task/Attempt, realm, nonce and transcript identities.
-`process.execPath` must also exist in the isolated realm; select the C7 runtime
-accordingly. No host directory is mounted through that value.
+The executable comes from the installed realm recipe, independently of the controller
+runtime. Setup and admission refuse a different executable before any realm starts.
 
 On the controller's person terminal, preview the resulting document with
 `deckent beuser setup --profile "$profile" --scope "$scope" --json`, then use

@@ -91,7 +91,9 @@ export async function admitConfiguredBeuserWalk(root: string, input: { readonly 
   const selected = registry.kinds.flatMap(kind => {
     const profile = registry.profiles.find(p => p.id === kind.profile.id && p.version === kind.profile.version)!;
     if (profile.adapter.id !== 'beuser' || profile.adapter.version !== 1) return [];
-    const data = beuserJourneyProfileSchema.parse(profile.parameters);
+    const parsed = beuserJourneyProfileSchema.safeParse(profile.parameters);
+    if (!parsed.success) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+    const data = parsed.data;
     return data.summary.journeyId === input.journey ? [{ kind, profile, data }] : [];
   });
   if (!selected.length) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');

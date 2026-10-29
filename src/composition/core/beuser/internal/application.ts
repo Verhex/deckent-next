@@ -62,7 +62,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   const probe = async (): Promise<BeuserReadback> => {
     const handle = (await custody.load(context))?.handle; if ((await realm.observe(context)).state !== 'admitted' || !handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     // Values only. No ledger, key, backup, receipt bytes or arbitrary persona-authored command crosses this boundary.
-    const summary = await readBeuserInstallationSummary(context, handle, runtimeOptions, data.entry.nodeExecutable);
+    const summary = await readBeuserInstallationSummary(context, handle, runtimeOptions);
     const atMs = Math.floor(performance.now() - started), evidenceRef = data.probes[0]!.readbackRef;
     return collectBeuserReadback(context, async () => ({ schemaVersion: 1, binding: context.binding, summary, atMs, evidenceRef }));
   };

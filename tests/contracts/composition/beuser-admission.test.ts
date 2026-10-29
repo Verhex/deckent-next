@@ -49,7 +49,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
       candidateManifest: { sha256: sha256(manifest), fileCount: files.length, ...source, version: '1.0.0' }, size: { columns: 80, rows: 24, scrollback: 100 }, bounds: { quietMs: 10, inactivityMs: 100, maxInputBytes: 1024 }, completionTokens: 1024,
       rubric: { schemaVersion: 1, journeyId: 'journey', version: 1, digest: 'f'.repeat(64), parameters: {} },
       choices: { 'beuser-walker': { channelId: 'configured', modelId: 'walker' }, 'beuser-evaluator': { channelId: 'configured', modelId: 'evaluator' } },
-      contributorModels: [{ vendorId: 'source-maker' }], entry: { mode: 'pty', nodeExecutable: '/usr/bin/node', args: ['--help'] },
+      contributorModels: [{ vendorId: 'source-maker' }], entry: { mode: 'pty', nodeExecutable: adapters.BEUSER_REALM_RECIPE.nodeExecutable, args: ['--help'] },
       probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'readback', key: 'installation', expected: 'installed' }], calibration };
     const inline = { ...parameters, schemaVersion: 1, files: Array.from({ length: 4114 }, () => files[0]!) };
     const definitionInput = { id: 'persona', version: 1, adapter: { id: 'beuser', version: 1 }, parameters };

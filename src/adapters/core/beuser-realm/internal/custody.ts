@@ -162,7 +162,7 @@ export function createBeuserRemovalReadback(options: BeuserRealmOptions, artifac
 }
 
 /** Read through the target's own guarded, read-only identity adapter; return allowlisted values only. */
-export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, nodeExecutable: string): Promise<unknown> {
+export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions): Promise<unknown> {
   const script = `
 const target = '${BEUSER_REALM_RECIPE.packageTarget}';
 const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js');
@@ -174,5 +174,5 @@ const installation = read.status === 'available' ? 'installed'
 console.log(JSON.stringify({ installation, preservedData: 'unknown', card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'unknown' }));
 `;
 
-  return JSON.parse(await dockerRealmCommand(options)(['container', 'exec', handle.containerId, nodeExecutable, '--input-type=module', '--eval', script], context)) as unknown;
+  return JSON.parse(await dockerRealmCommand(options)(['container', 'exec', handle.containerId, BEUSER_REALM_RECIPE.nodeExecutable, '--input-type=module', '--eval', script], context)) as unknown;
 }

@@ -52,7 +52,7 @@ export class DockerBeuserRealmRuntime implements BeuserRealmRuntime {
       '--tmpfs', `${recipe.workTarget}:rw,nosuid,nodev,size=${options.filesystemBytes},uid=${options.uid},gid=${options.gid},mode=0700`,
       '--tmpfs', `/tmp:rw,nosuid,nodev,noexec,size=${options.filesystemBytes},uid=${options.uid},gid=${options.gid},mode=0700`,
       '--env', `HOME=${recipe.home}`, '--env', `XDG_RUNTIME_DIR=${recipe.runtime}`, '--env', `DECKENT_GLOBAL_HOME=${recipe.home}/.deckent`,
-      '--workdir', recipe.workTarget, '--entrypoint', 'node', options.image, '--eval', bootstrap];
+      '--workdir', recipe.workTarget, '--entrypoint', recipe.nodeExecutable, options.image, '--eval', bootstrap];
     const id = (await this.#command(args, context)).trim();
     const handle = Object.freeze({ ...partial, containerId: id }); checkHandle(context, handle);
     if ((await readFile(join(controlDirectory, 'container.id'), 'utf8')).trim() !== id) return refuseRealm();
