@@ -2910,6 +2910,8 @@
     },
     "src/engine/core/config": {
       "dependencies": [
+        "src/domain/core/provider-catalog",
+        "src/domain/core/model-invocation",
         "src/platform/core/config",
         "src/platform/core/config-fields",
         "src/platform/core/utils",

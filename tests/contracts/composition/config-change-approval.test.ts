@@ -4,8 +4,8 @@ import { cachePanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { planConfiguredProfileCache } from '#composition/core/model-connect/index.js';
 import { anthropicPublishedTariff } from '#adapters/core/provider-anthropic-messages/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
@@ -13,8 +13,9 @@ import { configuredApproval } from '#composition/core/approvals/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openLocalIntegrityAuthority, withMcpPrincipal } from '#adapters/index.js';
+import { ModelBindingApplication } from '#engine/index.js';
 import { approvalSubject, type ApprovalRecord } from '#domain/index.js';
-import { clearConfigCache, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
+import { resolveGlobalConfigPaths, clearConfigCache, getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 
 // T3 L2 CONFIG-APPROVAL (Jev f0214347 + 9181d2be) through the real configured path: the installed policy, the ledger's approval store, the
 // one decision path (`configuredApproval`, which the terminal window and /approvals use) and the atomic config writer with its sealed audit.
@@ -311,4 +312,31 @@ describe('REVIEW2561 R1: the AI floor over the real terminal boundary keys, on t
     const [card] = (await f.list()).filter(item => item.request.approvalId === pending.approval.approvalId);
     expect(card?.status).toBe('pending');
   });
+});
+
+
+it('an allowed catalog card cannot stale a profile added in another layer while the card waited', async () => {
+  const f = await setup(principals => [{ id: 'company-catalog-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals,
+    resource: { kind: 'config', ids: ['project:provider_catalog.providers.0.models.0.nativeId'] } }]);
+  const reference = { providerId: 'test-vendor', providerVersion: 1, modelId: 'test-model', modelVersion: 1 };
+  const catalog = { schemaVersion: 1, revision: 'before', providers: [{ id: reference.providerId, version: 1, models: [{ id: reference.modelId,
+    version: 1, nativeId: 'before-native', protocols: [{ family: 'test', version: 'v1', capabilities: [] }] }] }] };
+  await f.app.set({ ...f.command, commandId: 'seed-catalog', keyPath: 'provider_catalog', value: catalog });
+  const binding = await new ModelBindingApplication({ read: async () => catalog }).inspect(reference);
+  if (binding.status !== 'declared') throw Error('FIXTURE_BINDING');
+  const input = { ...f.command, commandId: 'approved-catalog', keyPath: 'provider_catalog.providers.0.models.0.nativeId', value: 'after-native' };
+  const pending = await f.app.submit('set', input);
+  if (pending.status !== 'approval-pending') throw Error('FIXTURE_APPROVAL');
+  await f.decide(pending.approval.approvalId, 'allow', 'allow-catalog');
+  // Concurrent fixture layer change: the approved project's digest is unchanged, but it now inherits a dependent profile.
+  const globalPath = resolveGlobalConfigPaths(f.options.env).platformPath;
+  await mkdir(dirname(globalPath), { recursive: true });
+  await writeFile(globalPath, JSON.stringify({ provider_invocation_profiles: { schemaVersion: 1, profiles: [{ schemaVersion: 1, id: 'dependent',
+    version: 1, scopeId: 'installation', reference, bindingDigest: binding.binding.digest, protocol: { family: 'test', version: 'v1' },
+    adapter: { id: 'test', version: 1, definition: {} }, allocation: { id: 'test', maxCalls: null, maxInFlight: 1 },
+    limits: { requestMaxBytes: 1024, responseMaxBytes: 1024, timeoutMs: 1000 } }] } }), { mode: 0o600 });
+  clearConfigCache();
+  const before = await bytesOf(f.path), audits = f.auditCount();
+  await expect(f.app.submit('set', { ...input, expect: pending.expect })).rejects.toMatchObject({ code: 'CONFIG_MODEL_PROFILE_REBIND_REQUIRED' });
+  expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
 });
