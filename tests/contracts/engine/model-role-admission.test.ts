@@ -39,7 +39,7 @@ describe('model role admission (M2)', () => {
     const view = await new ModelRoleAdmissionApplication(ports(undefined).value).inspect({ schemaVersion: 1, scopeId: 's' });
     expect(view).toMatchObject({ digest: DIGEST, revision: CORE_MODEL_ROLES.revision, pending: 1 });
     expect(view.models.map(row => row.modelId)).toEqual(['claude-sonnet-5-5', 'claude-next-1']);
-    expect(view.roles.map(row => row.id)).toEqual(['brain', 'worker', 'recovery-decision', 'memory-evaluator']);
+    expect(view.roles.map(row => row.id)).toEqual(['brain', 'worker', 'recovery-decision', 'memory-evaluator', 'beuser-walker', 'beuser-evaluator']);
   });
 
   it('refuses a worker-tier Brain, an unregistered role, a model outside the catalog and a stale card before any write', async () => {

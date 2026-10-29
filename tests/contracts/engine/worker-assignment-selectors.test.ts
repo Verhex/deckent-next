@@ -69,7 +69,7 @@ it('PROOF: a new model added only as data (catalog row + role row + activation) 
   expect(task.assignment).toEqual({ schemaVersion: 2, workClass: 'feature', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'standard', version: 2 },
     candidateIndex: 3, channelId: CHANNEL, modelId: id, catalogRevision: packaged.revision, modelRevision: 7, activationRevision: 5,
     effort: { level: null, source: 'cli-default' },
-    selector: { roleRevision: JSON.stringify(['model-roles-2026-10-23', 'acme-roles-1']), expanded: 1, position: 0, expansionDigest },
+    selector: { roleRevision: JSON.stringify(['model-roles-2026-10-29', 'acme-roles-1']), expanded: 1, position: 0, expansionDigest },
     skipped: [{ index: 0, channelId: CHANNEL, modelId: 'claude-opus-5-5', reason: 'WORKER_MODEL_NOT_ACTIVE' },
       { index: 1, channelId: 'codex-cli-subscription', modelId: 'gpt-6.1-sol', reason: 'WORKER_CHANNEL_NOT_ACTIVE' },
       { index: 2, channelId: 'cursor-cli-subscription', modelId: 'claude-opus-5-thinking-high', reason: 'WORKER_CHANNEL_NOT_ACTIVE' }] });
