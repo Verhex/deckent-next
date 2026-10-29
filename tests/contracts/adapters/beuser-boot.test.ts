@@ -105,8 +105,9 @@ it.skipIf(process.platform !== 'linux')('production boot starts the real PTY ent
   let screen = await f.surface.look(context);
   for (let n = 0; n < 8 && !screen.text.includes('[y/N]'); n++) screen = await f.surface.wait(context, 100);
   expect(screen.text).toContain('Approval erase fixture? [y/N]');
-  realmCommand.mockResolvedValueOnce('{"installation":"unknown"}');
-  await expect(readBeuserInstallationSummary(context, f.handle, f.options)).resolves.toEqual({ installation: 'unknown' });
+  realmCommand.mockResolvedValueOnce('"unknown"');
+  await expect(readBeuserInstallationSummary(context, f.handle, f.options)).resolves.toEqual({ installation: 'unknown', preservedData: 'unknown', card: 'unknown',
+    receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'unknown' });
   expect(realmCommand.mock.lastCall?.[0].slice(0, 8)).toEqual([
     'container', 'exec', '--user', `${f.options.uid}:${f.options.gid}`, f.handle.containerId, BEUSER_REALM_RECIPE.nodeExecutable, '--input-type=module', '--eval']);
   await f.surface.press(context, 'y');

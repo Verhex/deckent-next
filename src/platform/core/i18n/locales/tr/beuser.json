@@ -67,5 +67,14 @@
   "beuser.report.cleanup": "Realm temizliği {branch}: {state}; dosya sistemi kanıtı: {source}.",
   "beuser.report.filesystem.kernel-proven": "kernel-proven (doğrudan dosya sistemi yokluğu)",
   "beuser.report.filesystem.daemon-attested": "daemon-attested (daemon beyanı; bağımsız dosya sistemi kanıtı yok)",
-  "beuser.report.filesystem.unknown": "bilinmiyor"
+  "beuser.report.filesystem.unknown": "bilinmiyor",
+  "error.BEUSER_START_STATE_UNREACHABLE": "Bu dalın bir BeUser başlangıç durumu realm içinde hazırlanamıyor; persona başlatılmadı.",
+  "remedy.BEUSER_START_STATE_UNREACHABLE": "Dalı bilinmiyor olarak bırakın; rapor her bir durumu ve nedenini adıyla gösterir. Ona ulaşmak için kişi tanıklığı ya da realm yalıtımı atlanmaz.",
+  "beuser.report.unarranged": "{branch} dalının {state} başlangıç durumu hazırlanmadı: {reason}.",
+  "beuser.report.unarranged.witness-required": "kişinin tanıklığını ister",
+  "beuser.report.unarranged.realm-external": "yalıtılmış realm dışında (servis yöneticisi, Docker, ağ, model ya da başka işletim sistemi)",
+  "beuser.report.unarranged.driver-limit": "terminal sürücüsü onu aslına uygun gösteremez",
+  "beuser.report.unarranged.no-producer": "tanıksız bir üretici yok",
+  "beuser.report.unarranged.enterprise-only": "yalnız Enterprise",
+  "beuser.report.unarranged.persona": "persona yürüyüş sırasında kendisi oluşturur"
 }

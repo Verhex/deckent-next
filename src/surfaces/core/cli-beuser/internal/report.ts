@@ -36,5 +36,9 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
     rows.push(t('beuser.report.unknownBranch', { branch: safe(row.branch), reason: safe(row.reason) }, locale));
     if (reason) rows.push(safe(reason.message));
   }
+  const unarranged = { 'witness-required': t('beuser.report.unarranged.witness-required', {}, locale), 'realm-external': t('beuser.report.unarranged.realm-external', {}, locale),
+    'driver-limit': t('beuser.report.unarranged.driver-limit', {}, locale), 'no-producer': t('beuser.report.unarranged.no-producer', {}, locale),
+    'enterprise-only': t('beuser.report.unarranged.enterprise-only', {}, locale), persona: t('beuser.report.unarranged.persona', {}, locale) };
+  for (const row of report.unarranged ?? []) rows.push(t('beuser.report.unarranged', { branch: safe(row.branch), state: safe(row.state), reason: unarranged[row.reason] }, locale));
   return rows.join('\n');
 }

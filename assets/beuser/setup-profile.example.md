@@ -32,7 +32,7 @@ node --input-type=module - "$candidate" "$profile" "$walker_channel" "$walker_mo
 import { readFile, writeFile, realpath } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { BEUSER_REALM_RECIPE, measureInstalledPackage } from './dist/adapters/index.js';
-import { beuserPersonaDigest, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY } from './dist/engine/index.js';
+import { beuserPersonaDigest, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserArrangePlan } from './dist/engine/index.js';
 import { beuserDigest } from './dist/capabilities/index.js';
 import { CONFIG_FIELDS, getConfigFieldDefault, sha256 } from './dist/platform/index.js';
 const [candidate, output, walkerChannel, walkerModel, evaluatorChannel, evaluatorModel,
@@ -62,10 +62,10 @@ for (const journeyId of journeyList.split(',')) {
   if (journey.journeyId !== journeyId || !person || !probeSet) throw new Error('Installed references differ');
   if (!limits?.provisional) throw new Error('Review this example against the installed limits');
   const summary = { ...person, journeyId, goal: visible.goal[person.language] };
-  // Catalogued states contribute their steps once, in branch order; the rest stay named, never inferred.
-  const states = branch.initialStates.map(id => BEUSER_ARRANGE_REGISTRY.states.find(row => row.id === id));
-  const steps = [...new Map(states.flatMap(row => row?.steps ?? []).map(step => [`${step.id}@${step.version}`, step])).values()];
-  unarranged[journeyId] = branch.initialStates.filter((_, index) => !states[index]?.steps);
+  // The profile names the branch's catalogued states; the engine plans their steps. States the harness does not arrange are printed with
+  // their typed reason, never inferred; a branch with a typed-unknown state stays unknown and its persona does not start.
+  const startState = { schemaVersion: 2, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, states: branch.initialStates };
+  unarranged[journeyId] = beuserArrangePlan(startState).unarranged;
   const binding = { schemaVersion: 1,
     identity: { scopeId: 'pending-admission', runId: 'pending-admission', taskId: `${person.personaId}-${journeyId}`,
       attemptId: 'pending-admission', layoutRevision: 'pending-admission', generation: 1 },
@@ -76,7 +76,7 @@ for (const journeyId of journeyList.split(',')) {
     realmId: 'pending-admission', nonce: randomUUID(), transcriptId: 'pending-admission' };
   const parameters = { schemaVersion: 3, binding, summary, limitsRevision: limits.revision,
     candidateRoot, packageDigest: measured.measurementDigest, candidateManifest,
-    startState: { schemaVersion: 1, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, steps },
+    startState,
     size: { columns: 100, rows: 30, scrollback: 1000 },
     bounds: { quietMs: 100, inactivityMs: 1000, maxInputBytes: 4096 }, completionTokens: 4096,
     rubric: journey.rubric,

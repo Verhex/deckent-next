@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { immutableJsonObjectSchema, beuserBindingSchema, beuserWalkerSummarySchema, beuserSealedRubricSchema, beuserCandidateManifestSchema } from '#domain/index.js';
 import { beuserParametersSchema, beuserCalibrationSchema } from '#capabilities/index.js';
-import { supervisorProfileSchema, BeuserContractError, beuserStartStateSchema, type SupervisorProfile } from '#engine/index.js';
+import { supervisorProfileSchema, BeuserContractError, beuserStartStateSchema, beuserStartStateFits, type SupervisorProfile } from '#engine/index.js';
 import { BEUSER_REALM_RECIPE } from '#adapters/index.js';
 
 const positive = z.number().int().positive().safe();
@@ -18,7 +18,8 @@ export const beuserJourneyProfileSchema = z.object({ schemaVersion: z.union([z.l
   probes: beuserParametersSchema.unwrap().innerType().shape.probes, calibration: beuserCalibrationSchema,
 }).strict().refine(data => data.candidateManifest.version === data.binding.candidate.version)
   .refine(data => data.probes.every(probe => probe.readbackRef === data.probes[0]?.readbackRef))
-  .refine(data => data.entry.mode !== 'argv' || data.entry.args.length > 0).refine(data => (data.schemaVersion === 3) === (data.startState !== undefined));
+  .refine(data => data.entry.mode !== 'argv' || data.entry.args.length > 0).refine(data => (data.schemaVersion === 3) === (data.startState !== undefined))
+  .refine(data => beuserStartStateFits(data.startState, data.summary));
 export type BeuserJourneyProfile = z.infer<typeof beuserJourneyProfileSchema>;
 export const beuserSupervisorProfileSchema = supervisorProfileSchema.unwrap().extend({ adapterId: z.literal('beuser'),
   adapterVersion: z.literal(1), parameters: beuserJourneyProfileSchema }).strict().readonly();

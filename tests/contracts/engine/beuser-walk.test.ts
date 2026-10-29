@@ -3,10 +3,10 @@ import { expect, it, vi } from 'vitest';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProjection, evaluatePolicy, type AuditRecord } from '#domain/index.js';
 import { sha256, createHmacIntegrity, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
-import { BeuserContractError, BEUSER_ARRANGE_REGISTRY, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, BEUSER_ARRANGE_REGISTRY, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen, type BeuserArrangeStep } from '#engine/core/beuser-contract/index.js';
 import { createBeuserTranscript } from '#engine/core/beuser-evidence/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
-  correctBeuserModelOutput, type BeuserWalkPorts } from '#engine/core/beuser/index.js';
+  correctBeuserModelOutput, type BeuserWalkPorts, type BeuserArrangement } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
 import { sealApproval, verifyApproval } from '#engine/core/approval/index.js';
 import { AuditApplication } from '#engine/core/audit/index.js';
@@ -212,25 +212,44 @@ it('C2 created observation must reach C4 admission, then the gated catalogued st
   console.info('R1 observed', { state: result.state, cleanup: result.cleanup, admissionInspections: inspect.mock.calls.length });
   expect(inspect).toHaveBeenCalledOnce();
   {
-    const step = { ...BEUSER_ARRANGE_REGISTRY.steps[0]!, timeoutMs: limits.maxWaitMs - 1 };
-    const arrangement = (installation: string, exitCode: number) => ({ steps: [step], record: vi.fn(async () => {}),
-      port: { run: vi.fn(async () => ({ exitCode, stdoutBytes: 2, stdoutDigest: '0'.repeat(64) })), observe: vi.fn(async () => ({ installation })) } });
+    const step = { ...BEUSER_ARRANGE_REGISTRY.steps[0]!, timeoutMs: limits.maxWaitMs - 1 } as BeuserArrangeStep;
+    const arrangement = (installation: string, exitCode: number, steps = [step], unarranged: BeuserArrangement['unarranged'] = []) => ({ steps, unarranged, record: vi.fn(async () => {}),
+      port: { run: vi.fn(async () => ({ exitCode, stdoutBytes: 2, stdoutDigest: '0'.repeat(64) })),
+        observe: vi.fn(async (_ctx: unknown, readback: BeuserArrangeStep['readback']) => readback.kind === 'path' ? { state: 'file', mode: '0600', sha256: installation } : installation) } });
     const met = harness(), arranged = arrangement('installed', 0);
     met.ports.arrange = arranged;
     expect(await met.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
     expect(arranged.port.run).toHaveBeenCalledWith(expect.anything(), step);
+    expect(arranged.port.observe).toHaveBeenCalledWith(expect.anything(), step.readback);
     expect(vi.mocked(arranged.port.run).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(met.ports.surface.look).mock.invocationCallOrder[0]!);
-    expect(arranged.record).toHaveBeenCalledWith(expect.anything(), { id: 'installed', version: 1, exitCode: 0, stdoutBytes: 2, stdoutDigest: '0'.repeat(64),
-      readback: { key: 'installation', expected: 'installed', met: true } });
+    expect(arranged.record).toHaveBeenCalledWith(expect.anything(), { id: 'installed', version: 1, ran: { exitCode: 0, stdoutBytes: 2, stdoutDigest: '0'.repeat(64) },
+      readback: { kind: 'installation', expected: 'installed', met: true } });
     // A witness refusal (non-zero exit) or a readback mismatch is unknown: no persona, no RED, no refusal audit; cleanup still runs.
     for (const [installation, exitCode] of [['absent', 0], ['installed', 78]] as const) {
       const unmet = harness(), held = arrangement(installation, exitCode);
       unmet.ports.arrange = held;
       expect(await unmet.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_START_STATE_UNMET', verdict: null, cleanup: 'destroyed', transcriptDigest: null });
       expect(held.port.observe).toHaveBeenCalledTimes(exitCode === 0 ? 1 : 0);
-      expect(held.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ exitCode, readback: expect.objectContaining({ met: false }) }));
+      expect(held.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ ran: expect.objectContaining({ exitCode }), readback: expect.objectContaining({ met: false }) }));
       for (const port of [unmet.ports.surface.look, unmet.ports.surface.argv, unmet.ports.models.walker, unmet.ports.refusal]) expect(port).not.toHaveBeenCalled();
     }
+    // A check runs nothing and is gated by its readback alone; a path readback must match every field it names (here the digest).
+    const check = BEUSER_ARRANGE_REGISTRY.steps.find(row => row.id === 'project-data')!, digest = (check.readback.expected as { sha256: string }).sha256;
+    for (const [observed, outcome] of [[digest, 'completed'], ['f'.repeat(64), 'unknown']] as const) {
+      const checked = harness(), probe = arrangement(observed, 0, [{ kind: 'check', id: 'project-data-present', version: 1, readback: check.readback }]);
+      checked.ports.arrange = probe;
+      expect(await checked.app.walk(context(), summary)).toMatchObject({ state: outcome });
+      expect(probe.port.run).not.toHaveBeenCalled();
+      expect(probe.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ ran: null, readback: expect.objectContaining({ met: outcome === 'completed' }) }));
+    }
+    // A typed-unknown start state (witness, realm-external, driver, producer, Enterprise) keeps the branch unknown before any effect; the persona's own act does not.
+    const unreachable = harness(), blocked = arrangement('installed', 0, [step], [{ state: 'S2', reason: 'realm-external' }, { state: 'cancel', reason: 'persona' }]);
+    unreachable.ports.arrange = blocked;
+    expect(await unreachable.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_START_STATE_UNREACHABLE', verdict: null, cleanup: 'destroyed' });
+    for (const port of [blocked.port.run, blocked.port.observe, blocked.record, unreachable.ports.surface.look, unreachable.ports.models.walker, unreachable.ports.refusal]) expect(port).not.toHaveBeenCalled();
+    const walked = harness(), persona = arrangement('installed', 0, [step], [{ state: 'cancel', reason: 'persona' }]);
+    walked.ports.arrange = persona;
+    expect(await walked.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
     // A catalogued timeout beyond the admitted wait bound is refused before any arrangement effect.
     const unbounded = harness(), late = arrangement('installed', 0);
     unbounded.ports.arrange = { ...late, steps: [BEUSER_ARRANGE_REGISTRY.steps[0]!] };

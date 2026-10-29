@@ -9,7 +9,7 @@ import manifest from '../../../assets/beuser/calibration/manifest.json' with { t
 import good from '../../../assets/beuser/calibration/known-good.json' with { type: 'json' };
 import bad from '../../../assets/beuser/calibration/known-bad.json' with { type: 'json' };
 import { beuserBindingSchema, beuserSealedRubricSchema } from '#domain/core/beuser/index.js';
-import { pinBeuserWalkerSummary, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserArrangeRegistrySchema } from '#engine/core/beuser-contract/index.js';
+import { pinBeuserWalkerSummary, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserArrangeRegistrySchema, beuserArrangePlan } from '#engine/core/beuser-contract/index.js';
 import { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
 import { BEUSER_REALM_RECIPE } from '#adapters/core/beuser-realm/index.js';
 import arrange from '../../../assets/beuser/arrange.json' with { type: 'json' };
@@ -113,20 +113,42 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
       choices: { 'beuser-walker': { channelId: 'c', modelId: 'w' }, 'beuser-evaluator': { channelId: 'c', modelId: 'e' } }, contributorModels: [{ vendorId: 'maker' }],
       entry: { mode: 'pty', nodeExecutable: BEUSER_REALM_RECIPE.nodeExecutable, args: [] },
       probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'terminal-state', key: 'installation', expected: 'installed' }], calibration: manifest.calibration };
-    const startState = { schemaVersion: 1, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, steps: [{ id: 'installed', version: 1 }] };
+    const startState = { schemaVersion: 2, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, states: ['T1'] };
     const ok = (value: object) => beuserJourneyProfileSchema.safeParse(value).success;
     expect(ok(v2)).toBe(true);
     expect(ok({ ...v2, schemaVersion: 3, startState })).toBe(true);
-    expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, steps: [] } })).toBe(true);
+    expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, states: [] } })).toBe(true);
     expect(ok({ ...v2, startState })).toBe(false);
     expect(ok({ ...v2, schemaVersion: 3 })).toBe(false);
-    for (const steps of [[{ id: 'installed', version: 2 }], [{ id: 'git-fixture', version: 1 }], [{ id: 'installed', version: 1, args: ['--global'] }]])
-      expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, steps } })).toBe(false);
+    for (const states of [['missing'], ['T1', 'T1'], [{ id: 'installed', version: 1 }]])
+      expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, states } })).toBe(false);
     expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, catalogRevision: 'other' } })).toBe(false);
-    // Catalog invariants live in code: exact structured CLI tuples and resolvable state mappings only.
+    expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, steps: [{ id: 'installed', version: 1 }] } })).toBe(false);
+    // Profile-fact states hold only for the matching persona (person: tr, no accessibility needs); a mismatch is an invalid profile.
+    expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, states: ['fresh-home', 'tr'] } })).toBe(true);
+    for (const fact of ['en', 'screen-reader', 'narrow-terminal'])
+      expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, states: ['fresh-home', fact] } })).toBe(false);
+    // Every start state every installed journey names is catalogued: arranged steps, typed unknown, a profile fact or the persona's own act.
+    for (const journey of journeys) for (const id of [...journey.rubric.parameters.branches.flatMap(row => row.initialStates),
+      ...('initialStateCatalog' in journey.rubric.parameters ? journey.rubric.parameters.initialStateCatalog.map(row => row.id) : [])])
+      expect(BEUSER_ARRANGE_REGISTRY.states.some(row => row.id === id), id).toBe(true);
+    const plan = (states: string[]) => { const value = beuserArrangePlan({ schemaVersion: 2, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, states });
+      return { steps: value.steps.map(step => `${step.kind}:${step.id}`), unarranged: value.unarranged }; };
+    expect(plan(['T1', 'S1', 'S10a'])).toEqual({ steps: ['cli:installed', 'check:runtime-stopped', 'file:project-data'], unarranged: [] });
+    expect(plan(['T3', 'S10a']).steps).toEqual(['git:git-repository', 'cli:installed', 'file:team-notes', 'git:team-notes-tracked', 'git:team-notes-committed', 'file:project-data']);
+    expect(plan(['sealed-owner-like-fixture', 'S2', 'S4']).unarranged).toEqual([{ state: 'S2', reason: 'realm-external' }, { state: 'S4', reason: 'realm-external' }]);
+    expect(plan(['fresh-home', 'cancel'])).toEqual({ steps: ['check:installation-absent', 'check:global-home-absent'], unarranged: [{ state: 'cancel', reason: 'persona' }] });
+    expect(plan(['T1', 'S17']).unarranged).toEqual([{ state: 'S17', reason: 'driver-limit' }]);
+    // Catalog invariants live in code: exact structured CLI tuples, realm-confined fixture paths, a fixed Git subcommand set and resolvable states.
     expect(beuserArrangeRegistrySchema.safeParse(arrange).success).toBe(true);
-    const step = arrange.steps[0]!;
-    for (const steps of [[{ ...step, args: ['init', '--yes'] }], [{ ...step, args: ['init', '--json', 'a\nb'] }], [{ ...step, kind: 'shell' }], [step, step]])
+    const step = arrange.steps[0]!, file = arrange.steps.find(row => row.kind === 'file')!, git = arrange.steps.find(row => row.kind === 'git')!;
+    // Each refusal changes one catalogued step in place, so every state still resolves and only the changed field can refuse it.
+    const swap = (row: object, change: object) => arrange.steps.map(other => other === row ? { ...row, ...change } : other);
+    expect(beuserArrangeRegistrySchema.safeParse({ ...arrange, steps: swap(git, { args: ['commit', '--quiet', '-m', 'note'] }) }).success).toBe(true);
+    for (const steps of [swap(step, { args: ['init', '--yes'] }), swap(step, { args: ['init', '--json', 'a\nb'] }), swap(step, { kind: 'shell' }), [...arrange.steps, step],
+      swap(file, { path: '/etc/passwd' }), swap(file, { path: '../outside' }), swap(file, { path: 'a/../../b' }), swap(file, { mode: '0o644' }),
+      swap(git, { args: ['push', 'origin'] }), swap(git, { args: ['commit', '-c', 'core.hooksPath=/tmp'] }), swap(git, { args: ['add', '--git-dir=/tmp/x'] }),
+      swap(step, { cwd: '/tmp' }), swap(step, { readback: { kind: 'path', path: 'relative', expected: { state: 'file' } } })])
       expect(beuserArrangeRegistrySchema.safeParse({ ...arrange, steps }).success).toBe(false);
     expect(beuserArrangeRegistrySchema.safeParse({ ...arrange, states: [{ id: 'T1', steps: [{ id: 'missing', version: 1 }] }] }).success).toBe(false);
   }

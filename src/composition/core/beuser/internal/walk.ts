@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { beuserBindingSchema, executionProfileDefinitionSchema, executionRegistrySchema } from '#domain/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, beuserParametersSchema, evaluateBeuserEvidence } from '#capabilities/index.js';
 import { openSqliteAttemptStore, FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
-import { BEUSER_LIMITS_REGISTRY, BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, type BeuserReport, type SandboxRequest } from '#engine/index.js';
+import { BEUSER_LIMITS_REGISTRY, BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, beuserArrangePlan, type BeuserReport, type SandboxRequest } from '#engine/index.js';
 import { sha256, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
@@ -73,7 +73,8 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
     unknown.push({ branch: input.journey, reason: code });
   } finally { store.close(); }
   const report = createBeuserReport({ schemaVersion: 1, simulated: true, calibrationClaim: 'uncalibrated', cohort: selected[0]!.data.calibration.cohort,
-    calibration: selected[0]!.data.calibration, counts: { defined: selected.length, selected: selected.length, walked, concurrent: Math.max(0, ...intervals.map(row => intervals.filter(other => other.start <= row.start && other.end > row.start).length)) }, segments, findings, cleanup,
+    calibration: selected[0]!.data.calibration,
+    unarranged: selected.flatMap(({ profile, data }) => beuserArrangePlan(data.startState).unarranged.map(row => ({ branch: profile.id, ...row }))), counts: { defined: selected.length, selected: selected.length, walked, concurrent: Math.max(0, ...intervals.map(row => intervals.filter(other => other.start <= row.start && other.end > row.start).length)) }, segments, findings, cleanup,
     unwalked: selected.filter(row => !segments.some(s => s.segment === row.profile.id) && !unknown.some(u => u.branch === row.profile.id)).map(row => ({ branch: row.profile.id, reason: signal.aborted ? 'cancelled' : 'not-reserved' })),
     unknown, criticalCoverage: selected.map(({ profile }) => beuserPersonaCoverage(profile.id,
       segments.find(segment => segment.segment === profile.id)?.verdict)), reliability: { completed, attempted }, cost: null, currency: BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === selected[0]!.data.limitsRevision)!.currency,

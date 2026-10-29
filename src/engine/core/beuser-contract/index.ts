@@ -5,5 +5,5 @@ export type { BeuserFilesystemProof, BeuserContext, BeuserSurfaceCommand, Beuser
   BeuserArrangePort, RealmPort, SurfacePort, ModelPort, EvidencePort, EvaluationPort, BeuserTargetRefusal, BeuserObservationPort } from './internal/ports.js';
 export { beuserDiagnosticSchema, beuserStuckFindingSchema } from './internal/diagnostics.js';
 export type { BeuserDiagnostic } from './internal/diagnostics.js';
-export { beuserArrangeRegistrySchema, beuserStartStateSchema, beuserArrangeSteps, BEUSER_ARRANGE_REGISTRY } from './internal/arrange.js';
-export type { BeuserArrangeStep } from './internal/arrange.js';
+export { beuserArrangeRegistrySchema, beuserStartStateSchema, beuserArrangePlan, beuserStartStateFits, BEUSER_ARRANGE_REGISTRY, BEUSER_UNREACHABLE_REASONS } from './internal/arrange.js';
+export type { BeuserArrangeStep, BeuserUnarrangedState } from './internal/arrange.js';

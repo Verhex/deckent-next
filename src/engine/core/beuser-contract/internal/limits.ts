@@ -16,7 +16,7 @@ export const BEUSER_LIMITS_REGISTRY = registrySchema.parse(asset);
 type BeuserSurfaceFailure = 'BEUSER_SURFACE_UNAVAILABLE' | 'BEUSER_SURFACE_INVALID' | 'BEUSER_SURFACE_LIMIT'
   | 'BEUSER_SURFACE_BUSY' | 'BEUSER_CAPTURE_BLOCKED' | 'BEUSER_SURFACE_EOF';
 export class BeuserContractError extends Error {
-  constructor(readonly code: BeuserSurfaceFailure | 'BEUSER_INPUT_INVALID' | 'BEUSER_CANDIDATE_MISMATCH' | 'BEUSER_TARGET_NOT_SANDBOX' | 'BEUSER_LIMITS_UNAVAILABLE' | 'BEUSER_MODEL_UNAVAILABLE' | 'BEUSER_MODEL_OUTPUT_INVALID' | 'BEUSER_PROFILE_REQUIRED' | 'BEUSER_REPORT_NOT_FOUND' | 'BEUSER_START_STATE_UNMET') { super(code); this.name = 'BeuserContractError'; }
+  constructor(readonly code: BeuserSurfaceFailure | 'BEUSER_INPUT_INVALID' | 'BEUSER_CANDIDATE_MISMATCH' | 'BEUSER_TARGET_NOT_SANDBOX' | 'BEUSER_LIMITS_UNAVAILABLE' | 'BEUSER_MODEL_UNAVAILABLE' | 'BEUSER_MODEL_OUTPUT_INVALID' | 'BEUSER_PROFILE_REQUIRED' | 'BEUSER_REPORT_NOT_FOUND' | 'BEUSER_START_STATE_UNMET' | 'BEUSER_START_STATE_UNREACHABLE') { super(code); this.name = 'BeuserContractError'; }
 }
 export function pinBeuserLimits(input: unknown): BeuserLimits {
   const parsed = beuserLimitsSchema.safeParse(input);

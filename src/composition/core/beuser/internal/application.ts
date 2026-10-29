@@ -10,7 +10,7 @@ import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
 import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
-  readBeuserControllerAudit, verifyApproval, beuserArrangeSteps, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
+  readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
 import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -63,8 +63,9 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   const models = { ...model.models, async walker(...args: Parameters<typeof model.models.walker>) { const answer = await model.models.walker(...args);
     if (answer.state === 'invoked') walkerMakers.push(answer.receipt.maker); return answer; } };
   const started = performance.now();
-  const arrange: BeuserArrangement = { steps: beuserArrangeSteps(data.startState), port: createBeuserArrange({ realm, custody, options: runtimeOptions, language: data.summary.language }),
-    async record(ctx, receipt) { const row = recorder.append(ctx, { binding: ctx.binding, kind: 'arrange', atMs: Math.floor(performance.now() - started),
+  const arrange: BeuserArrangement = { ...beuserArrangePlan(data.startState), port: createBeuserArrange({ realm, custody, options: runtimeOptions, language: data.summary.language }),
+    // atMs 0: setup precedes the walk clock, which the surface starts at its first look; transcript times stay monotonic.
+    async record(ctx, receipt) { const row = recorder.append(ctx, { binding: ctx.binding, kind: 'arrange', atMs: 0,
       evidenceRef: `${context.binding.transcriptId}:arrange:${trace.length + 1}`, text: JSON.stringify(receipt) });
     trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef: await retainBeuserJson(artifacts, ctx, row) }); } };
   const probe = async (): Promise<BeuserReadback> => {
@@ -109,7 +110,8 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
         catch { controllerValidity = 'unknown'; }
         return controllerValidity;
       },
-      async record(screen: { readonly sequence: number }) { const row = recorder.inspect(context).find(item => item.entry.sequence === screen.sequence);
+      async record(screen: { readonly sequence: number }) { // By the surface's own reference: arrange rows shift the recorder sequence.
+        const row = recorder.inspect(context).find(item => item.entry.evidenceRef === `${context.binding.transcriptId}:${screen.sequence}`);
         if (!row) throw new BeuserContractError('BEUSER_INPUT_INVALID'); await evidencePort.append(context, row.entry); },
       async stopped(screen: import('#engine/index.js').BeuserScreen, action: import('#engine/index.js').BeuserSurfaceCommand['action']) {
         const row = recorder.append(context, { binding: context.binding, kind: 'friction', evidenceRef: `${context.binding.transcriptId}:loop`,
@@ -130,7 +132,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
       finding: result.reason === 'loop' && lastScreen ? { schemaVersion: 1, binding: context.binding, branch: context.binding.identity.taskId,
         persona: data.summary.personaId, code: 'persona-stuck', reason: 'loop', outcome: 'RED', controllerValidity,
         screen: lastScreen.text, screenRef: `${context.binding.transcriptId}:${lastScreen.sequence}`, screenDigest: lastScreen.digest,
-        evidenceRefs: trace.map(row => row.artifactRef) } : null });
+        evidenceRefs: trace.filter(row => row.kind !== 'arrange').map(row => row.artifactRef) } : null }); // Arrange rows are setup, never RED evidence.
     return { result, evidence, diagnostic };
   } };
 }

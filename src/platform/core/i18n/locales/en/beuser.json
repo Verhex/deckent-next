@@ -67,5 +67,14 @@
   "beuser.report.cleanup": "Realm cleanup {branch}: {state}; filesystem proof: {source}.",
   "beuser.report.filesystem.kernel-proven": "kernel-proven (direct filesystem absence)",
   "beuser.report.filesystem.daemon-attested": "daemon-attested (daemon statement; no independent filesystem proof)",
-  "beuser.report.filesystem.unknown": "unknown"
+  "beuser.report.filesystem.unknown": "unknown",
+  "error.BEUSER_START_STATE_UNREACHABLE": "A BeUser start state of this branch cannot be arranged in the realm, so the persona did not start.",
+  "remedy.BEUSER_START_STATE_UNREACHABLE": "Keep the branch unknown; the report names each such state and why. Nothing bypasses a person's witness or the realm's isolation to reach it.",
+  "beuser.report.unarranged": "Start state {state} of {branch} not arranged: {reason}.",
+  "beuser.report.unarranged.witness-required": "needs a person's witness",
+  "beuser.report.unarranged.realm-external": "outside the isolated realm (service manager, Docker, network, model or another OS)",
+  "beuser.report.unarranged.driver-limit": "the terminal driver cannot present it faithfully",
+  "beuser.report.unarranged.no-producer": "no witness-free producer exists",
+  "beuser.report.unarranged.enterprise-only": "Enterprise only",
+  "beuser.report.unarranged.persona": "the persona establishes it during the walk"
 }
