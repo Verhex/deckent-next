@@ -364,7 +364,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
-  v29 and the current ledger (v70; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
+  v29 and the current ledger (v73; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
   backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
   position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
@@ -632,8 +632,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added.
   Alpha.56 supplies signed Hub packages; public network use remains bounded below.
 - **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
-  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
-  owner's detail).
+  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (the owner gave their
+  direction on 2026-10-24; design and ordering are pending, with no code yet).
 
 ## Hub packages and uninstall
 
