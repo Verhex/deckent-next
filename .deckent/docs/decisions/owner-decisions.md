@@ -998,7 +998,7 @@ Owner'ın B1 planına son eki: O-1 mutlak yasağı korunur; sealed BeUser ledger
 
 Kaynak: dış `proof/ANALIZ-2026-10-29/RAPOR.md` (temiz bağlam kanun denetimi 2. tur PASS) ve lead 6ea3ba88'in owner soruları; Jev 76c8e942, 392734ac.
 
-- **Birleştirme:** alpha.56.1 (PR #119) ve alpha.57 (PR #120 + #121), hosted CI yalnız süre sınırlarında kırmızıyken owner sözüyle
+- **Birleştirme:** alpha.56.1 (PR #119) ve alpha.57 (PR #120 + #121), hosted CI süre sınırlarında kırmızıyken (alpha.57'de bir denemede ayrıca RESTART-HUNT yarışı) owner sözüyle
   (“Şimdi birleştir ve geç”) birleşti; her biri tek sürümlük istisnadır, kural değişmez.
 - **CI:** 16 dilim kalır; süre ağırlıkları tazelenir, kayma bekçisi ve sürüm prosedüründe ağırlık tazeleme adımı eklenir, model-activation
   testi bölünür; tazelemeden sonra ölçülen pay %20'nin altındaysa 20 dilim. Zaman aşımları yükseltilmez.

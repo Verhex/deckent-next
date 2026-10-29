@@ -18,7 +18,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 - **`deckent init` içinde evet/hayır harfleri her yerde kabul edilmez.** İlk kart evet cevabının yanında `y` tuşunu gösterir ve `y` alır; ardından gelen rehberli kurulum penceresi harf göstermez ve `y`'yi sessizce yok sayar. *Etki:* orada `y`'ye basan kişi (ya da BeUser personası) hiçbir şey olmadığını görür. *Yol:* vurgulu cevabı seçmek için Enter'a basın.
 - **BeUser yolculuğu her zaman boş realm'de başlar.** Yolculuk verisi başlangıç durumlarını adlandırır ama onları hazırlayan kod yoktur; kurulu Deckent gerektiren yolculuklar (kaldırma, BeUser'ın kendisi) "Kuruluma başla?" ekranında durur. *Etki:* bu yolculuklar sınadıkları dala ulaşmadan kırmızı raporlanır. *Yol:* henüz yok; böyle bir kırmızıyı o dal hakkında ürün hükmü değil "başlangıç durumu eksik" diye okuyun.
-- **BeUser yürüyüşleri host'un Docker'ını ister.** Yürüyüş realm konteynerini user namespace ile başlatır; bunları sağlamayan bir sandbox (ör. Codex çalışma alanı sandbox'ı) reddedilir, bu beklenen davranıştır. *Yol:* profili herhangi bir yerde hazırlayın, `deckent beuser walk` komutunu Docker'lı bir host'ta çalıştırın.
+- **BeUser yürüyüşleri host'un Docker'ını ister.** Yürüyüş realm konteynerini host Docker daemon'ı üzerinden başlatır (root olmayan uid, ağ yok, salt okunur kök, kendi mount/pid/ipc/uts/cgroup namespace'leri); böyle bir konteyner başlatamayan ortam (ör. Codex çalışma alanı sandbox'ı) yürüyüş yapamaz. *Yol:* profili herhangi bir yerde hazırlayın, `deckent beuser walk` komutunu Docker'lı bir host'ta çalıştırın.
 
 ## Platformlar: denenenler ve denenmeyenler
 
