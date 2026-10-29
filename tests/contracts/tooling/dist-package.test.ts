@@ -352,6 +352,6 @@ describe('locked upstream license texts', () => {
     const root = fileURLToPath(new URL('../../..', import.meta.url));
     const locked = lockedLicenseTexts(root);
     expect(locked.problems).toEqual([]);
-    expect([...locked.texts.keys()].sort()).toEqual(['content-type@1.0.5', 'yoga-layout@3.2.1']);
+    expect([...locked.texts.keys()].sort()).toEqual(['@xterm/headless@6.0.0', 'content-type@1.0.5', 'yoga-layout@3.2.1']);
   });
 });
