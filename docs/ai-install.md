@@ -4,7 +4,7 @@
 
 Use this guide when a person asks you to install Deckent. Ask for their target folder and the verified package artifact.
 Deckent runs on the person's infrastructure; installation does not authorize their business operations.
-This guide was written for alpha.56 and has not yet been re-checked against alpha.57 (uninstall v2). It is not a claim that an npm package or the website has been released.
+This guide was re-checked against the CLI help and source of the alpha.58 release candidate (`f6b119d4f`), which is not released yet. It is not a claim that an npm package or the website has been released.
 For the last released version's source-install path, use the README.
 
 ## Prepare and install
@@ -49,6 +49,9 @@ Ask the person to open `deckent` in that folder and complete the setup screens. 
   witness a person's decision. Never simulate a terminal, alter policy files or swap commands to bypass a refusal.
 - Decide any paid API budget. First-install budget is zero USD; no-spend paths are offered first. The API budget screen
   offers a 10 USD preset that the person can accept or change; do not accept it for them.
+- Apply an installation profile (`init apply --profile`, `init resume`) whose rules reach wider than the first-run template
+  themselves: it needs the person at their terminal (`AUTHORITY_WITNESS_REQUIRED`). The template-bounded `init --yes` above
+  stays headless.
 - Confirm uninstall, its tier, `--force`, `--disable-unit` and the backup passphrase themselves. Knowing the installation name
   grants no authority, and `--yes` does not replace the person at their terminal.
 
@@ -89,7 +92,8 @@ cause and next step: running work (`--force` cancels it with the person's own au
 a service manager that restarts the service (`--disable-unit` separately approves disabling a user unit only when the manager
 proves the exact fragment and link set and exclusive ledger custody fences startup; its unit file stays), queued deliveries
 (`--all --force` withdraws through their queue owner after that owner authorizes each delivery before the card), policy,
-retention or legal hold, or a moved or unsafe authority file. When Git tracking cannot be
+retention or legal hold, or a moved or unsafe authority file (an unsafe `policy.json` or `bindings.json` is
+`UNINSTALL_POLICY_UNREADABLE`: data kept, the file never repaired; never fix it for the person). When Git tracking cannot be
 read, every project file is treated as possibly tracked and kept.
 `--yes` skips only the final card; the plan is still printed. Worker images stay; use only the exact command on the card.
 macOS/Windows service removal is manual. A partial deletion resumes only after the remaining bytes and authority are verified again.

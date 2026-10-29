@@ -536,7 +536,9 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 Tarih sözü verilmez; sıra verilir. Alpha.57 çekirdek katmanları, kurtarma kartlarını ve imzalı Hub paket yönetimini;
 rehberli ilk kullanımı, ChatGPT ile sohbet girişini, güvenli kaldırmayı ve kabulü henüz açık ilk BeUser yolculuk
-yürüyüşlerini içerir. Korunan katman anahtarları kapalı başlar;
+yürüyüşlerini içerir. Alpha.58 adayı her kart için tek cevap tuşu kuralı (evet/hayır sorularında (y)/(n), tek seçimde
+gösterilen numara), BeUser yürüyüşleri için hazırlanmış başlangıç durumları, ilk kurulum şablonundan geniş kurulum
+profillerine kişi tanığı ve systemd'nin çalıştırdığı servisi durdurmaya MCP/SDK retleri ekler. Korunan katman anahtarları kapalı başlar;
 gerçek kullanım kanıtları ve ChatGPT planındaki Codex işçisinin etkinleştirilmesi beta öncesi kapılardır. Beta bu katmanları
 gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi yanında başlar.
 

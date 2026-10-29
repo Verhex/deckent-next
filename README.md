@@ -540,7 +540,9 @@ OpenRouter settings.
 
 Dates are not promised; the order is. Alpha.57 includes the core layers, recovery cards and signed Hub package
 management, plus guided first use, ChatGPT chat sign-in, safe uninstall and the first BeUser journey walks, whose
-acceptance is still open. The protected layer switches still start off;
+acceptance is still open. The alpha.58 candidate adds one answer-key rule for every card ((y)/(n) on yes/no questions, the
+shown number on single choices), prepared start states for BeUser walks, a person's witness for install profiles wider than
+the first-run template, and MCP/SDK refusals to stop a service systemd runs. The protected layer switches still start off;
 their real-use proof and the ChatGPT-plan Codex worker activation remain gates before the beta. The beta then hardens
 these layers through real use, and Desktop app development starts alongside it.
 

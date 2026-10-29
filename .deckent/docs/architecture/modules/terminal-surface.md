@@ -163,7 +163,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the shortcut alike; a CLI card with a role must offer exactly one yes and one no (`cliCardGate`, `CLI_USAGE`). The guided `deckent init`
   window, CLI cards (`askCliCard`), `DecisionCard` and the SIWC card all draw through it; a "Not now" beside a real No and true multi-choice
   questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` (Enter cancels) and the onboarding question view are
-  separate and unchanged. In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
+  separate and unchanged. Each step of the guided setup window (`setup-window.tsx`) and of the SIWC card mounts its own `Window` (keyed
+  per step), so every step re-arms and a digit plus Enter typed for one step never answers the next (alpha.58). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
   mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.
   Standalone windows retain their modal default. TERMINAL-SABIT-DUZEN (owner 2026-10-18; the Claude Code fullscreen renderer's model,
   https://code.claude.com/docs/en/fullscreen): on a TTY `runTerminalWorkline` renders on Ink's alternate screen with incremental line

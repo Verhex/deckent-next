@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red, so no journey is accepted yet.
+B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19 on the alpha.58 candidate waits for the owner's GPU window; alpha.58's BeUser scope is installation and first settings.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|

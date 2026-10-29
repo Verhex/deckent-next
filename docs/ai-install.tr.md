@@ -4,7 +4,7 @@
 
 Bir kişi Deckent kurmanızı istediğinde bu rehberi kullanın. Hedef klasörünü ve doğrulanmış paket dosyasını öğrenin.
 Deckent kişinin altyapısında çalışır; kurulum kişinin iş operasyonlarını yürütme izni vermez.
-Bu rehber alpha.56 için yazıldı; alpha.57'ye (kaldırma v2) göre henüz yeniden kontrol edilmedi. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
+Bu rehber henüz yayımlanmamış alpha.58 sürüm adayının (`f6b119d4f`) CLI yardımı ve kaynağıyla yeniden kontrol edildi. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
 Son yayımlanan sürümün kaynaktan kurulum yolu README'dedir.
 
 ## Hazırlık ve kurulum
@@ -49,6 +49,8 @@ Kişinin bu klasörde `deckent` açıp başlangıç ekranlarını tamamlamasın�
   etmez. Terminal taklit etmeyin, politika dosyası değiştirmeyin ve reddi aşmak için komut değiştirmeyin.
 - Ücretli API bütçesine karar vermek. İlk kurulum bütçesi sıfır USD'dir; önce harcamasız yollar sunulur. API bütçe ekranı
   kişinin kabul edebileceği ya da değiştirebileceği 10 USD seçeneği sunar; kişi adına kabul etmeyin.
+- İlk kurulum şablonundan geniş kurallı bir kurulum profilini (`init apply --profile`, `init resume`) kendisi uygulamak: bu
+  kişiyi terminalinde ister (`AUTHORITY_WITNESS_REQUIRED`). Yukarıdaki şablon içi `init --yes` terminalsiz kalır.
 - Kaldırmayı, kademesini, `--force`, `--disable-unit` ve yedek parolasını kendisi onaylamak. Kurulum adını bilmek yetki
   vermez; `--yes` terminalindeki kişinin yerini almaz.
 
@@ -89,7 +91,8 @@ Bütün denetimler tek onaydan önce yapılır; silinecek bir şey yoksa soru so
 servis yöneticisi (`--disable-unit` kullanıcı birimini kapatmaya ayrı rızadır; manager dosya ve bağlantı kümesini kanıtlar,
 ledger kilidi yeni başlangıcı kapatır; birim dosyası kalır), kuyruktaki teslimler (`--all --force` her teslimin yetkisini karttan
 önce kendi kuyruğunun sahibinde denetler, sonra aynı sahip üzerinden geri çeker), politika,
-saklama ya da yasal saklama veya taşınmış ya da güvensiz yetki dosyası. Git izleme bilgisi
+saklama ya da yasal saklama veya taşınmış ya da güvensiz yetki dosyası (güvensiz `policy.json` ya da `bindings.json`
+`UNINSTALL_POLICY_UNREADABLE` olur: veriler kalır, dosya onarılmaz; kişi adına düzeltmeyin). Git izleme bilgisi
 okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. `--yes` yalnız son kartı atlar; plan yine yazdırılır. İşçi imajları kalır; yalnız kartın verdiği kesin komutu
 kullanın. macOS/Windows servis kaldırması elledir. Yarım silme yalnız kalan baytlar ve yetki yeniden doğrulanınca sürer.
 

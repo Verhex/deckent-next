@@ -57,7 +57,8 @@ one section; other sections link to it.
   host-tool bridges it detects. Docker coding workers do not read it; they get the worker file described in
   [Worker instructions and discovery](#worker-instructions-and-discovery).
 - `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init preview --profile <file>`
-  previews an installation profile file (advanced).
+  previews an installation profile file (advanced). Applying one (`init apply --profile`, `init resume`) whose rules reach wider
+  than the first-run template needs you at a real terminal (`AUTHORITY_WITNESS_REQUIRED`, alpha.58); a profile inside it stays headless.
 
 ## Provider connection details
 
@@ -285,6 +286,9 @@ Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and w
   needs `--reason`). `deckent runtime describe` shows the running one. Restart and shutdown both need the service's identity
   (`deckent config explain service.identity`) and your `shutdown` rule on it, which the first-run policy gives the installing
   person only; by default the local MCP actor cannot stop the service (a policy that grants it the `service` MCP group can).
+- **A service systemd runs (Linux).** Restart, shutdown, the MCP tool `shutdown_runtime_service` and the SDK client refuse it
+  with `RUNTIME_SERVICE_EXTERNALLY_MANAGED` and name `systemctl [--user] restart|stop <unit>`; only `runtime shutdown --force`
+  at your terminal overrides the stop (MCP and SDK have no override, alpha.58).
 - **Older installations.** A first-run policy older than template v12 has neither the service identity nor the `shutdown` rule,
   so `runtime restart` and `runtime shutdown` are refused. Upgrade it (see [First-run setup](#first-run-setup)); if the apply
   sets `service.identity`, stop a service that is already running once by hand (Ctrl+C on `runtime serve`) before
@@ -382,6 +386,7 @@ higher than your Deckent budget; Deckent cannot see either setting.
 - A call that never received its final usage stays reserved until you resolve it with `deckent models reconcile-spending`.
 - If a charge exceeds what was reserved, the scope stops new paid calls until `revise-budget … --unfreeze`.
 - `deckent models spending` without `--input` shows the scope's API budget (limit, used, held, left).
+- Confirming the amount the budget already has (and no freeze to lift) records nothing and says "nothing changed".
 
 ## Terminal window and keys
 
