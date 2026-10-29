@@ -47,7 +47,7 @@ describe('models.connect surface parity', () => {
     }
   });
 
-  it('Astra R3: a generated command id that waits for approval prints the exact resume command; running it reuses the same id', async () => {
+  it('Astra R3 + F4: a generated command id that waits for approval prints the exact resume command (argv tokens in every language); running it reuses the same id', async () => {
     const seen: ModelConnectCommand[] = [], out: string[] = [];
     const pending = { ...result, status: 'approval-pending', approval: { approvalId: 'ap-1', keyPath: 'provider_invocation_profiles', layer: 'project' } } as unknown as ModelConnectResult;
     const context = { root: '/project', env: {}, stdout: { write: (text: string) => { out.push(text); return true; } } as never, connectModel: async (_root: string, input: ModelConnectCommand) => { seen.push(input); return pending; } };
@@ -56,9 +56,7 @@ describe('models.connect surface parity', () => {
     expect(printed).toContain(`--command-id ${seen[0]!.commandId}`); expect(out.join('')).toContain('ap-1');
     await modelsCommand(printed!.split(' ').slice(1), context);
     expect(seen).toHaveLength(2); expect(seen[1]).toEqual(seen[0]);
-  });
-
-  it('F4: a Turkish environment still prints a runnable resume command (argv tokens, never the in-sentence "… komutu" phrase)', async () => {
+    // F4: a Turkish environment still prints a runnable resume command (argv tokens, never the in-sentence "… komutu" phrase).
     vi.stubEnv('DECKENT_LANGUAGE', 'tr');
     try {
       const seen: ModelConnectCommand[] = [], out: string[] = [];
