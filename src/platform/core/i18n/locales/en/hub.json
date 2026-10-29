@@ -35,7 +35,7 @@
   "error.HUB_STORE_UNAVAILABLE": "Hub storage is unavailable.",
   "error.HUB_OUTCOME_UNKNOWN": "The Hub commit result is unknown. Reconcile using the same command id.",
   "error.HUB_FILE_UNSUPPORTED": "Secure Hub file import is unavailable on this platform.",
-  "error.HUB_SKILL_FILES_UNAVAILABLE": "Supporting-file delivery is unavailable on this worker sandbox. A sandbox that enforces read-only, noexec file mounts is required before admitting another Run.",
+  "error.HUB_SKILL_FILES_UNAVAILABLE": "Deckent did not start this worker: a skill selected for it has supporting files, or its files could not be verified. By decision, this Deckent version does not run skills with supporting files; skills that contain only SKILL.md run. Next: use a SKILL.md-only skill or remove the supporting files, then start a new Run.",
   "error.HUB_TLS_REQUIRED": "TLS certificate and key are required before binding a Hub outside loopback.",
   "error.HUB_NETWORK_INVALID": "The Hub network configuration or request is invalid.",
   "error.HUB_NETWORK_FAILED": "The Hub network request failed. Inspect its effect evidence before retrying.",

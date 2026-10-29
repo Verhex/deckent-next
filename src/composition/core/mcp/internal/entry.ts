@@ -11,7 +11,7 @@ import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-req
 import { resolveLocale, isMainModule, DeckentError, formatHumanError, loadConfigLanguage, resolveProjectRoot, t, type Locale } from '#platform/index.js';
 import { withMcpPrincipal, createBoundedMcpTransport, gitTracksPaths } from '#adapters/index.js';
 import { loadMcpSurface } from '#surfaces/index.js';
-import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { createGuardedRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { listConfiguredSecretNames } from '#composition/core/secrets/index.js';
@@ -32,7 +32,7 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
 /** Stdio verifies the local OS user but delegates no terminal-owner authority to the client. */ export async function main(root = process.cwd()) {
   await loadConfiguredInstallationIdentity(root); const config = await loadComposedConfig(root, { heal: false });
   const locale = resolveLocale(undefined, process.env, config.language);
-  const runtime = createConfiguredRuntimeClient(root), { createMcpServer } = await loadMcpSurface();
+  const runtime = createGuardedRuntimeClient(root), { createMcpServer } = await loadMcpSurface();
   /* Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog. */ const operationCatalog = await describeConfiguredOperationTools(root);
   return serveStdio(() => createMcpServer(mcpApplications({ ...runtime, operationCatalog, inspectDeclaredModels: () => inspectDeclaredModels(root),
     planRun: input => planRuntimeRun(root, input),

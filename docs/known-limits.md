@@ -377,7 +377,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
-  v29 and the current ledger (v70; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
+  v29 and the current ledger (v73; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
   backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
   position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
@@ -551,7 +551,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
   affected.
 - **Restart fingerprint.** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); changing them never reports a stale service. A member is added only after proving no start-time capture.
-- **`runtime restart`, the terminal's `/service-restart` and `runtime shutdown` (unless `--force`) refuse a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>` (a shutdown names `systemctl [--user] stop <unit>`), only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). A user unit is asked through the caller's `XDG_RUNTIME_DIR`, or `/run/user/<uid>` when a launcher cleared the environment (alpha.56.1). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
+- **`runtime restart`, the terminal's `/service-restart`, `runtime shutdown` (unless `--force`), the MCP tool `shutdown_runtime_service` and the SDK client's `shutdownService` refuse a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>` (a shutdown names `systemctl [--user] stop <unit>`), only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). A user unit is asked through the caller's `XDG_RUNTIME_DIR`, or `/run/user/<uid>` when a launcher cleared the environment (alpha.56.1). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. MCP and SDK callers have no `--force` override, and on those surfaces an unreadable service descriptor sends nothing. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
 - **The local runtime socket's peer liveness witness** observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call: a handled signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported `cancelled`; its result text carries the applied write set (the owner decision on a completeness flag or a new status is open).
 - **MCP and terminal processes started before a switch to a new release keep running the previous build.** A switch replaces the
   installed build, but an MCP server or a `deckent` terminal that a client started earlier keeps the code it loaded until that client
@@ -645,8 +645,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added.
   Alpha.56 supplies signed Hub packages; public network use remains bounded below.
 - **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
-  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
-  owner's detail).
+  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (the owner gave their
+  direction on 2026-10-24; design and ordering are pending, with no code yet).
 
 ## Hub packages and uninstall
 

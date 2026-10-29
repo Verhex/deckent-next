@@ -377,7 +377,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   süre sınırı önce geliyorsa ve sessiz işçilerin daha erken durdurulmasını istiyorsanız bu değeri düşürün ya da profilin süre
   sınırını artırın.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
-  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve güncel ledger (v70; kuyruk
+  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve güncel ledger (v73; kuyruk
   ledger v57–v59 ile geldi) yeniden build edilmiş binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek
   terminal/socket/crash ve N1 yük kabulü ayrı kapılardır; ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar;
   görünüm son bilinen durumdur. Teslim penceresi şu an açıkça yenileme gerektirir.
@@ -552,7 +552,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   devam etmez:** yeniden gönderilince park edilir (`APPROVAL_CONFLICT`). *Yol:* yeni bir /do başlatın; görev onayı bu kez görev
   çalışmadan hemen önce bir kez sorulur. Politikasında `task` kuralı olmayan kurulumlar etkilenmez.
 - **Yeniden başlatma parmak izi.** `restart-exempt.json`, her istekte yeniden okunan yeniden başlatma bölümü üyelerini listeler (`admission.registry`); bunları değiştirmek hizmeti asla eski göstermez. Üye ancak başlangıçta yakalanmadığı kanıtlandıktan sonra eklenir.
-- **`runtime restart`, terminalin `/service-restart` komutu ve `runtime shutdown` (`--force` olmadan), systemd'nin çalıştırdığı hizmeti yalnız systemd bunu doğrularsa reddeder** (Linux): hizmet sürecinin control group'u aday bir `.service` unit'i gösterir; yeniden başlatma, yalnız systemd bu süreci unit'in MainPID'i olarak bildirirse reddedilir ve `systemctl [--user] restart <unit>` komutu söylenir (durdurmada `systemctl [--user] stop <unit>`) (`systemctl show -p MainPID`, 2 sn sınır; hedef servis sürecinin ortamı hiç okunmaz). Kullanıcı unit'i çağıranın `XDG_RUNTIME_DIR` değeriyle, başlatıcı ortamı temizlemişse `/run/user/<uid>` ile sorulur (alpha.56.1). Erişilebilir bir systemd bus'ı yoksa ya da yanıt gelmezse denetim kapalıdır ve yeniden başlatma yapılır; ExecStart sarmalayıcısı runtime'ı `exec` etmeyen bir unit algılanmaz. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz. *Yol:* systemd'nin çalıştırdığı hizmeti `systemctl [--user] restart <unit>` ile yeniden başlatın.
+- **`runtime restart`, terminalin `/service-restart` komutu, `runtime shutdown` (`--force` olmadan), MCP aracı `shutdown_runtime_service` ve SDK istemcisinin `shutdownService` çağrısı, systemd'nin çalıştırdığı hizmeti yalnız systemd bunu doğrularsa reddeder** (Linux): hizmet sürecinin control group'u aday bir `.service` unit'i gösterir; yeniden başlatma, yalnız systemd bu süreci unit'in MainPID'i olarak bildirirse reddedilir ve `systemctl [--user] restart <unit>` komutu söylenir (durdurmada `systemctl [--user] stop <unit>`) (`systemctl show -p MainPID`, 2 sn sınır; hedef servis sürecinin ortamı hiç okunmaz). Kullanıcı unit'i çağıranın `XDG_RUNTIME_DIR` değeriyle, başlatıcı ortamı temizlemişse `/run/user/<uid>` ile sorulur (alpha.56.1). Erişilebilir bir systemd bus'ı yoksa ya da yanıt gelmezse denetim kapalıdır ve yeniden başlatma yapılır; ExecStart sarmalayıcısı runtime'ı `exec` etmeyen bir unit algılanmaz. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz. MCP ve SDK çağıranlarında `--force` geçersiz kılması yoktur; bu yüzeylerde okunamayan servis tanımı hiçbir şey göndermez. *Yol:* systemd'nin çalıştırdığı hizmeti `systemctl [--user] restart <unit>` ile yeniden başlatın.
 - **Yerel runtime soketinin eş canlılık tanığı** HUP/ERR/NVAL'i, çağrı süresince yakalanabilir sinyalleri bloklayan sıfır süreli tek bir `ppoll` ile gözler: SIGCHLD gibi ele alınmış bir sinyal artık kopmuş istemci gibi okunmaz. Gerçek bir tur iptalinden önce biten araç çağrısı yine `cancelled` bildirilir; sonuç metni uygulanan yazım kümesini taşır (tamlık bayrağı ya da yeni durum kararı owner'da açık).
 - **Yeni sürüme geçişten önce başlatılan MCP ve terminal süreçleri önceki derlemeyle çalışmayı sürdürür.** Geçiş kurulu derlemeyi
   değiştirir, ama bir istemcinin daha önce başlattığı MCP sunucusu ya da `deckent` terminali, istemci onu yeniden başlatana kadar
@@ -648,7 +648,7 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   verdiği terfiler bir kişi geri alana kadar kalır (owner'ın seçimi). Skill'ler yalnız bir kişinin eklediği içe aktarma anahtarıyla içe
   aktarılır. Alpha.56 imzalı Hub paketlerini sağlar; halka açık ağ kullanımı aşağıdaki sınırlarla kalır.
 - **Auditor'ın henüz canlı okuyucusu ve sınıflandırıcısı yok.** Politika turu kayıtları mühürlenir, ama izleme okuyucusunun çalışma zamanı
-  işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner ayrıntısını bekler).
+  işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner yönünü 2026-10-24'te verdi; tasarım ve sıra bekliyor, kod yok).
 
 ## Hub paketleri ve kaldırma
 
