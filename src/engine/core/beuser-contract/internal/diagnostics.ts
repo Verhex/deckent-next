@@ -3,7 +3,7 @@ import { identitySchema as id, beuserBindingSchema, beuserTranscriptEntrySchema 
 
 /** Diagnostic observation, never a replacement for acceptance, calibration or cleanup evidence. */
 export const beuserStuckFindingSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
-  branch: id, persona: id, code: z.literal('persona-stuck'), reason: z.literal('loop'), outcome: z.literal('RED'),
+  branch: id, persona: id, code: z.literal('persona-stuck'), reason: z.enum(['loop', 'observing']), outcome: z.literal('RED'),
   screen: z.string(), screenRef: id, screenDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   evidenceRefs: z.array(z.string().regex(/^sha256:[a-f0-9]{64}$/u)).min(1),
   controllerValidity: z.enum(['valid', 'invalid', 'unknown']),

@@ -3,7 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { beuserBindingSchema, type BeuserBinding } from '#domain/index.js';
 import { verifiedPrincipalSchema } from '#domain/index.js';
-import { assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
+import { BEUSER_KEY_ALIASES, assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
 import { catalogCommand, type SurfaceCommand } from './argv.js';
 import { SurfaceCapture, surfaceDigest, type HarnessAction, type HarnessProcess, type HarnessSink } from './capture.js';
 import { atomicKey, BeuserSurfaceError, literalInput, positive } from './input.js';
@@ -194,10 +194,17 @@ export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurfac
     await capture.record(synthetic ? 'synthetic-person-decision' : 'action', elapsed(), undefined, detail);
     await request(command); return screen();
   });
+  // Walk18: a walker action refused before any input is retained with its reason (typed text withheld) and the session stays open for a
+  // correction. Screen hint spellings (`Esc`, `PgDn`, `↓`) press the named contract key, recorded by that name.
+  const refuse = async (context: BeuserContext, detail: HarnessAction): Promise<never> => { access(context); if (closed || busy) throw new BeuserSurfaceError(closed ? 'BEUSER_SURFACE_EOF' : 'BEUSER_SURFACE_BUSY');
+    capture.assertOpen(); await capture.record('action', elapsed(), undefined, { ...detail, refused: 'BEUSER_ACTION_INVALID' }); throw new BeuserSurfaceError('BEUSER_ACTION_INVALID'); };
   return {
     look: context => action(context, { op: 'read', ms: bounds.quietMs }, { kind: 'look' }),
-    type: (context, text) => action(context, { op: 'input', text: literalInput(text, bounds.maxInputBytes) }, { kind: 'type' }),
-    press: (context, key) => action(context, { op: 'input', text: atomicKey(key, renderer.applicationCursor) }, { kind: 'press', key }, true),
+    type: (context, text) => { const input = literalInput(text, bounds.maxInputBytes);
+      return input === null ? refuse(context, { kind: 'type' }) : action(context, { op: 'input', text: input }, { kind: 'type' }); },
+    press: (context, key) => { const name = BEUSER_KEY_ALIASES.get(key) ?? key, input = atomicKey(name, renderer.applicationCursor);
+      return input !== null ? action(context, { op: 'input', text: input }, { kind: 'press', key: name }, true)
+        : refuse(context, { kind: 'press', ...(literalInput(key, bounds.maxInputBytes) === null ? {} : { key }) }); },
     wait: (context, ms) => {
       positive(ms); if (ms > admitted.limits.maxWaitMs) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
       return action(context, { op: 'read', ms }, { kind: 'wait', ms });

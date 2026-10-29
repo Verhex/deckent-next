@@ -22,9 +22,9 @@ export async function offerSetup(refusal: unknown, context: CommandContext, loca
   if (cliMode(context).reason !== 'tty' || !(await installationMissing(context, root, env))) throw refusal;
   const target = offerTarget(context.rootResolution?.found ?? false, context.rootResolution?.gitTop ?? null, root);
   const answer = await askCliCard({ title: t('setup.offer.title', {}, locale), body: [t('setup.offer.folder', { path: terminalSafeText(target) }, locale), t('setup.offer.body', {}, locale)],
-    options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), key: 'y' },
+    options: [{ id: 'yes', label: target === root ? t('setup.window.yes', {}, locale) : t('setup.offer.recommended', { path: terminalSafeText(target) }, locale), role: 'yes' },
       ...(target === root ? [] : [{ id: 'here', label: t('setup.offer.here', { path: terminalSafeText(root) }, locale), key: 'h' }]),
-      { id: 'no', label: t('setup.window.no', {}, locale), key: 'n' }], initial: 'yes' },
+      { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }], initial: 'yes' },
   { locale, env, stdin, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}),
     ...(context.signal ? { signal: context.signal } : {}) });
   stdin.pause();

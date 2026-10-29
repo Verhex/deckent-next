@@ -33,7 +33,7 @@ function controlCard(action: RunControl, run: RunView, scopeId: string, locale: 
   return { title, body: [detail, t('cli.run.control.scope', { scope: scopeId }, locale), t('terminal.runControl.state', { state: runStateWord(run, locale), revision: run.revision }, locale),
     ...(action === 'cancel' && run.cancellationRequested ? [t('terminal.cancel.alreadyRequested', {}, locale)] : []), ...extra,
     t('terminal.runControl.identity', { run: run.runId }, locale)].map(line => terminalSafeText(line)),
-  options: [{ id: 'yes', label: t('cli.run.control.yes', {}, locale), key: 'y' }, { id: 'no', label: t('cli.run.control.no', {}, locale), key: 'n' }] };
+  options: [{ id: 'yes', label: t('cli.run.control.yes', {}, locale), role: 'yes' as const }, { id: 'no', label: t('cli.run.control.no', {}, locale), role: 'no' as const }] };
 }
 
 /** What the person typed that the flow keeps: scope, Run (a short id resolves), hold reason, resume answer for one task. */

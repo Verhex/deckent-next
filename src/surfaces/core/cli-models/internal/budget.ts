@@ -26,19 +26,29 @@ export function scopeBudgetCreateCommand(scopeId: string, usd: number, surface: 
   return parseProviderSpendManagementCommand({ schemaVersion: 1, kind: 'budget-create', scopeId, commandId, budgetId: PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: 1,
     budget: budgetOf(scopeId, PROVIDER_SPEND_SCOPE_BUDGET_ID, 1, usd), evidenceDigest: choiceDigest({ surface, scopeId, limitUsd: usd, unfreeze: false }) });
 }
-/** `budget-revision` of the account a current inspection read: the next revision, the same id and currency (USD only here). */
+/**
+ * `budget-revision` of the account a current inspection read: the next revision, the same id and currency (USD only here). Null (walk18) when it
+ * would change nothing (the same amount, no freeze to lift): no revision is recorded and the surface says so (`scopeBudgetUnchangedLine`).
+ */
 export function scopeBudgetRevisionCommand(current: ProviderSpendAccountInspection, usd: number, unfreeze: boolean, surface: ScopeBudgetSurface,
-  commandId: string = `budget-${randomUUID()}`): ProviderSpendManagementCommand {
+  commandId: string = `budget-${randomUUID()}`): ProviderSpendManagementCommand | null {
   if (!current.checkpoint) throw ErrorRegistry.createError('PROVIDER_SPEND_BUDGET_ABSENT', { params: { scope: current.scopeId } });
   const budget = current.checkpoint.account.budget;
   if (budget.currency !== 'USD') throw ErrorRegistry.createError('PROVIDER_SPEND_CONFLICT');
+  if (budget.limitMinorUnits === usd * SCOPE_BUDGET_CHOICES.minorUnitsPerUsd && !(unfreeze && current.checkpoint.account.frozen)) return null;
   return parseProviderSpendManagementCommand({ schemaVersion: 1, kind: 'budget-revision', scopeId: current.scopeId, commandId, budgetId: budget.budgetId,
     budgetRevision: budget.revision, expectedCheckpointDigest: current.checkpoint.digest, budget: budgetOf(current.scopeId, budget.budgetId, budget.revision + 1, usd, budget.period ?? PROVIDER_SPEND_PERIOD_REGISTRY.defaultPeriod),
     unfreeze, evidenceDigest: choiceDigest({ surface, scopeId: current.scopeId, limitUsd: usd, unfreeze }) });
 }
+/** The answer to a budget change that would change nothing (no revision recorded). */
+export function scopeBudgetUnchangedLine(current: ProviderSpendAccountInspection, locale: Locale): string {
+  const budget = current.checkpoint!.account.budget;
+  return t('models.budget.unchanged', { scope: budget.scopeId, usd: usdText(budget.limitMinorUnits, locale), revision: budget.revision }, locale);
+}
+const usdText = (minor: number, locale: Locale) => (minor / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { maximumFractionDigits: 2 });
 /** The one summary line of a recorded budget change (CLI text output and the terminal's system line). */
 export function scopeBudgetLine(result: ProviderSpendManagementResult, locale: Locale): string {
-  const budget = result.receipt.after.budget, usd = (budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', { maximumFractionDigits: 2 });
+  const budget = result.receipt.after.budget, usd = usdText(budget.limitMinorUnits, locale);
   const command = result.receipt.command, values = { scope: budget.scopeId, usd, revision: budget.revision };
   return [command.kind === 'budget-create' ? t('models.budget.created', values, locale) : t('models.budget.revised', values, locale), ...(command.kind === 'budget-revision' && command.unfreeze ? [t('models.budget.unfrozen', {}, locale)] : []),
     ...(result.replayed ? [t('models.budget.replayed', {}, locale)] : [])].join(' ');

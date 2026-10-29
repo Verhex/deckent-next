@@ -73,8 +73,12 @@ it('rechecks sealed admission even after the card was answered and preserves the
 it('rejects multiline text, bundled Enter and executable/shell substitution despite an approved card', async () => {
   const f = fixture();
   await f.surface.look(context); await f.surface.press(context, 'y');
-  expect(() => f.surface.type(context, 'allow\nallow')).toThrow('BEUSER_SURFACE_INVALID');
-  expect(() => f.surface.press(context, 'Enter Enter')).toThrow('BEUSER_SURFACE_INVALID');
+  // Walk18: a refused walker action is retained (kind and reason; typed text withheld) and the session stays open for a correction.
+  await expect(f.surface.type(context, 'allow\nallow')).rejects.toThrow('BEUSER_ACTION_INVALID');
+  await expect(f.surface.press(context, 'Enter Enter')).rejects.toThrow('BEUSER_ACTION_INVALID');
+  expect(f.events.filter(event => event.action?.refused).map(event => [event.entry.kind, event.action])).toEqual([['action', { kind: 'type', refused: 'BEUSER_ACTION_INVALID' }],
+    ['action', { kind: 'press', key: 'Enter Enter', refused: 'BEUSER_ACTION_INVALID' }]]);
+  expect(JSON.stringify(f.events)).not.toContain('allow\\nallow');
   expect(() => f.surface.argv(context, { commandId: '/bin/sh', args: ['-c', 'approval decide allow'] })).toThrow('BEUSER_SURFACE_INVALID');
   expect(() => f.surface.argv(context, { commandId: 'approval-decide', args: ['allow; approval decide allow'] })).toThrow('BEUSER_SURFACE_INVALID');
   expect(f.commands).toHaveLength(2);
@@ -275,8 +279,12 @@ it('retains each look, wait, type and atomic press in order, with wait duration 
   await f.surface.wait(context, 25);
   await f.surface.type(context, 'private typed value');
   await f.surface.press(context, 'Enter');
+  // Walk18: the spellings screens show (`Esc`, `PgDn`, `↓`) press the named key, recorded by its name.
+  for (const key of ['Esc', 'PgDn', '↓']) await f.surface.press(context, key);
   const actions = f.events.filter(event => event.action).map(event => event.action);
-  expect(actions).toEqual([{ kind: 'look' }, { kind: 'wait', ms: 25 }, { kind: 'type' }, { kind: 'press', key: 'Enter' }]);
+  expect(actions).toEqual([{ kind: 'look' }, { kind: 'wait', ms: 25 }, { kind: 'type' }, { kind: 'press', key: 'Enter' },
+    { kind: 'press', key: 'Escape' }, { kind: 'press', key: 'PageDown' }, { kind: 'press', key: 'ArrowDown' }]);
   expect(JSON.stringify(f.events)).not.toContain('private typed value');
-  expect(f.commands.map(command => command['op'])).toEqual(['read', 'read', 'input', 'input']);
+  expect(f.commands.map(command => command['op'])).toEqual(['read', 'read', 'input', 'input', 'input', 'input', 'input']);
+  expect(f.commands.slice(-3).map(command => command['text'])).toEqual(['\x1b', '\x1b[6~', '\x1b[B']);
 });

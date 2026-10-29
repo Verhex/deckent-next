@@ -48,6 +48,11 @@ it('create-budget builds budget-create (revision 1, whole dollars as cents, USD)
   expect(sent[1]).toMatchObject({ kind: 'budget-revision', budgetId: 'scope-budget', budgetRevision: 1, expectedCheckpointDigest: current().checkpoint!.digest,
     budget: { revision: 2, limitMinorUnits: 5000 }, unfreeze: true });
   expect(output).toBe('scope kapsamının bütçesi değişti: ayda 50 USD (revizyon 2). Aşım dondurması kaldırıldı.\n');
+  // Walk18: re-confirming the amount the budget already has records no revision and says so.
+  output = '';
+  expect(await main(['models', 'revise-budget', '--scope', 'scope', '--usd', '25'], context)).toBe(0);
+  expect(sent).toHaveLength(2);
+  expect(output).toBe('Budget for scope scope is already 25 USD a month (revision 1); nothing changed.\n');
 });
 
 it('refuses typed amounts outside whole dollars 1..1000, mixed forms and a revision without a budget (negative)', async () => {
@@ -97,5 +102,9 @@ it('preserves the distribution period when only the amount is revised', () => {
   const periodic = { ...before, checkpoint: { ...checkpoint, account: { ...checkpoint.account,
     budget: { ...checkpoint.account.budget, schemaVersion: 2 as const, period: 'overlay.quarter-local' } } } };
   const command = scopeBudgetRevisionCommand(periodic, 50, false, 'cli', 'same-period');
-  expect(command.kind === 'budget-revision' && command.budget.period).toBe('overlay.quarter-local');
+  expect(command?.kind === 'budget-revision' && command.budget.period).toBe('overlay.quarter-local');
+  // The same amount is no change unless it lifts an overrun freeze.
+  const frozen = { ...before, checkpoint: { ...checkpoint, account: { ...checkpoint.account, frozen: true } } };
+  expect([scopeBudgetRevisionCommand(before, 25, true, 'cli'), scopeBudgetRevisionCommand(frozen, 25, false, 'cli')]).toEqual([null, null]);
+  expect(scopeBudgetRevisionCommand(frozen, 25, true, 'cli')).toMatchObject({ kind: 'budget-revision', unfreeze: true, budget: { revision: 2, limitMinorUnits: 2500 } });
 });

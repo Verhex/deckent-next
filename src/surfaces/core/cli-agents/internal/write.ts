@@ -36,7 +36,7 @@ export async function agentsInputHelp(action: InputAction, schema: boolean, cont
 }
 /** A file that does not fit names its first field and points at the filled example (no bare `*_INVALID`). */
 export const assertAgentsFile = (action: InputAction, raw: unknown) => assertInputFields(`deckent agents ${action}`, FILE_SCHEMAS[action], raw, `deckent agents ${action} --example`);
-const options = (locale: Locale) => [{ id: 'apply', label: t('agents.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), key: 'n' }];
+const options = (locale: Locale) => [{ id: 'apply', label: t('agents.card.apply', {}, locale), role: 'yes' as const }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), role: 'no' as const }];
 const revisionLine = (previous: number | null, locale: Locale) => previous === null ? t('agents.card.new', {}, locale) : t('agents.card.revision', { from: previous, to: previous + 1 }, locale);
 
 /**

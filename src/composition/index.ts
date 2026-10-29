@@ -11,7 +11,7 @@ export { reserveConfiguredRunTasks, applyConfiguredPoolCapacity, inspectConfigur
 export { recoverConfiguredCancellations } from '#composition/core/runs/index.js';
 export { runConfiguredCancellationRuntime } from '#composition/core/runtime/index.js';
 export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
-export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+export { createGuardedRuntimeClient as createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 export { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
 export { previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';

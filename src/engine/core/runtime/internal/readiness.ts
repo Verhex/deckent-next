@@ -58,15 +58,23 @@ export async function awaitRuntimeServiceRestart(deadline: LifecycleDeadline,
  * service, so it is reported, never replaced; ownership/unsafe failures are never auto-repaired by a reader (Astra 2054 R2).
  * Single exception (RESTART-HUNT, LAW-AUDIT-2 K1–K5, Jev ed1f54d8): `startable` names this installation's own empty socket directory whose
  * only fault is the mode; the terminal autostart and `runtime restart` launch the ordinary service start for it once (the start re-creates it,
- * fix A). The describe itself still refuses it; the predicate is read-only and never yields an endpoint; any other unsafe state throws. */
+ * fix A). The describe itself still refuses it; the predicate is read-only and never yields an endpoint; any other unsafe state throws.
+ * When the predicate does not confirm an UNSAFE refusal, one fresh describe is judged by the same rule (RESTART-HUNT race, alpha.58). */
 export type RuntimeStartable = (error: unknown) => Promise<boolean>;
 const ABSENT = new Set(['LOCAL_RUNTIME_UNAVAILABLE']);
 export async function describeRuntimeServiceWithin(describe: (signal: AbortSignal) => Promise<RuntimeServiceDescriptor>, deadline: LifecycleDeadline,
   startable?: RuntimeStartable) {
-  try { return { descriptor: await describe(runtimeDeadlineSignal(deadline)), code: null }; }
-  catch (error) {
-    const code = error instanceof DeckentError ? error.code : null;
-    if (code !== null && (ABSENT.has(code) || await startable?.(error))) return { descriptor: null, code };
+  const judged = async () => {
+    try { return { descriptor: await describe(runtimeDeadlineSignal(deadline)), code: null }; }
+    catch (error) {
+      const code = error instanceof DeckentError ? error.code : null;
+      if (code !== null && (ABSENT.has(code) || await startable?.(error))) return { descriptor: null, code };
+      throw error;
+    }
+  };
+  return judged().catch(error => {
+    // The predicate's later look disagreeing with this refusal means the state changed (the launched start heals once): judge one fresh read, never the stale refusal.
+    if (startable && error instanceof DeckentError && error.code === 'LOCAL_RUNTIME_ENDPOINT_UNSAFE') return judged();
     throw error;
-  }
+  });
 }

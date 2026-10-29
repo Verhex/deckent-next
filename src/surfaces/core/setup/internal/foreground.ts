@@ -12,7 +12,7 @@ const code = (error: unknown) => { const value = (error as { code?: unknown } | 
 
 /** A y/n card; anything but y is "not applied" (said on the terminal), never a retry. */
 async function confirmed(io: CliCardIo, title: string, body: readonly string[], yes: string): Promise<boolean> {
-  const answer = await askCliCard({ title, body, options: [{ id: 'apply', label: yes, key: 'y' }, { id: 'no', label: t('setup.window.no', {}, io.locale), key: 'n' }] }, io);
+  const answer = await askCliCard({ title, body, options: [{ id: 'apply', label: yes, role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, io.locale), role: 'no' }] }, io);
   if (answer !== 'apply') emit(t('setup.foreground.notApplied', {}, io.locale), { stdout: process.stdout });
   return answer === 'apply';
 }
@@ -75,7 +75,7 @@ export async function runForegroundStage(context: Omit<SetupCommandContext, 'ins
       if (preview.status !== 'preview' || !preview.expect) return result('refused', `POLICY_UPGRADE_${preview.status.toUpperCase()}`);
       const rules = (preview.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string } }; return `+ ${terminalSafeText(grant.id ?? '-')}: ${terminalSafeText(grant.resource?.kind ?? '-')}`; });
       const answer = await askCliCard({ title: t('setup.foreground.upgradeTitle', {}, locale), body: [t('setup.foreground.upgradeBody', { scope: terminalSafeText(scopeId) }, locale), ...rules],
-        options: [{ id: 'apply', label: t('setup.foreground.upgradeApply', {}, locale), key: 'y' }, { id: 'no', label: t('setup.window.no', {}, locale), key: 'n' }] }, io);
+        options: [{ id: 'apply', label: t('setup.foreground.upgradeApply', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, locale), role: 'no' }] }, io);
       if (answer !== 'apply') { emit(t('setup.foreground.notApplied', {}, locale), { stdout: process.stdout }); return result('declined'); }
       const applied = await context.upgradePolicyTemplateInstallation(root, scopeId, true, preview.expect);
       return result(applied.status === 'upgraded' ? 'applied' : 'refused', applied.status === 'upgraded' ? undefined : `POLICY_UPGRADE_${applied.status.toUpperCase()}`);

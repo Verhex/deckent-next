@@ -13,7 +13,7 @@ export const workerImageConfirm = (io: CliCardIo, timeoutMs: number, sizeGigabyt
     : [t('setup.workerImage.card.build', { size: formatDecimal(sizeGigabytes, l, 1), limit }, l), t('setup.workerImage.card.network', {}, l),
       ...card.held ? [t('setup.workerImage.card.held', { held: terminalSafeText(card.held) }, l)] : [], t('setup.workerImage.card.next', {}, l)];
   const answer = await askCliCard({ title: adopt ? t('setup.workerImage.card.adoptTitle', { version }, l) : t('setup.workerImage.card.title', { version }, l), body,
-    options: [{ id: 'go', label: adopt ? t('setup.workerImage.card.adoptYes', {}, l) : t('setup.workerImage.card.yes', {}, l), key: 'y' }, { id: 'no', label: t('setup.window.no', {}, l), key: 'n' }] }, io);
+    options: [{ id: 'go', label: adopt ? t('setup.workerImage.card.adoptYes', {}, l) : t('setup.workerImage.card.yes', {}, l), role: 'yes' }, { id: 'no', label: t('setup.window.no', {}, l), role: 'no' }] }, io);
   if (answer === 'go') emit(adopt ? t('setup.workerImage.checking', {}, l) : t('setup.workerImage.building', { limit }, l), io.stdout ? { stdout: io.stdout as { write(text: string): unknown } } : {});
   return answer === 'go';
 };

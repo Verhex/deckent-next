@@ -6,11 +6,11 @@ import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
 import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
-  openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
+  openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, createBeuserArrange, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
-  readBeuserControllerAudit, verifyApproval, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
+  readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
 import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
@@ -63,6 +63,11 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   const models = { ...model.models, async walker(...args: Parameters<typeof model.models.walker>) { const answer = await model.models.walker(...args);
     if (answer.state === 'invoked') walkerMakers.push(answer.receipt.maker); return answer; } };
   const started = performance.now();
+  const arrange: BeuserArrangement = { ...beuserArrangePlan(data.startState), port: createBeuserArrange({ realm, custody, options: runtimeOptions, language: data.summary.language }),
+    // atMs 0: setup precedes the walk clock, which the surface starts at its first look; transcript times stay monotonic.
+    async record(ctx, receipt) { const row = recorder.append(ctx, { binding: ctx.binding, kind: 'arrange', atMs: 0,
+      evidenceRef: `${context.binding.transcriptId}:arrange:${trace.length + 1}`, text: JSON.stringify(receipt) });
+    trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef: await retainBeuserJson(artifacts, ctx, row) }); } };
   const probe = async (): Promise<BeuserReadback> => {
     const handle = (await custody.load(context))?.handle; if ((await realm.observe(context)).state !== 'admitted' || !handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     // Values only. No ledger, key, backup, receipt bytes or arbitrary persona-authored command crosses this boundary.
@@ -76,7 +81,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     const evaluated = controllerValidity === 'valid' ? await correctBeuserModelOutput(ctx, data.summary.patience, async outputError => {
       const answer = await models.evaluate(ctx, transcript.transcriptDigest, outputError);
       if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-evaluator' || answer.receipt.invocation.receipt.outcome?.state !== 'responded') return null;
-      return { answer, experience: decodeBeuserEvaluatorOutput(answer.receipt.invocation, transcript.evidenceRefs) };
+      return { answer, experience: decodeBeuserEvaluatorOutput(answer.receipt.invocation, transcript.transcript.filter(row => row.entry.kind !== 'arrange').map(row => row.entry.evidenceRef)) };
     }) : null;
     const experience = evaluated?.experience ?? { verdict: 'unknown' as const, evidenceRefs: [] };
     evidence = beuserEvidenceSchema.parse({ schemaVersion: 1, binding: ctx.binding, transcript: transcript.transcript, readbacks,
@@ -99,17 +104,18 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     finally { approvals.close(); }
   }, false, 'read');
   return { custody, realm, removal, refusal, async walk(budget: BeuserExecutionBudget) {
-    const ports = { realm, surface, initialCommand: launch.initialCommand, models, decode: model.decode, evidence: evidencePort, refusal,
+    const ports = { realm, surface, initialCommand: launch.initialCommand, models, decode: model.decode, evidence: evidencePort, refusal, arrange,
       async controllerAudit(ctx: BeuserContext) {
         try { controllerValidity = await withControllerAudit(ports => readBeuserControllerAudit(ctx, ports)); }
         catch { controllerValidity = 'unknown'; }
         return controllerValidity;
       },
-      async record(screen: { readonly sequence: number }) { const row = recorder.inspect(context).find(item => item.entry.sequence === screen.sequence);
+      async record(screen: { readonly sequence: number }) { // By the surface's own reference: arrange rows shift the recorder sequence.
+        const row = recorder.inspect(context).find(item => item.entry.evidenceRef === `${context.binding.transcriptId}:${screen.sequence}`);
         if (!row) throw new BeuserContractError('BEUSER_INPUT_INVALID'); await evidencePort.append(context, row.entry); },
-      async stopped(screen: import('#engine/index.js').BeuserScreen, action: import('#engine/index.js').BeuserSurfaceCommand['action']) {
-        const row = recorder.append(context, { binding: context.binding, kind: 'friction', evidenceRef: `${context.binding.transcriptId}:loop`,
-          atMs: Math.floor(performance.now() - started), text: JSON.stringify({ reason: 'loop', screenRef: `${context.binding.transcriptId}:${screen.sequence}`,
+      async stopped(screen: import('#engine/index.js').BeuserScreen, action: import('#engine/index.js').BeuserSurfaceCommand['action'], reason: 'loop' | 'observing') {
+        const row = recorder.append(context, { binding: context.binding, kind: 'friction', evidenceRef: `${context.binding.transcriptId}:${reason}`,
+          atMs: Math.floor(performance.now() - started), text: JSON.stringify({ reason, screenRef: `${context.binding.transcriptId}:${screen.sequence}`,
             proposedAction: action.kind === 'type' ? { kind: 'type' } : action }) });
         const artifactRef = await retainBeuserJson(artifacts, context, row);
         trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef });
@@ -123,10 +129,10 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     const result = await new BeuserApplication(ports, budget).walk(context, pinBeuserWalkerSummary(data.summary));
     if (capturedSurface && !context.signal.aborted) await capturedSurface.close(context);
     const diagnostic = beuserDiagnosticSchema.parse({ schemaVersion: 1, trace,
-      finding: result.reason === 'loop' && lastScreen ? { schemaVersion: 1, binding: context.binding, branch: context.binding.identity.taskId,
-        persona: data.summary.personaId, code: 'persona-stuck', reason: 'loop', outcome: 'RED', controllerValidity,
+      finding: (result.reason === 'loop' || result.reason === 'observing') && lastScreen ? { schemaVersion: 1, binding: context.binding, branch: context.binding.identity.taskId,
+        persona: data.summary.personaId, code: 'persona-stuck', reason: result.reason, outcome: 'RED', controllerValidity,
         screen: lastScreen.text, screenRef: `${context.binding.transcriptId}:${lastScreen.sequence}`, screenDigest: lastScreen.digest,
-        evidenceRefs: trace.map(row => row.artifactRef) } : null });
+        evidenceRefs: trace.filter(row => row.kind !== 'arrange').map(row => row.artifactRef) } : null }); // Arrange rows are setup, never RED evidence.
     return { result, evidence, diagnostic };
   } };
 }

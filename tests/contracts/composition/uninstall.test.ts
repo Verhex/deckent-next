@@ -278,6 +278,13 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
     expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
     await expect(lstat(uninstallRecoveryDirectory({ productLayout: { root: data }, installation: { uninstallRecoveryRoot: null } }, options.env))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
+    // Lane J P1: an unsafe policy or (v2) bindings file leaves no tier authorizable: a typed refusal naming it, nothing removed, the file left as it is.
+    const policyPath = join(data, 'policy.json'), v1 = await readFile(policyPath, 'utf8');
+    const refused = async (path: string) => { await expect(previewConfiguredUninstall(project, KEEP, options)).rejects.toMatchObject({ code: 'UNINSTALL_POLICY_UNREADABLE',
+      params: { path, reason: 'POLICY_FILE_UNSAFE' } }); expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE'); };
+    await chmod(policyPath, 0o666); await refused(policyPath); expect((await lstat(policyPath)).mode & 0o777).toBe(0o666); await chmod(policyPath, 0o600);
+    await writeFile(policyPath, JSON.stringify({ ...JSON.parse(v1), schemaVersion: 2, roles: [], separationOfDuties: [] })); await refused(join(data, 'bindings.json'));
+    await writeFile(policyPath, v1);
     // A relocated authority file is never followed to its configured spelling; the data-keeping uninstall stays available.
     await chmod(join(data, 'bindings.json'), 0o600); await config({ bindings: 'moved/bindings.json' }); clearConfigCache();
     const moved = await previewConfiguredUninstall(project, ALL, options);

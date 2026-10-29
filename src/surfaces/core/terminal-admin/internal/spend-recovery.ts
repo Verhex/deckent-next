@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { t, type Params } from '#platform/index.js';
 import { parseProviderSpendManagementCommand, PROVIDER_SPEND_HOLD_PAGE_MAX } from '#domain/index.js';
-import { SCOPE_BUDGET_CHOICES, scopeBudgetLine, scopeBudgetRevisionCommand, type ProviderSpendAccountInspectionHandler } from '#surfaces/core/cli-models/index.js';
+import { SCOPE_BUDGET_CHOICES, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUnchangedLine, type ProviderSpendAccountInspectionHandler } from '#surfaces/core/cli-models/index.js';
 import type { InfoView } from '#surfaces/core/terminal-window/index.js';
 import type { TerminalAdminCall } from './context.js';
 import { queryFailureText } from './failure.js';
@@ -65,7 +65,8 @@ function budgetView(call: TerminalAdminCall, current: ProviderSpendAccountInspec
       return { model: { summary: '', title: words(call, 'budgetConfirm', { usd }), sections: [{ choices: [{ id: 'confirm', label: words(call, 'confirm') }] }] },
         pick: async choice => {
           if (choice !== 'confirm') return null;
-          try { return message(call, scopeBudgetLine(await call.context.manageProviderSpend!(call.root, scopeBudgetRevisionCommand(current, usd, false, 'terminal'), call.options), call.locale)); }
+          try { const command = scopeBudgetRevisionCommand(current, usd, false, 'terminal');
+            return message(call, command ? scopeBudgetLine(await call.context.manageProviderSpend!(call.root, command, call.options), call.locale) : scopeBudgetUnchangedLine(current, call.locale)); }
           catch (error) { return message(call, queryFailureText(error, call.locale)); }
         } };
     } };

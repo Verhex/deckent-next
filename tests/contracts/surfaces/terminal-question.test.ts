@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { render } from 'ink';
 import { PassThrough, Writable } from 'node:stream';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
-import { QuestionWindow, WindowStackProvider, questionStep, type QuestionOption } from '#surfaces/core/terminal-window/index.js';
+import { QuestionWindow, WindowStackProvider, optionKey, questionStep, type QuestionOption } from '#surfaces/core/terminal-window/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import type { Key } from 'ink';
@@ -19,26 +19,41 @@ const key = (patch: Partial<Key> = {}): Key => ({ upArrow: false, downArrow: fal
 
 describe('question model', () => {
   const options: QuestionOption[] = [{ id: 'a', label: 'A', key: 'y' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C', key: 'n' }];
-  it('moves with arrows, j/k and digits, submits with Enter or an option letter, cancels with Esc/Ctrl+C, ignores paste and other keys', () => {
+  it('moves with arrows and j/k, submits with Enter, a shown number or an option letter (yes/no letters derived from the answer role), cancels with Esc/Ctrl+C, ignores paste and other keys', () => {
     const at = (n: number) => ({ at: n, ticked: [] as string[] });
     expect(questionStep('single', options, at(0), '', key({ downArrow: true }))).toEqual({ kind: 'move', state: at(1) });
     expect(questionStep('single', options, at(2), 'j', key())).toEqual({ kind: 'move', state: at(2) });
     expect(questionStep('single', options, at(2), 'k', key())).toEqual({ kind: 'move', state: at(1) });
-    expect(questionStep('single', options, at(0), '3', key())).toEqual({ kind: 'move', state: at(2) });
+    // Owner 2026-10-29: the number a row shows answers a single-choice question at once; a number past the last row does nothing.
+    expect(questionStep('single', options, at(0), '3', key())).toEqual({ kind: 'submit', ids: ['c'] });
+    expect(questionStep('single', options, at(0), '4', key())).toEqual({ kind: 'ignored' });
     expect(questionStep('single', options, at(1), '', key({ return: true }))).toEqual({ kind: 'submit', ids: ['b'] });
     expect(questionStep('single', options, at(1), 'y', key())).toEqual({ kind: 'submit', ids: ['a'] });
     expect(questionStep('single', options, at(1), '', key({ escape: true }))).toEqual({ kind: 'cancel' });
     expect(questionStep('single', options, at(1), 'c', key({ ctrl: true }))).toEqual({ kind: 'cancel' });
     expect(questionStep('single', options, at(1), 'yes', key())).toEqual({ kind: 'ignored' });
-    // BeUser E-14: a digit the card shows as an option's key answers with it (the purge reason card's "(4)"); unlabelled digits only move.
+    // A digit the card also shows as an option's key (the purge reason card's "(4)") answers the same row.
     expect(questionStep('single', [{ id: 'r1', label: 'one', key: '1' }, { id: 'r2', label: 'two', key: '2' }], at(0), '2', key())).toEqual({ kind: 'submit', ids: ['r2'] });
     expect(questionStep('single', options, at(1), 'x', key())).toEqual({ kind: 'ignored' });
-    // Multi choice: Space ticks, Enter submits the ticked ones in option order, letters never submit.
+    // Multi choice: Space ticks, Enter submits the ticked ones in option order, letters never submit, a number only moves.
+    expect(questionStep('multi', options, at(0), '3', key())).toEqual({ kind: 'move', state: at(2) });
     const ticked = questionStep('multi', options, at(2), ' ', key());
     expect(ticked).toEqual({ kind: 'move', state: { at: 2, ticked: ['c'] } });
     const both = questionStep('multi', options, { at: 0, ticked: ['c'] }, ' ', key());
     expect(both.kind === 'move' && questionStep('multi', options, both.state, '', key({ return: true }))).toEqual({ kind: 'submit', ids: ['a', 'c'] });
     expect(questionStep('multi', options, at(0), 'y', key())).toEqual({ kind: 'ignored' });
+    // A yes/no question derives (y)/(n) from its answers in every locale: y and n answer, Enter sends the highlighted one; other answers keep their own letter.
+    // The answer role, not the call site, owns the letter; an answer without a role ("Not now" beside a real No) is letterless; ids and order are free.
+    const yesNo = [{ id: 'later', label: 'Not now' }, { id: 'apply', label: 'Apply', role: 'yes' }, { id: 'cancel', label: 'Cancel', role: 'no' }] as QuestionOption[];
+    expect(questionStep('single', yesNo, at(0), 'y', key())).toEqual({ kind: 'submit', ids: ['apply'] });
+    expect(questionStep('single', yesNo, at(0), 'N', key())).toEqual({ kind: 'submit', ids: ['cancel'] });
+    expect(questionStep('single', yesNo, at(0), '', key({ return: true }))).toEqual({ kind: 'submit', ids: ['later'] });
+    expect(questionStep('single', yesNo, at(0), '3', key())).toEqual({ kind: 'submit', ids: ['cancel'] });
+    expect(questionStep('multi', yesNo, at(0), 'y', key())).toEqual({ kind: 'ignored' });
+    expect(yesNo.map(option => optionKey(option))).toEqual([undefined, 'y', 'n']);
+    expect(optionKey({ id: 'session', label: 'Session', key: 's' })).toBe('s');
+    // @ts-expect-error a yes/no answer never carries a hand-written letter
+    expect(optionKey({ id: 'odd', label: 'Odd', role: 'yes', key: 'x' })).toBe('y');
   });
 });
 
@@ -77,10 +92,10 @@ describe('approval card as a list (real Workline, NO_COLOR palette)', () => {
       expect(view.stdout.text.split('\u001b[').slice(1).some(sequence => /^[\d;]*m/u.test(sequence))).toBe(false);
     } finally { gate.release(); }
   });
-  it('"Yes, for this session" through the list carries the session scope (the existing G6 path); Enter on the default denies', async () => {
+  it('"Yes, for this session" by its shown number carries the session scope (the existing G6 path); Enter on the default denies', async () => {
     const gate = hold(), calls: unknown[][] = [], view = await open(true, calls, gate.promise);
     try {
-      view.stdin.write('2'); await settle(30); view.stdin.write('\r');
+      view.stdin.write('2');
       await until(() => calls.length === 1, 'session decision'); expect(calls[0]).toEqual(['appr-q', 'allow', 'session']);
     } finally { gate.release(); }
     const gate2 = hold(), calls2: unknown[][] = [], second = await open(true, calls2, gate2.promise);

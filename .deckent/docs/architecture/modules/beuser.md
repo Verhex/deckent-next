@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red, so no journey is accepted yet.
+B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19 on the alpha.58 candidate waits for the owner's GPU window; alpha.58's BeUser scope is installation and first settings.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|
@@ -90,8 +90,10 @@ and the existing strict journey profile contract (journey/persona/rubric pins, t
 manifest reference, finite limits revision, explicit walker/evaluator choices and launch/probe data).
 A profile author supplies this document; setup does not fabricate missing journey or model data.
 The packaged [B1 example](../../../../assets/beuser/setup-profile.example.md) builds one
-provisional onboarding/Ayşe document from installed references and the measured candidate;
-it carries no host paths or credentials and does not claim complete journey coverage.
+provisional document for the named journeys from installed references and the measured candidate:
+each journey's first branch and persona, that branch's own probe set and a v3 start state naming
+the branch's catalogued states, printing those it does not arrange with their reason. It carries no host paths
+or credentials and does not claim complete journey coverage.
 
 Journey profile `schemaVersion: 2` replaces inline `files` with `candidateManifest`:
 raw manifest `sha256`, complete measured `fileCount` (including both metadata files),
@@ -128,6 +130,67 @@ failures share the engine's finite BeUser error contract, so production look/arg
 catalog code without trusting arbitrary exception codes or messages. Recorded management reads the
 same optional reason/cleanup metadata and still requires actual handle and terminal evidence.
 
+## Start state (profile v3, alpha.58)
+
+Journey profile `schemaVersion: 3` requires `startState` (`schemaVersion: 2`, the installed
+`catalogRevision` and the branch's start state ids, normally its `initialStates`); v2 profiles stay
+valid and start in today's unarranged realm. The versioned catalog
+[`assets/beuser/arrange.json`](../../../../assets/beuser/arrange.json) (revision `beuser-arrange-2`)
+holds `kind`-discriminated steps and one entry for every start state the installed journeys name.
+A state either names its steps, carries a typed unknown reason (`witness-required`, `realm-external`,
+`driver-limit`, `no-producer`, `enterprise-only`), is established by the persona during the walk
+(`cancel`), or is a profile fact (persona language or accessibility: `tr`, `en`, `narrow-terminal`,
+`screen-reader`) checked when the profile is read. Invariants are code: a `cli` step is an exact
+product argv tuple carrying `--json`, without control characters; `file` and `git` steps act only on
+relative paths inside the realm work target (no empty, `.` or `..` segment); `git` runs only `init`,
+`add` or `commit` and refuses repository, config, helper and template options; a `check` step has no
+effect. Duplicate steps, unknown state ids and unresolvable references refuse the catalog or the
+profile (`BEUSER_INPUT_INVALID` at setup, admission and walk), and so does a profile fact the persona
+does not have.
+
+The engine plans a branch purely from the catalog: each step once, in branch order, plus the states
+it does not arrange with their reason. After realm admission and before the persona's first look, a
+branch with any typed-unknown state stops as `BEUSER_START_STATE_UNREACHABLE` before any effect, so
+the persona never walks a different start state than its rubric names; otherwise each step runs
+through `BeuserArrangePort` and is gated on its own readback. The port's target is the admitted
+binding, not a realm; the first adapter (`createBeuserArrange`) runs over `docker container exec`
+without `--interactive`/`--tty`, with explicit `--user uid:gid`, `LANG`/`LC_ALL`, realm HOME and
+workdir, through a fixed in-realm wrapper whose child has `/dev/null` stdin and pipes only. A `file`
+step creates missing parents (0700), writes without following a symlink, refuses a symlinked parent
+and sets the catalogued mode; a `git` step runs with a fixed fixture identity, no system or global
+config and no prompt. Readbacks are read-only observations in the realm: the installation through the
+target's own identity adapter, a path's type, mode and digest, whether Git tracks a path, the absence
+of the target's own runtime socket and whether the target can prove its install method; every field a
+readback names must match. The adapter never uses the PTY driver: anything sent through the driver is
+person-equivalent for the product's terminal witness, so a witnessed command honestly refuses here.
+Step count is bounded by `maxSteps`, and a step timeout must stay below `maxWaitMs`. A non-zero exit,
+a timeout or a readback mismatch stops the branch as `BEUSER_START_STATE_UNMET` before any persona
+action. Both codes are unknown, never RED or a refusal audit, with no retry and cleanup unchanged.
+Each step leaves one transcript row of kind `arrange` (contract v2) with the step reference, the run
+result (exit code, stdout size/digest, or none for a `check`) and the readback result; target output
+is never retained. `arrange` rows carry time 0 (setup precedes the walk clock) and are not persona
+actions or screens: they neither consume the step bound nor count as walked, persona evidence is
+looked up by the surface's own reference, the evaluator model cannot cite them, and a RED stuck
+finding does not cite them. The walk report lists every start state a branch did not arrange, with
+its reason (`unarranged`), next to the branch's unknown code.
+
+Catalog revision `beuser-arrange-2` arranges, each measured in a disposable no-network realm-equivalent
+container against the built package: the installed state (`init --yes --scope beuser-realm --json`,
+relying on the kept headless first-install decision U4E: uninstall `T1`, self `fresh-own-installation`
+and `missing-model-or-realm-or-binding`); a Git project with a tracked file under `.deckent/` (`T3`,
+and with a user README `sealed-owner-like-fixture`); an unknown file under `.deckent/` (`S10a`); a
+stopped service (`S1`, runtime socket absent); a second installation in `second-project` via
+`init --here` (`S13`); an unreadable ledger (`S19`, mode 0000); an unsafe authority file (`S20`,
+`policy.json` mode 0666); a hand-made launcher in `home/.local/bin` (`S22`); an unproven install
+method (`S24`, the package is not under an npm prefix); an empty cache (scratch and tree-scan cache
+absent); a fresh home, session and no prefilled model or consent (installation and global home
+absent; also `model-unavailable` in the network-less realm); `docker-unavailable` (no Docker socket);
+`existing-folder` (a user file); and `assembled-candidate` (`/package/manifest.json`, verified at realm
+admission). States that need a person's witness, lie outside the sealed realm, need a driver mode the
+PTY driver cannot give, have no witness-free producer, or belong to Enterprise stay unknown with that
+reason; no flag or PTY step bypasses the witness. An ERP/CRM journey adds its own fixture step kind
+and adapter through the general effect contract without changing Core.
+
 ## Walker/evaluator model output
 
 The versioned English instructions in `assets/beuser/model-instructions.json` are
@@ -150,6 +213,20 @@ bounds, and retain the admitted deadline. There is no extra retry limit or model
 substitution. Invalid actions never reach the surface, and model assessments do
 not replace harness readback or the existing acceptance owner.
 
+The walker message (instructions revision 3, walk18 2026-10-29) also carries
+`remainingSteps` (decisions left within the persona's step patience, this one
+included), `remainingWaitMs` and `keys`, the contract key names (`BEUSER_KEYS`)
+a press may use besides one printable character. The surface resolves the
+spellings screens show (`Esc`, `PgUp`/`PgDn`, `Return`, `↑↓←→`, `Up`/`Down`/
+`Left`/`Right`) to those names through the same contract table. An action the
+surface refuses before any input is sent (an unknown key name, empty or control
+text) is `BEUSER_ACTION_INVALID` (EN/TR): the refusal is retained as an action row
+(kind, reason and a bounded key name; typed text withheld), the session stays
+open, and the walker is asked again with that code inside the same correction
+bound, seeing the refused action in its history. Repeated refusals end the walk
+with that typed code; refusals never count toward a loop. A transport or render
+failure stays `BEUSER_SURFACE_INVALID`, closes the surface and is never retried.
+
 ## Interrupted walk diagnostics
 
 The surface records every walker action before sending it, including look and bounded wait
@@ -159,7 +236,17 @@ Each redacted event is retained separately; the private terminal record's option
 walks whose acceptance evidence could not be finalized. Recorded supervision reads the same
 optional schema; older terminal records and reports remain readable.
 
-A repeated screen/action stops before a duplicate effect; a friction event retains the blocked
+The stuck rules are registry data (`assets/beuser/limits.json` `walk`, registry revision
+`beuser-limits-2`) and stop before the effect. The `loopStop`th (3) identical key or text on one
+screen is a `loop` (walk17 S2, 2026-10-29: a first repeat may be a key the product swallowed): on
+the exact screen, or after a cycle through other screens back to a screen that differs only in its
+numbers (walk18: a budget change cycle bumped its revision each time). Screens are compared with
+digits masked in one place (`beuserSettledScreen`); consecutive presses on one such screen, as a
+number stepper does, are not a cycle. The `observeStop`th (4) consecutive `look`/`wait` on one
+digit-masked screen is `observing` (walk18: a walker that only observes is stuck, not a silent
+patience bound). Both are RED `persona-stuck` findings with their reason. Each walker call carries
+its own last three actions (typed text withheld, refused ones marked) and whether its last action
+left the screen unchanged. A stop's friction event retains the blocked
 proposal as metadata (typed plaintext omitted) and identifies its screen. The walk report's optional `findings`
 contains a named `persona-stuck` RED diagnostic for that branch/persona with the last redacted
 screen, its transcript reference/digest, controller validity and event artifact references.

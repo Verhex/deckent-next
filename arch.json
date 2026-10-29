@@ -634,6 +634,7 @@
         "src/adapters/core/local-keyring",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/runtime-launcher",
         "src/adapters/core/sqlite-agent-turn",
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/workspace-read",
@@ -4746,9 +4747,9 @@
       "domain": 10900,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 39400,
+      "adapters": 39450,
       "surfaces": 45000,
-      "composition": 11900
+      "composition": 11930
     },
     "totalSrcLines": 200000,
     "testCases": 8000,

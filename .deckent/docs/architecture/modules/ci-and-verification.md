@@ -64,7 +64,7 @@ and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes
 PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
 activate/change a remote merge queue or ruleset. Main push runs the same full sharded suite
 (owner 2026-10-06): admin merges bypass the PR gate, so this is main's post-merge full signal; on this public repository
-standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 44 (2 prepare, 40 test shards, 2 required verify; 36 before CI-DRIFT). Native macOS/Windows full suites stay in a separate daily/manual
+standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 46 (2 prepare, 40 test shards, 2 duration-drift, 2 required verify; 36 before CI-DRIFT). Native macOS/Windows full suites stay in a separate daily/manual
 workflow with visible failures; this scheduling does not resolve existing platform debt or claim platform acceptance.
 The full author scan exposed a genuine first integrity-key creation race during concurrent secret changes.
 Write-mode key custody now holds the existing bounded configuration path lock through create/read/fsync/close;

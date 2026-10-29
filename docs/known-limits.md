@@ -9,15 +9,16 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.57 has landed (PRs #120 and #121) and is live. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.57 has landed (PRs #120 and #121) and is live. Alpha.58 is a release candidate, not released; items marked alpha.58 describe that candidate. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 ## BeUser B1 journey walks (alpha.57)
 
 Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.
 
-- **Yes/no letters are not accepted everywhere in `deckent init`.** The first card shows the `y` key next to its yes answer and takes `y`; the guided setup window that follows shows no letter and silently ignores `y`. *Impact:* a person (or a BeUser persona) pressing `y` there sees nothing happen. *Workaround:* press Enter to choose the highlighted answer.
-- **A BeUser journey always starts in an empty realm.** The journey data names start states, but no code prepares them, so journeys that need an installed Deckent (uninstall, BeUser itself) stop at "Start setup?". *Impact:* those journeys report red without reaching the branch they test. *Workaround:* none yet; read such a red as "start state missing", not as a product verdict on that branch.
+- **In alpha.57, yes/no letters are not accepted everywhere in `deckent init`.** The first card shows the `y` key next to its yes answer and takes `y`; the guided setup window that follows shows no letter and silently ignores `y`. *Impact:* a person (or a BeUser persona) pressing `y` there sees nothing happen. *Workaround:* press Enter to choose the highlighted answer. The alpha.58 candidate shows and takes (y)/(n) on every yes/no card; this entry leaves when that lands.
+- **BeUser arranges only the start states it can reach without a witness (alpha.58).** A v3 journey profile names its branch's catalogued start states. Before the persona's first look, Deckent arranges them in the realm over an exec without a terminal (closed stdin, explicit user and locale), never through the persona's terminal, and reads each one back. The catalog arranges an installed Deckent (through `deckent init --yes --scope beuser-realm --json`), a Git project with a tracked file under `.deckent/`, an unknown file under `.deckent/`, a stopped service, a second installation, an unreadable ledger, an unsafe authority file, a hand-made launcher, an unproven install method, an empty cache, a fresh home, no Docker socket, a folder with the person's own files and the assembled candidate. The persona's language and accessibility needs come from its profile; `cancel` is the persona's own act. These stay unknown, and the report names each one with its reason: states that need a person's witness (managed policy and approvals `T2`/`S14`/`S14b`, global or relocated data `S10b`/`S25`, keys `S11`, an applied or interrupted uninstall `S15`/`S16`, a modified bridge `S21`, and model, price, role or budget setup), states outside the sealed realm (service managers and running services `S2`/`S4`/`S4b`/`K4`, active work and uncertain effects `S5`/`S8`, worker images `S12`, another platform `S18`, image preparation, worker questions, an unavailable realm or network), states with no witness-free producer (`S3`, parked work `S6`, pending approval `S7`, queued delivery `S9`, dispatch history `S23`), driver limits (pipe, CI and MCP `S17`, line mode) and Enterprise company scope. A branch that names any of them stops as `BEUSER_START_STATE_UNREACHABLE` before any step, and the persona does not start; a step that fails or does not read back stops it as `BEUSER_START_STATE_UNMET`. Both are unknown, never red. Nothing bypasses the witness. *Impact:* those branches are not walked, which is 18 of the 23 uninstall branches and 12 of the 21 onboarding branches. *Workaround:* keep the report's list of unarranged states; a v2 profile keeps the earlier empty realm.
+- **BeUser compares screens with their numbers masked when it looks for a stuck persona (alpha.58).** The same key or text a third time on a screen that came back through other screens and differs only in numbers (a revision, a counter, a clock) ends the walk as a `loop`, and a fourth look or wait in a row on such a screen ends it as `observing`; both are red `persona-stuck` findings. *Impact:* a journey that legitimately repeats one action three times through a screen that shows only changing numbers (for example adding three items to a list that shows just a count), or a product that stays on one screen through four looks or waits, is reported stuck. *Workaround:* read the finding's screen and evidence before treating it as a product defect; the thresholds are registry data in `assets/beuser/limits.json`.
 - **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
 
 ## Platforms: tried and not tried
@@ -141,6 +142,19 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   script and AI tools can no longer make these changes, and there is no approval-request path for them yet. *Workaround:* run
   `deckent secret set NAME --main` (or `--project`; hidden prompt), `deckent secret store`, `deckent config set <key> <value>` or the
   terminal's `/provider`, `/config` and mode switch in your own interactive terminal.
+- **A fresh install sets up its own starting authority without a witness; changing it later needs one.** Headless
+  `deckent init --yes` (or `init policy --apply`) on a fresh project writes the product-fixed first-run policy and bindings, creates
+  the installation and project identities and switches the secret store to the encrypted store, with no person at a terminal. The
+  switch is decided by the template's own `first-run-secret-switch` rule, written by the same install a moment earlier: before it
+  there is no authority to protect, and the content is fixed by the product, not chosen by the caller. Profile and mode authority
+  stay pending until the person's first witnessed terminal open. Afterwards `deckent secret store` (the runtime store switch) is an
+  authority change and needs the terminal witness like the changes above. A supplied profile (`deckent init apply --profile`, or
+  `init resume`) is published without a witness only while every rule it carries stays inside what the template would give the
+  installing person; anything wider (edit or shell tools allowed without asking, grants to the MCP actor or to everyone) is refused
+  with `AUTHORITY_WITNESS_REQUIRED` off an interactive terminal, before any evidence step or write. *Impact:* whoever can run a first
+  install on a fresh project gets the template's starting authority (never more), and an agent can still run a template-bounded
+  supplied install unattended; this gate checks the terminal, not the AI-agent marker, the same as `init policy --upgrade --apply`.
+  *Workaround:* run first installs yourself; apply a wider supplied profile in your own interactive terminal.
 - **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
   peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
   and the Landlock realm cannot open a unix socket at all. A process your account runs outside a sandbox (a host-realm call
@@ -364,7 +378,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
-  v29 and the current ledger (v70; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
+  v29 and the current ledger (v73; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
   backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
   position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
@@ -538,7 +552,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
   affected.
 - **Restart fingerprint.** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); changing them never reports a stale service. A member is added only after proving no start-time capture.
-- **`runtime restart`, the terminal's `/service-restart` and `runtime shutdown` (unless `--force`) refuse a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>` (a shutdown names `systemctl [--user] stop <unit>`), only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). A user unit is asked through the caller's `XDG_RUNTIME_DIR`, or `/run/user/<uid>` when a launcher cleared the environment (alpha.56.1). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
+- **`runtime restart`, the terminal's `/service-restart`, `runtime shutdown` (unless `--force`), the MCP tool `shutdown_runtime_service` and the SDK client's `shutdownService` refuse a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>` (a shutdown names `systemctl [--user] stop <unit>`), only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). A user unit is asked through the caller's `XDG_RUNTIME_DIR`, or `/run/user/<uid>` when a launcher cleared the environment (alpha.56.1). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. The MCP and SDK refusals are new in the alpha.58 candidate; those callers have no `--force` override, and on those surfaces an unreadable service descriptor sends nothing. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
 - **The local runtime socket's peer liveness witness** observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call: a handled signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported `cancelled`; its result text carries the applied write set (the owner decision on a completeness flag or a new status is open).
 - **MCP and terminal processes started before a switch to a new release keep running the previous build.** A switch replaces the
   installed build, but an MCP server or a `deckent` terminal that a client started earlier keeps the code it loaded until that client
@@ -632,8 +646,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added.
   Alpha.56 supplies signed Hub packages; public network use remains bounded below.
 - **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
-  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
-  owner's detail).
+  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (the owner gave their
+  direction on 2026-10-24; design and ordering are pending, with no code yet).
 
 ## Hub packages and uninstall
 
@@ -691,6 +705,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   agent or CI caller (marker variables) is refused through the SDK as through the CLI.
   *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.
 - **A partial deletion resumes only after re-verification.** Moved/unsafe authority files stop the data tier before it starts;
+  in the alpha.58 candidate an unsafe `policy.json` or `bindings.json` stops every tier as `UNINSTALL_POLICY_UNREADABLE` naming the
+  file, with data kept and the file never repaired;
   when Git tracking cannot be read, every project file counts as possibly tracked and stays. A partial final deletion resumes
   only after the remaining bytes, Git tracking, the archive and delete authority are verified again; otherwise files stay and
   managed backup restore remains available. An unknown step stays unknown. The recovery location must be private and lie outside

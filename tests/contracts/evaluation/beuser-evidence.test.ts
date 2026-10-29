@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { beuserBindingSchema } from '#domain/core/beuser/index.js';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, evaluatePolicy } from '#domain/index.js';
 import { createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback, createBeuserEvaluationPort } from '#engine/core/beuser-evidence/index.js';
-import { beuserDiagnosticSchema, pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, beuserDiagnosticSchema, pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { snapshotKnownSecrets, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, createInstalledTerminalEvaluator, validateInstalledCriterion, type BeuserEvidence } from '#capabilities/core/evaluation-evidence/index.js';
 import { TaskEvaluationApplication, resolveExecutionRegistry, verifyDispatchEvaluationEvidence } from '#engine/index.js';
@@ -61,7 +61,8 @@ it('refuses partial known-secret prefixes, reordered time, budget overflow and f
   expect(() => recorder.append(context, { ...event, binding: { ...binding, identity: { ...binding.identity, generation: 2 } } })).toThrow('BEUSER_TARGET_NOT_SANDBOX');
   expect(() => recorder.append(context, { ...event, text: 'x'.repeat(30001) })).toThrow();
   recorder.append(context, event);
-  expect(() => recorder.append(context, { ...event, evidenceRef: 'earlier', atMs: 0 })).toThrow();
+  // Typed, so a walk report carries the code (walk17 S1).
+  expect(() => recorder.append(context, { ...event, evidenceRef: 'earlier', atMs: 0 })).toThrow(BeuserContractError);
   expect(recorder.finalize(context).transcript).toHaveLength(1);
 });
 it('allows only typed readback summaries and refuses raw ledger, receipt and foreign target input', async () => {
@@ -78,7 +79,7 @@ it('accepts only captured metadata through EvidencePort and denies inspect befor
   const port = createBeuserEvidencePort(context, recorder, readVerdict);
   const row = recorder.append(context, { binding, atMs: 0, kind: 'screen', evidenceRef: 'screen', text: 'visible' });
   await port.append(context, row.entry);
-  await expect(port.append(context, { ...row.entry, digest: 'a'.repeat(64) })).rejects.toThrow('BEUSER_INPUT_INVALID');
+  await expect(port.append(context, { ...row.entry, digest: 'a'.repeat(64) })).rejects.toMatchObject({ name: 'BeuserContractError', code: 'BEUSER_INPUT_INVALID' });
   await expect(port.readback({ ...context, binding: { ...binding, transcriptId: 'foreign' } })).rejects.toThrow('BEUSER_TARGET_NOT_SANDBOX');
   expect(readVerdict).not.toHaveBeenCalled();
   expect((await port.finalize(context)).evidenceRefs).toEqual(['screen']);
@@ -191,6 +192,7 @@ it('diagnostic references stay unique, bound to their branch and backed by a cap
     screen: 'Permission question', screenRef: 'screen', screenDigest: '2'.repeat(64), evidenceRefs: [trace[0]!.artifactRef], controllerValidity: 'unknown' };
   const diagnostic = { schemaVersion: 1, trace, finding };
   expect(beuserDiagnosticSchema.parse(diagnostic).finding).toEqual(finding);
+  expect(beuserDiagnosticSchema.parse({ ...diagnostic, finding: { ...finding, reason: 'observing' } }).finding?.reason).toBe('observing'); // Walk18.
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, trace: [...trace, ...trace] }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, branch: 'foreign-task' } }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, screenRef: 'not-captured' } }).success).toBe(false);

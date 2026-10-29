@@ -42,7 +42,7 @@ export async function beuserCommand(argv: readonly string[], context: BeuserComm
       const config = await loadConfig(root, options);
       const answer = await askCliCard({ title: t('beuser.setup.card', {}, locale),
         body: [t('beuser.setup.change', { scope: terminalSafeText(scopeId), digest: preview.digest }, locale), terminalSafeText(redactSensitive(JSON.stringify(preview.admission)))],
-        options: [{ id: 'apply', key: 'y', label: t('beuser.setup.apply', {}, locale) }, { id: 'cancel', key: 'n', label: t('beuser.setup.cancel', {}, locale) }] },
+        options: [{ id: 'apply', role: 'yes', label: t('beuser.setup.apply', {}, locale) }, { id: 'cancel', role: 'no', label: t('beuser.setup.cancel', {}, locale) }] },
       { locale, env: options.env, signal: AbortSignal.any([AbortSignal.timeout(config.approvals.sessionTtlMs), ...(context.signal ? [context.signal] : [])]),
         ...(context.stdin ? { stdin: context.stdin } : {}), ...(context.stdout ? { stdout: context.stdout } : {}) });
       if (answer === 'apply') result = await context.setupBeuser(root, { ...input, apply: true, expect: preview.digest }, options);

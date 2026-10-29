@@ -93,7 +93,7 @@ export async function hubCommand(argv: readonly string[], context: HubCommandCon
   const request = hubRequest(args.operation, { schemaVersion: 1, ...value, scopeId: scope.scopeId, ...(writing && value.commandId === undefined ? { commandId: randomUUID() } : {}) });
   if (writing && await ask({ title: t('hub.card.title', { operation: args.operation }, locale),
     body: hubCardLines(request, locale, getConfigKnownSecrets(config)),
-    options: [{ id: 'apply', key: 'y', label: t('hub.card.apply', {}, locale) }, { id: 'cancel', key: 'n', label: t('hub.card.cancel', {}, locale) }] }) !== 'apply') return 1;
+    options: [{ id: 'apply', role: 'yes', label: t('hub.card.apply', {}, locale) }, { id: 'cancel', role: 'no', label: t('hub.card.cancel', {}, locale) }] }) !== 'apply') return 1;
   if (!context.executeHub) throw ErrorRegistry.createError('HUB_STORE_UNAVAILABLE');
   const result = await context.executeHub(root, request, options, context.signal).catch(error => { throw hubRefusal(error, request); });
   emit(args.json ? result : hubResultLines(result, locale).join('\n'), { ...sinks, json: args.json });

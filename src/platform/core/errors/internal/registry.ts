@@ -446,7 +446,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_NOT_STARTABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_NOT_STARTABLE', p, l) }) },
   LOCAL_RUNTIME_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_OPTIONS', p, l) }) },
   RUNTIME_SHUTDOWN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SHUTDOWN_UNAVAILABLE', p, l) }) },
-  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: p['action'] === 'stop' ? t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED.stop', p, l) : t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
+  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: p['action'] === 'stop' ? t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED.stop', p, l)
+    : p['action'] === 'stop-via-manager' ? t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED.stopViaManager', p, l) : t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
   RUNTIME_AUTOSTART_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_AUTOSTART_FAILED', p, l) }) },
   TERMINAL_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_SCOPE_REQUIRED', p, l) }) },
   LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },
@@ -943,6 +944,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_BACKUP_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_BACKUP_DENIED', p, l) }) },
   UNINSTALL_RECOVERY_LOCATION: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_LOCATION', p, l) }) },
   UNINSTALL_AUTHORITY_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_AUTHORITY_UNVERIFIED', p, l) }) },
+  UNINSTALL_POLICY_UNREADABLE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_POLICY_UNREADABLE', p, l) }) },
   UNINSTALL_SERVICE_RUNNING: { category: 'error', render: (p, l) => ({ message: p['unit'] ? t('error.UNINSTALL_SERVICE_RUNNING', p, l) : t('error.UNINSTALL_SERVICE_RUNNING_UNMANAGED', p, l) }) },
   UNINSTALL_UNCERTAIN_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_EFFECTS', p, l) }) },
   UNINSTALL_UNCERTAIN_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_MANAGED', p, l) }) },

@@ -74,8 +74,8 @@ const REASON_CAP = 2048;
 export function DecisionCard({ title, projectedLines, decisionLabels = {}, prompt, pendingText, position = '{from}-{to}/{total}', status, priority = WINDOW_PRIORITY.window,
   reason: reasonLabels, pending: controlledPending, scopes = [], choices, onDecide }: DecisionCardProps) {
   const decided = useRef(false);
-  const options: readonly QuestionOption[] = choices ? [{ id: 'once', label: choices.once, key: 'y' }, ...(scopes.includes('session') ? [{ id: 'session', label: choices.session, key: 's' }] : []),
-    ...(scopes.includes('always') ? [{ id: 'always', label: choices.always, key: 'a' }] : []), { id: 'no', label: choices.no, key: 'n' }] : [];
+  const options: readonly QuestionOption[] = choices ? [{ id: 'once', label: choices.once, role: 'yes' }, ...(scopes.includes('session') ? [{ id: 'session', label: choices.session, key: 's' }] : []),
+    ...(scopes.includes('always') ? [{ id: 'always', label: choices.always, key: 'a' }] : []), { id: 'no', label: choices.no, role: 'no' }] : [];
   // The highlight is kept as an option id (default No), so a changed option set can never move it onto an approving answer.
   const [chosen, setChosen] = useState('no'), found = options.findIndex(option => option.id === chosen), at = found < 0 ? Math.max(0, options.length - 1) : found;
   const atRef = useRef(at); atRef.current = at;

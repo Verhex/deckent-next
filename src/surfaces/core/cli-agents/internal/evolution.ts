@@ -15,7 +15,7 @@ interface Io { readonly root: string; readonly options: ConfigLoadOptions; reado
   readonly ask: (request: CliCardRequest) => Promise<string | null> }
 type Args = { readonly words: readonly string[]; readonly workClass?: string | undefined; readonly suggestion?: string | undefined; readonly fromSuggestion?: string | undefined; readonly id?: string | undefined };
 const need = <T>(value: T | undefined): T => { if (!value) throw ErrorRegistry.createError('AGENT_CATALOG_UNAVAILABLE'); return value; };
-const options = (locale: Locale) => [{ id: 'apply', label: t('agents.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), key: 'n' }];
+const options = (locale: Locale) => [{ id: 'apply', label: t('agents.card.apply', {}, locale), role: 'yes' as const }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), role: 'no' as const }];
 const standingLabel = (standing: string, locale: Locale) => standing === 'active' ? t('agent.standing.active', {}, locale) : standing === 'candidate' ? t('agent.standing.candidate', {}, locale)
   : standing === 'retired' ? t('agent.standing.retired', {}, locale) : t('agent.standing.redesign-required', {}, locale);
 const TO = { promote: 'active', demote: 'candidate', restore: 'candidate', retire: 'retired' } as const;

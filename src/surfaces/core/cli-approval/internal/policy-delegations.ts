@@ -38,7 +38,7 @@ export async function policyDelegationsCommand(argv: readonly string[], context:
   const result = await host.change(root, { ...query, step, action: verb, expectedRevision: view.revision }, async reviewed => {
     if (cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
     return await ask({ title: toggleTitle(verb, words.step[step] ?? step, locale), body: delegationCardLines(reviewed, step, verb, locale),
-      options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), key: 'y' }, { id: 'no', label: t('cli.policy.toggle.no', {}, locale), key: 'n' }] }) === 'apply';
+      options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), role: 'yes' }, { id: 'no', label: t('cli.policy.toggle.no', {}, locale), role: 'no' }] }) === 'apply';
   }, options);
   emit(result, { ...sinks, render: data => [words.result[data.status], delegationTable(data.view, locale, cliTableStyle(context))].join('\n') });
 }

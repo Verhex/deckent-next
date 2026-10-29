@@ -86,6 +86,10 @@ pull request. It changes only the lock and generated runtime identity, reuses an
 never force-updates or merges.
 Independent maintainer review and hosted CI remain mandatory. GitHub-token-created PRs need an explicit maintainer
 CI dispatch on the candidate branch; their creation does not itself trigger the normal PR workflow.
+Hosted CI runs the full suite in 20 duration-balanced shards per Node version. A separate, non-required
+`duration weight drift` job turns red when a test file runs far over its recorded weight, which means the
+generated duration weights are stale
+([CI and verification](.deckent/docs/architecture/modules/ci-and-verification.md)).
 
 Check the compiled entry without linking a global executable:
 

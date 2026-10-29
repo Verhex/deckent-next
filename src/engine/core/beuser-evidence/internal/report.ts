@@ -2,13 +2,15 @@ import { z } from 'zod';
 import { identitySchema as id, counterSchema } from '#domain/index.js';
 import { beuserVerdictSchema, type BeuserVerdict } from '#domain/index.js';
 import { beuserCalibrationSchema } from '#capabilities/index.js';
-import { beuserStuckFindingSchema, beuserFilesystemProofSchema } from '#engine/core/beuser-contract/index.js';
+import { beuserStuckFindingSchema, beuserFilesystemProofSchema, BEUSER_UNREACHABLE_REASONS } from '#engine/core/beuser-contract/index.js';
 const measured = z.number().finite().nonnegative().nullable();
 export const beuserReportSchema = z.object({ schemaVersion: z.literal(1), simulated: z.literal(true), calibrationClaim: z.literal('uncalibrated'),
   cohort: id, calibration: beuserCalibrationSchema,
   counts: z.object({ defined: counterSchema, selected: counterSchema, walked: counterSchema, concurrent: counterSchema }).strict(),
   cleanup: z.array(z.object({ branch: id, state: z.enum(['destroyed', 'quarantined', 'unknown']), filesystemProof: beuserFilesystemProofSchema }).strict()).optional(),
   findings: z.array(beuserStuckFindingSchema).optional(),
+  // Every start state of a branch the harness did not arrange, by name: typed unknown (the branch never started) or the persona's own act.
+  unarranged: z.array(z.object({ branch: id, state: id, reason: z.enum([...BEUSER_UNREACHABLE_REASONS, 'persona']) }).strict()).optional(),
   segments: z.array(z.object({ segment: id, verdict: beuserVerdictSchema.nullable(),
     broken: z.array(id), friction: z.array(id), delight: z.array(id), evidenceRefs: z.array(id), nextOwner: id }).strict()),
   unwalked: z.array(z.object({ branch: id, reason: id }).strict()), unknown: z.array(z.object({ branch: id, reason: id }).strict()),

@@ -96,7 +96,7 @@ async function decide(kind: 'accept' | 'reject', target: TaskTarget, context: Ta
     const answer = await ask({ title: kind === 'accept' ? t('cli.task.menu.decide.acceptTitle', { task: task.id }, locale) : t('cli.task.menu.decide.rejectTitle', { task: task.id }, locale), body: [
       t('cli.task.menu.decide.body', { run: target.runId.slice(0, 12), revision: run.revision, title: title(task) }, locale),
       ...(round ? [t('cli.task.menu.decide.reread', {}, locale)] : []), ...(kind === 'accept' ? [t('cli.task.menu.decide.acceptNote', {}, locale)] : []),
-    ], options: [{ id: 'yes', label: t('cli.task.menu.yes', {}, locale), key: 'y' }, { id: 'no', label: t('cli.task.menu.no', {}, locale), key: 'n' }] });
+    ], options: [{ id: 'yes', label: t('cli.task.menu.yes', {}, locale), role: 'yes' }, { id: 'no', label: t('cli.task.menu.no', {}, locale), role: 'no' }] });
     if (answer !== 'yes') { print(t('cli.task.menu.left', {}, locale)); return; }
     try {
       const result = await context.applyRunLifecycle(io.root, runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId: `cli-decide-${randomUUID()}`, scopeId: target.scopeId,

@@ -88,8 +88,8 @@ export async function policyRecoveryCommand(argv: readonly string[], context: Ap
   const body = [action === 'grant' ? t('cli.policy.toggle.becomesOn', { what }, locale) : t('cli.policy.toggle.becomesOff', { what }, locale),
     t('cli.policy.recovery.scope', { scope: scope.scopeId }, locale),
     ...(action === 'grant' && row.exits === false ? [t('cli.policy.recovery.exitsUnmet', {}, locale)] : [])];
-  if (await ask({ title: toggleTitle(action, what, locale), body, options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), key: 'y' },
-    { id: 'no', label: t('cli.policy.toggle.no', {}, locale), key: 'n' }] }) !== 'apply') return;
+  if (await ask({ title: toggleTitle(action, what, locale), body, options: [{ id: 'apply', label: t('cli.policy.toggle.apply', {}, locale), role: 'yes' },
+    { id: 'no', label: t('cli.policy.toggle.no', {}, locale), role: 'no' }] }) !== 'apply') return;
   const result = await host.changePolicy(root, { schemaVersion: 1, scopeId: scope.scopeId, kind: row.kind, id: row.id, action, expectedRevision: view.revision }, options);
   print([result.status === 'applied' ? t('cli.policy.recovery.applied', {}, locale) : t('cli.policy.recovery.current', {}, locale), policyTable(result.view, context, locale)].join('\n'));
 }

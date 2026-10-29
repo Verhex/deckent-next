@@ -6,6 +6,7 @@ import { createConnection } from 'node:net';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { createGuardedRuntimeClient, guardRuntimeServiceStop } from '../../../src/composition/core/runtime-service/index.js';
 import { ServiceShutdownApplication } from '#engine/index.js';
 import { FileProjectIdentityStore } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -47,6 +48,21 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] d
     expect(await client.describeService()).toMatchObject({ shutdownAvailable: false });
     await expect(client.shutdownService(command('instance-1'))).rejects.toMatchObject({ code: 'SERVICE_SHUTDOWN_INVALID' });
   } finally { await service.stop(); await service.done; }
+});
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] F3: SDK/MCP refuse to stop a manager-run service, naming its stop command; no shutdown request reaches it', async () => {
+  const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
+  const admit = vi.spyOn(ServiceShutdownApplication.prototype, 'admit'), asked: (number | undefined)[] = [];
+  try {
+    expect(createConfiguredRuntimeClient).toBe(createGuardedRuntimeClient); // the SDK export is the guarded client (MCP builds the same one)
+    const sdk = createConfiguredRuntimeClient(f.project, { env: f.env }), descriptor = await sdk.describeService();
+    const managed = guardRuntimeServiceStop(sdk, async pid => { asked.push(pid); return { manager: 'systemd', scope: 'user', unit: 'deckent-live.service' }; });
+    const refused: unknown = await managed.shutdownService(command(descriptor.instanceId)).then(() => null, (error: unknown) => error);
+    expect(refused).toMatchObject({ code: 'RUNTIME_SERVICE_EXTERNALLY_MANAGED', params: { command: 'systemctl --user stop deckent-live.service', action: 'stop-via-manager' } });
+    expect((refused as Error).message).not.toContain('--force'); // no AI/script surface has the person's override
+    expect(asked).toEqual([process.pid]); expect(admit).not.toHaveBeenCalled();
+    expect((await sdk.describeService()).instanceId).toBe(descriptor.instanceId);
+  } finally { admit.mockRestore(); await service.stop(); await service.done; }
 });
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] records the actual local-peer shutdown admission and clean outcome, then rejects its old instance after restart', async () => {

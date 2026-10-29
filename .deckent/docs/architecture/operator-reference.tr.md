@@ -52,11 +52,15 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   İki plan da yalnız kural ekler; sizin yazdığınız çakışan kurallar korunur.
 - `deckent init` rehberli kurulumdur: planı ve eksik kalanı, her adımın tam komutuyla gösterir;
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
+  Kurulum penceresinde ve kartlarında ↑↓ (ya da j/k) gezer, Enter vurgulu yanıtı gönderir, satırda gösterilen numara o satırla
+  yanıtlar, Esc kapatır; her evet/hayır sorusu (y) ve (n) gösterir ve kabul eder. Birkaç yanıt arasından seçimde (dil, profil) harf yoktur.
 - `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi ve
   algıladığı host aracı köprülerini önizler. Docker kodlama işçileri onu okumaz; onlar
   [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif) bölümündeki işçi dosyasını alır.
 - `deckent doctor` neyin hazır olduğunu söyler, kurulum başlayamıyorsa sıfır dışı kodla çıkar.
-  `deckent init preview --profile <dosya>` bir kurulum profili dosyasını önizler (ileri düzey).
+  `deckent init preview --profile <dosya>` bir kurulum profili dosyasını önizler (ileri düzey). İlk kurulum şablonundan geniş
+  kurallı bir profili uygulamak (`init apply --profile`, `init resume`) sizi gerçek terminalde ister (`AUTHORITY_WITNESS_REQUIRED`,
+  alpha.58); şablon içinde kalan profil terminalsiz uygulanır.
 
 ## Sağlayıcı bağlantı ayrıntıları
 
@@ -281,6 +285,9 @@ Geri alındı: <ref>, <sonra> → <önce> taşındı (sıra 2). Checkout, index 
   kimliğini (`deckent config explain service.identity`) ve sizin o servis üzerindeki `shutdown` kuralınızı ister; ilk kurulum
   policy'si bunu yalnız kuran kişiye verir. Yerel MCP aktörü varsayılan olarak servisi durduramaz (ona `service` MCP grubunu
   veren bir policy durdurabilir).
+- **systemd'nin çalıştırdığı servis (Linux).** Yeniden başlatma, durdurma, MCP aracı `shutdown_runtime_service` ve SDK istemcisi
+  bu servisi `RUNTIME_SERVICE_EXTERNALLY_MANAGED` ile reddeder ve `systemctl [--user] restart|stop <unit>` komutunu söyler;
+  durdurmayı yalnız terminalinizdeki `runtime shutdown --force` aşar (MCP ve SDK'da aşma yoktur, alpha.58).
 - **Eski kurulumlar.** Şablon v12'den eski bir ilk kurulum policy'sinde ne servis kimliği ne de `shutdown` kuralı vardır; bu
   yüzden `runtime restart` ve `runtime shutdown` reddedilir. Policy'yi yükseltin (bkz. [Başlangıç kurulumu](#başlangıç-kurulumu));
   uygulama `service.identity` ayarlarsa çalışan servisi bir kez elle durdurun (`runtime serve` üzerinde Ctrl+C), sonra
@@ -381,6 +388,7 @@ OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde a
 - Son kullanımını hiç almamış bir çağrı, siz `deckent models reconcile-spending` ile çözene kadar ayrılmış kalır.
 - Bir tutar ayrılandan fazla çıkarsa kapsam yeni ücretli çağrıları `revise-budget … --unfreeze` yapılana kadar durdurur.
 - `--input` olmadan `deckent models spending` kapsamın API bütçesini (sınır, kullanılan, ayrılan, kalan) gösterir.
+- Bütçenin zaten sahip olduğu tutarı onaylamak (kaldırılacak dondurma yoksa) hiçbir şey kaydetmez ve "hiçbir şey değişmedi" der.
 
 ## Terminal penceresi ve tuşlar
 
@@ -406,8 +414,8 @@ OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde a
   sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. `/watch-stop` gözlemi kapatır.
 - **Onay kartları.** Onay kartı (ve her soru) klavyeyi kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez.
   Yanıtları bir listedir — "Evet, bu sefer (y)", "Evet, bu oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis
-  sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓, j/k ya da 1–9 ile seçilir, Enter
-  ile onaylanır ya da harfle yanıtlanır; seçim Hayır'da başlar, Esc reddeder. "Hep izin ver" sizin kalıcı izninizdir
+  sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓ ya da j/k ile seçilir, Enter
+  ile onaylanır ya da satırın numarası veya harfiyle yanıtlanır; seçim Hayır'da başlar, Esc reddeder. "Hep izin ver" sizin kalıcı izninizdir
   (`deckent policy grants --mine`, `deckent policy revoke` ile kaldırılır). Bekleyen birden çok karar tek tek gelir ("1/3").
 - **Kartlarda tuş güvenliği.** Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş
   saymaz; o sırada ipucu satırı "Yeni açıldı · tuşları birazdan çalışır" der (erken gelen tuş için "Tuş sayılmadı … yeniden

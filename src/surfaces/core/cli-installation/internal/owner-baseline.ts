@@ -31,7 +31,7 @@ export async function ownerBaselineCommand(context: InstallationCommandContext, 
   if (input.expect !== undefined && input.expect !== preview.expect) return show({ ...preview, status: 'conflict', reason: 'revision-changed' });
   const ttlMs = (await loadConfig(input.root, { env: context.env ?? process.env, heal: false })).approvals.sessionTtlMs;
   const answer = await askCliCard({ title: t('cli.init.ownerBaseline.title', {}, input.locale), body: lines(preview),
-    options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, input.locale), key: 'y' }, { id: 'no', label: t('cli.init.policyModes.cardNo', {}, input.locale), key: 'n' }] },
+    options: [{ id: 'apply', label: t('cli.init.policyModes.cardApply', {}, input.locale), role: 'yes' }, { id: 'no', label: t('cli.init.policyModes.cardNo', {}, input.locale), role: 'no' }] },
   { locale: input.locale, env: context.env ?? process.env, signal: AbortSignal.timeout(ttlMs) });
   if (answer !== 'apply') return show(preview);
   show(await handler(input.root, input.scopeId, { ...call, apply: true, expect: preview.expect! }));

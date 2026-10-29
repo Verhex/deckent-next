@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type BeuserCandidateManifest } from '#domain/index.js';
 import { DockerBeuserRealmRuntime } from './lifecycle.js';
-import { dockerRealmCommand, canonicalRealmPath, BEUSER_REALM_RECIPE, type BeuserRealmOptions } from './realm.js';
+import { dockerRealmCommand, canonicalRealmPath, BEUSER_REALM_RECIPE, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 import { readBeuserCandidate } from './candidate.js';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
 import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type BeuserRealmChannel, type RealmDriverIO } from '#adapters/core/beuser-surface/index.js';
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
-  type SandboxRequest, beuserFilesystemProofSchema } from '#engine/index.js';
+  type SandboxRequest, type BeuserArrangePort, type BeuserArrangeStep, beuserFilesystemProofSchema } from '#engine/index.js';
 import { jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { createBeuserRemovalReadback } from './removal.js';
 import { retainBeuserJson } from './records.js';
@@ -121,18 +121,81 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
     } };
   }, async cancel() { /* C4 owns bounded destruction of the entire realm, including escaped driver descendants. */ } };
 }
+const recipe = BEUSER_REALM_RECIPE, cli = `${recipe.packageTarget}/dist/composition/core/cli/internal/entry.js`;
+// Fixed fixture Git identity and config: no system/global config, no prompt. Catalog steps never supply these.
+const gitEnv = `{ ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_AUTHOR_NAME: 'BeUser fixture',
+  GIT_AUTHOR_EMAIL: 'beuser@fixture.invalid', GIT_COMMITTER_NAME: 'BeUser fixture', GIT_COMMITTER_EMAIL: 'beuser@fixture.invalid' }`;
+const inRealm = `const work = ${JSON.stringify(recipe.workTarget)}, inRealm = rel => { const full = resolve(work, rel ?? '.');
+  if (full !== work && !full.startsWith(work + '/')) throw new Error('outside'); return full; };`;
+// In-realm read-only observer: the target's own guarded adapters for product facts, plain lstat/git for fixtures. Values only.
+const observeScript = `const { lstatSync, readFileSync } = await import('node:fs'), { resolve } = await import('node:path');
+const { spawnSync } = await import('node:child_process'), { createHash } = await import('node:crypto');
+const target = ${JSON.stringify(recipe.packageTarget)}, readback = JSON.parse(process.argv[1]); ${inRealm}
+const platform = () => import(target + '/dist/platform/index.js');
+const stat = path => { try { return lstatSync(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
+let value = 'unknown';
+if (readback.kind === 'installation') {
+  const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js'), { resolveProductLayout, getConfigFieldDefault } = await platform();
+  const read = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: inRealm(readback.root) }), getConfigFieldDefault('installation').writeLockTimeoutMs).read();
+  value = read.status === 'available' ? 'installed' : read.status === 'unavailable' && read.reason === 'not-created' ? 'absent' : 'unknown';
+} else if (readback.kind === 'path') {
+  const info = stat(readback.path);
+  value = !info ? { state: 'absent' } : { state: info.isFile() ? 'file' : info.isDirectory() ? 'directory' : info.isSocket() ? 'socket' : 'other',
+    mode: '0' + (info.mode & 0o777).toString(8).padStart(3, '0') };
+  try { if (info?.isFile()) value.sha256 = createHash('sha256').update(readFileSync(readback.path)).digest('hex'); } catch { /* unreadable: no digest */ }
+} else if (readback.kind === 'git') {
+  value = spawnSync('git', ['ls-files', '--error-unmatch', '--', readback.path], { cwd: work, env: ${gitEnv}, stdio: 'ignore', timeout: 10000 }).status === 0 ? 'tracked' : 'untracked';
+} else if (readback.kind === 'runtime-socket') {
+  const { runtimeSocketLocation } = await import(target + '/dist/adapters/core/local-runtime-socket/index.js'), { resolveProductLayout } = await platform();
+  value = stat(runtimeSocketLocation(resolveProductLayout({ projectRoot: work }))) ? 'present' : 'absent';
+} else if (readback.kind === 'install-method') value = (await platform()).packageRemovalCommand() === null ? 'unproven' : 'package-manager';
+console.log(JSON.stringify(value));`;
+const observe = async (context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, command: BeuserRealmCommand, readback: BeuserArrangeStep['readback']) =>
+  JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, handle.containerId, recipe.nodeExecutable, '--input-type=module', '--eval', observeScript,
+    JSON.stringify(readback)], context)) as unknown;
 /** Read through the target's own guarded, read-only identity adapter; return allowlisted values only. */
-export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions): Promise<unknown> {
-  const script = `
-const target = '${BEUSER_REALM_RECIPE.packageTarget}';
-const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js');
-const { resolveProductLayout, getConfigFieldDefault } = await import(target + '/dist/platform/index.js');
-const layout = resolveProductLayout({ projectRoot: '${BEUSER_REALM_RECIPE.workTarget}' });
-const read = await new FileInstallationIdentityStore(layout, getConfigFieldDefault('installation').writeLockTimeoutMs).read();
-const installation = read.status === 'available' ? 'installed'
-  : read.status === 'unavailable' && read.reason === 'not-created' ? 'absent' : 'unknown';
-console.log(JSON.stringify({ installation, preservedData: 'unknown', card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'unknown' }));
-`;
-
-  return JSON.parse(await dockerRealmCommand(options)(['container', 'exec', handle.containerId, BEUSER_REALM_RECIPE.nodeExecutable, '--input-type=module', '--eval', script], context)) as unknown;
+export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, command = dockerRealmCommand(options)): Promise<unknown> {
+  return { installation: await observe(context, handle, options, command, { kind: 'installation', expected: 'installed' }),
+    preservedData: 'unknown', card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'unknown' };
+}
+// In-realm effect wrapper: every child gets /dev/null stdin and pipes only, so the product's own witness check sees no terminal. Fixture files
+// and Git stay under the work target (no symlink is followed for the file itself). Exit codes are data.
+const arrangeScript = `const { spawnSync } = await import('node:child_process'), { createHash } = await import('node:crypto'), { resolve, dirname } = await import('node:path');
+const { mkdirSync, realpathSync, openSync, writeSync, closeSync, lstatSync, chmodSync, constants } = await import('node:fs');
+const [step, maxBuffer] = JSON.parse(process.argv[1]); ${inRealm}
+// Creates a missing directory one level at a time below the work target, never through a symlink: no effect lands outside it (Astra 2830).
+const safeDir = dir => { let at = work;
+  for (const part of dir.slice(work.length).split('/').filter(Boolean)) { at += '/' + part; let info;
+    try { info = lstatSync(at); } catch { mkdirSync(at, { mode: 0o700 }); info = lstatSync(at); }
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new Error('outside'); }
+  return dir; };
+let run;
+if (step.kind === 'file') {
+  try { const path = inRealm(step.path); safeDir(dirname(path));
+    if (realpathSync(dirname(path)) !== dirname(path)) throw new Error('outside');
+    if (step.content !== undefined) { const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+      try { writeSync(fd, step.content); } finally { closeSync(fd); } }
+    if (!lstatSync(path).isFile()) throw new Error('not a file');
+    chmodSync(path, parseInt(step.mode, 8)); run = { status: 0 };
+  } catch { run = { status: 1 }; }
+} else {
+  let cwd; try { cwd = safeDir(inRealm(step.cwd)); } catch { cwd = null; }
+  run = cwd === null ? { status: 1 } : spawnSync(step.kind === 'git' ? 'git' : process.execPath, step.kind === 'git' ? step.args : [${JSON.stringify(cli)}, ...step.args],
+    { cwd, env: step.kind === 'git' ? ${gitEnv} : process.env, stdio: ['ignore', 'pipe', 'ignore'], timeout: step.timeoutMs, maxBuffer, killSignal: 'SIGKILL' });
+}
+const out = run.stdout ?? Buffer.alloc(0);
+console.log(JSON.stringify({ exitCode: run.error ? null : run.status, stdoutBytes: out.length, stdoutDigest: createHash('sha256').update(out).digest('hex') }));`;
+/** First BeUser arrange adapter: product CLI, fixture file and Git steps over TTY-less `exec` (no --interactive/--tty) with explicit uid:gid and
+ * locale. Never the PTY driver: input through it is person-equivalent for the product's terminal witness. */
+export function createBeuserArrange(input: { readonly realm: BeuserRealmApplication; readonly custody: BeuserRealmCustody; readonly options: BeuserRealmOptions;
+  readonly language: string; readonly command?: BeuserRealmCommand }): BeuserArrangePort {
+  const { realm, custody, options, language } = input, command = input.command ?? dockerRealmCommand(options);
+  const admitted = async (ctx: BeuserContext) => { const handle = (await custody.load(ctx))?.handle;
+    return (await realm.observe(ctx)).state === 'admitted' && handle?.containerId ? handle : refuse(); };
+  return {
+    run: async (ctx, step) => JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, '--workdir', recipe.workTarget,
+      ...[`LANG=${language}`, `LC_ALL=${language}`, `HOME=${recipe.home}`, `DECKENT_GLOBAL_HOME=${recipe.home}/.deckent`].flatMap(env => ['--env', env]),
+      (await admitted(ctx)).containerId, recipe.nodeExecutable, '--input-type=module', '--eval', arrangeScript, JSON.stringify([step, ctx.limits.maxArtifactBytes])], ctx)) as unknown,
+    observe: async (ctx, readback) => observe(ctx, await admitted(ctx), options, command, readback),
+  };
 }

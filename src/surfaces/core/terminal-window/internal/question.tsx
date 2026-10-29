@@ -7,14 +7,22 @@ import { WINDOW_PRIORITY } from './window-stack.js';
 
 /**
  * One question contract for the terminal (TERMINAL-SABIT-DUZEN slice 2, owner 2026-10-18): approvals, single-choice and multi-choice
- * questions share these keys — ↑↓ or j/k move, 1–9 jump, Space toggles (multi), Enter submits the highlighted option (single) or the ticked
- * ones (multi), Esc and Ctrl+C cancel, and an option's own letter (`y`, `n`, `s`, `a`) answers a single-choice question at once. Pasted or
+ * questions share these keys — ↑↓ or j/k move, Space toggles (multi), Enter submits the highlighted option (single) or the ticked ones (multi),
+ * Esc and Ctrl+C cancel. A single-choice question is also answered at once by a shown number 1–9 (owner 2026-10-29) or an option's own letter
+ * (`s`, `a`, `q`, …); on a multi-choice question a number only moves. A digit beyond the option count is ignored. A yes/no
+ * question's answers declare `role` instead of a letter (BeUser walk16): `optionKey` derives `y`/`n` in every locale, so every yes/no question
+ * shows and takes (y)/(n) and an answer without a role (a "Not now" beside a real No) has none. Pasted or
  * multi-character input never answers. A question that takes the keyboard by itself is armed only after `armMs` (registry
  * `decision.json`), so keys typed for the input just before it appeared never decide it. Display and keys only: what a choice is allowed to
  * mean stays with the caller's controller and the service.
  */
 export type QuestionKind = 'single' | 'multi';
-export type QuestionOption = Readonly<{ id: string; label: string; key?: string }>;
+/** `role`: the yes or the no answer of a yes/no question, whose letter the contract derives; `key`: any other answer's own letter. Never both. */
+export type QuestionOption = Readonly<{ id: string; label: string } & ({ key?: string; role?: never } | { role: 'yes' | 'no'; key?: never })>;
+const YES_NO_KEYS = { yes: 'y', no: 'n' } as const;
+
+/** The one letter an option shows and answers to: `y`/`n` from its yes/no role, else its own key. */
+export const optionKey = (option: QuestionOption): string | undefined => option.role ? YES_NO_KEYS[option.role] : option.key;
 export type QuestionState = Readonly<{ at: number; ticked: readonly string[] }>;
 export type QuestionStep = Readonly<{ kind: 'move'; state: QuestionState }> | Readonly<{ kind: 'submit'; ids: readonly string[] }> | Readonly<{ kind: 'cancel' }> | Readonly<{ kind: 'ignored' }>;
 
@@ -30,10 +38,10 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
     return option ? { kind: 'submit', ids: [option.id] } : { kind: 'ignored' };
   }
   if (input.length !== 1) return { kind: 'ignored' };
-  const lower = input.toLowerCase(), shortcut = kind === 'single' ? options.find(option => option.key !== undefined && option.key.toLowerCase() === lower) : undefined;
-  // BeUser E-14: a key the card shows next to an option (`(4)`, `(y)`) answers with it, digits included; an unlabelled digit only moves.
+  const lower = input.toLowerCase(), shortcut = kind === 'single' ? options.find(option => optionKey(option)?.toLowerCase() === lower) : undefined;
   if (shortcut) return { kind: 'submit', ids: [shortcut.id] };
-  if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return move(Number(input) - 1);
+  // Owner 2026-10-29 (replaces BeUser E-14's "an unlabelled digit only moves"): the number a row shows answers a single-choice question.
+  if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return kind === 'single' ? { kind: 'submit', ids: [options[Number(input) - 1]!.id] } : move(Number(input) - 1);
   if (kind === 'multi' && input === ' ') {
     const id = options[state.at]?.id;
     if (id === undefined) return { kind: 'ignored' };
@@ -46,9 +54,9 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
 export function QuestionRows({ kind, options, state, focused }: { readonly kind: QuestionKind; readonly options: readonly QuestionOption[]; readonly state: QuestionState; readonly focused: boolean }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), pointer = glyphs.ascii ? '>' : '›';
   return <>{options.map((option, index) => {
-    const here = index === state.at, box = kind === 'multi' ? `${state.ticked.includes(option.id) ? '[x]' : '[ ]'} ` : '';
+    const here = index === state.at, box = kind === 'multi' ? `${state.ticked.includes(option.id) ? '[x]' : '[ ]'} ` : '', letter = optionKey(option);
     return <Text key={option.id} wrap="truncate-end" {...(here && focused ? palette.selection : {})}>
-      {`${here ? pointer : ' '} ${index + 1}. ${box}${option.label}${option.key ? ` (${option.key})` : ''}`}</Text>;
+      {`${here ? pointer : ' '} ${index + 1}. ${box}${option.label}${letter ? ` (${letter})` : ''}`}</Text>;
   })}</>;
 }
 

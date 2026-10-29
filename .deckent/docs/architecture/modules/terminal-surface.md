@@ -156,8 +156,15 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the owner takes plain text right now (`burstText`: only an open reason field), and then only as text, never a decision — except a read of
   navigation keys only (↑↓, PgUp/PgDn, Home/End without modifiers: a held key or coalesced arrows), delivered as ordinary keys because they
   only scroll or move the highlight and never decide (armed and focused still required); a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
-  answers through the shared question contract (`question.tsx`: ↑↓/j/k, 1–9, Enter, Esc, option letters; multi: Space) with the highlight on
-  No; session/always only as the service offers (G6). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
+  answers through the shared question contract (`question.tsx`: ↑↓/j/k, Enter, Esc, option letters, and 1–9 answering with the shown row (owner
+  2026-10-29) only once the card is armed; multi: Space toggles, a number only moves, Enter submits) with the highlight on
+  No; session/always only as the service offers (G6). Yes/no letters belong to the contract, not the call site (alpha.58, BeUser walk16): a
+  yes or no answer declares `role: 'yes' | 'no'` (never a hand `key`) and `optionKey` derives (y)/(n) in every locale for the row suffix and
+  the shortcut alike; a CLI card with a role must offer exactly one yes and one no (`cliCardGate`, `CLI_USAGE`). The guided `deckent init`
+  window, CLI cards (`askCliCard`), `DecisionCard` and the SIWC card all draw through it; a "Not now" beside a real No and true multi-choice
+  questions (language, profile, tier menus) have no letters. The panel `QuestionWindow` (Enter cancels) and the onboarding question view are
+  separate and unchanged. Each step of the guided setup window (`setup-window.tsx`) and of the SIWC card mounts its own `Window` (keyed
+  per step), so every step re-arms and a digit plus Enter typed for one step never answers the next (alpha.58). In the full window a focused decision takes the bar's place (`BarSlot`, composer kept
   mounted). Proof: `TERMINAL-SABIT-DUZEN-2026-10-18/race-*.txt` (failing first), `terminal-decision-race.test.ts`. While a card waits behind the composer (after Ctrl+O back) it shows `tui.focus.decide`.
   Standalone windows retain their modal default. TERMINAL-SABIT-DUZEN (owner 2026-10-18; the Claude Code fullscreen renderer's model,
   https://code.claude.com/docs/en/fullscreen): on a TTY `runTerminalWorkline` renders on Ink's alternate screen with incremental line

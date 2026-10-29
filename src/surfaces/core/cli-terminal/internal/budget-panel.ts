@@ -1,6 +1,6 @@
 import { loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { BudgetPanelPort, BudgetPanelView } from '#surfaces/core/terminal-panels/index.js';
-import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
+import { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUnchangedLine } from '#surfaces/core/cli-models/index.js';
 import type { TerminalLaunchContext } from './context.js';
 
 type Host = Required<Pick<TerminalLaunchContext, 'inspectProviderSpendAccount' | 'manageProviderSpend'>>;
@@ -33,9 +33,9 @@ export function budgetPanelPort(root: string, scopeId: string, host: Host, optio
     },
     async apply(request) {
       try {
-        const command = request.action === 'create' ? scopeBudgetCreateCommand(scopeId, request.usd, 'terminal')
-          : scopeBudgetRevisionCommand(await current(), request.usd, request.unfreeze, 'terminal');
-        return { ok: true, line: scopeBudgetLine(await host.manageProviderSpend(root, command, options), locale) };
+        const read = request.action === 'create' ? null : await current();
+        const command = read ? scopeBudgetRevisionCommand(read, request.usd, request.unfreeze, 'terminal') : scopeBudgetCreateCommand(scopeId, request.usd, 'terminal');
+        return { ok: true, line: command ? scopeBudgetLine(await host.manageProviderSpend(root, command, options), locale) : scopeBudgetUnchangedLine(read!, locale) };
       } catch (error) { return { ok: false, line: errorText(error) }; }
     },
   };

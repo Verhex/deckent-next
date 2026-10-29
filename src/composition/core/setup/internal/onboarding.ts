@@ -112,7 +112,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       const account = await terminal.inspectProviderSpendAccount(root, { schemaVersion: 1, scopeId, current: true }, options);
       const { scopeBudgetCreateCommand, scopeBudgetRevisionCommand } = await loadModelsSurface();
       const command = account.checkpoint ? scopeBudgetRevisionCommand(account, usd, false, 'terminal') : scopeBudgetCreateCommand(scopeId, usd, 'terminal');
-      await terminal.manageProviderSpend(root, command, options);
+      if (command) await terminal.manageProviderSpend(root, command, options); // Null: the budget already has this amount.
     },
     async reconcile(intent: RunIntentRecord) { return (await transitionConfiguredRunIntent(root, intent, 'fact', `${intent.command.commandId}-fact-${intent.fact.id}-${intent.fact.revision}`, options)).intent; },
     start: (intent: RunIntentRecord, signal?: AbortSignal) => startConfiguredRunIntent(root, intent, options, signal),

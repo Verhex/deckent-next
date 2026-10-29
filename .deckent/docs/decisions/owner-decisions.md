@@ -1008,3 +1008,16 @@ Kaynak: dış `proof/ANALIZ-2026-10-29/RAPOR.md` (temiz bağlam kanun denetimi 2
   canlı/N1/proje-wsl geçişi o sürümde.
 - **Envanter:** PUB-TRACK, KABUL-DEGERLENDIRICI, KUYRUK-KABUL, TEST-PERF-KOSUL, CORE-N1 yalnız PLAN gelen kutusuna; kabul edilmiş iş değil.
 - Açık: panel sorularında Enter=iptal korunsun mu (sorulmadı).
+
+## Owner kararları — 2026-10-29: beta envanteri R2 ve paket 1
+
+Kaynak: dış `proof/BETA-ISLER-2026-10-29/` (`PAKET-1/OWNER-DECISIONS.md`, Opus yan oturum 924cbc28'in dört sorusu); kökteki `beta-isler.md`
+ve `opus-beta-isler.md` Git'te izlenmez.
+
+- **Yürütücü:** paketi bu yan oturum ayrı worktree/dallarda yürütür, hedefli testleri koşar ve lead'e devreder; push ve merge yok.
+  2026-10-10 "lead tek geliştirme yetkilisi" kaydına yalnız bu paket için açık istisnadır. Birleştirme, Astra isteği ve canlı/N1 geçişi lead'de kalır.
+- **Eşzamanlılık:** aynı anda en çok 4 ajan; test/build tek ağır kilitle (flock) sırayla, 16 GB sınırı içinde.
+- **İlk paket:** küçük, çakışmasız işler: F1 uninstall yardım metni (4 yer), F4 TR sürdürme komutu, F6 Hub ret metni, F3 MCP/SDK servis
+  kapatma koruması, belge uzlaştırmaları (ARCHITECTURE uninstall paragrafı, Codex Ç3/Ç8/Ç10) ve dosya boyutu ölçü kilidi (PLAN Sıradaki 12,
+  ilk adım). F1/F3/F4/F6 böylece iş olarak kabul edildi; F2 ve F5 bu pakette değil.
+- **Native birimi:** kişi-gün, kaynaktaki gibi ([native-platforms](../plan/native-platforms-2026-10-21.md): macOS 60–110, Windows 110–190 kişi-gün).

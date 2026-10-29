@@ -38,7 +38,7 @@ export async function installExecutionEnvironment(root: string, scopeId: string,
   const outcome = await owner.install({ environment: DOCKER_APT.environment, scopeId, principal: readLocalOsIdentity(),
     source: { distribution: plan.source.distribution, codename: plan.source.codename, fingerprint: DOCKER_APT.key.fingerprint } }, {
     confirm: async () => await askCliCard({ title: t('setup.docker.card.title', {}, locale), body: dockerCardBody(plan, locale),
-      options: [{ id: 'install', label: t('setup.docker.card.install', {}, locale), key: 'y' }, { id: 'no', label: t('setup.docker.card.no', {}, locale), key: 'n' }] }, io) === 'install',
+      options: [{ id: 'install', label: t('setup.docker.card.install', {}, locale), role: 'yes' }, { id: 'no', label: t('setup.docker.card.no', {}, locale), role: 'no' }] }, io) === 'install',
     apply: () => runDockerInstall(plan, env, { spawn: spawnForeground, version: installedDockerVersion(env), ...deps.install, sudo }) });
   if (outcome === 'declined') { out([t('setup.docker.declined', {}, locale)]); return 'declined'; }
   const next = executionSetupFamily().stages[0]!.evaluate({ facts: await detect(), answer: undefined, scopeId, states: new Map() });

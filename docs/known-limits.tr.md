@@ -9,15 +9,16 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.57 main'e indi (PR #120 ve #121) ve canlıda. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.57 main'e indi (PR #120 ve #121) ve canlıda. Alpha.58 sürüm adayıdır, yayımlanmadı; alpha.58 işaretli maddeler bu adayı anlatır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
 Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel kalıcı realm kayıtlarını, private transport'u, C4/C5 kanıtını, TaskEvaluation ve Run raporunu bağlar. R3-B izin verisini init/upgrade yayınının içine alır; replay özgün byte denetimini korur. Dry admission yazar kanıtıdır, gerçek realm yolculuğu değildir. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; ölçülmeyen alanlar unknown/null kalır. Sonlu limits profili provisional'dır. Mühürlü ledger hiçbir yolda export/backup/restore olamaz; yedek bağımlı dallar unknown kalır. Desteklenmeyen private systemd unknown/non-blocking'dir. Host socket/bus çözümü yoktur. Native adoption/tam surfaces B2/B4'tür. Birleşik sürümde host üzerindeki ilk yürüyüş üç yolculuğu koştu; üçü de kırmızı çıktı, yani yolculuk kabulü ve owner kabulü açıktır.
 
-- **`deckent init` içinde evet/hayır harfleri her yerde kabul edilmez.** İlk kart evet cevabının yanında `y` tuşunu gösterir ve `y` alır; ardından gelen rehberli kurulum penceresi harf göstermez ve `y`'yi sessizce yok sayar. *Etki:* orada `y`'ye basan kişi (ya da BeUser personası) hiçbir şey olmadığını görür. *Yol:* vurgulu cevabı seçmek için Enter'a basın.
-- **BeUser yolculuğu her zaman boş realm'de başlar.** Yolculuk verisi başlangıç durumlarını adlandırır ama onları hazırlayan kod yoktur; kurulu Deckent gerektiren yolculuklar (kaldırma, BeUser'ın kendisi) "Kuruluma başla?" ekranında durur. *Etki:* bu yolculuklar sınadıkları dala ulaşmadan kırmızı raporlanır. *Yol:* henüz yok; böyle bir kırmızıyı o dal hakkında ürün hükmü değil "başlangıç durumu eksik" diye okuyun.
+- **Alpha.57'de `deckent init` içinde evet/hayır harfleri her yerde kabul edilmez.** İlk kart evet cevabının yanında `y` tuşunu gösterir ve `y` alır; ardından gelen rehberli kurulum penceresi harf göstermez ve `y`'yi sessizce yok sayar. *Etki:* orada `y`'ye basan kişi (ya da BeUser personası) hiçbir şey olmadığını görür. *Yol:* vurgulu cevabı seçmek için Enter'a basın. Alpha.58 adayı her evet/hayır kartında (y)/(n) gösterir ve alır; bu madde o sürüm inince kalkar.
+- **BeUser yalnız tanıksız ulaşabildiği başlangıç durumlarını hazırlar (alpha.58).** v3 yolculuk profili dalının katalogdaki başlangıç durumlarını adlandırır. Persona ilk ekrana bakmadan önce Deckent bunları realm içinde terminalsiz bir exec ile (stdin kapalı, kullanıcı ve dil açık) hazırlar, personanın terminalinden asla geçirmez ve her birini geri okur. Katalog şunları hazırlar: `deckent init --yes --scope beuser-realm --json` ile kurulu Deckent, `.deckent/` altında Git'in izlediği bir dosya olan Git projesi, `.deckent/` altında bilinmeyen bir dosya, durmuş servis, ikinci kurulum, okunamayan kayıt defteri, güvensiz yetki dosyası, elle yazılmış başlatıcı, kanıtlanamayan kurulum yöntemi, boş önbellek, taze ev klasörü, Docker soketi olmaması, kişinin kendi dosyalarının olduğu klasör ve montajlı aday. Personanın dili ve erişilebilirlik ihtiyacı profilinden gelir; `cancel` personanın kendi eylemidir. Şunlar unknown kalır ve rapor her birini nedeniyle adlandırır: kişinin tanıklığını isteyenler (yönetilen politika ve onaylar `T2`/`S14`/`S14b`, genel ya da taşınmış veri `S10b`/`S25`, anahtarlar `S11`, uygulanmış ya da yarım kalmış kaldırma `S15`/`S16`, değiştirilmiş köprü `S21`, model, fiyat, rol ya da bütçe kurulumu), mühürlü realm'in dışında kalanlar (servis yöneticileri ve çalışan servisler `S2`/`S4`/`S4b`/`K4`, etkin iş ve belirsiz etkiler `S5`/`S8`, çalışan imajları `S12`, başka platform `S18`, imaj hazırlama, çalışan soruları, kullanılamayan realm ya da ağ), tanıksız üreticisi olmayanlar (`S3`, park edilmiş iş `S6`, bekleyen onay `S7`, kuyruktaki teslim `S9`, dağıtım geçmişi `S23`), sürücü sınırları (boru hattı, CI ve MCP `S17`, satır kipi) ve Enterprise şirket kapsamı. Bunlardan birini adlandıran dal herhangi bir adımdan önce `BEUSER_START_STATE_UNREACHABLE` ile durur ve persona başlamaz; başarısız olan ya da geri okunamayan adım dalı `BEUSER_START_STATE_UNMET` ile durdurur. İkisi de unknown'dır, asla kırmızı değildir. Tanığı atlatan yol yoktur. *Etki:* bu dallar yürünmez; kaldırmanın 23 dalından 18'i ve onboarding'in 21 dalından 12'si bunlara girer. *Yol:* raporun hazırlanmamış durumlar listesini saklayın; v2 profil eski boş realm'de başlamayı sürdürür.
+- **BeUser takılan personayı ararken ekranları sayıları maskelenmiş olarak karşılaştırır (alpha.58).** Başka ekranlardan geçip geri dönen ve yalnız sayıları (revizyon, sayaç, saat) farklı olan bir ekranda aynı tuş ya da metin üçüncü kez gelirse yürüyüş `loop` ile, böyle bir ekranda üst üste dördüncü bakma ya da bekleme gelirse `observing` ile biter; ikisi de kırmızı `persona-stuck` bulgusudur. *Etki:* yalnız değişen sayıları gösteren bir ekrandan geçerek aynı eylemi meşru olarak üç kez tekrarlayan bir yolculuk (örneğin yalnız sayı gösteren bir listeye üç öğe eklemek) ya da dört bakma veya bekleme boyunca aynı ekranda kalan bir ürün takılmış olarak raporlanır. *Yol:* bulguyu ürün hatası saymadan önce ekranını ve kanıtını okuyun; eşikler `assets/beuser/limits.json` içinde registry verisidir.
 - **BeUser yürüyüşleri host'un Docker'ını ister.** Yürüyüş realm konteynerini host Docker daemon'ı üzerinden başlatır (root olmayan uid, ağ yok, salt okunur kök, kendi mount/pid/ipc/uts/cgroup namespace'leri); böyle bir konteyner başlatamayan ortam yürüyüş yapamaz. *Yol:* profili herhangi bir yerde hazırlayın, `deckent beuser walk` komutunu Docker'lı bir host'ta çalıştırın.
 
 ## Platformlar: denenenler ve denenmeyenler
@@ -141,6 +142,19 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD --main` (ya da `--project`; gizli istem),
   `deckent secret store`, `deckent config set <anahtar> <değer>` ya da terminalin `/provider`, `/config` ve mod değiştirmesini kendi
   etkileşimli terminalinizde kullanın.
+- **Yeni kurulum kendi başlangıç yetkisini tanıksız kurar; sonradan değiştirmek tanık ister.** Yeni bir projede başsız
+  `deckent init --yes` (ya da `init policy --apply`), ürünün sabit ilk çalıştırma policy'sini ve bindings dosyasını yazar, kurulum
+  ve proje kimliklerini oluşturur ve sır deposunu şifreli depoya geçirir; terminalde bir kişi gerekmez. Geçişi, aynı kurulumun bir
+  an önce yazdığı şablonun kendi `first-run-secret-switch` kuralı karara bağlar: ondan önce korunacak bir yetki yoktur ve içerik
+  çağıran tarafından seçilmez, ürün tarafından sabittir. Profil ve mod yetkisi kişinin terminalde tanıklı ilk açılışına kadar
+  beklemede kalır. Sonrasında `deckent secret store` (çalışma zamanı depo geçişi) bir yetki değişikliğidir ve yukarıdaki
+  değişiklikler gibi terminal tanığı ister. Verilen bir profil (`deckent init apply --profile` ya da `init resume`) yalnız taşıdığı
+  her kural şablonun kuran kişiye vereceğinin içinde kaldığı sürece tanıksız yayımlanır; daha genişi (sormadan izin verilen düzenleme
+  ya da kabuk araçları, MCP aktörüne ya da herkese verilen izinler) etkileşimli terminal dışında, kanıt adımından ve herhangi bir
+  yazmadan önce `AUTHORITY_WITNESS_REQUIRED` ile reddedilir. *Etki:* yeni bir projede ilk kurulumu çalıştırabilen kişi şablonun
+  başlangıç yetkisini alır (fazlasını değil) ve bir ajan şablonla sınırlı verilen bir kurulumu gözetimsiz çalıştırabilir; bu kapı
+  yapay zekâ ajanı işaretine değil terminale bakar, `init policy --upgrade --apply` ile aynı. *Geçici çözüm:* ilk kurulumları
+  kendiniz çalıştırın; daha geniş verilen bir profili kendi etkileşimli terminalinizde uygulayın.
 - **Runtime soketi sandbox'taki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** Runtime servisi kendi PID, mount ve
   user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü runtime soket dizinlerini gizler ve Landlock
   realm'i hiç unix soketi açamaz. Hesabınızın sandbox dışında çalıştırdığı bir süreç (tam erişimli bir turda onaylanan host
@@ -364,7 +378,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   süre sınırı önce geliyorsa ve sessiz işçilerin daha erken durdurulmasını istiyorsanız bu değeri düşürün ya da profilin süre
   sınırını artırın.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
-  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve güncel ledger (v70; kuyruk
+  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve güncel ledger (v73; kuyruk
   ledger v57–v59 ile geldi) yeniden build edilmiş binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek
   terminal/socket/crash ve N1 yük kabulü ayrı kapılardır; ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar;
   görünüm son bilinen durumdur. Teslim penceresi şu an açıkça yenileme gerektirir.
@@ -539,7 +553,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   devam etmez:** yeniden gönderilince park edilir (`APPROVAL_CONFLICT`). *Yol:* yeni bir /do başlatın; görev onayı bu kez görev
   çalışmadan hemen önce bir kez sorulur. Politikasında `task` kuralı olmayan kurulumlar etkilenmez.
 - **Yeniden başlatma parmak izi.** `restart-exempt.json`, her istekte yeniden okunan yeniden başlatma bölümü üyelerini listeler (`admission.registry`); bunları değiştirmek hizmeti asla eski göstermez. Üye ancak başlangıçta yakalanmadığı kanıtlandıktan sonra eklenir.
-- **`runtime restart`, terminalin `/service-restart` komutu ve `runtime shutdown` (`--force` olmadan), systemd'nin çalıştırdığı hizmeti yalnız systemd bunu doğrularsa reddeder** (Linux): hizmet sürecinin control group'u aday bir `.service` unit'i gösterir; yeniden başlatma, yalnız systemd bu süreci unit'in MainPID'i olarak bildirirse reddedilir ve `systemctl [--user] restart <unit>` komutu söylenir (durdurmada `systemctl [--user] stop <unit>`) (`systemctl show -p MainPID`, 2 sn sınır; hedef servis sürecinin ortamı hiç okunmaz). Kullanıcı unit'i çağıranın `XDG_RUNTIME_DIR` değeriyle, başlatıcı ortamı temizlemişse `/run/user/<uid>` ile sorulur (alpha.56.1). Erişilebilir bir systemd bus'ı yoksa ya da yanıt gelmezse denetim kapalıdır ve yeniden başlatma yapılır; ExecStart sarmalayıcısı runtime'ı `exec` etmeyen bir unit algılanmaz. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz. *Yol:* systemd'nin çalıştırdığı hizmeti `systemctl [--user] restart <unit>` ile yeniden başlatın.
+- **`runtime restart`, terminalin `/service-restart` komutu, `runtime shutdown` (`--force` olmadan), MCP aracı `shutdown_runtime_service` ve SDK istemcisinin `shutdownService` çağrısı, systemd'nin çalıştırdığı hizmeti yalnız systemd bunu doğrularsa reddeder** (Linux): hizmet sürecinin control group'u aday bir `.service` unit'i gösterir; yeniden başlatma, yalnız systemd bu süreci unit'in MainPID'i olarak bildirirse reddedilir ve `systemctl [--user] restart <unit>` komutu söylenir (durdurmada `systemctl [--user] stop <unit>`) (`systemctl show -p MainPID`, 2 sn sınır; hedef servis sürecinin ortamı hiç okunmaz). Kullanıcı unit'i çağıranın `XDG_RUNTIME_DIR` değeriyle, başlatıcı ortamı temizlemişse `/run/user/<uid>` ile sorulur (alpha.56.1). Erişilebilir bir systemd bus'ı yoksa ya da yanıt gelmezse denetim kapalıdır ve yeniden başlatma yapılır; ExecStart sarmalayıcısı runtime'ı `exec` etmeyen bir unit algılanmaz. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz. MCP ve SDK retleri alpha.58 adayında yenidir; bu çağıranlarda `--force` geçersiz kılması yoktur; bu yüzeylerde okunamayan servis tanımı hiçbir şey göndermez. *Yol:* systemd'nin çalıştırdığı hizmeti `systemctl [--user] restart <unit>` ile yeniden başlatın.
 - **Yerel runtime soketinin eş canlılık tanığı** HUP/ERR/NVAL'i, çağrı süresince yakalanabilir sinyalleri bloklayan sıfır süreli tek bir `ppoll` ile gözler: SIGCHLD gibi ele alınmış bir sinyal artık kopmuş istemci gibi okunmaz. Gerçek bir tur iptalinden önce biten araç çağrısı yine `cancelled` bildirilir; sonuç metni uygulanan yazım kümesini taşır (tamlık bayrağı ya da yeni durum kararı owner'da açık).
 - **Yeni sürüme geçişten önce başlatılan MCP ve terminal süreçleri önceki derlemeyle çalışmayı sürdürür.** Geçiş kurulu derlemeyi
   değiştirir, ama bir istemcinin daha önce başlattığı MCP sunucusu ya da `deckent` terminali, istemci onu yeniden başlatana kadar
@@ -635,7 +649,7 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   verdiği terfiler bir kişi geri alana kadar kalır (owner'ın seçimi). Skill'ler yalnız bir kişinin eklediği içe aktarma anahtarıyla içe
   aktarılır. Alpha.56 imzalı Hub paketlerini sağlar; halka açık ağ kullanımı aşağıdaki sınırlarla kalır.
 - **Auditor'ın henüz canlı okuyucusu ve sınıflandırıcısı yok.** Politika turu kayıtları mühürlenir, ama izleme okuyucusunun çalışma zamanı
-  işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner ayrıntısını bekler).
+  işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner yönünü 2026-10-24'te verdi; tasarım ve sıra bekliyor, kod yok).
 
 ## Hub paketleri ve kaldırma
 
@@ -691,7 +705,9 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   Kaldırma `require-approval` politika kararını reddeder (`POLICY_APPROVAL_UNSUPPORTED`): onaylı kaldırma henüz modellenemez. Bir
   yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.
-- **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur; Git
+- **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur;
+  alpha.58 adayında güvensiz bir `policy.json` ya da `bindings.json` her kademeyi dosyayı adlandıran `UNINSTALL_POLICY_UNREADABLE`
+  ile durdurur, veriler kalır ve dosya asla onarılmaz; Git
   izleme bilgisi okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. Yarım son silme yalnız kalan baytlar, Git
   izlemesi, arşiv ve silme yetkisi yeniden doğrulanınca sürer; yoksa dosyalar kalır, yönetilen yedekten geri yükleme
   kullanılabilir. Bilinmeyen adım bilinmiyor kalır. Kurtarma konumu size özel olmalı ve kaldırmanın değiştirdiği her klasörün

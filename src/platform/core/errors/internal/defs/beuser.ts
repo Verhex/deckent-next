@@ -13,9 +13,12 @@ export const beuserErrors: ErrorDefinitions = Object.freeze({
   BEUSER_MODEL_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_MODEL_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_MODEL_UNAVAILABLE', p, l) }) },
   BEUSER_SURFACE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_UNAVAILABLE', p, l), suggestion: t('remedy.BEUSER_SURFACE_UNAVAILABLE', p, l) }) },
   BEUSER_SURFACE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_INVALID', p, l), suggestion: t('remedy.BEUSER_SURFACE_INVALID', p, l) }) },
+  BEUSER_ACTION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_ACTION_INVALID', p, l), suggestion: t('remedy.BEUSER_ACTION_INVALID', p, l) }) },
   BEUSER_SURFACE_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_LIMIT', p, l), suggestion: t('remedy.BEUSER_SURFACE_LIMIT', p, l) }) },
   BEUSER_SURFACE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_BUSY', p, l), suggestion: t('remedy.BEUSER_SURFACE_BUSY', p, l) }) },
   BEUSER_CAPTURE_BLOCKED: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_CAPTURE_BLOCKED', p, l), suggestion: t('remedy.BEUSER_CAPTURE_BLOCKED', p, l) }) },
   BEUSER_SURFACE_EOF: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_SURFACE_EOF', p, l), suggestion: t('remedy.BEUSER_SURFACE_EOF', p, l) }) },
+  BEUSER_START_STATE_UNMET: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_START_STATE_UNMET', p, l), suggestion: t('remedy.BEUSER_START_STATE_UNMET', p, l) }) },
+  BEUSER_START_STATE_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: t('error.BEUSER_START_STATE_UNREACHABLE', p, l), suggestion: t('remedy.BEUSER_START_STATE_UNREACHABLE', p, l) }) },
   BACKUP_REALM_SEALED: { category: 'error', render: (p, l) => ({ message: t('error.BACKUP_REALM_SEALED', p, l), suggestion: t('remedy.BACKUP_REALM_SEALED', p, l) }) },
 });

@@ -10,7 +10,7 @@ export async function walkBeuser(controller: BeuserController, ports: {
   readonly initialCommand?: Parameters<SurfacePort['argv']>[1] | undefined;
   readonly finished: (screen: BeuserScreen) => Promise<boolean>;
   readonly record: (screen: BeuserScreen) => Promise<void>;
-  readonly stopped?: (screen: BeuserScreen, action: BeuserSurfaceCommand['action']) => Promise<void>;
+  readonly stopped?: (screen: BeuserScreen, action: BeuserSurfaceCommand['action'], reason: 'loop' | 'observing') => Promise<void>;
 }): Promise<void> {
   let screen = await controller.call('beuser-sandbox', 'create', context => ports.initialCommand
     ? ports.surface.argv(context, ports.initialCommand) : ports.surface.look(context));
@@ -18,31 +18,38 @@ export async function walkBeuser(controller: BeuserController, ports: {
     controller.screen(screen);
     await controller.call('beuser-transcript', 'inspect', () => ports.record(screen));
     if (await controller.call('attempt', 'evaluate', () => ports.finished(screen))) return;
-    const decoded = await correctBeuserModelOutput(controller.context, controller.summary.patience, async outputError => {
+    const shown = screen;
+    // One decision is one correction attempt: an unparseable answer or an action the surface refused before any input asks the walker again.
+    screen = await correctBeuserModelOutput(controller.context, controller.summary.patience, async outputError => {
+      const history = controller.history(shown);
       controller.step();
       controller.modelCall();
       const answer = await controller.call('attempt', 'evaluate', context => outputError
-        ? ports.models.walker(context, controller.summary, screen, outputError) : ports.models.walker(context, controller.summary, screen), true);
+        ? ports.models.walker(context, controller.summary, shown, history, outputError) : ports.models.walker(context, controller.summary, shown, history), true);
       if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-walker'
         || answer.receipt.invocation.receipt.outcome?.state !== 'responded') throw new BeuserWalkStopped('unknown');
-      return ports.decode(answer.receipt.invocation);
+      const decoded = ports.decode(answer.receipt.invocation);
+      const target = typeof decoded === 'object' && decoded !== null && 'binding' in decoded ? decoded.binding : null;
+      if (!beuserBindingSchema.safeParse(target).success) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
+      const parsed = beuserSurfaceCommandSchema.safeParse(decoded);
+      if (!parsed.success) throw new BeuserWalkStopped('drift');
+      const { context } = controller, action = parsed.data.action;
+      assertBeuserAccess(context, parsed.data.binding, context.principal, { kind: 'beuser-sandbox', id: parsed.data.binding.realmId }, 'create');
+      try { controller.action(shown, action); }
+      catch (error) {
+        if (error instanceof BeuserWalkStopped && (error.reason === 'loop' || error.reason === 'observing') && ports.stopped)
+          await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(shown, action, error.reason as 'loop' | 'observing'));
+        throw error;
+      }
+      if (action.kind === 'wait') controller.wait(action.ms);
+      try {
+        const next = await controller.call('beuser-sandbox', 'create', ctx => action.kind === 'look' ? ports.surface.look(ctx)
+          : action.kind === 'type' ? ports.surface.type(ctx, action.text) : action.kind === 'press' ? ports.surface.press(ctx, action.key) : ports.surface.wait(ctx, action.ms));
+        controller.acted(shown, action); return next;
+      } catch (error) {
+        if (error instanceof BeuserContractError && error.code === 'BEUSER_ACTION_INVALID') controller.acted(shown, action, error.code);
+        throw error;
+      }
     });
-    const target = typeof decoded === 'object' && decoded !== null && 'binding' in decoded ? decoded.binding : null;
-    if (!beuserBindingSchema.safeParse(target).success) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
-    const parsed = beuserSurfaceCommandSchema.safeParse(decoded);
-    if (!parsed.success) throw new BeuserWalkStopped('drift');
-    const command = parsed.data;
-    const { context } = controller;
-    assertBeuserAccess(context, command.binding, context.principal, { kind: 'beuser-sandbox', id: command.binding.realmId }, 'create');
-    try { controller.action(screen, command.action); }
-    catch (error) {
-      if (error instanceof BeuserWalkStopped && error.reason === 'loop' && ports.stopped)
-        await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(screen, command.action));
-      throw error;
-    }
-    const action = command.action;
-    if (action.kind === 'wait') controller.wait(action.ms);
-    screen = await controller.call('beuser-sandbox', 'create', ctx => action.kind === 'look' ? ports.surface.look(ctx)
-      : action.kind === 'type' ? ports.surface.type(ctx, action.text) : action.kind === 'press' ? ports.surface.press(ctx, action.key) : ports.surface.wait(ctx, action.ms));
   }
 }

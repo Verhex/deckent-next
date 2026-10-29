@@ -14,6 +14,7 @@ import {
   scopeLister, scopeNotice, standingCardOptions, textCells, type CliCardRequest,
 } from '#surfaces/core/cli-human/index.js';
 import { hostAgentEnvironment, hostLocale } from '#composition/core/cli/index.js';
+import { optionKey } from '#surfaces/core/terminal-window/index.js';
 
 /** L-KIT (alpha.48): the CLI toolkit's observable contract. */
 const caught = async (work: () => unknown): Promise<{ code?: string; message: string; exit: number }> => {
@@ -282,7 +283,7 @@ describe('TTY card contract', () => {
   it('NEGATIVE: "always" is never offered on a hard-floor cell, whatever the caller asked', () => {
     expect(standingCardOptions('en', { session: true, always: true, hardFloor: true }).map(option => option.id)).toEqual(['once', 'session', 'no']);
     expect(standingCardOptions('tr', { session: true, always: true, hardFloor: false }).map(option => option.id)).toEqual(['once', 'session', 'always', 'no']);
-    expect(standingCardOptions('en', { hardFloor: false }).map(option => option.key)).toEqual(['y', 'n']);
+    expect(standingCardOptions('en', { hardFloor: false }).map(option => optionKey(option))).toEqual(['y', 'n']);
   });
   it('NEGATIVE: only a person on a real terminal is asked; pipes, agents and dumb terminals are refused before anything is drawn', async () => {
     const request = { title: 'x', options: [{ id: 'a', label: 'A' }] };
@@ -293,6 +294,10 @@ describe('TTY card contract', () => {
     }
     expect(await caught(() => cliCardGate({ title: 'x', options: [{ id: 'a', label: 'A' }, { id: 'a', label: 'B' }] }, { locale: 'en', env: {}, stdin: tty, stdout: tty })))
       .toMatchObject({ code: 'CLI_USAGE' });
+    // walk16: a card with a yes/no answer offers exactly one yes and one no, so it always shows and takes both (y) and (n).
+    for (const options of [[{ id: 'go', label: 'Go', role: 'yes' as const }, { id: 'later', label: 'Later' }], [{ id: 'a', label: 'A', role: 'yes' as const }, { id: 'b', label: 'B', role: 'yes' as const }, { id: 'c', label: 'C', role: 'no' as const }]]) {
+      expect(await caught(() => cliCardGate({ title: 'x', options }, { locale: 'en', env: {}, stdin: tty, stdout: tty }))).toMatchObject({ code: 'CLI_USAGE' });
+    }
   });
   it('J1: askCliCard passes the same gate before its Ink view loads, and an already cancelled command gets no answer', async () => {
     const request = { title: 'x', options: [{ id: 'a', label: 'A' }] };

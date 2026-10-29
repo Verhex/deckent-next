@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { identitySchema as id, counterSchema, immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 
-export const BEUSER_CONTRACT_VERSION = 1;
+export const BEUSER_CONTRACT_VERSION = 2;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const competence = counterSchema.max(4);
 /** Package adapter pin; the complete inventory stays in the candidate, outside bounded execution JSON. */
@@ -24,9 +24,9 @@ export const beuserSealedRubricSchema = z.object({ schemaVersion: z.literal(1), 
 export const beuserBindingSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   candidate: acceptanceSubjectSchema, candidateDigest: digest, personaDigest: digest, journeyDigest: digest, rubricDigest: digest,
   realmId: id, nonce: z.string().uuid(), transcriptId: id }).strict().readonly();
-/** Harness authored, redacted observations; synthetic answers are never human approval evidence. */
+/** Harness authored, redacted observations; synthetic answers are never human approval evidence. v2: `arrange` is trusted start-state setup, never a persona action. */
 export const beuserTranscriptEntrySchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
-  sequence: counterSchema.positive(), atMs: counterSchema, kind: z.enum(['screen', 'action', 'friction', 'readback', 'secret-step', 'synthetic-person-decision']),
+  sequence: counterSchema.positive(), atMs: counterSchema, kind: z.enum(['arrange', 'screen', 'action', 'friction', 'readback', 'secret-step', 'synthetic-person-decision']),
   evidenceRef: id, digest }).strict().readonly();
 export const beuserVerdictSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema, transcriptDigest: digest,
   outcome: z.enum(['GREEN', 'FRICTION', 'RED', 'unknown']), authorization: z.enum(['pass', 'fail', 'unknown']),

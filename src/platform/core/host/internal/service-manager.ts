@@ -1,5 +1,6 @@
 import { closeSync, openSync, readSync } from 'node:fs';
 import { HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
+import { ErrorRegistry } from '#platform/core/errors/index.js';
 
 /** A service manager that runs a process: systemd places a unit's processes in the unit's control group (`<name>.service`) and names one main process. */
 export interface ServiceManagerUnit { readonly manager: 'systemd'; readonly scope: 'user' | 'system'; readonly unit: string }
@@ -47,3 +48,16 @@ export const serviceManagerRestartCommand = (found: ServiceManagerUnit): string 
   `systemctl ${found.scope === 'user' ? '--user ' : ''}restart ${found.unit}`;
 /** The operator command that stops the unit through its manager (a stop elsewhere leaves the manager believing it simply finished). */
 export const serviceManagerStopCommand = (found: ServiceManagerUnit): string => `systemctl ${found.scope === 'user' ? '--user ' : ''}stop ${found.unit}`;
+/**
+ * F3: the one stop check every caller surface shares (the CLI unless the person's `--force`, MCP, the SDK), before any shutdown request
+ * is sent: a runtime service its manager runs is stopped through that manager, else the next terminal starts a second, unmanaged service.
+ * A rejected lookup propagates (never "not managed"); an unanswered systemd query is no proof of a manager (`detectServiceManager`, CI-108).
+ * Uninstall's governed stop under K4 custody does not pass here (it stops such a service on purpose, before it disables the unit).
+ */
+export async function assertRuntimeServiceStoppable(processId: number | undefined,
+  managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null>, forceAvailable = false): Promise<void> {
+  const managed = await managerOf(processId);
+  if (!managed) return;
+  // Only the CLI person has `--force`; MCP and SDK callers get the refusal without that hint.
+  throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerStopCommand(managed), action: forceAvailable ? 'stop' : 'stop-via-manager' } });
+}

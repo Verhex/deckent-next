@@ -11,20 +11,22 @@ import { applyLine, languageName, stageCommand, stageStateLabel, stageText, stag
 import registry from './modes.json' with { type: 'json' };
 
 type Observed = Readonly<{ observation: SetupObservation; registry: SetupStageRegistry; firstJob?: FirstJobFacts }>;
-type Choice = Readonly<{ id: string; label: string; answer?: unknown; action: 'answer' | 'apply' | 'later' | 'close' }>;
+type Choice = Readonly<{ id: string; label: string; answer?: unknown; action: 'answer' | 'apply' | 'later' | 'close'; role?: 'yes' | 'no' }>;
 
 /** The stage the person works on now: the first one waiting for an answer or ready to apply that was not put off in this session. */
 export const activeStage = (plan: SetupPlan, later: ReadonlySet<string>) =>
   plan.stages.find(stage => !later.has(stage.id) && (stage.state === 'needs-answer' || (stage.state === 'ready' && stage.operation !== null))) ?? null;
 
-/** The answers offered for one stage, at most `windowOptionRows`; the window highlights `initialChoice` (owner 2026-10-26: Enter accepts it). */
+/** The answers offered for one stage, at most `windowOptionRows`; the window highlights `initialChoice` (owner 2026-10-26: Enter accepts it).
+ * A yes/no stage marks its yes and no answers (`role`), so the window shows and takes (y)/(n) (BeUser walk16): "Not now" is the no of a lone
+ * Yes/Apply/Connect and stays letterless beside a real No; language, profile and work-kind choices are a true choice with no letters. */
 export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale, stageRegistry: SetupStageRegistry = new SetupStageRegistry(), profiles: IdentityProfileListing['profiles'] = new IdentityProfileRegistry().list()): readonly Choice[] {
-  const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' };
+  const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' }, notNow: Choice = { ...later, role: 'no' };
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
-  if (stage.id === 'permissions:start-mode' && stage.state === 'ready') return [{ id: 'apply', label: t('setup.permissions.confirm', {}, locale), action: 'apply' }, later];
-  if (stage.state === 'ready') return [{ id: 'apply', label: (registry.readOnly.includes(stage.operation?.id ?? '') ? t('setup.window.run', {}, locale) : t('setup.window.apply', {}, locale)), action: 'apply' }, later];
+  if (stage.id === 'permissions:start-mode' && stage.state === 'ready') return [{ id: 'apply', label: t('setup.permissions.confirm', {}, locale), action: 'apply', role: 'yes' }, notNow];
+  if (stage.state === 'ready') return [{ id: 'apply', label: (registry.readOnly.includes(stage.operation?.id ?? '') ? t('setup.window.run', {}, locale) : t('setup.window.apply', {}, locale)), action: 'apply', role: 'yes' }, notNow];
   // A model is connected by `models connect` itself (its own connection and model picker), so the window offers to start it.
-  if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply' }, later];
+  if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply', role: 'yes' }, notNow];
   // BR1 1b: the first work kind's coding CLI, from the native CLI registry (the card shows the kind, pool and slots before anything is written).
   if (stage.id === WORK_KIND_STAGE_ID) return [...WORK_PROVIDERS.slice(0, registry.windowOptionRows - 1).map((id): Choice => ({ id, label: id, answer: id, action: 'answer' })), later];
   // BeUser AYSE-01: each language is offered in its own words ("English", "Türkçe"), so a person who cannot read the current one still finds hers.
@@ -34,9 +36,9 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
     .slice(0, registry.windowOptionRows - 1)
     .map((entry): Choice => { const profile = profiles.find(row => row.definition.id === entry.id && row.definition.version === entry.version);
       return { id: entry.id, label: profile ? profileLabel(profile, locale) : entry.id, answer: { id: entry.id, version: entry.version }, action: 'answer' }; }), later];
-  const yes = (answer: unknown): Choice => ({ id: 'yes', label: t('setup.window.yes', {}, locale), answer, action: 'answer' });
-  if (stage.id === 'core:folder') return typeof stage.default === 'string' && stage.default ? [yes(stage.default), later] : [later];
-  if (typeof stage.default === 'boolean') return [yes(true), { id: 'no', label: t('setup.window.no', {}, locale), answer: false, action: 'answer' }, later];
+  const yes = (answer: unknown): Choice => ({ id: 'yes', label: t('setup.window.yes', {}, locale), answer, action: 'answer', role: 'yes' });
+  if (stage.id === 'core:folder') return typeof stage.default === 'string' && stage.default ? [yes(stage.default), notNow] : [later];
+  if (typeof stage.default === 'boolean') return [yes(true), { id: 'no', label: t('setup.window.no', {}, locale), answer: false, action: 'answer', role: 'no' }, later];
   return [later];
 }
 
@@ -73,7 +75,8 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     // R05: the reason and the question wrap (not cut) inside a fixed row count each; the stage rows and the command keep one row.
     const heights = rows.map((_row, index) => index === rows.length - 3 ? registry.windowTextRows.reason : index === rows.length - 2 ? registry.windowTextRows.question : 1);
     const offered = choices(stage);
-    return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label }) => ({ id, label })), initial: initialChoice(stage, offered),
+    return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
+      initial: initialChoice(stage, offered),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */

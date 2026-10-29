@@ -91,7 +91,7 @@ export async function identityDistributionCommand(argv: readonly string[], conte
   const shown = `${renderIdentityPreview(prepared.preview, locale)}\n${t('identity.distributionExpect', { digest: prepared.digest }, locale)}`;
   if (!apply) { emit(prepared, { ...sinks, render: () => shown }); return; }
   const answer = await ask(context, locale, { title: t('climodels.identity.card.apply', { profile: profileLabel(profile, locale) }, locale), body: shown.split('\n'),
-    options: [{ id: 'apply', label: t('identity.approveDistribution', {}, locale), key: 'y' }, { id: 'cancel', label: t('identity.cancelDistribution', {}, locale), key: 'n' }] });
+    options: [{ id: 'apply', label: t('identity.approveDistribution', {}, locale), role: 'yes' }, { id: 'cancel', label: t('identity.cancelDistribution', {}, locale), role: 'no' }] });
   if (answer !== 'apply') return cancelled();
   emit(await context.applyIdentityDistribution(root, prepared.submission, prepared.digest, options), { ...sinks, render: result });
 }

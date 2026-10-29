@@ -5,9 +5,10 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterEach, expect } from 'vitest';
+import { afterEach, expect, vi } from 'vitest';
 import { applyInstallation, createConfiguredRuntimeClient, inspectInstallation } from '../../../src/index.js';
 import { hashInstallationProfilePayload } from '#engine/index.js';
+import * as adapters from '#adapters/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
@@ -180,7 +181,12 @@ export async function installedScenario(mode: string, observed: { root?: string;
   await writeFile(profilePath, JSON.stringify(rehash(profile)), { mode: 0o600 });
   const env = { HOME: join(root, 'home'), PATH: process.env.PATH ?? '/usr/bin:/bin' }, options = { env };
   const evidence = await inspectInstallation(project, profile, { allowShutdown: true, dockerExecutable: '/usr/bin/docker' });
-  const installed = await applyInstallation(project, profile, { allowShutdown: true, dockerExecutable: '/usr/bin/docker', proposalDigest: evidence.proposalDigest, acceptCustom: true });
+  const control = { allowShutdown: true, dockerExecutable: '/usr/bin/docker', proposalDigest: evidence.proposalDigest, acceptCustom: true } as const;
+  // H (owner 2026-10-29): the MCP actor's run/pool/attempt grants (and approval renew, the held-task approval) exceed the first-run template, so the
+  // supplied profile is an authority write: refused off a terminal (vitest has none), then applied as the person at the terminal.
+  await expect(applyInstallation(project, profile, control)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  const witness = vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+  const installed = await applyInstallation(project, profile, control).finally(() => witness.mockRestore());
   expect(installed).toMatchObject({ status: 'installed', trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
 
   let service: ChildProcessWithoutNullStreams | undefined, serviceClosed: Promise<number | null> | undefined, serviceErr = '';

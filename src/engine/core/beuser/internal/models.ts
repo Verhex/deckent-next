@@ -3,7 +3,7 @@ import { sha256 } from '#platform/index.js';
 import { inspectRoleModelsInScope, roleModelInvocationReference, type RoleModelSources, type ModelCatalogInspection } from '#engine/core/model-activation/index.js';
 import { BeuserWalkStopped } from './controller.js';
 import type { ModelInvocationApplication, ModelInvocationResult } from '#engine/core/model-invocation/index.js';
-import { BeuserContractError, assertBeuserAccess, pinBeuserWalkerSummary, type BeuserContext, type BeuserModelRole, type BeuserModelResult, type ModelPort } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, BEUSER_KEYS, assertBeuserAccess, pinBeuserWalkerSummary, type BeuserCorrection, type BeuserContext, type BeuserModelRole, type BeuserModelResult, type ModelPort } from '#engine/core/beuser-contract/index.js';
 
 /** Conservative reservations remain consumed on unknown replies; the same budget spans changed-evidence reruns. */
 export class BeuserCallBudget {
@@ -76,11 +76,12 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
   };
   return {
     // Build a new whitelist object, not a spread of caller/model context. The screen has already been redacted by the harness.
-    walker: (context, summaryInput, screen, outputError) => {
+    walker: (context, summaryInput, screen, history, outputError) => {
       const summary = pinBeuserWalkerSummary(summaryInput);
       if (sha256(encodeCommandProjection('beuser-persona:1', summary)) !== context.binding.personaDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
       assertBeuserAccess(context, screen.binding, context.principal, { kind: 'beuser-sandbox', id: screen.binding.realmId }, 'create');
-      return invoke(context, 'beuser-walker', { persona: summary, goal: summary.goal, screen: screen.text, tools: ['look', 'type', 'press', 'wait'], ...(outputError ? { outputError } : {}) });
+      return invoke(context, 'beuser-walker', { persona: summary, goal: summary.goal, screen: screen.text, recentActions: history.recentActions, screenUnchanged: history.screenUnchanged,
+        remainingSteps: history.remainingSteps, remainingWaitMs: history.remainingWaitMs, tools: ['look', 'type', 'press', 'wait'], keys: BEUSER_KEYS, ...(outputError ? { outputError } : {}) });
     },
     evaluate: (context, transcriptDigest, outputError) => invoke(context, 'beuser-evaluator', { transcriptDigest, ...(outputError ? { outputError } : {}) }),
     cancel: async (context, invocationId) => {
@@ -94,15 +95,16 @@ export type BeuserWalkerDecode = (result: ModelInvocationResult) => unknown;
 
 export const beuserSourceMakers = (models: readonly unknown[]) => models.map(canonicalModelMaker);
 
-/** Correct only format failures, with explicit feedback and the admitted call/step/patience envelope. No new retry policy. */
+/** Correct only format failures and actions refused before any input, with explicit feedback and the admitted call/step/patience envelope.
+ * No new retry policy: repeated invalid output ends with its typed code. */
 export async function correctBeuserModelOutput<T>(context: BeuserContext, patience: { readonly maxSteps: number },
-  work: (outputError?: 'BEUSER_MODEL_OUTPUT_INVALID') => Promise<T>): Promise<T> {
+  work: (outputError?: BeuserCorrection) => Promise<T>): Promise<T> {
   let invalid: BeuserContractError | undefined;
   for (let attempt = 0; attempt < Math.min(context.limits.maxCalls, context.limits.maxSteps, patience.maxSteps); attempt++) {
     context.signal.throwIfAborted();
-    try { return await work(invalid ? 'BEUSER_MODEL_OUTPUT_INVALID' : undefined); }
+    try { return await work(invalid?.code as BeuserCorrection | undefined); }
     catch (error) {
-      if (error instanceof BeuserContractError && error.code === 'BEUSER_MODEL_OUTPUT_INVALID') invalid = error;
+      if (error instanceof BeuserContractError && (error.code === 'BEUSER_MODEL_OUTPUT_INVALID' || error.code === 'BEUSER_ACTION_INVALID')) invalid = error;
       else if (invalid && (error instanceof BeuserContractError && error.code === 'BEUSER_LIMITS_UNAVAILABLE'
         || error instanceof BeuserWalkStopped && error.reason === 'bound')) throw invalid;
       else throw error;

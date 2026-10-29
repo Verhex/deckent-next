@@ -23,8 +23,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 
 it('keeps BeUser target, surface and sealed-backup refusals typed and localized without exposing internal detail', () => {
   const errors = [new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'), new BeuserSurfaceError('BEUSER_SURFACE_INVALID'), new BeuserTransferError(),
-    new BeuserContractError('BEUSER_PROFILE_REQUIRED'), new BeuserContractError('BEUSER_REPORT_NOT_FOUND'), new BeuserContractError('BEUSER_CANDIDATE_MISMATCH')];
-  const codes = ['BEUSER_TARGET_NOT_SANDBOX', 'BEUSER_SURFACE_INVALID', 'BACKUP_REALM_SEALED', 'BEUSER_PROFILE_REQUIRED', 'BEUSER_REPORT_NOT_FOUND', 'BEUSER_CANDIDATE_MISMATCH'];
+    new BeuserContractError('BEUSER_PROFILE_REQUIRED'), new BeuserContractError('BEUSER_REPORT_NOT_FOUND'), new BeuserContractError('BEUSER_CANDIDATE_MISMATCH'), new BeuserContractError('BEUSER_START_STATE_UNREACHABLE')];
+  const codes = ['BEUSER_TARGET_NOT_SANDBOX', 'BEUSER_SURFACE_INVALID', 'BACKUP_REALM_SEALED', 'BEUSER_PROFILE_REQUIRED', 'BEUSER_REPORT_NOT_FOUND', 'BEUSER_CANDIDATE_MISMATCH', 'BEUSER_START_STATE_UNREACHABLE'];
   errors.forEach((error, index) => {
     error.message += ' /private/target/raw-screen credential=hidden';
     const mapped = queryFailure(error);
@@ -67,7 +67,7 @@ it('publishes rows inside the original digest, refuses changed bytes on replay a
 });
 
 // Real installation/admission/pool/dispatch/custody; only external realm/driver I/O is substituted below.
-async function reportFixture(mode: 'pty' | 'argv' = 'pty') {
+async function reportFixture(mode: 'pty' | 'argv' = 'pty', startState?: object) {
   const base = await mkdtemp(join(tmpdir(), 'beuser-report-refusal-')), root = join(base, 'project'), candidate = join(base, 'candidate');
   const options = { env: { HOME: join(base, 'home'), USERPROFILE: join(base, 'home'), DECKENT_GLOBAL_HOME: join(base, 'global') } };
   try {
@@ -86,7 +86,7 @@ async function reportFixture(mode: 'pty' | 'argv' = 'pty') {
     const binding = { schemaVersion: 1, identity: { scopeId: 'untrusted', runId: 'untrusted', taskId: 'untrusted', attemptId: 'untrusted', layoutRevision: 'untrusted', generation: 1 },
       candidate: { adapter: 'installed-package', version: '1.0.0', evidenceRef: 'package', stateDigest: sha256(JSON.stringify(files)), environmentDigest: 'b'.repeat(64) },
       candidateDigest: 'c'.repeat(64), personaDigest: 'd'.repeat(64), journeyDigest: 'e'.repeat(64), rubricDigest: 'f'.repeat(64), realmId: 'untrusted', nonce: '12345678-1234-4234-8234-123456789abc', transcriptId: 'untrusted' };
-    const parameters = { schemaVersion: 2, binding, limitsRevision: BEUSER_LIMITS_REGISTRY.profiles[0]!.revision, candidateRoot: candidate, packageDigest: measured.measurementDigest,
+    const parameters = { schemaVersion: startState ? 3 : 2, ...(startState ? { startState } : {}), binding, limitsRevision: BEUSER_LIMITS_REGISTRY.profiles[0]!.revision, candidateRoot: candidate, packageDigest: measured.measurementDigest,
       candidateManifest: { sha256: sha256(manifest), fileCount: files.length, ...source, version: '1.0.0' },
       summary: { schemaVersion: 1, personaId: 'person', journeyId: 'journey', language: 'tr', role: 'buyer', goals: ['purchase'],
         knowledgeBoundary: [], accessibility: [], initialKnowledge: [], goal: 'request goods', competency: { computer: 1, domain: 4, product: 0 },
@@ -223,9 +223,16 @@ it.skipIf(process.platform !== 'linux')('setup and admission refuse a controller
 
 it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted action artifacts and a named RED finding with proven or unknown cleanup', async () => {
   for (const cleanupProven of [false, true]) {
-    const f = await reportFixture();
+    // Profile v3: the installed start state is arranged through the production arrange adapter (substituted Docker transport) before the first look.
+    const f = await reportFixture('pty', { schemaVersion: 2, catalogRevision: engine.BEUSER_ARRANGE_REGISTRY.revision, states: ['T1', 'cancel'] });
     try {
       vi.spyOn(platform, 'getConfigKnownSecrets').mockReturnValue(platform.snapshotKnownSecrets([{ name: 'FIXTURE', value: 'fixture-private' }]));
+      const arrangeCalls: string[][] = [], createArrange = adapters.createBeuserArrange;
+      vi.spyOn(adapters, 'createBeuserArrange').mockImplementation(input => createArrange({ ...input, command: async args => { arrangeCalls.push([...args]);
+        return JSON.stringify(args.includes('--workdir') ? { exitCode: 0, stdoutBytes: 0, stdoutDigest: sha256('') } : 'installed'); } }));
+      const evidenceRows: string[] = [], createEvidence = engine.createBeuserEvidencePort;
+      vi.spyOn(engine, 'createBeuserEvidencePort').mockImplementation((...args) => { const port = createEvidence(...args);
+        return { ...port, async append(ctx, entry) { evidenceRows.push(`${entry.kind}:${entry.evidenceRef}`); return port.append(ctx, entry); } }; });
       vi.spyOn(adapters, 'createBeuserRealm').mockImplementation(input => new BeuserRealmApplication({
         async create(ctx, publish) { const handle = { binding: ctx.binding, incarnation: '12345678-1234-4234-8234-123456789abc', containerId: 'a'.repeat(64),
           controlDirectory: input.options.controllerRoot, controlIdentity: 'fixture-owned' }; await publish(handle); return handle; },
@@ -250,13 +257,18 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
         } } })), evaluate: vi.fn(), cancel: vi.fn(),
       } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
       const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
-      expect(keys).toEqual(['fixture-private']); // The repeated action is detected before a second effect.
+      expect(keys).toEqual(['fixture-private', 'fixture-private']); // Walk17 S2: the second identical repeat on an unchanged screen stops before a third effect.
       expect(model).toHaveBeenCalled();
       expect(report).toMatchObject({ counts: { walked: 1 }, findings: [{ branch: 'persona', persona: 'person', code: 'persona-stuck', outcome: 'RED', reason: 'loop' }],
         unknown: cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }], reliability: { completed: 0, attempted: 1 } });
       const { terminal } = await f.records();
       expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown', evidence: null });
-      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['action', 'screen', 'action', 'screen', 'friction']);
+      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', 'action', 'screen', 'action', 'screen', 'action', 'screen', 'friction']);
+      expect(arrangeCalls.map(args => args.includes('--workdir'))).toEqual([true, false]);
+      expect(report.unarranged).toEqual([{ branch: 'persona', state: 'cancel', reason: 'persona' }]);
+      // Persona evidence is the surface's own screens, never the arrange row that shifted the recorder sequence.
+      expect(evidenceRows.length).toBeGreaterThan(0);
+      for (const row of evidenceRows) expect(row).toMatch(/^screen:[^:]+:\d+$/u);
       const config = await loadComposedConfig(f.root, { ...f.options, heal: false });
       const artifacts = new adapters.FileArtifactStore({ root: join(f.root, '.deckent', 'artifacts'), maxBytes: config.artifacts.maxBytes });
       for (const row of terminal.diagnostic.trace) {
@@ -269,11 +281,12 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
           reason: 'loop', screenRef: report.findings?.[0]?.screenRef, proposedAction: { kind: 'type' } });
       }
       expect(report.findings?.[0]?.screen).toContain('Permissions card');
-      expect(report.findings?.[0]?.evidenceRefs).toEqual(terminal.diagnostic.trace.map((row: { artifactRef: string }) => row.artifactRef));
+      expect(report.findings?.[0]?.evidenceRefs).toEqual(terminal.diagnostic.trace.filter((row: { kind: string }) => row.kind !== 'arrange').map((row: { artifactRef: string }) => row.artifactRef));
       expect(await readConfiguredBeuserReport(f.root, 'scope', undefined, f.options)).toEqual(report);
       for (const locale of ['tr', 'en'] as const) {
         const text = formatBeuserReport(report, { locale, json: false });
         expect(text).toContain('RED'); expect(text).toContain('Permissions card'); expect(text).toContain('persona');
+        expect(text).toContain(platform.t('beuser.report.unarranged', { branch: 'persona', state: 'cancel', reason: platform.t('beuser.report.unarranged.persona', {}, locale) }, locale));
         expect(text).toContain(terminal.diagnostic.trace.at(-1).artifactRef);
       }
       const storage = await openConfiguredAttemptStore(f.root, f.options);
@@ -284,7 +297,7 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
         expect(await manager.observe(request)).toMatchObject({ result: cleanupProven ? { kind: 'exited', exitCode: 1 } : { kind: 'unknown' } });
         if (cleanupProven) expect(await manager.collectOutputFiles!(request)).toEqual([]);
         else await expect(manager.collectOutputFiles!(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
-        expect(keys).toEqual(['fixture-private']);
+        expect(keys).toEqual(['fixture-private', 'fixture-private']);
       } finally { storage.store.close(); }
       expect(JSON.stringify({ report, terminal })).not.toContain('fixture-private');
     } finally { await f.dispose(); }

@@ -2,13 +2,15 @@
 
 Owner 2026-10-10: bu dosya **geçici işleri ve kimde olduklarını** taşır; biten iş buradan **silinir** (kalıcı kayıt PLAN/COMPLETED-PLAN/CHANGELOG'a gider). Ana oturum günceller. Kalıcı kaynaklar: `PLAN.md`, `ARCHITECTURE.md`, karar günlüğü, host panosu (`node .agents/refactor/board.mjs show`), iş planı panosu https://claude.ai/artifact/1ESSNiUPCxWVRa8mw9va2Q.
 
-Son güncelleme: 2026-10-29 (lead 6ea3ba88). **Canlı = N1 runtime = alpha.57** (`7c624d18d4d4-c38d723545f7`, 11:27Z). N1 KAYNAK = `7c624d18d`. Lead tek yetkili. Sıra owner 2026-10-29'dur (PLAN “alpha.57 sonrası owner sırası”).
+Son güncelleme: 2026-10-30 (lead 6ea3ba88). **Canlı = N1 runtime = alpha.57** (`7c624d18d4d4-c38d723545f7`, 11:27Z). main `64beb0f7c` (PR #122, hosted CI yeşil). Lead tek yetkili. Sıra owner 2026-10-29'dur (PLAN “alpha.57 sonrası owner sırası”).
 
 | İş | Kimde | Durum | Sonraki adım | Belge borcu |
 |---|---|---|---|---|
-| 1 CI kayma bekçisi, ağırlık tazeleme, model-activation testini bölme (şerit A) | Lead; Claude alt ajan, `fix/ci-drift-guard` worktree'si | Sürüyor | HANDOFF → lead toplu PR'a alır | ci-and-verification modül notu (şerit A) |
-| 1 project-init 30 sn zaman aşımı ve RESTART-HUNT tanısı (şerit B) | Lead; Claude alt ajan, salt okunur | Sürüyor; CI artefaktları ~2026-11-05'te silinir | DIAGNOSIS → gerekirse düzeltme kartı | — |
-| 2 alpha.57 belge turu (şerit C) | Lead; Claude alt ajan, `docs/a57-pass` worktree'si | Sürüyor | HANDOFF → toplu PR | 10-29 analiz kararları owner-decisions'ta yok (lead) |
-| Sürümsüz toplu PR (1 + 2) | Lead | Şeritler bekleniyor | Hedefli kontrol → Astra → exact-head hosted CI yeşil → owner onayıyla merge | — |
-| 3 evet/hayır tuş kuralı, 4 BeUser başlangıç durumu, 5 Node 26.13.0, 6 harcama kayıtları | Lead | Sırada; 26.13.0 host'ta kurulu | 1–2 indikten sonra sırayla; 3–4 sonrası yalnız walk16'nın üç yolculuğu yeniden yürür | PLAN takip listesi |
+| alpha.58 adayı `f6b119d4f` (`a58/integrate`: sıra 3–4, paket 1, walk17/walk18 düzeltmeleri) | Lead | Tam suite Node 26.13.0'da ayrı worktree'de sürüyor; genel belge turu adayın üstünde, commit edilmedi | Suite sonucu → Astra → exact-head hosted CI yeşil → owner onayıyla merge, canlı/N1 geçişi (Node 26.13.0 bu sürümle) | Sürüm sonrası CHANGELOG tarihi ve COMPLETED-PLAN alpha.58 |
+| walk19: walk16'nın üç yolculuğu (O-B1, U-B1, SELF-B1) alpha.58 adayında | Lead | Owner GPU penceresini bekliyor; yolculuk kabulü 0/3 | Owner penceresi açılınca yürüt; sonuç RED/unknown ise tanı kartı | beuser.md ve known-limits sonuca göre |
+| REALM-NET: yalnız model için Unix soket sağlayıcı geçidi | Lead | alpha.59 ayrı kartı (dış `proof/ANALIZ-2026-10-29/REALM-NET/CARD.md`) | B1 §2.6(c)(d) amendment ve temiz bağlam denetimi, sonra owner | — |
+| D2 dosya boyutu ölçü kilidi (Sıradaki 12 ilk adımı) | Lead | `d2/size-lock` worktree'sinde commit edilmemiş (dış `D2/HANDOFF.md`) | alpha.58'den sonra en son iner; ölçü seçimi lead kararı | ci-and-verification modül notu (şeritte) |
+| F2 (BeUser systemd yoklaması üretimden çağrılmıyor), F5 (Linux dışında kaldırma önizleme dahil reddediliyor) | Owner | Açık | Owner seçimi | known-limits |
+| 6 harcama kayıtları: 26 uzlaştırılmamış rezervasyon + 2 held-unreconciled | Lead | Açık; para/kota etkisi bilinmiyor | Salt okunur inceleme | — |
+| Temizlik envanteri | Owner | Owner kararını bekliyor | Yalnız owner'ın onayladığı kalemler temizlenir | — |
 | Oynak saat testi `terminal-turn-phases.test.ts:144` (2026-10-22 notu) | Lead | Kart açılmadı; güncel durumu doğrulanmadı | Yeniden görülürse enjekte saat kök neden kartı | — |

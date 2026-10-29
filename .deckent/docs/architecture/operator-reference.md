@@ -51,11 +51,14 @@ one section; other sections link to it.
   Either plan only adds rules; conflicting rules you wrote are kept.
 - `deckent init` is the guided setup: it shows the plan and what is still missing, with the exact command for each step;
   `deckent init --yes --scope <id>` installs a fresh first-run policy, sets the language and runs the final check.
+  In the setup window and its cards, ↑↓ (or j/k) move, Enter sends the highlighted answer, the number shown on a row answers with
+  that row and Esc closes; every yes/no question shows and takes (y) and (n). A choice among several answers (language, profile) has no letters.
 - `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads, and which
   host-tool bridges it detects. Docker coding workers do not read it; they get the worker file described in
   [Worker instructions and discovery](#worker-instructions-and-discovery).
 - `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init preview --profile <file>`
-  previews an installation profile file (advanced).
+  previews an installation profile file (advanced). Applying one (`init apply --profile`, `init resume`) whose rules reach wider
+  than the first-run template needs you at a real terminal (`AUTHORITY_WITNESS_REQUIRED`, alpha.58); a profile inside it stays headless.
 
 ## Provider connection details
 
@@ -283,6 +286,9 @@ Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and w
   needs `--reason`). `deckent runtime describe` shows the running one. Restart and shutdown both need the service's identity
   (`deckent config explain service.identity`) and your `shutdown` rule on it, which the first-run policy gives the installing
   person only; by default the local MCP actor cannot stop the service (a policy that grants it the `service` MCP group can).
+- **A service systemd runs (Linux).** Restart, shutdown, the MCP tool `shutdown_runtime_service` and the SDK client refuse it
+  with `RUNTIME_SERVICE_EXTERNALLY_MANAGED` and name `systemctl [--user] restart|stop <unit>`; only `runtime shutdown --force`
+  at your terminal overrides the stop (MCP and SDK have no override, alpha.58).
 - **Older installations.** A first-run policy older than template v12 has neither the service identity nor the `shutdown` rule,
   so `runtime restart` and `runtime shutdown` are refused. Upgrade it (see [First-run setup](#first-run-setup)); if the apply
   sets `service.identity`, stop a service that is already running once by hand (Ctrl+C on `runtime serve`) before
@@ -380,6 +386,7 @@ higher than your Deckent budget; Deckent cannot see either setting.
 - A call that never received its final usage stays reserved until you resolve it with `deckent models reconcile-spending`.
 - If a charge exceeds what was reserved, the scope stops new paid calls until `revise-budget … --unfreeze`.
 - `deckent models spending` without `--input` shows the scope's API budget (limit, used, held, left).
+- Confirming the amount the budget already has (and no freeze to lift) records nothing and says "nothing changed".
 
 ## Terminal window and keys
 
@@ -406,8 +413,8 @@ higher than your Deckent budget; Deckent cannot see either setting.
   it behind the current operation. Ctrl+O switches between input and the top window. `/watch-stop` closes observation.
 - **Approval cards.** An approval card (and any question) takes the keyboard by itself and replaces the input bar in place, so
   no Ctrl+O is needed. Its answers are a list — "Yes, once (y)", "Yes, for this session (s)" and "Always allow in this project
-  (a)" only where the service offers them (never for hard-floor items or always-ask locks), "No (n)" — moved with ↑↓, j/k or
-  1–9 and confirmed with Enter, or answered with the letter; the highlight starts on No, and Esc denies. "Always" is your own
+  (a)" only where the service offers them (never for hard-floor items or always-ask locks), "No (n)" — moved with ↑↓ or j/k
+  and confirmed with Enter, or answered with the row's number or letter; the highlight starts on No, and Esc denies. "Always" is your own
   standing grant (`deckent policy grants --mine`, removed with `deckent policy revoke`). Several pending decisions wait one at
   a time ("1/3").
 - **Key safety on cards.** A card counts keys only after a short quiet period (0.3 s, `decision.json`) from the moment it is

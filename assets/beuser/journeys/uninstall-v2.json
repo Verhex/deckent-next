@@ -247,7 +247,7 @@
     "schemaVersion": 1,
     "journeyId": "uninstall-v2",
     "version": 1,
-    "digest": "b1bef5ececc8b8b8009d611ee75b13320d1f0c663a6610499754ce31ea36df0f",
+    "digest": "682467a6f779f97243c98ac53f15e8f9183bb0ad81ce707f7dd3b6706bb7ed7f",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
@@ -1112,7 +1112,7 @@
         {
           "id": "S20",
           "fixture": "moved-unsafe-authority-file",
-          "expectation": "data-removal-refused-keep-data-available",
+          "expectation": "authority-unreadable-all-choices-refused-data-kept",
           "walkStatus": "not-walked"
         },
         {
