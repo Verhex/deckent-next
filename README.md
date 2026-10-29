@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.57`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.57`**, the current release; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
@@ -538,8 +538,9 @@ OpenRouter settings.
 
 ## Roadmap
 
-Dates are not promised; the order is. Alpha.56 includes the core layers, recovery cards and signed Hub package
-management, plus guided first use, ChatGPT chat sign-in and safe uninstall. The protected layer switches still start off;
+Dates are not promised; the order is. Alpha.57 includes the core layers, recovery cards and signed Hub package
+management, plus guided first use, ChatGPT chat sign-in, safe uninstall and the first BeUser journey walks, whose
+acceptance is still open. The protected layer switches still start off;
 their real-use proof and the ChatGPT-plan Codex worker activation remain gates before the beta. The beta then hardens
 these layers through real use, and Desktop app development starts alongside it.
 

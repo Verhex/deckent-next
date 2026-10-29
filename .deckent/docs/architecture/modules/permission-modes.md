@@ -331,7 +331,7 @@ at the next turn; the inventory, `secret list`, the delete/revoke cards and doct
 authority call keeps the edit-authority card in every mode; the text/argv classifier is defense in depth, so `false` never means safe — the boundary is
 semantic policy/approval for the principal plus enforced sandbox/socket custody (host fallback does not isolate; a TTY witness does not prove a person on the same OS account). Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).
 
-## U5A own-mode opening (alpha.56 candidate)
+## U5A own-mode opening (alpha.56)
 
 The CLI host offers the attested authority-file owner one y/N question when `--full-access`, `/mode full-auto|full-access`, or Shift+Tab
 reaches a closed mode. The mode picker can select a closed mode only when the CLI host binds this opening port; SDK/MCP have no new operation.

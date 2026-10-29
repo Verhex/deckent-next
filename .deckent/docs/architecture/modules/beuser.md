@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 is admitted for alpha.57; this branch is an author candidate, not a release or accepted journey.
+B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red, so no journey is accepted yet.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|

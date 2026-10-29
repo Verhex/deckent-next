@@ -4,7 +4,7 @@
 
 Bir kişi Deckent kurmanızı istediğinde bu rehberi kullanın. Hedef klasörünü ve doğrulanmış paket dosyasını öğrenin.
 Deckent kişinin altyapısında çalışır; kurulum kişinin iş operasyonlarını yürütme izni vermez.
-Bu rehber alpha.56 adayını kapsar. Alpha.56'nın, npm paketinin ya da sitenin yayımlandığı iddiası değildir.
+Bu rehber alpha.56 için yazıldı; alpha.57'ye (kaldırma v2) göre henüz yeniden kontrol edilmedi. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
 Son yayımlanan sürümün kaynaktan kurulum yolu README'dedir.
 
 ## Hazırlık ve kurulum

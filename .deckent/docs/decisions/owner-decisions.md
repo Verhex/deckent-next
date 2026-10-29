@@ -993,3 +993,18 @@ Kaynak: lead'in BEUSER-FIX-2 atama mesajları (Jev c10e0946, c6c1182a).
 ## BeUser B1 uygulama sınırları — owner 2026-10-29
 
 Owner'ın B1 planına son eki: O-1 mutlak yasağı korunur; sealed BeUser ledger yedeklenmez/restore edilmez/export edilmez, yedek gerektiren uninstall dalları adıyla unknown kalır. Private systemd yetki genişletmeden çalışmazsa unknown'dur, alpha.57'yi bekletmez. Paket tavanlarının kesin değeri birleştirmede ölçülen ihtiyaç + küçük pay olarak owner'a rakamla bildirilir; author tavan yükseltmez. Bu kararlar implementation/gerçek realm/bağımsız kabul sonucu değildir. Kaynak: dış proof BEUSER-B1-2026-10-28/OPEN-DECISIONS.md, son “Owner kararları — 2026-10-29” eki.
+
+## Owner kararları — 2026-10-29: alpha.57 sonrası analiz
+
+Kaynak: dış `proof/ANALIZ-2026-10-29/RAPOR.md` (temiz bağlam kanun denetimi 2. tur PASS) ve lead 6ea3ba88'in owner soruları; Jev 76c8e942, 392734ac.
+
+- **Birleştirme:** alpha.56.1 (PR #119) ve alpha.57 (PR #120 + #121), hosted CI yalnız süre sınırlarında kırmızıyken owner sözüyle
+  (“Şimdi birleştir ve geç”) birleşti; her biri tek sürümlük istisnadır, kural değişmez.
+- **CI:** 16 dilim kalır; süre ağırlıkları tazelenir, kayma bekçisi ve sürüm prosedüründe ağırlık tazeleme adımı eklenir, model-activation
+  testi bölünür; tazelemeden sonra ölçülen pay %20'nin altındaysa 20 dilim. Zaman aşımları yükseltilmez.
+- **Sıra:** 1 CI + tanı → 2 belge turu → 3 evet/hayır tuş kuralı → 4 BeUser başlangıç durumu → 5 Node 26 → 6 harcama kayıtları.
+  3–4 bitince yalnız walk16'nın üç yolculuğu yeniden yürür; 2026-10-28 BeUser durdurması başka turlar için sürer.
+- **Node 26:** 26.13.0 LTS host'a kurulur; sonraki canlıya giden adayın tek tam suite'i 26.13.0'da koşar; nvm varsayılanı ve
+  canlı/N1/proje-wsl geçişi o sürümde.
+- **Envanter:** PUB-TRACK, KABUL-DEGERLENDIRICI, KUYRUK-KABUL, TEST-PERF-KOSUL, CORE-N1 yalnız PLAN gelen kutusuna; kabul edilmiş iş değil.
+- Açık: panel sorularında Enter=iptal korunsun mu (sorulmadı).
