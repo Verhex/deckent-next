@@ -1,8 +1,11 @@
-import { BeuserContractError, assertBeuserAccess, pinBeuserLimits, type BeuserLimits, type BeuserContext, type BeuserScreen } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, assertBeuserAccess, pinBeuserLimits, type BeuserLimits, type BeuserContext, type BeuserScreen, type BeuserSurfaceCommand, type BeuserWalkerHistory } from '#engine/core/beuser-contract/index.js';
 import type { BeuserWalkerSummary } from '#domain/index.js';
 
 // Node's signed timer representation is a platform invariant, never a configurable walk policy.
 const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;
+/** Walk17 S2 (lead 2026-10-29): the same key or text on the same screen a third time is a loop (a first repeat may be a key the product
+ * swallowed); the walker sees as many of its own last actions. Observation (`look`, `wait`) never counts. */
+const LOOP_STOP = 3;
 
 export class BeuserWalkStopped extends Error {
   constructor(readonly reason: 'bound' | 'loop' | 'drift' | 'leak' | 'unknown' | 'cancelled' | 'deadline') { super(reason); }
@@ -49,7 +52,9 @@ export class BeuserController {
   private bytes = 0;
   private sequence = 0;
   private calls = 0;
-  private readonly visited = new Set<string>();
+  private readonly visited = new Map<string, number>();
+  private readonly recent: unknown[] = [];
+  private acted: string | null = null;
   constructor(context: BeuserContext, readonly summary: BeuserWalkerSummary, budget?: BeuserExecutionBudget) {
     this.budget = budget ?? new BeuserExecutionBudget(context.limits); this.ownsBudget = budget === undefined;
     if (JSON.stringify(this.budget.limits) !== JSON.stringify(pinBeuserLimits(context.limits))) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
@@ -83,9 +88,14 @@ export class BeuserController {
     this.budget.transcript(bytes); this.bytes += bytes;
     if (this.bytes > this.context.limits.maxTranscriptBytes) throw new BeuserWalkStopped('bound');
   }
-  action(screen: BeuserScreen, action: unknown): void {
-    const key = JSON.stringify([screen.digest, action]);
-    if (this.visited.has(key)) throw new BeuserWalkStopped('loop');
-    this.visited.add(key);
+  /** The walker's own last actions (typed text withheld, as in the loop friction row) and whether its last one left the screen as it was. */
+  history(screen: BeuserScreen): BeuserWalkerHistory { return { recentActions: [...this.recent], screenUnchanged: this.acted === screen.digest }; }
+  action(screen: BeuserScreen, action: BeuserSurfaceCommand['action']): void {
+    this.recent.push(action.kind === 'type' ? { kind: 'type' } : action); if (this.recent.length > LOOP_STOP) this.recent.shift();
+    this.acted = screen.digest;
+    if (action.kind === 'look' || action.kind === 'wait') return;
+    const key = JSON.stringify([screen.digest, action]), count = (this.visited.get(key) ?? 0) + 1;
+    if (count >= LOOP_STOP) throw new BeuserWalkStopped('loop');
+    this.visited.set(key, count);
   }
 }

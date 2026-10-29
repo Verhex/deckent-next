@@ -222,7 +222,11 @@ Each redacted event is retained separately; the private terminal record's option
 walks whose acceptance evidence could not be finalized. Recorded supervision reads the same
 optional schema; older terminal records and reports remain readable.
 
-A repeated screen/action stops before a duplicate effect; a friction event retains the blocked
+The same key or text on the same screen stops on its second repeat, before a third effect (walk17
+S2, 2026-10-29: a first repeat may be a key the product swallowed); `look` and `wait` are observation
+and never count, so a walker that only observes ends at its patience bound (unknown), not RED. Each
+walker call carries its own last three actions (typed text withheld) and whether its last action left
+the screen unchanged. A stop's friction event retains the blocked
 proposal as metadata (typed plaintext omitted) and identifies its screen. The walk report's optional `findings`
 contains a named `persona-stuck` RED diagnostic for that branch/persona with the last redacted
 screen, its transcript reference/digest, controller validity and event artifact references.

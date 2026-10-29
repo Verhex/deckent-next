@@ -943,6 +943,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_BACKUP_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_BACKUP_DENIED', p, l) }) },
   UNINSTALL_RECOVERY_LOCATION: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_LOCATION', p, l) }) },
   UNINSTALL_AUTHORITY_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_AUTHORITY_UNVERIFIED', p, l) }) },
+  UNINSTALL_POLICY_UNREADABLE: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_POLICY_UNREADABLE', p, l) }) },
   UNINSTALL_SERVICE_RUNNING: { category: 'error', render: (p, l) => ({ message: p['unit'] ? t('error.UNINSTALL_SERVICE_RUNNING', p, l) : t('error.UNINSTALL_SERVICE_RUNNING_UNMANAGED', p, l) }) },
   UNINSTALL_UNCERTAIN_EFFECTS: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_EFFECTS', p, l) }) },
   UNINSTALL_UNCERTAIN_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_UNCERTAIN_MANAGED', p, l) }) },

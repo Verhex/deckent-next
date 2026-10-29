@@ -52,7 +52,8 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
       { signal: abort.signal, fallback: value => { if (!abort.signal.aborted) setUrl(value); } });
     if (!abort.signal.aborted) { setResult(connected); setSelection({ at: 0, ticked: [] }); setStage('result'); }
   };
-  return <Window title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true } : {}) }))}
+  // Each stage is a new question and re-arms (arming.ts): a key typed for the last answer never answers this one.
+  return <Window key={stage} title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true } : {}) }))}
     hints={t('siwc.card.keys', {}, port.locale)} position="{from}-{to}/{total}" priority={WINDOW_PRIORITY.approval} decision footerRows={options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={selection} focused={owns} />} onClose={close}
     onInput={(input, key, meta) => {

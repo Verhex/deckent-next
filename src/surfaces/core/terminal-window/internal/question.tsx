@@ -7,8 +7,9 @@ import { WINDOW_PRIORITY } from './window-stack.js';
 
 /**
  * One question contract for the terminal (TERMINAL-SABIT-DUZEN slice 2, owner 2026-10-18): approvals, single-choice and multi-choice
- * questions share these keys — ↑↓ or j/k move, 1–9 jump, Space toggles (multi), Enter submits the highlighted option (single) or the ticked
- * ones (multi), Esc and Ctrl+C cancel, and an option's own letter (`s`, `a`, `q`, …) answers a single-choice question at once. A yes/no
+ * questions share these keys — ↑↓ or j/k move, Space toggles (multi), Enter submits the highlighted option (single) or the ticked ones (multi),
+ * Esc and Ctrl+C cancel. A single-choice question is also answered at once by a shown number 1–9 (owner 2026-10-29) or an option's own letter
+ * (`s`, `a`, `q`, …); on a multi-choice question a number only moves. A digit beyond the option count is ignored. A yes/no
  * question's answers declare `role` instead of a letter (BeUser walk16): `optionKey` derives `y`/`n` in every locale, so every yes/no question
  * shows and takes (y)/(n) and an answer without a role (a "Not now" beside a real No) has none. Pasted or
  * multi-character input never answers. A question that takes the keyboard by itself is armed only after `armMs` (registry
@@ -38,9 +39,9 @@ export function questionStep(kind: QuestionKind, options: readonly QuestionOptio
   }
   if (input.length !== 1) return { kind: 'ignored' };
   const lower = input.toLowerCase(), shortcut = kind === 'single' ? options.find(option => optionKey(option)?.toLowerCase() === lower) : undefined;
-  // BeUser E-14: a key the card shows next to an option (`(4)`, `(y)`) answers with it, digits included; an unlabelled digit only moves.
   if (shortcut) return { kind: 'submit', ids: [shortcut.id] };
-  if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return move(Number(input) - 1);
+  // Owner 2026-10-29 (replaces BeUser E-14's "an unlabelled digit only moves"): the number a row shows answers a single-choice question.
+  if (/^[1-9]$/u.test(input) && Number(input) <= options.length) return kind === 'single' ? { kind: 'submit', ids: [options[Number(input) - 1]!.id] } : move(Number(input) - 1);
   if (kind === 'multi' && input === ' ') {
     const id = options[state.at]?.id;
     if (id === undefined) return { kind: 'ignored' };

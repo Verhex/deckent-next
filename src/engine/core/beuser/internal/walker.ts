@@ -18,11 +18,12 @@ export async function walkBeuser(controller: BeuserController, ports: {
     controller.screen(screen);
     await controller.call('beuser-transcript', 'inspect', () => ports.record(screen));
     if (await controller.call('attempt', 'evaluate', () => ports.finished(screen))) return;
+    const history = controller.history(screen);
     const decoded = await correctBeuserModelOutput(controller.context, controller.summary.patience, async outputError => {
       controller.step();
       controller.modelCall();
       const answer = await controller.call('attempt', 'evaluate', context => outputError
-        ? ports.models.walker(context, controller.summary, screen, outputError) : ports.models.walker(context, controller.summary, screen), true);
+        ? ports.models.walker(context, controller.summary, screen, history, outputError) : ports.models.walker(context, controller.summary, screen, history), true);
       if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-walker'
         || answer.receipt.invocation.receipt.outcome?.state !== 'responded') throw new BeuserWalkStopped('unknown');
       return ports.decode(answer.receipt.invocation);
