@@ -55,8 +55,9 @@ export const serviceManagerStopCommand = (found: ServiceManagerUnit): string => 
  * Uninstall's governed stop under K4 custody does not pass here (it stops such a service on purpose, before it disables the unit).
  */
 export async function assertRuntimeServiceStoppable(processId: number | undefined,
-  managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null>): Promise<void> {
+  managerOf: (pid: number | undefined) => Promise<ServiceManagerUnit | null>, forceAvailable = false): Promise<void> {
   const managed = await managerOf(processId);
   if (!managed) return;
-  throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerStopCommand(managed), action: 'stop' } });
+  // Only the CLI person has `--force`; MCP and SDK callers get the refusal without that hint.
+  throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerStopCommand(managed), action: forceAvailable ? 'stop' : 'stop-via-manager' } });
 }

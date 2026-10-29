@@ -57,8 +57,9 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] F
     expect(createConfiguredRuntimeClient).toBe(createGuardedRuntimeClient); // the SDK export is the guarded client (MCP builds the same one)
     const sdk = createConfiguredRuntimeClient(f.project, { env: f.env }), descriptor = await sdk.describeService();
     const managed = guardRuntimeServiceStop(sdk, async pid => { asked.push(pid); return { manager: 'systemd', scope: 'user', unit: 'deckent-live.service' }; });
-    await expect(managed.shutdownService(command(descriptor.instanceId))).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_EXTERNALLY_MANAGED',
-      params: { command: 'systemctl --user stop deckent-live.service', action: 'stop' } });
+    const refused: unknown = await managed.shutdownService(command(descriptor.instanceId)).then(() => null, (error: unknown) => error);
+    expect(refused).toMatchObject({ code: 'RUNTIME_SERVICE_EXTERNALLY_MANAGED', params: { command: 'systemctl --user stop deckent-live.service', action: 'stop-via-manager' } });
+    expect((refused as Error).message).not.toContain('--force'); // no AI/script surface has the person's override
     expect(asked).toEqual([process.pid]); expect(admit).not.toHaveBeenCalled();
     expect((await sdk.describeService()).instanceId).toBe(descriptor.instanceId);
   } finally { admit.mockRestore(); await service.stop(); await service.done; }
