@@ -6,10 +6,13 @@ import type { BeuserWalkerDecode } from './models.js';
 /** Only native model output is decoded; a model-authored verdict is never a completion signal. */
 export async function walkBeuser(controller: BeuserController, ports: {
   readonly surface: SurfacePort; readonly models: ModelPort; readonly decode: BeuserWalkerDecode;
+  /** Trusted installed journey tuple; never decoded from walker output. */
+  readonly initialCommand?: Parameters<SurfacePort['argv']>[1] | undefined;
   readonly finished: (screen: BeuserScreen) => Promise<boolean>;
   readonly record: (screen: BeuserScreen) => Promise<void>;
 }): Promise<void> {
-  let screen = await controller.call('beuser-sandbox', 'create', context => ports.surface.look(context));
+  let screen = await controller.call('beuser-sandbox', 'create', context => ports.initialCommand
+    ? ports.surface.argv(context, ports.initialCommand) : ports.surface.look(context));
   while (true) {
     controller.screen(screen);
     await controller.call('beuser-transcript', 'inspect', () => ports.record(screen));

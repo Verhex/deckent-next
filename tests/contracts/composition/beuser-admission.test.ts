@@ -38,6 +38,8 @@ it.skipIf(process.platform !== 'linux')('dry admission reserves the exact Attemp
       choices: { 'beuser-walker': { channelId: 'configured', modelId: 'walker' }, 'beuser-evaluator': { channelId: 'configured', modelId: 'evaluator' } },
       contributorModels: [{ vendorId: 'source-maker' }], entry: { mode: 'pty', nodeExecutable: '/usr/bin/node', args: ['--help'] },
       probes: [{ id: 'installation', dimension: 'outcome', readbackRef: 'readback', key: 'installation', expected: 'installed' }], calibration };
+    expect(() => validateBeuserSupervisorProfile({ schemaVersion: 1, adapterId: 'beuser', adapterVersion: 1,
+      parameters: { ...parameters, entry: { ...parameters.entry, mode: 'argv', args: [] } } })).toThrow('BEUSER_INPUT_INVALID');
     const configPath = join(root, '.deckent', 'config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
     config.admission = { poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'beuser-fixture',
       profiles: [{ id: 'persona', version: 1, adapter: { id: 'beuser', version: 1 }, parameters }], kinds: [{ kind: 'journey', profile: { id: 'persona', version: 1 }, workspaceDelivery: 'none' }],
