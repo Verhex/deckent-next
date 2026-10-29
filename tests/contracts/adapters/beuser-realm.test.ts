@@ -8,9 +8,26 @@ import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contrac
 import { BeuserRealmApplication, createBeuserRealmSeal, beuserBindingDigest, type BeuserRealmCustody, type BeuserRealmHandle, type BeuserRealmLease, type BeuserRealmRuntime } from '#engine/core/beuser-realm/index.js';
 import { DockerBeuserRealmRuntime, canonicalRealmPath, pinRealmOptions, inspectBeuserRealm, BEUSER_REALM_RECIPE, probeBeuserSystemd, type BeuserRealmCommand, type BeuserEvidenceRetention } from '#adapters/core/beuser-realm/index.js';
 import { readlink } from 'node:fs/promises';
+import { generateKeyPairSync } from 'node:crypto';
+import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
+import { verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
+import { sha256, redactForRecord } from '#platform/index.js';
 
 const retain: BeuserEvidenceRetention = async (_context, evidence) => `fixture-retained:${evidence.digest}`;
 const roots: string[] = [];
+const packageLimits = { maxFiles: 32, maxFileBytes: 16384, maxTotalBytes: 65536, maxDepth: 8 };
+async function distributionFixture() {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'beuser-distribution-'))); roots.push(base);
+  const root = join(base, 'package'), controllerRoot = join(base, 'controller');
+  await mkdir(join(root, 'dist'), { recursive: true }); await mkdir(controllerRoot, { mode: 0o700 });
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'fixture', version: '1', files: ['dist'] }));
+  return { root, controllerRoot, target: join(root, 'dist/index.js') };
+}
+async function distribution(root: string) {
+  const measured = await measureInstalledPackage(root, packageLimits);
+  const files = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
+  return { files, digest: sha256(JSON.stringify(files)) };
+}
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 function context(): BeuserContext {
   return { binding: beuserBindingSchema.parse({ schemaVersion: 1, identity: { scopeId: 'scope', runId: 'run', taskId: 'task', attemptId: 'attempt', generation: 1, layoutRevision: 'layout' },
@@ -176,4 +193,43 @@ it('private systemd capability remains unknown on a failed probe; no privilege o
   const args = command.mock.calls[0]![0];
   expect(args.slice(0, 3)).toEqual(['container', 'exec', h.handle.containerId]);
   expect(args).not.toContain('--privileged'); expect(args).not.toContain('--cap-add');
+});
+
+it('accepts ordinary assignments and vendor private-key header constants while record redaction still masks assignments', async () => {
+  const { root, target } = await distributionFixture();
+  const source = 'const token=value; const secret=options.secret; const pemHeader="-----BEGIN PRIVATE KEY-----";';
+  await writeFile(target, source);
+  const { files, digest } = await distribution(root);
+  expect(await verifyBeuserDistribution(root, files, packageLimits, digest)).toBe(true);
+  expect(redactForRecord('token=fictitious-value')).toBe('token=[REDACTED]');
+});
+
+it.skipIf(process.platform !== 'linux')('refuses credential-bearing, foreign and missing packages with the typed realm code before any launch', async () => {
+  const { root, target, controllerRoot } = await distributionFixture(), ctx = context();
+  await writeFile(target, 'export {};');
+  const clean = await distribution(root);
+  expect(await verifyBeuserDistribution(root, clean.files, packageLimits, clean.digest)).toBe(true);
+  const command = vi.fn<BeuserRealmCommand>(), publish = vi.fn();
+  const refused = async (files: typeof clean.files, digest: string) => {
+    expect(await verifyBeuserDistribution(root, files, packageLimits, digest)).toBe(false);
+    const runtime = new DockerBeuserRealmRuntime({ controllerRoot, packageRoot: root, executable: '/usr/bin/docker', image: 'sha256:' + 'a'.repeat(64),
+      uid: 1000, gid: 1000, memoryBytes: 1048576, nanoCpus: 1000000000, pids: 10, filesystemBytes: 1048576 },
+    { retainEvidence: retain, verifyPackage: (_context, path) => verifyBeuserDistribution(path, files, packageLimits, digest),
+      removalEvidence: async () => ({ processesAbsent: false, cgroupAbsent: false, filesystemAbsent: false, evidenceRefs: [] }) }, command);
+    await expect(runtime.create(ctx, publish)).rejects.toMatchObject({ code: 'BEUSER_TARGET_NOT_SANDBOX' });
+    expect(command).not.toHaveBeenCalled(); expect(publish).not.toHaveBeenCalled();
+  };
+  // Re-pin each planted credential: a hash mismatch must not be the reason for its refusal.
+  const pem = generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 1024 }).privateKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+  for (const content of ['sk-ant-fictitiousprovider', 'glpat-' + 'F'.repeat(20), 'ASIAABCDEFGHIJKLMNOP',
+    'aws_secret_access_key=' + 'A'.repeat(40), 'sk_live_' + 'F'.repeat(16), 'xapp-' + 'F'.repeat(8),
+    'pypi-' + 'F'.repeat(50), 'AccountKey=' + 'F'.repeat(20), 'Bearer fictitious-bearer-0123456789',
+    'https://test:fictional-password@example.invalid/p', 'eyJfictional.payload.signature', pem,
+    JSON.stringify({ privateKey: pem }), rsa]) {
+    await writeFile(target, content); const { files, digest } = await distribution(root); await refused(files, digest);
+  }
+  await writeFile(target, 'export {};');
+  await writeFile(join(root, 'foreign.txt'), 'foreign'); await refused(clean.files, clean.digest);
+  await rm(join(root, 'foreign.txt')); await rm(target); await refused(clean.files, clean.digest);
 });

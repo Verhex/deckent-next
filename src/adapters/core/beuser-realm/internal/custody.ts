@@ -11,7 +11,7 @@ import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type Be
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
   type SandboxRequest } from '#engine/index.js';
-import { jsonRecordDirectory, withConfigWriteLock, sha256, hasSecret, type JsonRecordFile } from '#platform/index.js';
+import { jsonRecordDirectory, withConfigWriteLock, sha256, REDACTION_PATTERNS, REDACTION_GATE_PATTERNS, type JsonRecordFile } from '#platform/index.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 
 const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)) }).strict();
@@ -19,6 +19,13 @@ const handleSchema = z.object({ binding: beuserBindingSchema, incarnation: z.str
 const recordSchema = z.object({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
   lease: z.object({ handle: handleSchema.nullable(), observation: observationSchema }).strict() }).strict();
 const refuse = (): never => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); };
+// Distribution admission uses credential rules; record redaction keeps its broader assignment classifier.
+const distributionPatterns = [...REDACTION_PATTERNS.filter(row => row.gate), ...REDACTION_GATE_PATTERNS]
+  .map(row => new RegExp('distributionSource' in row ? row.distributionSource : row.source, row.flags.replace('g', '')));
+const hasDistributionCredential = (text: string): boolean => {
+  const decoded = text.replace(/\\r\\n|\\[rn]/gu, '\n');
+  return distributionPatterns.some(pattern => pattern.test(decoded));
+};
 /** The supervisor's per-Attempt custody file is never a scheduler or a launch grant. Dispatch remains the owner. */
 export async function createBeuserRealmCustody(input: { readonly context: BeuserContext; readonly request: SandboxRequest;
   readonly store: Pick<DispatchStore, 'readDispatch'>; readonly owner: string; readonly directory: string; readonly timeoutMs: number }): Promise<BeuserRealmCustody> {
@@ -105,7 +112,7 @@ export async function verifyBeuserDistribution(root: string, files: readonly { r
       const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       try { const before = await handle.stat(); if (before.dev !== info.dev || before.ino !== info.ino) return false;
         const bytes = await handle.readFile(), after = await handle.stat();
-        if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || sha256(bytes) !== expected.sha256 || hasSecret(bytes.toString('utf8'))) return false;
+        if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || sha256(bytes) !== expected.sha256 || hasDistributionCredential(bytes.toString('utf8'))) return false;
       } finally { await handle.close(); }
       allowed.delete(relative(root, path).split('\\').join('/'));
     }

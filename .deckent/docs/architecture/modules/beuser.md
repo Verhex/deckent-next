@@ -58,6 +58,13 @@ is the installed-file contract. Missing inventory files remain `declaredMissing`
 modes refuse measurement. The pinned full distribution verifier still rejects missing and foreign
 files, including files outside npm's inclusion list. These byte checks grant no release authority.
 
+Distribution content admission uses the canonical redaction registry's `gate:true` and gate-only
+credential patterns. Its private-key `distributionSource` requires an encoded body, including
+escaped newlines in source literals; a vendor's header-string constant alone is not key material.
+The generic key-value classifier remains in record redaction and is not a distribution rule.
+This scan detects credential formats, not all secrets or credential validity; unprefixed generic
+config values are outside this distribution scan. Record redaction and worker-tree rules are unchanged.
+
 `deckent beuser setup --profile <path> --scope <id>` previews a bounded admission document on the
 person's terminal; `--apply` displays its content and digest on a person card, and `--json` returns
 the same result as structured data. The document uses the existing admission schema: `poolId`,

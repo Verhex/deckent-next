@@ -51,6 +51,7 @@
     {
       "id": "private-key-block",
       "source": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----",
+      "distributionSource": "-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[ \\t\\r\\n]+(?:[A-Za-z0-9-]+:[^\\r\\n]*[\\r\\n]+)*(?:[A-Za-z0-9+/][ \\t\\r\\n]*){32}",
       "flags": ""
     },
     {
