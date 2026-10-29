@@ -263,7 +263,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
-  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
+  const sessionStore = parsed.action === 'workline' && context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
   const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   const previousConversation = sessions && (await sessions.list().catch(() => [])).some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined;
   if (previousConversation) accessNotices.push({ level: 'info', text: previousConversation });
