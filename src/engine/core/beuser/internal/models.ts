@@ -76,11 +76,12 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
   };
   return {
     // Build a new whitelist object, not a spread of caller/model context. The screen has already been redacted by the harness.
-    walker: (context, summaryInput, screen, outputError) => {
+    walker: (context, summaryInput, screen, history, outputError) => {
       const summary = pinBeuserWalkerSummary(summaryInput);
       if (sha256(encodeCommandProjection('beuser-persona:1', summary)) !== context.binding.personaDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
       assertBeuserAccess(context, screen.binding, context.principal, { kind: 'beuser-sandbox', id: screen.binding.realmId }, 'create');
-      return invoke(context, 'beuser-walker', { persona: summary, goal: summary.goal, screen: screen.text, tools: ['look', 'type', 'press', 'wait'], ...(outputError ? { outputError } : {}) });
+      return invoke(context, 'beuser-walker', { persona: summary, goal: summary.goal, screen: screen.text, recentActions: history.recentActions, screenUnchanged: history.screenUnchanged,
+        tools: ['look', 'type', 'press', 'wait'], ...(outputError ? { outputError } : {}) });
     },
     evaluate: (context, transcriptDigest, outputError) => invoke(context, 'beuser-evaluator', { transcriptDigest, ...(outputError ? { outputError } : {}) }),
     cancel: async (context, invocationId) => {

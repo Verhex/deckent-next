@@ -52,8 +52,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   İki plan da yalnız kural ekler; sizin yazdığınız çakışan kurallar korunur.
 - `deckent init` rehberli kurulumdur: planı ve eksik kalanı, her adımın tam komutuyla gösterir;
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
-  Kurulum penceresinde ve kartlarında ↑↓ (ya da j/k) gezer, Enter vurgulu yanıtı gönderir, Esc kapatır; her evet/hayır sorusu
-  (y) ve (n) gösterir ve kabul eder. Birkaç yanıt arasından seçimde (dil, profil) harf yoktur.
+  Kurulum penceresinde ve kartlarında ↑↓ (ya da j/k) gezer, Enter vurgulu yanıtı gönderir, satırda gösterilen numara o satırla
+  yanıtlar, Esc kapatır; her evet/hayır sorusu (y) ve (n) gösterir ve kabul eder. Birkaç yanıt arasından seçimde (dil, profil) harf yoktur.
 - `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi ve
   algıladığı host aracı köprülerini önizler. Docker kodlama işçileri onu okumaz; onlar
   [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif) bölümündeki işçi dosyasını alır.
@@ -408,8 +408,8 @@ OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde a
   sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. `/watch-stop` gözlemi kapatır.
 - **Onay kartları.** Onay kartı (ve her soru) klavyeyi kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez.
   Yanıtları bir listedir — "Evet, bu sefer (y)", "Evet, bu oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis
-  sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓, j/k ya da 1–9 ile seçilir, Enter
-  ile onaylanır ya da harfle yanıtlanır; seçim Hayır'da başlar, Esc reddeder. "Hep izin ver" sizin kalıcı izninizdir
+  sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓ ya da j/k ile seçilir, Enter
+  ile onaylanır ya da satırın numarası veya harfiyle yanıtlanır; seçim Hayır'da başlar, Esc reddeder. "Hep izin ver" sizin kalıcı izninizdir
   (`deckent policy grants --mine`, `deckent policy revoke` ile kaldırılır). Bekleyen birden çok karar tek tek gelir ("1/3").
 - **Kartlarda tuş güvenliği.** Kart, gösterildiği andan itibaren kısa bir sessiz süre (0,3 sn, `decision.json`) geçmeden tuş
   saymaz; o sırada ipucu satırı "Yeni açıldı · tuşları birazdan çalışır" der (erken gelen tuş için "Tuş sayılmadı … yeniden

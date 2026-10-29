@@ -11,7 +11,7 @@ import { createConfiguredRuntimeClient, withQueueContext, assertQueueWorkTarget 
 import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { createLayoutPolicySource, policyFileRefusal } from '#composition/core/policy/index.js';
 const load = (root: string, options: ConfigLoadOptions) => loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
 const marked = (env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>, names: readonly string[]) => automationMarker(process.env, names) ?? automationMarker(env, names);
 /** Trusted local composition: read-only previews and witnessed application admission use the same owned inventory. */
@@ -19,20 +19,22 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env;
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
   const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, options);
+  // Lane J P1: an unsafe policy or bindings file decides no tier: a typed refusal naming it, never an untyped crash and never a repair.
+  const policy = () => source.load().catch((error: unknown) => { const refusal = policyFileRefusal(layout, error); throw refusal ? ErrorRegistry.createError('UNINSTALL_POLICY_UNREADABLE', { params: refusal }) : error; });
   const scopes = (document: unknown) => uninstallAffectedScopes(document, [scopeId,
     ...(config.service.identity ? [config.service.identity.scopeId] : []), ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])]);
   const installationId = async () => { const identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
     if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE'); return identity.value.installationId; };
-  const person = async () => ({ ...readLocalOsIdentity(), scopeIds: scopes(await source.load()) }), exec = nativeServiceExec(config.installation.identityProbe, env);
+  const person = async () => ({ ...readLocalOsIdentity(), scopeIds: scopes(await policy()) }), exec = nativeServiceExec(config.installation.identityProbe, env);
   const links = nativeUserUnitLinks(config.installation.identityProbe, env);
   let stoppedLock: LedgerLock | undefined;
   return new UninstallApplication({
     channel: localPrincipalChannel(), witness: { attest: async () => { const peer = localPrincipalPeer(); return !marked(env, config.cli.agentEnvironment) && attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } }, principal: person,
     // M14, R8: every tier's own decision covers every ledger-recorded scope too (as again under custody), before any card.
-    async authorize(action, principal) { const document = policySchema.parse(await source.load()), affected = action === 'inspect' ? scopes(document)
+    async authorize(action, principal) { const document = policySchema.parse(await policy()), affected = action === 'inspect' ? scopes(document)
       : installationScopes(productResourcePath(layout, 'ledger'), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxScopes: config.audit.maxRecords }, scopes(document));
       authorizeUninstall(document, { ...principal, scopeIds: affected }, await installationId(), affected, action); },
-    async inventory() { const document = policySchema.parse(await source.load()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
+    async inventory() { const document = policySchema.parse(await policy()), inventory = (await observeUninstallInventory(config, document.revision, scopes(document), options)).inventory;
       // R13: each unknown result's own (ledger-recorded) scope is checked against company control too.
       return { ...inventory, managedScopes: uninstallManagedScopes(document, [...scopes(document), ...inventory.work.uncertain.map(item => item.scopeId)]), resources: [...inventory.resources, ...handMadeLaunchers(root, env).map(uninstallLauncherResource)] };
     },
@@ -45,7 +47,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
         decision: 'deny', reason: 'uninstall --force', channel: 'local-cli' }, options); },
       withdrawDelivery: ref => withQueueContext(root, ref.scopeId, options, undefined, false, async queue => { const record = await queue.app.inspect(ref.scopeId, ref.id, queue.principal); if (!record || record.revision !== ref.revision || record.state !== ref.state || JSON.stringify(record.request.identity) !== JSON.stringify(ref.identity)) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED'); await queue.app.cancel(record, queue.principal); }) },
     // F6: queue authority is decided from the owner's typed observation bound into D0; no queue context or SQLite is opened before the card.
-    async preflight(plan, principal) { const document = await source.load(); await authorizeUninstallSteps(document, plan, principal, scopeId);
+    async preflight(plan, principal) { const document = await policy(); await authorizeUninstallSteps(document, plan, principal, scopeId);
       if (plan.steps.withdrawDeliveries.length && !config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
       const delivery = plan.steps.withdrawDeliveries[0];
       if (delivery) try { assertQueueWorkTarget(config.execution ? selectWorkTarget(config.execution) : null, await resolveGitWorkTarget(root, config.execution, layout)); }

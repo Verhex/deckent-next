@@ -156,7 +156,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the owner takes plain text right now (`burstText`: only an open reason field), and then only as text, never a decision — except a read of
   navigation keys only (↑↓, PgUp/PgDn, Home/End without modifiers: a held key or coalesced arrows), delivered as ordinary keys because they
   only scroll or move the highlight and never decide (armed and focused still required); a paste consumer stays active (paste never decides); Ctrl+O in a read drops it. `DecisionCard` lists its
-  answers through the shared question contract (`question.tsx`: ↑↓/j/k, 1–9, Enter, Esc, option letters; multi: Space) with the highlight on
+  answers through the shared question contract (`question.tsx`: ↑↓/j/k, Enter, Esc, option letters, and 1–9 answering with the shown row (owner
+  2026-10-29) only once the card is armed; multi: Space toggles, a number only moves, Enter submits) with the highlight on
   No; session/always only as the service offers (G6). Yes/no letters belong to the contract, not the call site (alpha.58, BeUser walk16): a
   yes or no answer declares `role: 'yes' | 'no'` (never a hand `key`) and `optionKey` derives (y)/(n) in every locale for the row suffix and
   the shortcut alike; a CLI card with a role must offer exactly one yes and one no (`cliCardGate`, `CLI_USAGE`). The guided `deckent init`

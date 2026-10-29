@@ -69,7 +69,7 @@ it('walks the actual approval-card Enter action and consumes harness readback, n
   expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed', filesystemProof: { schemaVersion: 1, source: 'daemon-attested' }, verdict: { outcome: 'GREEN' } });
   expect(h.ports.surface.press).toHaveBeenCalledWith(expect.anything(), 'Enter');
   expect(h.ports.surface.argv).not.toHaveBeenCalled();
-  expect(h.ports.models.walker).toHaveBeenCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }));
+  expect(h.ports.models.walker).toHaveBeenCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false });
   expect(h.ports.evidence.readback).toHaveBeenCalledOnce();
 });
 
@@ -106,10 +106,20 @@ it('prompt-injected extra tools or verdict fields make the walk invalid instead 
 });
 
 it('stops a same-screen/action loop and enforces persona wait and step patience before the next effect', async () => {
+  // Walk17 S2: the same key on an unchanged screen stops on its second repeat (a first repeat may be a swallowed key); the walker sees its own
+  // last actions and that the screen did not change.
+  const stuck = harness(), looped = vi.fn(async () => {});
+  stuck.ports.surface.press = stuck.ports.surface.look; stuck.ports.stopped = looped;
+  expect(await stuck.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'loop' });
+  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(3); expect(looped).toHaveBeenCalledOnce();
+  const press = { kind: 'press', key: 'Enter' };
+  expect(vi.mocked(stuck.ports.models.walker).mock.calls.map(call => call[3])).toEqual([{ recentActions: [], screenUnchanged: false },
+    { recentActions: [press], screenUnchanged: true }, { recentActions: [press, press], screenUnchanged: true }]);
+  // Looking is observation, never a loop: only the persona's patience ends it.
   const loop = harness();
   loop.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'look' } });
-  expect(await loop.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'loop' });
-  expect(loop.ports.surface.look).toHaveBeenCalledTimes(2);
+  expect(await loop.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'bound' });
+  expect(loop.ports.surface.look).toHaveBeenCalledTimes(5);
   const wait = harness();
   wait.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms: 101 } });
   expect(await wait.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'bound' });
@@ -213,12 +223,26 @@ it('C2 created observation must reach C4 admission, then the gated catalogued st
   expect(inspect).toHaveBeenCalledOnce();
   {
     const step = { ...BEUSER_ARRANGE_REGISTRY.steps[0]!, timeoutMs: limits.maxWaitMs - 1 } as BeuserArrangeStep;
-    const arrangement = (installation: string, exitCode: number, steps = [step], unarranged: BeuserArrangement['unarranged'] = []) => ({ steps, unarranged, record: vi.fn(async () => {}),
+    const arrangement = (installation: string, exitCode: number, steps = [step], unarranged: BeuserArrangement['unarranged'] = []) => ({ steps, unarranged,
+      record: vi.fn<(ctx: BeuserContext, receipt: unknown) => Promise<void>>(async () => {}),
       port: { run: vi.fn(async () => ({ exitCode, stdoutBytes: 2, stdoutDigest: '0'.repeat(64) })),
         observe: vi.fn(async (_ctx: unknown, readback: BeuserArrangeStep['readback']) => readback.kind === 'path' ? { state: 'file', mode: '0600', sha256: installation } : installation) } });
-    const met = harness(), arranged = arrangement('installed', 0);
-    met.ports.arrange = arranged;
+    // One real recorder as composition wires it: arrange rows at `arrangeAtMs`, surface rows on the surface clock that starts at its first look.
+    const recorded = (h: ReturnType<typeof harness>, arranged: ReturnType<typeof arrangement>, arrangeAtMs: number) => {
+      const recorder = createBeuserTranscript(context(), EMPTY_KNOWN_SECRETS), { look, press } = h.ports.surface; let start: number | undefined;
+      const row = async (pending: Promise<BeuserScreen>) => { const screen = await pending; start ??= performance.now();
+        recorder.append(context(), { binding, kind: 'screen', atMs: Math.floor(performance.now() - start), evidenceRef: `transcript:${screen.sequence}`, text: screen.text }); return screen; };
+      h.ports.surface = { ...h.ports.surface, look: vi.fn(ctx => row(look(ctx))), press: vi.fn((ctx, key) => row(press(ctx, key))) };
+      arranged.record.mockImplementation(async (ctx, receipt) => { recorder.append(ctx, { binding: ctx.binding, kind: 'arrange', atMs: arrangeAtMs, evidenceRef: 'transcript:arrange:1', text: JSON.stringify(receipt) }); });
+      h.ports.arrange = arranged; return recorder;
+    };
+    const met = harness(), arranged = arrangement('installed', 0), transcript = recorded(met, arranged, 0);
     expect(await met.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
+    expect(transcript.inspect(context()).map(row => row.entry.kind)).toEqual(['arrange', 'screen', 'screen']);
+    // Walk17 S1: an arrange row on a later clock than the first surface row is refused with its typed code, never a bare "unknown".
+    const skewed = harness();
+    recorded(skewed, arrangement('installed', 0), 5);
+    expect(await skewed.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'BEUSER_INPUT_INVALID', cleanup: 'destroyed' });
     expect(arranged.port.run).toHaveBeenCalledWith(expect.anything(), step);
     expect(arranged.port.observe).toHaveBeenCalledWith(expect.anything(), step.readback);
     expect(vi.mocked(arranged.port.run).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(met.ports.surface.look).mock.invocationCallOrder[0]!);
@@ -370,7 +394,7 @@ it('corrects an invalid walker answer with typed feedback before executing the r
   vi.mocked(h.ports.decode).mockImplementationOnce(() => { throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID'); });
   expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'completed', cleanup: 'destroyed' });
   expect(h.ports.models.walker).toHaveBeenCalledTimes(2);
-  expect(h.ports.models.walker).toHaveBeenLastCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), 'BEUSER_MODEL_OUTPUT_INVALID');
+  expect(h.ports.models.walker).toHaveBeenLastCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false }, 'BEUSER_MODEL_OUTPUT_INVALID');
   expect(h.ports.surface.press).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'Enter');
   expect(h.ports.surface.type).not.toHaveBeenCalled();
 });

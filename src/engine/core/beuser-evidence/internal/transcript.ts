@@ -1,7 +1,7 @@
 import { beuserTranscriptEntrySchema, beuserVerdictSchema, type BeuserTranscriptEntry, type BeuserVerdict } from '#domain/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import { assertBeuserAccess, pinBeuserLimits, type BeuserContext, type EvidencePort } from '#engine/core/beuser-contract/index.js';
+import { BeuserContractError, assertBeuserAccess, pinBeuserLimits, type BeuserContext, type EvidencePort } from '#engine/core/beuser-contract/index.js';
 /** Controller-private recorder: return only redacted text to both the model and retained supervisor output. */
 export function createBeuserTranscript(admitted: BeuserContext, known: KnownSecretSnapshot) {
   const limits = pinBeuserLimits(admitted.limits), rows: { readonly entry: BeuserTranscriptEntry; readonly text: string }[] = [];
@@ -13,13 +13,13 @@ export function createBeuserTranscript(admitted: BeuserContext, known: KnownSecr
       assertBeuserAccess(admitted, event.binding, context.principal, { kind: 'beuser-transcript', id: admitted.binding.transcriptId }, 'inspect');
       if (sealed || rows.some(r => r.entry.evidenceRef === event.evidenceRef) || event.atMs > limits.maxWallMs
         || event.atMs < (rows.at(-1)?.entry.atMs ?? 0)
-        || event.kind === 'action' && rows.filter(r => r.entry.kind === 'action').length >= limits.maxSteps) throw new Error('BEUSER_INPUT_INVALID');
-      if (event.kind !== 'secret-step' && known.pendingStart(event.text) < event.text.length) throw new Error('BEUSER_INPUT_INVALID');
+        || event.kind === 'action' && rows.filter(r => r.entry.kind === 'action').length >= limits.maxSteps) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+      if (event.kind !== 'secret-step' && known.pendingStart(event.text) < event.text.length) throw new BeuserContractError('BEUSER_INPUT_INVALID');
       const text = event.kind === 'secret-step' ? '' : redactForRecord(event.text, known);
       const entry = beuserTranscriptEntrySchema.parse({ schemaVersion: 1, binding: admitted.binding, sequence: rows.length + 1,
         atMs: event.atMs, kind: event.kind, evidenceRef: event.evidenceRef, digest: beuserDigest(text) });
       const row = Object.freeze({ entry, text });
-      if (Buffer.byteLength(JSON.stringify([...rows, row])) > limits.maxTranscriptBytes) throw new Error('BEUSER_INPUT_INVALID');
+      if (Buffer.byteLength(JSON.stringify([...rows, row])) > limits.maxTranscriptBytes) throw new BeuserContractError('BEUSER_INPUT_INVALID');
       rows.push(row);
       return row;
     },
@@ -49,7 +49,7 @@ export function createBeuserEvidencePort(admitted: BeuserContext, recorder: Retu
       const entry = beuserTranscriptEntrySchema.parse(input);
       // Captured metadata cannot introduce a second producer or new content.
       const captured = recorder.inspect(context).find(row => row.entry.sequence === entry.sequence);
-      if (!captured || beuserDigest(captured.entry) !== beuserDigest(entry)) throw new Error('BEUSER_INPUT_INVALID');
+      if (!captured || beuserDigest(captured.entry) !== beuserDigest(entry)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     },
     async finalize(context: BeuserContext) { access(context); return recorder.finalize(context); },
     async readback(context: BeuserContext) {

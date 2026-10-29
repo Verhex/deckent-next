@@ -51,8 +51,8 @@ one section; other sections link to it.
   Either plan only adds rules; conflicting rules you wrote are kept.
 - `deckent init` is the guided setup: it shows the plan and what is still missing, with the exact command for each step;
   `deckent init --yes --scope <id>` installs a fresh first-run policy, sets the language and runs the final check.
-  In the setup window and its cards, ↑↓ (or j/k) move, Enter sends the highlighted answer and Esc closes; every yes/no question
-  shows and takes (y) and (n). A choice among several answers (language, profile) has no letters.
+  In the setup window and its cards, ↑↓ (or j/k) move, Enter sends the highlighted answer, the number shown on a row answers with
+  that row and Esc closes; every yes/no question shows and takes (y) and (n). A choice among several answers (language, profile) has no letters.
 - `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads, and which
   host-tool bridges it detects. Docker coding workers do not read it; they get the worker file described in
   [Worker instructions and discovery](#worker-instructions-and-discovery).
@@ -408,8 +408,8 @@ higher than your Deckent budget; Deckent cannot see either setting.
   it behind the current operation. Ctrl+O switches between input and the top window. `/watch-stop` closes observation.
 - **Approval cards.** An approval card (and any question) takes the keyboard by itself and replaces the input bar in place, so
   no Ctrl+O is needed. Its answers are a list — "Yes, once (y)", "Yes, for this session (s)" and "Always allow in this project
-  (a)" only where the service offers them (never for hard-floor items or always-ask locks), "No (n)" — moved with ↑↓, j/k or
-  1–9 and confirmed with Enter, or answered with the letter; the highlight starts on No, and Esc denies. "Always" is your own
+  (a)" only where the service offers them (never for hard-floor items or always-ask locks), "No (n)" — moved with ↑↓ or j/k
+  and confirmed with Enter, or answered with the row's number or letter; the highlight starts on No, and Esc denies. "Always" is your own
   standing grant (`deckent policy grants --mine`, removed with `deckent policy revoke`). Several pending decisions wait one at
   a time ("1/3").
 - **Key safety on cards.** A card counts keys only after a short quiet period (0.3 s, `decision.json`) from the moment it is

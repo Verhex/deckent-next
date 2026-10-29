@@ -66,6 +66,8 @@ describe('decision card keystroke race (real Workline, production arming)', () =
     try {
       await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
       await until(() => cardShown(view), 'card');
+      // A shown number answers an armed card (owner 2026-10-29); typed while it arms, "1" (Yes, once) decides nothing.
+      view.stdin.write('1'); await settle(30); expect(calls).toEqual([]);
       // Auto-repeat of y every 30 ms for longer than the arming period: never decides.
       for (let elapsed = 0; elapsed < ARM * 2.5; elapsed += 30) { view.stdin.write('y'); await settle(30); }
       expect(calls).toEqual([]);
@@ -87,8 +89,9 @@ describe('decision card keystroke race (real Workline, production arming)', () =
       await armed(() => view.stdout.frame, 'Enter confirm');
       view.stdin.write(CTRL_O); await settle(30); view.stdin.write(CTRL_O); await settle(20); view.stdin.write('y'); await settle(60);
       expect(calls).toEqual([]);
-      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('y');
-      await until(() => calls.length === 1, 'approved after re-arm'); expect(calls[0]![1]).toBe('allow');
+      // Armed again, the shown number of "Yes, once" answers it.
+      await armed(() => view.stdout.frame, 'Enter confirm'); view.stdin.write('1');
+      await until(() => calls.length === 1, 'approved after re-arm'); expect(calls[0]).toEqual(['appr-race', 'allow', undefined]);
     } finally { gate.release(); }
   });
 });

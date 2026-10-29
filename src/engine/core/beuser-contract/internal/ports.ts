@@ -70,9 +70,11 @@ export type BeuserModelRole = 'beuser-walker' | 'beuser-evaluator';
 export type BeuserModelResult = Readonly<{ state: 'invoked'; receipt: BeuserModelReceipt }>
   | Readonly<{ state: 'unavailable'; code: 'BEUSER_MODEL_UNAVAILABLE'; reason: RoleModelRefusal | 'maker-unknown' | 'independence' }>;
 export interface BeuserModelReceipt { readonly invocation: ModelInvocationResult; readonly role: BeuserModelRole; readonly maker: string | null }
+/** The walker's own last actions, oldest first, and whether its last action left the screen unchanged (walk17 S2). */
+export type BeuserWalkerHistory = Readonly<{ recentActions: readonly unknown[]; screenUnchanged: boolean }>;
 /** Input construction keeps the rubric out of the walker call; provider/model selection is the existing role/active/budget path. */
 export interface ModelPort {
-  walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
+  walker(context: BeuserContext, summary: BeuserWalkerSummary, screen: BeuserScreen, history: BeuserWalkerHistory, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
   evaluate(context: BeuserContext, transcriptDigest: string, outputError?: 'BEUSER_MODEL_OUTPUT_INVALID'): Promise<BeuserModelResult>;
   cancel(context: BeuserContext, invocationId: string): Promise<void>;
 }
