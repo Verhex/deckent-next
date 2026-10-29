@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
-import { FileArtifactStore, createBeuserSurface, BEUSER_REALM_RECIPE,
+import { FileArtifactStore, createBeuserSurface,
   openSqliteApprovalStore, openLocalIntegrityAuthority, extractOpenAiChatTextFromInvocation, beuserPrivateRecord, readBeuserInstallationSummary, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
@@ -19,6 +19,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createBeuserChannel, retainBeuserJson } from '#adapters/index.js';
 import { openConfiguredBeuserRealmOwner } from '#composition/core/supervisors/index.js';
 import { configuredBeuserModels } from './models.js';
+import { beuserJourneyLaunch } from './launch.js';
 
 export { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
 export type { BeuserJourneyProfile } from '#composition/core/supervisors/index.js';
@@ -28,9 +29,9 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   store: SqliteAttemptStore, artifacts: ArtifactStore, owner: string, options: ConfigLoadOptions = {}, created?: (id: string) => Promise<void>) {
   const c = await loadConfiguredScopeContext(root, context.binding.identity.scopeId, options, 'write'), config = c.config;
   const { data, custody, runtimeOptions, removal, realm } = await openConfiguredBeuserRealmOwner(c, context, request, profile, store, artifacts, owner, created);
+  const launch = beuserJourneyLaunch(data);
   const channel = createBeuserChannel({ context, realm, custody, options: runtimeOptions, boot: { mode: data.entry.mode,
-    entry: [data.entry.nodeExecutable, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`, ...data.entry.args],
-    commands: {}, maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
+    entry: launch.entry, commands: launch.commands, maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
   const known = getConfigKnownSecrets(config), recorder = createBeuserTranscript(context, known), readbacks: BeuserReadback[] = [];
   let lastEvent: HarnessEvent | null = null;
   const sink = async (ctx: BeuserContext, event: HarnessEvent) => {
@@ -42,7 +43,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     await retainBeuserJson(artifacts, ctx, row); lastEvent = event;
   };
   let capturedSurface: ReturnType<typeof createBeuserSurface> | undefined;
-  const getSurface = () => capturedSurface ??= createBeuserSurface({ context, realm: channel, size: data.size, bounds: data.bounds, catalog: [], sink });
+  const getSurface = () => capturedSurface ??= createBeuserSurface({ context, realm: channel, size: data.size, bounds: data.bounds, catalog: launch.catalog, sink });
   const safeScreen = async (pending: Promise<import('#engine/index.js').BeuserScreen>) => { const value = await pending;
     const text = redactForRecord(value.text, known); return { ...value, text, digest: sha256(text) }; };
   const surface: import('#engine/index.js').SurfacePort = {
@@ -93,7 +94,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     finally { approvals.close(); }
   }, false);
   return { custody, realm, removal, refusal, async walk(budget: BeuserExecutionBudget) {
-    const ports = { realm, surface, models, decode: model.decode, evidence: evidencePort, refusal,
+    const ports = { realm, surface, initialCommand: launch.initialCommand, models, decode: model.decode, evidence: evidencePort, refusal,
       async controllerAudit(ctx: BeuserContext) {
         try { controllerValidity = await withControllerAudit(ports => readBeuserControllerAudit(ctx, ports)); }
         catch { controllerValidity = 'unknown'; }

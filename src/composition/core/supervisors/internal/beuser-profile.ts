@@ -15,7 +15,8 @@ export const beuserJourneyProfileSchema = z.object({ schemaVersion: z.literal(1)
   contributorModels: z.array(immutableJsonObjectSchema).min(1),
   entry: z.object({ mode: z.enum(['pty', 'argv']), nodeExecutable: z.string().startsWith('/'), args: z.array(z.string()) }).strict(),
   probes: beuserParametersSchema.unwrap().innerType().shape.probes, calibration: beuserCalibrationSchema,
-}).strict().refine(data => data.probes.every(probe => probe.readbackRef === data.probes[0]?.readbackRef));
+}).strict().refine(data => data.probes.every(probe => probe.readbackRef === data.probes[0]?.readbackRef))
+  .refine(data => data.entry.mode !== 'argv' || data.entry.args.length > 0);
 export type BeuserJourneyProfile = z.infer<typeof beuserJourneyProfileSchema>;
 export const beuserSupervisorProfileSchema = supervisorProfileSchema.unwrap().extend({ adapterId: z.literal('beuser'),
   adapterVersion: z.literal(1), parameters: beuserJourneyProfileSchema }).strict().readonly();

@@ -1,14 +1,17 @@
 import * as processes from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it, vi } from 'vitest';
 import { beuserBindingSchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema } from '#domain/index.js';
-import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext } from '#engine/core/beuser-contract/index.js';
+import { BeuserController, walkBeuser } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmCustody, type BeuserRealmLease } from '#engine/core/beuser-realm/index.js';
-import { createBeuserChannel, type BeuserRealmOptions } from '#adapters/core/beuser-realm/index.js';
+import { BEUSER_REALM_RECIPE, createBeuserChannel, type BeuserRealmOptions } from '#adapters/core/beuser-realm/index.js';
 import { createBeuserSurface, pinBeuserDriverBoot, type BeuserDriverBoot } from '#adapters/core/beuser-surface/index.js';
+import { beuserJourneyLaunch } from '#composition/core/beuser/index.js';
+import personas from '../../../assets/beuser/personas.json' with { type: 'json' };
 
 // Only Docker transport is replaced. The production producer, validation, binding and Python are real.
 vi.mock('../../../src/adapters/core/beuser-realm/internal/realm.js', async importOriginal => ({
@@ -43,6 +46,9 @@ const size = { columns: 40, rows: 5, scrollback: 10 }, bounds = { quietMs: 30, i
 async function producer(mode: 'pty' | 'argv', program: string, corrupt?: (boot: BeuserDriverBoot) => unknown) {
   const directory = await mkdtemp(join(tmpdir(), 'beuser-boot-'));
   closers.push(() => rm(directory, { recursive: true, force: true }));
+  const cliDirectory = join(directory, 'dist/composition/core/cli/internal');
+  await mkdir(cliDirectory, { recursive: true });
+  await writeFile(join(cliDirectory, 'entry.js'), program);
   const handle = { binding: context.binding, containerId: 'a'.repeat(64), incarnation: '22345678-1234-4234-8234-123456789abc',
     controlDirectory: directory, controlIdentity: 'fixture' };
   let lease: BeuserRealmLease = { handle, observation: { binding: context.binding, state: 'admitted', evidenceRefs: ['fixture-readback'] } };
@@ -63,23 +69,26 @@ async function producer(mode: 'pty' | 'argv', program: string, corrupt?: (boot: 
         first = false;
         const boot = JSON.parse(String(chunk)) as BeuserDriverBoot;
         boots.push(boot);
-        return write(JSON.stringify(corrupt ? corrupt(boot) : boot) + '\n', ...args);
+        // Substitute only the container's package mount in this Docker transport fixture.
+        const wire = JSON.stringify(corrupt ? corrupt(boot) : boot).replaceAll(BEUSER_REALM_RECIPE.packageTarget, directory);
+        return write(wire + '\n', ...args);
       }
       return write(chunk, ...args);
     });
     return child;
   });
-  const entry = [process.execPath, '-e', program, directory];
-  const boot = { mode, entry, commands: { 'approval-decide': { prefix: entry, allowedArgs: [['allow']] } },
+  const declared = { entry: { mode, nodeExecutable: process.execPath, args: ['allow'] }, summary: { journeyId: 'approval-decide' } };
+  const journey = beuserJourneyLaunch(declared);
+  const boot = { mode, entry: journey.entry, commands: journey.commands,
     maxBootBytes: context.limits.maxArtifactBytes, language: 'C.UTF-8' };
   const options: BeuserRealmOptions = { executable: 'fixture-docker', packageRoot: directory, controllerRoot: directory,
     image: `sha256:${'a'.repeat(64)}`, uid: 1000, gid: 1000, memoryBytes: 1, nanoCpus: 1, pids: 1, filesystemBytes: 1 };
   const channel = createBeuserChannel({ context, realm, custody, options, boot });
   const events: unknown[] = [];
-  const surface = createBeuserSurface({ context, realm: channel, size, bounds, catalog: [{ commandId: 'approval-decide', args: ['allow'] }],
+  const surface = createBeuserSurface({ context, realm: channel, size, bounds, catalog: journey.catalog,
     sink: async (_ctx, event) => { events.push(event); } });
   closers.push(() => surface.close(context));
-  return { surface, channel, boot, boots, directory, events, launch, exits, diagnostics };
+  return { surface, channel, boot, boots, directory, events, launch, exits, diagnostics, journey };
 }
 
 it.skipIf(process.platform !== 'linux')('production boot starts the real PTY entry and preserves approval then nonce refusal', async () => {
@@ -88,7 +97,7 @@ it.skipIf(process.platform !== 'linux')('production boot starts the real PTY ent
     process.stdin.setRawMode(true); process.stdin.resume(); process.stdout.write('Approval erase fixture? [y/N]');
     process.stdin.on('data', bytes => {
       if (bytes.toString() === 'y') {
-        require('node:fs').writeFileSync(require('node:path').join(process.argv[1], 'approved'), 'applied');
+        require('node:fs').writeFileSync(require('node:path').join(require('node:path').dirname(process.argv[1]), '../../../../../approved'), 'applied');
         process.stdout.write('\\x1b[2J\\x1b[HApproved');
       }
     });`);
@@ -108,9 +117,22 @@ it.skipIf(process.platform !== 'linux')('production boot argv twin launches the 
   const f = await producer('argv', `
     if (!process.stdin.isTTY || process.argv.at(-1) !== 'allow') process.exit(32);
     process.stdout.write('Original approval allow: ' + process.stdout.columns + 'x' + process.stdout.rows);`);
-  expect((await f.surface.argv(context, { commandId: 'approval-decide', args: ['allow'] })).text).toBe('Original approval allow: 40x5');
+  const look = vi.spyOn(f.surface, 'look'), controller = new BeuserController(context, pinBeuserWalkerSummary(personas.personas[0]));
+  const finished = vi.fn(async (screen: { text: string }) => {
+    expect(screen.text).toBe('Original approval allow: 40x5'); return true;
+  });
+  const models = { walker: vi.fn(), evaluate: vi.fn(), cancel: vi.fn() };
+  try { await walkBeuser(controller, { surface: f.surface, initialCommand: f.journey.initialCommand, finished, models, decode: vi.fn(), record: vi.fn() }); }
+  finally { controller.close(); }
+  expect(finished).toHaveBeenCalledOnce();
+  expect(look).not.toHaveBeenCalled(); expect(models.walker).not.toHaveBeenCalled();
+  expect(() => f.surface.argv(context, { commandId: 'undeclared', args: ['allow'] })).toThrow(expect.objectContaining({ code: 'BEUSER_SURFACE_INVALID' }));
   expect(() => f.surface.argv(context, { commandId: 'approval-decide', args: ['allow; rm fixture'] })).toThrow('BEUSER_SURFACE_INVALID');
   expect(f.boots).toHaveLength(1);
+  expect(f.boots[0]!.commands).toEqual({ 'approval-decide': {
+    prefix: [process.execPath, `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`], allowedArgs: [['allow']],
+  } });
+  expect(JSON.stringify(f.boots[0])).not.toContain(f.directory);
   expect(f.diagnostics).toEqual([]);
 });
 

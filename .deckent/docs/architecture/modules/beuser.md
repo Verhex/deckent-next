@@ -14,6 +14,14 @@ B1 is admitted for alpha.57; this branch is an author candidate, not a release o
 
 ## Isolation and effect settlement
 
+The installed journey profile declares its CLI tuple in `entry.args`. One composition projection binds
+that tuple to the realm recipe's packaged CLI entry, using the journey id as its command id, and feeds
+both boot `commands` and the exact surface catalog. An argv walk starts that trusted tuple before any
+read; the walker still receives only look/type/press/wait and cannot supply executable paths or argv.
+Argv profiles without arguments are refused at admission. PTY walks retain their initial look.
+The local regression uses this projection, the production channel producer, surface and real Python
+driver with a substituted Docker transport; it does not establish assembled realm acceptance.
+
 Persona behavior is separate from principal authority. The outer caller uses existing Run admission;
 the internal evaluator rechecks the full own Attempt/generation/realm/nonce binding. Model selection,
 activation, budget and cancellation stay on the existing invocation path. Core does not gain a second
