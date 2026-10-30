@@ -187,22 +187,24 @@ describe('composer paste and chunked input', () => {
 
 describe('composer completion, shortcuts panel and mentions', () => {
   it('opens the slash popup on a bare prefix; arrows select, Tab completes, Enter runs the highlighted command', () => {
-    let { state } = run(typed('/wa'));
-    expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['watch-workers', 'watch-runs', 'watch-stop']);
+    let { state } = run(typed('/ru'));
+    expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['run', 'runs', 'resume']);
     state = run([K.down, K.tab], state).state;
-    expect(state.text).toBe('/watch-runs ');
+    expect(state.text).toBe('/runs ');
     expect(composerMenu(state)).toBeNull();
     // SLASH-WINDOWS (owner 2026-10-08): Enter on a palette row always runs `/name`; no command completes and waits for typed text.
-    expect(submitted(run([...typed('/wa'), K.down, K.submit]).intents)).toEqual(['/watch-runs']);
+    expect(submitted(run([...typed('/ru'), K.down, K.submit]).intents)).toEqual(['/runs']);
     const ran = run([...typed('/ru'), K.submit]);
     expect([submitted(ran.intents), ran.state.text]).toEqual([['/run'], '']);
     for (const name of ['run', 'transcript', 'approvals', 'cancel', 'resume', 'mode']) expect(submitted(run([...typed(`/${name}`), K.submit]).intents)).toEqual([`/${name}`]);
     expect(submitted(run([text('/sta\r')]).intents)).toEqual(['/status']);
-    expect(composerMenu(run(typed('/wwk')).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
+    expect(composerMenu(run(typed('/svr')).state)!.items.map(command => command.name)).toEqual(['service-restart']);
     expect(submitted(run([...typed('/zz'), K.submit]).intents)).toEqual(['/zz']);
-    const dismissed = run([...typed('/wa'), K.esc]).state;
+    const dismissed = run([...typed('/tr'), K.esc]).state;
     expect(composerMenu(dismissed)).toBeNull();
-    expect(composerMenu(run(typed('tch-w'), dismissed).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
+    expect(composerMenu(run(typed('ansc'), dismissed).state)!.items.map(command => command.name)).toEqual(['transcript']);
+    // Owner 2026-10-30: the terminal offers no watch commands (`/tasks` and `/runs` carry that information).
+    expect(composerMenu(run(typed('/watch')).state)).toBeNull();
   });
 
   it('toggles the shortcuts panel with ? only on an empty draft', () => {
@@ -288,7 +290,7 @@ describe('composer key mapping (Ink key events)', () => {
 });
 
 const labels: ComposerLabels = { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS',
-  slash: { 'terminal.slash.watchRuns': 'WATCH-RUNS-DESC', 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } };
+  slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } };
 class Screen extends Writable {
   text = '';
   readonly isTTY = true; readonly rows = 60;

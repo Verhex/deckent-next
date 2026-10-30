@@ -25,7 +25,7 @@ const work: WorkSurfaceLabels = { jobs: EN_WORK.jobs, workerLine: EN, panel: { t
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
-  watchStarted: 'WATCH-ON', watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', work,
+  statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', work,
   render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued' },
@@ -93,7 +93,7 @@ describe('work surface: live worker panel', () => {
   it('shows human-readable worker lines in the live window fed only by the heartbeat poll', async () => {
     const polls: number[] = [];
     const view = mount({ pollMs: 60, ledger: { ...baseLedger, async listWorkers() { polls.push(performance.now()); return report(Date.now()); } } });
-    await view.type('/watch-workers\r');
+    await view.type('/tasks\r');
     await until(() => view.stdout.text.includes('LIVE-PANEL'), 'panel');
     // The window may open before its first poll answers (an empty list for one frame); the first read fills it in place.
     await until(() => view.stdout.text.includes('worker 1 · claude'), 'first poll in the window');
@@ -104,11 +104,9 @@ describe('work surface: live worker panel', () => {
     // Single-flight polls never run faster than the heartbeat: at most one per interval after the first. Intervals use the
     // monotonic clock: the WSL wall clock steps back by seconds (a -2877 ms interval was observed in a full verify).
     for (let index = 1; index < polls.length; index++) expect(polls[index]! - polls[index - 1]!).toBeGreaterThanOrEqual(55);
-    // FIRST-TEST-FIXES (760c906e): the watch frame takes no focus, so Esc (the composer's key) leaves it open; /watch-stop closes it and
-    // stops the watch, leaving one summary line in the scrollback.
-    view.stdin.write('\u001B'); await settle(200); expect(view.frame()).toContain('LIVE-PANEL');
-    await view.type('/watch-stop\r');
-    await until(() => view.frame().includes('Workers window closed') && !view.frame().includes('LIVE-PANEL'), 'window closed when the watch stops');
+    // Esc closes the window and stops the watch, leaving one summary line in the scrollback.
+    view.stdin.write('\u001B');
+    await until(() => view.frame().includes('Background work window closed') && !view.frame().includes('LIVE-PANEL'), 'window closed when the watch stops');
   });
 
   it('shows the live line in the /workers list window', async () => {

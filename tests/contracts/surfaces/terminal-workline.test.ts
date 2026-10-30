@@ -11,8 +11,8 @@ import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 
 const labels: WorklineLabels = { work: workSurfaceLabels('en'), banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
-  ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
-  watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
+  ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
+  statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
   render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
@@ -234,7 +234,7 @@ describe('workline view rendered by Ink', () => {
     }
     const view = mount({ labels: liveLabels, completeTurn: async () => 'ok', pollMs: 5, ledger: { scopeId: 'scope-a',
       async listWorkers() { polls += 1; return workers(1, 0); }, async inspectRun() { return null; }, followWorkers } });
-    await view.type('/watch-workers\r');
+    await view.type('/tasks\r');
     await until(() => view.stdout.text.includes('worker 1 · docker'), 'pushed worker');
     await settle(40);
     expect(polls).toBe(0);
@@ -346,17 +346,16 @@ describe('workline view rendered by Ink', () => {
     expect(view.stdout.text.indexOf('worker 1')).toBeLessThan(view.stdout.text.indexOf('REPLY-AFTER'));
   });
 
-  it('applies queued watch toggles in order and exits on a queued /exit without running what follows it', async () => {
+  it('applies queued slash commands in order and exits on a queued /exit without running what follows it', async () => {
     const sent: string[] = []; const gates: Array<() => void> = [];
     const view = mount({ labels: liveLabels, completeTurn: messages => new Promise(resolve => { sent.push(messages.at(-1)!.content); gates.push(() => resolve('ok')); }),
       ledger: { scopeId: 'scope-a', async listWorkers() { return workers(0, 0); }, async inspectRun() { return null; } } });
     let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
     await view.type('one\r'); await until(() => sent.length === 1, 'turn busy');
-    for (const line of ['/watch-workers', '/watch-stop', 'two', '/exit', 'never']) await view.type(`${line}\r`);
+    for (const line of ['/status', 'two', '/exit', 'never']) await view.type(`${line}\r`);
     await until(() => view.stdout.text.includes('QUEUED: never'), 'lines queued');
-    gates[0]!(); await until(() => sent.length === 2, 'queued text turn after the watch toggles');
-    // A stale watch would make the queued /watch-stop a no-op: both toggles must be applied in order before `two`.
-    expect(view.stdout.text).toContain('Workers window closed');
+    gates[0]!(); await until(() => sent.length === 2, 'queued text turn after the queued command');
+    expect(view.stdout.text).toContain('STATUS-LINE');
     expect(exited).toBe(false);
     gates[1]!(); await until(() => exited, 'queued /exit closes the view');
     await settle(40);
@@ -370,17 +369,17 @@ describe('workline view rendered by Ink', () => {
     expect(plain.stdout.text).not.toMatch(colour);
   });
 
-  it('reports a failing watch once per failure streak, never overlaps polls, and stops polling on /watch-stop', async () => {
+  it('reports a failing watch once per failure streak, never overlaps polls, and stops polling when /tasks closes', async () => {
     let calls = 0, active = 0, overlap = 0, reported = 0;
     const view = mount({ labels: liveLabels, completeTurn: async () => 'ok', pollMs: 5, errorText: error => { reported++; return `ERR:${(error as Error).message}`; },
       ledger: { scopeId: 'scope-a', async listWorkers() {
         calls++; active++; if (active > 1) overlap++;
         await settle(15); active--; throw new Error('probe down');
       }, async inspectRun() { return null; } } });
-    await view.type('/watch-workers\r'); await until(() => calls >= 5, 'several polls');
+    await view.type('/tasks\r'); await until(() => calls >= 5, 'several polls');
     expect(reported).toBe(1); expect(overlap).toBe(0);
-    // A watch frame leaves focus in the composer; its slash command stops the polling.
-    view.stdin.write('/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), 'stopped');
+    // Esc closes the window and stops the polling.
+    view.stdin.write(ESC); await until(() => view.stdout.text.includes('Background work window closed'), 'stopped');
     const after = calls; await settle(120);
     expect(calls - after).toBeLessThanOrEqual(1);
   });
