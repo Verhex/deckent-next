@@ -782,6 +782,7 @@ export function WorklineApp(props: WorklineProps) {
     </Box>;
   return (
     <CardCopyContext.Provider value={copyCard}>
+    <PointerContext.Provider value={pointerSelection}>
     <DecisionArmContext.Provider value={props.decisionArmMs ?? DECISION_ARM_DEFAULT}>
     <DecisionArmLabelsContext.Provider value={labels.decisionArm ?? NEUTRAL_ARM_LABELS}>
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -793,6 +794,7 @@ export function WorklineApp(props: WorklineProps) {
     </HumanTextContext.Provider>
     </DecisionArmLabelsContext.Provider>
     </DecisionArmContext.Provider>
+    </PointerContext.Provider>
     </CardCopyContext.Provider>
   );
 }

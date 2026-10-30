@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { CardCopyContext, DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DECISION_ARM_DEFAULT, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
 import { QuestionWindow, SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
@@ -45,15 +45,19 @@ function splitKeys(keys: string): string[] {
 /** alpha.59 L3: the texts a card sent with Ctrl+Y (OSC 52 requests in the output, decoded). */
 // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
 const clipboardTexts = (output: string) => [...output.matchAll(/\u001b\]52;c;([A-Za-z0-9+/=]*)\u0007/gu)].map(match => Buffer.from(match[1]!, 'base64').toString('utf8'));
-/** `copy`: the cards take Ctrl+Y through the host's clipboard writer on this screen (as the Workline, a CLI card and onboarding provide it). */
+/** `copy`: the cards take Ctrl+Y through the host's clipboard writer on this screen (as the Workline, a CLI card and onboarding provide it)
+ * and a full window's left-button pointer (`pointer` sends one event). */
 function mount(node: ReactElement, columns = 100, rows = 40, ascii = false, copy = false) {
   const stdout = new Screen(columns, rows);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
-  const stack = createElement(WindowStackProvider, null, node);
+  const listeners = new Set<(event: PointerEvent) => void>();
+  const pointerSource = { pointer: { subscribe: (listener: (event: PointerEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } }, copy: () => undefined };
+  const stack = createElement(PointerContext.Provider, { value: copy ? pointerSource : null }, createElement(WindowStackProvider, null, node));
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
     children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, copy ? createElement(CardCopyContext.Provider, { value: streamCardCopy(stdout, cardCopyLabels('en'), {}) }, stack) : stack) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
-  return { frame: () => stdout.frame, all: () => stdout.all, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
+  return { frame: () => stdout.frame, all: () => stdout.all,
+    pointer: async (kind: PointerEvent['kind'], column: number, row: number) => { for (const listener of listeners) listener({ kind, column, row }); await settle(30); }, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
     /** One stdin chunk, as a terminal sends a modified or coalesced key. */
     raw: async (keys: string, ms?: number) => { stdin.write(keys); await settle(ms); } };
 }
@@ -237,6 +241,10 @@ describe('/provider window', () => {
     await view.raw('\u0019', 60);
     const copies = clipboardTexts(view.all());
     expect(copies).toHaveLength(1); expect(copies[0]).toContain('Anthropic API · API key'); expect(copies[0]).toContain('TRANSPARENCY-NOTE'); expect(copies[0]).not.toContain(CANARY);
+    expect(view.frame()).toContain('•'.repeat(CANARY.length));
+    // The full window's left-drag over the card (from its first body row past its last) copies the drawn body the same way; the entry is not selectable.
+    await view.pointer('press', 2, 2); await view.pointer('drag', 60, 30); await view.pointer('release', 99, 39);
+    expect(clipboardTexts(view.all())).toHaveLength(2); expect(clipboardTexts(view.all())[1]).toContain('TRANSPARENCY-NOTE'); expect(clipboardTexts(view.all())[1]).not.toContain(CANARY);
     expect(view.frame()).toContain('•'.repeat(CANARY.length));
     await view.press(ENTER, 120);
     expect(requests).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY }]);
