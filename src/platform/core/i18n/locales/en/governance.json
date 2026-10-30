@@ -583,7 +583,7 @@
   "error.AGENT_TURN_INVALID": "The turn request is invalid: it needs a scope, a turn id and a history that ends with your message.",
   "error.AGENT_TURN_UNAVAILABLE": "The turn store is unavailable; nothing was run for this turn.",
   "error.AGENT_TURN_REASONING_UNSUPPORTED": "This model does not declare that it can turn thinking off (catalog capability chat-template-enable-thinking), so the turn was not sent. Use /reasoning on to continue, or declare the capability.",
-  "error.TERMINAL_CHAT_NOT_CONFIGURED": "Select a provider with `/provider`, then select a model with `/model` in `deckent terminal`.",
+  "error.TERMINAL_CHAT_NOT_CONFIGURED": "No model is connected: open /setup in `deckent terminal` (or select a provider with `/provider`, then a model with `/model`).",
   "error.MODEL_CONNECT_PRICE_REQUIRED": "This remote endpoint has no verified published price for the selected model. Paid calls are refused and nothing was connected. Choose a priced provider or a local loopback server; entering your own price is not supported.",
   "error.MODEL_CONNECT_INVALID": "The model connection request is not valid.",
   "error.MODEL_CONNECT_NOT_CONNECTABLE": "This connection kind cannot have models connected to it yet.",

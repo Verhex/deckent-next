@@ -47,6 +47,8 @@ export interface ComposerProps {
   readonly historyText?: (text: string) => string;
   /** A line sent for the person outside the composer (a new `seq` each time): kept in recall and `history` like a submitted one. */
   readonly remember?: Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null;
+  /** A sent line the owner gives back as the draft (a new `seq` each time), e.g. a message that waits for a model to be connected. */
+  readonly restore?: Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null;
   readonly mentions?: ComposerMentionPort;
   /** T3 (Alt+Up on an empty draft): the owner takes its last queued message out of the queue and returns it, or null when none is left. */
   readonly onWithdraw?: () => ComposerHistoryEntry | null;
@@ -164,6 +166,8 @@ export function Composer(props: ComposerProps): ReactNode {
   }, [dispatch, props.history]);
   const rememberSeq = props.remember?.seq ?? 0;
   useEffect(() => { const remember = latest.current.remember; if (!remember) return; dispatch({ type: 'remember', entry: remember.entry }); void (async () => latest.current.history?.append(remember.entry))().catch(ignore); }, [dispatch, rememberSeq]);
+  const restoreSeq = props.restore?.seq ?? 0;
+  useEffect(() => { const restore = latest.current.restore; if (restore) dispatch({ type: 'restore', entry: restore.entry }); }, [dispatch, restoreSeq]);
   useEffect(() => {
     if (state.armedAt === null) return;
     const timer = setTimeout(() => dispatch({ type: 'tick' }), COMPOSER_LIMITS.exitWindowMs + 1);

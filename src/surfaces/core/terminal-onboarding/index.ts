@@ -1,4 +1,4 @@
-export type { FolderFacts, FirstTaskIntent, OnboardingSnapshot, OnboardingPort, OnboardingStep, OnboardingPresentation, OnboardingUi } from './internal/contract.js';
+export type { FolderFacts, FirstTaskIntent, OnboardingSnapshot, OnboardingPort, OnboardingStep, OnboardingPresentation, OnboardingUi, OnboardingFocus } from './internal/contract.js';
 export { intentCommand } from './internal/contract.js';
 export { FirstTaskRegistry, firstTaskIntent, type FirstTaskSuggestion } from './internal/first-tasks.js';
 export { firstTaskBody } from './internal/first-task.js';

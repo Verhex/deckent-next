@@ -274,9 +274,10 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     try {
       const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
       const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
-      const run = async (revisit: boolean, signal?: AbortSignal, focus?: 'workers') => {
+      let opened: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot | undefined;
+      const run = async (revisit: boolean, signal?: AbortSignal, focus?: import('#surfaces/core/terminal-onboarding/index.js').OnboardingFocus) => {
         const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
-        return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
+        return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale, observed: snapshot => { opened = snapshot; },
           provider: async () => {
             if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
             await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
@@ -286,8 +287,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
           foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
         }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus, previousConversation);
       };
-      onboarding = { initial: await run(false), open: (signal, focus) => run(true, signal, focus) };
-      const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
+      onboarding = { initial: await run(false), open: (signal, focus) => run(true, signal, focus), modelDraft: t('onboarding.model.draft', {}, locale) };
+      // P2: the settled opening snapshot when no step was shown; after a person's answer or action the state is observed again.
+      const deferred = surface.deferredOnboardingNotice(opened ?? await port.observe({}), locale);
       if (deferred) accessNotices.push({ level: 'info', text: deferred });
     } catch (error) {
       if (context.signal?.aborted) throw error;
@@ -391,7 +393,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatName }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
-    target, model: modelName ?? chat?.reference?.modelId ?? chatTarget(chat, locale),
+    // Owner 2026-10-30: in a person's terminal (setup cards at hand) the status row says a missing model is set up with /setup.
+    target, model: modelName ?? chat?.reference?.modelId ?? (onboarding ? t('onboarding.model.status', {}, locale) : chatTarget(chat, locale)),
     ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
     systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, maxTrackedRuns: ((config['terminal'] ?? getConfigMetadata().find(row => row.key === 'terminal')?.defaultValue) as { maxTrackedRuns?: number } | undefined)?.maxTrackedRuns, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).

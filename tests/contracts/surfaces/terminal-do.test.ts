@@ -142,15 +142,21 @@ it('AYSE-R3-02: Esc on the run-here card after the onboarding first job keeps th
   const before = view.stdout.frame.split('/do list monthly spending').length; view.stdin.write('\u001b[A');
   await until(() => view.stdout.frame.split('/do list monthly spending').length > before, 'Up recalls the first job');
 });
-it('owner option A: "Set up workers" opens /setup at its worker steps and runs nothing here', async () => {
+it('owner option A: "Set up workers" opens /setup at its worker steps and runs nothing here; a message without a model stays a draft and opens the model card', async () => {
   const asked: string[] = [], opened: unknown[] = [];
-  const view = mountWorkline({ ...windowLabels, onboarding: { initial: null, open: async (_signal: AbortSignal, focus?: string) => { opened.push(focus); return null; } } as never,
-    completeTurn: async messages => { asked.push(String(messages.at(-1)?.content)); return 'LOCAL ANSWER'; },
+  const view = mountWorkline({ ...windowLabels, errorText: error => `REFUSED ${(error as DeckentError).code}`,
+    onboarding: { initial: null, modelDraft: 'KEPT AS DRAFT', open: async (_signal: AbortSignal, focus?: string) => { opened.push(focus); return null; } } as never,
+    completeTurn: async messages => { const text = String(messages.at(-1)?.content); if (!opened.includes('model')) throw new DeckentError('TERMINAL_CHAT_NOT_CONFIGURED', 'x'); asked.push(text); return 'LOCAL ANSWER'; },
     doPlan: { ...words, localFallback: 'RUNS HERE', offerHere, here: { ...HERE, canSetup: async () => true }, lines: () => [], plan: async () => { throw new DeckentError('RUN_ADMISSION_NOT_CONFIGURED', 'x'); } } }); mounted.push(view);
   await settle(40); view.stdin.write('/do First\r'); await until(() => view.stdout.frame.includes('SETUP-ROW'), 'card');
   expect(view.stdout.frame).not.toContain('NEEDS GIT');
   await settle(40); view.stdin.write('\u001b[B'); await settle(40); view.stdin.write('\r'); await until(() => opened.length === 1, 'setup opened');
   expect(opened).toEqual(['workers']); await settle(60); expect(asked).toEqual([]);
+  view.stdin.write('\u001b'); await settle(60); view.stdin.write('Hello model\r');
+  await until(() => opened.length === 2 && view.stdout.text.includes('KEPT AS DRAFT'), 'model card opened'); await settle(80);
+  expect(opened).toEqual(['workers', 'model']); expect(view.stdout.text).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(asked).toEqual([]);
+  view.stdin.write('\r'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'the kept draft is sent once a model is there');
+  expect(asked).toHaveLength(1); expect(asked[0]).toContain('Hello model');
 });
 it('BeUser M-07: a plan rejected because no worker can run it shows its refusal first and never runs here', async () => {
   const pending = pendingBrainFixture(), asked: string[] = [];

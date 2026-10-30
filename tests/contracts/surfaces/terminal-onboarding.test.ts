@@ -39,16 +39,33 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const reopened = createOnboardingSession(port, { ...snapshot, deferred }, true);
   expect(reopened.model().steps.map(row => row.kind)).toEqual(['stage', 'budget', 'first-task']);
   expect(reopened.model().steps[0]?.id).toBe('core:model');
-  // İ-2: a deferred model screen returns only while no model is usable (a chat-only activation is usable without a worker catalog row).
+  // Owner 2026-10-30: Esc · Later on the model card holds also while no model is usable (was İ-2); the deferral stays named; /setup and the model focus reopen it.
   const unconnected = { ...observation, model: { connections: 0 } };
-  const chatOnly = { ...snapshot, observation: unconnected, plan: planSetup(unconnected, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), deferred: ['core:model'] };
+  const chatOnly = { ...snapshot, observation: unconnected, plan: planSetup(unconnected, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), deferred: ['core:model'], modelUsable: false };
   expect(onboardingSteps(chatOnly).some(row => row.id === 'core:model')).toBe(false);
-  expect(onboardingSteps({ ...chatOnly, modelUsable: false })[0]?.id).toBe('core:model');
+  expect(deferredOnboardingNotice(chatOnly, 'en')).toMatch(/model.*\/setup/isu);
+  expect(onboardingSteps(chatOnly, true).some(row => row.id === 'core:model')).toBe(true);
+  expect(createOnboardingSession(port, chatOnly, true, 'model').model().steps.map(row => row.id)).toEqual(['core:model']);
   let attestations = 0;
   const stopped = { assertPerson: async () => { attestations++; throw new Error('must not open'); } } as OnboardingPort;
   const { runOnboardingSession } = await loadOnboardingScreens();
   expect(await runOnboardingSession(stopped, {} as never, { locale: 'tr', signal: AbortSignal.abort() })).toBeNull();
   expect(attestations).toBe(0);
+  // P2: one observation per open; settling writes first and that settled snapshot is shared only when no step was shown.
+  let observes = 0; const settledIds: string[] = [], shared: OnboardingSnapshot[] = [];
+  let current: OnboardingSnapshot = { ...snapshot, deferred: ['onboarding:budget', 'onboarding:first-task:done', 'permissions:start-mode'] };
+  const counting = { ...port, observe: async () => { observes++; return current; }, reconcile: async (intent: never) => intent,
+    settle: async (ids: readonly string[]) => { settledIds.push(...ids); } } as OnboardingPort;
+  expect(await runOnboardingSession(counting, { observed: (row: OnboardingSnapshot) => shared.push(row) } as never, { locale: 'en' } as never)).toBeNull();
+  expect(observes).toBe(1); expect(settledIds).toEqual(['permissions:start-mode']); expect(shared.map(row => row.deferred)).toEqual([['onboarding:budget', 'onboarding:first-task:done']]);
+  // After a person's answer (Esc · Later on the budget card) nothing is shared: the opener observes again.
+  const { PassThrough, Writable } = await import('node:stream'), { until } = await import('../support/workline-harness.js');
+  let frame = ''; current = { ...snapshot, deferred: ['onboarding:first-task:done'] }; deferred.length = 0;
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 120, rows: 40 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const answered = runOnboardingSession(counting, { observed: (row: OnboardingSnapshot) => shared.push(row) } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
+  try { await until(() => frame.includes('Later'), 'budget card'); stdin.write('\u001b'); expect(await answered).toBeNull(); } finally { stdin.destroy(); stdout.destroy(); }
+  expect(deferred).toEqual(['onboarding:budget']); expect(observes).toBe(2); expect(shared).toHaveLength(1);
 });
 
 it('U4C: a relaunched ready card skips settled owners, refuses a refused write and reobserves before the next owner', async () => {

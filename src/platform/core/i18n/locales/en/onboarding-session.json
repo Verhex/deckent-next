@@ -120,5 +120,7 @@
   "onboarding.permissions.profileMissing": "Profile {profile} will be saved and start in {mode} for {principal} in scope {scope}. Protected settings, secrets and destructive actions keep their approval rules. Confirm to complete the pending installation permissions.",
   "onboarding.permissions.preserved": "Your existing mode choice ({mode}) is preserved for {principal} in scope {scope}.",
   "onboarding.permissions.profileWithoutDefaults": "Profile {profile} has no permission defaults. Confirm saves this profile and preserves the existing mode ({mode}) for {principal} in scope {scope}.",
-  "onboarding.firstTask.empty": "Write a task before pressing Enter, or press Esc to continue without one."
+  "onboarding.firstTask.empty": "Write a task before pressing Enter, or press Esc to continue without one.",
+  "onboarding.model.status": "Model not connected — /setup",
+  "onboarding.model.draft": "No model is connected, so the message was not sent; it stays in the composer as a draft. Connect a model on the card (or later with /setup), then press Enter to send it."
 }
