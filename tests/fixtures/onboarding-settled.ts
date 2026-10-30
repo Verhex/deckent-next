@@ -7,8 +7,8 @@ const PRESENTATION = ['onboarding:budget', 'onboarding:worker-ready', 'permissio
 
 /**
  * A terminal fixture that is not about first run: this OS user has already answered "Later" on every onboarding screen for `folder`
- * (canonical, relative to the installation root; '' is the root), written through the product's own deferral store. The model screen
- * still returns while no model is usable (İ-2).
+ * (canonical, relative to the installation root; '' is the root), written through the product's own deferral store. Later holds for the
+ * model screen too (owner 2026-10-30); /setup reopens it.
  */
 export async function settleOnboarding(layout: ProductLayout, folder = ''): Promise<void> {
   const stages = JSON.parse(await readFile(new URL('../../src/engine/core/setup/internal/stages.json', import.meta.url), 'utf8')) as { phases: Record<string, string> };

@@ -583,7 +583,7 @@
   "error.AGENT_TURN_INVALID": "Tur isteği geçersiz: bir kapsam, bir tur kimliği ve sizin mesajınızla biten bir geçmiş gerekir.",
   "error.AGENT_TURN_UNAVAILABLE": "Tur kaydı kullanılamıyor; bu tur için hiçbir şey çalıştırılmadı.",
   "error.AGENT_TURN_REASONING_UNSUPPORTED": "Bu model düşünmeyi kapatabildiğini bildirmiyor (katalog yeteneği chat-template-enable-thinking); tur gönderilmedi. Devam etmek için /reasoning on yazın ya da yeteneği kataloğa ekleyin.",
-  "error.TERMINAL_CHAT_NOT_CONFIGURED": "`deckent terminal` içinde `/provider` ile sağlayıcı, ardından `/model` ile model seçin.",
+  "error.TERMINAL_CHAT_NOT_CONFIGURED": "Bağlı model yok: `deckent terminal` içinde /setup açın (ya da `/provider` ile sağlayıcı, ardından `/model` ile model seçin).",
   "error.MODEL_CONNECT_PRICE_REQUIRED": "Bu uzak uç noktada seçilen model için doğrulanmış yayımlanmış fiyat yok. Ücretli çağrı reddedilir ve hiçbir model bağlanmadı. Fiyatı doğrulanmış bir sağlayıcı veya bu makinedeki yerel sunucuyu seçin; kendi fiyatınızı girmek desteklenmiyor.",
   "error.MODEL_CONNECT_INVALID": "Model bağlama isteği geçerli değil.",
   "error.MODEL_CONNECT_NOT_CONNECTABLE": "Bu bağlantı türüne henüz model bağlanamıyor.",

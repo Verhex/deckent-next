@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from 'ink';
-import type { FirstTaskIntent } from './contract.js';
-export type OnboardingHandoff = Readonly<{ initial: FirstTaskIntent | null; open(signal: AbortSignal, focus?: 'workers'): Promise<FirstTaskIntent | null> }>; // focus: only the worker steps (owner option A card)
+import type { FirstTaskIntent, OnboardingFocus } from './contract.js';
+export type OnboardingHandoff = Readonly<{ initial: FirstTaskIntent | null; open(signal: AbortSignal, focus?: OnboardingFocus): Promise<FirstTaskIntent | null>;
+  /** Said when a message waits as a draft for a model (catalog text; the raw TERMINAL_CHAT_NOT_CONFIGURED is not shown to the person). */
+  modelDraft: string }>;
 /** Selected intent is submitted once to the ordinary Workline input queue, preserving its /do command identity. */
 export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff | undefined; submit(id: string, line: string): boolean;
   release?(): void; reclaim?(): void }>) {
@@ -16,7 +18,7 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
   return {
     intent: (inputId: string) => queued.current.get(inputId),
     settled: (inputId: string) => queued.current.delete(inputId),
-    async open(signal: AbortSignal, focus?: 'workers') {
+    async open(signal: AbortSignal, focus?: OnboardingFocus) {
       if (!latest.current.port) return;
       let intent: FirstTaskIntent | null = null;
       await suspendTerminal(async () => { latest.current.release?.();

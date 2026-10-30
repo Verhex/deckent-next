@@ -1,12 +1,12 @@
 import { t, type Locale } from '#platform/index.js';
 import { onboardingMessage } from './message.js';
-import type { OnboardingPort, OnboardingPresentation, OnboardingSnapshot, OnboardingStep } from './contract.js';
+import type { OnboardingFocus, OnboardingPort, OnboardingPresentation, OnboardingSnapshot, OnboardingStep } from './contract.js';
 import presentation from './presentation.json' with { type: 'json' };
 const readyIds = new Set(presentation.workerReady.members.filter(id => id !== 'work:kind'));
 /** Projection over the same setup plan: grouping is presentation only; owners still settle every individual operation. */
 export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): readonly OnboardingStep[] {
   const steps: OnboardingStep[] = [], deferred = new Set(revisit ? [] : snapshot.deferred);
-  const add = (step: OnboardingStep) => { if (!deferred.has(step.id) || step.id === 'core:model' && !snapshot.modelUsable) steps.push(step); };
+  const add = (step: OnboardingStep) => { if (!deferred.has(step.id)) steps.push(step); }; // owner 2026-10-30: Later on the model card holds; /setup reopens it
   if (!['applied', 'not-applicable'].includes(snapshot.permissions.state)) add({ id: 'permissions:start-mode', stages: [], kind: 'permissions' });
   if (snapshot.rights?.state === 'needed' && snapshot.rights.digest) add({ id: 'permissions:owner-rights', stages: [], kind: 'rights' });
   let workAt = -1;
@@ -52,23 +52,25 @@ const awaitedImage = (snapshot: OnboardingSnapshot, steps: readonly OnboardingSt
   && !steps.some(row => row.id === 'execution:worker') && snapshot.plan.stages.some(row => row.id === 'execution:worker' && row.reason.code === 'setup.execution.noWorkKind'));
 export const firstSignedInHost = (snapshot: OnboardingSnapshot): string | null => snapshot.hosts.find(row => row.cli === 'found' && row.login === 'found')?.id ?? null;
 /** One answer/apply at a time. Reobserve changes applicability, while the answered prefix remains counted. */
-export function createOnboardingSession(port: OnboardingPort, initial: OnboardingSnapshot, revisit = false, focus?: 'workers') {
+export function createOnboardingSession(port: OnboardingPort, initial: OnboardingSnapshot, revisit = false, focus?: OnboardingFocus) {
   let snapshot = initial, answers = { ...initial.answers }, completed: string[] = [];
   const deferred = new Set<string>();
   const model = (): OnboardingPresentation => {
     const steps = onboardingSteps({ ...snapshot, deferred: [...snapshot.deferred, ...deferred] }, revisit)
-      .filter(row => !completed.includes(row.id) && !deferred.has(row.id) && (focus !== 'workers' || row.kind === 'work' || row.kind === 'ready' || /^(work|execution):/u.test(row.id)));
+      .filter(row => !completed.includes(row.id) && !deferred.has(row.id) && (focus === 'model' ? row.id === 'core:model'
+        : focus !== 'workers' || row.kind === 'work' || row.kind === 'ready' || /^(work|execution):/u.test(row.id)));
     return { schemaVersion: 1, steps, completed: completed.length, total: completed.length + steps.length + awaitedImage(snapshot, steps), snapshot };
   };
-  const refresh = async () => {
-    snapshot = await port.observe(answers);
+  // Settling forgets settled deferrals and reconciles parked intents on the current snapshot (no second observation at open).
+  const settle = async () => {
     const open = openDeferrals(snapshot), settled = snapshot.deferred.filter(id => !open.includes(id));
     if (settled.length && port.settle) { await port.settle(settled); snapshot = { ...snapshot, deferred: snapshot.deferred.filter(id => !settled.includes(id)) }; }
     const pending = [];
     for (const intent of snapshot.pending) pending.push(['parked', 'released'].includes(intent.status) ? await port.reconcile(intent) : intent);
     snapshot = { ...snapshot, pending }; answers = { ...snapshot.answers, ...answers }; return model();
   };
-  return { model, refresh,
+  const refresh = async () => { snapshot = await port.observe(answers); return settle(); };
+  return { model, refresh, settle,
     answer: async (stage: string, value: unknown) => { answers[stage] = value; return refresh(); },
     finish: async (step: OnboardingStep) => { completed = [...completed, step.id]; return refresh(); },
     defer: async (step: OnboardingStep) => {

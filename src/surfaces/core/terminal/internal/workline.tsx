@@ -1,4 +1,4 @@
-import { useOnboardingHandoff, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
+import { useOnboardingHandoff, type OnboardingFocus, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
@@ -354,6 +354,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
+  const openSetup = useRef<(signal: AbortSignal, focus?: OnboardingFocus) => Promise<void>>(async () => undefined);
   const serviceStarted = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
@@ -416,7 +417,10 @@ export function WorklineApp(props: WorklineProps) {
       } serviceStarted.current = false;
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
-      history.current = code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
+      const waitsForModel = code === 'TERMINAL_CHAT_NOT_CONFIGURED' && props.onboarding !== undefined && !signal.aborted;
+      history.current = (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService) || waitsForModel ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
+      // Owner 2026-10-30: in a person's terminal a message sent without a model is not sent; it stays the draft and the model card opens (/setup).
+      if (waitsForModel) { push([notice('info', props.onboarding!.modelDraft)]); await openSetup.current(signal, 'model'); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })); return; }
       if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
         const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
         if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
@@ -431,15 +435,22 @@ export function WorklineApp(props: WorklineProps) {
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.onboarding, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
   const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
+  const [draft, setDraft] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null);
   const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: bareSlash(text), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
+  // /setup (whole, or only the model card) may connect a model: the status row then names the configured one instead of the startup label.
+  openSetup.current = async (signal, focus) => {
+    await onboarding.open(signal, focus);
+    const configured = props.panels?.ports.model ? (await props.panels.ports.model.inspect().catch(() => null))?.choices.find(choice => choice.configured) : undefined;
+    if (configured) setConfiguredLabels({ model: configured.label, provider: configured.providerLabel ?? configured.group });
+  };
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
-    if (slash.command === 'setup') { if (props.onboarding) await onboarding.open(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
+    if (slash.command === 'setup') { if (props.onboarding) await openSetup.current(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
     if (slash.command === 'do') {
       if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
@@ -708,7 +719,7 @@ export function WorklineApp(props: WorklineProps) {
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-    busy={busy} historyText={bareSlash} remember={remember} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+    busy={busy} historyText={bareSlash} remember={remember} restore={draft} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
     onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;

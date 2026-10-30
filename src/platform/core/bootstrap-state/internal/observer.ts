@@ -127,6 +127,9 @@ async function assertPathSafe(projectRoot: string, path: string): Promise<void> 
     }
   }
 }
+/** The last verified journal bytes (one entry, keyed by their SHA-256): only parse, schema and checksum work is reused; the custody checks
+ * (lstat, O_NOFOLLOW open, fstat, private file, changed comparison) run on every call and `generation` is always built from fresh stats. */
+let verified: Readonly<{ content: string; record: BootstrapJournal }> | null = null;
 export async function observeBootstrapState(projectRoot: string): Promise<BootstrapObservation> {
   let path: string;
   try { const layout = resolveProductLayout({ projectRoot, platform: process.platform === 'win32' ? 'win32' : 'posix' });
@@ -158,14 +161,17 @@ export async function observeBootstrapState(projectRoot: string): Promise<Bootst
       || !same(named.dev, opened.dev) || !same(named.ino, opened.ino) || !same(named.size, opened.size)
       || !same(named.mtimeNs, opened.mtimeNs) || !same(named.ctimeNs, opened.ctimeNs)) throw new BootstrapStateError('BOOTSTRAP_STATE_CHANGED');
     assertPrivateFile(after); assertPrivateFile(named);
-    let raw: unknown; try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-    catch { throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID'); }
-    const parsed = bootstrapJournalSchema.safeParse(raw);
-    if (!parsed.success) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
-    const { checksum, ...payload } = parsed.data;
-    if (checksum !== hashBootstrapJournal(payload)) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
     const content = createHash('sha256').update(bytes).digest('hex');
-    return Object.freeze({ generation: `${opened.dev}:${opened.ino}:${opened.size}:${opened.mtimeNs}:${opened.ctimeNs}:${content}`, record: parsed.data });
+    if (verified?.content !== content) {
+      let raw: unknown; try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
+      catch { throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID'); }
+      const parsed = bootstrapJournalSchema.safeParse(raw);
+      if (!parsed.success) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
+      const { checksum, ...payload } = parsed.data;
+      if (checksum !== hashBootstrapJournal(payload)) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
+      verified = Object.freeze({ content, record: parsed.data });
+    }
+    return Object.freeze({ generation: `${opened.dev}:${opened.ino}:${opened.size}:${opened.mtimeNs}:${opened.ctimeNs}:${content}`, record: verified.record });
   } catch (error) {
     if (error instanceof BootstrapStateError) throw error;
     throw new BootstrapStateError((error as NodeJS.ErrnoException).code === 'ELOOP' ? 'BOOTSTRAP_STATE_UNSAFE' : 'BOOTSTRAP_STATE_UNAVAILABLE');
