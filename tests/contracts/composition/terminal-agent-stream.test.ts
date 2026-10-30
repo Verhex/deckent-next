@@ -3,6 +3,7 @@ import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatT
 import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#surfaces/core/terminal-turn/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { renderAssistantStream, startAssistantStream, type ToolUnit } from '#surfaces/core/terminal-render/index.js';
+import { builtinAgentToolClass } from '#composition/core/agent-turn/index.js';
 
 const input = { projectRoot: '/project', scopeId: 'scope', messages: [{ role: 'user' as const, content: 'what?' }], options: {} };
 const result = (over: Partial<ChatTurnResult> = {}): ChatTurnResult => ({ schemaVersion: 1, turnId: 't', finish: 'stop', note: null, rounds: 2, toolCalls: 1,
@@ -65,6 +66,15 @@ describe('terminal agent turn stream', () => {
     const deltas = await collect(streamTerminalAgentTurn(input, p.value));
     expect(deltas.find(delta => delta.kind === 'tool' && delta.phase === 'finished')).toEqual(
       { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: 'ok', ms: 12, cleanup: 'group-ended' });
+    // alpha.59 L6: the client's registered tool metadata names each call's declared class (both phases); a tool it does not know (MCP) carries none.
+    const q = ports(async (command, onEvent) => {
+      for (const [callId, name] of [['c1', 'read_file'], ['c2', 'run_shell'], ['c3', 'mcp__srv__lookup']] as const) {
+        onEvent({ kind: 'tool.started', callId, name, target: null }); onEvent({ kind: 'tool.finished', callId, name, status: 'ok', ms: 1, bytes: 1 }); }
+      return result({ turnId: command.turnId, answer: null });
+    });
+    const classed = await collect(streamTerminalAgentTurn(input, { ...q.value, toolClass: builtinAgentToolClass }));
+    expect(classed.flatMap(delta => delta.kind === 'tool' ? [`${delta.callId}:${delta.phase}:${'toolClass' in delta ? delta.toolClass : '-'}`] : []))
+      .toEqual(['c1:started:read', 'c1:finished:read', 'c2:started:shell', 'c2:finished:shell', 'c3:started:-', 'c3:finished:-']);
   });
 
   // D2 (TL-B, analysis §2/§4): the engine's `target` (path-first for grep/glob, `call-approvals.ts` displayTarget bug)

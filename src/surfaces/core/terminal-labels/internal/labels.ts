@@ -23,6 +23,8 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
     toolSandboxNone: t('terminal.render.toolSandboxNone', {}, locale),
     toolSandboxDegraded: t('terminal.render.toolSandboxDegraded', {}, locale),
     toolSummary: { lines: t('terminal.render.toolSummary.lines', {}, locale), linesMore: t('terminal.render.toolSummary.linesMore', {}, locale), headings: t('terminal.render.toolSummary.headings', {}, locale), headingsMore: t('terminal.render.toolSummary.headingsMore', {}, locale), matches: t('terminal.render.toolSummary.matches', {}, locale), matchesMore: t('terminal.render.toolSummary.matchesMore', {}, locale), entries: t('terminal.render.toolSummary.entries', {}, locale) },
+    toolGroup: { running: t('terminal.render.toolGroup.running', {}, locale), files: t('terminal.render.toolGroup.files', {}, locale), filesOne: t('terminal.render.toolGroup.filesOne', {}, locale), dirs: t('terminal.render.toolGroup.dirs', {}, locale), dirsOne: t('terminal.render.toolGroup.dirsOne', {}, locale),
+      searches: t('terminal.render.toolGroup.searches', {}, locale), searchesOne: t('terminal.render.toolGroup.searchesOne', {}, locale), reads: t('terminal.render.toolGroup.reads', {}, locale), readsOne: t('terminal.render.toolGroup.readsOne', {}, locale), expand: t('terminal.render.toolGroup.expand', {}, locale), collapse: t('terminal.render.toolGroup.collapse', {}, locale) },
     toolTracked: t('terminal.render.toolTracked', {}, locale),
     thought: t('terminal.render.thought', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
     tokens: t('terminal.render.tokens', {}, locale), reasoningTokens: t('terminal.render.reasoningTokens', {}, locale),

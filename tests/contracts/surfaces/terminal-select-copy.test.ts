@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { highlightCells, osc52Copy, selectedText, takeMouseReports, type PointerEvent, type PointerListener, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
+import { PassThrough } from 'node:stream';
+import { highlightCells, mouseFilteredInput, osc52Copy, selectedText, takeMouseReports, type PointerEvent, type PointerListener, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
@@ -45,13 +46,29 @@ const tool = (callId: string, name: string, target: string): TurnDelta[] => [
   { kind: 'tool', phase: 'started', callId, name, target, status: null, ms: null },
   { kind: 'tool', phase: 'finished', callId, name, target, status: 'ok', ms: 3 }];
 
+/** alpha.59 L6: a read-class call (declared class from the client's tool metadata) with its own result message, so its summary has a kind. */
+const read = (callId: string, name: string, target: string, content: string, status: 'ok' | 'error' = 'ok', toolClass: 'read' | 'edit' = 'read'): TurnDelta[] => [
+  { kind: 'tool', phase: 'started', callId, name, target, status: null, ms: null, toolClass },
+  { kind: 'message', message: { role: 'tool', toolCallId: callId, name, content } },
+  { kind: 'tool', phase: 'finished', callId, name, target, status, ms: 3, toolClass }];
+const READ_META = '[deckent] read_file: mode=range totalLines=2 range=1-2 returned=2 hasMore=false\n1: a\n2: b';
+const reads: Script = [{ kind: 'text', text: 'READS-BEFORE\n' }, ...read('r1', 'read_file', 'x.ts', READ_META), ...read('r2', 'list_dir', 'src', 'a.ts\nlib/'),
+  ...read('r3', 'read_file', 'y.ts', READ_META), ...read('r4', 'grep', 'gone', 'boom', 'error'), ...read('w1', 'edit_file', 'z.ts', 'ok', 'ok', 'edit'),
+  { kind: 'text', text: 'READS-AFTER\n' }, { kind: 'done', finish: 'stop' }];
+
 describe('spacing between tool steps and answer text', () => {
   const script: Script = [{ kind: 'text', text: 'TEXT-BEFORE\n' }, ...tool('c1', 'read_file', 'a.ts'), ...tool('c2', 'grep', 'needle'),
     { kind: 'text', text: 'TEXT-AFTER\n' }, { kind: 'done', finish: 'stop' }];
+  const turns = async function* (messages: readonly { content: unknown }[]): AsyncGenerator<TurnDelta> {
+    for (const delta of messages.at(-1)?.content === 'reads' ? reads : script) { yield delta; await settle(1); } };
   for (const fullscreen of [true, false]) {
-    it(`one blank line between text and a tool step, between two tool steps, and none inside a block (${fullscreen ? 'full window' : 'inline'})`, async () => {
-      const view = mountWorkline({ streamTurn: scripted(script), fullscreen, labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}' } } }, 80, { rows: 30, debug: true });
-      mounted.push(view.instance);
+    it(`one blank line between text and a tool step, between two tool steps, and none inside a block; consecutive reads are one line (${fullscreen ? 'full window' : 'inline'})`, async () => {
+      // The full window's mouse: SGR reports through the host's own filter (mouse.ts), as a terminal sends them.
+      const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
+      const mouse = mouseFilteredInput(real);
+      const view = mountWorkline({ streamTurn: turns, fullscreen, ...(fullscreen ? { pointer: mouse.pointer, copyText: () => {} } : {}),
+        labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}' } } }, 80, { rows: 40, debug: true });
+      mounted.push(view.instance, { unmount: mouse.close });
       view.stdin.write('go'); await settle(20); view.stdin.write('\r');
       await until(() => view.stdout.text.includes('TEXT-AFTER') && view.stdout.frame.includes('READY'), 'turn finished');
       await settle(60);
@@ -62,6 +79,25 @@ describe('spacing between tool steps and answer text', () => {
       expect(first - before, rows.join('\n')).toBe(2); expect(rows[before + 1]).toBe('');
       expect(second - first).toBe(2); expect(rows[first + 1]).toBe('');
       expect(after - second).toBe(2); expect(rows[second + 1]).toBe('');
+      // alpha.59 L6 (owner 2026-10-30): consecutive successful reads settle as one summary line; the failed read and the write keep their own lines.
+      view.stdin.write('reads'); await settle(20); view.stdin.write('\r');
+      await until(() => view.stdout.text.includes('READS-AFTER') && view.stdout.frame.includes('READY'), 'reads finished');
+      await settle(60);
+      const shown = () => view.stdout.frame.split('\n').map(line => line.trimEnd());
+      const summary = () => shown().findIndex(line => line.includes('2 files read, 1 directory listed'));
+      expect(summary(), shown().join('\n')).toBeGreaterThan(0);
+      expect(shown().some(line => line.includes('TOOL grep gone') && line.includes('TOOL-FAILED'))).toBe(true);
+      expect(shown().some(line => line.includes('TOOL edit_file z.ts'))).toBe(true);
+      // Inline (no mouse): the calls stay under the summary, never only behind a click. Full window: collapsed until a click shows them.
+      expect(shown().some(line => line.includes('TOOL read_file x.ts'))).toBe(!fullscreen);
+      expect(shown()[summary()]!.includes('click to show the calls')).toBe(fullscreen);
+      if (fullscreen) {
+        const click = () => { const row = summary(), column = shown()[row]!.indexOf('files read') + 1;
+          real.emit('data', Buffer.from(`\u001b[<0;${column};${row + 1}M\u001b[<0;${column};${row + 1}m`)); };
+        click(); await until(() => shown().some(line => line.includes('TOOL read_file x.ts')), 'expanded by a click');
+        expect(shown().some(line => line.includes('TOOL list_dir src')) && shown()[summary()]!.includes('click to hide the calls')).toBe(true);
+        click(); await until(() => !shown().some(line => line.includes('TOOL read_file x.ts')), 'collapsed by a second click');
+      }
     });
   }
 });

@@ -66,7 +66,7 @@ describe('assistant stream state machine', () => {
   });
 
   // Astra 2124 durable marker (CLEANUP-MARK): a finished tool delta's `cleanup` rides the resulting unit unchanged; absent stays absent.
-  it("carries a finished tool delta's cleanup onto the unit, and leaves it off when the delta has none", () => {
+  it("carries a finished tool delta's cleanup onto the unit, leaves it off when the delta has none, and groups consecutive quiet reads", () => {
     // The finished delta itself carries the resolved target (agent-stream.ts fills it from the started phase); the pure state
     // machine reads it directly off the finished delta, not off its own earlier `started` phase.
     const withCleanup = play([[{ kind: 'tool', phase: 'started', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: null, ms: null }, 0],
@@ -76,6 +76,20 @@ describe('assistant stream state machine', () => {
       [{ kind: 'tool', phase: 'finished', callId: 'c2', name: 'read_file', target: 'a.ts', status: 'ok', ms: 5 }, 5]]);
     expect(withoutCleanup.units).toEqual([{ kind: 'tool', name: 'read_file', target: 'a.ts', status: 'ok', ms: 5 }]);
     expect(withoutCleanup.units[0]).not.toHaveProperty('cleanup');
+    // alpha.59 L6: consecutive read-class successes (and the thinking and blank text between them) settle as ONE group row; an error, an
+    // approval card or a non-read call breaks the group and keeps its own line; a lone read stays a plain line; nothing prints while it is open.
+    const call = (callId: string, toolClass: 'read' | 'edit', status: 'ok' | 'error' = 'ok'): Array<readonly [TurnDelta, number]> => [
+      [{ kind: 'tool', phase: 'started', callId, name: `t_${callId}`, target: callId, status: null, ms: null, toolClass }, 0],
+      [{ kind: 'tool', phase: 'finished', callId, name: `t_${callId}`, target: callId, status, ms: 2, toolClass }, 0]];
+    let open = startAssistantStream(0);
+    for (const [delta] of [...call('r1', 'read'), ...call('r2', 'read')]) { const next = renderAssistantStream(open, delta, 0); expect(next.staticUnits).toEqual([]); open = next.state; }
+    expect(renderAssistantStream(open, { kind: 'text', text: '\n' }, 0).toolGroup.map(step => step.kind === 'tool' && step.target)).toEqual(['r1', 'r2']);
+    const grouped = play([[{ kind: 'text', text: 'Looking.\n' }, 0], ...call('r1', 'read'), [{ kind: 'reasoning', text: 'abcd' }, 0], ...call('r2', 'read'), [{ kind: 'text', text: '\n' }, 0],
+      ...call('r3', 'read'), ...call('e1', 'read', 'error'), ...call('w1', 'edit'), ...call('r4', 'read').slice(0, 1),
+      [{ kind: 'approval', phase: 'requested', callId: 'r4', approvalId: 'a', revision: 0, summary: 's', preview: 'p', expiresAt: 1 }, 0], ...call('r4', 'read').slice(1),
+      ...call('r5', 'read'), ...call('r6', 'read'), [{ kind: 'text', text: 'Done.\n' }, 0], ...call('r7', 'read'), [{ kind: 'done', finish: 'stop' }, 0]]);
+    const shape = (unit: AssistantUnit): unknown => unit.kind === 'tool-group' ? unit.steps.map(shape) : unit.kind === 'tool' ? `${unit.target}:${unit.status}` : unit.kind;
+    expect(grouped.units.map(shape)).toEqual(['text', ['r1:ok', 'reasoning', 'r2:ok', 'r3:ok'], 'e1:error', 'w1:ok', 'r4:ok', ['r5:ok', 'r6:ok'], 'text', 'r7:ok']);
   });
 
   it('adapts a complete non-streaming reply into lead units plus a footer', () => {

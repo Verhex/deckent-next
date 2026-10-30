@@ -1057,6 +1057,7 @@
         "src/platform/core/redaction",
         "src/engine/core/monitor",
         "src/domain/core/agent-turn",
+        "src/domain/core/agent-tool",
         "src/platform/core/output",
         "src/surfaces/core/terminal-theme"
       ],
@@ -1065,6 +1066,7 @@
     "src/surfaces/core/terminal-turn": {
       "dependencies": [
         "src/domain/core/agent-turn",
+        "src/domain/core/agent-tool",
         "src/domain/core/provider-catalog",
         "src/engine/core/agent-turn",
         "src/platform/core/config",

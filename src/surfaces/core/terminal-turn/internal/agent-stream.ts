@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult, ModelReference } from '#domain/index.js';
+import type { AgentToolClass, AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { PanelTurnBinding, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
@@ -17,6 +17,8 @@ export interface TerminalAgentTurnPorts {
   /** PRE-8: the turn's provider credential decided without reading a value (`.deck`, project vault, main vault only with a grant); a refusal is
    * typed (`SECRET_GRANT_REQUIRED` …) and nothing reaches the service. Absent: the service's own pre-send check stays the only one. */
   credential?(projectRoot: string, options: ConfigLoadOptions, reference: ModelReference | undefined, scopeId: string): Promise<void>;
+  /** alpha.59 L6: the declared class of a registered tool by its name (null: not a tool this client knows); presentation only. */
+  toolClass?(name: string): AgentToolClass | null;
 }
 export interface TerminalAgentTurnInput {
   readonly projectRoot: string;
@@ -68,7 +70,8 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     }
     if (event.kind === 'context') round = event.round;
     const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission) && compactionGuard.plan(history) !== null;
-    queue.push({ delta: toDelta(event, targets, compacting, names, admission?.compactionThresholdTokens), usageRound: event.kind === 'usage' ? event.round : null }); notify();
+    const delta = toDelta(event, targets, compacting, names, admission?.compactionThresholdTokens), toolClass = delta.kind === 'tool' ? ports.toolClass?.(delta.name) ?? null : null;
+    queue.push({ delta: delta.kind === 'tool' && toolClass ? { ...delta, toolClass } : delta, usageRound: event.kind === 'usage' ? event.round : null }); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };

@@ -10,7 +10,7 @@ import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTyped
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, treeChangeLine, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
-import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
@@ -209,6 +209,7 @@ export function WorklineApp(props: WorklineProps) {
   const size = useWindowSize(), pinned = pinnedMode && size.rows > 0 && size.columns > 0;
   const [fullscreenMode] = useState(() => pinnedMode && props.fullscreen === true);
   const [searchOpen, setSearchOpen] = useState(false), searchFocus = useRef(false);
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const onSearch = useCallback((open: boolean) => { searchFocus.current = open; setSearchOpen(open); }, []);
   const { selection: pointerSelection, copied } = usePointerCopy(props.pointer, props.copyText);
   const [bannerShown, setBannerShown] = useState(true);
@@ -700,15 +701,25 @@ export function WorklineApp(props: WorklineProps) {
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
+  // alpha.59 L6 (owner 2026-10-30): a settled read group shows one line; a click on it (the full window's mouse) shows or hides its calls. Without a
+  // pointer, and in what is written to the main screen at exit, a group is open: its calls are never only behind a click.
+  const groupViewOf = useCallback((row: LedgerRow, exit = false): ToolGroupView | undefined => row.entry.kind !== 'chat' || row.entry.assistant?.kind !== 'tool-group' ? undefined
+    : exit || !props.pointer ? 'open' : expanded.has(row.seq) ? 'expanded' : 'collapsed', [expanded, props.pointer]);
+  const variantOf = useCallback((row: LedgerRow, exit?: boolean) => groupViewOf(row, exit) ?? '', [groupViewOf]);
+  const toggleGroup = useCallback((key: string) => {
+    const seq = Number(key), row = buffer.history.find(item => item.seq === seq);
+    if (!row || !groupViewOf(row)) return;
+    setExpanded(current => { const next = new Set(current); if (!next.delete(seq)) next.add(seq); return next; });
+  }, [buffer.history, groupViewOf]);
   // TERMINAL-SABIT-DUZEN: the full-window conversation, laid out per row with the providers `Static` gave each row.
-  const renderRow = (row: LedgerRow) => <WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={glyphs}>
-    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>;
+  const renderRow = (row: LedgerRow, exit?: boolean) => { const groupView = groupViewOf(row, exit); return <WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={glyphs}>
+    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} {...(groupView ? { groupView } : {})} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>; };
   // The conversation opens with the opening frame (until `/clear`) and the workline's own how-to line (how to cancel and quit), once, at its top.
   const startup = props.startup, bannerLine = labels.banner, bannerOf = useMemo(() => fullscreenMode ? (columns: number) => {
     const frame = bannerShown && startup && startup.banner !== 'off' ? startupFrame({ ...startup, clear: false }, palette, columns, 0) : '';
     return `${frame}${renderToString(<Text {...palette.accent}>{bannerLine}</Text>, { columns })}\n`;
   } : null, [fullscreenMode, bannerShown, startup, palette, bannerLine]);
-  const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette);
+  const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette, variantOf);
   const transcriptExit = props.transcriptExit;
   useLayoutEffect(() => { if (transcriptExit && fullscreenMode) transcriptExit.current = transcript.text; }, [transcriptExit, fullscreenMode, transcript]);
   const statusNode = <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? (configuredLabels === null ? props.model : configuredLabels.model)} provider={pinnedLabels.current.get(sessionId())?.provider ?? (configuredLabels === null ? props.provider : configuredLabels.provider)}
@@ -725,7 +736,7 @@ export function WorklineApp(props: WorklineProps) {
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
   const hintNode = copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
-    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null;
+    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
   const windowsNode = <>
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
     {instructions.window}
@@ -756,7 +767,7 @@ export function WorklineApp(props: WorklineProps) {
   const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
   const layout = fullscreenMode
     ? <FullscreenWorkline
-      viewport={<WheelContext.Provider value={props.wheel ?? null}><PointerContext.Provider value={pointerSelection}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} /></PointerContext.Provider></WheelContext.Provider>}
+      viewport={<WheelContext.Provider value={props.wheel ?? null}><PointerContext.Provider value={pointerSelection}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} onClick={toggleGroup} /></PointerContext.Provider></WheelContext.Provider>}
       above={<>
         {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
         {windowsNode}</>}
