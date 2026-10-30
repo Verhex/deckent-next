@@ -13,7 +13,7 @@ interface WorkCommandContext {
   readonly push: (entries: readonly WorkLedgerEntry[]) => void; readonly errorText: (error: unknown) => string; readonly pushMode: SurfaceDeliveryMode;
   readonly watchRef: MutableRefObject<WatchState>; readonly setWatch: (state: WatchState) => void; readonly setWatchStatus: (text: string) => void;
   readonly monitor?: ((args: string) => Promise<readonly string[]>) | undefined;
-  readonly live: { readonly canOpenMonitor: boolean; readonly openMonitor: () => Promise<void>; readonly close: () => void; readonly show: (kind: Exclude<LiveWindowKind, 'monitor'> | null) => void };
+  readonly live: { readonly canOpenMonitor: boolean; readonly openMonitor: () => Promise<void>; readonly show: (kind: Exclude<LiveWindowKind, 'monitor'>) => void };
   readonly runDecision: (command: 'approvals' | 'cancel' | 'runs', args: string, execution: LocalExecution) => Promise<void>;
   /** `{part}`: a slash command without its port in this terminal (`terminal.admin.partUnavailable`, the session language). */
   readonly commandUnavailable?: string | undefined;
@@ -41,11 +41,10 @@ export async function dispatchWorkCommand(slash: { readonly command: string; rea
     }
     return true;
   }
-  if (slash.command === 'watch-stop') { live.close(); return true; }
-  if (['workers', 'runs', 'run', 'transcript', 'cancel', 'approvals', 'watch-workers', 'watch-runs', 'tasks'].includes(slash.command)) {
+  if (['workers', 'runs', 'run', 'transcript', 'cancel', 'approvals', 'tasks'].includes(slash.command)) {
     const workLabels = labels.work;
     try {
-      const unavailable = !ledger || !workLabels?.jobs || !workLabels.live || (['runs', 'run', 'cancel', 'watch-runs'].includes(slash.command) && !ledger.listRunIds)
+      const unavailable = !ledger || !workLabels?.jobs || !workLabels.live || (['runs', 'run', 'cancel'].includes(slash.command) && !ledger.listRunIds)
         || (slash.command === 'transcript' && !ledger.inspectTranscript) || (slash.command === 'cancel' && !ledger.cancelRun)
         || (slash.command === 'approvals' && (!ledger.listApprovalPage || !ledger.decideApproval));
       if (unavailable) {
@@ -58,10 +57,10 @@ export async function dispatchWorkCommand(slash: { readonly command: string; rea
         await runDecision(slash.command as 'approvals' | 'cancel' | 'runs', '', execution);
         if (slash.command === 'runs' && !execution.signal.aborted) context.onRunsSeen?.();
       }
-      else if (['watch-workers', 'watch-runs', 'tasks'].includes(slash.command)) {
-        const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current })!;
+      else if (slash.command === 'tasks') {
+        const action = immediateSlashAction('tasks', { ledger, labels, watch: watchRef.current })!;
         if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
-        const feed = ledger!.followEvents || (slash.command === 'watch-runs' ? ledger!.followRuns : ledger!.followWorkers);
+        const feed = ledger!.followEvents || ledger!.followWorkers;
         // A refused or uninitialized feed delivers nothing, so the window names no delivery mode then (the refusal is its status line).
         const refused = pushMode === 'denied' || pushMode === 'not-initialized';
         setWatchStatus(refused ? '' : fillTemplate(workLabels!.jobs!.watchStatus, { mode: feed && pushMode !== 'poll' ? workLabels!.jobs!.push : workLabels!.jobs!.poll }));

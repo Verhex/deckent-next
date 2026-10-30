@@ -16,9 +16,6 @@ export interface WorklineActionLabels {
   readonly serviceRestartUnavailable: string;
   readonly queued: string;
   readonly runUsage: string;
-  readonly watchStarted: string;
-  readonly watchRunsStarted: string;
-  readonly watchStopped: string;
   /** `{mode}` is `push` or `poll`. Present in production; tests omit it unless they assert the mark. */
   readonly watchDelivery?: string;
   /** `{status}` is `gap`, `backpressure` or `foreign-scope`. */
@@ -43,7 +40,7 @@ export interface WorkSurfaceLabels {
   readonly runAnswer?: RunAnswerLabels;
   /** TERMINAL-SABIT slice 2: the active work strip above the composer; absent means no strip. */
   readonly activeWork?: ActiveWorkLabels;
-  /** Live windows (`/monitor`, `/watch-*`, `/tasks`); absent means those commands are not offered as windows. */
+  /** Live windows (`/monitor`, `/tasks`); absent means those commands are not offered as windows. */
   readonly live?: LiveWindowLabels;
   readonly workerLine: WorkerLineLabels;
   readonly panel: WorkerPanelLabels;
@@ -130,8 +127,8 @@ export interface WorklineActionContext {
 }
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
-/** `window`: the live window the command opens (`null` closes the open one). */
-export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'> | null; exit?: true }>;
+/** `window`: the live window the command opens. */
+export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'>; exit?: true }>;
 
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
@@ -139,16 +136,12 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
   if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'watch-workers' || command === 'watch-runs' || command === 'tasks') {
-    const runs = command === 'watch-runs', tasks = command === 'tasks', kind = tasks ? 'tasks' as const : runs ? 'runs' as const : 'workers' as const;
-    if (!ledger || (runs && !ledger.listRunIds) || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
+  if (command === 'tasks') {
+    if (!ledger || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
     // `/tasks` follows both feeds (runs only where the ledger can list them); a feed already on is not announced again, its window just opens.
-    const next: WatchState = { workers: watch.workers || !runs, runs: watch.runs || runs || (tasks && Boolean(ledger.listRunIds)) };
-    if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: kind };
-    return { entries: [], watch: next, window: kind };
-  }
-  if (command === 'watch-stop') {
-    return watch.workers || watch.runs ? { entries: [], watch: { workers: false, runs: false }, window: null } : { entries: [] };
+    const next: WatchState = { workers: true, runs: watch.runs || Boolean(ledger.listRunIds) };
+    if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: 'tasks' };
+    return { entries: [], watch: next, window: 'tasks' };
   }
   if (command === 'runs') {
     if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };

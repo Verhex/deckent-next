@@ -410,8 +410,9 @@ OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde a
 - **Slash komutu pencereleri ve odak.** Slash komutu pencereleri ve kartlar giriş barının hemen üstünde açılır, ekranın en çok
   yarısını kaplar ve içeride kayar (oklar, PageUp/PageDown ve Home/End; satır aralığı görünür); sohbet alanını daraltır, barı
   oynatmaz. Komutunuzla ya da seçiminizle açılan pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama
-  ve ilerleme pencereleri ile Run/işçi izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin arkasına
-  sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. `/watch-stop` gözlemi kapatır.
+  ve ilerleme pencereleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin arkasına sıraya alabilirsiniz.
+  Ctrl+O giriş ile üst pencere arasında odağı değiştirir. `/tasks` işçileri ve Run'ları tek pencerede canlı izler, `/runs`
+  kapsamın Run'larını listeler; Escape `/tasks` penceresini kapatır ve gözlemi durdurur.
 - **Onay kartları.** Onay kartı (ve her soru) klavyeyi kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez.
   Yanıtları bir listedir — "Evet, bu sefer (y)", "Evet, bu oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis
   sunduğunda (sabit zemin öğelerinde ve her zaman sorulan kilitlerde asla), "Hayır (n)" — ↑↓ ya da j/k ile seçilir, Enter

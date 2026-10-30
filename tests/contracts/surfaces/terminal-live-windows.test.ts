@@ -10,7 +10,7 @@ import { readLocalOsIdentity } from '#adapters/index.js';
 import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { main } from '../../../src/surfaces/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
-import { immediateSlashAction, liveWindowClosedText, liveWindowLines, liveWindowStatus, liveWindowTitle, LIVE_WINDOW_MAX_ROWS, type LiveWindowRenderLabels } from '#surfaces/core/terminal-work/index.js';
+import { immediateSlashAction, liveWindowClosedText, liveWindowLines, liveWindowStatus, LIVE_WINDOW_MAX_ROWS, type LiveWindowRenderLabels } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal/index.js';
 import { LiveWatchWindow } from '#surfaces/core/terminal-work/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
@@ -21,7 +21,7 @@ import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/w
 import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 import { fullSnapshot } from '../../fixtures/monitor/snapshots.js';
 
-/** T3 L5: `/monitor`, `/watch-workers`, `/watch-runs` and `/tasks` as bounded modal windows. */
+/** T3 L5: `/monitor` and `/tasks` as bounded modal windows. */
 const ESC = '\u001B';
 const EN = workSurfaceLabels('en'), TR = workSurfaceLabels('tr');
 const labelsOf = (work: typeof EN): LiveWindowRenderLabels => ({ live: work.live!, panel: work.panel, workerLine: WORKER_LINE_EN });
@@ -31,19 +31,18 @@ const run = (index: number, extra: Partial<WorkLedgerRunEntry> = {}): WorkLedger
   revision: index + 1, cancellationRequested: false, taskPhases: 'active:1', ...extra });
 
 describe('live window content (pure)', () => {
-  it('words workers, runs and the combined tasks window in the session language, with an empty line before the first read', () => {
+  it('words the workers list and the combined tasks window in the session language, with an empty line before the first read', () => {
     for (const [locale, work] of [['en', EN], ['tr', TR]] as const) {
       const labels = labelsOf(work);
-      const rows = (kind: 'workers' | 'runs' | 'tasks', data: { workers: WorkLedgerWorkerEntry[]; runs: WorkLedgerRunEntry[] }) => liveWindowLines(kind, data, labels).map(line => plainText(line.spans));
+      const rows = (kind: 'workers' | 'tasks', data: { workers: WorkLedgerWorkerEntry[]; runs: WorkLedgerRunEntry[] }) => liveWindowLines(kind, data, labels).map(line => plainText(line.spans));
       expect(rows('workers', { workers: [], runs: [] }), locale).toEqual([work.live!.empty]);
-      expect(rows('runs', { workers: [], runs: [] }), locale).toEqual([work.live!.empty]);
       expect(rows('workers', { workers: [worker(0)], runs: [] })[0]).toContain('worker 1');
-      expect(rows('runs', { workers: [], runs: [run(0, { cancellationRequested: true })] })[0]).toContain(shortId('run-0'));
-      const tasks = rows('tasks', { workers: [worker(0)], runs: [run(0)] });
+      const tasks = rows('tasks', { workers: [worker(0)], runs: [run(0, { cancellationRequested: true })] });
       expect(tasks[0]).toBe(work.panel.title); expect(tasks).toContain(work.live!.runsTitle); expect(tasks).toContain('');
-      expect(liveWindowStatus('tasks', { workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 workers · 2 runs' : '1 işçi · 2 iş');
-      expect(liveWindowTitle('runs', labels)).toBe(work.live!.runsTitle);
-      expect(liveWindowClosedText('tasks', { workers: [worker(0)], runs: [run(0)] }, work.live!)).toContain('1');
+      expect(tasks.at(-1)).toContain(shortId('run-0'));
+      expect(rows('tasks', { workers: [], runs: [] }), locale).toEqual([work.panel.title, work.live!.empty, '', work.live!.runsTitle, work.live!.empty]);
+      expect(liveWindowStatus({ workers: [worker(0)], runs: [run(0), run(1)] }, labels)).toBe(locale === 'en' ? '1 workers · 2 runs' : '1 işçi · 2 iş');
+      expect(liveWindowClosedText({ workers: [worker(0)], runs: [run(0)] }, work.live!)).toContain('1');
     }
   });
   it('bounds a list at the ledger tail limit and says how many rows are not shown', () => {
@@ -51,7 +50,7 @@ describe('live window content (pure)', () => {
     const rows = liveWindowLines('workers', { workers: many, runs: [] }, labels).map(line => plainText(line.spans));
     expect(rows).toHaveLength(LIVE_WINDOW_MAX_ROWS + 1);
     expect(rows.at(-1)).toBe(EN.panel.more.replace('{count}', '5'));
-    const runs = liveWindowLines('runs', { workers: [], runs: Array.from({ length: LIVE_WINDOW_MAX_ROWS + 2 }, (_, index) => run(index)) }, labels).map(line => plainText(line.spans));
+    const runs = liveWindowLines('tasks', { workers: [], runs: Array.from({ length: LIVE_WINDOW_MAX_ROWS + 2 }, (_, index) => run(index)) }, labels).map(line => plainText(line.spans));
     expect(runs.at(-1)).toBe(EN.live!.runsMore.replace('{count}', '2'));
   });
 });
@@ -59,23 +58,18 @@ describe('live window content (pure)', () => {
 describe('live window commands (pure)', () => {
   const ledger = { scopeId: 'scope-a', async listWorkers() { return null as never; }, async inspectRun() { return null; }, async listRunIds() { return []; } };
   const context = (extra: Record<string, unknown> = {}) => ({ ledger: ledger as never, labels: WORKLINE_TEST_LABELS as never, watch: { workers: false, runs: false }, ...extra });
-  it('opens the matching window and starts exactly the feeds it shows', () => {
-    expect(immediateSlashAction('watch-workers', context())).toMatchObject({ window: 'workers', watch: { workers: true, runs: false } });
-    expect(immediateSlashAction('watch-runs', context())).toMatchObject({ window: 'runs', watch: { workers: false, runs: true } });
+  it('opens the tasks window, starts exactly the feeds it shows, and reopens an already followed feed without announcing it again', () => {
     expect(immediateSlashAction('tasks', context())).toMatchObject({ window: 'tasks', watch: { workers: true, runs: true } });
     // A ledger that cannot list runs follows workers only.
     expect(immediateSlashAction('tasks', context({ ledger: { ...ledger, listRunIds: undefined } }))).toMatchObject({ window: 'tasks', watch: { workers: true, runs: false } });
+    expect(immediateSlashAction('tasks', context({ watch: { workers: true, runs: true } }))).toEqual({ entries: [], window: 'tasks' });
+    // Owner 2026-10-30: the watch commands are gone from the terminal; `/tasks` and `/runs` carry the same information.
+    for (const removed of ['watch-workers', 'watch-runs', 'watch-stop']) expect(immediateSlashAction(removed, context())?.entries[0]).toMatchObject({ level: 'error' });
   });
-  it('opens an already followed feed without announcing it again, and /watch-stop closes the window', () => {
-    expect(immediateSlashAction('watch-workers', context({ watch: { workers: true, runs: false } }))).toEqual({ entries: [], window: 'workers' });
-    expect(immediateSlashAction('watch-stop', context({ watch: { workers: true, runs: true } }))).toMatchObject({ window: null, watch: { workers: false, runs: false } });
-    expect(immediateSlashAction('watch-stop', context())).toEqual({ entries: [] });
-  });
-  it('refuses with a typed notice when there is no ledger, no run listing for /watch-runs, or no window words', () => {
+  it('refuses with a typed notice when there is no ledger or no window words', () => {
     expect(immediateSlashAction('tasks', context({ ledger: undefined }))?.entries[0]).toMatchObject({ kind: 'notice', level: 'error' });
-    expect(immediateSlashAction('watch-runs', context({ ledger: { ...ledger, listRunIds: undefined } }))?.entries[0]).toMatchObject({ level: 'error' });
     const bare = { ...WORKLINE_TEST_LABELS, work: { ...WORKLINE_TEST_LABELS.work!, live: undefined } } as never;
-    const result = immediateSlashAction('watch-workers', context({ labels: bare }));
+    const result = immediateSlashAction('tasks', context({ labels: bare }));
     expect(result?.window).toBeUndefined(); expect(result?.watch).toBeUndefined(); expect(result?.entries[0]).toMatchObject({ level: 'error' });
   });
 });
@@ -87,33 +81,19 @@ describe('live windows in the workline', () => {
     taskId: `task-${index}`, process: 'running', provider: 'docker', authority: 'next-ledger' })) }] }) as never;
   const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
 
-  it('/watch-workers updates in place without taking focus; /watch-stop closes it and stops the feed', async () => {
+  it('/tasks shows workers and runs together, updates in place, and Esc closes it, stops the feed and leaves the summary', async () => {
     let count = 1, calls = 0;
-    const sent: string[] = [];
-    const view = mountWorkline({ pollMs: 20, completeTurn: async messages => { sent.push(messages.at(-1)!.content); return 'ok'; },
-      ledger: { scopeId: 'scope-a', async listWorkers() { calls++; return report(count); }, async inspectRun() { return null; } } }); mounted.push(view.instance);
-    await settle(20); view.stdin.write('/watch-workers\r');
-    await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1 · docker'), 'window with the first worker');
-    expect(view.stdout.frame).toContain(EN.live!.watchHints);
-    // The observation frame leaves input ownership with the composer.
-    view.stdin.write('hello\r'); await until(() => sent.length === 1, 'composer while observing');
-    count = 2; await until(() => view.stdout.frame.includes('worker 2 · docker'), 'the second worker appears in the open window');
-    // In place: one row each, no card appended to the scrollback.
-    expect(occurrences(view.stdout.frame, 'worker 1 · docker')).toBe(1); expect(occurrences(view.stdout.frame, 'worker 2 · docker')).toBe(1);
-    view.stdin.write('/watch-stop\r');
-    await until(() => view.stdout.frame.includes(EN.live!.closedWorkers.replace('{count}', '2')) && !view.stdout.frame.includes('LIVE-PANEL'), 'watch-stop closes the frame and leaves the summary');
-    const after = calls; await settle(120); expect(calls - after).toBeLessThanOrEqual(1);
-    view.stdin.write('hello\r'); await until(() => sent.length === 2, 'the composer listens again');
-  });
-
-  it('/tasks shows workers and runs together; the finished output stays in the scrollback', async () => {
     const inspected = vi.fn(async (runId: string) => ({ runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false, tasks: [{ phase: 'active' }] }) as never);
-    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', async listWorkers() { return report(1); }, async listRunIds() { return ['run-a']; }, inspectRun: inspected } }); mounted.push(view.instance);
+    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', async listWorkers() { calls++; return report(count); }, async listRunIds() { return ['run-a']; }, inspectRun: inspected } }); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r');
     await until(() => view.stdout.frame.includes(EN.live!.tasksTitle) && view.stdout.frame.includes('worker 1') && view.stdout.frame.includes('rev 3'), 'both lists in one window');
     expect(view.stdout.frame).toContain(EN.live!.runsTitle); expect(view.stdout.frame).toContain('1 workers · 1 runs');
+    count = 2; await until(() => view.stdout.frame.includes('worker 2 · docker'), 'the second worker appears in the open window');
+    // In place: one row each, no card appended to the scrollback.
+    expect(occurrences(view.stdout.frame, 'worker 1 · docker')).toBe(1); expect(occurrences(view.stdout.frame, 'worker 2 · docker')).toBe(1);
     view.stdin.write(ESC);
-    await until(() => !view.stdout.frame.includes(EN.live!.tasksHints!) && view.stdout.frame.includes('1 workers and 1 runs at the last read'), 'closed with the summary');
+    await until(() => !view.stdout.frame.includes(EN.live!.tasksHints!) && view.stdout.frame.includes('2 workers and 1 runs at the last read'), 'closed with the summary');
+    const after = calls; await settle(120); expect(calls - after).toBeLessThanOrEqual(1);
   });
 
   it('/tasks Enter opens the selected transcript and x uses the refreshed run cancellation approval; opening a card never cancels', async () => {
@@ -139,17 +119,7 @@ describe('live windows in the workline', () => {
     await until(() => cancelled.length === 1, 'approved cancellation'); expect(cancelled).toEqual([['run-a', 9]]);
   });
 
-  it('/watch-runs follows runs only', async () => {
-    let workerReads = 0;
-    const view = mountWorkline({ pollMs: 20, ledger: { scopeId: 'scope-a', async listWorkers() { workerReads++; return report(1); }, async listRunIds() { return ['run-b']; },
-      async inspectRun(runId: string) { return { runId, scopeId: 'scope-a', revision: 7, cancellationRequested: true, tasks: [] } as never; } } }); mounted.push(view.instance);
-    await settle(20); view.stdin.write('/watch-runs\r');
-    await until(() => view.stdout.frame.includes(EN.live!.runsTitle) && view.stdout.frame.includes('rev 7') && view.stdout.frame.includes('cancel'), 'run row with the requested cancellation');
-    expect(workerReads).toBe(0);
-    view.stdin.write('/watch-stop\r'); await until(() => view.stdout.frame.includes('1 runs at the last read'), 'closed');
-  });
-
-  it('refuses /tasks and /watch-workers without a ledger and opens no window', async () => {
+  it('refuses /tasks without a ledger and opens no window', async () => {
     const view = mountWorkline({}); mounted.push(view.instance);
     await settle(20); view.stdin.write('/tasks\r'); await until(() => view.stdout.text.includes('NO-LEDGER') || view.stdout.text.includes('UNWIRED'), 'refused');
     expect(view.stdout.frame).not.toContain(EN.live!.tasksTitle);
@@ -173,7 +143,7 @@ describe('live window frame', () => {
   it('draws with ASCII characters only on an ASCII terminal and keeps the word cues without colour', async () => {
     const stdout = new Screen(100, 30), stdin = keyboard();
     const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(true) },
-      createElement(WindowStackProvider, null, createElement(LiveWatchWindow, { kind: 'tasks', data: { workers: [worker(0)], runs: [run(0, { cancellationRequested: true })] },
+      createElement(WindowStackProvider, null, createElement(LiveWatchWindow, { data: { workers: [worker(0)], runs: [run(0, { cancellationRequested: true })] },
         labels: labelsOf(EN), position: EN.window.position, onClose: () => undefined }))) });
     const instance = render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
     mountedStandalone.push(instance);

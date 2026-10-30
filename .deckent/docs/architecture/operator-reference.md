@@ -409,8 +409,9 @@ higher than your Deckent budget; Deckent cannot see either setting.
 - **Slash-command windows and focus.** Slash-command windows and cards open right above the input bar, take at most half the
   screen and scroll inside (arrows, PageUp/PageDown and Home/End, with a visible row range); they shrink the conversation area
   and never move the bar. A window opened by your command or selection takes focus immediately; Escape closes it back to input.
-  Automatic /do planning and progress windows and Run/worker watches leave input focused: type a draft or press Enter to queue
-  it behind the current operation. Ctrl+O switches between input and the top window. `/watch-stop` closes observation.
+  Automatic /do planning and progress windows leave input focused: type a draft or press Enter to queue it behind the current
+  operation. Ctrl+O switches between input and the top window. `/tasks` follows workers and Runs live in one window and `/runs`
+  lists the scope's Runs; Escape closes the `/tasks` window and stops observation.
 - **Approval cards.** An approval card (and any question) takes the keyboard by itself and replaces the input bar in place, so
   no Ctrl+O is needed. Its answers are a list — "Yes, once (y)", "Yes, for this session (s)" and "Always allow in this project
   (a)" only where the service offers them (never for hard-floor items or always-ask locks), "No (n)" — moved with ↑↓ or j/k

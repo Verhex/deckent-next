@@ -225,7 +225,7 @@ describe('approval window in the real Workline', () => {
     });
   }
 
-  it('an approval window takes the screen from an open watch window (one visible window), fits the terminal rows, and the watch window returns after the decision (T3 L5)', async () => {
+  it('an approval window takes the screen from an open tasks window (one visible window), fits the terminal rows, and the tasks window returns after the decision (T3 L5)', async () => {
     let releaseA!: () => void, releaseB!: () => void;
     const gateA = new Promise<void>(resolve => { releaseA = resolve; }), holdB = new Promise<void>(resolve => { releaseB = resolve; });
     let started = 0;
@@ -240,19 +240,19 @@ describe('approval window in the real Workline', () => {
       sources: [{ workers: Array.from({ length: 10 }, (_, index) => ({ taskId: `t-${index}`, provider: 'claude', process: 'running', authority: 'next-ledger', files: null })) }] } as never; } } as never, pollMs: 40 }, 120, { rows: 30 });
     mounted.push(view.instance);
     await settle(20);
-    // Turn one is busy; the watch command and the second turn queue behind it. When turn one ends the watch window opens and turn two asks for approval over it.
-    for (const line of ['one', '/watch-workers', 'two']) { for (const char of `${line}\r`) { view.stdin.write(char); await settle(2); } }
+    // Turn one is busy; /tasks and the second turn queue behind it. When turn one ends the tasks window opens and turn two asks for approval over it.
+    for (const line of ['one', '/tasks', 'two']) { for (const char of `${line}\r`) { view.stdin.write(char); await settle(2); } }
     releaseA();
-    await until(() => view.stdout.frame.includes('What:'), 'approval window over the watch window'); await settle(80);
+    await until(() => view.stdout.frame.includes('What:'), 'approval window over the tasks window'); await settle(80);
     const frame = view.stdout.frame;
-    proof('workline en 30 rows, approval over a watch window', frame);
-    expect(frame).not.toContain(work.live!.watchHints!); // the watch frame (its own hints since 760c906e) steps aside while the approval window is up
+    proof('workline en 30 rows, approval over a tasks window', frame);
+    expect(frame).not.toContain(work.live!.tasksHints!); // the tasks window steps aside while the approval window is up
     expect(frame).toMatch(/rows 1–\d+ of \d+/u);
     const live = frame.slice(frame.indexOf('What:') - 400);
     expect(live.split('\n').filter(Boolean).length).toBeLessThanOrEqual(30);
     view.stdin.write('\u001B'); // The card holds the keyboard by itself (slice 2); Esc denies
     await until(() => calls.length === 1, 'decision reached the port'); releaseB();
-    await until(() => view.stdout.frame.includes(work.live!.watchHints!), 'the watch window is back after the decision');
+    await until(() => view.stdout.frame.includes(work.live!.tasksHints!), 'the tasks window is back after the decision');
   });
 
   it('/approvals rows with the catalog: what, who and how long; no approval id on the row', async () => {

@@ -138,7 +138,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   frame (`pickerWindowGeometry`); the embedded `ListPicker` draws neither title nor hints and pads its page, status row (filter · position)
   and reason row. A non-embedded `ListPicker` (the workline's own list windows) is unchanged. `/mcp` adds stdio and HTTP servers (URL + masked headers; the registry validates), revokes trust with the grant, shows the
   person's `mcp-server` grant and offers `sandbox-net` first. `terminal-work/live-windows.tsx` + `terminal/workline-live.tsx` (L5): `/monitor`
-  (the monitor's `MonitorBody` through `monitorWindow`, the monitor body stays behind its host port), `/watch-workers`, `/watch-runs`, `/tasks` as
+  (the monitor's `MonitorBody` through `monitorWindow`, the monitor body stays behind its host port) and `/tasks` as
   modal live windows updated in place (Esc closes and stops the watch, one summary line stays); a card, picker, `/resume` or settings window
   takes the screen and the live window returns after it. Config-change approvals speak in setting words in the approval window.
 - **Bounded windows (TUI2 L1, 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37):** unit `terminal-window` (← terminal-kit, terminal-render)
@@ -273,8 +273,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   task, alpha.54 BR2); `terminal-work/run-control.tsx` owns the list, the y/N `DecisionCard` (Tab hold reason) and the loop; results and typed refusals stay above the list until Esc. Line/CLI text producers are unchanged.
   Chat text is not run truth. **S18/S18B/S18B-AUTH (batch 36):** üretim yolu runtime SQLite ledger’ına salt okunur `fs.watch` + heartbeat takibidir; servis tek yazardır, okuyucu outbox silmez/etki açmaz. `inspectMonitor` ile ortak principal/scope/policy kapısı okuma öncesi ve takip boyunca yeniden değerlendirilir; ret/veri bağlamı değişimi takibi durdurur. R4 yetkili açılış snapshot’ı, sıra boşluğunda resync ve reconnect başlangıç cursor’ını; R5 çalışan worker’ın canlı panel gözlemini korur. Takip portu olmayan tüketici bounded single-flight poll kullanır. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
-- **Work surface (P4, 2026-09-24):** worker cards and a bounded live panel (dynamic region, shown while `/watch-workers`
-  runs, fed only by that single-flight poll or `followWorkers`) render one line per worker from the `activity`/`usage`
+- **Work surface (P4, 2026-09-24):** worker cards and a bounded live panel (dynamic region, shown while the `/tasks` window
+  is open, fed only by that single-flight poll or `followWorkers`) render one line per worker from the `activity`/`usage`
   of `inspectWorkers` (`worker 2 · claude <model> · editing src/x.ts · 12 s ago · 18.4k tokens (cache 83%)`): phase text
   from `cli.worker.phase.*`, age = observation time − host `receivedAt` (never `atMs`), truncated/dropped markers, a
   finished/failed session labelled "worker reported"; `starting` with unmapped events is muted progress, not an error.
