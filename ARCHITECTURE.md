@@ -1069,7 +1069,7 @@ HIGH/CRITICAL and on any unreadable source. `acceptedRisks` (evidence-backed, ex
 an exactly matching advisory set on one package@version and carrier into MITIGATED report rows that do not fail; expiry or any
 advisory/version/carrier/severity change fails again; lint-arch validates the entries and warns after expiry. The one entry today is
 fast-uri 3.1.0 inside MCP SDK 2.3.1 (expires 2026-10-29: renewed with fresh evidence, or removed when the SDK ships a rebuilt bundle).
-The weekly/manual deps-watch runs in `platform-verification.yml`; daily platform verification remains separate.
+The daily/weekly/manual deps-watch runs in `platform-verification.yml` independently of its advisory macOS/Windows matrix.
 
 **Published package (DEPS-DIST, 2026-09-29; ninth batch).** The npm package has no `dependencies`: `scripts/build-dist.mjs` bundles
 third-party runtime code into `dist/vendor/` chunks with esbuild (ESM, code splitting, lazy `import()` preserved) while every Deckent module

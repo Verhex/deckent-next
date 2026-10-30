@@ -69,7 +69,7 @@ The cache checksum manifest detects corruption; the committed lock remains the b
 Actions caches can expire or be evicted: this is not a permanent Alpine mirror.
 
 On a miss, unavailable Alpine pins fail with `BWRAP_PIN_REFRESH_REQUIRED` / `BWRAP_BUILD_FAILED`
-and point here. The weekly/manual **platform verification → deps-watch** job runs
+and point here. The daily/weekly/manual **platform verification → deps-watch** job runs
 `node scripts/refresh-bwrap.mjs <fresh-evidence-directory>` in the digest-pinned image. It resolves
 a candidate host closure and every sysroot, updates the direct pins, builds once to record hashes
 and again in check mode to compare them, and retains the inventories, logs, lock delta and
@@ -77,7 +77,8 @@ and again in check mode to compare them, and retains the inventories, logs, lock
 Linked-library version changes that need a new verified license text stop for maintainer review.
 It never updates the build image, source tarball, shipped architectures or source/license pins silently.
 
-The watch job itself stays read-only. A separate `deps-publish` job, the only one with
+The watch runs independently of the advisory macOS/Windows verification matrix and stays read-only.
+A separate `deps-publish` job, the only one with
 `contents: write` and `pull-requests: write`, runs only when the watch verified a refresh and found
 no integrity problem. It installs no packages, builds nothing and runs no candidate code: it checks
 out the base the watch resolved, re-verifies the uploaded `deps-watch-<attempt>` candidate and runs
