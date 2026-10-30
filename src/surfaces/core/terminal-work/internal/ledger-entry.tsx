@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { type LedgerBuffer, type LedgerRow, type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { AssistantUnitRow, HumanTextRow, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantUnitRow, HumanTextRow, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render/index.js';
 import { SYSTEM_SUMMARY_ENTRY_ID, SystemSummaryLine } from '#surfaces/core/terminal-window/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
@@ -16,9 +16,9 @@ export interface LedgerEntryLabels {
   readonly workerLine?: WorkerLineLabels;
   readonly render: AssistantRenderLabels;
 }
-/** A finished agent tool call: one step of the turn (TERM-POLISH spacing). */
+/** A finished agent tool call or a settled read group (alpha.59 L6): one step of the turn (TERM-POLISH spacing). */
 export function isToolStep(entry: WorkLedgerEntry | undefined): boolean {
-  return entry?.kind === 'chat' && entry.role === 'assistant' && entry.assistant?.kind === 'tool';
+  return entry?.kind === 'chat' && entry.role === 'assistant' && (entry.assistant?.kind === 'tool' || entry.assistant?.kind === 'tool-group');
 }
 
 /**
@@ -38,16 +38,18 @@ export function rowSpaceBefore(buffer: LedgerBuffer, row: LedgerRow): boolean {
   return stepSpaceBefore(kept?.seq === row.seq - 1 ? kept.entry : index >= 0 ? buffer.tail[index] : undefined, row.entry);
 }
 
-/** One finished conversation row; `spaceBefore` (from `stepSpaceBefore`) puts the blank line above it. */
-export function LedgerEntryRow({ entry, labels, spaceBefore = false }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels; readonly spaceBefore?: boolean }) {
-  return spaceBefore ? <Box flexDirection="column" marginTop={1}><LedgerEntryBody entry={entry} labels={labels} /></Box> : <LedgerEntryBody entry={entry} labels={labels} />;
+/** One finished conversation row; `spaceBefore` (from `stepSpaceBefore`) puts the blank line above it; `groupView`: how a read group shows. */
+export function LedgerEntryRow({ entry, labels, spaceBefore = false, groupView }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels; readonly spaceBefore?: boolean;
+  readonly groupView?: ToolGroupView }) {
+  const body = <LedgerEntryBody entry={entry} labels={labels} {...(groupView ? { groupView } : {})} />;
+  return spaceBefore ? <Box flexDirection="column" marginTop={1}>{body}</Box> : body;
 }
 
-function LedgerEntryBody({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
+function LedgerEntryBody({ entry, labels, groupView }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels; readonly groupView?: ToolGroupView }) {
   const ink = useWorklinePalette(), glyphs = useRenderGlyphs(), known = useHumanTextSecrets();
   if (entry.kind === 'chat' && entry.role === 'assistant') {
     // A row without a unit is a complete reply: one lead unit rendered as markdown.
-    return <AssistantUnitRow unit={entry.assistant ?? { kind: 'text', markdown: entry.text, lead: true }} labels={labels.render} />;
+    return <AssistantUnitRow unit={entry.assistant ?? { kind: 'text', markdown: entry.text, lead: true }} labels={labels.render} {...(groupView ? { groupView } : {})} />;
   }
   if (entry.kind === 'chat' && entry.role === 'user') {
     // T2 T-READABLE (owner choice): a thin rail on the left, the person's label on the first line, their text in the terminal's own

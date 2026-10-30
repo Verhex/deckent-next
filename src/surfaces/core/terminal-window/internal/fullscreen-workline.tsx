@@ -82,10 +82,11 @@ const WHEEL_LINES = 3;
  * The scrolling conversation. Follows the newest line (and the live answer after it) until the person scrolls back: PgUp/PgDn move half a
  * view, Ctrl+Home goes to the first line, Ctrl+End returns to the newest line and follows again (the Claude Code fullscreen keys). While
  * scrolled back the view stays put as lines arrive and the last row says how many lines are below. `active`: the composer owns the keyboard
- * (a focused window keeps its own PgUp/PgDn).
+ * (a focused window keeps its own PgUp/PgDn). `onClick`: a plain left click (press and release on the same cell) on a drawn line names that
+ * line's block (alpha.59 L6: a click on a read group's row shows or hides its calls); a drag stays a selection.
  */
-export function ChatViewport({ blocks, live, active, labels, onSearch }: { readonly blocks: SearchableBlocks; readonly live?: ReactNode; readonly active: boolean;
-  readonly labels: ChatViewportLabels; readonly onSearch?: (open: boolean) => void }) {
+export function ChatViewport({ blocks, live, active, labels, onSearch, onClick }: { readonly blocks: SearchableBlocks; readonly live?: ReactNode; readonly active: boolean;
+  readonly labels: ChatViewportLabels; readonly onSearch?: (open: boolean) => void; readonly onClick?: (key: string) => void }) {
   const palette = useWorklinePalette(), size = useWindowSize();
   const ref = useRef<DOMElement | null>(null), metrics = useBoxMetrics(ref), innerRef = useRef<DOMElement | null>(null), inner = useBoxMetrics(innerRef);
   const height = Math.max(1, metrics.height || Math.floor((size.rows || 24) / 2));
@@ -100,7 +101,7 @@ export function ChatViewport({ blocks, live, active, labels, onSearch }: { reado
   });
   const latest = useRef({ blocks, height }); latest.current = { blocks, height };
   const anchorRef = useRef(anchor); anchorRef.current = anchor;
-  const owner = useFocusOwner(), wheel = useContext(WheelContext), pointer = useContext(PointerContext);
+  const owner = useFocusOwner(), wheel = useContext(WheelContext), pointer = useContext(PointerContext), clicked = useRef(onClick); clicked.current = onClick;
   // TERM-POLISH: click and drag selects the conversation's text (content-anchored), the release copies it; a plain click or any key but
   // the scroll keys clears it (the Claude Code fullscreen behaviour).
   const [selection, setSelectionState] = useState<Selection | null>(null), selectionRef = useRef(selection);
@@ -125,7 +126,7 @@ export function ChatViewport({ blocks, live, active, labels, onSearch }: { reado
     if (!current?.dragging) return;
     if (event.kind === 'drag') { if (point) setSelection({ ...current, focus: point.at }); return; }
     const done = { ...current, focus: point?.at ?? current.focus, dragging: false };
-    if (done.focus.key === done.anchor.key && done.focus.line === done.anchor.line && done.focus.cell === done.anchor.cell) { setSelection(null); return; }
+    if (done.focus.key === done.anchor.key && done.focus.line === done.anchor.line && done.focus.cell === done.anchor.cell) { setSelection(null); clicked.current?.(done.anchor.key); return; }
     setSelection(done);
     const text = selectedText(latest.current.blocks, done.anchor, done.focus);
     if (text.trim()) pointer.copy(text);

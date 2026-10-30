@@ -1,8 +1,8 @@
 import type { PanelTurnBinding } from './panel-contract.js';
-import type { AgentContextQuality, AgentShellPosture, AgentToolApprovalSettlement, AgentToolCardCall, AgentToolUndo, ApprovalPreviewCutFacts, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
+import type { AgentContextQuality, AgentShellPosture, AgentToolApprovalSettlement, AgentToolCardCall, AgentToolClass, AgentToolUndo, ApprovalPreviewCutFacts, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 
 /** `tool.finished`'s optional `cleanup` (Astra 2124), derived from the agent-turn event rather than importing the agent-tool
- * module directly (`terminal-kit`'s declared dependency is `agent-turn`; `AgentToolCleanup` itself is declared in `agent-tool`). */
+ * module directly (`AgentToolCleanup` itself is declared in `agent-tool`; this unit takes only the `AgentToolClass` type from there). */
 type FinishedToolCleanup = Extract<AgentTurnStreamEvent, { readonly kind: 'tool.finished' }>['cleanup'];
 
 /** One chat message as sent to the model for a plain (tool-less) turn. */
@@ -37,9 +37,10 @@ export type TurnDelta =
     readonly write5mTokens?: number; readonly write1hTokens?: number; readonly netBenefitUsdE10?: number | null } }
   /** An agent tool call: `started` with the engine's target, then `finished` with its typed status and duration (T-L3). `cleanup`
    * (Astra 2124) only ever arrives on a finished host shell call; every other call leaves it undefined. The tool line's pattern-first
-   * target and result summary (TL-B D2) are derived by the renderer from the `message` deltas, not carried here. */
+   * target and result summary (TL-B D2) are derived by the renderer from the `message` deltas, not carried here. `toolClass` (alpha.59 L6):
+   * the called tool's declared class from the client's registered tool metadata (never a wire field); absent for a tool it does not know. */
   | { readonly kind: 'tool'; readonly phase: 'started' | 'finished'; readonly callId: string; readonly name: string; readonly target: string | null;
-    readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup }
+    readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup; readonly toolClass?: AgentToolClass }
   /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
   | { readonly kind: 'message'; readonly message: AgentChatMessage }
   /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. `compacting` (TL-A, derived on the
