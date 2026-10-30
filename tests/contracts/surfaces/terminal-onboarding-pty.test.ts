@@ -111,9 +111,10 @@ it.skipIf(process.platform !== 'linux')('AYSE-18/22/23 PTY: empty first-task inp
     const store = await openConfiguredTerminalSessions(root, { env }); expect(store).not.toBeNull();
     await store!.save({ schemaVersion: 1, scopeId: 's', sessionId: '11111111-2222-4333-8444-555555555555', updatedAtMs: Date.now(),
       messages: [{ role: 'user', content: 'Yesterday request' }, { role: 'assistant', content: 'Saved reply', toolCalls: [] }] });
-    const again = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify([[first, '\u001b'],
+    const again = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify([
       [tr ? 'Bu klasörde kayıtlı bir konuşmanız var' : 'A saved conversation is available', '/resume\r'], ['Yesterday request', '\r'],
       [tr ? 'mesajıyla devam ediliyor.' : 'Resumed', '/exit\r']]), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
-    expect(again.code).toBe(0); expect(again.output).toContain('Saved reply');
+    // Owner 2026-10-30: "Esc · Later" on the model card is persistent; the next open goes straight to the Workline.
+    expect(again.code).toBe(0); expect(again.output).toContain('Saved reply'); expect(again.output).not.toContain(first);
   }
 }, 180_000);
