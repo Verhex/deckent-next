@@ -87,12 +87,25 @@ describe.skipIf(process.platform === 'win32')('full window on a real PTY (produc
 
   it('wheel and clicks over an approval card never answer it; a deliberate key does', async () => {
     // The mouse reports go in once the card's keys count (armed: its key hints show), so they could have answered it if they reached it.
-    const run = await pty([['READY', 'card\r', 0.2], ['Enter confirm', `${WHEEL_UP}${CLICK}${WHEEL_DOWN}${CLICK}`, 0.6], ['Approval needed', '', 0.5], ['Enter confirm', 'n', 0.2], ['READY', '', 0.5]]);
+    // alpha.59 L3: Ctrl+Y on the armed card sends its drawn text with OSC 52 (the host's one writer) and neither answers nor re-arms it; a
+    // left-drag over its body rows (screen rows 12-15, under the title) selects them and the release copies them the same way.
+    const DRAG_CARD = '\u001b[<0;3;12M\u001b[<32;40;14M\u001b[<32;80;15M\u001b[<0;80;15m';
+    const run = await pty([['READY', 'card\r', 0.2], ['Enter confirm', `${WHEEL_UP}${CLICK}${WHEEL_DOWN}${CLICK}`, 0.6], ['Approval needed', '', 0.5], ['Enter confirm', '\u0019', 0.5],
+      ['Enter confirm', DRAG_CARD, 0.6], ['Enter confirm', 'n', 0.2], ['READY', '', 0.5]]);
     const before = run.screen(2).join('\n');
-    expect(before).toContain('Approval needed');
+    expect(before).toContain('Approval needed'); expect(before).toContain('Ctrl+Y COPY'); expect(run.screen(4).join('\n')).toMatch(/CARD-SENT \d+/u);
+    // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
+    const copy = /\u001b\]52;c;([A-Za-z0-9+/=]+)\u0007/u.exec(run.output.slice(run.marks[3], run.marks[4]));
+    expect(copy, run.output.slice(run.marks[3], run.marks[3]! + 600)).not.toBeNull();
+    expect(Buffer.from(copy![1]!, 'base64').toString('utf8')).toContain('rm -rf build');
+    // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
+    const dragged = /\u001b\]52;c;([A-Za-z0-9+/=]+)\u0007/u.exec(run.output.slice(run.marks[4], run.marks[5]));
+    expect(dragged, run.output.slice(run.marks[4], run.marks[4]! + 600)).not.toBeNull();
+    const selected = Buffer.from(dragged![1]!, 'base64').toString('utf8');
+    expect(selected).toMatch(/^What: +A shell command will run\nCommand: +rm -rf build\n +Detailed fields are not available from this service version; the producer's/u); expect(selected).not.toMatch(/Yes, once|Approval needed|│/u);
     // The child writes its decisions to stderr (the same PTY): none before the deliberate n, a deny after it.
-    expect(run.output.slice(0, run.marks[3]).includes('DECIDED'), run.output.slice(Math.max(0, run.output.indexOf('DECIDED') - 600), run.output.indexOf('DECIDED') + 40)).toBe(false); expect(run.output.slice(run.marks[3])).toContain('DECIDED deny');
-    expect(run.screen(4).join('\n')).not.toContain('Approval needed');
+    expect(run.output.slice(0, run.marks[5]).includes('DECIDED'), run.output.slice(Math.max(0, run.output.indexOf('DECIDED') - 600), run.output.indexOf('DECIDED') + 40)).toBe(false); expect(run.output.slice(run.marks[5])).toContain('DECIDED deny');
+    expect(run.screen(6).join('\n')).not.toContain('Approval needed');
   }, 120_000);
 
   it('Ctrl+S puts the draft aside and brings it back, Ctrl+_ undoes, and neither key ever answers a card (real TTY: no XOFF freeze)', async () => {

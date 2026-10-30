@@ -45,5 +45,9 @@ export interface OnboardingPort {
 export type OnboardingStep = Readonly<{ id: string; stages: readonly SetupStage[]; kind: 'stage' | 'work' | 'ready' | 'budget' | 'permissions' | 'rights' | 'first-task' | 'parked'; pending?: RunIntentRecord }>;
 export type OnboardingPresentation = Readonly<{ schemaVersion: 1; steps: readonly OnboardingStep[]; completed: number; total: number; snapshot: OnboardingSnapshot }>;
 export type OnboardingUi = Readonly<{ locale: Locale; provider(): Promise<void>; instructions(): Promise<void>;
-  foreground(stage: SetupStage): Promise<Readonly<{ status: string; code?: string }>> }>;
+  foreground(stage: SetupStage): Promise<Readonly<{ status: string; code?: string }>>;
+  /** The settled opening snapshot when the session closes without showing a step (nothing answered or applied): reusable instead of observing again. */
+  observed?(snapshot: OnboardingSnapshot): void }>;
+/** A narrowed /setup: only the worker steps (owner option A card) or only the model card (a message sent without a model). */
+export type OnboardingFocus = 'workers' | 'model';
 export const intentCommand = (intent: FirstTaskIntent): BrainPlanCommand => ({ schemaVersion: 1, commandId: intent.commandId, scopeId: intent.scopeId, intent: intent.intent });

@@ -105,9 +105,11 @@ describe('platform verification dependency watch schedule', () => {
     expect(workflow).toContain('  workflow_dispatch:\n');
   });
 
-  it('runs the watch only on the weekly schedule or manual dispatch, never the daily schedule', () => {
+  it('runs the watch on every schedule or manual dispatch independently of platform verification', () => {
     expect(depsWatch).not.toBe('');
-    expect(depsWatch).toMatch(/^ {4}if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.schedule == '41 3 \* \* 1'$/mu);
+    expect(depsWatch).toMatch(/^ {4}if: github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'schedule'$/mu);
+    // A failed/advisory matrix must never suppress the watch; publish depends only on its verified outputs.
+    expect(depsWatch).not.toMatch(/^ {4}needs:/mu);
     expect(depsWatch).toMatch(/^ {4}runs-on: ubuntu-latest$/mu);
     // The watch runs npm-installed code and builds: read-only. Owner 2026-10-15: only deps-publish writes (draft PR, never merge).
     expect(depsWatch).toMatch(/^ {4}permissions:\n {6}contents: read$/mu);

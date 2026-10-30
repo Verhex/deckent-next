@@ -38,12 +38,11 @@ describe('slash palette keys through the real workline', () => {
     await until(() => view.stdout.text.includes('> /status'), 'palette');
     await view.type('\r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), 'status executed');
-    // '/wa' offers watch-workers, watch-runs, watch-stop; Down highlights watch-runs and Enter runs exactly that one.
-    await view.type('/wa', DOWN);
-    await until(() => view.stdout.text.includes('> /watch-runs'), 'second row highlighted');
+    // '/ru' offers run, runs, resume; Down highlights runs and Enter runs exactly that one.
+    await view.type('/ru', DOWN);
+    await until(() => view.stdout.text.includes('> /runs'), 'second row highlighted');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('Watching · polling'), 'watch-runs executed');
-    expect(view.stdout.text).not.toContain('WATCH-ON');
+    await until(() => view.stdout.frame.includes('Runs (live)') && view.stdout.frame.includes('Nothing observed yet.'), 'runs executed');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 
@@ -74,10 +73,10 @@ describe('slash palette keys through the real workline', () => {
 
   it('typing filters by prefix first, then by fuzzy subsequence', async () => {
     const view = await open();
-    await view.type('/wwk');
-    await until(() => view.stdout.text.includes('> /watch-workers'), 'fuzzy match offered');
+    await view.type('/svr');
+    await until(() => view.stdout.text.includes('> /service-restart'), 'fuzzy match offered');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('UNWIRED'), 'watch-workers ran (no ledger wired)');
+    await until(() => view.stdout.text.includes('NO-RESTART'), 'service-restart ran (no restart port wired)');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });

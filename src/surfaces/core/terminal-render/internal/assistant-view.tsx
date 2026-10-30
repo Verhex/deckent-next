@@ -2,7 +2,7 @@ import { Box, Text, useAnimation, useWindowSize } from 'ink';
 import { SystemTrustedClock, type TrustedClock } from '#platform/index.js';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { ToolResultSummary } from '#surfaces/core/terminal-kit/index.js';
-import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolUnit, TurnStage, WaitingView } from './assistant-stream.js';
+import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolGroupStep, ToolUnit, TurnStage, WaitingView } from './assistant-stream.js';
 import { useRenderGlyphs } from './glyphs.js';
 import { RenderedLines } from './lines-view.js';
 import { renderHumanMarkdown } from './human-text.js';
@@ -48,6 +48,9 @@ export type AssistantRenderLabels = Readonly<{
    * until the catalog carries `terminal.render.toolSummary.*` (see `i18n-delta.json`); the row falls back to short,
    * language-neutral text meanwhile (the same devolution `toolCleanup` used before its catalog keys were wired). */
   toolSummary?: Readonly<Record<'lines' | 'linesMore' | 'headings' | 'headingsMore' | 'matches' | 'matchesMore' | 'entries', string>>;
+  /** alpha.59 L6 read group (`terminal.render.toolGroup.*`): `{count}` per kind (`…One` for exactly one), the live line's `{summary}`, and the
+   * settled row's click hints. Absent: the neutral English text below. */
+  toolGroup?: ToolGroupLabels;
   /** `{percent}` of `{window}` tokens; `{approx}` is `~` when the prompt is an upper bound, not the provider's count. */
   context: string;
   /** The information row's context segment before any measurement (harness gap item 1); absent: no segment until measured. */
@@ -65,6 +68,11 @@ export type AssistantRenderLabels = Readonly<{
   cancelHint?: string;
 }>;
 
+export type ToolGroupLabels = Readonly<Record<'running' | 'files' | 'filesOne' | 'dirs' | 'dirsOne' | 'searches' | 'searchesOne' | 'reads' | 'readsOne' | 'expand' | 'collapse', string>>;
+/** How a settled read group shows (alpha.59 L6): `collapsed`/`expanded` where a click toggles it (the full window's mouse), `open` (no pointer: the
+ * summary and every call, so nothing is ever only behind a click). */
+export type ToolGroupView = 'collapsed' | 'expanded' | 'open';
+
 const INDENT = 2;
 const LIVE_TAIL_LINES = 8;
 const SYSTEM_CLOCK = new SystemTrustedClock();
@@ -81,6 +89,10 @@ const NEUTRAL_COMPACTION_CANCELLED = 'Summarizing was cancelled before it finish
 const NEUTRAL_TOOL_SUMMARY: NonNullable<AssistantRenderLabels['toolSummary']> = { lines: '{shown}/{total} lines', linesMore: '{shown}/{total} lines, more available',
   headings: '{shown}/{total} headings', headingsMore: '{shown}/{total} headings, more available', matches: '{count} matches', matchesMore: '{count}+ matches',
   entries: '{count} entries' };
+// alpha.59 L6: equals the `en` catalog values of `terminal.render.toolGroup.*`.
+const NEUTRAL_TOOL_GROUP: ToolGroupLabels = { running: 'Running… {summary}', files: '{count} files read', filesOne: '{count} file read', dirs: '{count} directories listed',
+  dirsOne: '{count} directory listed', searches: '{count} searches', searchesOne: '{count} search', reads: '{count} other reads', readsOne: '{count} other read',
+  expand: 'click to show the calls', collapse: 'click to hide the calls' };
 // FA-TRACKED-WARN: equals the `en` catalog value of `terminal.render.toolTracked`.
 const NEUTRAL_TOOL_TRACKED = 'tracked files: {deleted} deleted, {overwritten} overwritten';
 const seconds = (ms: number, digits = 1) => (ms / 1000).toFixed(digits);
@@ -96,6 +108,19 @@ function toolSummaryText(summary: ToolResultSummary, labels: AssistantRenderLabe
     case 'sandbox-none': return labels.toolSandboxNone ?? 'sandbox: none';
     case 'sandbox-degraded': return labels.toolSandboxDegraded ?? 'sandbox: degraded';
   }
+}
+
+/** The read group's counts by kind (alpha.59 L6): a call's kind is the shape of its own result (file lines or headings, directory entries, matches);
+ * a read whose result has no known shape counts as another read. Kinds with no call are left out. */
+export function toolGroupSummary(steps: readonly ToolGroupStep[], labels: AssistantRenderLabels): string {
+  const words = labels.toolGroup ?? NEUTRAL_TOOL_GROUP, counts = { files: 0, dirs: 0, searches: 0, reads: 0 };
+  for (const step of steps) {
+    if (step.kind !== 'tool') continue;
+    const kind = step.summary?.kind;
+    counts[kind === 'lines' || kind === 'headings' ? 'files' : kind === 'entries' ? 'dirs' : kind === 'matches' ? 'searches' : 'reads'] += 1;
+  }
+  return (['files', 'dirs', 'searches', 'reads'] as const).filter(kind => counts[kind] > 0)
+    .map(kind => fillTemplate(counts[kind] === 1 ? words[`${kind}One`] : words[kind], { count: counts[kind] })).join(', ');
 }
 
 function useBodyWidth(): number {
@@ -118,10 +143,27 @@ export function toolText(unit: Pick<ToolUnit, 'name' | 'target'>, labels: Assist
   return fillTemplate(labels.tool, { name: unit.name, target: unit.target ?? '' }).trimEnd();
 }
 
-/** One finished unit of an assistant turn, printed once by `Static` at the width current at print time. */
-export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUnit; readonly labels: AssistantRenderLabels }) {
-  const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
+/** One finished unit of an assistant turn, printed once by `Static` at the width current at print time. `groupView`: how a read group shows. */
+export function AssistantUnitRow({ unit, labels, groupView = 'open' }: { readonly unit: AssistantUnit; readonly labels: AssistantRenderLabels; readonly groupView?: ToolGroupView }) {
+  return <UnitBody unit={unit} labels={labels} groupView={groupView} width={useBodyWidth()} />;
+}
+
+/** The row itself at a measured width: a read group's calls reuse it with the group's width (one terminal-size subscription per row). */
+function UnitBody({ unit, labels, groupView, width }: { readonly unit: AssistantUnit; readonly labels: AssistantRenderLabels; readonly groupView: ToolGroupView; readonly width: number }) {
+  const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const known = useHumanTextSecrets();
+  if (unit.kind === 'tool-group') {
+    // The Claude Code collapsed read group: one summary line; the calls under it when expanded (a click) or where no click exists.
+    const ms = unit.steps.reduce((sum, step) => sum + (step.kind === 'tool' ? step.ms : 0), 0), words = labels.toolGroup ?? NEUTRAL_TOOL_GROUP;
+    const hint = groupView === 'collapsed' ? words.expand : groupView === 'expanded' ? words.collapse : null;
+    const head = [toolGroupSummary(unit.steps, labels), fillTemplate(labels.elapsed, { seconds: seconds(ms) }), ...(hint ? [hint] : [])].join(` ${glyphs.separator} `);
+    return (
+      <Box flexDirection="column">
+        <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{glyphs.separator} {head}</Text></Box>
+        {groupView === 'collapsed' ? null : unit.steps.map((step, index) => <UnitBody key={index} unit={step} labels={labels} groupView="open" width={width} />)}
+      </Box>
+    );
+  }
   if (unit.kind === 'reasoning') {
     return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{fillTemplate(labels.thought, { seconds: seconds(unit.elapsedMs), tokens: tokenText(unit.tokens, unit.approximate) })}</Text></Box>;
   }
@@ -201,13 +243,15 @@ function WaitingLine({ waiting, labels, clock }: { readonly waiting: WaitingView
 /** The small dynamic region of a streaming answer: narration plus the unfinished tail, bounded to its last lines. `spaceBefore`: the last
  * finished row is a tool step, so what streams now starts after one blank line, as its row will when it lands (TERM-POLISH spacing rule,
  * `stepSpaceBefore`); the running call always stands one blank line apart from what is above it. */
-export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES, waiting = null, reasoningPreview = [], clock = SYSTEM_CLOCK, spaceBefore = false }: {
+export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES, waiting = null, reasoningPreview = [], clock = SYSTEM_CLOCK, spaceBefore = false, toolGroup = [] }: {
   readonly tail: LiveTail; readonly narration: Narration | null; readonly labels: AssistantRenderLabels; readonly lead: boolean;
   readonly activeTool?: ActiveTool | null; readonly maxLines?: number;
   readonly clock?: TrustedClock;
   /** TL-A: the silent wait to show, and the reasoning preview lines (empty when hidden). */
   readonly waiting?: WaitingView | null; readonly reasoningPreview?: readonly string[];
   readonly spaceBefore?: boolean;
+  /** alpha.59 L6: the open read group; while it is open its one live line stands for it and for the read call running in it. */
+  readonly toolGroup?: readonly ToolGroupStep[];
 }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
   const known = useHumanTextSecrets();
@@ -216,17 +260,31 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
   const hidden = Math.max(0, lines.length - maxLines);
   // The running call alone is a tool step: its own blank line is the one above it (never two).
   const toolOnly = activeTool !== null && !waiting && !narration && lines.length === 0 && projection.hiddenCount === 0;
+  const group = toolGroup.length > 0, rest = Boolean(waiting || narration) || lines.length > 0 || projection.hiddenCount > 0;
   return (
-    <Box flexDirection="column" marginTop={spaceBefore && !toolOnly ? 1 : 0}>
-      {waiting && <WaitingLine waiting={waiting} labels={labels} clock={clock} />}
-      {narration && <ReasoningNarration narration={narration} labels={labels} clock={clock} preview={reasoningPreview} />}
-      {lead && lines.length > 0 && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
-      {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
-      {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
-      <Box paddingLeft={INDENT}><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
-      {activeTool && <ToolRunning tool={activeTool} labels={labels} clock={clock} />}
+    <Box flexDirection="column" marginTop={spaceBefore && !toolOnly && !group ? 1 : 0}>
+      {group && <ToolGroupRunning steps={toolGroup} tool={activeTool} labels={labels} clock={clock} />}
+      <Box flexDirection="column" marginTop={group && rest ? 1 : 0}>
+        {waiting && <WaitingLine waiting={waiting} labels={labels} clock={clock} />}
+        {narration && <ReasoningNarration narration={narration} labels={labels} clock={clock} preview={reasoningPreview} />}
+        {lead && lines.length > 0 && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
+        {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
+        {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
+        <Box paddingLeft={INDENT}><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
+        {activeTool && !group && <ToolRunning tool={activeTool} labels={labels} clock={clock} />}
+      </Box>
     </Box>
   );
+}
+
+/** The open read group's one live line: its counts so far and the read call running in it, if any (alpha.59 L6). */
+function ToolGroupRunning({ steps, tool, labels, clock }: { readonly steps: readonly ToolGroupStep[]; readonly tool: ActiveTool | null; readonly labels: AssistantRenderLabels;
+  readonly clock: TrustedClock }) {
+  const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
+  const { frame } = useAnimation({ interval: TIMING.spinnerIntervalMs });
+  const running = tool ? ` ${glyphs.separator} ${fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(clock.sample().wallMs - tool.startedAtMs) })}` : '';
+  const text = fillTemplate((labels.toolGroup ?? NEUTRAL_TOOL_GROUP).running, { summary: toolGroupSummary(steps, labels) });
+  return <Box paddingLeft={INDENT} marginTop={1}><Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}{running}</Text></Box>;
 }
 
 /** Last lines of a running call's output shown under its line (already sanitized by the stream state). */

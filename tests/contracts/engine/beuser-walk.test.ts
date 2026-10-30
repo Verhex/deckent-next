@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProjection, evaluatePolicy, type AuditRecord } from '#domain/index.js';
 import { sha256, createHmacIntegrity, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
@@ -107,19 +107,31 @@ it('prompt-injected extra tools or verdict fields make the walk invalid instead 
 
 it('stops a same-screen/action loop and enforces persona wait and step patience before the next effect', async () => {
   // Walk17 S2: the same key on an unchanged screen stops on its second repeat (a first repeat may be a swallowed key); the walker sees its own
-  // last actions, that the screen did not change, and (walk18) the steps and wait patience it has left.
+  // last actions, that the screen did not change, and (walk18) the steps and wait patience it has left. Walk19R: on an unchanged screen the
+  // rules hold only after `settleMs` without a change, and the screen is read once more before the stop; here each decision takes `settleMs`.
+  let clock = 0;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock); onTestFinished(() => { now.mockRestore(); });
+  const press = { kind: 'press', key: 'Enter' }, look = { kind: 'look' };
+  const deciding = (action: object, ms = BEUSER_WALK_RULES.settleMs) => () => { clock += ms; return { schemaVersion: 1, binding, action }; };
   const stuck = harness(), looped = vi.fn(async () => {});
-  stuck.ports.surface.press = stuck.ports.surface.look; stuck.ports.stopped = looped;
+  stuck.ports.surface.press = stuck.ports.surface.look; stuck.ports.stopped = looped; stuck.ports.decode = deciding(press);
   expect(await stuck.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'loop' });
-  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(3); expect(looped).toHaveBeenCalledExactlyOnceWith(expect.anything(), { kind: 'press', key: 'Enter' }, 'loop');
-  const press = { kind: 'press', key: 'Enter' };
+  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(4); expect(looped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sequence: 4 }), press, 'loop');
   expect(vi.mocked(stuck.ports.models.walker).mock.calls.map(call => call[3])).toEqual([{ recentActions: [], screenUnchanged: false, remainingSteps: 4, remainingWaitMs: 100 },
     { recentActions: [press], screenUnchanged: true, remainingSteps: 3, remainingWaitMs: 100 }, { recentActions: [press, press], screenUnchanged: true, remainingSteps: 2, remainingWaitMs: 100 }]);
   // Walk18: only observing an unchanged screen is stuck too (RED `observing`, threshold from the limits registry), never a silent patience end.
   const loop = harness(), observed = vi.fn(async () => {});
-  loop.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'look' } }); loop.ports.stopped = observed;
+  loop.ports.decode = deciding(look); loop.ports.stopped = observed;
   expect(await loop.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'observing' });
-  expect(loop.ports.surface.look).toHaveBeenCalledTimes(BEUSER_WALK_RULES.observeStop); expect(observed).toHaveBeenCalledExactlyOnceWith(expect.anything(), { kind: 'look' }, 'observing');
+  expect(loop.ports.surface.look).toHaveBeenCalledTimes(BEUSER_WALK_RULES.observeStop + 1); expect(observed).toHaveBeenCalledExactlyOnceWith(expect.anything(), look, 'observing');
+  // Walk19R: a 1 s walker repeating Enter while the product applies for 3.5 s, a blank startup screen for 8 s, and a redraw the stop's own
+  // read finds are never stuck.
+  const roomy = { ...context(), limits: pinBeuserLimits({ ...limits, maxWallMs: 60_000 }) };
+  const product = (action: object, ms: number, text: (reads: number) => string) => { const h = harness(); let reads = 0; clock = 0; h.ports.decode = deciding(action, ms);
+    h.ports.surface.look = h.ports.surface.press = vi.fn(async () => { const shown = text(++reads); return { binding, sequence: reads, text: shown, digest: sha256(shown) }; }); return h; };
+  for (const h of [product(press, 1000, () => clock >= 3500 ? 'completed' : 'approval card'), product(look, 2000, () => clock >= 8000 ? 'completed' : ''),
+    product(press, BEUSER_WALK_RULES.settleMs, reads => reads === 4 ? 'completed' : 'approval card')])
+    expect(await h.app.walk(roomy, summary)).toMatchObject({ state: 'completed', reason: null });
   const wait = harness();
   wait.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms: 101 } });
   expect(await wait.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'bound' });

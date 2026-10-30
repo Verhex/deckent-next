@@ -2,7 +2,7 @@ import type { Readable } from 'node:stream';
 import { ErrorRegistry, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { detectCliMode } from './mode.js';
 import { lendHeldInput } from './input-hold.js';
-import type { QuestionOption } from '#surfaces/core/terminal-window/index.js';
+import type { CardCopyLabels, QuestionOption } from '#surfaces/core/terminal-window/index.js';
 
 /** One answer of a CLI card (the terminal's question option): a yes/no answer declares `role` (the card shows and takes (y)/(n)); others may show a `key`. */
 export type CliCardOption = QuestionOption;
@@ -27,6 +27,10 @@ export function cliCardGate(request: CliCardRequest, io: CliCardIo): Readonly<{ 
 }
 
 export type StandingAnswer = 'once' | 'session' | 'always' | 'no';
+/** The words of a card's Ctrl+Y copy (`tuicopy.card.*`) for a card drawn on its own stream (a CLI card, an onboarding step). */
+export function cardCopyLabels(locale: Locale): CardCopyLabels {
+  return { hint: t('tuicopy.card.hint', {}, locale), sent: t('tuicopy.card.sent', {}, locale), tooLarge: t('tuicopy.card.tooLarge', {}, locale), unavailable: t('tuicopy.card.unavailable', {}, locale) };
+}
 /**
  * The approval answers in the terminal card's words: once, this session, always, no. `always` is never offered on a hard-floor cell,
  * whatever the caller asked for; `session`/`always` appear only when offered. No option is preselected.

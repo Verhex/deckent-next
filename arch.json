@@ -1057,6 +1057,7 @@
         "src/platform/core/redaction",
         "src/engine/core/monitor",
         "src/domain/core/agent-turn",
+        "src/domain/core/agent-tool",
         "src/platform/core/output",
         "src/surfaces/core/terminal-theme"
       ],
@@ -1065,6 +1066,7 @@
     "src/surfaces/core/terminal-turn": {
       "dependencies": [
         "src/domain/core/agent-turn",
+        "src/domain/core/agent-tool",
         "src/domain/core/provider-catalog",
         "src/engine/core/agent-turn",
         "src/platform/core/config",
@@ -3666,6 +3668,7 @@
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-host",
         "src/capabilities/core/evaluation-evidence"
       ],
       "plan": "SURFACES"
@@ -4360,6 +4363,7 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-host",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/cli-identity"
       ],

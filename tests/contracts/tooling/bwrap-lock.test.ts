@@ -39,7 +39,7 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
 
   it('constrains transitive packages as well as direct requests; malformed inventory fails rather than yielding an unpinned request', () => {
     const hostPins = resolvedPackagePins(lock.resolvedPackages.host) as string[];
-    expect(hostPins).toContain('python3-pycache-pyc0=3.14.8-r0');
+    expect(hostPins).toContain('python3-pycache-pyc0=3.14.10-r1');
     expect(hostPins).toContain('nghttp2-libs=1.70.0-r0');
     for (const pin of lock.hostPackages) expect(hostPins).toContain(pin);
     for (const arch of BWRAP_ARCHES) {

@@ -2,6 +2,9 @@
   "onboarding.session.step": "Step {n}/{total}",
   "onboarding.session.continue": "Enter · Continue",
   "onboarding.session.later": "Esc · Later",
+  "onboarding.session.applying": "Applying…",
+  "onboarding.session.preparing": "Preparing…",
+  "onboarding.session.busyKey": "keys ignored",
   "onboarding.session.blocked": "This step is waiting",
   "onboarding.session.waiting": "The operation owner has not confirmed completion. Reopen with /setup.",
   "onboarding.session.unavailable": "First-run setup screens could not be shown ({code}); the workline opens without them.",
@@ -120,5 +123,7 @@
   "onboarding.permissions.profileMissing": "Profile {profile} will be saved and start in {mode} for {principal} in scope {scope}. Protected settings, secrets and destructive actions keep their approval rules. Confirm to complete the pending installation permissions.",
   "onboarding.permissions.preserved": "Your existing mode choice ({mode}) is preserved for {principal} in scope {scope}.",
   "onboarding.permissions.profileWithoutDefaults": "Profile {profile} has no permission defaults. Confirm saves this profile and preserves the existing mode ({mode}) for {principal} in scope {scope}.",
-  "onboarding.firstTask.empty": "Write a task before pressing Enter, or press Esc to continue without one."
+  "onboarding.firstTask.empty": "Write a task before pressing Enter, or press Esc to continue without one.",
+  "onboarding.model.status": "Model not connected — /setup",
+  "onboarding.model.draft": "No model is connected, so the message was not sent; it stays in the composer as a draft. Connect a model on the card (or later with /setup), then press Enter to send it."
 }

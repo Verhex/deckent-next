@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ErrorRegistry, t, terminalSafeText } from '#platform/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
-import { Window, QuestionRows, questionStep, WINDOW_PRIORITY, type QuestionState } from '#surfaces/core/terminal-window/index.js';
+import { useMainScreenLine, Window, QuestionRows, hyperlinkEnds, questionStep, WINDOW_PRIORITY, type QuestionState } from '#surfaces/core/terminal-window/index.js';
 import type { SiwcResult, SiwcWindowPort } from './port.js';
 
 const SECOND_MS = 1000;
@@ -13,6 +13,13 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
   const [targets, setTargets] = useState<NonNullable<SiwcResult['apiTargets']>>([]), [result, setResult] = useState<SiwcResult | null>(null);
   const [url, setUrl] = useState<string | null>(null), [seconds, setSeconds] = useState(0), [usageUrl, setUsageUrl] = useState<string | null>(null), background = useRef(false), controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
+  // The sign-in link also goes to the main screen's scrollback as one raw line (an OSC 8 link on the unbroken address): the terminal wraps it
+  // softly, so its own click and selection take the whole address (alpha.59 L3; the card's rows break at the border). Not in the full window.
+  const mainScreenLine = useMainScreenLine();
+  useEffect(() => { if (!url || !mainScreenLine) return;
+    const ends = hyperlinkEnds(url), shown = terminalSafeText(url);
+    mainScreenLine(`${terminalSafeText(t('siwc.browser.fallback', {}, port.locale))}\n${ends && shown === url ? `${ends.open}${url}${ends.close}` : shown}`);
+  }, [url, mainScreenLine, port.locale]);
   useEffect(() => { if (stage !== 'browser') return;
     const started = Date.now(), timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / SECOND_MS)), SECOND_MS);
     return () => clearInterval(timer);
@@ -53,7 +60,7 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
     if (!abort.signal.aborted) { setResult(connected); setSelection({ at: 0, ticked: [] }); setStage('result'); }
   };
   // Each stage is a new question and re-arms (arming.ts): a key typed for the last answer never answers this one.
-  return <Window key={stage} title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true } : {}) }))}
+  return <Window key={stage} title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true, link: url } : {}) }))}
     hints={t('siwc.card.keys', {}, port.locale)} position="{from}-{to}/{total}" priority={WINDOW_PRIORITY.approval} decision footerRows={options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={selection} focused={owns} />} onClose={close}
     onInput={(input, key, meta) => {

@@ -26,7 +26,7 @@ async function snapshotDone(read: { mock: { results: { value: unknown }[] } }, c
   await until(() => read.mock.results.length >= count, 'snapshot called'); await read.mock.results[count - 1]!.value; await settle(10);
 }
 
-it('loads pending approval, Run (including never dispatched) and worker at open into the real surface and fills /watch-workers', async () => {
+it('loads pending approval, Run (including never dispatched) and worker at open into the real surface and fills /tasks', async () => {
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   // SLASH-WINDOWS (SW-2): the opening snapshot names the pending approval in the status row; runs and workers are never pushed as chat cards at
@@ -35,7 +35,7 @@ it('loads pending approval, Run (including never dispatched) and worker at open 
   expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker']]);
   expect(view.stdout.text).not.toContain('worker 1 · ');
   expect(view.stdout.text).not.toContain('foreign-run'); expect(view.stdout.text).not.toContain('foreign-approval');
-  await type(view.stdin, '/watch-workers\r');
+  await type(view.stdin, '/tasks\r');
   await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1'), 'actual WorkerPanel');
   await snapshotDone(read, 2); await settle(60);
   expect(read).toHaveBeenCalledTimes(2); // Opening/watch snapshots, before the first 100 ms heartbeat. Empty idle is tested below.
@@ -46,8 +46,8 @@ it('loads pending approval, Run (including never dispatched) and worker at open 
   await until(() => read.mock.calls.some(call => call[0].length === 1 && call[0][0] === 'approval'), 'approval invalidation snapshot');
   expect(view.stdout.text).not.toContain('approval:'); // Payload is an invalidation, not surface data.
   view.stdin.write(ESC); await settle(80);
-  await type(view.stdin, '/watch-runs\r');
-  await until(() => view.stdout.frame.includes('never-dispatched-run') && view.stdout.frame.includes('snapshot-run'), 'the never dispatched Run in the run window');
+  await type(view.stdin, '/tasks\r');
+  await until(() => view.stdout.frame.includes('never-dispatched-run') && view.stdout.frame.includes('snapshot-run'), 'the never dispatched Run in the tasks window');
   expect(view.stdout.text).not.toContain('foreign-run');
 });
 
@@ -64,7 +64,7 @@ it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars throu
     try { return db.prepare('SELECT count(*) AS count FROM worker_event_logs').get()!.count; } finally { db.close(); }
   };
   await snapshotDone(read, 1);
-  await type(view.stdin, '/watch-workers\r'); await snapshotDone(read, 2);
+  await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2);
   expect(view.stdout.frame).not.toContain('worker 1');
   await settle(350); expect(read).toHaveBeenCalledTimes(2); // No active worker: no heartbeat snapshots.
   const connections = follow.mock.calls.length;
@@ -110,7 +110,7 @@ it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars throu
   await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
   expect(follow).toHaveBeenCalledTimes(connections); expect(sealedCount()).toBe(0);
   if (ending === 'denied') {
-    await type(view.stdin, '/watch-stop\r'); await type(view.stdin, '/watch-workers\r'); await settle(250);
+    await type(view.stdin, '/tasks\r'); await settle(250);
     expect(read).toHaveBeenCalledTimes(stopped); expect(follow).toHaveBeenCalledTimes(connections);
   }
 });
@@ -131,14 +131,14 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     } finally { inFlight--; ends.push(performance.now()); }
   });
   async function* followEvents(signal: AbortSignal) {
-    // A loaded host opens the subscription that /watch-stop restarts late (hosted CI run 39207907013): its baseline read lands well
+    // A loaded host opens the subscription that closing the window restarts late (hosted CI run 39207907013): its baseline read lands well
     // after the window has closed.
     if (slow) await settle(200);
     for await (const event of f.follow(signal)) { if ('kind' in event && event.kind === 'run') runPublished = true; yield event; }
   }
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read, followEvents } }); mounted.push(view.instance);
   try {
-    await snapshotDone(read, 1); await type(view.stdin, '/watch-workers\r');
+    await snapshotDone(read, 1); await type(view.stdin, '/tasks\r');
     await until(() => held, 'heartbeat held in snapshot');
     const before = read.mock.calls.length;
     f.advanceRun(2); await until(() => runPublished, 'real producer Run invalidation');
@@ -151,11 +151,10 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     const drained = starts.length;
     await until(() => starts.length > drained, 'next heartbeat read');
     expect(starts[drained]! - ends[drained - 1]!).toBeGreaterThanOrEqual(50);
-    // FIRST-TEST-FIXES (760c906e): the watch frame takes no focus; /watch-stop closes it and stops the watch.
-    // Closing the watch restarts the push subscription, which reads one full baseline (approvals stay observed); its timing depends on
+    // Esc closes the tasks window and stops the watch. Closing the watch restarts the push subscription, which reads one full baseline (approvals stay observed); its timing depends on
     // the host. Once it has settled, no read follows for more than three heartbeat intervals: the heartbeat stopped with the watch.
     const atStop = read.mock.calls.length;
-    await type(view.stdin, '/watch-stop\r'); await until(() => view.stdout.text.includes('Workers window closed'), '/watch-stop closes the window and stops the watch');
+    view.stdin.write(ESC); await until(() => view.stdout.text.includes('Background work window closed'), 'Esc closes the window and stops the watch');
     await until(() => read.mock.calls.slice(atStop).some(call => call[0].length === 3) && inFlight === 0, 'restarted subscription baseline settles');
     const stopped = read.mock.calls.length;
     await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
@@ -166,7 +165,7 @@ it('resynchronizes a real two-revision Run gap once, then renders subsequent rev
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   await snapshotDone(read, 1);
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial Run snapshot in the run window');
+  await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial Run snapshot in the tasks window');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'first Run publication');
   f.advanceRun(4); await until(() => view.stdout.text.includes('STEP gap') && view.stdout.text.includes('rev 4'), 'gap snapshot');
   f.advanceRun(5); await until(() => view.stdout.text.includes('rev 5'), 'post-gap publication');
@@ -211,12 +210,12 @@ it('reconnects the mounted workline through a new production baseline and shows 
   const read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   await snapshotDone(read, 1);
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
+  await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'old stream cursor one');
   const beforeReconnect = calls, beforeReads = read.mock.calls.length;
   connection!.abort(); await until(() => calls === beforeReconnect + 1 && read.mock.calls.length >= beforeReads + 2, 'new baseline and fallback snapshots'); await snapshotDone(read, beforeReads + 2);
   f.advanceRun(3); await until(() => view.stdout.text.includes('rev 3'), 'first event in new stream');
-  expect(view.stdout.text).toContain('Watching · polling'); // SW-2: the delivery mode is the run window's status
+  expect(view.stdout.text).toContain('Watching · polling'); // SW-2: the delivery mode is the tasks window's status
 });
 
 it('refuses foreign principal snapshots, startup and resync before publication SQL or any data port', async () => {
@@ -227,7 +226,7 @@ it('refuses foreign principal snapshots, startup and resync before publication S
   const read = vi.fn(f.ports.readSurfaceSnapshot!), follow = vi.fn(f.follow);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents: follow, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   await until(() => view.stdout.text.includes('ACCESS-STOPPED'), 'access stopped');
-  await type(view.stdin, '/watch-workers\r'); await settle(80);
+  await type(view.stdin, '/tasks\r'); await settle(80);
   expect(read).not.toHaveBeenCalled(); expect(follow).toHaveBeenCalledTimes(1);
   // The window may open (it is the person's own command) but shows nothing: no data port was read and no foreign row reached the screen.
   expect(view.stdout.text).not.toMatch(/snapshot-task|snapshot-run|A-NOTIFY/);
@@ -243,7 +242,7 @@ it('stops on a denied gap resync without falling back into unguarded data ports'
   const follow = vi.fn(f.follow);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents: follow, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   await snapshotDone(read, 1);
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
+  await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'first');
   f.advanceRun(4); await until(() => view.stdout.text.includes('ACCESS-STOPPED'), 'resync denied');
   await settle(80);
@@ -263,7 +262,7 @@ it('keeps partially admitted observations scoped across startup and reconnect', 
   const read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   await until(() => view.stdout.text.includes('ACCESS-DENIED approval'), 'partial startup'); await snapshotDone(read, 1);
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'authorized run'); const beforeReconnect = calls, beforeReads = read.mock.calls.length;
+  await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'authorized run'); const beforeReconnect = calls, beforeReads = read.mock.calls.length;
   connection!.abort(); await until(() => calls === beforeReconnect + 1 && read.mock.calls.length >= beforeReads + 2, 'partial reconnect'); await snapshotDone(read, beforeReads + 2);
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'authorized run after reconnect');
   expect(read.mock.calls.every(call => !call[0].includes('approval'))).toBe(true);
@@ -274,12 +273,12 @@ it('stops watched cards without stopping approval observation and refreshes when
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
   await snapshotDone(read, 1);
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
+  await type(view.stdin, '/tasks\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'watched revision');
-  // FIRST-TEST-FIXES (760c906e): the run watch frame takes no focus; `/watch-stop` closes it and stops the watch.
-  await type(view.stdin, '/watch-stop\r'); await settle(100);
+  // Esc closes the tasks window and stops the watch.
+  view.stdin.write(ESC); await settle(100);
   f.advanceRun(3); f.addApproval('still-observed'); await settle(180);
   expect(view.stdout.text).not.toContain('rev 3');
-  await type(view.stdin, '/watch-runs\r'); await until(() => view.stdout.text.includes('rev 3'), 'fresh watch activation');
+  await type(view.stdin, '/tasks\r'); await until(() => view.stdout.text.includes('rev 3'), 'fresh watch activation');
   expect(view.stdout.text).toContain('A-NOTIFY');
 });

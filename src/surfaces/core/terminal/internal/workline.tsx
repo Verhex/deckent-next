@@ -1,16 +1,16 @@
-import { useOnboardingHandoff, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
+import { useOnboardingHandoff, type OnboardingFocus, type OnboardingHandoff } from '#surfaces/core/terminal-onboarding/index.js';
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
-import { runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
+import { cardCopy, runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, treeChangeLine, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
-import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
@@ -20,7 +20,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
+import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
   WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
@@ -209,6 +209,7 @@ export function WorklineApp(props: WorklineProps) {
   const size = useWindowSize(), pinned = pinnedMode && size.rows > 0 && size.columns > 0;
   const [fullscreenMode] = useState(() => pinnedMode && props.fullscreen === true);
   const [searchOpen, setSearchOpen] = useState(false), searchFocus = useRef(false);
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const onSearch = useCallback((open: boolean) => { searchFocus.current = open; setSearchOpen(open); }, []);
   const { selection: pointerSelection, copied } = usePointerCopy(props.pointer, props.copyText);
   const [bannerShown, setBannerShown] = useState(true);
@@ -354,6 +355,7 @@ export function WorklineApp(props: WorklineProps) {
   }, failed);
   /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
+  const openSetup = useRef<(signal: AbortSignal, focus?: OnboardingFocus) => Promise<void>>(async () => undefined);
   const serviceStarted = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
@@ -416,7 +418,10 @@ export function WorklineApp(props: WorklineProps) {
       } serviceStarted.current = false;
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
-      history.current = code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
+      const waitsForModel = code === 'TERMINAL_CHAT_NOT_CONFIGURED' && props.onboarding !== undefined && !signal.aborted;
+      history.current = (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService) || waitsForModel ? messages.slice(0, -1) : messages; // D11-M2: the resent line is added once, by its own turn
+      // Owner 2026-10-30: in a person's terminal a message sent without a model is not sent; it stays the draft and the model card opens (/setup).
+      if (waitsForModel) { push([notice('info', props.onboarding!.modelDraft)]); await openSetup.current(signal, 'model'); setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })); return; }
       if (code === 'LOCAL_RUNTIME_UNAVAILABLE' && props.startService && !signal.aborted && !serviceStarted.current) { serviceStarted.current = true; // BeUser M-09: absent (nothing reached it) → start it as at open, send the line again as a new turn
         const line = await props.startService().catch((failure: unknown) => { push([notice('error', errorText(error)), notice('error', errorText(failure))]); return null; });
         if (line) { push([notice('info', line)]); panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId: `input-${++inputSequence.current}`, text, mentions: mentioned }); return; } throw error; }
@@ -431,15 +436,22 @@ export function WorklineApp(props: WorklineProps) {
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, props.startService, props.onboarding, props.spending, props.info, infoWindow.show, push, refreshMode, session, systemPrompt, work, panel]);
 
   const [remember, setRemember] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null); // AYSE-R3-02: the first job is recalled with Up
+  const [draft, setDraft] = useState<Readonly<{ seq: number; entry: ComposerHistoryEntry }> | null>(null);
   const onboarding = useOnboardingHandoff({ port: props.onboarding, submit: (inputId, text) => (setRemember(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text: bareSlash(text), pastes: [] } })), panel.controller.send({ kind: 'submit', context: panel.controller.snapshot().context, inputId, text, mentions: [] })), release: () => props.handover?.release(), reclaim: () => props.handover?.reclaim() });
+  // /setup (whole, or only the model card) may connect a model: the status row then names the configured one instead of the startup label.
+  openSetup.current = async (signal, focus) => {
+    await onboarding.open(signal, focus);
+    const configured = props.panels?.ports.model ? (await props.panels.ports.model.inspect().catch(() => null))?.choices.find(choice => choice.configured) : undefined;
+    if (configured) setConfiguredLabels({ model: configured.label, provider: configured.providerLabel ?? configured.group });
+  };
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
-    if (slash.command === 'setup') { if (props.onboarding) await onboarding.open(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
+    if (slash.command === 'setup') { if (props.onboarding) await openSetup.current(execution.signal); else push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'setup' }))]); return true; }
     if (slash.command === 'do') {
       if (!props.doPlan) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]); return true; }
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
@@ -689,15 +701,25 @@ export function WorklineApp(props: WorklineProps) {
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
+  // alpha.59 L6 (owner 2026-10-30): a settled read group shows one line; a click on it (the full window's mouse) shows or hides its calls. Without a
+  // pointer, and in what is written to the main screen at exit, a group is open: its calls are never only behind a click.
+  const groupViewOf = useCallback((row: LedgerRow, exit = false): ToolGroupView | undefined => row.entry.kind !== 'chat' || row.entry.assistant?.kind !== 'tool-group' ? undefined
+    : exit || !props.pointer ? 'open' : expanded.has(row.seq) ? 'expanded' : 'collapsed', [expanded, props.pointer]);
+  const variantOf = useCallback((row: LedgerRow, exit?: boolean) => groupViewOf(row, exit) ?? '', [groupViewOf]);
+  const toggleGroup = useCallback((key: string) => {
+    const seq = Number(key), row = buffer.history.find(item => item.seq === seq);
+    if (!row || !groupViewOf(row)) return;
+    setExpanded(current => { const next = new Set(current); if (!next.delete(seq)) next.add(seq); return next; });
+  }, [buffer.history, groupViewOf]);
   // TERMINAL-SABIT-DUZEN: the full-window conversation, laid out per row with the providers `Static` gave each row.
-  const renderRow = (row: LedgerRow) => <WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={glyphs}>
-    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>;
+  const renderRow = (row: LedgerRow, exit?: boolean) => { const groupView = groupViewOf(row, exit); return <WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={glyphs}>
+    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} {...(groupView ? { groupView } : {})} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>; };
   // The conversation opens with the opening frame (until `/clear`) and the workline's own how-to line (how to cancel and quit), once, at its top.
   const startup = props.startup, bannerLine = labels.banner, bannerOf = useMemo(() => fullscreenMode ? (columns: number) => {
     const frame = bannerShown && startup && startup.banner !== 'off' ? startupFrame({ ...startup, clear: false }, palette, columns, 0) : '';
     return `${frame}${renderToString(<Text {...palette.accent}>{bannerLine}</Text>, { columns })}\n`;
   } : null, [fullscreenMode, bannerShown, startup, palette, bannerLine]);
-  const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette);
+  const transcript = useTranscriptBlocks(fullscreenMode ? buffer.history : EMPTY_ROWS, size.columns || 80, renderRow, bannerOf, palette, variantOf);
   const transcriptExit = props.transcriptExit;
   useLayoutEffect(() => { if (transcriptExit && fullscreenMode) transcriptExit.current = transcript.text; }, [transcriptExit, fullscreenMode, transcript]);
   const statusNode = <StatusStrip target={target} model={pinnedLabels.current.get(sessionId())?.model ?? (configuredLabels === null ? props.model : configuredLabels.model)} provider={pinnedLabels.current.get(sessionId())?.provider ?? (configuredLabels === null ? props.provider : configuredLabels.provider)}
@@ -708,13 +730,13 @@ export function WorklineApp(props: WorklineProps) {
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-    busy={busy} historyText={bareSlash} remember={remember} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+    busy={busy} historyText={bareSlash} remember={remember} restore={draft} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
     onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
   const hintNode = copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
   const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
-    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null;
+    waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} toolGroup={live.step.toolGroup} /> : null;
   const windowsNode = <>
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
     {instructions.window}
@@ -742,10 +764,12 @@ export function WorklineApp(props: WorklineProps) {
   </>;
   // Full window: a fixed number of information rows (state; work, else the full-access line; key hints) so the bar never moves.
   const infoRows = fullscreenInfoRows(fullscreenFrameRows(size.rows || 24));
+  // alpha.59 L3: every card's Ctrl+Y copy goes through the host's one clipboard writer (absent off a TTY).
+  const copyCard = useMemo(() => cardCopy(props.clipboard, labels.copy?.card), [props.clipboard, labels.copy?.card]);
   const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
   const layout = fullscreenMode
     ? <FullscreenWorkline
-      viewport={<WheelContext.Provider value={props.wheel ?? null}><PointerContext.Provider value={pointerSelection}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} /></PointerContext.Provider></WheelContext.Provider>}
+      viewport={<WheelContext.Provider value={props.wheel ?? null}><PointerContext.Provider value={pointerSelection}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} onClick={toggleGroup} /></PointerContext.Provider></WheelContext.Provider>}
       above={<>
         {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
         {windowsNode}</>}
@@ -768,6 +792,8 @@ export function WorklineApp(props: WorklineProps) {
       </PinnedWorkline>
     </Box>;
   return (
+    <CardCopyContext.Provider value={copyCard}>
+    <PointerContext.Provider value={pointerSelection}>
     <DecisionArmContext.Provider value={props.decisionArmMs ?? DECISION_ARM_DEFAULT}>
     <DecisionArmLabelsContext.Provider value={labels.decisionArm ?? NEUTRAL_ARM_LABELS}>
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -779,6 +805,8 @@ export function WorklineApp(props: WorklineProps) {
     </HumanTextContext.Provider>
     </DecisionArmLabelsContext.Provider>
     </DecisionArmContext.Provider>
+    </PointerContext.Provider>
+    </CardCopyContext.Provider>
   );
 }
 

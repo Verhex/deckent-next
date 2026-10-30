@@ -30,8 +30,14 @@ export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | n
   /** DENY-WORDING (T2-FOLLOWUP): a `denied` call whose approval the owner declined on the card (`approval.settled` deny for this call), not a
    * policy rule's refusal. */
   declined?: true }>;
-/** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
-export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string }>;
+/** alpha.59 L6 (owner 2026-10-30, the Claude Code collapsed read group): two or more consecutive finished read-class calls (the tool's declared
+ * class `read`, status ok, no approval card, no tracked or cleanup mark) and the thinking between them, settled as ONE row. Presentation only:
+ * `steps` keeps every call's own unit, in order, for the expanded view; the history and the audit are untouched. */
+export type ToolGroupStep = ToolUnit | ReasoningUnit;
+export type ToolGroupUnit = Readonly<{ kind: 'tool-group'; steps: readonly ToolGroupStep[] }>;
+/** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. `groupable`:
+ * a read-class call without an approval card, shown inside the open read group's live line. */
+export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string; groupable?: boolean }>;
 /** Characters of a running call's streamed output kept for the live region. */
 export const LIVE_OUTPUT_TAIL_CHARS = 2_048;
 
@@ -39,7 +45,7 @@ export const LIVE_OUTPUT_TAIL_CHARS = 2_048;
 export { terminalSafeText };
 /** The history was compacted during the turn (T-L5b): one visible line, never a silent change. */
 export type CompactionUnit = Readonly<{ kind: 'compaction'; replacedMessages: number }>;
-export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | CompactionUnit | FooterUnit;
+export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | ToolGroupUnit | CompactionUnit | FooterUnit;
 export type Narration = Readonly<{ tokens: number; approximate: boolean; startedAtMs: number }>;
 /** A silent wait of the turn (TL-A D1): the model preparing its answer (measurement, prompt processing) or the service summarizing. */
 export type WaitingView = Readonly<{ kind: 'model' | 'compaction'; sinceMs: number }>;
@@ -81,6 +87,10 @@ export type AssistantStreamState = Readonly<{
   toolLineTracked: ReadonlyMap<string, ToolTrackedChanges>;
   /** Calls whose approval the owner declined this turn (settled `deny`), until their line is printed. */
   toolLineDeclined: ReadonlySet<string>;
+  /** Calls that raised an approval card this turn: never grouped (alpha.59 L6), until their line is printed. */
+  toolLineApproval: ReadonlySet<string>;
+  /** The open read group (alpha.59 L6): finished grouped calls and the thinking between them, not printed yet. */
+  toolGroup: readonly ToolGroupStep[];
 }>;
 export type AssistantStreamStep = Readonly<{
   state: AssistantStreamState;
@@ -95,6 +105,8 @@ export type AssistantStreamStep = Readonly<{
   waiting: WaitingView | null;
   /** Last lines of the reasoning while it streams, sanitized; empty once the answer or a tool call starts (TL-A D6). */
   reasoningPreview: readonly string[];
+  /** The open read group, for its one live line (alpha.59 L6); empty when none is open. */
+  toolGroup: readonly ToolGroupStep[];
 }>;
 
 /** Roughly four characters per token until the provider reports reasoning usage. */
@@ -103,7 +115,7 @@ const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 export function startAssistantStream(nowMs: number, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): AssistantStreamState {
   return Object.freeze({ startedAtMs: nowMs, known, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
     earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '', toolLineTargets: new Map(),
-    toolLineSummaries: new Map(), toolLineTracked: new Map(), toolLineDeclined: new Set<string>() });
+    toolLineSummaries: new Map(), toolLineTracked: new Map(), toolLineDeclined: new Set<string>(), toolLineApproval: new Set<string>(), toolGroup: [] });
 }
 
 /** The first step of a turn, before any delta: the model is being prepared (TL-A D1). */
@@ -149,7 +161,7 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
   const liveTail = { ...tail, markdown: tail.markdown + joiner + pending };
   const activeTool = state.activeTool ? { ...state.activeTool, output: (state.activeTool.output + previewRecordStream(state.outputRecord.stdout, state.known, terminalSafeText) + previewRecordStream(state.outputRecord.stderr, state.known, terminalSafeText)).slice(-LIVE_OUTPUT_TAIL_CHARS) } : null;
   return Object.freeze({ state, staticUnits: Object.freeze([...staticUnits]), liveTail, narration: narrationOf(state), footer,
-    activeTool, waiting: waitingOf(state),
+    activeTool, waiting: waitingOf(state), toolGroup: state.toolGroup,
     reasoningPreview: Object.freeze(state.phase === 'reasoning' ? reasoningPreviewLines(state.reasoningTail + previewRecordStream(state.reasoningRecord, state.known, terminalSafeText)) : []) });
 }
 
@@ -173,6 +185,17 @@ function noteToolLine(state: AssistantStreamState, message: AgentChatMessage): A
   return Object.freeze({ ...state, toolLineTargets: targets });
 }
 
+/** Answer text that shows something; blank text between grouped calls never breaks the group and is not printed inside it. */
+const visible = (units: readonly AnswerUnit[]) => units.some(unit => unit.markdown.trim() !== '');
+const toolCount = (steps: readonly ToolGroupStep[]) => steps.filter(step => step.kind === 'tool').length;
+/** A call that may join the read group: its declared class is `read` and it raised no approval card (alpha.59 L6). */
+const groupable = (state: AssistantStreamState, delta: ToolDelta) => delta.toolClass === 'read' && !state.toolLineApproval.has(delta.callId);
+/** A settled read group: one group row for two or more calls, a lone call's own line(s) otherwise (nothing to collapse). */
+const groupUnits = (steps: readonly ToolGroupStep[]): readonly AssistantUnit[] => toolCount(steps) > 1 ? [Object.freeze({ kind: 'tool-group' as const, steps })] : steps;
+function closeGroup(state: AssistantStreamState): Readonly<{ state: AssistantStreamState; units: readonly AssistantUnit[] }> {
+  return state.toolGroup.length === 0 ? { state, units: [] } : { state: Object.freeze({ ...state, toolGroup: [] }), units: groupUnits(state.toolGroup) };
+}
+
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
   if (delta.kind === 'output') {
@@ -184,11 +207,18 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   }
   if (delta.kind === 'message') return step(noteToolLine(state, delta.message), []);
   // DENY-WORDING: the card's settlement says who refused a call; the line then says "you declined", not a policy refusal.
+  // alpha.59 L6: a call that asks for approval is never grouped; the open group settles before its card.
+  if (delta.kind === 'approval' && delta.phase === 'requested') {
+    const closed = closeGroup(state), active = closed.state.activeTool;
+    return step(Object.freeze({ ...closed.state, toolLineApproval: new Set(state.toolLineApproval).add(delta.callId),
+      activeTool: active?.callId === delta.callId ? Object.freeze({ ...active, groupable: false }) : active }), closed.units);
+  }
   if (delta.kind === 'approval') return step(delta.phase === 'settled' && delta.outcome === 'deny'
     ? Object.freeze({ ...state, toolLineDeclined: new Set(state.toolLineDeclined).add(delta.callId) }) : state, []);
   // The summary landed: the round is prepared again, counted from now.
   if (delta.kind === 'compacted') {
-    return step(Object.freeze({ ...state, waitingFor: 'model' as const, waitingSinceMs: nowMs }), [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
+    const closed = closeGroup(state);
+    return step(Object.freeze({ ...closed.state, waitingFor: 'model' as const, waitingSinceMs: nowMs }), [...closed.units, Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
   }
   if (delta.kind === 'context') {
     const view = Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality });
@@ -210,10 +240,14 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const text = answerUnits(segments, state.answered);
     const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, reasoningChars: 0, reasoningStartedAtMs: null, reasoningTail: '',
       answered: state.answered || text.length > 0, waitingFor: 'model' as const, waitingSinceMs: nowMs };
-    const target = safeTarget(state.toolLineTargets.get(delta.callId) ?? delta.target);
+    const target = safeTarget(state.toolLineTargets.get(delta.callId) ?? delta.target), joins = groupable(state, delta);
+    // alpha.59 L6: answer text or a call outside the group settles the open group first; the thinking before a grouped call joins it.
+    const keep = !visible(text) && joins && state.toolGroup.length > 0;
+    // Blank text dropped inside the group never takes the answer's lead label.
+    const grouped = keep ? [...state.toolGroup, ...pending] : [], printed = keep ? [] : [...groupUnits(state.toolGroup), ...pending, ...text], answered = keep ? state.answered : base.answered;
     if (delta.phase === 'started') {
-      return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target, startedAtMs: nowMs, output: '' }) }),
-        [...pending, ...text]);
+      return step(Object.freeze({ ...base, answered, toolGroup: grouped, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target, startedAtMs: nowMs, output: '', groupable: joins }) }),
+        printed);
     }
     // The engine sends every call's result message before `tool.finished`; without one there is nothing to summarize.
     const summary = state.toolLineSummaries.get(delta.callId) ?? null, tracked = state.toolLineTracked.get(delta.callId);
@@ -222,9 +256,12 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
       ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(summary !== null ? { summary } : {}),
       ...(tracked ? { trackedChanges: tracked } : {}), ...(delta.status === 'denied' && state.toolLineDeclined.has(delta.callId) ? { declined: true as const } : {}) });
     const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries), trackedLines = new Map(state.toolLineTracked), declined = new Set(state.toolLineDeclined);
-    targets.delete(delta.callId); summaries.delete(delta.callId); trackedLines.delete(delta.callId); declined.delete(delta.callId);
-    return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries, toolLineTracked: trackedLines, toolLineDeclined: declined }),
-      [...pending, ...text, unit]);
+    const approvals = new Set(state.toolLineApproval);
+    targets.delete(delta.callId); summaries.delete(delta.callId); trackedLines.delete(delta.callId); declined.delete(delta.callId); approvals.delete(delta.callId);
+    // Only a clean success stays in the group: an error, a refusal or a durable mark (tracked files, cleanup) keeps its own visible line.
+    const quiet = joins && unit.status === 'ok' && !unit.trackedChanges && (unit.cleanup === undefined || unit.cleanup === 'clean');
+    return step(Object.freeze({ ...base, answered, toolGroup: quiet ? [...grouped, unit] : [], activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries, toolLineTracked: trackedLines,
+      toolLineDeclined: declined, toolLineApproval: approvals }), quiet ? printed : [...printed, ...groupUnits(grouped), unit]);
   }
   if (delta.kind === 'reasoning') {
     const reasoning = state.phase === 'answering' ? {} : { phase: 'reasoning' as const, reasoningStartedAtMs: state.reasoningStartedAtMs ?? nowMs };
@@ -238,7 +275,11 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const record = feedRecordStream(state.answerRecord, delta.text, state.known, terminalSafeText, terminalLineEnd);
     const fed = feedSegmenter(state.segmenter, record.text);
     const units = answerUnits(fed.segments, state.answered);
-    return step(Object.freeze({ ...state, phase: 'answering', answerRecord: record.state, reasoningRecord: EMPTY_RECORD_STREAM, segmenter: fed.state, answered: state.answered || units.length > 0 }), [...summary, ...units]);
+    // alpha.59 L6: visible answer text settles the open read group; blank text between calls (and the thinking before it) keeps it open.
+    const open = state.toolGroup.length > 0, closes = open && (delta.text.trim() !== '' || visible(units));
+    return step(Object.freeze({ ...state, phase: 'answering', answerRecord: record.state, reasoningRecord: EMPTY_RECORD_STREAM, segmenter: fed.state,
+      answered: state.answered || (units.length > 0 && (closes || !open)),
+      toolGroup: closes ? [] : open ? [...state.toolGroup, ...summary] : state.toolGroup }), closes ? [...groupUnits(state.toolGroup), ...summary, ...units] : open ? [] : [...summary, ...units]);
   }
   const settled = feedSegmenter(state.segmenter, finishRecordStream(state.answerRecord, state.known, terminalSafeText));
   const flushed = flushSegmenter(settled.state);
@@ -247,8 +288,9 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     completionTokens: usage ? state.earlierCompletionTokens + usage.completionTokens : null, reasoningTokens: usage?.reasoningTokens ?? null, finish: delta.finish,
     ...(delta.note ? { note: delta.note } : {}), ...(state.context ? { context: state.context } : {}),
     ...(delta.finish === 'cancelled' ? { cancelledDuring: stageOf(state) } : {}) });
-  const done = Object.freeze({ ...state, phase: 'done' as const, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, segmenter: flushed.state, answered: true, activeTool: null });
-  return step(done, [...summary, ...answerUnits([...settled.segments, ...flushed.segments], state.answered)], footer);
+  const done = Object.freeze({ ...state, phase: 'done' as const, answerRecord: EMPTY_RECORD_STREAM, reasoningRecord: EMPTY_RECORD_STREAM, outputRecord: EMPTY_TOOL_RECORD, segmenter: flushed.state, answered: true, activeTool: null,
+    toolGroup: [] });
+  return step(done, [...groupUnits(state.toolGroup), ...summary, ...answerUnits([...settled.segments, ...flushed.segments], state.answered)], footer);
 }
 
 /** Non-streaming adapter: a complete reply is the text deltas of one turn followed by `done`. */

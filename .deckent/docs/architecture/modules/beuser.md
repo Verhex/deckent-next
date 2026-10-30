@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19 on the alpha.58 candidate waits for the owner's GPU window; alpha.58's BeUser scope is installation and first settings.
+B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19R on the alpha.58 live stage (2026-10-30) stopped all three journeys as false `persona-stuck` reds: the walker decided on screens the product had not redrawn yet; the settle rule below (`beuser-limits-3`) is in the alpha.59 candidate and the three journeys are walked again after it. alpha.58's BeUser scope is installation and first settings.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|
@@ -236,15 +236,23 @@ Each redacted event is retained separately; the private terminal record's option
 walks whose acceptance evidence could not be finalized. Recorded supervision reads the same
 optional schema; older terminal records and reports remain readable.
 
-The stuck rules are registry data (`assets/beuser/limits.json` `walk`, registry revision
-`beuser-limits-2`) and stop before the effect. The `loopStop`th (3) identical key or text on one
-screen is a `loop` (walk17 S2, 2026-10-29: a first repeat may be a key the product swallowed): on
+The stuck rules are registry data (`assets/beuser/limits.json` `walk`) and stop before the
+effect. The `loopStop`th (3) identical key or text on one screen is a `loop` (walk17 S2, 2026-10-29: a first repeat may be a key the product swallowed): on
 the exact screen, or after a cycle through other screens back to a screen that differs only in its
 numbers (walk18: a budget change cycle bumped its revision each time). Screens are compared with
 digits masked in one place (`beuserSettledScreen`); consecutive presses on one such screen, as a
 number stepper does, are not a cycle. The `observeStop`th (4) consecutive `look`/`wait` on one
 digit-masked screen is `observing` (walk18: a walker that only observes is stuck, not a silent
-patience bound). Both are RED `persona-stuck` findings with their reason. Each walker call carries
+patience bound). Both are RED `persona-stuck` findings with their reason. Registry revision
+`beuser-limits-3` adds `settleMs` (10000; walk19R, 2026-10-30: a walker deciding in about a second
+read screens the product had not redrawn yet, while it applied a setup step for 1-3.5 s or drew
+its first frame for 7-8 s): on a screen unchanged since the walker's last action either rule holds
+only once that digit-masked screen has stayed unchanged for `settleMs`; before that the action
+proceeds. A cycle through other screens is the product answering and is not delayed. Before a
+stop the screen is read once more (retained as a `look`); if it changed, the walker decides again
+on it and no verdict is given. After input, resize or a secret step the driver's `quietMs`
+silence window opens at the target's first answering byte, bounded by `inactivityMs`. Step,
+wait, call and wall budgets are unchanged. Each walker call carries
 its own last three actions (typed text withheld, refused ones marked) and whether its last action
 left the screen unchanged. A stop's friction event retains the blocked
 proposal as metadata (typed plaintext omitted) and identifies its screen. The walk report's optional `findings`

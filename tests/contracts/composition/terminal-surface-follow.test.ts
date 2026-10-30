@@ -258,7 +258,7 @@ it.each(['en', 'tr'] as const)('renders a real producer denial in %s without rec
   try {
     const denied = t('terminal.workline.watchAccessStopped', { kinds: 'approval, run, worker' }, locale);
     await until(() => view.stdout.text.includes(denied), 'localized access refusal');
-    for (const char of '/watch-workers\r') { view.stdin.write(char); await settle(2); }
+    for (const char of '/tasks\r') { view.stdin.write(char); await settle(2); }
     await settle(50);
     expect(calls).toBe(1); expect(polls).toBe(0);
     // SLASH-WINDOWS (SW-2): the delivery mode is the watch window's status, never a chat line; a refused feed names no live or polling delivery.
@@ -335,8 +335,9 @@ it.each(['en', 'tr'] as const)('renders missing identity in %s and stops without
   try {
     await until(() => view.stdout.text.includes(t('terminal.workline.watchNotInitialized', {}, locale)), 'missing identity notice');
     expect(view.stdout.text).toContain(t('terminal.workline.watchNotInitialized', {}, locale));
-    for (const command of ['/watch-workers\r', '/watch-stop\r', '/watch-runs\r']) {
-      for (const char of command) { view.stdin.write(char); await settle(2); }
+    // Open, close (Esc) and reopen the tasks window: no reconnect, snapshot or poll follows.
+    for (const command of ['/tasks\r', '\u001b', '/tasks\r']) {
+      for (const char of command === '\u001b' ? [command] : command) { view.stdin.write(char); await settle(command === '\u001b' ? 40 : 2); }
     }
     await settle(50);
     expect(follow).toHaveBeenCalledOnce(); expect(read).not.toHaveBeenCalled(); expect(poll).not.toHaveBeenCalled();

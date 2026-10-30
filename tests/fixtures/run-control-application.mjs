@@ -17,7 +17,7 @@ const ledger = createWorklineLedgerPorts({ root, scopeId: 's', options, locale, 
 const labels = { banner: 'BANNER', prompt: '', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING', hint: 'HINT',
   focus: { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS' }, roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
   commandUnavailable: 'NO-PORT {part}', ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS',
-  serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE', watchStarted: 'WATCH-ON', watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF',
+  serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
   statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), work: workSurfaceLabels(locale) };
 await runTerminalWorkline({ labels, palette: resolveWorklinePalette('none'), context: { installationId: 'i', projectId: 'p', scopeId: 's' }, target: 's', systemPrompt: 'SYSTEM',
   historyMessages: 40, maxTrackedRuns: 4, pollMs: 60_000, ledger, completeTurn: async () => 'unused',

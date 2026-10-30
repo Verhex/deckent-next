@@ -4,7 +4,8 @@ import type { OnboardingPort, OnboardingPresentation } from '#surfaces/core/term
 // The question card itself is Ink on a TTY; here only the answers and the shown bodies matter.
 const shown: string[][] = [];
 vi.mock('../../../src/surfaces/core/terminal-onboarding/internal/question.js', () => ({
-  askOnboardingQuestion: async (question: { body: readonly string[] }) => { shown.push([...question.body]); return { id: 'apply' }; } }));
+  askOnboardingQuestion: async (question: { body: readonly string[] }, _io: unknown, apply?: (answer: { id: string }) => Promise<void>) => {
+    shown.push([...question.body]); await apply?.({ id: 'apply' }); return { id: 'apply' }; } }));
 
 const model = { schemaVersion: 1, steps: [], completed: 0, total: 2, snapshot: { scopeId: 's', rights: { state: 'needed', digest: 'd'.repeat(64), rules: 4 } } } as unknown as OnboardingPresentation;
 it.each([['applied', 'applied', 'Your management rights are given.'], ['conflict', 'later', 'The rights were not given (conflict']] as const)(

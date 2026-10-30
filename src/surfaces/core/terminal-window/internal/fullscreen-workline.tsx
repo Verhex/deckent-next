@@ -3,6 +3,7 @@ import { Box, Text, useBoxMetrics, useInput, useWindowSize, type DOMElement } fr
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider, WINDOW_PRIORITY, useFocusOwner } from './window-stack.js';
+import { MainScreenContext } from './card-copy.js';
 import { promptJump, scrollViewport, searchViewport, viewportLines, viewportStart, type SearchableBlocks, type ViewportAnchor } from './viewport.js';
 import type { PointerEvent, PointerSource, WheelSource } from './mouse.js';
 import { highlightCells, lineRange, selectedText, type SelectionPoint } from './selection.js';
@@ -28,14 +29,14 @@ export function FullscreenWorkline({ viewport, above, bar, info }: { readonly vi
   const size = useWindowSize(), rows = fullscreenFrameRows(size.rows || 24), columns = size.columns || 80;
   // A card or window takes at most half the frame (it scrolls inside); `reservedRows` is what Window subtracts from the terminal rows.
   const cap = Math.max(3, Math.floor(rows / 2));
-  return <WindowStackProvider composerDefault reservedRows={Math.max(0, (size.rows || 24) - cap)}>
+  return <WindowStackProvider composerDefault reservedRows={Math.max(0, (size.rows || 24) - cap)}><MainScreenContext.Provider value={false}>
     <Box flexDirection="column" height={rows} width={columns} overflow="hidden">
       {viewport}
       <Box flexDirection="column" flexShrink={0} maxHeight={cap} overflow="hidden" justifyContent="flex-end">{above}</Box>
       <BarSlot>{bar}</BarSlot>
       <Box flexDirection="column" flexShrink={0} height={fullscreenInfoRows(rows)} overflow="hidden">{info}</Box>
     </Box>
-  </WindowStackProvider>;
+  </MainScreenContext.Provider></WindowStackProvider>;
 }
 
 /** A decision that holds the keyboard takes the bar's place (Claude Code style): the composer stays mounted, so its draft returns with it. */
@@ -81,10 +82,11 @@ const WHEEL_LINES = 3;
  * The scrolling conversation. Follows the newest line (and the live answer after it) until the person scrolls back: PgUp/PgDn move half a
  * view, Ctrl+Home goes to the first line, Ctrl+End returns to the newest line and follows again (the Claude Code fullscreen keys). While
  * scrolled back the view stays put as lines arrive and the last row says how many lines are below. `active`: the composer owns the keyboard
- * (a focused window keeps its own PgUp/PgDn).
+ * (a focused window keeps its own PgUp/PgDn). `onClick`: a plain left click (press and release on the same cell) on a drawn line names that
+ * line's block (alpha.59 L6: a click on a read group's row shows or hides its calls); a drag stays a selection.
  */
-export function ChatViewport({ blocks, live, active, labels, onSearch }: { readonly blocks: SearchableBlocks; readonly live?: ReactNode; readonly active: boolean;
-  readonly labels: ChatViewportLabels; readonly onSearch?: (open: boolean) => void }) {
+export function ChatViewport({ blocks, live, active, labels, onSearch, onClick }: { readonly blocks: SearchableBlocks; readonly live?: ReactNode; readonly active: boolean;
+  readonly labels: ChatViewportLabels; readonly onSearch?: (open: boolean) => void; readonly onClick?: (key: string) => void }) {
   const palette = useWorklinePalette(), size = useWindowSize();
   const ref = useRef<DOMElement | null>(null), metrics = useBoxMetrics(ref), innerRef = useRef<DOMElement | null>(null), inner = useBoxMetrics(innerRef);
   const height = Math.max(1, metrics.height || Math.floor((size.rows || 24) / 2));
@@ -99,7 +101,7 @@ export function ChatViewport({ blocks, live, active, labels, onSearch }: { reado
   });
   const latest = useRef({ blocks, height }); latest.current = { blocks, height };
   const anchorRef = useRef(anchor); anchorRef.current = anchor;
-  const owner = useFocusOwner(), wheel = useContext(WheelContext), pointer = useContext(PointerContext);
+  const owner = useFocusOwner(), wheel = useContext(WheelContext), pointer = useContext(PointerContext), clicked = useRef(onClick); clicked.current = onClick;
   // TERM-POLISH: click and drag selects the conversation's text (content-anchored), the release copies it; a plain click or any key but
   // the scroll keys clears it (the Claude Code fullscreen behaviour).
   const [selection, setSelectionState] = useState<Selection | null>(null), selectionRef = useRef(selection);
@@ -124,7 +126,7 @@ export function ChatViewport({ blocks, live, active, labels, onSearch }: { reado
     if (!current?.dragging) return;
     if (event.kind === 'drag') { if (point) setSelection({ ...current, focus: point.at }); return; }
     const done = { ...current, focus: point?.at ?? current.focus, dragging: false };
-    if (done.focus.key === done.anchor.key && done.focus.line === done.anchor.line && done.focus.cell === done.anchor.cell) { setSelection(null); return; }
+    if (done.focus.key === done.anchor.key && done.focus.line === done.anchor.line && done.focus.cell === done.anchor.cell) { setSelection(null); clicked.current?.(done.anchor.key); return; }
     setSelection(done);
     const text = selectedText(latest.current.blocks, done.anchor, done.focus);
     if (text.trim()) pointer.copy(text);

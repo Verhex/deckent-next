@@ -6,7 +6,7 @@ import { WORKLINE_TEST_LABELS, mountWorkline, settle, until } from '../support/w
 
 // TUI2 L3: the run and worker cards carry words from the catalog (no `rev`, `cancel`, `pending:2 active:1`, raw process or authority names)
 // and a short run identity; the real workline renders them in EN and TR without colour (NO_COLOR palette). SLASH-WINDOWS (SW-2): run and worker
-// rows live in windows now, never as chat cards; the run card words are the `/watch-runs` window rows, the worker words the `/workers` window rows.
+// rows live in windows now, never as chat cards; the run card words are the `/tasks` window rows, the worker words the `/workers` window rows.
 const RUN = '3f2a9c1e-8b4d-4e7a-9c55-1d2e3f4a5b6c', TASK = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 const run = { runId: RUN, scopeId: 'scope-main', revision: 4, cancellationRequested: true, tasks: [{ phase: 'pending' }, { phase: 'pending' }, { phase: 'active' }, { phase: 'weird' }] } as unknown as RunView;
 const report = { schemaVersion: 1, observedAt: 1, scopeId: 'scope-main', control: 'observe-only', sources: [{ workers: [
@@ -27,7 +27,7 @@ async function card(locale: Locale, command: string, done: string) {
 describe('run and worker cards', () => {
   it.each([['en', ['revision 4 · cancellation requested', '2 waiting, 1 running, 1 weird', '· 3f2a9c1e']],
     ['tr', ['revizyon 4 · iptal istendi', '2 bekliyor, 1 çalışıyor, 1 weird', '· 3f2a9c1e']]] as const)('/runs (%s)', async (locale, lines) => {
-    const text = await card(locale, '/watch-runs ', lines[2]);
+    const text = await card(locale, '/tasks', lines[2]);
     for (const line of lines) expect(text).toContain(line);
     expect(text).not.toContain(RUN); expect(text).not.toMatch(/\brev\b|pending:|active:|· cancel\b/u);
   });

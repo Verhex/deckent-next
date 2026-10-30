@@ -205,6 +205,8 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     const run = await f.pty(`card-${label}`, [[card, key]], { LANG: lang });
     expect(run.timeout, run.output.slice(-2000)).toBeUndefined();
     expect(run.output).toContain(card);
+    // alpha.59 L3: a main-screen card never takes mouse reports, so the terminal's own selection works on it; Ctrl+Y is the quick copy.
+    expect(run.output).not.toContain('\u001b[?1000h'); expect(run.output).toContain(lang.startsWith('tr') ? 'Ctrl+Y kopyala' : 'Ctrl+Y copy');
     expect(run.output).toContain(missing);
     expect(run.output).not.toMatch(/init policy|TERMINAL_SCOPE_REQUIRED|Deckent setup|Deckent kurulumu plan/u);
     expect(run.status, run.output.slice(-2000)).toBe(2);

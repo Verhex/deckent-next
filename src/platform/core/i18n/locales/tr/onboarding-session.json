@@ -2,6 +2,9 @@
   "onboarding.session.step": "Adım {n}/{total}",
   "onboarding.session.continue": "Enter · Devam",
   "onboarding.session.later": "Esc · Sonra",
+  "onboarding.session.applying": "Uygulanıyor…",
+  "onboarding.session.preparing": "Hazırlanıyor…",
+  "onboarding.session.busyKey": "tuşlar işlenmez",
   "onboarding.session.blocked": "Bu adım bekliyor",
   "onboarding.session.waiting": "İşlemin sahibi tamamlandığını doğrulamadı. /setup ile yeniden açın.",
   "onboarding.session.unavailable": "İlk kurulum ekranları gösterilemedi ({code}); çalışma satırı onlarsız açılıyor.",
@@ -120,5 +123,7 @@
   "onboarding.permissions.profileMissing": "{scope} kapsamında {principal} için {profile} profili kaydedilip {mode} ile başlayacak. Korunan ayarlar, sırlar ve yıkıcı işlemler kendi onay kurallarını korur. Bekleyen kurulum izinlerini tamamlamak için onaylayın.",
   "onboarding.permissions.preserved": "{scope} kapsamında {principal} için önceki kip seçiminiz ({mode}) korunur.",
   "onboarding.permissions.profileWithoutDefaults": "{profile} profilinin başlangıç izinleri yok. Onay bu profili kaydeder ve {scope} kapsamında {principal} için mevcut kipi ({mode}) korur.",
-  "onboarding.firstTask.empty": "Enter’dan önce bir iş yazın; iş vermeden devam etmek için Esc’ye basın."
+  "onboarding.firstTask.empty": "Enter’dan önce bir iş yazın; iş vermeden devam etmek için Esc’ye basın.",
+  "onboarding.model.status": "Model bağlı değil — /setup",
+  "onboarding.model.draft": "Bağlı model olmadığı için mesaj gönderilmedi; taslak olarak giriş satırında duruyor. Kartta bir model bağlayın (ya da sonra /setup ile), ardından göndermek için Enter’a basın."
 }

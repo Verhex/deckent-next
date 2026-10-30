@@ -3,7 +3,7 @@ import type { WorkerImageState } from '#engine/index.js';
 import { onboardingMessage } from './message.js';
 import { t, ErrorRegistry } from '#platform/index.js';
 import { type CliCardIo } from '#surfaces/core/cli-human/index.js';
-import type { FirstTaskIntent, OnboardingPort, OnboardingUi } from './contract.js';
+import type { FirstTaskIntent, OnboardingFocus, OnboardingPort, OnboardingUi } from './contract.js';
 import { createOnboardingSession, firstSignedInHost, FIRST_TASK_DONE } from './session.js';
 import { askOnboardingQuestion, type QuestionAnswer } from './question.js';
 import { firstTaskScreen } from './first-task.js';
@@ -11,14 +11,17 @@ import { guideScreen } from './guides.js';
 import { settleOnboardingReady } from './ready.js';
 import { firstCommitScreen } from './first-commit.js';
 /** The same session drives first open and /setup; no Workline/composer is mounted in this loop. */
-export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: 'workers', conversationNotice?: string): Promise<FirstTaskIntent | null> {
+export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: OnboardingFocus, conversationNotice?: string): Promise<FirstTaskIntent | null> {
   if (io.signal?.aborted) return null;
   await port.assertPerson();
-  const initial = await port.observe({}), session = createOnboardingSession(port, initial, revisit, focus);
-  await session.refresh();
+  // One observation per open: settling writes (forgotten deferrals, reconciled intents) and the settled snapshot is the one shown and shared.
+  const session = createOnboardingSession(port, await port.observe({}), revisit, focus);
+  await session.settle();
+  let shown = false;
   while (!io.signal?.aborted) {
     const model = session.model(), step = model.steps[0], locale = io.locale;
-    if (!step) return null;
+    if (!step) { if (!shown) ui.observed?.(model.snapshot); return null; } // after a shown step the opener observes again
+    shown = true;
     if (step.kind === 'first-task') {
       const result = await firstTaskScreen(model, io, undefined, conversationNotice);
       if (result === 'later' && !model.snapshot.deferred.includes(FIRST_TASK_DONE)) await session.defer(step); // AYSE-R2-04: after a first task, Esc only closes

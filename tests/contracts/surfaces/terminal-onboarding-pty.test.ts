@@ -67,8 +67,8 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   expect(run.output).not.toContain('^['); expect(await readFile(configPath, 'utf8')).toBe(before);
   const history = JSON.parse(await readFile(join(root, '.deckent/state/onboarding.json'), 'utf8'));
   expect(history.schemaVersion).toBe(2); expect(history.entries.every((row: { folder: string }) => row.folder === '')).toBe(true);
-  // Screen buffers retain the actual layout for the lead's focus/footer review; no snapshot-only acceptance claim.
-  expect(terminalBuffers(run.output, 80, 32)).toBeDefined();
+  // walk19R: one live card region: every answered card erased its own frame, so no step card is left stacked on the main screen or its scrollback.
+  expect(terminalBuffers(run.output, 80, 32).main).not.toContain(step);
 }, 180_000);
 it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window opened from the Workline never reach the composer; Enter afterwards sends nothing', async () => {
   const base = await mkdtemp(join(tmpdir(), 'onboarding-pty-')); roots.push(base);
@@ -111,9 +111,10 @@ it.skipIf(process.platform !== 'linux')('AYSE-18/22/23 PTY: empty first-task inp
     const store = await openConfiguredTerminalSessions(root, { env }); expect(store).not.toBeNull();
     await store!.save({ schemaVersion: 1, scopeId: 's', sessionId: '11111111-2222-4333-8444-555555555555', updatedAtMs: Date.now(),
       messages: [{ role: 'user', content: 'Yesterday request' }, { role: 'assistant', content: 'Saved reply', toolCalls: [] }] });
-    const again = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify([[first, '\u001b'],
+    const again = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify([
       [tr ? 'Bu klasörde kayıtlı bir konuşmanız var' : 'A saved conversation is available', '/resume\r'], ['Yesterday request', '\r'],
       [tr ? 'mesajıyla devam ediliyor.' : 'Resumed', '/exit\r']]), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
-    expect(again.code).toBe(0); expect(again.output).toContain('Saved reply');
+    // Owner 2026-10-30: "Esc · Later" on the model card is persistent; the next open goes straight to the Workline.
+    expect(again.code).toBe(0); expect(again.output).toContain('Saved reply'); expect(again.output).not.toContain(first);
   }
 }, 180_000);

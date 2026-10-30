@@ -1,4 +1,5 @@
 import type { Writable } from 'node:stream';
+import type { CardCopy, CardCopyLabels } from '#surfaces/core/terminal-window/index.js';
 import limits from './clipboard-limits.json' with { type: 'json' };
 
 /** The most bytes of one clipboard request and the furthest `/copy [n]` reaches back (registry data: `clipboard-limits.json`). */
@@ -31,4 +32,14 @@ export function createClipboardWriter(out: Pick<Writable, 'write'> & { readonly 
     try { out.write(request.sequence); } catch { return { ok: false, reason: 'unavailable', bytes: request.bytes }; }
     return { ok: true, bytes: request.bytes };
   };
+}
+
+/** The cards' copy key (terminal-window `CardCopyContext`) on this writer with its words (`tuicopy.card.*`); none without both. */
+export function cardCopy(write: ((text: string) => ClipboardResult) | undefined, labels: CardCopyLabels | undefined): CardCopy | null {
+  return write && labels ? { write, labels, maxBytes: CLIPBOARD_LIMITS.maxBytes } : null;
+}
+
+/** `cardCopy` for a card rendered on its own output stream (a CLI card, an onboarding step): a stream that is not a TTY gets none. */
+export function streamCardCopy(out: Pick<Writable, 'write'> & { readonly isTTY?: boolean }, labels: CardCopyLabels, env: NodeJS.ProcessEnv = process.env): CardCopy | null {
+  return cardCopy(out.isTTY === true ? createClipboardWriter(out, env) : undefined, labels);
 }

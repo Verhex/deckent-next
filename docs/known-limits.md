@@ -9,14 +9,13 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.57 has landed (PRs #120 and #121) and is live. Alpha.58 is a release candidate, not released; items marked alpha.58 describe that candidate. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.58 has landed (PR #123) and is live. Alpha.59 is a release candidate, not released; items marked alpha.59 describe that candidate. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 ## BeUser B1 journey walks (alpha.57)
 
 Alpha.57 binds walk/report callbacks, real Run admission/reservation, private durable realm records, streaming transport, C4/C5 retained evidence, TaskEvaluation and per-Run reports. R3-B publishes policy data inside init/upgrade; replay keeps its original byte verification. Dry admission is author evidence, not a realm journey. Secret FD creation/verified reset, full milestone readbacks and measured call/cost/reliability evidence remain open; unobserved fields stay unknown/null. One finite limits profile is provisional. Sealed ledgers can never be exported, backed up or restored; backup-dependent branches remain unknown. Unsupported private systemd stays unknown and non-blocking. No host socket/bus workaround. Native adoption/full surfaces remain B2/B4. The first host walk on the assembled release ran three journeys; all three were red, so journey acceptance and owner acceptance are open.
 
-- **In alpha.57, yes/no letters are not accepted everywhere in `deckent init`.** The first card shows the `y` key next to its yes answer and takes `y`; the guided setup window that follows shows no letter and silently ignores `y`. *Impact:* a person (or a BeUser persona) pressing `y` there sees nothing happen. *Workaround:* press Enter to choose the highlighted answer. The alpha.58 candidate shows and takes (y)/(n) on every yes/no card; this entry leaves when that lands.
 - **BeUser arranges only the start states it can reach without a witness (alpha.58).** A v3 journey profile names its branch's catalogued start states. Before the persona's first look, Deckent arranges them in the realm over an exec without a terminal (closed stdin, explicit user and locale), never through the persona's terminal, and reads each one back. The catalog arranges an installed Deckent (through `deckent init --yes --scope beuser-realm --json`), a Git project with a tracked file under `.deckent/`, an unknown file under `.deckent/`, a stopped service, a second installation, an unreadable ledger, an unsafe authority file, a hand-made launcher, an unproven install method, an empty cache, a fresh home, no Docker socket, a folder with the person's own files and the assembled candidate. The persona's language and accessibility needs come from its profile; `cancel` is the persona's own act. These stay unknown, and the report names each one with its reason: states that need a person's witness (managed policy and approvals `T2`/`S14`/`S14b`, global or relocated data `S10b`/`S25`, keys `S11`, an applied or interrupted uninstall `S15`/`S16`, a modified bridge `S21`, and model, price, role or budget setup), states outside the sealed realm (service managers and running services `S2`/`S4`/`S4b`/`K4`, active work and uncertain effects `S5`/`S8`, worker images `S12`, another platform `S18`, image preparation, worker questions, an unavailable realm or network), states with no witness-free producer (`S3`, parked work `S6`, pending approval `S7`, queued delivery `S9`, dispatch history `S23`), driver limits (pipe, CI and MCP `S17`, line mode) and Enterprise company scope. A branch that names any of them stops as `BEUSER_START_STATE_UNREACHABLE` before any step, and the persona does not start; a step that fails or does not read back stops it as `BEUSER_START_STATE_UNMET`. Both are unknown, never red. Nothing bypasses the witness. *Impact:* those branches are not walked, which is 18 of the 23 uninstall branches and 12 of the 21 onboarding branches. *Workaround:* keep the report's list of unarranged states; a v2 profile keeps the earlier empty realm.
 - **BeUser compares screens with their numbers masked when it looks for a stuck persona (alpha.58).** The same key or text a third time on a screen that came back through other screens and differs only in numbers (a revision, a counter, a clock) ends the walk as a `loop`, and a fourth look or wait in a row on such a screen ends it as `observing`; both are red `persona-stuck` findings. *Impact:* a journey that legitimately repeats one action three times through a screen that shows only changing numbers (for example adding three items to a list that shows just a count), or a product that stays on one screen through four looks or waits, is reported stuck. *Workaround:* read the finding's screen and evidence before treating it as a product defect; the thresholds are registry data in `assets/beuser/limits.json`.
 - **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
@@ -39,14 +38,16 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
-- **Copying with the mouse and `/copy [n]` use your terminal's clipboard sequence (OSC 52)** and were proven only on a Linux
-  pseudo-terminal, not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until
+- **Copying with the mouse, card copy (Ctrl+Y or a drag over a card, alpha.59) and `/copy [n]` use your terminal's clipboard sequence
+  (OSC 52)** and were proven only on a Linux pseudo-terminal (a click on a collapsed tool-call line, alpha.59, only in an in-process
+  terminal test), not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until
   "Applications in terminal may access clipboard" is on; tmux needs `set -g set-clipboard on`, and for `/copy` also
   `allow-passthrough on`). Deckent cannot ask the terminal whether it took the text, so `/copy` says "sent", never "copied". One
   request carries at most 64 KiB and `/copy` reaches back at most 99 answers; a larger answer is refused, and off an interactive
   terminal nothing is sent. Drag selection has no autoscroll and no double/triple click.
   *Impact:* after "Copied … characters" or "Sent answer …" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
-  terminal's own selection, or set `terminal.layout` to `inline`.
+  terminal's own selection, or set `terminal.layout` to `inline`. The full window prints no unbroken plain sign-in link (owner choice):
+  there the link is an OSC 8 link split over the card's rows; use Ctrl+Y, or the inline layout, where it is printed once unbroken.
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
@@ -705,7 +706,7 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   agent or CI caller (marker variables) is refused through the SDK as through the CLI.
   *Workaround:* stop the unit yourself, or ask the administrator for a direct allow.
 - **A partial deletion resumes only after re-verification.** Moved/unsafe authority files stop the data tier before it starts;
-  in the alpha.58 candidate an unsafe `policy.json` or `bindings.json` stops every tier as `UNINSTALL_POLICY_UNREADABLE` naming the
+  since alpha.58 an unsafe `policy.json` or `bindings.json` stops every tier as `UNINSTALL_POLICY_UNREADABLE` naming the
   file, with data kept and the file never repaired;
   when Git tracking cannot be read, every project file counts as possibly tracked and stays. A partial final deletion resumes
   only after the remaining bytes, Git tracking, the archive and delete authority are verified again; otherwise files stay and

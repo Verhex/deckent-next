@@ -19,8 +19,8 @@ describe('/help grouped', () => {
     const sections = text.split('\n').slice(1).join('\n').split('\n\n');
     expect(sections.map(section => section.split('\n')[0])).toEqual(['Bilgi', 'İşler', 'Onaylar', 'Ayar', 'Oturum']);
     // /cancel is the window lane's text and is not pinned here.
-    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /do istek  İsteğinizden iş planı hazırla', '  /workers  İşçileri ve her birinin ne yaptığını listele', '  /watch-workers  İşçileri yerinde güncellenen bir pencerede canlı izle',
-      '  /watch-runs  İşleri yerinde güncellenen bir pencerede canlı izle', '  /watch-stop  İşçi ve iş izlemeyi durdur', '  /tasks  Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir işi ayrıntılı göster',
+    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /do istek  İsteğinizden iş planı hazırla', '  /workers  İşçileri ve her birinin ne yaptığını listele',
+      '  /tasks  Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir işi ayrıntılı göster',
       "  /runs  Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat, a işçinin sorusunu cevapla (her biri kendi y'siyle)", '  /deliver  Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dalı ilerlet', '  /transcript <n|deneme-kimliği> [sayfa]  Bir işçinin mühürlü dökümünü göster'].join('\n'));
   });
   it('puts the window and mode commands under their headings, one short line each (T2 integration)', () => {
@@ -39,8 +39,8 @@ describe('/help grouped', () => {
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(37); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; alpha.55 f2 adds /roles; alpha.56 U4-2 adds /setup, H7 adds /hub.
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(37);
+      expect(rows).toHaveLength(34); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; alpha.55 f2 adds /roles; alpha.56 U4-2 adds /setup, H7 adds /hub; alpha.59 removes /watch-workers, /watch-runs, /watch-stop.
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(34);
     }
   });
 });

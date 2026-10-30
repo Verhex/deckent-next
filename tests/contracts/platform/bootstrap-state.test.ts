@@ -54,6 +54,7 @@ it.skipIf(process.platform === 'win32')('rejects other-writable ancestry even wh
 
 it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — rejects malformed contracts, invalid commit invariants and bad checksums', async () => {
   const root = await project(), path = await publish(root);
+  await expect(observeBootstrapState(root)).resolves.toMatchObject({ record: { phase: 'pending' } }); // P1: verified bytes are cached; other bytes are verified again
   await writeFile(path, '{', { mode: 0o600 });
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_INVALID' });
   const invalid = { ...payload(root), phase: 'committed' as const };
@@ -85,6 +86,13 @@ it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — de
   await writeFile(path, encodeBootstrapJournal({ ...payload(root), updatedAtMs: 12 }), { mode: 0o600 });
   const mutated = await observeBootstrapState(root);
   expect(() => assertBootstrapUnchanged(first, mutated)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_CHANGED' }));
+  expect(mutated.record?.updatedAtMs).toBe(12);
+  // P1: identical bytes on a new inode reuse the frozen verified record, yet the fresh stats still make it a changed generation; custody runs first.
+  const same = `${path}.same`; await writeFile(same, encodeBootstrapJournal({ ...payload(root), updatedAtMs: 12 }), { mode: 0o600 }); await rename(same, path);
+  const renamed = await observeBootstrapState(root);
+  expect(renamed.record).toBe(mutated.record); expect(Object.isFrozen(renamed.record)).toBe(true); expect(Object.isFrozen(renamed.record!.resources[0])).toBe(true);
+  expect(() => assertBootstrapUnchanged(mutated, renamed)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_CHANGED' }));
+  await chmod(path, 0o644); await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' }); await chmod(path, 0o600);
   const replacement = `${path}.replacement`; const next = payload(root, 'committed');
   await writeFile(replacement, encodeBootstrapJournal(next), { mode: 0o600 }); await rename(replacement, path);
   const replaced = await observeBootstrapState(root);

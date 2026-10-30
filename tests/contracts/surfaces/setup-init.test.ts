@@ -297,21 +297,30 @@ describe('I-S4 setup window controller (no Ink)', () => {
 
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-it('N3: a long reason wraps whole at 72 columns (no "…" cut); a one-row stage line still fits its row', async () => {
+it('N3 + walk19R: a long reason wraps whole at 72 columns; an answer being applied shows it, a key then is visibly not used and never answers the next step', async () => {
   const { PassThrough, Writable } = await import('node:stream'), { mountSetupWindow } = await import('#surfaces/core/project-instructions/index.js');
   let frame = '';
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 72, rows: 36 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const reason = 'my-project scope for HOST/1000 starts with the Solo profile in full-auto. Usual work follows the company policy; protected settings, secrets and destructive operations keep their own approval rules. Switch the mode with Shift+Tab or /mode at any time; nothing else changes.';
-  const closed = mountSetupWindow({ title: 'Deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'later', label: 'Not now' }],
-    optionRows: 2, initial: 0, hints: 'Esc close', position: '{from}-{to}/{total}', reveal: 0 }, async () => null, { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
+  const model = { title: 'Deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'apply', label: 'Apply now' }],
+    optionRows: 2, initial: 0, hints: 'Esc close', applying: 'Applying…', busyKey: 'keys ignored', position: '{from}-{to}/{total}', reveal: 0 };
+  const sent: string[] = [];
+  let release = () => {};
+  const closed = mountSetupWindow(model, id => { sent.push(id); return sent.length > 1 ? Promise.resolve(null) : new Promise(resolve => { release = () => resolve({ ...model, rows: ['> 8. Final check · ready to apply', '', 'Next step', '', ''] }); }); },
+    { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
   await new Promise(resolve => setTimeout(resolve, 150));
-  const text = frame.replace(/\u001b\[[0-9;?]*[A-Za-z]/gu, '').replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' '); // eslint-disable-line no-control-regex
-  expect(text).toContain(reason);
-  // A decision window counts keys only after its quiet arming period; then "Not now" closes it.
-  const { DECISION_ARM_DEFAULT } = await import('#surfaces/core/terminal-window/index.js');
-  await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 200)); stdin.write('\r');
-  await closed;
+  const text = () => frame.replace(/\u001b\[[0-9;?]*[A-Za-z]/gu, '').replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' '); // eslint-disable-line no-control-regex
+  expect(text()).toContain(reason);
+  // A decision window counts keys only after its quiet arming period; then Enter applies. While it applies, a second Enter is shown as not used.
+  const { DECISION_ARM_DEFAULT } = await import('#surfaces/core/terminal-window/index.js'), pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  await pause(DECISION_ARM_DEFAULT + 200); stdin.write('\r'); await pause(150);
+  expect(text()).toContain('Applying…'); stdin.write('\r'); await pause(150);
+  expect(text()).toContain('Applying… · keys ignored'); expect(sent).toEqual(['apply']);
+  // The next step's window re-arms: the key typed during the apply did not answer it; Enter after its arming does.
+  release(); await pause(150); expect(text()).toContain('Next step'); expect(sent).toEqual(['apply']);
+  await pause(DECISION_ARM_DEFAULT + 200); stdin.write('\r');
+  await closed; expect(sent).toEqual(['apply', 'apply']);
 });
 /** Mounts the real guided window on a fake TTY with one controller model; returns the drawn text and the answers the window sent. */
 async function setupWindowAt(model: import('#surfaces/core/project-instructions/index.js').SetupWindowModel) {
