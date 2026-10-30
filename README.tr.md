@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.58`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README geçerli sürüm adayını anlatır: **ön sürüm `1.0.0-alpha.59`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -544,7 +544,7 @@ gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilme
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.58<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Betadan önce · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.59<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar · kurtarma kartları · imzalı paketler<br/>ChatGPT sohbeti · rehberli kurulum · kaldırma"] --> C["Betadan önce · gerçek kullanım kabulü<br/>ölçülmüş kurallarla çekirdek katmanları açma<br/>ChatGPT işçi kanıtı · Hub dağıtım kapıları<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```
