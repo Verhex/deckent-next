@@ -273,7 +273,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // Onboarding is presentation: an unreadable observation never keeps the Workline closed; every action there keeps its own owner's checks.
     try {
       const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
-      const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
+      // Astra 2834 R1: onboarding cards copy through the record projection, which also masks this config's known secrets.
+      const io = { locale, env, stdin: process.stdin, stdout: process.stdout, known: getConfigKnownSecrets(config), ...(context.signal ? { signal: context.signal } : {}) };
       let opened: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot | undefined;
       const run = async (revisit: boolean, signal?: AbortSignal, focus?: import('#surfaces/core/terminal-onboarding/index.js').OnboardingFocus) => {
         const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
