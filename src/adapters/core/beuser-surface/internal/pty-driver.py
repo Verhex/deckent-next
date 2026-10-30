@@ -148,16 +148,17 @@ def main():
             pending.extend(chunk)
         return True
 
-    def drain(ms, until_exit=False, wait_full=False):
+    def drain(ms, until_exit=False, silence_ms=None):
         nonlocal state
         end = min(deadline, time.monotonic() + ms / 1000)
         # Walk19R: the silence window opens at the target's first answering byte, never before it; `ms` bounds the whole drain.
+        silence = (silence_ms or limits['quietMs']) / 1000
         quiet_end = None
         while time.monotonic() < end and state == 'ready':
             reap()
             if eof and (not until_exit or status is not None):
                 break
-            wait_end = end if until_exit or wait_full or quiet_end is None else min(end, quiet_end)
+            wait_end = end if until_exit or quiet_end is None else min(end, quiet_end)
             remaining = wait_end - time.monotonic()
             if remaining <= 0:
                 break
@@ -167,7 +168,7 @@ def main():
                 continue
             readable, _, _ = select.select([fd], [], [], remaining)
             if readable and receive_output():
-                quiet_end = time.monotonic() + limits['quietMs'] / 1000
+                quiet_end = time.monotonic() + silence
         reap()
         if until_exit and (status is None or not eof) and state == 'ready':
             state = 'timeout'
@@ -264,7 +265,9 @@ def main():
                     ms = positive(command['ms'])
                     if ms > limits['maxWaitMs'] or fd is None:
                         raise ValueError()
-                    drain(ms, wait_full=True)
+                    # Walk20: a read (look, wait) ends once the target redrew and then stayed silent for inactivityMs, longer than an
+                    # animation frame, so a spinner keeps it waiting; a silent target is read for the whole `ms`.
+                    drain(ms, silence_ms=limits['inactivityMs'])
                 else:
                     raise ValueError()
             except (KeyError, ValueError, TypeError, OSError):

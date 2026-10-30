@@ -8,7 +8,7 @@ const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;
 export const beuserSettledScreen = (screen: BeuserScreen): string => sha256(screen.text.replace(/\p{Nd}+/gu, '#'));
 
 export class BeuserWalkStopped extends Error {
-  constructor(readonly reason: 'bound' | 'loop' | 'observing' | 'drift' | 'leak' | 'unknown' | 'cancelled' | 'deadline') { super(reason); }
+  constructor(readonly reason: 'bound' | 'loop' | 'observing' | 'patience' | 'drift' | 'leak' | 'unknown' | 'cancelled' | 'deadline') { super(reason); }
 }
 /** A timeout stops waiting even if a broken adapter ignores cancellation. Its effect then remains uncertain. */
 export async function beuserBounded<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
@@ -83,7 +83,12 @@ export class BeuserController {
     this.budget.step();
     if (++this.steps > Math.min(this.context.limits.maxSteps, this.summary.patience.maxSteps)) throw new BeuserWalkStopped('bound');
   }
-  wait(ms: number): void { this.budget.wait(ms); if ((this.waited += ms) > Math.min(this.context.limits.maxWaitMs, this.summary.patience.maxWaitMs)) throw new BeuserWalkStopped('bound'); }
+  /** Walk20: a wait is charged the time it actually took (the driver returns once the product redrew and settled), never more than asked. */
+  wait(requested: number, elapsed: number): void {
+    const ms = Math.min(requested, Math.max(0, Math.ceil(elapsed)));
+    this.budget.wait(ms); if ((this.waited += ms) > this.waitPatience()) throw new BeuserWalkStopped('bound');
+  }
+  private waitPatience(): number { return Math.min(this.context.limits.maxWaitMs, this.summary.patience.maxWaitMs); }
   modelCall(): void { this.budget.call(); if (++this.calls > this.context.limits.maxCalls) throw new BeuserWalkStopped('bound'); }
   screen(screen: BeuserScreen): void {
     assertBeuserAccess(this.context, screen.binding, this.context.principal, { kind: 'beuser-sandbox', id: screen.binding.realmId }, 'create');
@@ -100,20 +105,23 @@ export class BeuserController {
   history(screen: BeuserScreen): BeuserWalkerHistory {
     return { recentActions: [...this.recent], screenUnchanged: this.actedOn === screen.digest,
       remainingSteps: Math.min(this.context.limits.maxSteps, this.summary.patience.maxSteps) - this.steps,
-      remainingWaitMs: Math.min(this.context.limits.maxWaitMs, this.summary.patience.maxWaitMs) - this.waited };
+      remainingWaitMs: Math.max(0, this.waitPatience() - this.waited) };
   }
   /**
    * Before the effect (walk17 S2, walk18; thresholds from the limits registry): the `loopStop`th identical key or text on one screen is a loop,
    * exactly or after a cycle through other screens that only changed numbers (a stepper's consecutive presses are not a cycle); the
    * `observeStop`th consecutive look/wait on one settled screen is `observing`. Both are RED persona-stuck. Walk19R: on a screen unchanged since
    * the last action either holds only once that screen has stayed unchanged for `settleMs`; before that the action proceeds. A cycle through
-   * other screens is the product answering, so it is not delayed.
+   * other screens is the product answering, so it is not delayed. Walk20: a wait beyond the wait patience left is refused before any effect
+   * (a correction); with no wait patience left the persona has run out of patience (`patience`, RED persona-patience).
    */
   action(screen: BeuserScreen, action: BeuserSurfaceCommand['action']): void {
     const settled = beuserSettledScreen(screen), unchanged = this.previous === settled;
     const waiting = unchanged && performance.now() - this.changedAt < BEUSER_WALK_RULES.settleMs;
     if (action.kind === 'look' || action.kind === 'wait') {
       if (unchanged && !waiting && this.idle + 1 >= BEUSER_WALK_RULES.observeStop) throw new BeuserWalkStopped('observing');
+      const left = this.waitPatience() - this.waited;
+      if (action.kind === 'wait' && action.ms > left) throw left <= 0 ? new BeuserWalkStopped('patience') : new BeuserContractError('BEUSER_ACTION_INVALID');
       return;
     }
     const exact = this.visited.get(JSON.stringify([screen.digest, action])) ?? 0, cycle = this.visited.get(JSON.stringify([settled, action])) ?? 0;

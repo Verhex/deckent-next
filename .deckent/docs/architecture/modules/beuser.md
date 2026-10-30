@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19R on the alpha.58 live stage (2026-10-30) stopped all three journeys as false `persona-stuck` reds: the walker decided on screens the product had not redrawn yet; the settle rule below (`beuser-limits-3`) is in the alpha.59 candidate and the three journeys are walked again after it. alpha.58's BeUser scope is installation and first settings.
+B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19R on the alpha.58 live stage (2026-10-30) stopped all three journeys as false `persona-stuck` reds: the walker decided on screens the product had not redrawn yet; the settle rule below (`beuser-limits-3`) is in the alpha.59 candidate and the three journeys are walked again after it. Walk20 on alpha.59 (2026-10-30) ended all three without a verdict on harness causes (wait patience charged by the requested time, a key sent to a card the persona never saw, an unread lifecycle probe); `beuser-limits-4` below addresses them for the next walk. alpha.58's BeUser scope is installation and first settings.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|
@@ -55,8 +55,13 @@ profile with verified literal-loopback/zero-tariff evidence is accepted at zero 
 still require a quote in the envelope's currency. Existing invocation authorization and fresh
 profile/spending pins remain authoritative.
 The controller audit scan is limited by the recorded BeUser byte/time bounds; an incomplete scope scan remains unknown. Recovery uses current local management access with the retained profile/custody; missing kernel/cgroup custody or unavailable accepted filesystem proof stays quarantined. The real calibration cohort remains open. Author source wiring and dry admission do not prove an assembled journey.
-The current final-state probe observes installation existence; preserved-data, card, receipt-location,
-forbidden-effect and target lifecycle summaries remain unknown. Only a single final readback reference is
+The current final-state probe observes installation existence and (walk20) target lifecycle: no runtime
+socket reads `stopped` when installed and `absent` when not; a socket file alone does not prove a running
+service and reads unknown. The outcome dimension (installation, lifecycle) is therefore fully read, so a
+real mismatch there is RED instead of being hidden by an unread sibling. Preserved-data, card,
+receipt-location and forbidden-effect have no in-realm reader yet: their probes stay in the journey assets
+and read unknown, which keeps the authorization and safety dimensions (and so any GREEN) unknown rather
+than dropping those requirements. Only a single final readback reference is
 admitted. The secret FD producer/reset, full milestone probes and measured call/cost/reliability evidence
 remain explicit gaps; none is replaced with success or an unrestricted host command. Reports retain null
 cost when no verified amount is available. No live, hosted, other-platform or independent acceptance is claimed.
@@ -213,14 +218,14 @@ bounds, and retain the admitted deadline. There is no extra retry limit or model
 substitution. Invalid actions never reach the surface, and model assessments do
 not replace harness readback or the existing acceptance owner.
 
-The walker message (instructions revision 3, walk18 2026-10-29) also carries
+The walker message (instructions revision 4; revision 3 walk18 2026-10-29) also carries
 `remainingSteps` (decisions left within the persona's step patience, this one
 included), `remainingWaitMs` and `keys`, the contract key names (`BEUSER_KEYS`)
 a press may use besides one printable character. The surface resolves the
 spellings screens show (`Esc`, `PgUp`/`PgDn`, `Return`, `↑↓←→`, `Up`/`Down`/
 `Left`/`Right`) to those names through the same contract table. An action the
 surface refuses before any input is sent (an unknown key name, empty or control
-text) is `BEUSER_ACTION_INVALID` (EN/TR): the refusal is retained as an action row
+text), or (walk20) a wait longer than the wait patience left, is `BEUSER_ACTION_INVALID` (EN/TR): the refusal is retained as an action row
 (kind, reason and a bounded key name; typed text withheld), the session stays
 open, and the walker is asked again with that code inside the same correction
 bound, seeing the refused action in its history. Repeated refusals end the walk
@@ -251,12 +256,26 @@ only once that digit-masked screen has stayed unchanged for `settleMs`; before t
 proceeds. A cycle through other screens is the product answering and is not delayed. Before a
 stop the screen is read once more (retained as a `look`); if it changed, the walker decides again
 on it and no verdict is given. After input, resize or a secret step the driver's `quietMs`
-silence window opens at the target's first answering byte, bounded by `inactivityMs`. Step,
-wait, call and wall budgets are unchanged. Each walker call carries
+silence window opens at the target's first answering byte, bounded by `inactivityMs`.
+Registry revision `beuser-limits-4` (walk20, 2026-10-30) closes three harness gaps. (1) Before a
+`press` or `type` is sent the screen is read once more; if its digit-masked form changed since the
+screen the walker decided on, the input is dropped (never sent) and the walker decides again on the
+new screen, so a synthetic person never answers a card it did not see (walk20 uninstall: Enter sent
+1.3 s after "Hazırlanıyor…" landed on an unseen "Bireysel tam otomatik" card). An unchanged read is
+retained as a `look`. Witness rules are unchanged. A short window between that read and the key
+write remains. (2) A `read` (look, wait) returns once the target redrew and then stayed silent for
+`inactivityMs`, longer than a spinner frame, so a spinner keeps it waiting and a silent target is
+read for the whole time; a wait is charged the time it actually took, never more than asked. A wait
+longer than the wait patience left is a correction; with no wait patience left, a wait is the persona
+out of patience: the screen is read once more (a changed screen is decided again) and the stop is
+the RED `persona-patience` finding (reason `patience`) with that last screen. (3) The guard read
+costs one surface step per key or text, so the provisional profile's `maxSteps` is 242
+(2 × the largest persona step patience 120, plus the first look and a stop's read); the decision
+bound stays the persona's step patience. Wait, call and wall budgets are unchanged. Each walker call carries
 its own last three actions (typed text withheld, refused ones marked) and whether its last action
 left the screen unchanged. A stop's friction event retains the blocked
 proposal as metadata (typed plaintext omitted) and identifies its screen. The walk report's optional `findings`
-contains a named `persona-stuck` RED diagnostic for that branch/persona with the last redacted
+contains a named `persona-stuck` (or `persona-patience`) RED diagnostic for that branch/persona with the last redacted
 screen, its transcript reference/digest, controller validity and event artifact references.
 This reports an observed failure to progress, not a proven product root cause or acceptance
 verdict. Cleanup uncertainty remains separately unknown; the diagnostic grants no authority,

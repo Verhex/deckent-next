@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "beuser-limits-3",
+  "revision": "beuser-limits-4",
   "walk": { "loopStop": 3, "observeStop": 4, "settleMs": 10000 },
   "profiles": [
     {
@@ -8,7 +8,7 @@
       "revision": "b1-dogfood-provisional-1",
       "source": "b1-plan-bounded-walk-c7-pending",
       "provisional": true,
-      "maxSteps": 120,
+      "maxSteps": 242,
       "maxWallMs": 1200000,
       "maxWaitMs": 30000,
       "maxCalls": 128,

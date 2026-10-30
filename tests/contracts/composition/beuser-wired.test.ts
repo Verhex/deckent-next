@@ -266,7 +266,8 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
         unknown: cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }], reliability: { completed: 0, attempted: 1 } });
       const { terminal } = await f.records();
       expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown', evidence: null });
-      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', 'action', 'screen', 'action', 'screen', 'action', 'screen', 'action', 'screen', 'friction']);
+      // First look, then per typed text its walk20 guard read and the input, then the stop's read.
+      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', ...Array(6).fill(['action', 'screen']).flat(), 'friction']);
       expect(arrangeCalls.map(args => args.includes('--workdir'))).toEqual([true, false]);
       expect(report.unarranged).toEqual([{ branch: 'persona', state: 'cancel', reason: 'persona' }]);
       // Persona evidence is the surface's own screens, never the arrange row that shifted the recorder sequence.

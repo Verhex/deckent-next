@@ -71,6 +71,15 @@ it('walks the actual approval-card Enter action and consumes harness readback, n
   expect(h.ports.surface.argv).not.toHaveBeenCalled();
   expect(h.ports.models.walker).toHaveBeenCalledWith(expect.anything(), summary, expect.objectContaining({ text: 'approval card' }), { recentActions: [], screenUnchanged: false, remainingSteps: 4, remainingWaitMs: 100 });
   expect(h.ports.evidence.readback).toHaveBeenCalledOnce();
+  // Walk20: the screen is read again before a key; a card drawn after the one the persona decided on drops the key and is decided again.
+  const stale = harness(); let reads = 0;
+  const at = (text: string): BeuserScreen => ({ binding, sequence: ++reads, text, digest: sha256(text) });
+  stale.ports.surface.look = vi.fn(async () => at(reads === 0 ? 'Preparing…' : 'Personal full-auto card'));
+  stale.ports.surface.press = vi.fn(async () => at('completed'));
+  expect(await stale.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
+  expect(vi.mocked(stale.ports.models.walker).mock.calls.map(call => call[2].text)).toEqual(['Preparing…', 'Personal full-auto card']);
+  expect(stale.ports.surface.press).toHaveBeenCalledOnce();
+  expect(vi.mocked(stale.ports.surface.press).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(stale.ports.surface.look).mock.invocationCallOrder[2]!);
 });
 
 it('an explicit allow still refuses the same Enter action on another nonce before dispatching it; audit precedes cleanup', async () => {
@@ -116,7 +125,8 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
   const stuck = harness(), looped = vi.fn(async () => {});
   stuck.ports.surface.press = stuck.ports.surface.look; stuck.ports.stopped = looped; stuck.ports.decode = deciding(press);
   expect(await stuck.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'loop' });
-  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(4); expect(looped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sequence: 4 }), press, 'loop');
+  // Each press is preceded by its walk20 guard read: 1 first look + 2 × (read + press) + the stop's read.
+  expect(stuck.ports.surface.look).toHaveBeenCalledTimes(6); expect(looped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sequence: 6 }), press, 'loop');
   expect(vi.mocked(stuck.ports.models.walker).mock.calls.map(call => call[3])).toEqual([{ recentActions: [], screenUnchanged: false, remainingSteps: 4, remainingWaitMs: 100 },
     { recentActions: [press], screenUnchanged: true, remainingSteps: 3, remainingWaitMs: 100 }, { recentActions: [press, press], screenUnchanged: true, remainingSteps: 2, remainingWaitMs: 100 }]);
   // Walk18: only observing an unchanged screen is stuck too (RED `observing`, threshold from the limits registry), never a silent patience end.
@@ -130,12 +140,18 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
   const product = (action: object, ms: number, text: (reads: number) => string) => { const h = harness(); let reads = 0; clock = 0; h.ports.decode = deciding(action, ms);
     h.ports.surface.look = h.ports.surface.press = vi.fn(async () => { const shown = text(++reads); return { binding, sequence: reads, text: shown, digest: sha256(shown) }; }); return h; };
   for (const h of [product(press, 1000, () => clock >= 3500 ? 'completed' : 'approval card'), product(look, 2000, () => clock >= 8000 ? 'completed' : ''),
-    product(press, BEUSER_WALK_RULES.settleMs, reads => reads === 4 ? 'completed' : 'approval card')])
+    product(press, BEUSER_WALK_RULES.settleMs, reads => reads === 6 ? 'completed' : 'approval card')])
     expect(await h.app.walk(roomy, summary)).toMatchObject({ state: 'completed', reason: null });
-  const wait = harness();
-  wait.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms: 101 } });
-  expect(await wait.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'bound' });
-  expect(wait.ports.surface.wait).not.toHaveBeenCalled();
+  // Walk20: a wait that returned early is charged the time it took; one beyond the patience left is a correction before any effect; a wait
+  // with none left is the persona out of patience, retained as RED persona-patience on the screen read once more.
+  const wait = harness(), patience = vi.fn(async () => {}); clock = 0;
+  const waits = [60, 90, 80, 1].map(ms => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms } }));
+  wait.ports.decode = () => waits.shift(); wait.ports.stopped = patience;
+  const { look: read } = wait.ports.surface; wait.ports.surface.wait = vi.fn(async (ctx: BeuserContext, ms: number) => { clock += ms === 60 ? 20 : ms; return read(ctx); });
+  expect(await wait.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'patience' });
+  expect(vi.mocked(wait.ports.models.walker).mock.calls.map(call => [call[3].remainingWaitMs, call[4]])).toEqual([[100, undefined], [80, undefined], [80, 'BEUSER_ACTION_INVALID'], [0, undefined]]);
+  expect(vi.mocked(wait.ports.surface.wait).mock.calls.map(call => call[1])).toEqual([60, 80]);
+  expect(patience).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: 'approval card' }), { kind: 'wait', ms: 1 }, 'patience');
   // Walk18 SELF: a budget cycle whose screens differ only by a revision number is a loop; a stepper changing one number per press is not.
   const at = (text: string, sequence: number): BeuserScreen => ({ binding, sequence, text, digest: sha256(text) });
   const walk = (texts: readonly string[], action: { kind: 'press'; key: string }) => { const controller = new BeuserController(context(), summary);
@@ -258,7 +274,7 @@ it('C2 created observation must reach C4 admission, then the gated catalogued st
     };
     const met = harness(), arranged = arrangement('installed', 0), transcript = recorded(met, arranged, 0);
     expect(await met.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
-    expect(transcript.inspect(context()).map(row => row.entry.kind)).toEqual(['arrange', 'screen', 'screen']);
+    expect(transcript.inspect(context()).map(row => row.entry.kind)).toEqual(['arrange', 'screen', 'screen', 'screen']); // First look, guard read, press.
     // Walk17 S1: an arrange row on a later clock than the first surface row is refused with its typed code, never a bare "unknown".
     const skewed = harness();
     recorded(skewed, arrangement('installed', 0), 5);
