@@ -212,7 +212,7 @@ it('A57 merge: a saved conversation notice keeps the closed local-run explanatio
   const { until, settle } = await import('../support/workline-harness.js');
   const { snapshotKnownSecrets } = await import('#platform/index.js');
   // Astra 2834 R1: a body line carrying a credential-shaped value and a known secret (as a Git file name or an error message can).
-  const KNOWN = 'known-canary-7f3e9d2a', TOKEN = 'sk-ant-api03-Z9y8X7w6V5u4T3s2', TYPED = 'typed-canary-41c0';
+  const KNOWN = 'known-canary-7f3e9d2a', TOKEN = 'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', TYPED = 'typed-canary-41c0';
   // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
   const copies = () => [...frame.matchAll(/\u001b\]52;c;([A-Za-z0-9+/=]*)\u0007/gu)].map(match => Buffer.from(match[1]!, 'base64').toString('utf8'));
   let frame = '';
