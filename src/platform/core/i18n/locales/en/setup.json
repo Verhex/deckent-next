@@ -180,6 +180,8 @@
   "setup.window.title": "Deckent setup",
   "setup.window.hints": "↑↓ choose · Enter confirm · Esc close",
   "setup.window.position": "{from}-{to} of {total}",
+  "setup.window.applying": "Applying…",
+  "setup.window.busyKey": "keys ignored",
   "setup.window.yes": "Yes",
   "setup.window.no": "No",
   "setup.window.later": "Not now",

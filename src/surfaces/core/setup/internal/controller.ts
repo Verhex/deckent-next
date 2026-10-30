@@ -77,7 +77,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     const offered = choices(stage);
     return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label, role }) => role ? { id, label, role } : { id, label }),
       initial: initialChoice(stage, offered),
-      optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
+      optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), applying: t('setup.window.applying', {}, locale), busyKey: t('setup.window.busyKey', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */
   const settle = async (stage: SetupStage, result: SetupApplyResult) => {
