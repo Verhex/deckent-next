@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext } from 'react';
 import { useStdout, type Key } from 'ink';
 import { plainText, type Span } from '#surfaces/core/terminal-render/index.js';
+import { sliceCells } from './selection.js';
 
 /**
  * Card copy (alpha.59 L3, owner 2026-10-30): Ctrl+Y ("yank", the vi/tmux copy word) sends a card's drawn text to the terminal clipboard.
@@ -30,6 +31,33 @@ export const isCardCopyKey = (input: string, key: Key): boolean => key.ctrl && !
  * (an entry, the option rows) are never part of it, so a masked value is never copied. */
 export function cardCopyText(title: readonly Span[], body: readonly Readonly<{ label?: readonly Span[]; spans: readonly Span[] }>[]): string {
   return [plainText(title), ...body.map(line => [line.label ? plainText(line.label).trim() : '', plainText(line.spans)].filter(Boolean).join(' '))].join('\n').trim();
+}
+
+/** A point of a mouse selection inside a card's body: display row (of all its rows, scrolled-out ones included) and display cell. */
+export type CardPoint = Readonly<{ row: number; cell: number }>;
+export type CardSelection = Readonly<{ anchor: CardPoint; focus: CardPoint; dragging: boolean }>;
+/** The selection in reading order. */
+export const orderedPoints = (a: CardPoint, b: CardPoint): readonly [CardPoint, CardPoint] => a.row < b.row || a.row === b.row && a.cell <= b.cell ? [a, b] : [b, a];
+/** The cells of display row `row` a selection covers (inclusive), or null. */
+export function cardRowRange(selection: CardSelection, row: number): Readonly<{ start: number; end: number }> | null {
+  const [from, to] = orderedPoints(selection.anchor, selection.focus);
+  return row < from.row || row > to.row ? null : { start: row === from.row ? from.cell : 0, end: row === to.row ? to.cell : Number.MAX_SAFE_INTEGER };
+}
+/**
+ * The text a mouse selection over a card's body copies: the drawn rows, a body line wrapped over several rows joined back (an exact value —
+ * a link, a command — with nothing between its pieces, prose with a space; a continuation row's label-column padding is dropped), lines by
+ * newlines. Only body rows are selectable, so an entry's text (a masked key) or an option row is never part of it.
+ */
+export function cardSelectionText(rows: readonly string[], lines: readonly Readonly<{ line: number; exact: boolean; labelled: boolean }>[], selection: CardSelection): string {
+  const [from, to] = orderedPoints(selection.anchor, selection.focus);
+  let out = '';
+  for (let row = from.row; row <= Math.min(to.row, rows.length - 1); row++) {
+    const range = cardRowRange(selection, row)!, piece = sliceCells(rows[row] ?? '', range.start, range.end).trimEnd(), here = lines[row];
+    if (row === from.row) out = piece;
+    else if (here && lines[row - 1]?.line === here.line) out += here.exact && !here.labelled ? piece : `${here.exact ? '' : ' '}${piece.trimStart()}`;
+    else out += `\n${piece}`;
+  }
+  return out;
 }
 
 /** OSC 8 around a drawn link row: only an http(s) address of printable ASCII is ever put in the sequence (no ESC, BEL or space). */

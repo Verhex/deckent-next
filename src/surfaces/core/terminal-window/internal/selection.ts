@@ -24,7 +24,7 @@ export function comparePoints(blocks: ViewportBlocks, a: SelectionPoint, b: Sele
 }
 
 /** The cells `start`..`end` (inclusive, 0-based) of a plain line; a wide character half inside the range is taken whole. */
-function sliceCells(plain: string, start: number, end: number): string {
+export function sliceCells(plain: string, start: number, end: number): string {
   let at = 0, out = '';
   for (const cluster of graphemes(plain)) {
     const width = cells(cluster), last = at + Math.max(1, width) - 1;
