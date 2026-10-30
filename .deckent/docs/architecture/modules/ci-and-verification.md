@@ -6,11 +6,12 @@ A hit verifies its input identity and all file/APK checksums, then the committed
 hashes and every installed closure before copying/staging. A missing cache builds; a corrupt one fails.
 No signature bypass or prefix restore is admitted. Cache eviction can still expose vanished upstream
 pins; the error identifies the refresh path rather than silently unpinning or repeating the build.
-Weekly/manual deps-watch resolves candidate pins in the existing digest-pinned image, compares the
+Daily/weekly/manual deps-watch resolves candidate pins in the existing digest-pinned image, compares the
 host and both sysroot closures, records outputs and runs a separate check build before emitting the
 candidate lock/runtime identity and PR body. Changed linked-library license versions stop for manual
 source verification. No image, source, shipped-arch or Core authority change is included.
-Automatic draft PR publication is wired (owner 2026-10-15): the weekly deps-watch job stays read-only
+The watch has no dependency on the advisory macOS/Windows verification matrix; its failures do not suppress the watch.
+Automatic draft PR publication is wired (owner 2026-10-15): the deps-watch job stays read-only
 (it runs npm code and builds) and exports the candidate; the separate deps-publish job is the only one
 with contents/pull-requests write, checks out the exact base the watch resolved without credentials,
 runs no package code, re-verifies the candidate (only pin fields may change, strict shapes) and opens a

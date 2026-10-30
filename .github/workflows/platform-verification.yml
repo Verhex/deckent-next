@@ -105,7 +105,8 @@ jobs:
           retention-days: 7
   deps-watch:
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 1'
+    # Daily/weekly/manual watch is independent of the advisory macOS/Windows matrix (no needs edge).
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     # Runs npm-installed code and container builds: read-only token. Publishing is the separate deps-publish job.
     permissions:
