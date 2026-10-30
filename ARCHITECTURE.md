@@ -775,7 +775,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor` and `/tasks` are
   bounded live windows (L5: `MonitorBody` through a host port; one visible window at a time; alpha.59 removed
-  `/watch-workers`, `/watch-runs`, `/watch-stop`; CLI `workers watch` stays). Full access shows a warning line above the composer. Card copy (alpha.59): Ctrl+Y and a full-window body drag use the host's one byte-capped `clipboardRequest` writer; title, entry and option rows are never copied. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
+  `/watch-workers`, `/watch-runs`, `/watch-stop`; CLI `workers watch` stays). Full access shows a warning line above the composer. Card copy (alpha.59): Ctrl+Y copies a card's title and body, a full-window drag only the selected body rows; both pass the record redaction (patterns and known values) and the host's one byte-capped `clipboardRequest` writer; entry and option rows are never copied. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
 - **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; alpha.15 `4d6f1582`, PR #46):** in the TTY terminal every
   informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's
   scrollback (ED 2 + ED 3, TTY only, also with NO_COLOR; nothing on TERM=dumb or a non-TTY) and starts a new conversation (saved history stays for

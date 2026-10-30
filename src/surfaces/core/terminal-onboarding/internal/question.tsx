@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, render, useInput, useWindowSize } from 'ink';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cardCopyLabels, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
-import { fillTemplate, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, humanRecordText, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
 import { isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];
@@ -13,7 +13,8 @@ export type CardWork = 'applying' | 'preparing';
 const COPIED_MS = 4_000;
 /** `finish` takes the one answer and says whether its apply now runs behind this card: the card then shows that it is applying and every key is
  * visibly not used (BeUser walk19R: never a silent drop, and never kept for the next card, which is another question). */
-export function OnboardingQuestionView({ question, locale, finish, copy = null, work = 'applying' }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => boolean;
+export function OnboardingQuestionView({ question, locale, finish, copy = null, known, work = 'applying' }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => boolean;
+  /** The process's known secrets: the Ctrl+Y copy passes the same record projection as every card's copy (`humanRecordText`). */ readonly known?: CliCardIo['known'];
   /** What the card says while that work runs: a write (`applying`) or a preview or check that writes nothing (`preparing`). */ readonly work?: CardWork;
   /** Ctrl+Y sends the step's title and body (never the typed text) through the host's clipboard writer; absent off a TTY. */ readonly copy?: CardCopy | null }) {
   const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
@@ -28,7 +29,8 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
     if (done.current) { if (busy.current) setRefused(true); return; }
     if (input.length > 1 && !question.text) return;
     if (copy && isCardCopyKey(input, key)) {
-      const text = terminalSafeText([question.title, ...question.body].join('\n')), result = copy.write(text);
+      // Astra 2834 R1: file names and error messages reach this body unprojected; the copy redacts like the Window cards' copy (patterns + known values).
+      const text = humanRecordText([question.title, ...question.body].join('\n'), known), result = copy.write(text);
       setCopied(result.ok ? fillTemplate(copy.labels.sent, { count: [...text].length }) : result.reason === 'too-large' ? fillTemplate(copy.labels.tooLarge, { bytes: result.bytes, max: copy.maxBytes }) : copy.labels.unavailable);
       return;
     }
@@ -75,7 +77,7 @@ export async function askOnboardingQuestion(question: OnboardingQuestion, io: Cl
     applying = apply(value); applying.then(settle, settle);
     return true;
   };
-  const view = render(<OnboardingQuestionView question={question} locale={io.locale} finish={finish} work={work}
+  const view = render(<OnboardingQuestionView question={question} locale={io.locale} finish={finish} work={work} known={io.known}
     copy={streamCardCopy((io.stdout ?? process.stdout) as NodeJS.WriteStream, cardCopyLabels(io.locale), io.env ?? process.env)} />,
     { stdin: (io.stdin ?? process.stdin) as NodeJS.ReadStream, stdout: (io.stdout ?? process.stdout) as NodeJS.WriteStream,
       interactive: true, patchConsole: false, exitOnCtrlC: false });

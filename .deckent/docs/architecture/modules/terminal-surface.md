@@ -458,9 +458,10 @@ every call. Onboarding is observed once per terminal open and again after a pers
 while no model is usable: the status row says "Model not connected — /setup" and `/setup` still offers the card; a message sent without a
 model in a person's Workline stays the draft (composer restore) and opens the model card through the `/setup` handoff (model focus), while
 agents, line mode and AI surfaces keep the typed `TERMINAL_CHAT_NOT_CONFIGURED`. Card copy (`terminal-window/internal/card-copy.ts`):
-Ctrl+Y on any card or onboarding step, and in the full window a left drag over a card's body, send the drawn, redacted body rows through the
-host's one `clipboardRequest` writer (byte-capped, TTY-only, tmux-wrapped), never the unbounded mouse `osc52Copy`; title, entry and option rows
-are not selectable, so a masked value never reaches the copy; neither key nor pointer answers or re-arms a card. The sign-in link is an OSC 8
+Ctrl+Y on any card or onboarding step copies its drawn title and body; in the full window a left drag over a card's body copies the selected
+body rows (the title is not selectable). Both pass the record redaction (`humanRecordText`: credential patterns and the known values) and the
+host's one `clipboardRequest` writer (byte-capped, TTY-only, tmux-wrapped), never the unbounded mouse `osc52Copy`; entry and option rows are
+never copied, so a masked value or typed input never reaches the copy; neither key nor pointer answers or re-arms a card. The sign-in link is an OSC 8
 link on every row it wraps over and, on the main screen only, one unbroken raw line above the live area. Tool calls: consecutive successful
 read-class calls (`toolClass` from `builtinAgentToolClass`; MCP tools never group) settle as one summary row; in the full window a plain left
 click on it shows or hides its calls, the inline layout lists them under it, and errors, approvals and writes keep their own line (presentation

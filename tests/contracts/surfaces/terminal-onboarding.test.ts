@@ -209,17 +209,35 @@ it('Astra 2761 R1 (K3): the first-task screen reads the host run-here answer; wh
 it('A57 merge: a saved conversation notice keeps the closed local-run explanation and Esc submits no first task', async () => {
   const { PassThrough, Writable } = await import('node:stream');
   const { firstTaskScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-task.js');
-  const { until } = await import('../support/workline-harness.js');
+  const { until, settle } = await import('../support/workline-harness.js');
+  const { snapshotKnownSecrets } = await import('#platform/index.js');
+  // Astra 2834 R1: a body line carrying a credential-shaped value and a known secret (as a Git file name or an error message can).
+  const KNOWN = 'known-canary-7f3e9d2a', TOKEN = 'sk-ant-api03-Z9y8X7w6V5u4T3s2', TYPED = 'typed-canary-41c0';
+  // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
+  const copies = () => [...frame.matchAll(/\u001b\]52;c;([A-Za-z0-9+/=]*)\u0007/gu)].map(match => Buffer.from(match[1]!, 'base64').toString('utf8'));
   let frame = '';
   const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 160, rows: 60 });
   const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const signal = new AbortController(), pool = { id: 'work:pool', state: 'ready' } as SetupStage;
   const model = { schemaVersion: 1 as const, steps: [], completed: 0, total: 1,
     snapshot: { ...snapshot, localRun: false, plan: { ...snapshot.plan, stages: [pool] } } };
-  const answer = firstTaskScreen(model, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never, signal: signal.signal }, undefined, 'Saved conversation: use /resume');
+  const answer = firstTaskScreen(model, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never, signal: signal.signal,
+    known: snapshotKnownSecrets([{ name: 'ONBOARDING_FIXTURE', value: KNOWN }]) }, undefined, `Saved conversation: use /resume · ${TOKEN} · ${KNOWN}`);
+  let decided = false; void answer.then(() => { decided = true; });
   try {
     await until(() => frame.includes('Saved conversation: use /resume'), 'first-task conversation notice');
     expect(frame).toContain('closed for this setup'); expect(frame).not.toContain('runs here in the terminal');
+    // Ctrl+Y copies the card through the record projection (no credential shape, no known value) and decides nothing.
+    stdin.write('\u0019'); await until(() => copies().length === 1, 'onboarding card copy');
+    expect(copies()[0]).toContain('Saved conversation: use /resume'); expect(copies()[0]).toContain('[REDACTED]');
+    expect(copies()[0]).not.toContain(TOKEN); expect(copies()[0]).not.toContain(KNOWN); expect(copies()[0]).not.toMatch(/sk-ant-|known-canary/u);
+    await settle(50); expect(decided).toBe(false);
+    // The free-text card: what the person types in its input never reaches the copy.
+    for (let index = 0; index < 12; index++) { stdin.write('\u001b[B'); await settle(15); }
+    stdin.write('\r'); await settle(400); stdin.write(TYPED); await settle(60); stdin.write('\u0019');
+    await until(() => copies().length === 2, 'free-text card copy');
+    expect(copies()[1]).not.toContain(TYPED); expect(copies()[1]).not.toContain(KNOWN); expect(copies()[1]).not.toContain(TOKEN);
+    await settle(50); expect(decided).toBe(false);
     stdin.write('\u001b'); expect(await answer).toBe('later');
   } finally { signal.abort(); await answer; stdin.destroy(); stdout.destroy(); }
 });
