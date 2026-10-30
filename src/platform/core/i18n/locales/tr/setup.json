@@ -180,6 +180,8 @@
   "setup.window.title": "Deckent kurulumu",
   "setup.window.hints": "↑↓ seç · Enter onayla · Esc kapat",
   "setup.window.position": "{from}-{to} / {total}",
+  "setup.window.applying": "Uygulanıyor…",
+  "setup.window.busyKey": "tuşlar işlenmez",
   "setup.window.yes": "Evet",
   "setup.window.no": "Hayır",
   "setup.window.later": "Şimdi değil",

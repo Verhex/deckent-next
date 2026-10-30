@@ -67,8 +67,8 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   expect(run.output).not.toContain('^['); expect(await readFile(configPath, 'utf8')).toBe(before);
   const history = JSON.parse(await readFile(join(root, '.deckent/state/onboarding.json'), 'utf8'));
   expect(history.schemaVersion).toBe(2); expect(history.entries.every((row: { folder: string }) => row.folder === '')).toBe(true);
-  // Screen buffers retain the actual layout for the lead's focus/footer review; no snapshot-only acceptance claim.
-  expect(terminalBuffers(run.output, 80, 32)).toBeDefined();
+  // walk19R: one live card region: every answered card erased its own frame, so no step card is left stacked on the main screen or its scrollback.
+  expect(terminalBuffers(run.output, 80, 32).main).not.toContain(step);
 }, 180_000);
 it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window opened from the Workline never reach the composer; Enter afterwards sends nothing', async () => {
   const base = await mkdtemp(join(tmpdir(), 'onboarding-pty-')); roots.push(base);

@@ -163,7 +163,7 @@ it('FIX9: an empty repository explains that there is nothing to commit and Enter
   expect(result).toBe('later');
   expect(frame).toContain('no files to commit yet'); expect(frame).toContain('Skip for now'); expect(frame).not.toMatch(/0 of 0|of 0 files/u);
 });
-it('BeUser ZEY-02/D-04: the management-rights step follows permission mode, is skippable, comes back in /setup and applies only the previewed digest', async () => {
+it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and applies only the previewed digest; permission cards show their work and replace each other', async () => {
   const needed = { ...snapshot, permissions: { state: 'needs-confirmation' as const, reason: '' }, rights: { state: 'needed' as const, digest: 'd'.repeat(64), rules: 9 } };
   expect(onboardingSteps(needed).slice(0, 3).map(row => row.id)).toEqual(['permissions:start-mode', 'onboarding:budget', 'permissions:owner-rights']);
   expect(onboardingSteps({ ...needed, rights: { state: 'current', rules: 0 } }).some(row => row.kind === 'rights')).toBe(false);
@@ -171,6 +171,25 @@ it('BeUser ZEY-02/D-04: the management-rights step follows permission mode, is s
   expect(onboardingSteps({ ...needed, deferred: ['permissions:owner-rights'] }, true).some(row => row.kind === 'rights')).toBe(true);
   const question = guideQuestion({ schemaVersion: 1, steps: [], completed: 0, total: 3, snapshot: needed }, 'rights', 'en');
   expect(question.body.join('\n')).toContain('pause and resume them in an emergency'); expect(question.body.join('\n')).not.toMatch(/rules|deckent init|owner-baseline/u); expect(question.choices.map(row => row.id)).toEqual(['apply']);
+  // walk19R: the profile card stays up while its preview runs and says so; Enter pressed then is visibly not used and never answers the next
+  // card (whose Enter would apply); the next card replaces it in one live region, and an answered card leaves no frame behind.
+  const { PassThrough, Writable } = await import('node:stream'), { until, settle } = await import('../support/workline-harness.js'), { terminalBuffers } = await import('../../fixtures/terminal-screen.js');
+  const { guideScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/guides.js');
+  let frame = '', release = () => {}; const applied: string[] = [], profiles = [{ id: 'core:solo', version: 1 }];
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 30 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const port = { assertPerson: async () => {}, permissions: async (digest: string) => { applied.push(digest); },
+    previewPermissions: () => new Promise(resolve => { release = () => resolve({ state: 'needs-confirmation', reason: 'onboarding.permissions.guided', digest: 'p'.repeat(64), selectedProfile: profiles[0] }); }) } as unknown as OnboardingPort;
+  const picking = { ...snapshot, permissions: { state: 'needs-profile' as const, reason: '', profiles } };
+  const result = guideScreen({ schemaVersion: 1, steps: [], completed: 0, total: 2, snapshot: picking }, 'permissions', port, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
+  const main = () => terminalBuffers(frame.replace(/\n/gu, '\r\n'), 100, 30).main; // the TTY's ONLCR, as a real terminal receives it
+  try {
+    await until(() => frame.includes('Esc · Later'), 'profile card'); stdin.write('\r');
+    await until(() => frame.includes('Preparing…'), 'preparing'); stdin.write('\r'); await until(() => frame.includes('keys ignored'), 'ignored key note');
+    release(); await until(() => frame.includes('> Enter · Continue'), 'permission card'); await settle(200);
+    expect(applied).toEqual([]); expect(main().split('Step 1/2').length - 1).toBe(1); expect(main()).not.toContain('Choose a profile');
+    stdin.write('\r'); expect(await result).toBe('applied'); expect(applied).toEqual(['p'.repeat(64)]); expect(main()).not.toContain('Step 1/2');
+  } finally { stdin.destroy(); stdout.destroy(); }
 });
 it('BeUser M-J6: a chosen first task is not offered at every open, is not named as deferred, and /setup still offers it', () => {
   const done = { ...snapshot, budget: { ...snapshot.budget, needed: false }, deferred: ['onboarding:first-task:done'] };
