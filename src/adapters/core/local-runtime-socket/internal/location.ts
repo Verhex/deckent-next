@@ -29,6 +29,12 @@ export async function prepareRuntimeSocket(layout: ProductLayout, create = true,
   const socketRefused = socket ? socketFileRefusal(socket) : null;
   if (socketRefused) throw unsafeEndpoint(socketRefused); if (healed) onHealed?.('parent-mode'); return endpoint; // reported once the checks passed
 }
+/** Read-only observation (BeUser walk20 lifecycle): `absent` only for a safe absence (no parent, or this uid's own real 0700 parent without a
+ * socket), `present` for a checked socket file, `unknown` for an unsafe or unreadable path. Never creates, repairs or connects. */
+export async function observeRuntimeSocket(layout: ProductLayout): Promise<'present' | 'absent' | 'unknown'> {
+  try { return await lstat(await prepareRuntimeSocket(layout, false)).then(() => 'present' as const, error => (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' as const : 'unknown' as const); }
+  catch (error) { return error instanceof LocalRuntimeSocketError && error.code === 'LOCAL_RUNTIME_UNAVAILABLE' ? 'absent' : 'unknown'; }
+}
 /** RESTART-HUNT (alpha.56.1): an open-view bwrap mask can leave a vanished runtime directory on the host as 0755. At the service start only, its
  * own empty directory whose only fault is the mode (a real directory of this uid at its own real path) is re-created: rmdir + mkdir, never a path
  * chmod (that follows a link swapped in after the lstat); rmdir refuses a link or a non-empty directory. The caller's checks then run once, unchanged. */

@@ -15,4 +15,4 @@ export { acquireLedgerLock, type LedgerLock } from './internal/ledger-lock.js';
 export { listenForContainerPeer, localPeerNativePath } from './internal/container-peer.js';
 export type { ContainerPeer } from './internal/container-peer.js';
 
-export { runtimeSocketLocation, prepareRuntimeSocket, runtimeSocketHealable } from './internal/location.js';
+export { runtimeSocketLocation, prepareRuntimeSocket, runtimeSocketHealable, observeRuntimeSocket } from './internal/location.js';

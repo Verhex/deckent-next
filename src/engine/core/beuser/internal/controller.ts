@@ -83,10 +83,15 @@ export class BeuserController {
     this.budget.step();
     if (++this.steps > Math.min(this.context.limits.maxSteps, this.summary.patience.maxSteps)) throw new BeuserWalkStopped('bound');
   }
-  /** Walk20: a wait is charged the time it actually took (the driver returns once the product redrew and settled), never more than asked. */
-  wait(requested: number, elapsed: number): void {
-    const ms = Math.min(requested, Math.max(0, Math.ceil(elapsed)));
-    this.budget.wait(ms); if ((this.waited += ms) > this.waitPatience()) throw new BeuserWalkStopped('bound');
+  /** Walk20: a wait is charged the time it actually took (the driver returns once the product redrew and settled; surface work may add to
+   * it). Past the persona's wait patience it is `patience`; past the admitted wait bound it is `bound`. */
+  wait(elapsed: number): void {
+    const ms = Math.max(0, Math.ceil(elapsed));
+    let envelope: unknown = null;
+    try { this.budget.wait(ms); } catch (error) { envelope = error; }
+    if ((this.waited += ms) > this.summary.patience.maxWaitMs) throw new BeuserWalkStopped('patience');
+    if (envelope) throw envelope;
+    if (this.waited > this.context.limits.maxWaitMs) throw new BeuserWalkStopped('bound');
   }
   private waitPatience(): number { return Math.min(this.context.limits.maxWaitMs, this.summary.patience.maxWaitMs); }
   modelCall(): void { this.budget.call(); if (++this.calls > this.context.limits.maxCalls) throw new BeuserWalkStopped('bound'); }

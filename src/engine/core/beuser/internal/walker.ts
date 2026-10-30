@@ -42,27 +42,34 @@ export async function walkBeuser(controller: BeuserController, ports: {
       assertBeuserAccess(context, parsed.data.binding, context.principal, { kind: 'beuser-sandbox', id: parsed.data.binding.realmId }, 'create');
       // Walk19R: a stop verdict, and (walk20) a key or text, first read the screen once more. A product that redrew after the screen the
       // persona decided on is decided again: no stop, and no input lands on a card the persona never saw. Unchanged, the read is retained.
-      const reread = async () => {
+      // A stop compares digit-masked screens (the loop equality); input compares the exact screen, since a digit can carry the choice
+      // (`1: Deny; 2: Allow` swapped to `2: Deny; 1: Allow`).
+      const retain = async (fresh: BeuserScreen) => { controller.screen(fresh); await controller.call('beuser-transcript', 'inspect', () => ports.record(fresh)); };
+      const reread = async (same: (fresh: BeuserScreen) => boolean) => {
         const fresh = await controller.call('beuser-sandbox', 'create', ctx => ports.surface.look(ctx));
-        const changed = beuserSettledScreen(fresh) !== beuserSettledScreen(shown);
-        if (!changed) { controller.screen(fresh); await controller.call('beuser-transcript', 'inspect', () => ports.record(fresh)); }
+        const changed = !same(fresh);
+        if (!changed) await retain(fresh);
         return { fresh, changed };
+      };
+      const stop = async (screen: BeuserScreen, error: BeuserWalkStopped & { reason: BeuserStopReason }): Promise<never> => {
+        if (ports.stopped) await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(screen, action, error.reason));
+        throw error;
       };
       try { controller.action(shown, action); }
       catch (error) {
         if (error instanceof BeuserContractError && error.code === 'BEUSER_ACTION_INVALID') { controller.acted(shown, action, error.code); throw error; }
         if (!personaStop(error)) throw error;
-        const { fresh, changed } = await reread();
-        if (changed) return fresh;
-        if (ports.stopped) await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(fresh, action, error.reason));
-        throw error;
+        const { fresh, changed } = await reread(fresh => beuserSettledScreen(fresh) === beuserSettledScreen(shown));
+        return changed ? fresh : stop(fresh, error);
       }
-      if (action.kind === 'press' || action.kind === 'type') { const { fresh, changed } = await reread(); if (changed) return fresh; }
+      if (action.kind === 'press' || action.kind === 'type') { const { fresh, changed } = await reread(fresh => fresh.digest === shown.digest); if (changed) return fresh; }
       try {
         const started = performance.now();
         const next = await controller.call('beuser-sandbox', 'create', ctx => action.kind === 'look' ? ports.surface.look(ctx)
           : action.kind === 'type' ? ports.surface.type(ctx, action.text) : action.kind === 'press' ? ports.surface.press(ctx, action.key) : ports.surface.wait(ctx, action.ms));
-        if (action.kind === 'wait') controller.wait(action.ms, performance.now() - started);
+        // Walk20: a wait is charged its real time; one that ran past the wait patience left ends as persona-patience on the screen it returned.
+        if (action.kind === 'wait') try { controller.wait(performance.now() - started); }
+        catch (error) { if (personaStop(error)) { await retain(next); await stop(next, error); } throw error; }
         controller.acted(shown, action); return next;
       } catch (error) {
         if (error instanceof BeuserContractError && error.code === 'BEUSER_ACTION_INVALID') controller.acted(shown, action, error.code);

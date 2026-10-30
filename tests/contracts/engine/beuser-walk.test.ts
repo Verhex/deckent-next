@@ -74,10 +74,11 @@ it('walks the actual approval-card Enter action and consumes harness readback, n
   // Walk20: the screen is read again before a key; a card drawn after the one the persona decided on drops the key and is decided again.
   const stale = harness(); let reads = 0;
   const at = (text: string): BeuserScreen => ({ binding, sequence: ++reads, text, digest: sha256(text) });
-  stale.ports.surface.look = vi.fn(async () => at(reads === 0 ? 'Preparing…' : 'Personal full-auto card'));
-  stale.ports.surface.press = vi.fn(async () => at('completed'));
+  // Astra 2842 R1: the input guard compares the exact screen; a swapped numeric choice is a changed card, though its digit-masked form is not.
+  stale.ports.surface.look = vi.fn(async () => at(reads === 0 ? '1: Deny; 2: Allow' : '2: Deny; 1: Allow'));
+  stale.ports.surface.press = vi.fn(async () => at('completed')); stale.ports.decode = () => ({ schemaVersion: 1, binding, action: { kind: 'press', key: '1' } });
   expect(await stale.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null });
-  expect(vi.mocked(stale.ports.models.walker).mock.calls.map(call => call[2].text)).toEqual(['Preparing…', 'Personal full-auto card']);
+  expect(vi.mocked(stale.ports.models.walker).mock.calls.map(call => call[2].text)).toEqual(['1: Deny; 2: Allow', '2: Deny; 1: Allow']);
   expect(stale.ports.surface.press).toHaveBeenCalledOnce();
   expect(vi.mocked(stale.ports.surface.press).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(stale.ports.surface.look).mock.invocationCallOrder[2]!);
 });
@@ -142,16 +143,21 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
   for (const h of [product(press, 1000, () => clock >= 3500 ? 'completed' : 'approval card'), product(look, 2000, () => clock >= 8000 ? 'completed' : ''),
     product(press, BEUSER_WALK_RULES.settleMs, reads => reads === 6 ? 'completed' : 'approval card')])
     expect(await h.app.walk(roomy, summary)).toMatchObject({ state: 'completed', reason: null });
-  // Walk20: a wait that returned early is charged the time it took; one beyond the patience left is a correction before any effect; a wait
-  // with none left is the persona out of patience, retained as RED persona-patience on the screen read once more.
-  const wait = harness(), patience = vi.fn(async () => {}); clock = 0;
-  const waits = [60, 90, 80, 1].map(ms => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms } }));
-  wait.ports.decode = () => waits.shift(); wait.ports.stopped = patience;
-  const { look: read } = wait.ports.surface; wait.ports.surface.wait = vi.fn(async (ctx: BeuserContext, ms: number) => { clock += ms === 60 ? 20 : ms; return read(ctx); });
-  expect(await wait.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'patience' });
-  expect(vi.mocked(wait.ports.models.walker).mock.calls.map(call => [call[3].remainingWaitMs, call[4]])).toEqual([[100, undefined], [80, undefined], [80, 'BEUSER_ACTION_INVALID'], [0, undefined]]);
-  expect(vi.mocked(wait.ports.surface.wait).mock.calls.map(call => call[1])).toEqual([60, 80]);
-  expect(patience).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: 'approval card' }), { kind: 'wait', ms: 1 }, 'patience');
+  // Walk20: a wait is charged the time it really took, shorter (it returned early) or longer (surface work) than asked; one beyond the
+  // patience left is a correction before any effect. A wait that ran past the patience, or one asked with none left, is the persona out of
+  // patience: RED persona-patience on the last screen (the wait's own, or one read once more).
+  const timed = (requests: readonly number[], durations: number[]) => { const h = harness(), stopped = vi.fn(async () => {}), { look } = h.ports.surface; clock = 0;
+    h.ports.decode = vi.fn(() => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms: requests[vi.mocked(h.ports.decode).mock.calls.length - 1]! } }));
+    h.ports.stopped = stopped; h.ports.surface.wait = vi.fn(async (ctx: BeuserContext) => { clock += durations.shift()!; return look(ctx); }); return { h, stopped }; };
+  const over = timed([60, 90, 30, 30], [20, 50, 40]);
+  expect(await over.h.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'patience' });
+  expect(vi.mocked(over.h.ports.models.walker).mock.calls.map(call => [call[3].remainingWaitMs, call[4]])).toEqual([[100, undefined], [80, undefined], [80, 'BEUSER_ACTION_INVALID'], [30, undefined]]);
+  expect(vi.mocked(over.h.ports.surface.wait).mock.calls.map(call => call[1])).toEqual([60, 30, 30]);
+  expect(over.stopped).toHaveBeenCalledExactlyOnceWith(await vi.mocked(over.h.ports.surface.wait).mock.results.at(-1)!.value, { kind: 'wait', ms: 30 }, 'patience');
+  const spent = timed([100, 1], [100]);
+  expect(await spent.h.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'patience' });
+  expect(spent.h.ports.surface.wait).toHaveBeenCalledOnce();
+  expect(spent.stopped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: 'approval card' }), { kind: 'wait', ms: 1 }, 'patience');
   // Walk18 SELF: a budget cycle whose screens differ only by a revision number is a loop; a stepper changing one number per press is not.
   const at = (text: string, sequence: number): BeuserScreen => ({ binding, sequence, text, digest: sha256(text) });
   const walk = (texts: readonly string[], action: { kind: 'press'; key: string }) => { const controller = new BeuserController(context(), summary);

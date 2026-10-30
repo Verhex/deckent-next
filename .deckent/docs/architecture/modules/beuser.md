@@ -55,10 +55,11 @@ profile with verified literal-loopback/zero-tariff evidence is accepted at zero 
 still require a quote in the envelope's currency. Existing invocation authorization and fresh
 profile/spending pins remain authoritative.
 The controller audit scan is limited by the recorded BeUser byte/time bounds; an incomplete scope scan remains unknown. Recovery uses current local management access with the retained profile/custody; missing kernel/cgroup custody or unavailable accepted filesystem proof stays quarantined. The real calibration cohort remains open. Author source wiring and dry admission do not prove an assembled journey.
-The current final-state probe observes installation existence and (walk20) target lifecycle: no runtime
-socket reads `stopped` when installed and `absent` when not; a socket file alone does not prove a running
-service and reads unknown. The outcome dimension (installation, lifecycle) is therefore fully read, so a
-real mismatch there is RED instead of being hidden by an unread sibling. Preserved-data, card,
+The current final-state probe observes installation existence and (walk20) target lifecycle through the
+socket adapter's own safe read (parent lstat, real path, uid and mode; no create, repair or connect): a safe
+absence reads `stopped` when installed and `absent` when not; an unsafe or unreadable path, or a socket file
+alone (which does not prove a running service), reads unknown. When both are read, a real mismatch in the
+outcome dimension (installation, lifecycle) is RED instead of being hidden by an unread sibling. Preserved-data, card,
 receipt-location and forbidden-effect have no in-realm reader yet: their probes stay in the journey assets
 and read unknown, which keeps the authorization and safety dimensions (and so any GREEN) unknown rather
 than dropping those requirements. Only a single final readback reference is
@@ -258,17 +259,21 @@ stop the screen is read once more (retained as a `look`); if it changed, the wal
 on it and no verdict is given. After input, resize or a secret step the driver's `quietMs`
 silence window opens at the target's first answering byte, bounded by `inactivityMs`.
 Registry revision `beuser-limits-4` (walk20, 2026-10-30) closes three harness gaps. (1) Before a
-`press` or `type` is sent the screen is read once more; if its digit-masked form changed since the
-screen the walker decided on, the input is dropped (never sent) and the walker decides again on the
-new screen, so a synthetic person never answers a card it did not see (walk20 uninstall: Enter sent
-1.3 s after "Hazırlanıyor…" landed on an unseen "Bireysel tam otomatik" card). An unchanged read is
-retained as a `look`. Witness rules are unchanged. A short window between that read and the key
-write remains. (2) A `read` (look, wait) returns once the target redrew and then stayed silent for
+`press` or `type` is sent the screen is read once more; if it changed in any way since the screen the
+walker decided on (exact comparison, digits included: a swapped `1: Deny; 2: Allow` is a different card),
+the input is dropped (never sent) and the walker decides again on the new screen (walk20 uninstall: Enter
+sent 1.3 s after "Hazırlanıyor…" landed on an unseen "Bireysel tam otomatik" card). Stops keep the
+digit-masked loop equality. An unchanged read is retained as a `look`. Witness rules are unchanged. The
+read and the key write are not atomic: between them run the transcript record, the realm check, the
+action evidence write and the driver round trip, none bounded by `quietMs`; a redraw inside that window
+can still receive the key. (2) A `read` (look, wait) returns once the target redrew and then stayed silent for
 `inactivityMs`, longer than a spinner frame, so a spinner keeps it waiting and a silent target is
-read for the whole time; a wait is charged the time it actually took, never more than asked. A wait
-longer than the wait patience left is a correction; with no wait patience left, a wait is the persona
-out of patience: the screen is read once more (a changed screen is decided again) and the stop is
-the RED `persona-patience` finding (reason `patience`) with that last screen. (3) The guard read
+read for the whole time. A wait is charged the time it really took, shorter or longer than asked
+(surface work adds to it). A wait longer than the wait patience left is a correction. A wait that ran
+past the wait patience ends on the screen it returned; with no wait patience left, a wait first reads
+the screen once more (a changed screen is decided again). Either stop is the RED `persona-patience`
+finding (reason `patience`) with that last screen. The `inactivityMs` bound now also sets the read's
+settle window; lowering it below a spinner frame would make waits return on every frame. (3) The guard read
 costs one surface step per key or text, so the provisional profile's `maxSteps` is 242
 (2 × the largest persona step patience 120, plus the first look and a stop's read); the decision
 bound stays the persona's step patience. Wait, call and wall budgets are unchanged. Each walker call carries
