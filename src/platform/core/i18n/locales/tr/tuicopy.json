@@ -6,5 +6,9 @@
   "tuicopy.range": "Kopyalanacak yalnızca {max} yanıt var; /copy ile 1 ile {max} arasında bir sayı verin.",
   "tuicopy.usage": "Kullanım: /copy [n] (1 son yanıt, 2 ondan önceki)",
   "tuicopy.tooLarge": "{n}. yanıt {bytes} bayt; tek pano isteği en çok {max} bayt taşır. Bunun yerine metni fareyle seçin.",
-  "tuicopy.unavailable": "Bu terminal burada pano isteği alamaz (etkileşimli bir terminal değil)."
+  "tuicopy.unavailable": "Bu terminal burada pano isteği alamaz (etkileşimli bir terminal değil).",
+  "tuicopy.card.hint": "Ctrl+Y kopyala",
+  "tuicopy.card.sent": "{count} karakter panoya gönderildi",
+  "tuicopy.card.tooLarge": "Kopyalamak için çok uzun ({bytes}/{max} bayt)",
+  "tuicopy.card.unavailable": "Pano burada kullanılamıyor"
 }

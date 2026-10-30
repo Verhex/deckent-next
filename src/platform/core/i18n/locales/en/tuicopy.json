@@ -6,5 +6,9 @@
   "tuicopy.range": "There are only {max} answer(s) to copy; use /copy with a number from 1 to {max}.",
   "tuicopy.usage": "Usage: /copy [n] (1 is the latest answer, 2 the one before it)",
   "tuicopy.tooLarge": "Answer {n} is {bytes} bytes; one clipboard request carries at most {max} bytes. Select the text with the mouse instead.",
-  "tuicopy.unavailable": "This terminal cannot take a clipboard request here (it is not an interactive terminal)."
+  "tuicopy.unavailable": "This terminal cannot take a clipboard request here (it is not an interactive terminal).",
+  "tuicopy.card.hint": "Ctrl+Y copy",
+  "tuicopy.card.sent": "{count} characters sent to clipboard",
+  "tuicopy.card.tooLarge": "Too long to copy ({bytes}/{max} bytes)",
+  "tuicopy.card.unavailable": "Clipboard unavailable here"
 }

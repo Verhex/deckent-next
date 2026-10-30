@@ -3,8 +3,9 @@ import { render, useApp } from 'ink';
 import { colorCapability, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, humanRecordText, prefersAsciiGlyphs, resolveRenderGlyphs, span } from '#surfaces/core/terminal-render/index.js';
-import { QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
-import type { CliCardRequest } from './card.js';
+import { CardCopyContext, QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
+import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
+import { cardCopyLabels, type CliCardRequest } from './card.js';
 
 /** The card body: the terminal's bounded window and question rows, answered once; Esc, Ctrl+C or the window's close give no answer. */
 function CliCard({ request, hints, known, finish }: { readonly request: CliCardRequest; readonly hints: string; readonly known?: KnownSecretSnapshot | undefined;
@@ -36,7 +37,9 @@ export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin
   if (io.signal?.aborted) return null;
   const palette = resolveWorklinePalette(colorCapability({ env: io.env, isTTY: true, argv: [] }));
   const view = render(<WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={resolveRenderGlyphs(prefersAsciiGlyphs(io.env))}>
+    <CardCopyContext.Provider value={streamCardCopy(io.stdout, cardCopyLabels(io.locale), io.env)}>
     <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
+    </CardCopyContext.Provider>
   </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
   // Cancellation of the command closes the card with no answer.
   const abort = () => { chosen = null; view.unmount(); };
