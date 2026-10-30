@@ -1,6 +1,6 @@
 # BeUser B1 source integration
 
-B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19 on the alpha.58 candidate waits for the owner's GPU window; alpha.58's BeUser scope is installation and first settings.
+B1 shipped in alpha.57 (live 2026-10-29). The mechanism walks end to end on the host; the first walk (walk16) ran three journeys and all three were red; walk17 and walk18 on alpha.58 integration stages ended without a verdict (unknown), so no journey is accepted yet (0/3). Walk19R on the alpha.58 live stage (2026-10-30) stopped all three journeys as false `persona-stuck` reds: the walker decided on screens the product had not redrawn yet; the settle rule below (`beuser-limits-3`) is in the alpha.59 candidate and the three journeys are walked again after it. alpha.58's BeUser scope is installation and first settings.
 
 | Responsibility | Source mechanism | Production/acceptance boundary |
 |---|---|---|

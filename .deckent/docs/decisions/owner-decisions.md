@@ -1021,3 +1021,19 @@ ve `opus-beta-isler.md` Git'te izlenmez.
   kapatma koruması, belge uzlaştırmaları (ARCHITECTURE uninstall paragrafı, Codex Ç3/Ç8/Ç10) ve dosya boyutu ölçü kilidi (PLAN Sıradaki 12,
   ilk adım). F1/F3/F4/F6 böylece iş olarak kabul edildi; F2 ve F5 bu pakette değil.
 - **Native birimi:** kişi-gün, kaynaktaki gibi ([native-platforms](../plan/native-platforms-2026-10-21.md): macOS 60–110, Windows 110–190 kişi-gün).
+
+## Owner kararları — 2026-10-30: alpha.59 paket 1
+
+Kaynak: dış `proof/ALPHA59/PAKET-1/CARD.md` (owner turları 1–4, kanun denetimi ilk tur HOLD, yeniden denetim PASS) ve lead 6ea3ba88'in owner soruları.
+
+- **Açılış hızı:** P1 (günlük doğrulama önbelleği, custody denetimleri her çağrıda) + P2 (açılış başına tek onboarding gözlemi) ilk iş; P3 (önce çiz) ayrı kart.
+- **Model kartı:** Esc · Later kalıcı; durum satırı notu ve komut `/setup` (`/models` diye bir komut yok); model ertelenmişken gönderilen mesaj
+  taslak kalır ve model kartı açılır.
+- **İzleme komutları:** terminal `/watch-workers`, `/watch-runs`, `/watch-stop` kaldırılır; bilgi `/tasks` ve `/runs`'ta; CLI `deckent workers watch` kalır.
+- **Kart kopyalama:** kart metni kopyalanabilir; fareyle seçim birincil, Ctrl+Y hızlı kopya; tek yazar host `clipboardRequest`; maskeli değer,
+  token ve cihaz kodu kopyaya girmez; kopya tuşu onay değildir. Tam ekranda bölünmemiş OAuth URL satırı şimdilik gerekmez.
+- **walk19R bulguları:** BeUser harness settle kuralı (L4) ve ürün sürtünmesi (uygulanıyor göstergesi, sessiz tuş düşmesi yok, kartlar üst üste
+  kalmaz; L5) bu pakete; ardından üç yolculuk yeniden yürünür.
+- **Araç çağrıları:** ardışık okuma çağrıları tek satır, ayrıntı fare tıklamasıyla açılır (Ctrl+O değil); hata, onay ve yazma ayrı satır.
+  Fare olmayan satır içi düzende özetin altında çağrılar da görünür (kabul).
+- **Dependency watch:** günlük çalışır.

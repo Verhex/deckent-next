@@ -116,7 +116,9 @@ one section; other sections link to it.
   [First-run setup](#first-run-setup)).
 - **Onboarding:** the first interactive terminal open shows sequential setup screens before the Workline. `/setup` revisits them.
   Escape defers only the current screen for this person and launch folder. On relaunch, each operation is observed again; a closed screen
-  never proves that its operation completed. AI, MCP, pipes and CI do not answer person-only screens.
+  never proves that its operation completed. AI, MCP, pipes and CI do not answer person-only screens. Esc · Later on the model card
+  (alpha.59) holds while no model is usable: later opens skip the card, the status row says "Model not connected — /setup" and `/setup`
+  offers it again. A message you send with no model is not sent: it stays in the input as a draft and the model card opens.
 - **Permission defaults:** versioned profile data supplies the offered start mode. The shipped `core:solo@1` entry offers full auto;
   profiles or versions without an entry retain standard mode. The confirmation opens the person's mode grant through the installer
   writer, then saves the mode through the existing mode application. An interruption between those writes resumes at the missing mode
@@ -406,6 +408,12 @@ higher than your Deckent budget; Deckent cannot see either setting.
   `/clear` empties the view and that scrollback. The full window takes the mouse only while it is shown: the wheel scrolls, a
   left drag selects conversation text and copies it on release (OSC 52); clicks never answer a card. Your terminal's modifier
   (Shift in most terminals; Option in iTerm2; Fn in Terminal.app) still gives native selection.
+- **Copying cards and tool calls (alpha.59).** Ctrl+Y copies the open card's shown, masked title and text (approval, question,
+  sign-in, onboarding or error card); in the full window a left drag over a card's text selects it and copies it on release. Input
+  lines and answer rows are never copied, so a masked key never reaches the clipboard, and neither key nor drag answers a card. On the
+  main screen the sign-in link is also printed once as one unbroken line. Consecutive file reads, folder listings and searches show as
+  one summary line ("2 files read, 1 directory listed"); in the full window a click on it shows or hides the calls, the inline layout
+  lists them under it. Errors, approvals and changes keep their own line.
 - **Slash-command windows and focus.** Slash-command windows and cards open right above the input bar, take at most half the
   screen and scroll inside (arrows, PageUp/PageDown and Home/End, with a visible row range); they shrink the conversation area
   and never move the bar. A window opened by your command or selection takes focus immediately; Escape closes it back to input.

@@ -117,6 +117,10 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 
 - **Başlamadan önce:** kurulumunuzda güncel ilk kurulum policy'si olmalıdır; eski bir kurulum önce yükseltilir (bkz.
   [Başlangıç kurulumu](#başlangıç-kurulumu)).
+- **Onboarding:** ilk etkileşimli terminal açılışı Workline'dan önce sıralı kurulum ekranları gösterir; `/setup` onlara geri döner.
+  Model kartındaki Esc · Later (alpha.59) kullanılabilir model yokken kalıcıdır: sonraki açılışlarda kart gelmez, durum satırı
+  "Model bağlı değil — /setup" der ve `/setup` kartı yeniden sunar. Model yokken gönderdiğiniz mesaj gönderilmez: taslak olarak girişte
+  kalır ve model kartı açılır.
 - **İşçi imajı (alpha.54):** `deckent init` işçi imajını kurulu paketten ön planda derler; önce boyutu ve süre sınırını
   (`toolchains.update.buildTimeoutMs`) söyleyen bir kart gösterir ve bu kurulum için bir makbuz kaydeder.
   `deckent init --image-id sha256:<kimlik>` ise bu Docker'da zaten olan bir imajı paketin işçi imaj sürümüyle karşılaştırır
@@ -407,6 +411,12 @@ OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde a
   o geçmişi boşaltır. Tam pencere fareyi yalnız gösterilirken alır: tekerlek kaydırır, sol sürükleme sohbet metnini seçer ve
   bırakınca kopyalar (OSC 52); tıklama hiçbir kartı yanıtlamaz. Terminalinizin değiştirici tuşu (çoğu terminalde Shift;
   iTerm2'de Option; Terminal.app'te Fn) yerel seçimi sağlamaya devam eder.
+- **Kartları ve araç çağrılarını kopyalama (alpha.59).** Ctrl+Y açık kartın gösterilen, maskeli başlığını ve metnini kopyalar (onay,
+  soru, giriş, onboarding ya da hata kartı); tam pencerede kart metni üzerinde sol sürükleme seçer ve bırakınca kopyalar. Giriş
+  satırları ve cevap satırları hiç kopyalanmaz, bu yüzden maskeli anahtar panoya ulaşmaz; ne tuş ne sürükleme kartı yanıtlar. Ana
+  ekranda giriş bağlantısı ayrıca bir kez bölünmemiş tek satır olarak yazılır. Art arda dosya okuma, klasör listeleme ve aramalar tek
+  özet satırında görünür ("2 dosya okundu, 1 klasör listelendi"); tam pencerede satıra tıklamak çağrıları gösterir ya da gizler, satır
+  içi düzen onları altında listeler. Hatalar, onaylar ve değişiklikler kendi satırında kalır.
 - **Slash komutu pencereleri ve odak.** Slash komutu pencereleri ve kartlar giriş barının hemen üstünde açılır, ekranın en çok
   yarısını kaplar ve içeride kayar (oklar, PageUp/PageDown ve Home/End; satır aralığı görünür); sohbet alanını daraltır, barı
   oynatmaz. Komutunuzla ya da seçiminizle açılan pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama

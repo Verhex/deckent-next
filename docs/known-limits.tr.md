@@ -9,14 +9,13 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.57 main'e indi (PR #120 ve #121) ve canlıda. Alpha.58 sürüm adayıdır, yayımlanmadı; alpha.58 işaretli maddeler bu adayı anlatır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.58 main'e indi (PR #123) ve canlıda. Alpha.59 sürüm adayıdır, yayımlanmadı; alpha.59 işaretli maddeler bu adayı anlatır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
 
 Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel kalıcı realm kayıtlarını, private transport'u, C4/C5 kanıtını, TaskEvaluation ve Run raporunu bağlar. R3-B izin verisini init/upgrade yayınının içine alır; replay özgün byte denetimini korur. Dry admission yazar kanıtıdır, gerçek realm yolculuğu değildir. Gizli adım FD kaynağı/doğrulanmış reset, tam milestone readback'leri ve ölçülmüş çağrı/maliyet/güvenilirlik kanıtı açıktır; ölçülmeyen alanlar unknown/null kalır. Sonlu limits profili provisional'dır. Mühürlü ledger hiçbir yolda export/backup/restore olamaz; yedek bağımlı dallar unknown kalır. Desteklenmeyen private systemd unknown/non-blocking'dir. Host socket/bus çözümü yoktur. Native adoption/tam surfaces B2/B4'tür. Birleşik sürümde host üzerindeki ilk yürüyüş üç yolculuğu koştu; üçü de kırmızı çıktı, yani yolculuk kabulü ve owner kabulü açıktır.
 
-- **Alpha.57'de `deckent init` içinde evet/hayır harfleri her yerde kabul edilmez.** İlk kart evet cevabının yanında `y` tuşunu gösterir ve `y` alır; ardından gelen rehberli kurulum penceresi harf göstermez ve `y`'yi sessizce yok sayar. *Etki:* orada `y`'ye basan kişi (ya da BeUser personası) hiçbir şey olmadığını görür. *Yol:* vurgulu cevabı seçmek için Enter'a basın. Alpha.58 adayı her evet/hayır kartında (y)/(n) gösterir ve alır; bu madde o sürüm inince kalkar.
 - **BeUser yalnız tanıksız ulaşabildiği başlangıç durumlarını hazırlar (alpha.58).** v3 yolculuk profili dalının katalogdaki başlangıç durumlarını adlandırır. Persona ilk ekrana bakmadan önce Deckent bunları realm içinde terminalsiz bir exec ile (stdin kapalı, kullanıcı ve dil açık) hazırlar, personanın terminalinden asla geçirmez ve her birini geri okur. Katalog şunları hazırlar: `deckent init --yes --scope beuser-realm --json` ile kurulu Deckent, `.deckent/` altında Git'in izlediği bir dosya olan Git projesi, `.deckent/` altında bilinmeyen bir dosya, durmuş servis, ikinci kurulum, okunamayan kayıt defteri, güvensiz yetki dosyası, elle yazılmış başlatıcı, kanıtlanamayan kurulum yöntemi, boş önbellek, taze ev klasörü, Docker soketi olmaması, kişinin kendi dosyalarının olduğu klasör ve montajlı aday. Personanın dili ve erişilebilirlik ihtiyacı profilinden gelir; `cancel` personanın kendi eylemidir. Şunlar unknown kalır ve rapor her birini nedeniyle adlandırır: kişinin tanıklığını isteyenler (yönetilen politika ve onaylar `T2`/`S14`/`S14b`, genel ya da taşınmış veri `S10b`/`S25`, anahtarlar `S11`, uygulanmış ya da yarım kalmış kaldırma `S15`/`S16`, değiştirilmiş köprü `S21`, model, fiyat, rol ya da bütçe kurulumu), mühürlü realm'in dışında kalanlar (servis yöneticileri ve çalışan servisler `S2`/`S4`/`S4b`/`K4`, etkin iş ve belirsiz etkiler `S5`/`S8`, çalışan imajları `S12`, başka platform `S18`, imaj hazırlama, çalışan soruları, kullanılamayan realm ya da ağ), tanıksız üreticisi olmayanlar (`S3`, park edilmiş iş `S6`, bekleyen onay `S7`, kuyruktaki teslim `S9`, dağıtım geçmişi `S23`), sürücü sınırları (boru hattı, CI ve MCP `S17`, satır kipi) ve Enterprise şirket kapsamı. Bunlardan birini adlandıran dal herhangi bir adımdan önce `BEUSER_START_STATE_UNREACHABLE` ile durur ve persona başlamaz; başarısız olan ya da geri okunamayan adım dalı `BEUSER_START_STATE_UNMET` ile durdurur. İkisi de unknown'dır, asla kırmızı değildir. Tanığı atlatan yol yoktur. *Etki:* bu dallar yürünmez; kaldırmanın 23 dalından 18'i ve onboarding'in 21 dalından 12'si bunlara girer. *Yol:* raporun hazırlanmamış durumlar listesini saklayın; v2 profil eski boş realm'de başlamayı sürdürür.
 - **BeUser takılan personayı ararken ekranları sayıları maskelenmiş olarak karşılaştırır (alpha.58).** Başka ekranlardan geçip geri dönen ve yalnız sayıları (revizyon, sayaç, saat) farklı olan bir ekranda aynı tuş ya da metin üçüncü kez gelirse yürüyüş `loop` ile, böyle bir ekranda üst üste dördüncü bakma ya da bekleme gelirse `observing` ile biter; ikisi de kırmızı `persona-stuck` bulgusudur. *Etki:* yalnız değişen sayıları gösteren bir ekrandan geçerek aynı eylemi meşru olarak üç kez tekrarlayan bir yolculuk (örneğin yalnız sayı gösteren bir listeye üç öğe eklemek) ya da dört bakma veya bekleme boyunca aynı ekranda kalan bir ürün takılmış olarak raporlanır. *Yol:* bulguyu ürün hatası saymadan önce ekranını ve kanıtını okuyun; eşikler `assets/beuser/limits.json` içinde registry verisidir.
 - **BeUser yürüyüşleri host'un Docker'ını ister.** Yürüyüş realm konteynerini host Docker daemon'ı üzerinden başlatır (root olmayan uid, ağ yok, salt okunur kök, kendi mount/pid/ipc/uts/cgroup namespace'leri); böyle bir konteyner başlatamayan ortam yürüyüş yapamaz. *Yol:* profili herhangi bir yerde hazırlayın, `deckent beuser walk` komutunu Docker'lı bir host'ta çalıştırın.
@@ -39,14 +38,17 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**
   *Etki:* giriş çubuğu, pencereler ve renkler orada bozulabilir. *Yol:* düz bir Linux ya da WSL2 terminali kullanın.
-- **Fareyle kopyalama ve `/copy [n]` terminalinizin pano dizisini (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde
-  kanıtlandı; fiziksel Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller
+- **Fareyle kopyalama, kart kopyalama (Ctrl+Y ya da kart üzerinde sürükleme, alpha.59) ve `/copy [n]` terminalinizin pano dizisini
+  (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı (katlanmış araç çağrısı satırına tıklama, alpha.59, yalnız
+  süreç içi bir terminal testinde); fiziksel Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller
   (iTerm2'de "Applications in terminal may access clipboard" açılmalı; tmux'ta `set -g set-clipboard on`, `/copy` için ayrıca
   `allow-passthrough on` gerekir). Deckent terminalin metni alıp almadığını soramaz; bu yüzden `/copy` "gönderildi" der, hiçbir zaman
   "kopyalandı" demez. Tek istek en çok 64 KiB taşır ve `/copy` en çok 99 yanıt geriye gider; daha büyük yanıt reddedilir, etkileşimli
   olmayan terminalde hiçbir şey gönderilmez. Sürükleyerek seçimde otomatik kaydırma ve çift/üçlü tıklama yok. *Etki:* "… karakter
   panoya kopyalandı" ya da "… terminal panosuna gönderildi" sonrasında yapıştırma boş gelebilir. *Yol:* Shift'e (iTerm2'de Option) basılı tutup
-  sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın.
+  sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın. Tam pencere bölünmemiş düz giriş
+  bağlantısı yazmaz (owner tercihi): orada bağlantı kart satırlarına bölünmüş bir OSC 8 bağlantısıdır; Ctrl+Y'yi ya da bağlantıyı bir kez
+  bölünmeden yazan satır içi düzeni kullanın.
 - **arm64 yayımlanmıyor.** Kilitli bubblewrap paketi x86_64 için gelir; arm64 derleme kontrolü arm64 çalışma kanıtı değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
@@ -706,7 +708,7 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   yapay zekâ ajanı ya da CI çağıranı (işaret değişkenleri) CLI'de olduğu gibi SDK üzerinden de reddedilir.
   *Yol:* birimi kendiniz durdurun veya yöneticiden doğrudan izin isteyin.
 - **Yarım silme yalnız yeniden doğrulamayla sürer.** Taşınmış/güvensiz yetki dosyası veri kademesini başlamadan durdurur;
-  alpha.58 adayında güvensiz bir `policy.json` ya da `bindings.json` her kademeyi dosyayı adlandıran `UNINSTALL_POLICY_UNREADABLE`
+  alpha.58'den beri güvensiz bir `policy.json` ya da `bindings.json` her kademeyi dosyayı adlandıran `UNINSTALL_POLICY_UNREADABLE`
   ile durdurur, veriler kalır ve dosya asla onarılmaz; Git
   izleme bilgisi okunamazsa her proje dosyası izleniyor olabilir sayılır ve korunur. Yarım son silme yalnız kalan baytlar, Git
   izlemesi, arşiv ve silme yetkisi yeniden doğrulanınca sürer; yoksa dosyalar kalır, yönetilen yedekten geri yükleme
