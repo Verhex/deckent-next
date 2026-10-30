@@ -225,12 +225,13 @@ it.skipIf(process.platform !== 'linux')('real Python PTY has controlling TTY, ph
     process.stdout.write('Approval erase fixture? [y/N] ' + process.stdout.columns + 'x' + process.stdout.rows);
     process.on('SIGWINCH', () => process.stdout.write('\\x1b[2J\\x1b[HResize ' + process.stdout.columns + 'x' + process.stdout.rows));
     process.stdin.on('data', data => {
-      if (data.toString() === 'y') { fs.writeFileSync(path.join(process.argv[1], 'approved'), 'applied'); process.stdout.write('\\x1b[2J\\x1b[HApproved'); }
+      if (data.toString() === 'y') { fs.writeFileSync(path.join(process.argv[1], 'approved'), 'applied'); setTimeout(() => process.stdout.write('\\x1b[2J\\x1b[HApproved'), 120); }
       if (data[0] === 4) process.exit(0);
     });`);
   let screen = await f.surface.look(context);
   for (let n = 0; n < 8 && !screen.text.includes('[y/N]'); n++) screen = await f.surface.wait(context, 100);
   expect(screen.text).toContain('Approval erase fixture? [y/N] 40x5');
+  // Walk19R: the product redraws after more silence than quietMs; the press still returns that redraw, not the stale card.
   expect((await f.surface.press(context, 'y')).text).toBe('Approved');
   expect(await readFile(join(f.directory, 'approved'), 'utf8')).toBe('applied');
   expect((await f.surface.resize(context, 25, 6)).text).toBe('Resize 25x6');

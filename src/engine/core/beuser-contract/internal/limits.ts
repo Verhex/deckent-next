@@ -10,8 +10,9 @@ export const beuserLimitsSchema = z.object({ schemaVersion: z.literal(1), revisi
   maxArtifactBytes: bound, cleanupDeadlineMs: bound, criticalRepetitions: bound,
 }).strict().refine(value => value.maxWaitMs <= value.maxWallMs && value.cleanupDeadlineMs <= value.maxWallMs, 'BEUSER_LIMITS_INVALID').readonly();
 export type BeuserLimits = z.infer<typeof beuserLimitsSchema>;
-/** Walk-wide stuck rules (walk17/18): the Nth identical action on one (digit-masked) screen is a loop, the Nth consecutive look/wait on one is `observing`. */
-const walkRulesSchema = z.object({ loopStop: bound.min(2), observeStop: bound.min(2) }).strict().readonly();
+/** Walk-wide stuck rules (walk17/18): the Nth identical action on one (digit-masked) screen is a loop, the Nth consecutive look/wait on one is `observing`;
+ * (walk19R) on a screen unchanged since the last action either holds only once that screen has stayed unchanged for `settleMs`. */
+const walkRulesSchema = z.object({ loopStop: bound.min(2), observeStop: bound.min(2), settleMs: bound }).strict().readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, walk: walkRulesSchema, profiles: z.array(beuserLimitsSchema).readonly() }).strict()
   .refine(value => new Set(value.profiles.map(profile => profile.revision)).size === value.profiles.length).readonly();
 export const BEUSER_LIMITS_REGISTRY = registrySchema.parse(asset);

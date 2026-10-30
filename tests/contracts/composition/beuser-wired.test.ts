@@ -250,20 +250,23 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
           } });
           return { input: sink, output, cancel: async () => {} };
         } }));
-      // External model I/O only: real decode/controller/realm custody/dispatch/report below.
+      // External model I/O only: real decode/controller/realm custody/dispatch/report below. Each walker decision takes `settleMs` (walk19R).
+      const clock = performance.now.bind(performance); let skew = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock() + skew);
       const model = vi.spyOn(engine, 'createBeuserModelPort').mockReturnValue({
-        walker: vi.fn(async () => ({ state: 'invoked', receipt: { role: 'beuser-walker', maker: 'fixture-walker', invocation: {
+        walker: vi.fn(async () => { skew += engine.BEUSER_WALK_RULES.settleMs; return { state: 'invoked', receipt: { role: 'beuser-walker', maker: 'fixture-walker', invocation: {
           receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: '{"kind":"type","text":"fixture-private"}' } }] } },
-        } } })), evaluate: vi.fn(), cancel: vi.fn(),
+        } } }; }), evaluate: vi.fn(), cancel: vi.fn(),
       } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
       const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
-      expect(keys).toEqual(['fixture-private', 'fixture-private']); // Walk17 S2: the second identical repeat on an unchanged screen stops before a third effect.
+      // Walk17 S2: the second identical repeat on an unchanged screen stops before a third effect, after (walk19R) one more read of that screen.
+      expect(keys).toEqual(['fixture-private', 'fixture-private']);
       expect(model).toHaveBeenCalled();
       expect(report).toMatchObject({ counts: { walked: 1 }, findings: [{ branch: 'persona', persona: 'person', code: 'persona-stuck', outcome: 'RED', reason: 'loop' }],
         unknown: cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }], reliability: { completed: 0, attempted: 1 } });
       const { terminal } = await f.records();
       expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown', evidence: null });
-      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', 'action', 'screen', 'action', 'screen', 'action', 'screen', 'friction']);
+      expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', 'action', 'screen', 'action', 'screen', 'action', 'screen', 'action', 'screen', 'friction']);
       expect(arrangeCalls.map(args => args.includes('--workdir'))).toEqual([true, false]);
       expect(report.unarranged).toEqual([{ branch: 'persona', state: 'cancel', reason: 'persona' }]);
       // Persona evidence is the surface's own screens, never the arrange row that shifted the recorder sequence.

@@ -1,6 +1,6 @@
 import { BeuserContractError, beuserSurfaceCommandSchema, assertBeuserAccess, type ModelPort, type SurfacePort, type BeuserScreen, type BeuserSurfaceCommand } from '#engine/core/beuser-contract/index.js';
 import { beuserBindingSchema } from '#domain/index.js';
-import { BeuserController, BeuserWalkStopped } from './controller.js';
+import { BeuserController, BeuserWalkStopped, beuserSettledScreen } from './controller.js';
 import { correctBeuserModelOutput, type BeuserWalkerDecode } from './models.js';
 
 /** Only native model output is decoded; a model-authored verdict is never a completion signal. */
@@ -37,8 +37,13 @@ export async function walkBeuser(controller: BeuserController, ports: {
       assertBeuserAccess(context, parsed.data.binding, context.principal, { kind: 'beuser-sandbox', id: parsed.data.binding.realmId }, 'create');
       try { controller.action(shown, action); }
       catch (error) {
-        if (error instanceof BeuserWalkStopped && (error.reason === 'loop' || error.reason === 'observing') && ports.stopped)
-          await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(shown, action, error.reason as 'loop' | 'observing'));
+        if (!(error instanceof BeuserWalkStopped && (error.reason === 'loop' || error.reason === 'observing'))) throw error;
+        // Walk19R: a stop verdict reads the screen once more first; a product that redrew after the last read is answered, not stuck.
+        const fresh = await controller.call('beuser-sandbox', 'create', ctx => ports.surface.look(ctx));
+        if (beuserSettledScreen(fresh) !== beuserSettledScreen(shown)) return fresh;
+        controller.screen(fresh);
+        await controller.call('beuser-transcript', 'inspect', () => ports.record(fresh));
+        if (ports.stopped) await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(fresh, action, error.reason as 'loop' | 'observing'));
         throw error;
       }
       if (action.kind === 'wait') controller.wait(action.ms);
