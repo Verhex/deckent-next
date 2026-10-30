@@ -3,6 +3,7 @@ import { Box, Text, useBoxMetrics, useInput, useWindowSize, type DOMElement } fr
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider, WINDOW_PRIORITY, useFocusOwner } from './window-stack.js';
+import { MainScreenContext } from './card-copy.js';
 import { promptJump, scrollViewport, searchViewport, viewportLines, viewportStart, type SearchableBlocks, type ViewportAnchor } from './viewport.js';
 import type { PointerEvent, PointerSource, WheelSource } from './mouse.js';
 import { highlightCells, lineRange, selectedText, type SelectionPoint } from './selection.js';
@@ -28,14 +29,14 @@ export function FullscreenWorkline({ viewport, above, bar, info }: { readonly vi
   const size = useWindowSize(), rows = fullscreenFrameRows(size.rows || 24), columns = size.columns || 80;
   // A card or window takes at most half the frame (it scrolls inside); `reservedRows` is what Window subtracts from the terminal rows.
   const cap = Math.max(3, Math.floor(rows / 2));
-  return <WindowStackProvider composerDefault reservedRows={Math.max(0, (size.rows || 24) - cap)}>
+  return <WindowStackProvider composerDefault reservedRows={Math.max(0, (size.rows || 24) - cap)}><MainScreenContext.Provider value={false}>
     <Box flexDirection="column" height={rows} width={columns} overflow="hidden">
       {viewport}
       <Box flexDirection="column" flexShrink={0} maxHeight={cap} overflow="hidden" justifyContent="flex-end">{above}</Box>
       <BarSlot>{bar}</BarSlot>
       <Box flexDirection="column" flexShrink={0} height={fullscreenInfoRows(rows)} overflow="hidden">{info}</Box>
     </Box>
-  </WindowStackProvider>;
+  </MainScreenContext.Provider></WindowStackProvider>;
 }
 
 /** A decision that holds the keyboard takes the bar's place (Claude Code style): the composer stays mounted, so its draft returns with it. */

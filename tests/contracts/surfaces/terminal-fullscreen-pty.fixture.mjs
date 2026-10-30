@@ -19,6 +19,8 @@ const labels = {
   focus: { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS', decide: 'DECIDE-HERE' },
   viewport: { below: 'BELOW {count} END', newMessages: 'NEW {count} END', search: 'FIND[{query}]{state}', searchNone: ' NONE', copied: 'COPIED {count}' },
   work: workSurfaceLabels('en'),
+  copy: { sent: 'SENT {n}', none: 'NONE', range: 'RANGE {max}', usage: 'USAGE', tooLarge: 'BIG', unavailable: 'NA',
+    card: { hint: 'Ctrl+Y COPY', sent: 'CARD-SENT {count}', tooLarge: 'CARD-BIG {bytes}/{max}', unavailable: 'CARD-NA' } },
 };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let decided = false, turns = 0;

@@ -1,9 +1,10 @@
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { humanRecordText } from '#surfaces/core/terminal-render/index.js';
+import type { CardCopyLabels } from '#surfaces/core/terminal-window/index.js';
 import { CLIPBOARD_LIMITS, type ClipboardResult } from './clipboard.js';
 
-/** `/copy` words (`tuicopy.*`); `{count}`, `{n}`, `{bytes}`, `{max}` are filled by {@link runCopyCommand}. */
-export type CopyLabels = Readonly<{ sent: string; none: string; range: string; usage: string; tooLarge: string; unavailable: string }>;
+/** `/copy` words (`tuicopy.*`); `{count}`, `{n}`, `{bytes}`, `{max}` are filled by {@link runCopyCommand}. `card`: the cards' Ctrl+Y copy (`tuicopy.card.*`). */
+export type CopyLabels = Readonly<{ sent: string; none: string; range: string; usage: string; tooLarge: string; unavailable: string; card?: CardCopyLabels }>;
 type HistoryMessage = Readonly<{ role: string; content: string }>;
 
 /**

@@ -3,7 +3,7 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
-import { runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
+import { cardCopy, runCopyCommand, runTerminalHost, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
@@ -20,7 +20,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
+import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
   WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
@@ -742,6 +742,8 @@ export function WorklineApp(props: WorklineProps) {
   </>;
   // Full window: a fixed number of information rows (state; work, else the full-access line; key hints) so the bar never moves.
   const infoRows = fullscreenInfoRows(fullscreenFrameRows(size.rows || 24));
+  // alpha.59 L3: every card's Ctrl+Y copy goes through the host's one clipboard writer (absent off a TTY).
+  const copyCard = useMemo(() => cardCopy(props.clipboard, labels.copy?.card), [props.clipboard, labels.copy?.card]);
   const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
   const layout = fullscreenMode
     ? <FullscreenWorkline
@@ -768,6 +770,7 @@ export function WorklineApp(props: WorklineProps) {
       </PinnedWorkline>
     </Box>;
   return (
+    <CardCopyContext.Provider value={copyCard}>
     <DecisionArmContext.Provider value={props.decisionArmMs ?? DECISION_ARM_DEFAULT}>
     <DecisionArmLabelsContext.Provider value={labels.decisionArm ?? NEUTRAL_ARM_LABELS}>
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -779,6 +782,7 @@ export function WorklineApp(props: WorklineProps) {
     </HumanTextContext.Provider>
     </DecisionArmLabelsContext.Provider>
     </DecisionArmContext.Provider>
+    </CardCopyContext.Provider>
   );
 }
 

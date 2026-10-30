@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { CardCopyContext, DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
+import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
 import { QuestionWindow, SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -40,11 +42,16 @@ function splitKeys(keys: string): string[] {
   }
   return out;
 }
-function mount(node: ReactElement, columns = 100, rows = 40, ascii = false) {
+/** alpha.59 L3: the texts a card sent with Ctrl+Y (OSC 52 requests in the output, decoded). */
+// eslint-disable-next-line no-control-regex -- the OSC 52 clipboard request is a control sequence.
+const clipboardTexts = (output: string) => [...output.matchAll(/\u001b\]52;c;([A-Za-z0-9+/=]*)\u0007/gu)].map(match => Buffer.from(match[1]!, 'base64').toString('utf8'));
+/** `copy`: the cards take Ctrl+Y through the host's clipboard writer on this screen (as the Workline, a CLI card and onboarding provide it). */
+function mount(node: ReactElement, columns = 100, rows = 40, ascii = false, copy = false) {
   const stdout = new Screen(columns, rows);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const stack = createElement(WindowStackProvider, null, node);
   const tree = createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'),
-    children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, createElement(WindowStackProvider, null, node)) });
+    children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii) }, copy ? createElement(CardCopyContext.Provider, { value: streamCardCopy(stdout, cardCopyLabels('en'), {}) }, stack) : stack) });
   mounted.push(render(tree, { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false }));
   return { frame: () => stdout.frame, all: () => stdout.all, press: async (keys: string, ms?: number) => { for (const key of splitKeys(keys)) { stdin.write(key); await settle(10); } await settle(ms); },
     /** One stdin chunk, as a terminal sends a modified or coalesced key. */
@@ -217,13 +224,19 @@ describe('/provider window', () => {
   it('connect: the key is typed masked under the transparency note, goes only to the port, and the typed result is shown; the key is never drawn or pushed', async () => {
     const { port, requests } = providerPort();
     const { element, calls } = panel('provider', { provider: port });
-    const view = mount(element, 100, 40);
+    const view = mount(element, 100, 40, false, true);
     await settle(80);
     await view.press(`${ENTER}${ENTER}`, 60);
     expect(view.frame()).toContain('Anthropic API · API key'); expect(view.frame()).toContain('TRANSPARENCY-NOTE');
+    expect(view.frame()).toContain(t('tuicopy.card.hint', {}, 'en'));
     await view.press(ENTER, 40); // an empty required key is refused in place
     expect(view.frame()).toContain('This provider needs a key.'); expect(requests).toEqual([]);
     await view.press(CANARY, 40);
+    expect(view.frame()).toContain('•'.repeat(CANARY.length));
+    // alpha.59 L3: Ctrl+Y copies the card as drawn (title, body) and never the typed key, which also stays in the entry untouched.
+    await view.raw('\u0019', 60);
+    const copies = clipboardTexts(view.all());
+    expect(copies).toHaveLength(1); expect(copies[0]).toContain('Anthropic API · API key'); expect(copies[0]).toContain('TRANSPARENCY-NOTE'); expect(copies[0]).not.toContain(CANARY);
     expect(view.frame()).toContain('•'.repeat(CANARY.length));
     await view.press(ENTER, 120);
     expect(requests).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY }]);
@@ -338,11 +351,15 @@ describe('/provider window', () => {
 // TERMINAL-UX: every QuestionWindow caller (MCP trust on add and re-approve, MCP remove, workspace profile apply, provider disconnect and
 // address preview) shares this key rule; only a single typed y/n answers, and only after the decision arming period (G2-3).
 describe('QuestionWindow keys', () => {
-  const question = (answers: (boolean | null)[]) => mount(createElement(QuestionWindow, { title: 'Trust files and pin these tools?', lines: [], hints: 'y/n',
-    position: '', onAnswer: (answer: boolean | null) => { answers.push(answer); } }), 80, 20);
+  const question = (answers: (boolean | null)[], copy = false) => mount(createElement(QuestionWindow, { title: 'Trust files and pin these tools?', lines: [], hints: 'y/n',
+    position: '', onAnswer: (answer: boolean | null) => { answers.push(answer); } }), 80, 20, false, copy);
   it('Ctrl+Y, Ctrl+N, Alt+y, a coalesced Ctrl+O y and pasted text answer nothing; one typed y answers yes once', async () => {
-    const answers: (boolean | null)[] = [], view = question(answers); await armed(view.frame, 'y/n');
-    for (const keys of ['\u0019', '\u000e', `${ESC}y`, '\u000fy', 'yy', 'yes']) { await view.raw(keys, 40); expect(answers).toEqual([]); }
+    const answers: (boolean | null)[] = [], view = question(answers, true); await armed(view.frame, 'y/n');
+    // alpha.59 L3: Ctrl+Y copies the card, answers nothing and keeps it armed (its keys still show); with a y in the same read it does neither.
+    await view.raw('\u0019', 40);
+    expect(clipboardTexts(view.all())).toEqual(['Trust files and pin these tools?']); expect(answers).toEqual([]); expect(view.frame()).toContain('y/n · Ctrl+Y copy');
+    await view.raw('\u0019y', 40); expect(clipboardTexts(view.all())).toHaveLength(1);
+    for (const keys of ['\u000e', `${ESC}y`, '\u000fy', 'yy', 'yes']) { await view.raw(keys, 40); expect(answers).toEqual([]); }
     expect(view.frame()).toContain('Trust files and pin these tools?');
     await armed(view.frame, 'y/n'); await view.press('y', 40); await view.press('n', 40);
     expect(answers).toEqual([true]);
@@ -820,19 +837,27 @@ it('a blocked model offers its governed repair, writes only after the card, and 
   expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
 });
 
+const SIGN_IN = `https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_test&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid%20profile%20email%20offline_access&code_challenge=${'C'.repeat(43)}&code_challenge_method=S256&state=${'s'.repeat(43)}&originator=deckent&extra=${'x'.repeat(60)}`;
 it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and doctor do), and Enter or Esc closes the card', async () => {
   const { loadSiwcWindow } = await import('#surfaces/core/siwc/index.js'), { default: SiwcWindow } = await loadSiwcWindow();
   for (const key of [ENTER, ESC]) {
     let closed = 0; const errors: unknown[] = [];
-    const port = { locale: 'en' as const, connection: 'chatgpt-login', execute: async (request: { operation: string }) => {
+    const port = { locale: 'en' as const, connection: 'chatgpt-login', execute: async (request: { operation: string }, presentation?: { fallback?: (url: string) => void }) => {
       if (request.operation === 'prepare') return { apiTargets: [{ id: 'metered', reference: ref('metered') }] };
+      presentation?.fallback?.(SIGN_IN); await settle(400);
       throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } });
     } };
-    const view = mount(createElement(SiwcWindow, { port: port as never, onClose: () => { closed++; }, onError: error => { errors.push(error); } }), 100, 40);
+    const view = mount(createElement(SiwcWindow, { port: port as never, onClose: () => { closed++; }, onError: error => { errors.push(error); } }), 100, 40, false, true);
     const keys = t('siwc.card.keys', {}, 'en');
     await armed(view.frame, keys); await view.press(ENTER, 80);
     // The API step: the person moves to the metered target, so the selection points past the refusal card's one choice.
     await armed(view.frame, keys); await view.press(`${DOWN}${ENTER}`, 120);
+    // alpha.59 L3: the sign-in link (three times the card's width) is an OSC 8 link on every card row it wraps over, one unbroken raw line in
+    // the main screen's scrollback, and Ctrl+Y copies it whole with the card.
+    const link = `\u001b]8;;${SIGN_IN}\u0007`;
+    expect(view.all().split(link).length - 1).toBeGreaterThanOrEqual(3); expect(view.all().split(`${link}${SIGN_IN}\u001b]8;;\u0007\n`)).toHaveLength(2);
+    await view.raw('\u0019', 60); expect(clipboardTexts(view.all()).at(-1)).toContain(`\n${SIGN_IN}`);
+    await settle(400);
     expect(view.frame()).toContain('/tmp (mode 1777) can be changed by other users');
     expect(view.frame()).not.toContain('Use your own local store');
     expect((errors[0] as { message?: string }).message).toContain('/tmp (mode 1777)');

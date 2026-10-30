@@ -1,19 +1,31 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, render, useApp, useInput, useWindowSize } from 'ink';
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
-import { cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
-import { truncateEnd, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { cardCopyLabels, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+import { fillTemplate, truncateEnd, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { isCardCopyKey, type CardCopy } from '#surfaces/core/terminal-window/index.js';
+import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];
   step: number; total: number; initial?: string | null; text?: boolean }>;
 export type QuestionAnswer = Readonly<{ id: string; text?: string }>;
-export function OnboardingQuestionView({ question, locale, finish }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => void }) {
+/** How long the copy result stays on the key line. */
+const COPIED_MS = 4_000;
+export function OnboardingQuestionView({ question, locale, finish, copy = null }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => void;
+  /** Ctrl+Y sends the step's title and body (never the typed text) through the host's clipboard writer; absent off a TTY. */ readonly copy?: CardCopy | null }) {
   const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
   const [at, select] = useState(initial), [text, setText] = useState(''), [empty, setEmpty] = useState(false), [bodyAt, scroll] = useState(0), done = useRef(false), { exit } = useApp();
   const size = useWindowSize(), width = Math.max(8, size.columns - 4), height = Math.max(1, Math.min(question.choices.length || 1, Math.floor(size.rows / 3)));
   const bodyHeight = Math.max(1, size.rows - height - 9 - (question.text ? 3 : 0)), bodyLines = question.body.flatMap(line => wrapCells(terminalSafeText(line), width));
   const send = (answer: QuestionAnswer) => { if (done.current) return; done.current = true; finish(answer); exit(); };
+  const [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_MS); return () => clearTimeout(timer); }, [copied]);
   useInput((input, key) => {
     if (done.current || input.length > 1 && !question.text) return;
+    if (copy && isCardCopyKey(input, key)) {
+      const text = terminalSafeText([question.title, ...question.body].join('\n')), result = copy.write(text);
+      setCopied(result.ok ? fillTemplate(copy.labels.sent, { count: [...text].length }) : result.reason === 'too-large' ? fillTemplate(copy.labels.tooLarge, { bytes: result.bytes, max: copy.maxBytes }) : copy.labels.unavailable);
+      return;
+    }
     if (key.escape) { send({ id: 'later' }); return; }
     if (key.ctrl && input === 'c') { send({ id: 'exit' }); return; }
     if (key.pageUp) { scroll(value => Math.max(0, value - bodyHeight)); return; }
@@ -37,7 +49,7 @@ export function OnboardingQuestionView({ question, locale, finish }: { readonly 
       <Text>{empty && !text.trim() ? t('onboarding.firstTask.empty', {}, locale) : ' '}</Text>
     </Box>
       : question.choices.slice(start, start + height).map((row, index) => <Text key={row.id}>{at === start + index ? '> ' : '  '}{truncateEnd(terminalSafeText(row.label), width - 2, '…')}</Text>)}
-    <Text> </Text><Text>{t('onboarding.session.continue', {}, locale)} · {t('onboarding.session.later', {}, locale)}</Text>
+    <Text> </Text><Text>{t('onboarding.session.continue', {}, locale)} · {t('onboarding.session.later', {}, locale)}{copy ? ` · ${copied ?? copy.labels.hint}` : ''}</Text>
   </Box>;
 }
 /** A single input owner; unmounted before a foreground owner takes the real terminal. */
@@ -45,7 +57,8 @@ export async function askOnboardingQuestion(question: OnboardingQuestion, io: Cl
   if (io.signal?.aborted) return { id: 'exit' };
   cliCardGate({ title: question.title, options: [{ id: 'later', label: '-' }] }, io);
   let answer: QuestionAnswer = { id: 'exit' };
-  const view = render(<OnboardingQuestionView question={question} locale={io.locale} finish={value => { answer = value; }} />,
+  const view = render(<OnboardingQuestionView question={question} locale={io.locale} finish={value => { answer = value; }}
+    copy={streamCardCopy((io.stdout ?? process.stdout) as NodeJS.WriteStream, cardCopyLabels(io.locale), io.env ?? process.env)} />,
     { stdin: (io.stdin ?? process.stdin) as NodeJS.ReadStream, stdout: (io.stdout ?? process.stdout) as NodeJS.WriteStream,
       interactive: true, patchConsole: false, exitOnCtrlC: false });
   const stop = () => view.unmount(); io.signal?.addEventListener('abort', stop, { once: true });

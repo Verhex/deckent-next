@@ -1,16 +1,18 @@
 import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize, type Key } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { SpanText, cells, fillTemplate, graphemes, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
+import { SpanText, cells, fillTemplate, graphemes, humanRecordText, padSpans, plainText, sliceSpans, span, spanCells, truncateEnd, useHumanTextSecrets, useRenderGlyphs, wrapCells, wrapSpans, type Span } from '#surfaces/core/terminal-render/index.js';
 import { useDecisionQueue, useFocusOwner, useWindowLayer, useWindowLayerGuard, WindowDecideHintContext, WindowInputContext, useWindowReserve, WINDOW_PRIORITY } from './window-stack.js';
 import { useWindowNote } from './window-note.js';
 import { DecisionArmContext, DecisionArmLabelsContext, useQuietArming } from './arming.js';
 import { clampScroll, scrollBy, scrollKeyOf } from './scroll.js';
+import { CardCopyContext, cardCopyText, hyperlinkEnds, isCardCopyKey } from './card-copy.js';
 
 /** One logical body row: an optional field label kept in its own column (values wrap under the value column, never under the label; an
  * empty label continues the previous field in its value column).
- * `exact`: the value is a command, path, pattern or preview — it breaks at the cell limit and keeps every character (no word wrap). */
-export type WindowLine = Readonly<{ label?: readonly Span[]; spans: readonly Span[]; exact?: boolean }>;
+ * `exact`: the value is a command, path, pattern or preview — it breaks at the cell limit and keeps every character (no word wrap).
+ * `link`: every drawn row of the line is an OSC 8 hyperlink to this http(s) address, so a click on any piece of a wrapped link opens all of it. */
+export type WindowLine = Readonly<{ label?: readonly Span[]; spans: readonly Span[]; exact?: boolean; link?: string }>;
 
 /** Breaks spans at exactly `width` cells, keeping every character (whitespace included) in order. */
 export function hardWrapSpans(spans: readonly Span[], width: number): Span[][] {
@@ -41,6 +43,8 @@ const MIN_BODY_ROWS = 3;
 /** Below this inner width labels go on their own row instead of a column (a 40-column terminal). */
 const LABEL_COLUMN_MIN_WIDTH = 48;
 const FALLBACK_COLUMNS = 80, FALLBACK_ROWS = 24;
+/** How long the copy result stays in the title row's status area. */
+const COPIED_MS = 4_000;
 
 /** Lays out body lines into display rows of at most `width` cells: labelled rows align their values in one column. */
 export function layoutWindowLines(lines: readonly WindowLine[], width: number): Span[][] {
@@ -114,6 +118,9 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const columns = Math.min(size.columns || FALLBACK_COLUMNS, maxColumns ?? Number.MAX_SAFE_INTEGER), terminalRows = size.rows || FALLBACK_ROWS;
   const id = useId(), focused = useWindowLayer(id, interactive, priority), reserve = useWindowReserve(), reserved = reserve ?? WINDOW_RESERVED_ROWS;
   const acceptsInput = useWindowLayerGuard(id);
+  // Card copy (card-copy.ts): Ctrl+Y sends the drawn, redacted title and body; it never reaches the owner, decides or touches the arming.
+  const copy = useContext(CardCopyContext), known = useHumanTextSecrets(), [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => { if (copied === null) return undefined; const timer = setTimeout(() => setCopied(null), COPIED_MS); return () => clearTimeout(timer); }, [copied]);
   const owner = useFocusOwner(), queue = useDecisionQueue(id, priority);
   useEffect(() => { onFocusChange?.(focused); }, [focused, onFocusChange]);
   // A decision (a card, a question, any approval-priority window) counts keys only after a quiet arming period from the moment it became
@@ -128,11 +135,14 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const waitingText = decision && interactive && decideHint && owner.composerWindows && owner.top === id && owner.composing ? decideHint : null;
   const width = Math.max(1, columns - FRAME_COLUMNS);
   const { rows, starts } = layoutWindowRows(body, width);
+  const links = new Array<string | undefined>(rows.length).fill(undefined);
+  body.forEach((line, index) => { if (line.link) links.fill(line.link, starts[index], starts[index + 1] ?? rows.length); });
   // A decision shows its keys only while they count: focused and armed. Until it is armed (it just appeared, or a key was ignored) the hint
   // row says so; behind the composer (Ctrl+O back to input) the "Ctrl+O to decide" line speaks instead. Keys on screen ⇔ keys count — one
   // signal for the person and for a PTY test, whatever frames the renderer skips (CI 2026-10-18).
   const armLabels = useContext(DecisionArmLabelsContext), behind = owner.top === id && owner.composing;
-  const hintText = !guarded || !interactive || arming.shown ? hints : behind ? '' : arming.ignored ? armLabels.ignored : armLabels.arming;
+  const keyHints = copy && interactive ? `${hints} · ${copy.labels.hint}` : hints;
+  const hintText = !guarded || !interactive || arming.shown ? keyHints : behind ? '' : arming.ignored ? armLabels.ignored : armLabels.arming;
   // Key hints wrap on a narrow terminal instead of losing their last keys.
   const hintRows = wrapCells(hintText, width);
   const minimum = reserve === undefined ? MIN_BODY_ROWS : 1;
@@ -145,8 +155,16 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
     if (revealRow === undefined) return;
     setOffset(value => revealRow < value ? revealRow : revealRow >= value + visible ? revealRow - visible + 1 : value);
   }, [revealRow, visible]);
-  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, burstText });
-  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, burstText };
+  const latest = useRef({ total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy });
+  latest.current = { total: rows.length, visible, onInput, onClose, onPaste, burstText, title, body, copy };
+  const copyCard = () => {
+    const { copy: writer, title: shownTitle, body: shownBody } = latest.current;
+    if (!writer) return;
+    const text = humanRecordText(cardCopyText(shownTitle, shownBody), known), result = writer.write(text);
+    setCopied(result.ok ? fillTemplate(writer.labels.sent, { count: [...text].length })
+      : result.reason === 'too-large' ? fillTemplate(writer.labels.tooLarge, { bytes: result.bytes, max: writer.maxBytes }) : writer.labels.unavailable);
+  };
+  const copyKey = (input: string, key: Key) => latest.current.copy !== null && interactive && isCardCopyKey(input, key);
   const deliver = (input: string, key: Key) => {
     const current = latest.current;
     if (current.onInput?.(input, key) === true) return;
@@ -161,6 +179,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const flush = () => {
     const read = burst.current; burst.current = null;
     if (!read) return;
+    // A read of copy keys only copies and leaves the arming as it was; mixed with other keys it is one more event of a burst (never decides).
+    if (read.events.every(([input, key]) => copyKey(input, key))) { if (read.owned && acceptsInput()) copyCard(); return; }
     if (!read.owned || !acceptsInput() || !arming.armed()) { arming.touch(); return; }
     if (read.events.length === 1) { const [input, key] = read.events[0]!; deliver(input, key); return; }
     // A read of navigation keys only (held PgDn, a coalesced run of arrows) moves the view or the highlight and never decides: delivered.
@@ -174,7 +194,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   useInput((input, key) => {
     // A focus switch inside a read taints the whole read (it is dropped), whichever order the events came in.
     if (key.ctrl && input === 'o') { if (guarded) begin().owned = false; return; }
-    if (!guarded) { if (acceptsInput()) deliver(input, key); return; }
+    if (!guarded) { if (acceptsInput()) { if (copyKey(input, key)) copyCard(); else deliver(input, key); } return; }
     const read = begin();
     read.events.push([input, key]);
     if (!acceptsInput()) read.owned = false;
@@ -189,7 +209,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const first = clampScroll(offset, rows.length, visible);
   // A decision waiting behind the shown one draws nothing (its layer and keys stay registered); the shown one says "1/3".
   if (queue.hidden) return null;
-  const counted = queue.total > 1 ? `${queue.position}/${queue.total} ${plainText(status)}`.trim() : plainText(status);
+  const statusWords = copied ?? plainText(status), counted = queue.total > 1 ? `${queue.position}/${queue.total} ${statusWords}`.trim() : statusWords;
   const statusText = truncateEnd(counted, Math.max(0, Math.floor(width / 2)), glyphs.ellipsis);
   const titleRoom = Math.max(1, width - (statusText ? cells(statusText) + 1 : 0));
   const titleText = plainText(title), titleFits = cells(titleText) <= titleRoom;
@@ -200,7 +220,7 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
         {statusText ? <Text {...palette.muted} wrap="truncate">{statusText}</Text> : null}
       </Box>
       {noteText === null ? null : <Text {...palette.warning} wrap="truncate-end">{`! ${noteText}`}</Text>}
-      {rows.slice(first, first + visible).map((row, index) => <Text key={first + index} wrap="truncate">{row.length ? <SpanText spans={row} /> : ' '}</Text>)}
+      {rows.slice(first, first + visible).map((row, index) => (ends => <Text key={first + index} wrap="truncate">{ends?.open}{row.length ? <SpanText spans={row} /> : ' '}{ends?.close}</Text>)(hyperlinkEnds(links[first + index])))}
       {overflow ? <Text {...palette.muted} wrap="truncate">{fillTemplate(position, { from: first + 1, to: Math.min(rows.length, first + visible), total: rows.length })}</Text> : null}
       {footer ? <WindowInputContext.Provider value={acceptsInput}>{footer(focused)}</WindowInputContext.Provider> : null}
       {waitingText === null ? null : <Text {...palette.accent} wrap="truncate-end">{waitingText}</Text>}
