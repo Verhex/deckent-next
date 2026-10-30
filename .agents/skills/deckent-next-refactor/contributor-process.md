@@ -81,8 +81,9 @@ and `tr` catalog entries and the shared i18n renderer; do not inline user-facing
 
 New tracked Markdown needs explicit owner admission in `markdown.trackedAllow` or an admitted glob,
 with a reason in ARCHITECTURE's decision log. Product writers do not write repository standards
-files; preserve `markdown.writerModule` and its existing gate. Keep AGENTS.md/CLAUDE.md byte-identical
-and at most 70 lines. Refresh the core-memory manifest after authorized edits:
+files; preserve `markdown.writerModule` and its existing gate. AGENTS.md is the single contributor
+instruction file (at most 70 lines); CLAUDE.md only imports it with `@AGENTS.md`. Refresh the
+core-memory manifest after authorized edits:
 
 ```sh
 node scripts/lint-core-memory.mjs --write

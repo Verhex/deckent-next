@@ -121,9 +121,11 @@ export function references(file, text) {
   return found;
 }
 
-test('CLAUDE.md and AGENTS.md are byte-identical', () => {
+test('AGENTS.md is the single contributor instruction file and CLAUDE.md only imports it', () => {
+  // Owner 2026-10-30: one source; Claude Code loads it through the documented `@AGENTS.md` import.
   assert.ok(TRACKED.has('CLAUDE.md') && TRACKED.has('AGENTS.md'), 'both root instruction files are tracked');
-  assert.ok(read('CLAUDE.md').equals(read('AGENTS.md')), 'CLAUDE.md and AGENTS.md differ; keep them byte-identical');
+  assert.equal(read('CLAUDE.md').toString('utf8'), '@AGENTS.md\n', 'CLAUDE.md must be exactly the one-line import "@AGENTS.md"');
+  assert.ok(read('AGENTS.md').toString('utf8').trimEnd().split('\n').length <= 70, 'AGENTS.md exceeds 70 lines');
 });
 
 test('.claude/rules and .codex/rules carry the same tracked Markdown rules byte for byte', () => {

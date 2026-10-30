@@ -122,9 +122,14 @@ export function guard(event, input, ctx) {
   if (event === 'post-tool') {
     if (!filePath) return pass();
     const rel = filePath.startsWith(root + sep) ? filePath.slice(root.length + 1) : null;
-    if (rel === 'CLAUDE.md' || rel === 'AGENTS.md') {
+    if (rel === 'AGENTS.md') {
       const lines = ctx.readLines(filePath);
-      if (lines > LINE_CAP) return block(`${rel} has ${lines} lines; CLAUDE.md requires at or below ${LINE_CAP}. Trim it before continuing.`);
+      if (lines > LINE_CAP) return block(`AGENTS.md has ${lines} lines; it must stay at or below ${LINE_CAP}. Trim it before continuing.`);
+      return pass();
+    }
+    if (rel === 'CLAUDE.md') {
+      const lines = ctx.readLines(filePath);
+      if (lines > 1) return block(`CLAUDE.md has ${lines} lines; it is only the one-line import \`@AGENTS.md\`. Put contributor guidance in AGENTS.md.`);
       return pass();
     }
     // Warn only (Jev g3-hostguard-manifest warn_only, owner 2026-10-18): refreshing the manifest here approved every

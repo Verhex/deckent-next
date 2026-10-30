@@ -94,11 +94,15 @@ test('U1: build/verify of a checkout whose dist runs a live process is denied; o
   assert.deepEqual(buildTargets('cd /a && cd b && npm run build; node ../c/scripts/build.mjs', '/x'), [resolve('/a/b'), resolve('/a/c')]);
 });
 
-test('post-tool: CLAUDE.md line cap; a core-memory edit only warns and never writes the manifest', () => {
-  const over = guard('post-tool', edit(`${root}/CLAUDE.md`), ctx({ readLines: () => 71 }));
+test('post-tool: AGENTS.md line cap, CLAUDE.md one-line import; a core-memory edit only warns and never writes the manifest', () => {
+  const over = guard('post-tool', edit(`${root}/AGENTS.md`), ctx({ readLines: () => 71 }));
   assert.equal(over.decision, 'block');
   assert.match(over.reason, /71 lines/);
   assert.deepEqual(guard('post-tool', edit(`${root}/AGENTS.md`), ctx({ readLines: () => 70 })), {});
+  const grown = guard('post-tool', edit(`${root}/CLAUDE.md`), ctx({ readLines: () => 2 }));
+  assert.equal(grown.decision, 'block');
+  assert.match(grown.reason, /@AGENTS\.md/u);
+  assert.deepEqual(guard('post-tool', edit(`${root}/CLAUDE.md`), ctx({ readLines: () => 1 })), {});
   const mem = guard('post-tool', edit(`${root}/.deckent/docs/core-memory/new_fact.md`), ctx());
   assert.equal(mem.hookSpecificOutput.hookEventName, 'PostToolUse');
   assert.equal(mem.hookSpecificOutput.additionalContext, MEMORY_WARNING);

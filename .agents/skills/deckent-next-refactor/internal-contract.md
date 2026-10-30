@@ -44,7 +44,7 @@ The complete stable contract for Next work. Dated owner rules live in the laws
 - Commit inside the assigned scope without asking; workers never push. Release, landing, live/N1 switch and
   dogfood are lead-only with owner approval per merge and per switch and green hosted PR CI before merge.
 - Refresh the memory manifest after authorized core-memory edits: `node scripts/lint-core-memory.mjs --write`.
-- Keep `AGENTS.md` and `CLAUDE.md` byte-identical and at or below 70 lines.
+- `AGENTS.md` is the single contributor instruction file, at or below 70 lines; `CLAUDE.md` only imports it with `@AGENTS.md`.
 
 ## Current development phase
 - Next owns product development and all operator/execution work; use this repository as cwd.
