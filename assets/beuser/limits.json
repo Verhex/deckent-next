@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": "beuser-limits-2",
-  "walk": { "loopStop": 3, "observeStop": 4 },
+  "revision": "beuser-limits-3",
+  "walk": { "loopStop": 3, "observeStop": 4, "settleMs": 10000 },
   "profiles": [
     {
       "schemaVersion": 1,

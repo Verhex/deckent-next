@@ -57,6 +57,9 @@ export class BeuserController {
   private actedOn: string | null = null;
   private previous: string | null = null;
   private idle = 0;
+  /** The digit-masked screen last observed and when it first appeared (walk19R: a fast walker reads a screen the product has not redrawn yet). */
+  private observed: string | null = null;
+  private changedAt = performance.now();
   constructor(context: BeuserContext, readonly summary: BeuserWalkerSummary, budget?: BeuserExecutionBudget) {
     this.budget = budget ?? new BeuserExecutionBudget(context.limits); this.ownsBudget = budget === undefined;
     if (JSON.stringify(this.budget.limits) !== JSON.stringify(pinBeuserLimits(context.limits))) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
@@ -86,6 +89,8 @@ export class BeuserController {
     assertBeuserAccess(this.context, screen.binding, this.context.principal, { kind: 'beuser-sandbox', id: screen.binding.realmId }, 'create');
     if (!Number.isSafeInteger(screen.sequence) || screen.sequence <= this.sequence || !/^[a-f0-9]{64}$/u.test(screen.digest)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     this.sequence = screen.sequence;
+    const settled = beuserSettledScreen(screen);
+    if (settled !== this.observed) { this.observed = settled; this.changedAt = performance.now(); }
     const bytes = new TextEncoder().encode(screen.text).byteLength;
     this.budget.transcript(bytes); this.bytes += bytes;
     if (this.bytes > this.context.limits.maxTranscriptBytes) throw new BeuserWalkStopped('bound');
@@ -100,16 +105,19 @@ export class BeuserController {
   /**
    * Before the effect (walk17 S2, walk18; thresholds from the limits registry): the `loopStop`th identical key or text on one screen is a loop,
    * exactly or after a cycle through other screens that only changed numbers (a stepper's consecutive presses are not a cycle); the
-   * `observeStop`th consecutive look/wait on one settled screen is `observing`. Both are RED persona-stuck.
+   * `observeStop`th consecutive look/wait on one settled screen is `observing`. Both are RED persona-stuck. Walk19R: on a screen unchanged since
+   * the last action either holds only once that screen has stayed unchanged for `settleMs`; before that the action proceeds. A cycle through
+   * other screens is the product answering, so it is not delayed.
    */
   action(screen: BeuserScreen, action: BeuserSurfaceCommand['action']): void {
-    const settled = beuserSettledScreen(screen);
+    const settled = beuserSettledScreen(screen), unchanged = this.previous === settled;
+    const waiting = unchanged && performance.now() - this.changedAt < BEUSER_WALK_RULES.settleMs;
     if (action.kind === 'look' || action.kind === 'wait') {
-      if (this.previous === settled && this.idle + 1 >= BEUSER_WALK_RULES.observeStop) throw new BeuserWalkStopped('observing');
+      if (unchanged && !waiting && this.idle + 1 >= BEUSER_WALK_RULES.observeStop) throw new BeuserWalkStopped('observing');
       return;
     }
     const exact = this.visited.get(JSON.stringify([screen.digest, action])) ?? 0, cycle = this.visited.get(JSON.stringify([settled, action])) ?? 0;
-    if (exact + 1 >= BEUSER_WALK_RULES.loopStop || this.previous !== settled && cycle + 1 >= BEUSER_WALK_RULES.loopStop) throw new BeuserWalkStopped('loop');
+    if (!waiting && exact + 1 >= BEUSER_WALK_RULES.loopStop || !unchanged && cycle + 1 >= BEUSER_WALK_RULES.loopStop) throw new BeuserWalkStopped('loop');
   }
   /** After the surface took (or refused, before any input) the action. A refused action is history for the correction, never a loop count. */
   acted(screen: BeuserScreen, action: BeuserSurfaceCommand['action'], refused?: BeuserCorrection): void {

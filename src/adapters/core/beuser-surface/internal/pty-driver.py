@@ -151,12 +151,13 @@ def main():
     def drain(ms, until_exit=False, wait_full=False):
         nonlocal state
         end = min(deadline, time.monotonic() + ms / 1000)
-        quiet_end = time.monotonic() + limits['quietMs'] / 1000
+        # Walk19R: the silence window opens at the target's first answering byte, never before it; `ms` bounds the whole drain.
+        quiet_end = None
         while time.monotonic() < end and state == 'ready':
             reap()
             if eof and (not until_exit or status is not None):
                 break
-            wait_end = end if until_exit or wait_full else min(end, quiet_end)
+            wait_end = end if until_exit or wait_full or quiet_end is None else min(end, quiet_end)
             remaining = wait_end - time.monotonic()
             if remaining <= 0:
                 break
