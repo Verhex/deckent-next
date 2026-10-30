@@ -1140,7 +1140,7 @@ The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHIT
 `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`;
 public reader guides `docs/glossary{,.tr}.md` and `docs/architecture-overview{,.tr}.md` (owner-approved pre-beta DOC-03/DOC-04 fixes, 2026-10-09)
 and the further entries of `arch.json` `markdown.trackedAllow`/`trackedAllowGlobs` (the complete list);
-byte-identical ≤70-line public contributor guidance `CLAUDE.md`, `AGENTS.md` (DOC-01, 2026-10-09);
+single ≤70-line public contributor guidance `AGENTS.md` (DOC-01, 2026-10-09) and its one-line `@AGENTS.md` import `CLAUDE.md` (owner 2026-10-30);
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
 and the explicit refactor host-kit globs in `arch.json`: the 23 tracked `.agents/skills/<skill>` (`claude-design-sync` retired 2026-10-18)
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.

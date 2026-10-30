@@ -31,7 +31,7 @@ does not replace current authority and relevant verification.
   Record branch, relevant upstream relation and staged, unstaged and untracked changes.
   Check overlapping worktrees and assigned paths. Do not infer dirty-state ownership from a
   filename or branch; mark unknown ownership and preserve those edits.
-- Resolve live owner instructions and repository `AGENTS.md` / `CLAUDE.md`, then the relevant
+- Resolve live owner instructions and repository `AGENTS.md` (`CLAUDE.md` imports it), then the relevant
   `ARCHITECTURE.md`, `PLAN.md` and `follow-up-works/current-flow.md` content. Read local
   `.deckent/docs/core-memory/MEMORY.md` and its relevant laws; use the product north star
   already required by the shared entry guide. Refresh changed sources before relying on them.

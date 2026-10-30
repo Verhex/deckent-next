@@ -57,4 +57,4 @@ a test suite is running. Report exact commands, results, skips and unverified pa
 - Explain and test submitted changes, including material AI assistance as described
   in CONTRIBUTING. Apply the same review standard to every contribution.
 
-Keep AGENTS.md and CLAUDE.md byte-identical and each at or below 70 lines.
+AGENTS.md is the single contributor instruction file, at or below 70 lines; CLAUDE.md only imports it with `@AGENTS.md`.

@@ -13,7 +13,7 @@ once per session for a Next card, and again only when it changes.
 
 ## Authority and sources
 
-- At task start read `AGENTS.md`/`CLAUDE.md`, `ARCHITECTURE.md`, `PLAN.md`, your process-board row
+- At task start read `AGENTS.md` (`CLAUDE.md` imports it), `ARCHITECTURE.md`, `PLAN.md`, your process-board row
   (`node .agents/refactor/board.mjs show`), `.deckent/docs/core-memory/MEMORY.md`, the relevant laws and
   `.deckent/docs/core-memory/project_product_north_star.md`. Reuse unchanged session reads.
 - Live owner instructions take precedence. Preserve accepted decisions; bring a material new conflict or
