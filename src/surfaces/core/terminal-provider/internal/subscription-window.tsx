@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span, useTerminalHandover } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL } from '#surfaces/core/terminal-picker/index.js';
 import { EntryWindow, LinesWindow, PickerWindow, QuestionWindow, type PanelLabels, type PanelLine, type ProviderModelOutcome, type ProviderPanelKind } from '#surfaces/core/terminal-panels/index.js';
-import type { ProviderDelegateClass, ProviderSubscriptionPort } from './context.js';
+import type { ProviderDelegateClass, ProviderSubscriptionOutcome, ProviderSubscriptionPort } from './context.js';
 
 type Step = Readonly<{ kind: 'busy' } | { kind: 'dir'; owned: string; lines: readonly PanelLine[] } | { kind: 'other'; problem: string | null }
   | { kind: 'ended'; title: string; lines: readonly PanelLine[]; retry: boolean }
-  | { kind: 'consent'; outcome: ProviderModelOutcome; configDir: string | null; now: readonly ProviderDelegateClass[]; ticked: readonly ProviderDelegateClass[]; pos: number }
-  | { kind: 'confirm'; outcome: ProviderModelOutcome; configDir: string | null; now: readonly ProviderDelegateClass[]; ticked: readonly ProviderDelegateClass[] }>;
+  | { kind: 'consent'; outcome: ProviderSubscriptionOutcome; configDir: string | null; now: readonly ProviderDelegateClass[]; ticked: readonly ProviderDelegateClass[]; pos: number }
+  | { kind: 'confirm'; outcome: ProviderSubscriptionOutcome; configDir: string | null; now: readonly ProviderDelegateClass[]; ticked: readonly ProviderDelegateClass[] }>;
 const CLASSES: readonly ProviderDelegateClass[] = ['system', 'ai'];
 /** The dir step's explanation and shell twin wrap on a narrow terminal; they keep this many rows (a longer body scrolls). */
 const DIR_BODY_ROWS = 4;
@@ -65,10 +65,12 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
       }} />;
   }
   const { outcome, configDir, now, ticked } = step, box = (id: ProviderDelegateClass) => `[${ticked.includes(id) ? 'x' : ' '}] `;
-  return <PickerWindow title={title(fillTemplate(words.consentTitle, { kind: kind.label }))} body={[{ spans: [span(fillTemplate(words.consentNow, { who: who(now) }))] }]} bodyRows={2}
+  return <PickerWindow title={title(fillTemplate(words.consentTitle, { kind: kind.label }))} body={[fillTemplate(words.consentNow, { who: who(now) }), words.configPolicy,
+    ...(outcome.delegationBlocked ? [outcome.delegationBlocked] : [])].map(text => ({ spans: [span(text)] }))} bodyRows={4} bodyPages
     labels={labels.picker} position={labels.position} pickerKey={`consent:${ticked.join(',')}`} initial={{ ...PICKER_INITIAL, pos: step.pos }}
     tree={{ title: words.consentTitle, items: [{ id: 'confirm', label: fillTemplate(words.consentConfirm, { who: who(ticked) }) },
-      ...CLASSES.map(id => ({ id, label: `${box(id)}${words[id]}` })), { id: 'mcp', label: `[ ] ${words.mcp}`, blocked: { reason: words.mcpBlocked } }] }}
+      ...CLASSES.map(id => ({ id, label: `${box(id)}${words[id]}`, ...(outcome.delegationBlocked ? { blocked: { reason: outcome.delegationBlocked } } : {}) })),
+      { id: 'mcp', label: `[ ] ${words.mcp}`, blocked: { reason: words.mcpBlocked } }] }}
     onResult={result => {
       // Esc keeps the consent as it is now; Enter on a class ticks or unticks it; the first row confirms what is ticked (nothing: only you).
       if (result.kind !== 'selected') { onDone(outcome); return; }

@@ -332,7 +332,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     },
     keyName(kind, endpoint) { return connect.secretName?.(kind, endpoint) ?? kindOf(kind)?.secretName ?? null; },
     ...(host.connectModel ? { connectModel: (request: ProviderModelRequest) => connectChosen(request).then(chosen => chosen.outcome) } : {}),
-    ...(host.connectModel && connect.login && connect.loginDir ? { subscription: subscriptionPort({ scopeId, options, locale, errorText, connect: { ...connect, login: connect.login, loginDir: connect.loginDir },
+    ...(host.connectModel && connect.login && connect.loginDir ? { subscription: subscriptionPort({ root, policy: host, scopeId, options, locale, errorText, connect: { ...connect, login: connect.login, loginDir: connect.loginDir },
       kindLabel: id => kindLabel(kindOf(id), id, locale), refusal: () => isolation,
       connectModel: (kind, cli, delegate) => connectChosen({ kind, endpoint: null, model: PULL }, { ...(cli ? { cli } : {}), ...(delegate ? { delegate: [...delegate] } : {}) }) }) } : {}),
     get transparency(): readonly PanelLine[] {

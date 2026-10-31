@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -10,6 +10,10 @@ import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { ModelInvocableNowApplication, type ModelInvocability, type InvocableModels } from '#engine/index.js';
+import { main as runConfiguredCli } from '#composition/core/cli/index.js';
+import * as cliSurface from '#surfaces/index.js';
+import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
@@ -560,9 +564,53 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const commands: ModelConnectCommand[] = [], ref = { providerId: 'claude-cli-subscription', providerVersion: 1, modelId: 'm', modelVersion: 1 };
   let person = false, mutationFails = false, observationFails = false;
   let persisted: readonly ('ai' | 'system')[] = [];
+  let authored: readonly ('global' | 'project')[] = [], policy: 'allow' | 'require-approval' | 'deny' | 'unreadable' | 'missing' = 'allow';
+  const permissionReads: string[][] = [];
+  const localPrincipal = process.platform !== 'win32';
+  if (localPrincipal) await applyPolicyTemplateInstallation(root, 'scope', options);
+  const principal = localPrincipal ? await resolveConfiguredConfigPrincipal(root, 'scope', options) : null, policyPath = productResourcePath(resolveProductLayout({ projectRoot: root }), 'policy');
+  const installedPolicy = (localPrincipal ? JSON.parse(await readFile(policyPath, 'utf8')) : { grants: [] }) as { grants: unknown[] };
+  if (!localPrincipal) console.info('verify-not-run: PV configured policy producer requires a POSIX OS principal; typed port negatives remain active');
+  const globalPath = resolveGlobalConfigPaths(options.env).platformPath, projectPath = join(root, '.deckent/config.json');
+  const document = { provider_invocation_profiles: { schemaVersion: 1, profiles: [] } };
+  const writePolicy = async () => {
+    if (!principal) return;
+    const principals = [{ issuer: principal.issuer, subject: principal.subject }];
+    await writeFile(policyPath, JSON.stringify({ ...installedPolicy, grants: [...installedPolicy.grants,
+      { id: 'pv-config-write', effect: 'allow', actions: ['write'], scopes: 'all', principals, resource: { kind: 'config', ids: 'all' } },
+      ...(policy === 'deny' || policy === 'require-approval' ? [{ id: 'managed-no-config', effect: policy, actions: ['write'], scopes: 'all', principals,
+        resource: { kind: 'config', ids: [`${authored.at(-1) ?? 'project'}:provider_invocation_profiles`] } }] : [])] }), { mode: 0o600 });
+    clearConfigCache();
+  };
+  await writePolicy();
+  let inspect: TerminalLaunchContext['inspectDelegationPermission'];
+  const entry = vi.spyOn(cliSurface, 'main').mockImplementation(async (_argv, context) => { inspect = (await context!.loadHost!()).inspectDelegationPermission; return 0; });
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
+  vi.stubEnv('DECKENT_GLOBAL_HOME', options.env.DECKENT_GLOBAL_HOME); vi.stubEnv('HOME', options.env.HOME);
+  try { expect(await runConfiguredCli(['--lang', 'en'])).toBe(0); }
+  finally { entry.mockRestore(); cwd.mockRestore(); vi.unstubAllEnvs(); }
+  expect(inspect).toBeTypeOf('function');
+  const inspectDelegationPermission: NonNullable<typeof inspect> = async (...args) => {
+    if (policy === 'unreadable') throw new Error('unreadable');
+    if (policy === 'missing') return null;
+    if (!localPrincipal) {
+      const layers: ('global' | 'project')[] = authored.length ? [...authored] : ['project'];
+      permissionReads.push(layers.map(layer => `${layer}:provider_invocation_profiles`));
+      return { layers, decisions: layers.map(layer => ({ layer, ruleId: 'managed-no-config',
+        decision: policy === 'deny' && layer === authored.at(-1) ? 'deny' : policy === 'require-approval' ? 'require-approval' : 'allow' })) };
+    }
+    const paths = [projectPath, globalPath, policyPath], before = await Promise.all(paths.map(path => readFile(path, 'utf8').catch(() => null)));
+    const view = await inspect!(...args);
+    expect(await Promise.all(paths.map(path => readFile(path, 'utf8').catch(() => null)))).toEqual(before);
+    expect(Object.keys(view!).sort()).toEqual(['decisions', 'layers']);
+    for (const row of view!.decisions) expect(Object.keys(row).sort()).toEqual(['decision', 'layer', 'ruleId']);
+    permissionReads.push(view!.layers.map(layer => `${layer}:provider_invocation_profiles`));
+    return view;
+  };
   const subscription = (locale: 'en' | 'tr') => providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [{ ...claude, headlessLogin: true }],
     loginDir: async () => { if (!person) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } }); return { owned: '/state/logins/claude' }; },
     login: async command => ({ configDir: command.configDir ?? '/state/logins/claude', owned: !command.configDir, exit: 'completed', signedIn: true, authMethod: 'claude.ai', subscriptionType: 'max' }) },
+  inspectDelegationPermission,
   connectModel: async (_root, command) => { if (mutationFails) throw ErrorRegistry.createError('POLICY_DENIED');
     commands.push(command); persisted = command.delegate ?? persisted; return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
     status: 'connected', reference: ref, models: [{ nativeId: 'm', state: 'connected', reference: ref }], credentialRef: null, keyStored: null, steps: { catalog: 'present', declaration: 'skipped',
@@ -604,6 +652,29 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
       summary: t('tui.provider.login.appliedUnverified', {}, locale) });
     expect(uncertain.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');
     expect(uncertain.lines.map(line => line.text)).not.toContain(t('tui.provider.login.personOnly', {}, locale));
+  }
+  mutationFails = false; observationFails = false;
+  // R3: the display uses the same authored-layer selection as governed connect; a denied layer blocks both classes.
+  for (const locale of ['en', 'tr'] as const) for (authored of [[], ['project'], ['global'], ['global', 'project']] as const) {
+    const layers = authored.length ? authored : ['project'];
+    await mkdir(dirname(globalPath), { recursive: true });
+    await writeFile(globalPath, JSON.stringify(authored.includes('global') ? document : {}), { mode: 0o600 });
+    await writeFile(projectPath, JSON.stringify(authored.includes('project') ? document : {}), { mode: 0o600 });
+    policy = 'allow'; await writePolicy();
+    expect((await subscription(locale).connect(claude.id, null)).delegationBlocked).toBeNull();
+    expect(permissionReads.at(-1)).toEqual(layers.map(layer => `${layer}:provider_invocation_profiles`));
+    policy = 'require-approval'; await writePolicy();
+    expect((await subscription(locale).connect(claude.id, null)).delegationBlocked).toBeNull();
+    if (authored.length) {
+      policy = 'deny'; await writePolicy();
+      const denied = await subscription(locale).connect(claude.id, null);
+      expect(denied.delegationBlocked).toBe(t('tui.provider.login.policyBlocked', { policy: 'managed-no-config', layer: authored.at(-1)! }, locale));
+      mutationFails = true;
+      const refused = await subscription(locale).connect(claude.id, null);
+      expect(refused.state).toBe('not-applied'); expect(refused.lines.map(line => line.text)).toContain(denied.delegationBlocked);
+      mutationFails = false;
+    }
+    for (policy of ['unreadable', 'missing']) expect((await subscription(locale).connect(claude.id, null)).delegationBlocked).toBe(t('tui.provider.login.policyUnread', {}, locale));
   }
 });
 

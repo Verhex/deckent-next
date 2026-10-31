@@ -44,7 +44,11 @@ export type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'gra
 export type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
 export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
+/** Display-only policy facts. No config writer or principal resolver crosses this port. */
+export type ProviderDelegationPermission = Readonly<{ layers: readonly ('global' | 'project')[]; decisions: readonly Readonly<{
+  layer: 'global' | 'project'; decision: 'allow' | 'require-approval' | 'deny' | 'refused'; ruleId: string | null }>[] }>;
 export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels' | 'connectModel' | 'siwc'> {
+  inspectDelegationPermission?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<ProviderDelegationPermission | null>;
   providerConnect?: ProviderConnectHost;
   inspectInvocableModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InvocableModels>;
   listSecretNames?: TerminalSecretNamesHandler;
@@ -57,7 +61,7 @@ export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectMod
 }
 /** PV: who besides the person may use a CLI subscription login (S10: never MCP). */
 export type ProviderDelegateClass = 'ai' | 'system';
-export type ProviderSubscriptionOutcome = ProviderModelOutcome & (Readonly<{ state: 'applied'; delegate: readonly ProviderDelegateClass[] }>
+export type ProviderSubscriptionOutcome = ProviderModelOutcome & Readonly<{ delegationBlocked: string | null }> & (Readonly<{ state: 'applied'; delegate: readonly ProviderDelegateClass[] }>
   | Readonly<{ state: 'not-applied' | 'approval-pending' | 'applied-unverified'; delegate: null }>);
 /**
  * PV 3 (owner S10): `/provider` signs a CLI subscription in and connects it — the login dir (the Brain's own by default), the CLI's own sign-in
@@ -68,7 +72,7 @@ export interface ProviderSubscriptionPort {
   /** The rows that sign in with their CLI. */
   readonly kinds: readonly string[];
   readonly words: Readonly<Record<'action' | 'dirTitle' | 'dirOwned' | 'dirOther' | 'otherTitle' | 'otherHint' | 'otherAbsolute' | 'banner' | 'retryKeys' | 'consentTitle'
-    | 'consentNow' | 'consentConfirm' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>>;
+    | 'consentNow' | 'consentConfirm' | 'configPolicy' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>>;
   refusal(kind: string, usable: readonly string[]): Readonly<{ title: string; lines: readonly PanelLine[] }>;
   /** The person check, then what the sign-in will do and its shell twin; the Brain's own dir (null: refused, with its typed reason). */
   prepare(kind: string): Promise<Readonly<{ owned: string; lines: readonly PanelLine[] }> | Readonly<{ owned: null; title: string; lines: readonly PanelLine[] }>>;

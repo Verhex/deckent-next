@@ -81,6 +81,14 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
     configChoiceSources: (root, options) => ({ ...configuredConfigChoiceSources(root, options), checkWorkTarget: async workTargets => checkConfiguredWorkTarget(root, workTargets, options,
       await inspectMonitor(root, options).then(openDeliveryRuns, () => [])) }), /* BeUser DR2-05: the open results a work-source move strands */ configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
+    // PV: only policy facts reach the provider card; the config writer stays in composition.
+    inspectDelegationPermission: async (root, scopeId, options) => {
+      const app = createConfiguredConfigApplication(root, options), principal = await resolveConfiguredConfigPrincipal(root, scopeId, options), keyPath = 'provider_invocation_profiles';
+      const [global, project] = await Promise.all([app.inspectValue({ keyPath, layer: 'global' }), app.inspectValue({ keyPath, layer: 'project' })]);
+      const layers: ('global' | 'project')[] = global.value !== undefined ? project.value !== undefined ? ['global', 'project'] : ['global'] : ['project'];
+      const permissions = await app.permissions({ principal, scopeId, keys: [keyPath], layers });
+      return permissions === null ? null : { layers, decisions: permissions.map(({ layer, decision, ruleId }) => ({ layer, decision, ruleId })) };
+    },
     listRefusedRequests: (root, scopeId, limit, options) => inspectConfiguredRefusedRequests(root, scopeId, limit, options), // BeUser D-08
     changeDeliveryDismissal: changeConfiguredDeliveryDismissal, // BeUser M-33
     openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)

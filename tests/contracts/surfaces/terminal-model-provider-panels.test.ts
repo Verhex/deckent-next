@@ -799,6 +799,9 @@ it('U1 confirms the named project before masked key entry and carries that conse
 });
 
 it('U1 optional-key local connections can skip custody and key entry explicitly', async () => {
+  const inspectDelegationPermission = (policy: 'allow' | 'deny' | 'refused' | 'unknown') => async () => policy === 'unknown' ? null : {
+    layers: ['global', 'project'] as const, decisions: (['global', 'project'] as const).map(layer => ({
+      layer, decision: layer === 'project' ? policy : 'allow' as const, ruleId: 'company-profile-write' })) };
   const { port, requests } = providerPort();
   let prepared = 0;
   const provider = { ...port, prepareKey: async () => { prepared++; throw new Error('custody must not run without a key'); } };
@@ -815,7 +818,7 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
   for (const widening of [true, false]) for (const fault of ['mutation', 'observation'] as const) {
     const kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null }, requests: unknown[] = [];
     let persisted: readonly ('ai' | 'system')[] = widening ? [] : ['system'];
-    const subscription = providerPanelPort('fixture-project', 'scope', { providerConnect: {
+    const subscription = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: inspectDelegationPermission('allow'), providerConnect: {
       kinds: [{ id: kind.id, labelKey: kind.label, available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
         secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }),
       probe: async () => { throw new Error('unused'); }, loginDir: async () => ({ owned: '/fixture/login' }),
@@ -847,6 +850,39 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
     expect(ui.frame()).not.toContain('Who may use this login now:');
     expect(persisted).toEqual(fault === 'mutation' ? widening ? [] : ['system'] : widening ? ['system'] : []);
     expect(requests).toHaveLength(fault === 'mutation' ? 1 : 2);
+    mounted.pop()!.unmount();
+  }
+  // P-B9: SettingsPanel → SubscriptionWindow with the production provider port (the policy read is a typed fixture).
+  for (const locale of ['en', 'tr'] as const) for (const policy of ['deny', 'refused', 'unknown', 'allow'] as const) {
+    const kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null }, delegated: unknown[] = [];
+    const subscription = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: inspectDelegationPermission(policy), providerConnect: {
+      kinds: [{ id: kind.id, labelKey: kind.label, available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
+        secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }), probe: async () => { throw new Error('unused'); },
+      loginDir: async () => ({ owned: '/fixture/login' }), login: async () => ({ configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }) },
+      connectModel: async (_root, command) => { delegated.push(command.delegate ?? null);
+        return { status: 'connected', reference: ref('m', kind.id), models: [], notCarried: [], carriedModels: [],
+          cli: { configDir: '/fixture/login', owned: true, delegate: command.delegate ?? [] }, steps: {}, tariff: 'unmetered' } as unknown as ModelConnectResult;
+      } }, {}, locale, () => 'POLICY_DENIED').subscription!;
+    const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
+    const { element, calls } = panel('provider', { provider }, locale), ui = mount(element, 180, 45);
+    await settle(80); await ui.press(`${ENTER}${ENTER}${ENTER}`, 120);
+    expect(ui.frame()).toContain(subscription.words.configPolicy);
+    const reason = policy === 'unknown' ? t('tui.provider.login.policyUnread', {}, locale)
+      : t('tui.provider.login.policyBlocked', { policy: 'company-profile-write', layer: 'project' }, locale);
+    for (const actor of ['system', 'ai'] as const) {
+      await ui.press(`${DOWN}${ENTER}`, 60);
+      expect(ui.frame()).toContain(`[${policy === 'allow' ? 'x' : ' '}] ${subscription.words[actor]}`);
+      if (policy !== 'allow') expect(ui.frame()).toContain(reason);
+      expect(delegated).toEqual([null]); // Choosing a disabled class cannot start a mutation or a widening card.
+      console.info('PV-R3 Ink consent', JSON.stringify({ locale, policy, actor, frame: ui.frame() }));
+    }
+    await ui.press(`\u001B[A\u001B[A${ENTER}`, 60);
+    if (policy === 'allow') {
+      expect(delegated).toEqual([null]);
+      await armed(ui.frame, subscription.words.questionKeys); await ui.press('y', 100); // approve-card-then-assert
+      expect(delegated).toEqual([null, ['system', 'ai']]);
+    } else expect(delegated).toEqual([null]); // Unchanged Enter preserves the existing person-only connection.
+    expect(calls.errors).toEqual([]);
     mounted.pop()!.unmount();
   }
 });
