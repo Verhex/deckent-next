@@ -58,7 +58,8 @@ const operationsKey = (key: string) => key === 'operations' || key.startsWith('o
  * `/config` as a window: sections → key → value, then the layer (project or user) with each layer's policy lock. Choosing writes through the
  * L2 port only; a write the policy sends to approval writes nothing and opens the approval window. Finished lines go to scrollback.
  */
-export function ConfigPanel({ port, labels, push, openApproval, onError, onClose }: { readonly port: ConfigPanelPort; readonly labels: PanelLabels;
+export function ConfigPanel({ port, labels, push, openApproval, onError, onClose, theme }: { readonly port: ConfigPanelPort; readonly labels: PanelLabels;
+  readonly theme?: Readonly<{ title: string; open: () => void }>;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval: (approvalId: string) => void; readonly onError: (error: unknown) => void;
   readonly onClose: () => void }) {
   const words = labels.config;
@@ -74,7 +75,10 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
   if (!view) return <PickerWindow title={[span(labels.loading)]} bodyRows={FOCUS_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position} onClose={onClose}
     onResult={onClose} />;
   const focusedKey = state.trail.length >= 2 ? state.trail[1]!.id : null;
-  const tree = configPanelTree(view, words, focusedKey);
+  const base = configPanelTree(view, words, focusedKey);
+  const themeRow = { id: ':theme', label: theme?.title ?? '', unscoped: true };
+  const tree = theme ? { ...base, items: [themeRow, ...base.items.map(section => section.children ? { ...section,
+    children: section.children.map(row => row.id === 'terminal.theme' ? themeRow : row) } : section)] } : base;
   const shown = pickerView(tree, state), row = shown.rows[shown.pos];
   const field = view.fields.find(item => item.key === (state.trail.length >= 2 ? focusedKey : state.trail.length === 1 ? row?.id : null));
   // Back where the person was: the key list of the section, on the key just written.
@@ -99,6 +103,7 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
   };
   const chosen = (result: PickerResult, at: PickerState) => {
     if (result.kind !== 'selected') { onClose(); return; }
+    if (result.id === ':theme' && theme) { theme.open(); return; }
     const [, key, value] = result.path, target = view.fields.find(item => item.key === key), layer = LAYERS.find(item => item === result.scope) ?? 'project';
     if (!target) { onClose(); return; }
     if (value === RECORDS && port.records) { setStep({ kind: 'records', field: target, layer }); return; }

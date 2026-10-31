@@ -8,7 +8,7 @@ import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'hub' | 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
+export type PanelKind = 'hub' | 'mode' | 'config' | 'theme' | 'mcp' | 'model' | 'provider' | 'policy';
 export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string; identity?: ModelProviderLabel }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
@@ -35,6 +35,18 @@ export interface ModePanelLabels {
 }
 
 export type ConfigPanelLayer = 'project' | 'global';
+/** Human-only theme window. Preview is local to its provider; only Enter reaches the governed config writer. */
+export interface ThemePanelPort {
+  readonly title: string;
+  inspect(): Promise<Readonly<{ current: string; source: string; notes: readonly string[];
+    choices: readonly Readonly<{ id: string; label: string; detail: string }>[] }>>;
+  palette(setting: string): ReturnType<typeof import('#surfaces/core/terminal-kit/index.js').useWorklinePalette>;
+  readonly words: Readonly<{ hints: string; current: string; preview: string; contrast: string; inherited: string; noColor: string; sessionOnly: string;
+    samples: readonly Readonly<{ text: string; role: import('#surfaces/core/terminal-render/index.js').SpanRole }>[] }>;
+  background(): string | null;
+  apply(setting: string): void;
+  write(setting: string): Promise<ConfigPanelOutcome>;
+}
 /** One key as the panel shows it: localized words only, plus the choices its schema allows and each layer's lock or note. */
 export type ConfigPanelField = Readonly<{
   key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
@@ -328,6 +340,7 @@ export interface PanelLabels {
   readonly workspace?: Readonly<{ entry: string; title: string; confirm: string; empty: string; note: string; hints: string }>;
 }
 export interface PanelPorts {
+  readonly theme?: ThemePanelPort;
   readonly hub?: { render(input: { readonly labels: PanelLabels; readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void }): import('react').ReactNode };
   readonly policy?: PolicyPanelPort;
   readonly mode?: ModePanelPort;
