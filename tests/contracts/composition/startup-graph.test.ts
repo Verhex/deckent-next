@@ -61,12 +61,16 @@ const HOST_GRAPH = ['adapters/index.js', 'engine/index.js', 'composition/core/ro
 
 // P5a (owner 2026-10-31): the bin is a bootstrap that loads only the platform common unit (node: built-ins, registry JSON) before Node's compile
 // cache is on; the cache lives only in an existing private global state root, so a call before any installation writes nothing in HOME.
-it('the CLI bootstrap reaches only the common unit and the CLI none of the host graph; the compile cache lives only in a private global root', async () => {
+it('the CLI bootstrap reaches only the common unit, the CLI and the launch shell none of the host graph; the compile cache lives only in a private global root', async () => {
   const boot = await staticReach(resolve(dist, 'composition/core/cli/internal/entry.js'));
   expect([...boot.files].map(file => relative(dist, file)).filter(file => file !== 'composition/core/cli/internal/entry.js' && !file.startsWith('platform/core/common/'))).toEqual([]);
   expect([...boot.packages.keys()]).toEqual([]);
   const { files } = await staticReach(resolve(dist, 'composition/core/cli/internal/cli-main.js'));
   expect(HOST_GRAPH.filter(path => files.has(resolve(dist, path)))).toEqual([]);
+  // alpha.60 C: the first frame (the launch shell, a lazy edge of the CLI) is drawn before the host graph and the Workline load.
+  const shell = await staticReach(resolve(dist, 'surfaces/core/cli/internal/launch-shell.js'));
+  expect([...HOST_GRAPH, 'surfaces/core/terminal/index.js', 'surfaces/core/terminal/internal/workline.js', 'surfaces/core/cli-terminal/index.js'].filter(path => shell.files.has(resolve(dist, path)))).toEqual([]);
+  expect([...shell.files].map(file => relative(dist, file)).filter(path => /^(engine|adapters|composition)[/\\]/u.test(path))).toEqual([]);
   if (process.platform === 'win32') return;   // the cache needs POSIX ownership; Windows runs without it
   const home = await mkdtemp(join(tmpdir(), 'deckent-compile-cache-'));
   try {

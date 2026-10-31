@@ -158,6 +158,26 @@ it('owner option A: "Set up workers" opens /setup at its worker steps and runs n
   view.stdin.write('\r'); await until(() => view.stdout.text.includes('LOCAL ANSWER'), 'the kept draft is sent once a model is there');
   expect(asked).toHaveLength(1); expect(asked[0]).toContain('Hello model');
 });
+// alpha.60 B, owner 2026-10-31 rule (b): setup is prepared after the frame; its waiting card opens by itself only while the person has typed nothing.
+// Typed-ahead keys never answer it: one line names the waiting steps and the keys stay the draft.
+// Astra 2858 B-R2: the condition holds across the input hand-over — a key that arrives after the opening resolved (the hand-over gap), input
+// already buffered on the card's stream, or a draft carried over from the launch shell (C) all keep the card closed; nothing typed is lost.
+it('alpha.60 B (rule b): the waiting setup card opens by itself only before any key; after one, a single line says how many steps wait', async () => {
+  for (const variant of ['none', 'before', 'gap', 'buffered', 'carried'] as const) {
+    let prepared!: (opening: unknown) => void; const shown: string[] = [], typed = variant !== 'none';
+    const opening = new Promise(resolve => { prepared = resolve; });
+    const view = mountWorkline({ completeTurn: async () => 'x', ...(variant === 'carried' ? { initialDraft: { text: 'carried', pastes: [] } } : {}),
+      onboarding: { opening, modelDraft: 'D', waiting: (count: number) => `SETUP WAITING ${count}`, open: async () => null, ...(variant === 'buffered' ? { pending: () => true } : {}) } as never }); mounted.push(view);
+    await settle(40); if (variant === 'before') { view.stdin.write('ab'); await settle(40); }
+    prepared({ total: 3, notice: null, show: async () => { shown.push('card'); return { intent: null, notice: { level: 'info', text: 'AFTER THE CARD' } }; } });
+    // The gap: the opening's own reaction has run (the old check point) before this key is written; the key still keeps the card closed.
+    if (variant === 'gap') { await Promise.resolve(); await Promise.resolve(); view.stdin.write('ab'); }
+    await until(() => view.stdout.text.includes(typed ? 'SETUP WAITING 3' : 'AFTER THE CARD'), `the opening outcome (${variant})`); await settle(40);
+    expect(shown, variant).toEqual(typed ? [] : ['card']); expect(view.stdout.text.includes('SETUP WAITING'), variant).toBe(typed);
+    if (variant === 'before' || variant === 'gap') expect(view.stdout.frame, variant).toMatch(/> ?ab/u);
+    if (variant === 'carried') expect(view.stdout.frame).toMatch(/> ?carried/u);
+  }
+});
 it('BeUser M-07: a plan rejected because no worker can run it shows its refusal first and never runs here', async () => {
   const pending = pendingBrainFixture(), asked: string[] = [];
   const rejected = { ...pending, run: null, reasonParams: { taskId: 'T1', workClass: 'feature', skipped: 'x: WORKER_CHANNEL_NOT_ACTIVE' },

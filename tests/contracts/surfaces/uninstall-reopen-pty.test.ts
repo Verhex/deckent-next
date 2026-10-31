@@ -49,7 +49,7 @@ describe.skipIf(process.platform !== 'linux' || !existsSync(cli))('uninstall kee
     try {
       // The card listens once its key hint is drawn; the moved choice is confirmed only once it is shown.
       const notNow = await pty(['--lang', 'en'], [['↑↓ choose', '\x1b[B'], ['› 2. Not now', '\r', 'fresh']], true);
-      expect(notNow.status, notNow.output).toBe(0); expect(await lstat(marker)).toBeTruthy(); expect(await service()).toContain('LOCAL_RUNTIME_UNAVAILABLE');
+      expect(notNow.status, notNow.output).toBe(0); expect(await lstat(marker)).toBeTruthy(); expect(notNow.output).not.toContain('Preparing…'); // alpha.60 C: a retired folder keeps the old path expect(await service()).toContain('LOCAL_RUNTIME_UNAVAILABLE');
       // Continue: the marker is cleared and the terminal starts the service before onboarding opens (the view is stopped there; the service keeps running).
       const reopened = await pty(['--lang', 'en'], [['↑↓ choose', '\r'], ['Permission settings', '', 'fresh']], false);
       await expect(lstat(marker), reopened.output).rejects.toMatchObject({ code: 'ENOENT' });

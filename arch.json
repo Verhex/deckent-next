@@ -1095,6 +1095,7 @@
     },
     "src/surfaces/core/terminal-labels": {
       "dependencies": [
+        "src/surfaces/core/terminal-host",
         "src/platform/core/i18n",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal",
@@ -1257,6 +1258,7 @@
     },
     "src/surfaces/core/terminal-host": {
       "dependencies": [
+        "src/surfaces/core/terminal-composer",
         "src/platform/core/redaction",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
@@ -1345,6 +1347,10 @@
     },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/terminal-host",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-labels",
         "src/surfaces/core/cli-installation",
         "src/surfaces/core/doctor",
         "src/platform/core/common",
@@ -1379,6 +1385,7 @@
     },
     "src/surfaces/core/cli-terminal": {
       "dependencies": [
+        "src/surfaces/core/terminal-host",
         "src/domain/core/primitives",
         "src/engine/core/config",
         "src/engine/core/runs",

@@ -24,6 +24,12 @@ export function bindSessionScope(store: TerminalSessionStoreView, scopeId: strin
   list: (allFolders?: boolean) => allFolders ? store.list(scopeId, { allFolders: true }) : store.list(scopeId), load: (sessionId: string) => store.load(scopeId, sessionId),
     ...(store.rename ? { rename: (sessionId: string, title: string) => store.rename!(scopeId, sessionId, title) } : {}) });
 }
+/** alpha.60 B: the store opened on its first use, after the first frame; one that does not open is an empty one (sessions never block the terminal). */
+export function lazySessionStore(open: () => Promise<TerminalSessionStoreView | null>): TerminalSessionStoreView {
+  let opened: Promise<TerminalSessionStoreView | null> | undefined; const store = () => opened ??= open().catch(() => null);
+  return { save: async snapshot => { await (await store())?.save(snapshot); }, list: async (scopeId, filter) => await (await store())?.list(scopeId, filter) ?? [],
+    load: async (scopeId, sessionId) => await (await store())?.load(scopeId, sessionId) ?? null, rename: async (scopeId, sessionId, title) => await (await store())?.rename?.(scopeId, sessionId, title) ?? false };
+}
 export type SessionRefusal = 'SESSION_REFERENCE_EXACT_REQUIRED' | 'SESSION_LIST_STALE' | 'SESSION_NOT_FOUND';
 type SessionReference = Readonly<{ target: string } | { refusal: Exclude<SessionRefusal, 'SESSION_NOT_FOUND'> }>;
 const EXACT_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

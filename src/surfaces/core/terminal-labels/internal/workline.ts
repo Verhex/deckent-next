@@ -53,7 +53,7 @@ export function worklineLabels(locale: Locale, statusLine: string): WorklineLabe
       switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale),
-      fullAutoRevoked: t('terminal.mode.fullAutoRevoked', {}, locale) },
+      fullAutoRevoked: t('terminal.mode.fullAutoRevoked', {}, locale), startFullAccess: t('terminal.fullAccess.banner', {}, locale), startDenied: t('terminal.fullAccess.startDenied', {}, locale) },
     viewport: { below: t('terminal.viewport.below', {}, locale), newMessages: t('terminal.viewport.newMessages', {}, locale), search: t('terminal.viewport.search', {}, locale),
       searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale) },
     decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale) },

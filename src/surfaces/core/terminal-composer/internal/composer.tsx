@@ -58,6 +58,8 @@ export interface ComposerProps {
   readonly mentionDelayMs?: number;
   /** 'marker' draws `|` before the caret for terminals where inverse video is suppressed (no colour tier). */
   readonly caret?: 'inverse' | 'marker';
+  /** alpha.60 C: the draft as it now stands, after each change (the launch shell hands it to the Workline). */
+  readonly onDraft?: (entry: ComposerHistoryEntry) => void;
   readonly now?: () => number;
   readonly policy?: PastePolicy;
 }
@@ -123,8 +125,10 @@ export function Composer(props: ComposerProps): ReactNode {
       if (text !== intent.entry.text) remembered.set(intent.entry, { text, pastes: intent.entry.pastes.filter(paste => text.includes(paste.chip)) });
     }
     const next = remembered.size ? { ...result.state, history: result.state.history.map(entry => remembered.get(entry) ?? entry) } : result.state;
+    const before = current.current;
     current.current = next;
     setState(next);
+    if (next.text !== before.text || next.pastes !== before.pastes) latest.current.onDraft?.({ text: next.text, pastes: next.pastes });
     for (const intent of result.intents) {
       if (intent.type === 'cancel') onCancel();
       else if (intent.type === 'withdraw') { const entry = onWithdraw?.(); if (entry) dispatch({ type: 'restore', entry }); }

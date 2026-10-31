@@ -38,8 +38,8 @@ const version = (value: unknown) => typeof value === 'string' && /^[0-9A-Za-z.+~
  * reach it, and its kind. Read-only registry argv under one shared deadline; never starts a service, pulls an image, writes or asks for sudo.
  * A probe that cannot answer reports `unknown`, never a guess.
  */
-export async function detectExecutionFacts(input: Readonly<{ env: DetectEnvironment; ports?: ExecutionDetectPorts; runtimes?: readonly ExecutionRuntimeEntry[] }>): Promise<ExecutionFacts> {
-  const ports = input.ports ?? HOST_EXECUTION_PORTS, signal = AbortSignal.timeout(limits.totalTimeoutMs), runtimes: RuntimeFacts[] = [];
+export async function detectExecutionFacts(input: Readonly<{ env: DetectEnvironment; ports?: ExecutionDetectPorts; runtimes?: readonly ExecutionRuntimeEntry[]; signal?: AbortSignal }>): Promise<ExecutionFacts> {
+  const ports = input.ports ?? HOST_EXECUTION_PORTS, signal = AbortSignal.any([AbortSignal.timeout(limits.totalTimeoutMs), ...(input.signal ? [input.signal] : [])]), runtimes: RuntimeFacts[] = [];
   for (const entry of input.runtimes ?? EXECUTION_RUNTIMES) runtimes.push(await detectRuntime(entry, input.env, ports, signal));
   return { schemaVersion: 1, runtimes };
 }

@@ -5,6 +5,8 @@ import { CORE_SCHEMA, type ConfigFieldMetadata } from '#platform/core/config-fie
 export { CORE_SCHEMA } from '#platform/core/config-fields/index.js';
 
 export type CoreConfig = z.infer<typeof CORE_SCHEMA>;
+/** `terminal.scopeId` (and `--scope`): one rule for the registered terminal section and the launch shell that reads it before registration. */
+export const TERMINAL_SCOPE_ID_SCHEMA = z.string().min(1).max(128);
 export type DeckentConfig = CoreConfig & Record<string, unknown>;
 export interface ConfigSectionOptions {
   /** Called on the authored global/project layers before they are merged. */
