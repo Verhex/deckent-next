@@ -271,12 +271,20 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(body(await call())).toMatchObject({ refusal: 'quota' });
       // 1b (WALK21): a CLI that ends before a complete turn (a refused argv: exit 2, plain stderr carrying a secret) is incomplete evidence, so the outcome
       // stays unknown with its exit code and a redacted, bounded stderr tail (never a cause-less throw).
-      await write({ steps: [{ stderr: 'Error loading config.toml: unknown configuration field `tools.view_image` in -c/--config override\nAuthorization: Bearer w12Fictional0123456789\n' }, { exit: 2 }] });
-      const exited = await call();
-      expect(exited).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', httpStatus: null, body: { complete: false } } });
-      expect(body(exited)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2, signal: null, stderrSummary: expect.stringContaining('unknown configuration field `tools.view_image`') });
-      expect(JSON.stringify(body(exited))).not.toContain('w12Fictional0123456789');
-      expect(Buffer.byteLength(body(exited).stderrSummary)).toBeLessThanOrEqual(codexHeadless.limits.stderrSummaryBytes);
+      // Astra 2875 R1: an allowlist summary. Secret forms no redaction pattern knows (JSON refresh_token, a quoted password, an opaque token line) and
+      // the Bearer line are withheld and counted; only the registry's diagnostic line stays. Past the bound only the newest whole lines stay.
+      const line = 'Error loading config.toml: unknown configuration field `tools.view_image` in -c/--config override', bound = codexHeadless.limits.stderrSummaryBytes;
+      const secrets = ['{"refresh_token":"opaque-refresh-value-1234567890"}', 'password="fictional-value-123456"', 'w12OpaqueTokenLine0123456789abcdef', 'Authorization: Bearer w12Fictional0123456789'];
+      let exited: Awaited<ReturnType<typeof call>> | undefined;
+      for (const [stderr, summary] of [[`${secrets.slice(0, 3).join('\n')}\n${line}\n${secrets[3]}\n`, `${line}\n[4 stderr lines withheld]`],
+        [`sk-w12Fictional0123456789ABCDEFGH\n${`${line}\n`.repeat(40)}`, null]] as const) {
+        await write({ steps: [{ stderr }, { exit: 2 }] });
+        exited = await call();
+        expect(exited).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', httpStatus: null, body: { complete: false } } });
+        expect(body(exited)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2, signal: null, stderrSummary: summary ?? expect.stringMatching(/override\n\[\d+ stderr lines withheld\]$/u) });
+        for (const fragment of ['refresh-value', 'fictional-value', 'OpaqueToken', 'w12Fictional', '0123456789', 'ABCDEFGH']) expect(JSON.stringify(body(exited))).not.toContain(fragment);
+        expect(Buffer.byteLength(body(exited).stderrSummary)).toBeLessThanOrEqual(bound);
+      }
       expect(readHeadlessRejection((exited as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2 });
       // Lead 2026-10-31: the CLI's own counted reconnect notices (probe/2 shape) are tolerated up to the registry bound; past it, or any other error line, refuses.
       const reconnect = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'error', message: `Reconnecting... ${i + 2}/5 (stream disconnected before completion: failed to lookup address information: Try again)` }));

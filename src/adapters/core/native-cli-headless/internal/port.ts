@@ -6,7 +6,7 @@ import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelIn
 import { createModelInvocationResponseEvidence, modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliHeadless, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { nativeQuotaPolicy, parseClaudeStreamLine, type ClaudeStreamLine } from '#adapters/core/native-connection/index.js';
-import { redactSensitive } from '#platform/index.js';
+import { EMPTY_KNOWN_SECRETS, previewRecordStream, redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, nativeCliHeadlessDefinitionSchema, refuse, type HeadlessRejectionBody } from './contract.js';
 import { codexTurn } from './codex.js';
 import { headlessArgv, type HeadlessEntry } from './env.js';
@@ -95,11 +95,25 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
     },
   };
 }
-/** 1b: the stderr tail of a CLI that ended before a complete turn: redacted, control characters blanked, cut to the registry bound on a character boundary. */
-function stderrSummary(base64: string, bound: number): string {
-  const text = [...redactSensitive(Buffer.from(base64, 'base64').toString('utf8'))].map(char => { const code = char.charCodeAt(0);
-    return (code < 32 && code !== 10) || (code >= 127 && code <= 159) ? ' ' : char; }).join('').trim(), bytes = Buffer.from(text, 'utf8');
-  return bytes.byteLength <= bound ? text : bytes.subarray(bytes.byteLength - bound).toString('utf8').replace(/^\uFFFD+/u, '');
+const withheldLine = (count: number) => `[${count} stderr lines withheld]`;
+/**
+ * 1b, Astra 2875 R1: the stderr summary of a CLI that ended before a complete turn is an allowlist. Only whole (trimmed) lines matching the
+ * registry's `stderrAllow` patterns are kept, each still redacted (patterns, the call's known secrets, incomplete known-secret suffixes as
+ * takeQueryErrorRecord withholds them); the newest kept lines that fit the registry bound stay. Every other non-blank line may hold a secret
+ * no pattern knows, so it is withheld and only counted.
+ */
+function stderrSummary(base64: string, allow: readonly string[], bound: number, known: KnownSecretSnapshot): string {
+  const patterns = allow.map(pattern => new RegExp(pattern, 'u')), kept: string[] = [];
+  const lines = Buffer.from(base64, 'base64').toString('utf8').split(/\r?\n/u).map(line => line.trim()).filter(line => line !== '');
+  // The counter line is reserved at its widest (every line withheld).
+  let size = Buffer.byteLength(withheldLine(lines.length), 'utf8');
+  for (const line of [...lines].reverse()) {
+    if (!patterns.some(pattern => pattern.test(line))) continue;
+    const safe = redactForRecord(previewRecordStream({ held: redactForRecord(line, known), withheld: false }, known), known);
+    if ((size += Buffer.byteLength(safe, 'utf8') + 1) > bound) break;
+    kept.unshift(safe);
+  }
+  return [...kept, ...(lines.length > kept.length ? [withheldLine(lines.length - kept.length)] : [])].join('\n');
 }
 /**
  * The headless native port (S3-2). `prepare` is pure; `preflight` (the registry's pre-claim acquisition step) spawns no model call; `send`
@@ -108,7 +122,7 @@ function stderrSummary(base64: string, bound: number): string {
  * complete turn (crash, missing result, a refused argv) is incomplete evidence, so the outcome stays `unknown` with its exit and a redacted stderr tail.
  */
 export type NativeCliHeadlessPort = ModelInvocationNativePort & { preflight(profile: ModelInvocationProfile, signal?: AbortSignal): Promise<void> };
-export function createNativeCliHeadlessPort(options: { readonly now: () => number; readonly isolation: HeadlessIsolation }): NativeCliHeadlessPort {
+export function createNativeCliHeadlessPort(options: { readonly now: () => number; readonly isolation: HeadlessIsolation; readonly knownSecrets?: KnownSecretSnapshot }): NativeCliHeadlessPort {
   const tokens = new WeakSet<object>();
   const target = (profileInput: unknown) => {
     const parsed = modelInvocationProfileSchema.safeParse(profileInput);
@@ -174,7 +188,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       if (ended && 'refusal' in ended) return settle(ended.refusal);
       if (!ended) {
         if (evidence.reason !== 'exit' && evidence.reason !== 'signal') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
-        const exited: HeadlessRejectionBody = { schemaVersion: 4, refusal: 'process-exit', exitCode: evidence.exitCode, signal: evidence.signal, stderrSummary: stderrSummary(evidence.stderrBase64, headless.limits.stderrSummaryBytes), egress };
+        const exited: HeadlessRejectionBody = { schemaVersion: 4, refusal: 'process-exit', exitCode: evidence.exitCode, signal: evidence.signal, stderrSummary: stderrSummary(evidence.stderrBase64, headless.stderrAllow.patterns, headless.limits.stderrSummaryBytes, options.knownSecrets ?? EMPTY_KNOWN_SECRETS), egress };
         return Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, 'interrupted', null, Buffer.from(JSON.stringify(exited), 'utf8'), false) });
       }
       const response = ended.response;

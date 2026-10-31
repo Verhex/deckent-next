@@ -202,8 +202,10 @@ Brain's own separate login directory, so this is accepted (lead 2026-10-31).
 
 A CLI of either family that ends by itself before a complete turn (a crash, a missing result, a refused argv) settles as incomplete
 evidence (`interrupted`, `complete: false`), so the receipt stays `unknown` (`transport-error`, ledger v73 unchanged) and keeps an adapter
-body `process-exit` (schema version 4, read by `readHeadlessRejection`) with the exit code, the signal and the redacted stderr tail (registry
-`stderrSummaryBytes`), the only CLI text a body may carry (owner S12). Timeout and cancellation still throw. When `send` throws a
+body `process-exit` (schema version 4, read by `readHeadlessRejection`, owner-approved) with the exit code, the signal and a stderr summary,
+the only CLI text a body may carry. The summary is an allowlist (Astra 2875 R1): only whole lines matching the CLI's registry `stderrAllow`
+patterns (parser and connection diagnostics from the probe captures), each still redacted with the call's known secrets, newest first within
+`stderrSummaryBytes`; every other line is withheld and counted (`[N stderr lines withheld]`). Timeout and cancellation still throw. When `send` throws a
 registered error code after the claim, the engine keeps only that code as the unknown receipt's evidence. S7 (owner 2026-10-31): connect
 keeps the executable path the person gave or PATH found (a path with `.`/`..` segments by its realpath) and every call resolves it again;
 a changed realpath, size, mtime or inode runs the preflight once, every spawn binds the resolved file, the preflight record keeps
