@@ -94,6 +94,8 @@ const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).transform(() => 4 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive,
     modelListBytes: positive.default(asset.limits.modelListBytes), modelListCount: positive.default(asset.limits.modelListCount) }).strict(),
+  toolRejection: z.object({ parameters: z.array(z.string().min(1)).min(1), messagePatterns: z.array(z.string().min(1)).min(1), note: z.string(),
+    sources: z.array(z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict()).min(1) }).strict().default(asset.toolRejection),
   /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
   legacyKeys: z.array(z.object({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) }).strict()).max(16).readonly().default([]),
   /** What a connected model's invocation profile starts with (data; the person can change the written profile on the governed config path). */

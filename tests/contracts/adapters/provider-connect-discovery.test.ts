@@ -159,7 +159,35 @@ it('BeUser AYSE-16/M-04 (alpha.56.1): a keyless loopback server that accepts one
   expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: async () => { throw new Error('down'); } })).toBeNull();
   expect(await probeLocalToolCalls(generic, 'https://llm.example/v1', 'm', { fetch: probe(200) })).toBeNull(); expect(sent).toHaveLength(2);
   expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: probe(503) })).toBeNull();
-  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: reply('{"error":"bad max_tokens"}', 400) })).toBeNull();
+  for (const status of [400, 422]) {
+    for (const error of [{ param: 'tools' }, { code: 'tool_choice' }, { param: 'tool_choice' }, { code: 'tools' },
+      { message: '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set' },
+      { message: 'This model does not support tools.' }, { message: 'Tool calling is not supported' }]) {
+      expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: reply(JSON.stringify({ error }), status) })).toBe(false);
+    }
+    for (const text of ['{"error":"bad max_tokens"}', '{"error":{"param":"max_tokens","message":"bad max_tokens"},"request":{"tools":[]}}',
+      '{"error":{"message":"bad max_tokens; request includes tools"}}', '{"error":{"message":"tool_calls must be an array"}}',
+      '{"request":{"param":"tools","message":"Tools are not supported"}}', '{"error":{"param":"max_tokens","message":"bad max_tokens"},"tools":"not supported"}',
+      '{"error":{"param":["tools"],"code":{"tools":true},"message":["Tools are not supported"]}}',
+      'Tools are not supported', '{"error":{"param":"tools"}', 'null']) {
+      const result = await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: reply(text, status) });
+      expect(result).toBeNull();
+      expect(discoveredProviderCatalog(local, 'http://127.0.0.1:8000', 'm', result).providers[0]!.models[0]!.protocols[0]!.capabilities).toEqual([]);
+    }
+  }
+  for (const status of [401, 403, 404, 409, 429, 503]) {
+    expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: reply('{"error":{"param":"tools"}}', status) })).toBeNull();
+  }
+  const fragmented = new ReadableStream<Uint8Array>({ start(controller) {
+    for (const part of ['{"error":', '{"param":', '"tools"', '}}']) controller.enqueue(new TextEncoder().encode(part)); controller.close();
+  } });
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: async () => new Response(fragmented, { status: 422 }) })).toBe(false);
+  let oversizedCancelled = false;
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode('{"error":{"param":"tools"}}' + ' '.repeat(PROVIDER_CONNECT_LIMITS.bodyPrefixBytes))); },
+    cancel() { oversizedCancelled = true; },
+  }), { status: 400 }) })).toBeNull();
+  expect(oversizedCancelled).toBe(true);
   const timeout: ProviderProbeFetch = async (_url, init) => new Promise((_resolve, reject) => init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true }));
   expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: timeout, timeoutMs: 20 })).toBeNull();
   let bodyCancelled = false;

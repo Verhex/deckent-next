@@ -2,9 +2,10 @@ import { displayAddress } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { endpointMayCarryKey, exactModelIdSchema, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from '#adapters/core/provider-openai-chat/index.js';
-import { PROVIDER_CONNECT_LIMITS, type ProviderConnectKind } from './registry.js';
+import { PROVIDER_CONNECT_LIMITS, PROVIDER_CONNECT_REGISTRY, type ProviderConnectKind } from './registry.js';
 import { providerProbeBase, type ProviderProbeOptions } from './probe.js';
 import { ProviderModelListError, readProviderPart, providerListHttpError } from './failure.js';
+const toolRejectionPatterns = PROVIDER_CONNECT_REGISTRY.toolRejection.messagePatterns.map(pattern => new RegExp(pattern, 'iu'));
 export { ProviderModelListError } from './failure.js';
 /** A separate channel for each kind/address: equal API ids at two servers never overwrite each other's profiles. */
 export function providerDiscoveryChannel(kind: ProviderConnectKind, endpoint: string | null): string {
@@ -83,9 +84,17 @@ export async function probeLocalToolCalls(kind: ProviderConnectKind, endpoint: s
       signal.throwIfAborted();
       if (response.status === 200) return true;
       if (!reader || response.status !== 400 && response.status !== 422) return null;
-      // Only a refusal naming tools is evidence; an unrelated invalid-parameter response proves nothing about tools.
-      const part = await readProviderPart(reader, signal);
-      return !part.done && /tool(?:s|[_ -]choice|[_ -]calls?)/iu.test(new TextDecoder().decode(part.value.subarray(0, PROVIDER_CONNECT_LIMITS.modelListBytes))) ? false : null;
+      // Parse the bounded error envelope; echoed request fields never establish a tool refusal.
+      const chunks: Uint8Array[] = []; let bytes = 0;
+      for (;;) {
+        const part = await readProviderPart(reader, signal); if (part.done) break;
+        if (part.value.byteLength > PROVIDER_CONNECT_LIMITS.bodyPrefixBytes - bytes) return null;
+        chunks.push(part.value); bytes += part.value.byteLength;
+      }
+      const { param, code, message } = (JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, bytes))) as
+        { error?: { param?: unknown; code?: unknown; message?: unknown } } | null)?.error ?? {};
+      return [param, code].some(field => typeof field === 'string' && PROVIDER_CONNECT_REGISTRY.toolRejection.parameters.includes(field))
+        || typeof message === 'string' && toolRejectionPatterns.some(pattern => pattern.test(message)) ? false : null;
     } finally { void reader?.cancel().catch(() => undefined); }
   } catch { options.signal?.throwIfAborted(); return null; }
 }
