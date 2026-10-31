@@ -504,20 +504,19 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   }, 30_000);
 
   it('waits for the owner on an approval-gated call: allow runs it once, deny never runs it, expiry and cancel close the request (T-L4, C12)', async () => {
-    const f = await runtime({ toolGrant: 'approval' }); await f.start();
-    const client = f.client(), steered: unknown[] = [];
-    const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => {
-      if (event.kind !== 'approval.requested') return;
-      if (decision === 'allow') steered.push(await client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-allow', steerId: 'line-1', content: 'and name its type' }));
+    const f = await runtime({ toolGrant: 'approval', responseMaxBytes: 4096 }), client = f.client(), steered: { state: string }[] = []; await f.start(); // v30 (Astra 2888):
+    // at a 4096-byte response bound, 16 longest steer ids and an escape-heavy answer (quotes, backslashes, controls, multibyte).
+    const ids = Array.from({ length: 16 }, (_, n) => String(n).padStart(64, 'x')), heavy = `${'"'.repeat(700)}${'\\'.repeat(300)}${'\u0001\n\t'.repeat(40)}${'ş'.repeat(300)}`;
+    const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => { if (event.kind !== 'approval.requested') return;
+      if (decision === 'allow') for (const steerId of ids) steered.push(await client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-allow', steerId, content: 'and name its type' }));
       await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: `${decision}-${event.approvalId}`,
         expectedRevision: event.revision, decision, reason: 'Reviewed' });
     };
     const run = async (turnId: string, onApproval: (event: AgentTurnStreamEvent) => Promise<void>) => {
-      const events: AgentTurnStreamEvent[] = [], pending: Promise<void>[] = [];
-      const result = await client.chatTurn(ask(turnId), event => { events.push(event); pending.push(onApproval(event)); });
+      const events: AgentTurnStreamEvent[] = [], pending: Promise<void>[] = []; const result = await client.chatTurn(ask(turnId), event => { events.push(event); pending.push(onApproval(event)); });
       await Promise.all(pending); return { result, events };
     };
-    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' },
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: heavy },
       { toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Not allowed.' }];
     const allowed = await run('turn-allow', decide('allow'));
     const requested = allowed.events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
@@ -525,10 +524,13 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       preview: expect.stringContaining('"path": "src/a.ts"') });
     expect(allowed.events.find(event => event.kind === 'approval.settled')).toMatchObject({ approvalId: requested.approvalId, outcome: 'allow' });
     expect(allowed.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
-    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1, notices: [], steer: { joined: ['line-1'], returned: [] } }); expect(steered).toEqual([expect.objectContaining({ steerId: 'line-1', state: 'queued' })]);
-    // v30 steer, sent while the card waited: it never answered the card (the record below is the person's decision); it joined after the tool result.
-    const sent = (f.state.requests[1]!['messages'] as { role: string; content: string }[]).slice(-2);
-    expect(sent).toEqual([expect.objectContaining({ role: 'tool' }), { role: 'user', content: 'and name its type' }]); expect(allowed.events.filter(event => event.kind === 'message' && event.steerId === 'line-1')).toHaveLength(1);
+    // Frame fits, ids whole, answer repeat left out (size named); so too with a maximal escape-heavy note (cut, …). Each steer was sent while the card
+    // waited: it never answered the card (the record below is the person's decision); it joined after the tool result.
+    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1, notices: [], answer: null, answerBytes: Buffer.byteLength(heavy), steer: { joined: ids, returned: [] } });
+    const capacity = engine.runtimeServiceResultCapacity(randomUUID(), 4096), fitted = engine.fitChatTurnResult({ ...allowed.result, answer: heavy, note: '"\\\u0001ş'.repeat(1024) }, capacity);
+    expect(Buffer.byteLength(JSON.stringify(fitted))).toBeLessThanOrEqual(capacity); expect(fitted).toMatchObject({ answer: null, notices: [], steer: { joined: ids, returned: [] } }); expect(fitted.note?.startsWith('"\\\u0001ş') && fitted.note.endsWith('…')).toBe(true);
+    expect(steered.map(answer => answer.state)).toEqual(ids.map(() => 'queued')); expect(allowed.events.flatMap(event => event.kind === 'text' ? [event.text] : []).join('')).toBe(heavy);
+    const sent = (f.state.requests[1]!['messages'] as { role: string; content: string }[]).slice(-17); expect(sent.map(message => message.role)).toEqual(['tool', ...ids.map(() => 'user')]); expect(allowed.events.filter(event => event.kind === 'message' && event.steerId)).toHaveLength(16);
     const record = JSON.parse((f.rows(`SELECT snapshot FROM approvals WHERE approval_id='${requested.approvalId}'`)[0] as { snapshot: string }).snapshot);
     expect(record).toMatchObject({ status: 'decided', request: { schemaVersion: 3, subject: { kind: 'agent-tool-call', turnId: 'turn-allow', round: 1, index: 0,
       tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } }); expect(JSON.stringify(record)).not.toContain('and name its type');
@@ -537,8 +539,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(denied.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
     const toolMessage = denied.events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0];
     expect(toolMessage).toContain('denied-by-owner'); expect(toolMessage).not.toContain('export const a');
-    // Single use: every call opens its own request; nothing was reused across turns.
-    expect(f.rows("SELECT count(*) AS count FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ count: 2 }]);
+    expect(f.rows("SELECT count(*) AS count FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ count: 2 }]); // Single use: one request per call, none reused across turns.
   }, 60_000);
 
   // D2 checkpoint (TL-B, owner): the tool line may show grep's pattern first (call-approvals.ts's displayTarget shows
@@ -1185,10 +1186,9 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   }, 30_000);
 
   it('cancels a running turn at once for the same principal, and reports an unknown turn as not running', async () => {
-    // v30 cancel/steer race (Astra 2882) at a 4096- and a 2048-byte response bound: a line is accepted only while every id fits the result whole
-    // (16 longest ids at 4096, fewer at 2048, then `full`); the cancel returns each accepted id in the final frame, a later line is refused, and
-    // a replay after a restart answers the same ids.
-    for (const bound of [4096, 2048]) {
+    // v30 cancel/steer race (Astra 2882/2889) at a 4096- and a 1024-byte bound: a line is accepted only while every id fits the result whole (16 longest
+    // ids at 4096, fewer at 1024, then `full`); the cancel returns each in the final frame (the note cut if need be), a later line is refused, a replay the same.
+    for (const bound of [4096, 1024]) {
       const f = await runtime({ responseMaxBytes: bound }), live = await f.start(), client = f.client(); let seen = false; f.state.script = [{ hold: true }];
       // Wait for the provider's stream (the first event is now the pre-send `context` measurement).
       const running = client.chatTurn(ask('turn-cancel'), event => { if (event.kind === 'text') seen = true; });

@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { canonicalTurnRequest as canonical, chatTurnRoundFailureState, modelInvocationProfileDigest, TURN_NOTE_MAX_CHARS } from '#engine/index.js';
+import { canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
 export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
@@ -52,10 +52,10 @@ export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, sig
  * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */
 interface TurnSteer { readonly pending: { readonly steerId: string; readonly content: string }[]; readonly joined: string[]; readonly seen: Set<string>; closed: boolean;
   readonly room: number }
-/** Bytes a turn result keeps for its fixed fields and note, beside the answer, notices and steer ids (the reserve the answer bound has always used). */
-const TURN_RESULT_RESERVE = 1024;
+const resultBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 /** Serialized size of the steer ids as the result carries them; one array is the largest split of the same ids. */
-const steerBytes = (ids: readonly string[]) => Buffer.byteLength(JSON.stringify({ joined: [], returned: ids }), 'utf8');
+const steerBytes = (ids: readonly string[]) => resultBytes({ joined: [], returned: ids });
+
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
@@ -209,8 +209,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     registered = !host.running.has(key);
     // v30 (tema L6): MCP notices as data, at the protocol's bound; `note` keeps only the turn's own note (and a failed policy record).
     const notices = mcpNotices.flatMap(notice => { const parsed = mcpStartNoticeSchema.safeParse(notice); return parsed.success ? [parsed.data] : []; }).slice(0, CHAT_TURN_RESULT_NOTICES);
-    const noticeBytes = Buffer.byteLength(JSON.stringify(notices), 'utf8');
-    const steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - TURN_RESULT_RESERVE - noticeBytes };
+    // The largest result before any steer id, answer or note (every count at its bound): what steer admission leaves room for.
+    const floor = resultBytes({ schemaVersion: 1, turnId: command.turnId, finish: 'cancelled', note: null, rounds: Number.MAX_SAFE_INTEGER, toolCalls: Number.MAX_SAFE_INTEGER,
+      answer: null, answerBytes: Number.MAX_SAFE_INTEGER, replayed: false, recorded: false, notices, steer: { joined: [], returned: [] } });
+    const steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
     if (registered) host.running.set(key, { principalKey, controller: cancel, steer });
     const ports: AgentTurnPorts = {
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
@@ -388,12 +390,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
-    // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery (beside notices and steer ids).
-    const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, steer.room - steerBytes([...result.steer.joined, ...result.steer.returned]))) ? answer : null;
     const policyRecorded = await flushPolicy?.(); flushPolicy = null;
-    const note = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), result.note].filter(Boolean).join(' ').slice(0, TURN_NOTE_MAX_CHARS) : result.note;
-    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note, rounds: result.rounds,
-      toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded, notices, steer: result.steer });
+    const note = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), result.note].filter(Boolean).join(' ') : result.note;
+    // The answer came as text events; the result repeats it only while the whole serialized result (JSON escaping included) fits the delivery.
+    return fitChatTurnResult(Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note, rounds: result.rounds, toolCalls: result.toolCalls,
+      answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? answer : null, answerBytes, replayed: result.replayed, recorded: result.recorded, notices, steer: result.steer }),
+    delivery.maxResultBytes);
   } finally {
     /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();
     if (registered) host.running.delete(key);

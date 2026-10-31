@@ -1,10 +1,27 @@
-import type { ModelInvocationOutcome, ModelInvocationRejectionReason } from '#domain/index.js';
+import { modelTextPrefix, type ChatTurnResult, type ModelInvocationOutcome, type ModelInvocationRejectionReason } from '#domain/index.js';
 export function canonicalTurnRequest(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalTurnRequest).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalTurnRequest((value as Record<string, unknown>)[key])}`).join(',')}}`;
   return JSON.stringify(value);
 }
 export const TURN_NOTE_MAX_CHARS = 4_096; // The result note's bound (`chatTurnResultSchema`).
+const resultBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+/**
+ * A turn result within `capacity` serialized bytes (Astra 2888/2889). The note is held to its bound; then, while the whole result does not
+ * fit, the answer's repeat is left out first (`answerBytes` still names it; the answer came as text events) and Deckent's own note is cut
+ * (`…`). Notices and steer ids are never cut: steer admission keeps the result with no answer and no note within the bound.
+ */
+export function fitChatTurnResult(result: ChatTurnResult, capacity: number): ChatTurnResult {
+  let fitted: ChatTurnResult = Object.freeze({ ...result, note: result.note === null ? null : modelTextPrefix(result.note, TURN_NOTE_MAX_CHARS) });
+  if (resultBytes(fitted) <= capacity) return fitted;
+  fitted = Object.freeze({ ...fitted, answer: null });
+  const note = fitted.note, cutTo = (units: number) => Object.freeze({ ...fitted, note: units > 0 ? `${modelTextPrefix(note ?? '', units)}…` : null });
+  if (note === null || resultBytes(fitted) <= capacity) return fitted;
+  // The longest prefix of the note that fits (the serialized size grows with the prefix): a binary search over its code units.
+  let low = 0, high = note.length - 1;
+  while (low < high) { const middle = Math.ceil((low + high) / 2); if (resultBytes(cutTo(middle)) <= capacity) low = middle; else high = middle - 1; }
+  return cutTo(low);
+}
 /**
  * How a round that ended without an answer is named in the turn's note: the outcome state and, when the provider answered, its bounded
  * diagnostic (rejection reason, HTTP status) — never the response body, which stays in the receipt (it may echo the sent input).
