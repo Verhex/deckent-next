@@ -264,8 +264,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       ...(runtimeConfigFreshness(started.configDigest, config) === 'stale' ? [{ level: 'warning' as const, text: t('terminal.service.configStale', {}, locale) }] : [])];
   }, (error: unknown) => [{ level: 'error' as const, text: errorText(error, locale) }]) : Promise.resolve([]);
   // Presence follows the switch the store reads (`terminal.persistHistory`); the store opens on its first use.
-  const sessions = parsed.action === 'workline' && context.openTerminalSessions && (config['terminal'] as { persistHistory?: unknown } | undefined)?.persistHistory !== false
-    ? bindSessionScope(lazySessionStore(() => settled.then(() => context.openTerminalSessions!(root, options, context.rootResolution?.folder ?? ''))), scopeId) : null; // Astra 2858 B-R3: identity → service attempt → session store
+  const sessionStore = parsed.action === 'workline' && context.openTerminalSessions && (config['terminal'] as { persistHistory?: unknown } | undefined)?.persistHistory !== false
+    ? lazySessionStore(() => settled.then(() => context.openTerminalSessions!(root, options, context.rootResolution?.folder ?? ''))) : null, sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null; // Astra 2858 B-R3: identity → service attempt → session store
   const previous = lazy(() => sessions ? sessions.list().then(list => list.some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined, () => undefined) : Promise.resolve(undefined));
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
@@ -472,6 +472,6 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
     ...(context.signal ? { signal: context.signal } : {}), ...(context.terminalShell ? { shell: context.terminalShell } : {}),
-  }); } finally { if (beat) clearInterval(beat); closing.abort(); } // a setup observation still running after the view closed ends now
+  }); } finally { if (beat) clearInterval(beat); closing.abort(); await sessionStore?.idle(); } // a setup observation still running ends now; a session write in flight settles first
 }
 import { brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';

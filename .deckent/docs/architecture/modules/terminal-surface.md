@@ -36,7 +36,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   stale config) and the saved-conversation notice arrive as the Workline's `opening.notices`; sessions, composer history and project
   instructions are ports opened on first use (session presence follows `terminal.persistHistory`; the session store, the
   saved-conversation read included, opens only once the view is mounted and the start attempt settled, success or failure, keeping
-  identity → service → session); the service watch is armed and the `@`
+  identity → service → session; the terminal awaits every started session open, read or write before it returns, so nothing is
+  written after it reports done); the service watch is armed and the `@`
   index warmed when the start answers. **Send gate** (`openingGate`, `terminal-kit`): until the start answered and the first mode read
   settled, a sent line waits behind one notice (`terminal.opening.wait`), in order (the controller runs one line at a time); Ctrl+C on it
   sends nothing; a failed start (deadline included) gives the waiting line its typed error and puts it back as the draft; `/exit`
