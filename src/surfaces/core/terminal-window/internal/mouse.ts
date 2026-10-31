@@ -1,6 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 import { createFocusTracker, takeFocusReports, type FocusSource } from './focus.js';
+import { createAnswerFilter, type BackgroundProbe } from './color-reports.js';
 
 /**
  * Mouse for the full-window conversation (owner 2026-10-18; TERM-POLISH 2026-10-20). The Claude Code fullscreen renderer captures the mouse,
@@ -52,18 +53,18 @@ export type WheelSource = Readonly<{ subscribe: (listener: WheelListener) => () 
 export type PointerListener = (event: PointerEvent) => void;
 export type PointerSource = Readonly<{ subscribe: (listener: PointerListener) => () => void }>;
 
-/** The stdin Ink reads: the real TTY's bytes without mouse and focus reports; raw mode and ref/unref go to the real stream. Focus reports only
- * exist while the host switched mode 1004 on (`focus`); the full window also turns on mouse reporting. */
+/** The stdin Ink reads: the real TTY's bytes without mouse, focus and terminal colour answers; raw mode and ref/unref go to the real stream. Focus
+ * reports only exist while the host switched mode 1004 on (`focus`); the full window also turns on mouse reporting; `background` asks OSC 11. */
 export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: NodeJS.ReadStream; wheel: WheelSource; pointer: PointerSource; focus: FocusSource; close: () => void;
-  hold: (held: boolean) => void }> {
+  hold: (held: boolean) => void; background: BackgroundProbe }> {
   const tracker = createFocusTracker();
   const listeners = new Set<WheelListener>(), pointers = new Set<PointerListener>(), out = new PassThrough();
   // Ink sets the encoding on this stream, not on the real TTY, which emits Buffers: one decoder for the whole stream keeps a multi-byte
   // character cut at a read boundary (a large paste) whole instead of two U+FFFD.
   const decoder = new StringDecoder('utf8');
   let carry = '';
-  const onData = (chunk: Buffer | string) => {
-    const read = takeMouseReports(typeof chunk === 'string' ? chunk : decoder.write(chunk), carry);
+  const deliver = (text: string) => {
+    const read = takeMouseReports(text, carry);
     carry = read.carry;
     const focused = takeFocusReports(read.text);
     if (focused.text) out.write(focused.text);
@@ -71,6 +72,9 @@ export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: N
     for (const step of read.wheel) for (const listener of listeners) listener(step);
     for (const event of read.pointer) for (const listener of pointers) listener(event);
   };
+  // Terminal answers first (color-reports.ts): what is held there is released into this same path, so it still passes the mouse and focus filters.
+  const colors = createAnswerFilter(deliver);
+  const onData = (chunk: Buffer | string) => colors.push(typeof chunk === 'string' ? chunk : decoder.write(chunk));
   real.on('data', onData);
   const input = Object.assign(out, {
     isTTY: true as const,
@@ -78,12 +82,12 @@ export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: N
     ref() { real.ref(); return input; }, unref() { real.unref(); return input; },
   }) as unknown as NodeJS.ReadStream;
   Object.defineProperty(input, 'isRaw', { get: () => real.isRaw });
-  return { input, focus: tracker.source, wheel: { subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
+  return { input, focus: tracker.source, background: colors.probe, wheel: { subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     pointer: { subscribe: listener => { pointers.add(listener); return () => { pointers.delete(listener); }; } },
-    close: () => { real.off('data', onData); real.pause(); out.end(); },
+    close: () => { real.off('data', onData); colors.reset(); real.pause(); out.end(); },
     // One input owner (FIX9): while another view owns the terminal (a /setup window, the external editor) its bytes never reach this stream —
     // Node emits 'data' for that owner's reads too, so a kept listener would queue them for the composer to read on resume.
     // Paused while held, so this process does not read the TTY under a child that inherits it (the external editor).
-    hold: held => { real.off('data', onData); if (held) { real.pause(); return; }
-      carry = ''; while (out.read() !== null) { /* drop what queued before the hand-over */ } real.on('data', onData); real.resume(); } };
+    hold: held => { real.off('data', onData); if (held) { colors.reset(); real.pause(); return; }
+      carry = ''; colors.reset(); while (out.read() !== null) { /* drop what queued before the hand-over */ } real.on('data', onData); real.resume(); } };
 }
