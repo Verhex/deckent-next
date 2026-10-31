@@ -39,14 +39,16 @@ export function modelConnectPullWords(locale: Locale) {
     notOnKey: t('models.connect.pull.notOnKey', { model: '{model}' }, locale), notInCatalog: t('models.connect.pull.notInCatalog', { model: '{model}' }, locale) };
 }
 
-/** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service. */
-export function modelConnectLines(result: ModelConnectResult, label: string, locale: Locale): PanelLine[] {
+/** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service.
+ * PV 2d: `billing` (the registry class of the connection) words a subscription as its CLI login and usage quota, never as a local server. */
+export function modelConnectLines(result: ModelConnectResult, label: string, locale: Locale, billing?: 'subscription' | 'local' | 'metered'): PanelLine[] {
+  const subscription = billing === 'subscription';
   const step = (state: string) => state === 'written' ? t('models.connect.step.written', {}, locale) : state === 'present' ? t('models.connect.step.present', {}, locale)
     : t('models.connect.step.skipped', {}, locale);
   return [...(result.models ?? []).map(model => ({ label: '', text: modelConnectPullWords(locale)[model.state].replace('{model}', model.nativeId) })), { label: t('tui.provider.model.field.model', {}, locale), text: label },
     { label: t('tui.provider.model.field.steps', {}, locale), text: t('models.connect.steps', { catalog: step(result.steps.catalog), declaration: step(result.steps.declaration),
       profile: step(result.steps.profile), activation: step(result.steps.activation), carried: result.steps.carried }, locale), tone: 'muted' },
-    { label: t('tui.provider.field.key', {}, locale), text: result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false
+    { label: t('tui.provider.field.key', {}, locale), text: result.credentialRef === null ? subscription ? t('models.connect.keySubscription', {}, locale) : t('models.connect.keyNone', {}, locale) : result.keyStored === false
       ? t('models.connect.keyMissing', { name: result.credentialRef }, locale) : t('models.connect.key', { name: result.credentialRef }, locale),
     tone: result.keyStored === false ? 'warning' : 'muted' },
     // K5: which other models were carried to the new catalog revision, and which were not (with the typed reason); the system line stays a summary.
@@ -54,7 +56,8 @@ export function modelConnectLines(result: ModelConnectResult, label: string, loc
       text: result.carriedModels.map(reference => reference.modelId).join(', ') }] : []),
     ...(result.notCarried.length ? [{ label: t('tui.provider.model.field.notCarried', {}, locale), tone: 'warning' as const, text: t('models.connect.notCarried', {
       models: result.notCarried.map(item => `${item.reference.modelId} (${item.code})`).join(', ') }, locale) }] : []),
-    ...(result.tariff === 'unmetered' ? [{ label: t('tui.provider.model.field.spend', {}, locale), text: t('models.connect.unmetered', {}, locale), tone: 'warning' as const }] : []),
+    ...(result.tariff === 'unmetered' ? [{ label: t('tui.provider.model.field.spend', {}, locale), text: subscription ? t('models.connect.subscription', {}, locale) : t('models.connect.unmetered', {}, locale),
+      tone: subscription ? 'muted' as const : 'warning' as const }] : []),
     ...(result.service === 'stale' ? [{ label: t('tui.provider.model.field.service', {}, locale), text: t('models.connect.restart', {}, locale), tone: 'warning' as const }] : []),
     ...(result.worker === 'image-required' ? [{ label: t('tui.provider.model.field.steps', {}, locale), text: t('models.connect.workerImageRequired', {}, locale), tone: 'warning' as const }] : []),
 ];

@@ -55,6 +55,8 @@ export async function modelLoginCommand(argv: readonly string[], context: ModelC
     body: [dirLine(dir, locale), t('headless.login.card.what', {}, locale)],
     options: modelsConfirmOptions(locale) }) === 'apply');
   if (!view) { reportModelsCancelled(context, locale); return EXIT_CODES.error; }
+  // PV 2e: the CLI's own sign-in wrote to this terminal; its last line may lack a line break, so the result starts on a line of its own.
+  (context.stdout ?? process.stdout).write('\n');
   emit(renderHeadlessLogin(view, locale, command.connection), { ...sinks, ...(view.signedIn ? {} : { level: 'warning' as const }) });
   return view.signedIn && view.exit === 'completed' ? undefined : EXIT_CODES.error;
 }

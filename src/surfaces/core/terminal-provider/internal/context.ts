@@ -1,5 +1,6 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+import type { PanelLine, ProviderModelOutcome, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
   catalogProviderId?: string | null;
@@ -10,7 +11,9 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
   priceRequired?: boolean;
   /** İ-12: the registry billing class (kinds arrive no-spend first: subscription, local, then metered). */
-  billing?: 'subscription' | 'local' | 'metered' }>;
+  billing?: 'subscription' | 'local' | 'metered';
+  /** PV: a CLI subscription that signs in with its own CLI (`models login`) and runs only inside the isolation realm. */
+  headlessLogin?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: string }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
@@ -27,6 +30,12 @@ export interface ProviderConnectHost {
   /** Seedless endpoint discovery after address selection; the same configured read used by models.connect. */
   discoverModels?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions):
     Promise<readonly Readonly<{ nativeId: string; displayName: string; priced: boolean }>[]>;
+  /** PV 2a: the typed refusal a CLI subscription meets on this host (no usable isolation), or null when it can run. */
+  isolationRefusal?(options: ConfigLoadOptions): Promise<Error | null>;
+  /** PV 3: after the person check, the Brain's own login dir of a CLI subscription. */
+  loginDir?(connection: string, options: ConfigLoadOptions): Promise<Readonly<{ owned: string }>>;
+  /** PV 3: the CLI's own sign-in (`models login`, inherited stdio); the caller hands the terminal over around it. */
+  login?(command: Readonly<{ connection: string; configDir?: string }>, options: ConfigLoadOptions): Promise<import('#surfaces/core/cli-models/index.js').HeadlessLoginView | null>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
@@ -46,3 +55,24 @@ export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectMod
     name: string; backend: string | null; custody: ProviderSecretStepView; key: ProviderSecretStepView; grant: ProviderSecretStepView }>>;
   deleteSecret?: TerminalSecretDeleteHandler;
 }
+/** PV: who besides the person may use a CLI subscription login (S10: never MCP). */
+export type ProviderDelegateClass = 'ai' | 'system';
+/**
+ * PV 3 (owner S10): `/provider` signs a CLI subscription in and connects it — the login dir (the Brain's own by default), the CLI's own sign-in
+ * on this terminal (the window hands the terminal over), the governed connect, then the person's delegated-use card. 2a: the refusal card of a
+ * row this host cannot run, listing the rows that can.
+ */
+export interface ProviderSubscriptionPort {
+  /** The rows that sign in with their CLI. */
+  readonly kinds: readonly string[];
+  readonly words: Readonly<Record<'action' | 'dirTitle' | 'dirOwned' | 'dirOther' | 'otherTitle' | 'otherHint' | 'otherAbsolute' | 'banner' | 'retryKeys' | 'consentTitle'
+    | 'consentNow' | 'consentConfirm' | 'onlyYou' | 'youAnd' | 'system' | 'ai' | 'mcp' | 'mcpBlocked' | 'question' | 'questionKeys', string>>;
+  refusal(kind: string, usable: readonly string[]): Readonly<{ title: string; lines: readonly PanelLine[] }>;
+  /** The person check, then what the sign-in will do and its shell twin; the Brain's own dir (null: refused, with its typed reason). */
+  prepare(kind: string): Promise<Readonly<{ owned: string; lines: readonly PanelLine[] }> | Readonly<{ owned: null; title: string; lines: readonly PanelLine[] }>>;
+  /** The CLI's own sign-in (null dir: the Brain's own); `refused`: nothing started (person check, isolation, a missing CLI). */
+  login(kind: string, configDir: string | null): Promise<Readonly<{ signedIn: boolean; refused: boolean; title: string; lines: readonly PanelLine[] }>>;
+  /** The governed connect; `delegate` absent keeps the earlier choice. `delegate` in the outcome: who may use the login now. */
+  connect(kind: string, configDir: string | null, delegate?: readonly ProviderDelegateClass[]): Promise<ProviderModelOutcome & Readonly<{ delegate: readonly ProviderDelegateClass[] }>>;
+}
+export type ProviderWindowPort = ProviderPanelPort & { readonly subscription?: ProviderSubscriptionPort };

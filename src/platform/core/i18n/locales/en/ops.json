@@ -448,6 +448,8 @@
   "models.connect.keyNone": "Key: none is sent (a local server over plain http).",
   "models.connect.keyInsecure": "Key: not sent, not checked and not stored — a key never travels over plain http, not even to this machine. Leave the key empty for a local server that takes none, or use an https address.",
   "models.connect.unmetered": "Spending: a local server is recorded at a zero tariff (self-hosted, no provider charge).",
+  "models.connect.keySubscription": "Key: none — the subscription signs in with its own CLI login (no API key is stored or sent).",
+  "models.connect.subscription": "Spending: your subscription's usage quota (its plan limits apply; no per-token charge is recorded).",
   "models.connect.restart": "The running service started with older settings: restart it to apply them (`deckent runtime restart`).",
   "models.connect.workerImageRequired": "Connected for one-shot model calls only (for example BeUser): no worker image admits this CLI version yet, so no worker model was activated. Build or refresh it in /setup (Worker image) and connect again to use it for workers too.",
   "models.connect.budgetMissing": "Budget: 0 USD — this model is paid, so its turns stay refused until scope {scope} has a budget. Next: deckent models create-budget --scope {scope} --usd <amount> (suggested {usd} USD), or Create budget in the terminal.",

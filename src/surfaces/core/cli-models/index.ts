@@ -6,7 +6,7 @@ export type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 export type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './internal/model-spending.js';
 export type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './internal/model-catalog.js';
 export { renderModelConnect, type ModelConnectHandler } from './internal/model-connect.js';
-export { renderHeadlessLogin, type HeadlessLoginHandler } from './internal/model-login.js';
+export { renderHeadlessLogin, type HeadlessLoginHandler, type HeadlessLoginView } from './internal/model-login.js';
 export { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand, scopeBudgetUnchangedLine } from './internal/budget.js';
 export { modelRetirementWarnings, renderRetirementWarning, type ModelRetirementWarning } from './internal/models-table.js';
 export type { ModelRoleAssignHandler, ModelRoleInspectionHandler } from './internal/model-roles.js';

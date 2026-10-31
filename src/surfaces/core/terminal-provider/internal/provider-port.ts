@@ -4,7 +4,8 @@ import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions,
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
-import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost } from './context.js';
+import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost, ProviderWindowPort } from './context.js';
+import { subscriptionPort } from './subscription-port.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { providerDisplayName } from './provider-label.js';
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
@@ -61,6 +62,10 @@ async function workerReadiness(host: Host, root: string, scopeId: string, option
   return channel?.access === 'allowed' && channel.channel.kind === 'native-cli' && channel.channel.cli ? workerChannelText(channel.channel.cli, channel.activation?.state === 'active',
     (await host.observeSetup?.(root, options).catch(() => null))?.observation.families ?? null, locale) : null;
 }
+/** PV: a CLI subscription that runs isolated serves the Brain (planning, BeUser), not the terminal chat: the chat readiness read refuses it by protocol
+ * (MODEL_INVOCATION_UNAVAILABLE), which is its expected state, never "unavailable". Any other refusal keeps its own words. */
+const brainOnly = (kind: ProviderConnectKindView | undefined, rows: readonly Readonly<{ invocable: boolean; reason: { code: string } | null }>[]) =>
+  Boolean(kind?.headlessLogin) && rows.length > 0 && rows.every(row => !row.invocable && row.reason?.code === 'MODEL_INVOCATION_UNAVAILABLE');
 const PULL = 'pull:available';
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
@@ -92,8 +97,8 @@ function discoveryPort(root: string, scopeId: string, connect: NonNullable<Host[
   } };
 }
 export function providerPanelPort(root: string, scopeId: string, host: Host & { providerConnect: NonNullable<Host['providerConnect']> }, options: ConfigLoadOptions, locale: Locale,
-  errorText: (error: unknown) => string, secretGrant?: ProviderSecretGrantPort): ProviderPanelPort {
-  const connect = host.providerConnect; let backend = '-';
+  errorText: (error: unknown) => string, secretGrant?: ProviderSecretGrantPort): ProviderWindowPort {
+  const connect = host.providerConnect; let backend = '-', isolation: unknown = null; // PV 2a: the last isolation refusal read for the list
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
   const pullModels = async (kind: ProviderConnectKindView, endpoint: string | null, lines: PanelLine[], workspaceRequired: boolean): Promise<readonly Readonly<{ id: string; name: string }>[] | undefined> => {
@@ -104,14 +109,57 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       if (workspaceRequired && !workspaces.length) { lines.push({ label: '', text: t('tui.workspace.required', {}, locale), tone: 'warning' }); return; }
       const result = await host.connectModel(root, { schemaVersion: 1, commandId: `provider-${randomUUID()}`, scopeId, connection: kind.id, endpoint,
         model: { pull: 'available' }, ...(workspaces[0] ? { workspaceId: workspaces[0].id } : {}) }, options);
-      lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale).filter(row => row.text !== t('tui.provider.model.next', {}, locale))); for (const model of result.models ?? []) if (model.reference) answered.add(model.reference.providerId);
+      lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale, kind.billing).filter(row => row.text !== t('tui.provider.model.next', {}, locale))); for (const model of result.models ?? []) if (model.reference) answered.add(model.reference.providerId);
       const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       const usable = reading?.models.find(row => row.availability.invocable && result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference)));
       const worker = usable ? null : await workerReadiness(host, root, scopeId, options, result.reference.providerId, locale);
       if (worker) { lines.push({ label: '', text: worker }); return; }
+      if (!usable && result.status === 'connected' && brainOnly(kind, (reading?.models ?? []).filter(row => result.models?.some(model => model.reference && referenceKey(model.reference)
+        === referenceKey(row.reference))).map(row => row.availability))) { lines.push({ label: '', text: t('tui.provider.login.brainOnly', {}, locale), tone: 'success' }); return; }
       lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : t('tui.provider.pull.blocked', { reason: result.status === 'approval-pending' ? result.approval?.approvalId ?? '-' : result.budget?.state === 'missing' ? t('tui.budget.missing', { scope: scopeId }, locale) : t('tui.provider.unavailable', {}, locale) }, locale), tone: usable ? 'success' : 'warning' });
     } catch (error) { lines.push({ label: '', text: errorText(error), tone: 'warning' }); }
   };
+  /** One governed `models.connect` of a chosen model; PV: a CLI subscription also names its login dir and the person's delegated-use choice. */
+  async function connectChosen(request: ProviderModelRequest, extra: Pick<ModelConnectCommand, 'cli' | 'delegate'> = {}): Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null }>> {
+    const kind = kindOf(request.kind), label = kindLabel(kind, request.kind, locale);
+    const choice = request.model === PULL ? { pull: 'available' as const } : request.model.startsWith(SEED) ? { nativeId: request.model.slice(SEED.length) } : (() => {
+      const match = /^([^@/]+)@(\d+)\/([^@/]+)@(\d+)$/u.exec(request.model.slice(DECLARED.length));
+      return match ? { reference: { providerId: match[1]!, providerVersion: Number(match[2]), modelId: match[3]!, modelVersion: Number(match[4]) } } : null;
+    })();
+    const shown = request.model === PULL ? t('tui.provider.pull', {}, locale) : 'nativeId' in (choice ?? {}) ? (choice as { nativeId: string }).nativeId : request.model.slice(DECLARED.length);
+    const refused = (text: string) => ({ result: null, outcome: { connected: false, title: t('tui.provider.model.refused', { model: shown }, locale),
+      lines: [{ label: t('tui.provider.model.field.model', {}, locale), text: `${label} · ${shown}` }, { label: t('tui.provider.field.check', {}, locale), text, tone: 'warning' as const }],
+      summary: t('tui.provider.model.refused', { model: shown }, locale), approvalId: null } });
+    if (!choice) return refused(t('tui.provider.unavailable', {}, locale));
+    // A connection waiting for approval continues under the same command id (its config approval names it); anything else is a new command.
+    const pendingKey = JSON.stringify([request.kind, request.endpoint, request.model]);
+    const command: ModelConnectCommand = { schemaVersion: 1, commandId: pendingConnections.get(pendingKey) ?? randomUUID(), scopeId, connection: request.kind,
+      endpoint: request.endpoint, ...(request.workspaceId ? { workspaceId: request.workspaceId } : {}), model: choice as ModelConnectCommand['model'], ...extra };
+    let result: ModelConnectResult;
+    try { result = await host.connectModel!(root, command, options); } catch (error) {
+      pendingConnections.delete(pendingKey);
+      // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
+      if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
+      return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error)); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
+    }
+    if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
+    while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
+    const lines = modelConnectLines(result, `${label} · ${shown}`, locale, kind?.billing);
+    const reading = result.status === 'connected' ? await host.inspectInvocableModels?.(root, scopeId, options) : null;
+    const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
+    const usable = candidates.some(row => row.availability.invocable);
+    // PV: the readiness read is the terminal chat's (its protocol families); a CLI subscription connects for the Brain, whose check ran isolated at connect.
+    const unavailable = brainOnly(kind, candidates.map(row => row.availability)) ? t('tui.provider.login.brainOnly', {}, locale)
+      : t('tui.provider.pull.blocked', { reason: candidates[0] ? modelInvocabilityText(candidates[0].availability, locale) : t('tui.provider.unavailable', {}, locale) }, locale);
+    const brain = !usable && brainOnly(kind, candidates.map(row => row.availability));
+    if (result.status === 'connected') lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : unavailable, tone: usable || brain ? 'success' : 'warning' });
+    return { result, outcome: result.status === 'connected'
+      ? { connected: true, title: t('tui.provider.model.connected', { model: shown }, locale), lines, approvalId: null,
+        summary: !usable ? unavailable : result.notCarried.length ? t('tui.provider.model.summaryNotCarried', { model: shown, count: result.notCarried.length }, locale)
+          : t('tui.provider.model.summary', { model: shown }, locale) }
+      : { connected: false, title: t('tui.provider.model.pending', { model: shown }, locale), lines, summary: t('tui.provider.model.summaryPending', { model: shown }, locale),
+        approvalId: result.approval?.approvalId ?? null } };
+  }
   return {
     ...(host.siwc ? { siwc: { connection: host.siwc.connection, locale, execute: (request, presentation) => host.siwc!.execute(root, { ...request, scopeId }, options, presentation) } } : {}),
     ...(secretGrant ? { secretGrant } : {}),
@@ -167,6 +215,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
         await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
+      // PV 2a: a CLI subscription that runs only isolated is disabled with its reason on a host without usable isolation (refusal card on Enter).
+      isolation = connect.isolationRefusal && connect.kinds.some(kind => kind.headlessLogin) ? await connect.isolationRefusal(options).catch((error: unknown) => error) : null;
       const reading = await host.inspectInvocableModels?.(root, scopeId, options), catalogView = await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null); // M-28 tail: a keyless CLI channel's count
       const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.map(async kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
@@ -181,7 +231,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
-        return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored, grantRequired,
+        return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail: kind.billing === 'subscription' && kind.available ? `${t('tui.provider.billing.subscription', {}, locale)} · ${detail}` : detail,
+          blocked: !kind.available ? t('tui.provider.unavailable', {}, locale) : kind.headlessLogin && isolation ? t('tui.provider.isolation.blocked', {}, locale) : null, keyName, keyStored: stored, grantRequired,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
@@ -198,7 +249,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-      for (const model of reading?.models ?? []) notes.push(`${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale) : modelInvocabilityText(model.availability, locale)}`);
+      for (const model of reading?.models ?? []) notes.push(`${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${model.availability.invocable && answered.has(model.reference.providerId) ? t('tui.provider.model.answered', {}, locale)
+        : brainOnly(connect.kinds.find(kind => kind.catalogProviderId === model.reference.providerId), [model.availability]) ? t('tui.provider.login.brainOnlyNote', {}, locale) : modelInvocabilityText(model.availability, locale)}`);
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
     },
     endpoint(kind, text) {
@@ -272,43 +324,10 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         ...(using > 0 ? [t('tui.provider.disconnectedBound', { count: using, name }, locale)] : [])];
     },
     keyName(kind, endpoint) { return connect.secretName?.(kind, endpoint) ?? kindOf(kind)?.secretName ?? null; },
-    ...(host.connectModel ? { async connectModel(request: ProviderModelRequest): Promise<ProviderModelOutcome> {
-      const kind = kindOf(request.kind), label = kindLabel(kind, request.kind, locale);
-      const choice = request.model === PULL ? { pull: 'available' as const } : request.model.startsWith(SEED) ? { nativeId: request.model.slice(SEED.length) } : (() => {
-        const match = /^([^@/]+)@(\d+)\/([^@/]+)@(\d+)$/u.exec(request.model.slice(DECLARED.length));
-        return match ? { reference: { providerId: match[1]!, providerVersion: Number(match[2]), modelId: match[3]!, modelVersion: Number(match[4]) } } : null;
-      })();
-      const shown = request.model === PULL ? t('tui.provider.pull', {}, locale) : 'nativeId' in (choice ?? {}) ? (choice as { nativeId: string }).nativeId : request.model.slice(DECLARED.length);
-      const refused = (text: string): ProviderModelOutcome => ({ connected: false, title: t('tui.provider.model.refused', { model: shown }, locale),
-        lines: [{ label: t('tui.provider.model.field.model', {}, locale), text: `${label} · ${shown}` }, { label: t('tui.provider.field.check', {}, locale), text, tone: 'warning' }],
-        summary: t('tui.provider.model.refused', { model: shown }, locale), approvalId: null });
-      if (!choice) return refused(t('tui.provider.unavailable', {}, locale));
-      // A connection waiting for approval continues under the same command id (its config approval names it); anything else is a new command.
-      const pendingKey = JSON.stringify([request.kind, request.endpoint, request.model]);
-      const command: ModelConnectCommand = { schemaVersion: 1, commandId: pendingConnections.get(pendingKey) ?? randomUUID(), scopeId, connection: request.kind,
-        endpoint: request.endpoint, ...(request.workspaceId ? { workspaceId: request.workspaceId } : {}), model: choice as ModelConnectCommand['model'] };
-      let result: ModelConnectResult;
-      try { result = await host.connectModel!(root, command, options); } catch (error) {
-        pendingConnections.delete(pendingKey);
-        // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
-        if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
-        return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error)); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
-      }
-      if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
-      while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
-      const lines = modelConnectLines(result, `${label} · ${shown}`, locale);
-      const reading = result.status === 'connected' ? await host.inspectInvocableModels?.(root, scopeId, options) : null;
-      const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
-      const usable = candidates.some(row => row.availability.invocable);
-      const unavailable = t('tui.provider.pull.blocked', { reason: candidates[0] ? modelInvocabilityText(candidates[0].availability, locale) : t('tui.provider.unavailable', {}, locale) }, locale);
-      if (result.status === 'connected') lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : unavailable, tone: usable ? 'success' : 'warning' });
-      return result.status === 'connected'
-        ? { connected: true, title: t('tui.provider.model.connected', { model: shown }, locale), lines, approvalId: null,
-          summary: !usable ? unavailable : result.notCarried.length ? t('tui.provider.model.summaryNotCarried', { model: shown, count: result.notCarried.length }, locale)
-            : t('tui.provider.model.summary', { model: shown }, locale) }
-        : { connected: false, title: t('tui.provider.model.pending', { model: shown }, locale), lines, summary: t('tui.provider.model.summaryPending', { model: shown }, locale),
-          approvalId: result.approval?.approvalId ?? null };
-    } } : {}),
+    ...(host.connectModel ? { connectModel: (request: ProviderModelRequest) => connectChosen(request).then(chosen => chosen.outcome) } : {}),
+    ...(host.connectModel && connect.login && connect.loginDir ? { subscription: subscriptionPort({ scopeId, options, locale, errorText, connect: { ...connect, login: connect.login, loginDir: connect.loginDir },
+      kindLabel: id => kindLabel(kindOf(id), id, locale), refusal: () => isolation,
+      connectModel: (kind, cli, delegate) => connectChosen({ kind, endpoint: null, model: PULL }, { ...(cli ? { cli } : {}), ...(delegate ? { delegate: [...delegate] } : {}) }) }) } : {}),
     get transparency(): readonly PanelLine[] {
       return [{ label: t('tui.provider.field.storage', {}, locale), text: custodyText(backend, locale), tone: 'muted' }];
     },

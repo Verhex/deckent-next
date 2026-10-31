@@ -528,7 +528,7 @@ it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothi
 
 it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-in, image), never "Connected, unusable"', async () => {
   const { root, options } = await project({});
-  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false };
+  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false, billing: 'subscription' as const };
   const ref = { providerId: 'codex-cli-subscription', providerVersion: 1, modelId: 'gpt-x', modelVersion: 1 };
   const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
     connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'codex-cli-subscription', status: 'connected', reference: ref,
@@ -542,6 +542,8 @@ it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-i
   const text = outcome.lines.map(line => line.text).join('\n');
   expect(text).toContain('Connected as a codex worker channel'); expect(text).toContain('Channel on: yes'); expect(text).toContain('signed in on this machine: yes');
   expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
+  // PV 2d: a subscription is worded as its CLI login and usage quota, never as a local server at a zero tariff.
+  expect(text).toContain(t('models.connect.subscription', {}, 'en')); expect(text).not.toMatch(/local server|zero tariff/u);
 });
 
 it('BeUser M-01: Connect on a key-less CLI subscription runs its model connection and shows that check\'s cause, not "The chat turn failed"', async () => {
@@ -553,6 +555,33 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const outcome = await port.connect({ kind: 'claude-cli-subscription', endpoint: null, key: null });
   const text = outcome.lines.map(line => line.text).join('\n');
   expect(text).toContain('deckent models login --connection <connection>'); expect(text).toContain('claude-cli-subscription or codex-cli-subscription'); expect(outcome.stored).toBe(false);
+  // PV 3: the /provider sign-in: the person check refuses before any dir or spawn; the person's run names the Brain's own dir, the CLI's own sign-in result,
+  // and the connect carries only the dir and the consent the card gave (never MCP); a dir the person names goes as `cli.configDir`.
+  const commands: ModelConnectCommand[] = [], ref = { providerId: 'claude-cli-subscription', providerVersion: 1, modelId: 'm', modelVersion: 1 };
+  let person = false;
+  const signIn = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [{ ...claude, headlessLogin: true }],
+    loginDir: async () => { if (!person) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } }); return { owned: '/state/logins/claude' }; },
+    login: async command => ({ configDir: command.configDir ?? '/state/logins/claude', owned: !command.configDir, exit: 'completed', signedIn: true, authMethod: 'claude.ai', subscriptionType: 'max' }) },
+  connectModel: async (_root, command) => { commands.push(command); return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
+    status: 'connected', reference: ref, models: [{ nativeId: 'm', state: 'connected', reference: ref }], credentialRef: null, keyStored: null, steps: { catalog: 'present', declaration: 'skipped',
+      profile: 'written', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current',
+    cli: { configDir: command.cli?.configDir ?? '/state/logins/claude', owned: !command.cli, delegate: command.delegate ?? [] } } as ModelConnectResult; },
+  // The chat readiness read refuses a CLI subscription by protocol: that is its expected Brain-only state, worded as such (never "Connected, unavailable").
+  inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: ref, label: 'm', nativeId: 'm', catalogRevision: 'r', bindingDigest: '',
+    availability: { invocable: false, reason: { code: 'MODEL_INVOCATION_UNAVAILABLE' } } }] }) as never }, options, 'en', errorText).subscription!;
+  expect(signIn.kinds).toEqual(['claude-cli-subscription']);
+  expect(await signIn.prepare('claude-cli-subscription')).toMatchObject({ owned: null, lines: [{ text: 'ERR:AUTHORITY_WITNESS_REQUIRED' }] });
+  person = true;
+  const ready = await signIn.prepare('claude-cli-subscription');
+  expect(ready.owned).toBe('/state/logins/claude'); expect(ready.lines.map(line => line.text).join('\n')).toContain('deckent models login --connection claude-cli-subscription');
+  expect(await signIn.login('claude-cli-subscription', null)).toMatchObject({ signedIn: true, refused: false });
+  const first = await signIn.connect('claude-cli-subscription', null);
+  expect(first.delegate).toEqual([]); expect(first).toMatchObject({ connected: true, summary: t('tui.provider.login.brainOnly', {}, 'en') });
+  expect(first.lines.map(line => line.text)).toContain(t('tui.provider.login.brainOnly', {}, 'en'));
+  expect((await signIn.connect('claude-cli-subscription', '/state/logins/claude', ['ai'])).delegate).toEqual(['ai']);
+  await signIn.connect('claude-cli-subscription', '/home/person/.claude', []);
+  expect(commands.map(command => [command.cli ?? null, command.delegate ?? null, command.model])).toEqual([[null, null, { pull: 'available' }], [null, ['ai'], { pull: 'available' }],
+    [{ configDir: '/home/person/.claude' }, [], { pull: 'available' }]]);
 });
 
 it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models instead of "-"', async () => {
@@ -564,4 +593,14 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
   expect(view.kinds[0]!.detail).toBe('7 model(s) connected');
   const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
   expect(none.kinds[0]!.detail).toBe('-');
+  // PV 2a: without usable isolation the CLI subscription row is disabled with its reason before anything is chosen; its card names the typed cause and the rows usable here.
+  const host = { ...secrets().host, connectModel: async () => { throw new Error('NOT_REACHED'); }, providerConnect: { ...connectHost('ok'), kinds: [{ ...codex, billing: 'subscription' as const, headlessLogin: true },
+    connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher' } }),
+    loginDir: async () => ({ owned: '/x' }), login: async () => null } };
+  const blocked = providerPanelPort(root, 'scope', host, options, 'en', errorText), listed = await blocked.inspect();
+  expect(listed.kinds[0]).toMatchObject({ blocked: t('tui.provider.isolation.blocked', {}, 'en') }); expect(listed.kinds[0]!.detail).toMatch(/^subscription: no API key, uses your plan's usage quota · /u);
+  expect(listed.kinds[1]!.blocked).toBeNull();
+  const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
+  expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);
+  expect((await providerPanelPort(root, 'scope', { ...host, providerConnect: { ...host.providerConnect, isolationRefusal: async () => null } }, options, 'en', errorText).inspect()).kinds[0]!.blocked).toBeNull();
 });

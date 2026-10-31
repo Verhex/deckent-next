@@ -32,7 +32,7 @@ function parse(argv: readonly string[]) {
 const stepWord = (state: string, locale: Locale) => state === 'written' ? t('models.connect.step.written', {}, locale)
   : state === 'present' ? t('models.connect.step.present', {}, locale) : t('models.connect.step.skipped', {}, locale);
 /** The person's summary: what is connected, under which key name, what each governed step did and what (if anything) still waits. */
-export function renderModelConnect(result: ModelConnectResult, locale: Locale, resume?: ModelConnectCommand): string {
+export function renderModelConnect(result: ModelConnectResult, locale: Locale, resume?: ModelConnectCommand, billing?: 'subscription' | 'local' | 'metered'): string {
   const reference = `${result.reference.providerId}@${result.reference.providerVersion}/${result.reference.modelId}@${result.reference.modelVersion}`;
   // BeUser alpha.56.1 (Ayşe): a pull leads with the human result (each model and its state), then the scope and reference, the key, the bookkeeping
   // steps. A single `--model`/`--reference` connect has no per-model rows and still opens with the reference line.
@@ -42,13 +42,13 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale, r
   lines.push(result.status === 'connected' ? t('models.connect.connected', { reference, scope: result.scopeId }, locale)
     : resume ? t('models.connect.pendingResume', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-', command: resumeCommand(resume) }, locale) // Astra R3: the same id resumes
       : t('models.connect.pending', { reference, key: result.approval?.keyPath ?? '-', approval: result.approval?.approvalId ?? '-' }, locale),
-  result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false ? t('models.connect.keyMissing', { name: result.credentialRef }, locale)
+  result.credentialRef === null ? billing === 'subscription' ? t('models.connect.keySubscription', {}, locale) : t('models.connect.keyNone', {}, locale) : result.keyStored === false ? t('models.connect.keyMissing', { name: result.credentialRef }, locale)
     : t('models.connect.key', { name: result.credentialRef }, locale),
   t('models.connect.steps', { catalog: stepWord(result.steps.catalog, locale), declaration: stepWord(result.steps.declaration, locale),
     profile: stepWord(result.steps.profile, locale), activation: stepWord(result.steps.activation, locale), carried: result.steps.carried }, locale));
   if (result.notCarried.length) lines.push(t('models.connect.notCarried', { models: result.notCarried.map(item => `${item.reference.providerId}@${item.reference.providerVersion}/`
     + `${item.reference.modelId}@${item.reference.modelVersion} (${item.code})`).join(', ') }, locale));
-  if (result.tariff === 'unmetered') lines.push(t('models.connect.unmetered', {}, locale));
+  if (result.tariff === 'unmetered') lines.push(billing === 'subscription' ? t('models.connect.subscription', {}, locale) : t('models.connect.unmetered', {}, locale)); // PV 2d
   if (result.budget?.state === 'missing') lines.push(t('models.connect.budgetMissing', { scope: result.scopeId, usd: SCOPE_BUDGET_CHOICES.defaultPresetUsd }, locale));
   if (result.budget?.state === 'unknown') lines.push(t('models.connect.budgetUnknown', { scope: result.scopeId, code: result.budget.code ?? '-' }, locale));
   if (result.service === 'stale') lines.push(t('models.connect.restart', {}, locale));
@@ -90,12 +90,14 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
     endpoint: value('--endpoint') ?? null, model: exact ? { reference: { providerId: exact[1], providerVersion: Number(exact[2]), modelId: exact[3], modelVersion: Number(exact[4]) } }
       : value('--model') ? { nativeId: value('--model') } : { pull: 'available' } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');
-  emit(await context.connectModel(root, command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale, command.data) });
+  emit(await context.connectModel(root, command.data, { env }), { ...sinks, json: parsed.json, render: item => renderModelConnect(item, locale, command.data, billingOf(context, item.connection)) });
 }
 
 /** The connection kinds and their seeded models the host binds for the terminal's `/provider` window (registry data, exact ids). */
-type ConnectKinds = Readonly<{ kinds: readonly Readonly<{ id: string; labelKey: string; available: boolean; seeded?: boolean; pull?: 'available' | 'pick'; connectFamily?: string | null }>[];
+type ConnectKinds = Readonly<{ kinds: readonly Readonly<{ id: string; labelKey: string; available: boolean; seeded?: boolean; pull?: 'available' | 'pick'; connectFamily?: string | null;
+  billing?: 'subscription' | 'local' | 'metered' }>[];
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string }>[]> }>;
+const billingOf = (context: ModelCommandContext, connection: string) => (context as { providerConnect?: ConnectKinds }).providerConnect?.kinds.find(kind => kind.id === connection)?.billing;
 function connectPickOnly(argv: readonly string[]): { scope?: string; language?: string } | null {
   const picked: { scope?: string; language?: string } = {};
   for (let index = 2; index < argv.length; index += 2) {
@@ -141,6 +143,6 @@ async function connectByChoice(picked: { scope?: string; language?: string }, co
   const command = modelConnectCommandSchema.parse({ schemaVersion: 1, commandId: `connect-${randomUUID()}`, scopeId: scope.scopeId, connection: kind.id, endpoint: null, model: pull ? { pull: 'available' } : { nativeId } });
   emit(scopeNotice(scope, locale), modelsSinks(context));
   const result = await context.connectModel(root, command, options);
-  emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale, command),
+  emit(result, { ...modelsSinks(context), render: item => [renderModelConnect(item, locale, command, kind.billing),
     ...(item.credentialRef && item.keyStored === false ? [t('climodels.models.connect.storeKey', { name: terminalSafeText(item.credentialRef) }, locale)] : [])].join('\n') });
 }
