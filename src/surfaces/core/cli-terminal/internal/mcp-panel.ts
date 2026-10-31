@@ -1,5 +1,5 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { McpChoice, McpPanelList, McpPanelPort, McpServerDraft, McpTrustAsk, PanelLine } from '#surfaces/core/terminal-panels/index.js';
+import type { McpChoice, McpPanelList, McpPanelPort, McpPanelState, McpServerDraft, McpTrustAsk, PanelLine } from '#surfaces/core/terminal-panels/index.js';
 import type { SecretGrantCardPort } from '#surfaces/core/terminal-kit/index.js'; const GRANT = 'secret-refused:SECRET_GRANT_REQUIRED:';
 type Scope = 'local' | 'project' | 'user';
 /** The registry commands the terminal's `/mcp` window runs (the same `deckent mcp` handler; this unit never imports the CLI or the adapter). */
@@ -9,8 +9,8 @@ export type McpPanelRequest = { readonly verb: 'list'; readonly health?: boolean
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk?: readonly string[] | undefined }
   | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string };
 /** The host's MCP registry command (`McpCommandHandler`): `ask` answers one trust card (yes, no, or null: no answer, nothing recorded). */
-export type McpPanelRun = (root: string, request: McpPanelRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>, locale?: Locale) => Promise<unknown>;
-type ServerSummary = { name: string; scope: string; file?: string; status: string; reason?: string; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
+export type McpPanelRun = (root: string, request: McpPanelRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>, locale?: Locale, signal?: AbortSignal) => Promise<unknown>;
+type ServerSummary = { health?: 'connected' | 'not-started' | 'failed' | 'tools-changed' | 'timed-out'; failure?: string; detail?: string; name: string; scope: string; file?: string; status: string; reason?: string; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
   headerNames?: string[]; pinnedTools?: number; definitionDigest?: string; lastStart?: { text?: string; phase?: string };
   grant?: { status: 'granted'; scopes: 'all' | string[] } | { status: 'none' } };
 type TrustCard = { phase?: string; name?: string; scope?: string; file?: string; definitionDigest?: string; transport?: string; command?: string; args?: string[];
@@ -21,6 +21,7 @@ const digest12 = (value: unknown) => typeof value === 'string' ? value.slice(0, 
 /** A server's state in words, one renderer for `deckent mcp list|get` and the `/mcp` window (YTK-40: both read the same trust record the same way);
  * a record trusted before alpha.48 (SEC-2 D6, `trust-moved`) is approved again on its card; an unknown status stays its typed name. */
 export function mcpServerStateWord(server: { readonly status: string; readonly reason?: string | undefined }, locale: Locale): string {
+  if (server.reason?.startsWith('secret-unresolved:')) return t('terminal.mcp.status.secretUnresolved', { key: server.reason.slice(18) }, locale);
   if (server.reason === 'trust-moved') return t('climodels.mcp.state.moved', {}, locale);
   if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale); if (server.reason?.startsWith('secret-refused:')) { const [code, key = ''] = server.reason.slice(15).split(':'); return code === 'SECRET_PROJECT_MISSING' ? t('terminal.mcp.status.secretProjectMissing', { key }, locale) : code === 'DECK_DECLARATION_REQUIRED' ? t('terminal.mcp.status.secretUndeclared', { key }, locale) : code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? t('terminal.mcp.status.secretNoIdentity', { key }, locale) : t('terminal.mcp.status.secretRefused', { key }, locale); } // KER-17
   switch (server.status) {
@@ -31,6 +32,32 @@ export function mcpServerStateWord(server: { readonly status: string; readonly r
     case 'invalid-launch': return t('terminal.mcp.status.invalidLaunch', {}, locale);
     case 'trust-store-unavailable': return t('terminal.mcp.status.trustUnreadable', {}, locale);
     default: return server.status;
+  }
+}
+/** Health is evidence from this check, never inferred from a trust decision or a localized word. */
+function panelState(server: ServerSummary): McpPanelState {
+  if (server.reason?.startsWith('secret-unresolved:')) return 'secret-unresolved';
+  if (server.reason?.startsWith('secret-refused:')) {
+    const code = server.reason.slice(15).split(':')[0];
+    return code === 'SECRET_PROJECT_MISSING' ? 'secret-project-missing' : code === 'DECK_DECLARATION_REQUIRED' ? 'secret-undeclared'
+      : code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? 'secret-no-identity' : 'secret-refused';
+  }
+  switch (server.status) {
+    case 'trusted': return (server.health !== 'not-started' ? server.health : undefined) ?? (server.lastStart?.phase === 'tools' ? 'tools-changed' : server.lastStart ? 'failed' : 'not-started');
+    case 'pending-approval': case 'changed': case 'declined': case 'invalid-launch': case 'trust-store-unavailable': return server.status;
+    default: return 'unknown';
+  }
+}
+function panelWord(server: ServerSummary, state: McpPanelState, locale: Locale): string {
+  switch (state) {
+    case 'connected': return t('terminal.mcp.status.connected', {}, locale);
+    case 'checking': return t('terminal.mcp.status.checking', {}, locale);
+    case 'not-started': return t('terminal.mcp.status.not-started', {}, locale);
+    case 'timed-out': return t('terminal.mcp.status.timed-out', {}, locale);
+    case 'unknown': return t('terminal.mcp.status.unknown', {}, locale);
+    case 'failed': return t('terminal.mcp.status.failed', { reason: server.detail ?? server.lastStart?.text ?? server.failure ?? '' }, locale);
+    case 'tools-changed': return t('terminal.mcp.status.tools-changed', { reason: server.detail ?? server.lastStart?.text ?? '' }, locale);
+    default: return t('terminal.mcp.status.disconnected', { reason: mcpServerStateWord(server, locale) }, locale);
   }
 }
 function scopeWord(scope: string, locale: Locale) {
@@ -74,16 +101,17 @@ export function mcpTrustQuestion(raw: unknown, locale: Locale) {
  * plain http to another machine (https only; http only on this machine) and a `$DECK:` header in a project file.
  */
 export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoadOptions, locale: Locale, card?: SecretGrantCardPort): McpPanelPort {
-  const call = (request: McpPanelRequest, ask: (card: unknown) => Promise<boolean | null> = async () => null) => run(root, request, options, ask, locale);
+  const call = (request: McpPanelRequest, ask: (card: unknown) => Promise<boolean | null> = async () => null, signal?: AbortSignal) => run(root, request, options, ask, locale, signal);
   const asking = (ask: McpTrustAsk) => (card: unknown) => ask(mcpTrustQuestion(card, locale));
   const choice = (id: string, label: string, detail: string, blocked?: string): McpChoice => ({ id, label, detail, ...(blocked ? { blocked } : {}) });
   return {
-    async list(): Promise<McpPanelList> {
-      const listed = (await call({ verb: 'list', health: false })) as { servers?: unknown; problems?: unknown };
-      const servers = array<ServerSummary>(listed.servers).map(server => ({ name: server.name, scope: scopeWord(server.scope, locale), status: mcpServerStateWord(server, locale),
-        attention: server.status !== 'trusted' || Boolean(server.lastStart), tools: server.pinnedTools ? toolsWord(server.pinnedTools, locale) : '',
+    async list(input = {}): Promise<McpPanelList> {
+      input.signal?.throwIfAborted();
+      const listed = (await call({ verb: 'list', health: input.health ?? false }, undefined, input.signal)) as { servers?: unknown; problems?: unknown };
+      const servers = array<ServerSummary>(listed.servers).map(server => { const previous = panelState(server), state = input.checking && server.status === 'trusted' ? 'checking' : previous; return { state, name: server.name, scope: scopeWord(server.scope, locale), status: state === 'checking' ? `${panelWord(server, state, locale)} · ${panelWord(server, previous, locale)}` : panelWord(server, state, locale),
+        attention: state !== 'connected', tools: server.pinnedTools ? toolsWord(server.pinnedTools, locale) : '',
         realm: realmWord(server.realm, locale).split(':')[0]!, launch: [server.command ?? '', ...array<string>(server.args)].join(' '), trusted: server.status === 'trusted',
-        ...(card && server.reason?.startsWith(GRANT) ? { grantKey: server.reason.slice(GRANT.length) } : {}) }));
+        ...(card && server.reason?.startsWith(GRANT) ? { grantKey: server.reason.slice(GRANT.length) } : {}) }; });
       const problems = array<{ name: string | null; scope: string; reason: string }>(listed.problems).map(problem => problem.name === null
         ? t('terminal.mcp.problemFile', { scope: scopeWord(problem.scope, locale), reason: problem.reason }, locale)
         : t('terminal.mcp.problemServer', { name: problem.name, scope: scopeWord(problem.scope, locale), reason: problem.reason }, locale));

@@ -24,13 +24,44 @@ describe('/mcp window port', () => {
       get: { server: { ...SERVER, trust: { tools: [{ name: 'read_file', digest: 'b'.repeat(64), alwaysAsk: true }] } } } });
     const port = mcpPanelPort('/p', run, {}, 'tr');
     const list = await port.list();
-    expect(list.servers).toEqual([{ name: 'files', scope: 'yerel', status: 'onaydan sonra değişti, yeniden onay gerekir', attention: true, tools: '2 araç',
+    expect(list.servers).toEqual([{ name: 'files', scope: 'yerel', state: 'changed', status: 'bağlı değil — onaydan sonra değişti, yeniden onay gerekir', attention: true, tools: '2 araç',
       realm: 'host', launch: 'npx -y files', trusted: false }]);
     expect(list.problems).toEqual(['proje MCP dosyasında sorun: invalid json']);
     // YTK-40: the window words a waiting server exactly as `deckent mcp list` does (one renderer): a pre-alpha.48 trust says why it asks again.
     const moved = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'pending-approval', reason: 'trust-moved' }] } }).run, {}, 'tr').list();
-    expect(moved.servers[0]!.status).toBe(t('climodels.mcp.state.moved', {}, 'tr'));
+    expect(moved.servers[0]!.status).toBe(t('terminal.mcp.status.disconnected', { reason: t('climodels.mcp.state.moved', {}, 'tr') }, 'tr'));
     expect(requests).toEqual([{ verb: 'list', health: false }]);
+    // Typed health wins only for a trusted definition; untranslated words never drive the state.
+    const states = [
+      { status: 'trusted', health: 'connected', expected: 'connected' }, { status: 'trusted', expected: 'not-started' },
+      { status: 'trusted', health: 'failed', detail: 'ENOENT (PATH)', expected: 'failed' },
+      { status: 'trusted', health: 'timed-out', expected: 'timed-out' }, { status: 'trusted', health: 'tools-changed', expected: 'tools-changed' },
+      { status: 'pending-approval', health: 'connected', expected: 'pending-approval' },
+      { status: 'declined', expected: 'declined' }, { status: 'changed', expected: 'changed' },
+      { status: 'invalid-launch', reason: 'secret-refused:SECRET_PROJECT_MISSING:KEY', expected: 'secret-project-missing' },
+      { status: 'invalid-launch', reason: 'secret-refused:DECK_DECLARATION_REQUIRED:KEY', expected: 'secret-undeclared' },
+      { status: 'invalid-launch', reason: 'secret-refused:SECRET_PROJECT_IDENTITY_REQUIRED:KEY', expected: 'secret-no-identity' },
+      { status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:KEY', expected: 'secret-refused' },
+      { status: 'invalid-launch', reason: 'secret-unresolved:KEY', expected: 'secret-unresolved' },
+      { status: 'invalid-launch', expected: 'invalid-launch' }, { status: 'trust-store-unavailable', expected: 'trust-store-unavailable' },
+    ];
+    for (const locale of ['en', 'tr'] as const) {
+      const samples = states.map(item => ({ ...SERVER, lastStart: undefined, ...item }));
+      let received: AbortSignal | undefined;
+      const controller = new AbortController();
+      const check = mcpPanelPort('/p', async (_root, request, _options, _ask, _locale, signal) => {
+        expect(request).toEqual({ verb: 'list', health: true }); received = signal; return { servers: samples };
+      }, {}, locale);
+      const checked = await check.list({ health: true, signal: controller.signal });
+      expect(received).toBe(controller.signal);
+      expect(checked.servers.map(server => server.state)).toEqual(states.map(item => item.expected));
+      expect(checked.servers.find(server => server.state === 'failed')!.status).toContain('ENOENT (PATH)');
+      expect(checked.servers.find(server => server.state === 'timed-out')!.status).toContain(locale === 'tr' ? 'bilinmiyor' : 'unknown');
+      controller.abort(); await expect(check.list({ health: true, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+      const waiting = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'trusted' }] } }).run, {}, locale).list({ checking: true });
+      expect(waiting.servers[0]).toMatchObject({ state: 'checking', attention: true });
+      expect(waiting.servers[0]!.status).toContain(SERVER.lastStart.text);
+    }
     const detail = await port.detail('files');
     const text = detail.map(line => `${line.label}|${line.text}|${line.tone ?? ''}`);
     expect(text).toContain('Çalışır|host: sizin yetkinizle çalışır, dosyalarınıza, ağa ve kimlik bilgilerinize erişir — yalnız güvendiğiniz bir sunucu için seçin|warning');

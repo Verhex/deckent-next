@@ -207,17 +207,20 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     ...(context.limits?.inputMaxBytes ? { inputMaxBytes: context.limits.inputMaxBytes } : {}) };
   const launchContext = { cwd: view.projectKey, environment: context.environment, sandboxes: context.sandboxes, homeRoot: mcpServerHomes(context.layout),
     ...(context.scopeId ? { homeScope: context.scopeId } : {}) };
-  const probe = async <T>(work: (pool: McpClientPool) => Promise<T>): Promise<T> => {
-    const controller = new AbortController(), pool = new McpClientPool(context.signal ? AbortSignal.any([controller.signal, context.signal]) : controller.signal);
-    try { return await work(pool); } finally { controller.abort(); await pool.close(); }
+  const probe = async (launch: McpClientServerSettings) => {
+    const controller = new AbortController(), deadline = AbortSignal.timeout(settings.connectTimeoutMs);
+    const pool = new McpClientPool(AbortSignal.any([controller.signal, deadline, ...(context.signal ? [context.signal] : [])]));
+    try { const state = await pool.open(launch, { ...settings, servers: [launch] }, launchContext); context.signal?.throwIfAborted();
+      return { state, timedOut: deadline.aborted || (!state.ok && state.detail === 'REQUEST_TIMEOUT') };
+    } finally { controller.abort(); await pool.close(); }
   };
   if (request.verb === 'list') {
     const servers = await mapBounded(view.servers, context.limits?.maxServers ?? getConfigFieldDefault('mcp').maxServers, async server => {
       context.signal?.throwIfAborted();
       if (!server.launch || request.health === false) return { ...summary(server), health: !server.launch && server.status === 'trusted' ? 'failed' : 'not-started' };
       const launch = server.launch;
-      const state = await probe(pool => pool.open(launch, { ...settings, servers: [launch] }, launchContext));
-      return { ...summary(server), health: state.ok ? (state.tools.every(tool => tool.status !== 'drifted' && tool.status !== 'missing') ? 'connected' : 'tools-changed') : 'failed',
+      const { state, timedOut } = await probe(launch);
+      return { ...summary(server), health: state.ok ? (state.tools.every(tool => tool.status !== 'drifted' && tool.status !== 'missing') ? 'connected' : 'tools-changed') : timedOut ? 'timed-out' : 'failed',
         ...(state.ok ? { era: state.era, tools: state.tools.map(verdict => Object.fromEntries(Object.entries(verdict).filter(([key]) => key !== 'spec'))) }
           : { failure: state.reason, ...(state.detail ? { detail: state.detail } : {}),
             ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, mcpEntryDisplay(server.entry)) } : {}) }) };
