@@ -270,6 +270,6 @@
   "monitor.legend.ok": "fine: Run accepted, or a check passed (service running, ledger read, image current, model invocable)",
   "monitor.legend.attention": "needs attention: a blocked Run, a warning, a stale heartbeat, a read problem, a held pool or an old snapshot",
   "monitor.legend.installOff": "off or not reachable: an unreachable or refused install, a stopped service, an unused profile",
-  "monitor.diagnostic.modelRolesPending": "New model: role pending ({count}); no role may use it until you assign one",
+  "monitor.diagnostic.modelRolesPending": "New model: role pending ({count}); no tier-based role may use it until you assign one",
   "monitor.action.modelRolesPending": "To assign: deckent models roles"
 }

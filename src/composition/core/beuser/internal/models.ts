@@ -14,7 +14,7 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
   choices: BeuserModelComposition['choices'], contributorModels: readonly unknown[], budget: BeuserCallBudget, completionTokens: number,
   evaluatorInput: () => unknown) {
   const pins = new Map<string, Awaited<ReturnType<typeof prepareConfiguredModelAs>>>();
-  const models = createBeuserModelPort({ choices, contributorModels, walkerModels: [], independence: 'required', credential: undefined,
+  const models = createBeuserModelPort({ choices, contributorModels, walkerModels: [], independence: 'reduced', credential: undefined,
     now: Date.now,
     async sources(ctx) {
       const c = await loadConfiguredScopeContext(root, ctx.binding.identity.scopeId, options, 'read');

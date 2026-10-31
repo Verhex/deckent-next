@@ -37,14 +37,17 @@ export async function decideRoleModelInScope(policy: ModelRolePolicy, roleId: st
   const measured = policy.models.filter(row => row.measured !== undefined && row.roles.includes(roleId) && roleModelKey(row) !== roleModelKey(target));
   const active = await activeKeys(scopeId, targetActive === undefined ? [target, ...measured] : measured, ports);
   if (targetActive) active.add(roleModelKey(target));
-  return decideRoleModel(policy, roleId, target, { today: utcDay(nowMs), active });
+  // A `connected` role needs only to know whether the declared catalog serves the target.
+  return decideRoleModel(policy, roleId, target, { today: utcDay(nowMs), active, catalog: ports.references(target).length ? [target] : [] });
 }
-/** Read port for later role consumers (S6R-5 recovery decision, S4B memory evaluator): the role's models today, each with its permission. */
+/** Read port for later role consumers (S6R-5 recovery decision, S4B memory evaluator, BeUser setup): the role's models today, each with its permission. */
 export async function inspectRoleModelsInScope(sources: RoleModelSources, roleId: string, scopeId: string, nowMs: number) {
   const policy = composeModelRolePolicy(sources.modelRoles), ports = roleModelPorts(sources);
-  const today = utcDay(nowMs), listed = eligibleRoleModels(policy, roleId, { today, active: new Set() });
+  const catalog = sources.providerCatalog === undefined ? [] : parseProviderCatalog(sources.providerCatalog).providers
+    .flatMap(provider => provider.models.map(model => ({ channelId: provider.id, modelId: model.nativeId })));
+  const today = utcDay(nowMs), listed = eligibleRoleModels(policy, roleId, { today, active: new Set(), catalog });
   const measured = policy.models.filter(row => row.measured !== undefined && row.roles.includes(roleId));
-  const models: readonly RoleModelRow[] = eligibleRoleModels(policy, roleId, { today, active: await activeKeys(scopeId, [...listed, ...measured], ports) });
+  const models: readonly RoleModelRow[] = eligibleRoleModels(policy, roleId, { today, active: await activeKeys(scopeId, [...listed, ...measured], ports), catalog });
   return Object.freeze({ schemaVersion: 1 as const, scopeId, role: roleId, revision: policy.revision, models });
 }
 /** A role target's invocable path (S4B-3, S6R-5): the declared reference that has an invocation profile in the scope for this (channel, exact model); none: null. */

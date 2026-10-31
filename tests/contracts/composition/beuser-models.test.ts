@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { CORE_MODEL_ROLES, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type ModelInvocationCommand, type ModelInvocationProfile } from '#domain/index.js';
+import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type ModelInvocationCommand, type ModelInvocationProfile } from '#domain/index.js';
 import { BeuserCallBudget, providerSpendEvidenceDigest, type BeuserContext } from '#engine/index.js';
 import type { ModelInvocationResult, ModelInvocationSpending } from '#engine/core/model-invocation/index.js';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -18,7 +18,8 @@ vi.mock('#adapters/index.js', async original => ({ ...await original<typeof impo
   openSqliteModelActivationReader: async (...args: Parameters<typeof import('#adapters/index.js').openSqliteModelActivationReader>) => args[0] === '/fixture.sqlite'
     ? { loadRecord: mocks.activation, close() {} } : (await original<typeof import('#adapters/index.js')>()).openSqliteModelActivationReader(...args) }));
 
-const target = CORE_MODEL_ROLES.models.find(row => row.roles.includes('beuser-walker'))!;
+// A local model with no tier/role row: BeUser roles take any catalog model the scope has active (owner 2026-10-31).
+const target = { channelId: 'local-vllm', modelId: 'qwen-fixture' };
 const reference = { providerId: target.channelId, providerVersion: 1, modelId: 'catalog-model', modelVersion: 1 };
 const limits = { schemaVersion: 1 as const, revision: 'fixture', source: 'test-only', provisional: true, maxSteps: 10, maxWallMs: 1000, maxWaitMs: 100,
   maxCalls: 10, maxTokens: 131072, maxCost: 1, currency: 'USD', maxReruns: 1, maxTranscriptBytes: 10000, maxArtifactBytes: 10000, cleanupDeadlineMs: 100, criticalRepetitions: 1 };
@@ -193,8 +194,7 @@ it('production local preflight detects a typed counter, reserves prompt plus com
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('fixture address');
   const f = await brainProviderFixture({ noCharge: true, budget: null, contextWindow: 2000, maxOutputTokens: 32, jsonOutput: true,
-    modelRoles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'beuser-fixture', roles: [], exceptions: [], models: [
-      { channelId: 'test-operator', modelId: 'vendor/model', version: 1, tier: 'frontier', roles: ['beuser-walker', 'beuser-evaluator'] }] }] } });
+    modelRoles: null });
   try {
     const scoped = await vi.importActual<typeof import('#composition/core/scoped-request/index.js')>('#composition/core/scoped-request/index.js');
     const invocation = await vi.importActual<typeof import('#composition/core/model-invocation/index.js')>('#composition/core/model-invocation/index.js');

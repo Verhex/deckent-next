@@ -122,6 +122,33 @@ can be reconciled by repeating setup. An equal registry is not rewritten; a diff
 registry or pool is refused for governed reconciliation. `beuser.*` remains a protected root;
 execution profiles continue to live in the general execution registry.
 
+### Walker and evaluator models (owner 2026-10-31)
+
+The `beuser-walker` and `beuser-evaluator` roles declare `admits: "connected"` in the model role registry
+(`assets/model-roles/model-roles.json`, revision `model-roles-2026-10-31`): every model of the scope's declared
+provider catalog that the scope has active serves them, whether it is a subscription CLI channel, a local server
+(for example vLLM) or an API-key channel. They have no tier floor and need no model row; eligibility is the catalog
+plus the scope's activation, decided per call (basis `connected`), and no model id appears in code. A row an
+installation overlay already wrote for a BeUser role stays valid at any tier and grants nothing more. The other roles
+(`brain`, `worker`, `recovery-decision`, `memory-evaluator`) keep their tier and rows. An overlay cannot redefine a
+Core role; an Enterprise overlay may declare `admits: "connected"` only on a role it adds.
+
+Evaluator maker independence is information, not a gate. The composition runs the model port in `reduced` mode:
+an evaluator whose maker is unknown or shared with a contributor or walker is still called, and the verdict labels
+it `independent`, `reduced` or `unknown`. The label never changes the outcome or acceptance, and in this mode
+reliability reruns only for calibration, never for independence. The engine keeps a `required` mode (refuse
+`maker-unknown` and `independence`) that BeUser does not use. Memory-evaluator independence is a separate mechanism
+and unchanged. A subscription channel still serves BeUser only within the person's own delegated-use consent for
+that channel; this rule neither skips nor widens it.
+
+Several walkers run at once through the existing pool: each journey profile carries its own walker and evaluator
+choice, and a walk reserves a wave of pending tasks under the admission's `executionSlots` and `inFlightSlots`
+and runs it in parallel. One admission can therefore list three profiles whose walkers are, for example, a Claude
+subscription model, a Codex subscription model and a local vLLM model, with `executionSlots: 3`. The bounds stay
+the existing ones: each profile's limits revision (steps, wall time, calls, tokens and cost per walk), the pool
+slots, each invocation profile's `maxInFlight` and context window (a local server's window and concurrency), and
+the subscription's own quota (a quota refusal is a typed rejection of that call, never a model substitution).
+
 Missing walk profiles return `BEUSER_PROFILE_REQUIRED` with the setup next step. A missing report
 directory or record returns `BEUSER_REPORT_NOT_FOUND` with the walk next step. Corrupt records,
 unsafe paths and access failures retain their refusal instead of becoming an empty report.

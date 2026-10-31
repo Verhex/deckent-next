@@ -1,6 +1,6 @@
-import { canonicalModelMaker, independentMakerRows, roleModelKey, encodeCommandProjection, type ModelInvocationCommand, type RoleModelTarget } from '#domain/index.js';
+import { canonicalModelMaker, independentMakerRows, encodeCommandProjection, type ModelInvocationCommand, type RoleModelTarget } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
-import { inspectRoleModelsInScope, roleModelInvocationReference, type RoleModelSources, type ModelCatalogInspection } from '#engine/core/model-activation/index.js';
+import { composeModelRolePolicy, decideRoleModelInScope, roleModelInvocationReference, roleModelPorts, type RoleModelSources, type ModelCatalogInspection } from '#engine/core/model-activation/index.js';
 import { BeuserWalkStopped } from './controller.js';
 import type { ModelInvocationApplication, ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { BeuserContractError, BEUSER_KEYS, assertBeuserAccess, pinBeuserWalkerSummary, type BeuserCorrection, type BeuserContext, type BeuserModelRole, type BeuserModelResult, type ModelPort } from '#engine/core/beuser-contract/index.js';
@@ -32,6 +32,8 @@ export interface BeuserModelComposition {
   readonly choices: Readonly<Record<BeuserModelRole, RoleModelTarget>>;
   readonly contributorModels: readonly unknown[];
   readonly walkerModels: readonly unknown[];
+  /** `required` refuses an evaluator whose maker is unknown or shared with a contributor or walker; `reduced` (BeUser, owner 2026-10-31) calls it
+   * and the verdict only labels its independence (independent/reduced/unknown). */
   readonly independence: 'required' | 'reduced';
   /** Trusted provider codec uses its current profile, tariff/quote and remaining envelope. No rubric/system authority in walker input. */
   readonly prepare: (context: BeuserContext, role: BeuserModelRole, reference: NonNullable<ReturnType<typeof roleModelInvocationReference>>,
@@ -50,17 +52,16 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
   const invoke = async (context: BeuserContext, role: BeuserModelRole, input: unknown): Promise<BeuserModelResult> => {
     assertBeuserAccess(context, context.binding, context.principal, { kind: 'attempt', id: context.binding.identity.attemptId }, 'evaluate');
     const source = await ports.sources(context), target = ports.choices[role];
-    const inspected = await inspectRoleModelsInScope(source.roles, role, context.binding.identity.scopeId, ports.now());
-    const row = inspected.models.find(row => roleModelKey(row) === roleModelKey(target));
+    // One target's decision per call (one activation read), not the whole role listing: a `connected` role spans the scope's catalog.
+    const decision = await decideRoleModelInScope(composeModelRolePolicy(source.roles.modelRoles), role, context.binding.identity.scopeId, target, roleModelPorts(source.roles), ports.now());
     const unavailable = (reason: Extract<BeuserModelResult, { state: 'unavailable' }>['reason']): BeuserModelResult => ({ state: 'unavailable', code: 'BEUSER_MODEL_UNAVAILABLE', reason });
-    if (!row) return unavailable('role-not-held');
-    if (!row.active) return unavailable('not-active');
+    if (decision.state === 'refused') return unavailable(decision.reason);
     const channel = source.catalog.channels.find(provider => provider.channelId === target.channelId);
     const model = source.catalog.scopeId === context.binding.identity.scopeId && channel?.access === 'allowed' ? channel.models.find(model => model.modelId === target.modelId)?.model : undefined;
     if (!model) return unavailable('model-unknown');
     const maker = canonicalModelMaker(model);
     if (maker === null && role === 'beuser-evaluator' && ports.independence === 'required') return unavailable('maker-unknown');
-    if (role === 'beuser-evaluator' && ports.independence === 'required' && !beuserIndependentRows([row], () => maker, ports.contributorModels, walkers).length) return unavailable('independence');
+    if (role === 'beuser-evaluator' && ports.independence === 'required' && !beuserIndependentRows([target], () => maker, ports.contributorModels, walkers).length) return unavailable('independence');
     const reference = roleModelInvocationReference(source.roles, source.profiles, context.binding.identity.scopeId, target);
     if (!reference) return unavailable('model-unknown');
     const prepared = await ports.prepare(context, role, reference, input, budget.remaining());

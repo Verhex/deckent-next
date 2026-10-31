@@ -14,7 +14,8 @@ const none = new Set<string>();
 
 it('the Core seed names exactly the owner Brain list as frontier Brain rows, and declares the six roles', () => {
   const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, []);
-  expect(Object.fromEntries(policy.roles.map(row => [row.id, row.minimumTier]))).toEqual({ brain: 'frontier', worker: 'worker', 'recovery-decision': 'frontier', 'memory-evaluator': 'frontier', 'beuser-walker': 'frontier', 'beuser-evaluator': 'frontier' });
+  expect(Object.fromEntries(policy.roles.map(row => [row.id, 'minimumTier' in row ? row.minimumTier : row.admits]))).toEqual({ brain: 'frontier', worker: 'worker',
+    'recovery-decision': 'frontier', 'memory-evaluator': 'frontier', 'beuser-walker': 'connected', 'beuser-evaluator': 'connected' });
   const brain = eligibleRoleModels(policy, 'brain', { today: '2026-10-23', active: none });
   expect(new Set(brain.map(row => row.modelId))).toEqual(new Set(['claude-opus-5-5', 'claude-fable-5-1', 'gpt-6.1-sol', 'anthropic/claude-opus-5.5',
     'anthropic/claude-fable-5.1', 'openai/gpt-6.1-sol']));
@@ -57,6 +58,22 @@ it('refuses a worker-tier Brain, an unknown model, a frontier row without the ro
   // Eligible but not active: permission is the activation's, never assumed.
   expect(decideRoleModel(policy, 'brain', opus, { today, active: none })).toEqual({ state: 'refused', reason: 'not-active' });
   expect(decideRoleModel(policy, 'brain', opus, { today, active: new Set([roleModelKey(opus)]) })).toMatchObject({ state: 'eligible', basis: 'tier', tier: 'frontier' });
+});
+
+it('a connected role (BeUser, owner 2026-10-31) takes every active catalog model without a row; tiered roles are unchanged', () => {
+  const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, []), today = '2026-10-31', local = { channelId: 'local-vllm', modelId: 'qwen3-8b' };
+  const catalog = [local, opus, local], active = new Set([roleModelKey(local)]);
+  for (const role of ['beuser-walker', 'beuser-evaluator']) {
+    expect(eligibleRoleModels(policy, role, { today, active, catalog })).toEqual([{ ...local, tier: null, basis: 'connected', active: true }, { ...opus, tier: 'frontier', basis: 'connected', active: false }]);
+    expect(decideRoleModel(policy, role, local, { today, active, catalog })).toEqual({ state: 'eligible', basis: 'connected', tier: null });
+    expect(decideRoleModel(policy, role, opus, { today, active, catalog })).toEqual({ state: 'refused', reason: 'not-active' });
+    expect(decideRoleModel(policy, role, local, { today, active })).toEqual({ state: 'refused', reason: 'model-unknown' });
+  }
+  expect(decideRoleModel(policy, 'brain', local, { today, active, catalog })).toEqual({ state: 'refused', reason: 'model-unknown' });
+  // An installation row naming a connected role still merges at any tier and grants nothing more; a role is tiered or connected, never both.
+  const tolerated = mergeModelRoleRegistries(CORE_MODEL_ROLES, [overlay({ models: [{ ...local, version: 1, tier: 'worker', roles: ['beuser-walker'] }] })]);
+  expect(decideRoleModel(tolerated, 'beuser-walker', local, { today, active: none, catalog })).toEqual({ state: 'refused', reason: 'not-active' });
+  expect(modelRoleRegistrySchema.safeParse({ ...overlay({}), roles: [{ id: 'auditor', minimumTier: 'frontier', admits: 'connected' }] }).success).toBe(false);
 });
 
 it('honours the interim Qwen exception only while it is declared and inside its dates, and drops it once a measured frontier Brain is active', () => {

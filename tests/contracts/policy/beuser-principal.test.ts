@@ -86,12 +86,12 @@ it('walker summary pins persona behaviour and product locale without exposing th
 });
 
 it('new model roles grant neither activation nor maker independence', () => {
-  const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, []);
+  const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, []), row = { channelId: 'local-vllm', modelId: 'qwen-fixture' };
   for (const role of ['beuser-walker', 'beuser-evaluator']) {
-    expect(policy.roles.find(row => row.id === role)?.minimumTier).toBe('frontier');
-    const row = policy.models.find(model => model.roles.includes(role))!;
-    expect(decideRoleModel(policy, role, row, { today: '2026-10-29', active: new Set() })).toEqual({ state: 'refused', reason: 'not-active' });
-    expect(decideRoleModel(policy, role, { channelId: 'unknown', modelId: 'unknown' }, { today: '2026-10-29', active: new Set([roleModelKey(row)]) })).toEqual({ state: 'refused', reason: 'model-unknown' });
+    expect(policy.roles.find(entry => entry.id === role)).toEqual({ id: role, admits: 'connected' });
+    expect(decideRoleModel(policy, role, row, { today: '2026-10-31', active: new Set(), catalog: [row] })).toEqual({ state: 'refused', reason: 'not-active' });
+    expect(decideRoleModel(policy, role, { channelId: 'unknown', modelId: 'unknown' }, { today: '2026-10-31', active: new Set([roleModelKey(row)]), catalog: [row] }))
+      .toEqual({ state: 'refused', reason: 'model-unknown' });
     expect(independentMakerRows([row], () => null, ['maker'])).toEqual([]);
     expect(independentMakerRows([row], () => 'maker', ['maker'])).toEqual([]);
   }

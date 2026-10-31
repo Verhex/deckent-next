@@ -8,8 +8,9 @@ import limits from './model-role-limits.json' with { type: 'json' };
  * Model tier/role registry (S2, owner A2, A3, BRAIN1): which exact catalog models may serve which role. Tier is eligibility, the scope's
  * activation is permission, and a role asks for both. Rows are keyed by (channel id, exact model id), the catalog row identity; aliases and
  * vendor links never match. Tiers are ordered; a role names the lowest tier it accepts. The only way past a role's tier is a named, dated
- * exception that drops once a measured row of the role's tier is active in the scope. An overlay adds rows and roles, and replaces a row or
- * exception only by a compare-and-set against its version; it never redefines a role.
+ * exception that drops once a measured row of the role's tier is active in the scope. A role that `admits: 'connected'` (owner 2026-10-31,
+ * BeUser walker/evaluator) has no tier and no rows: every model of the scope's catalog that the scope has active serves it. An overlay adds rows
+ * and roles, and replaces a row or exception only by a compare-and-set against its version; it never redefines a role.
  */
 export const MODEL_TIERS = Object.freeze(['worker', 'frontier'] as const);
 /** The registry's bounds (`model-role-limits.json`), read by the typed role admission too (M2). */
@@ -26,7 +27,8 @@ const dayNumber = (day: string) => {
   const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
   return era * 146_097 + yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy - 719_468;
 };
-const roleSchema = z.object({ id: identitySchema, minimumTier: tierSchema }).strict().readonly();
+const roleSchema = z.union([z.object({ id: identitySchema, minimumTier: tierSchema }).strict(),
+  z.object({ id: identitySchema, admits: z.literal('connected') }).strict()]).readonly();
 const modelRowSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema, version, tier: tierSchema,
   roles: z.array(identitySchema).max(limits.rolesPerModel).readonly(),
   /** Evidence that this row was measured as the role's model (owner A3/H5): only a measured active row drops an exception. */
@@ -77,7 +79,7 @@ export function mergeModelRoleRegistries(coreInput: unknown, overlayInputs: read
   for (const row of models.values()) for (const id of row.roles) {
     const role = roles.get(id);
     if (!role) throw new ModelRoleError('MODEL_ROLE_NOT_REGISTERED');
-    if (rank(row.tier) < rank(role.minimumTier)) throw new ModelRoleError('MODEL_ROLE_TIER_INVALID');
+    if ('minimumTier' in role && rank(row.tier) < rank(role.minimumTier)) throw new ModelRoleError('MODEL_ROLE_TIER_INVALID');
   }
   if ([...exceptions.values()].some(row => !roles.has(row.role))) throw new ModelRoleError('MODEL_ROLE_NOT_REGISTERED');
   const revision = overlays.length === 0 ? core.revision : JSON.stringify([core.revision, ...overlays.map(row => row.revision)]);
@@ -85,13 +87,16 @@ export function mergeModelRoleRegistries(coreInput: unknown, overlayInputs: read
   return Object.freeze({ revision, roles: Object.freeze([...roles.values()]), models: Object.freeze([...models.values()]), exceptions: Object.freeze([...exceptions.values()]) });
 }
 export type RoleModelTarget = Readonly<{ channelId: string; modelId: string }>;
-/** `today` is the UTC day the caller observed; `active` holds the `roleModelKey` of every target the scope has active (permission). */
-export type RoleModelFacts = Readonly<{ today: string; active: ReadonlySet<string> }>;
+/** `today` is the UTC day the caller observed; `active` holds the `roleModelKey` of every target the scope has active (permission); `catalog`
+ * names the scope's declared catalog targets, read only by a `connected` role (absent: none). */
+export type RoleModelFacts = Readonly<{ today: string; active: ReadonlySet<string>; catalog?: readonly RoleModelTarget[] }>;
 export type RoleModelRefusal = 'role-unknown' | 'model-unknown' | 'tier' | 'role-not-held' | 'exception-not-current' | 'exception-dropped' | 'not-active';
 export type RoleModelDecision = Readonly<{ state: 'eligible'; basis: 'tier'; tier: ModelTier }>
+  | Readonly<{ state: 'eligible'; basis: 'connected'; tier: ModelTier | null }>
   | Readonly<{ state: 'eligible'; basis: 'exception'; tier: ModelTier | null; exceptionId: string; expiresOn: string }>
   | Readonly<{ state: 'refused'; reason: RoleModelRefusal }>;
-const holds = (row: ModelRolePolicy['models'][number], role: ModelRolePolicy['roles'][number]) => row.roles.includes(role.id) && rank(row.tier) >= rank(role.minimumTier);
+const holds = (row: ModelRolePolicy['models'][number], role: ModelRolePolicy['roles'][number]) => 'minimumTier' in role && row.roles.includes(role.id) && rank(row.tier) >= rank(role.minimumTier);
+const rowTier = (policy: ModelRolePolicy, key: string) => policy.models.find(row => roleModelKey(row) === key)?.tier ?? null;
 const current = (row: ModelRolePolicy['exceptions'][number], today: string) => dayNumber(row.declaredOn) <= dayNumber(today) && dayNumber(today) <= dayNumber(row.expiresOn);
 const measuredActive = (policy: ModelRolePolicy, role: ModelRolePolicy['roles'][number], active: ReadonlySet<string>) =>
   policy.models.some(row => row.measured !== undefined && holds(row, role) && active.has(roleModelKey(row)));
@@ -99,6 +104,8 @@ const measuredActive = (policy: ModelRolePolicy, role: ModelRolePolicy['roles'][
 export function decideRoleModel(policy: ModelRolePolicy, roleId: string, target: RoleModelTarget, facts: RoleModelFacts): RoleModelDecision {
   const role = policy.roles.find(row => row.id === roleId), key = roleModelKey(target);
   if (!role) return { state: 'refused', reason: 'role-unknown' };
+  if ('admits' in role) return !facts.catalog?.some(entry => roleModelKey(entry) === key) ? { state: 'refused', reason: 'model-unknown' }
+    : facts.active.has(key) ? { state: 'eligible', basis: 'connected', tier: rowTier(policy, key) } : { state: 'refused', reason: 'not-active' };
   const row = policy.models.find(entry => roleModelKey(entry) === key);
   if (row && holds(row, role)) return facts.active.has(key) ? { state: 'eligible', basis: 'tier', tier: row.tier } : { state: 'refused', reason: 'not-active' };
   const exception = policy.exceptions.find(entry => entry.role === role.id && roleModelKey(entry) === key);
@@ -109,11 +116,15 @@ export function decideRoleModel(policy: ModelRolePolicy, roleId: string, target:
   return { state: 'eligible', basis: 'exception', tier: row?.tier ?? null, exceptionId: exception.id, expiresOn: exception.expiresOn };
 }
 export type RoleModelRow = Readonly<{ channelId: string; modelId: string; tier: ModelTier; basis: 'tier'; measured: boolean; active: boolean }>
+  | Readonly<{ channelId: string; modelId: string; tier: ModelTier | null; basis: 'connected'; active: boolean }>
   | Readonly<{ channelId: string; modelId: string; tier: ModelTier | null; basis: 'exception'; exceptionId: string; expiresOn: string; active: boolean }>;
-/** Read port (S6R-5 recovery decision, S4B memory evaluator): every model the role may use today, in registry order, with its permission. */
+/** Read port (S6R-5 recovery decision, S4B memory evaluator, BeUser): every model the role may use today, in registry order (a `connected`
+ * role: catalog order), with its permission. */
 export function eligibleRoleModels(policy: ModelRolePolicy, roleId: string, facts: RoleModelFacts): readonly RoleModelRow[] {
   const role = policy.roles.find(row => row.id === roleId);
   if (!role) throw new ModelRoleError('MODEL_ROLE_NOT_REGISTERED');
+  if ('admits' in role) return Object.freeze([...new Map((facts.catalog ?? []).map(entry => [roleModelKey(entry), entry])).entries()].map(([key, entry]) => ({
+    channelId: entry.channelId, modelId: entry.modelId, tier: rowTier(policy, key), basis: 'connected' as const, active: facts.active.has(key) })));
   const rows: RoleModelRow[] = policy.models.filter(row => holds(row, role)).map(row => ({ channelId: row.channelId, modelId: row.modelId, tier: row.tier, basis: 'tier' as const,
     measured: row.measured !== undefined, active: facts.active.has(roleModelKey(row)) }));
   const listed = new Set(rows.map(roleModelKey));

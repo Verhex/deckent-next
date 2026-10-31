@@ -220,8 +220,9 @@
   "climodels.roles.table.tier": "Tier",
   "climodels.roles.table.roles": "Roles",
   "climodels.roles.table.state": "State",
-  "climodels.roles.legend": "Roles and the lowest tier each accepts: {roles}",
-  "climodels.roles.pendingFooter": "New model: role pending ({count}). No role may use these models until you assign one: deckent models roles set --channel <id> --model <id> --tier <tier> --roles <roles>",
+  "climodels.roles.legend": "Roles and what each accepts (a tier, or any connected, active model): {roles}",
+  "climodels.roles.pendingFooter": "New model: role pending ({count}). No tier-based role may use these models until you assign one: deckent models roles set --channel <id> --model <id> --tier <tier> --roles <roles>",
+  "climodels.roles.admits.connected": "any connected, active model",
   "climodels.roles.tier.worker": "worker",
   "climodels.roles.tier.frontier": "frontier",
   "climodels.roles.none": "none",
@@ -263,6 +264,6 @@
   "models.catalog.lifecycle.deprecated": "deprecated",
   "climodels.budget.usdRange": "The amount is whole US dollars from {min} to {max}: a monthly limit for every API provider of the scope.",
   "climodels.budget.command": "deckent models {action}",
-  "climodels.roles.pendingFooter.filled": "New model: role pending ({count}). No role may use these models until you assign one, for example:\n  deckent models roles set --channel {channel} --model {model} --tier worker --roles <one or more of {roles}>\n--tier takes worker or frontier; --roles a comma-separated list.",
+  "climodels.roles.pendingFooter.filled": "New model: role pending ({count}). No tier-based role may use these models until you assign one, for example:\n  deckent models roles set --channel {channel} --model {model} --tier worker --roles <one or more of {roles}>\n--tier takes worker or frontier; --roles a comma-separated list.",
   "climodels.roles.tierMeaning": "Tiers: worker runs ordinary tasks; frontier marks a top-capability model you trust for planning and review roles (Brain, recovery decisions). A role takes its tier or higher; the tier you set is your judgement, not a measurement."
 }

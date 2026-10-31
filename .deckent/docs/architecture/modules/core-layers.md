@@ -57,10 +57,11 @@ instead of an exact id; it expands through the model role registry when reached,
 `worker` role.
 
 Tier and role live in one versioned registry, `assets/model-roles/model-roles.json` (roles `brain`, `worker`, `recovery-decision`,
-`memory-evaluator`; tiers `worker` and `frontier`). Tier is eligibility and the scope's activation is permission; the Brain needs both,
+`memory-evaluator`; tiers `worker` and `frontier`; the BeUser walker and evaluator roles declare `admits: "connected"` instead of a
+tier, so every catalog model the scope has active serves them, see [BeUser](beuser.md)). Tier is eligibility and the scope's activation is permission; the Brain needs both,
 and a worker-tier, unknown or role-less Brain model is refused with `BRAIN_TIER_REFUSED` before any budget read or model call. A model
 the catalog lists without a role row is shown as pending ("new model: role pending") in `deckent doctor`, the monitor and the terminal
-`/roles` window, and every role refuses it until a person runs `deckent models roles set` on their own terminal card; the write is one
+`/roles` window, and every tiered role refuses it until a person runs `deckent models roles set` on their own terminal card; the write is one
 compare-and-set row in the global `model_roles` overlay, audited like other governed config writes. API-channel models connect from a
 registered catalog row (`connect.tariff`, `connect.route`): a model the release does not list needs no source change, and a row
 without usable terms is refused, never priced by guess. A model-family word in a source string literal fails the architecture check

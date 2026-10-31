@@ -35,7 +35,7 @@ const capture = () => { let text = ''; return { text: () => text, sink: { write:
 const tty = () => Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return undefined; } });
 const DIGEST = 'd'.repeat(64);
 const view: ModelRoleInspection = { schemaVersion: 1, scopeId: 'scope', revision: 'model-roles-2026-10-23', digest: DIGEST,
-  roles: [{ id: 'brain', minimumTier: 'frontier' }, { id: 'worker', minimumTier: 'worker' }],
+  roles: [{ id: 'brain', minimumTier: 'frontier' }, { id: 'worker', minimumTier: 'worker' }, { id: 'beuser-walker', admits: 'connected' }],
   models: [
     { channelId: 'anthropic-api', modelId: 'claude-sonnet-5-5', state: 'assigned', tier: 'worker', roles: ['worker'], version: 1, measured: false, exceptions: [],
       catalog: { channelId: 'anthropic-api', modelId: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', maker: 'anthropic', pricing: { kind: 'per-token', asOf: '2026-10-08', inputPerMTok: '2', outputPerMTok: '10' } } },
@@ -99,8 +99,9 @@ it('a cancelled card writes nothing and exits 1; a model outside the catalog is 
 
 it('show lists every catalog model with maker, tier, roles and the pending state in both languages; --json is the typed view', async () => {
   const f = await project(), calls: unknown[] = [];
-  for (const [lang, words] of [['en', ['claude-next-1', 'new model: role pending', 'assigned', 'anthropic', 'New model: role pending (1)', 'brain (frontier)']],
-    ['tr', ['yeni model: rol bekliyor', 'atanmış', 'Yeni model: rol bekliyor (1)', 'worker (işçi)']]] as const) {
+  for (const [lang, words] of [['en', ['claude-next-1', 'new model: role pending', 'assigned', 'anthropic', 'New model: role pending (1)', 'brain (frontier)',
+      'beuser-walker (any connected, active model)', 'one or more of brain,worker>']],
+    ['tr', ['yeni model: rol bekliyor', 'atanmış', 'Yeni model: rol bekliyor (1)', 'worker (işçi)', 'beuser-walker (bağlı ve etkin her model)']]] as const) {
     const out = capture();
     await modelsCommand(['models', 'roles', '--scope', 'scope', '--lang', lang], { root: f.root, env: f.env, stdout: out.sink, ...handlers(calls) } as never);
     for (const word of words) expect(out.text()).toContain(word);

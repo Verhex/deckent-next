@@ -45,9 +45,11 @@ export function assessBeuserReliability(sample: BeuserReliabilitySample, limits:
     acceptanceEvidence: reliable && outcome !== 'unknown', completedCriticalRepetitions, hitRate: calibration.hits / calibration.bad,
     falseRedRate: calibration.falseReds / calibration.good, calibrationRevision: calibration.revision, policyRevision: policy.revision });
 }
-/** Reruns are fresh Tasks, not loss Attempts. The caller shares its conservative invocation envelope across them. */
+/** Reruns are fresh Tasks, not loss Attempts. The caller shares its conservative invocation envelope across them. With `independence: 'reduced'`
+ * (BeUser, owner 2026-10-31) the label is information only: only calibration reruns. */
 export async function runBeuserReliability(input: {
   readonly budget: BeuserExecutionBudget;
+  readonly independence?: 'required' | 'reduced';
   readonly limits: BeuserLimits; readonly policy: unknown; readonly first: BeuserReliabilitySample;
   readonly alternatives: readonly BeuserRerunChoice[];
   readonly rerun: (choice: BeuserRerunChoice, previous: BeuserReliabilitySample, budget: BeuserExecutionBudget) => Promise<BeuserReliabilitySample>;
@@ -60,14 +62,15 @@ export async function runBeuserReliability(input: {
     const samples = [input.first], seen = new Set([JSON.stringify(input.first.choice)]);
     const rerunEvidence: { choice: BeuserRerunChoice; reason: 'calibration' | 'independence' | 'calibration-and-independence'; state: 'completed' | 'unknown' }[] = [];
     let current = input.first, result = assessBeuserReliability(current, input.limits, policy);
+    const wantsIndependence = () => input.independence !== 'reduced' && result.independence !== 'independent';
     for (const choice of input.alternatives) {
-      if (result.calibrated && result.independence === 'independent' || rerunEvidence.length >= input.limits.maxReruns
+      if (result.calibrated && !wantsIndependence() || rerunEvidence.length >= input.limits.maxReruns
         || !current.cleanupProven || current.unresolvedEffects || current.verdict.validity !== 'valid') break;
       const key = JSON.stringify(choice);
       if (seen.has(key) || choice.modelKey === current.choice.modelKey && choice.personaDigest === current.choice.personaDigest) continue;
       seen.add(key);
       if (input.budget.signal.aborted) { result = { ...result, outcome: 'unknown', acceptanceEvidence: false }; break; }
-      const attempt = { choice, reason: !result.calibrated && result.independence !== 'independent' ? 'calibration-and-independence' as const
+      const attempt = { choice, reason: !result.calibrated && wantsIndependence() ? 'calibration-and-independence' as const
         : !result.calibrated ? 'calibration' as const : 'independence' as const, state: 'unknown' as 'completed' | 'unknown' };
       rerunEvidence.push(attempt);
       let next: BeuserReliabilitySample;

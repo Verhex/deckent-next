@@ -115,7 +115,7 @@ describe('doctor rows (pure)', () => {
     const pending = Array.from({ length: 7 }, (_, index) => ({ modelId: `model-new-${index}`, channelId: 'anthropic-api' }));
     const en = doctorChecks(report, facts({ pendingRoleModels: pending }), 'en').filter(row => row.id === 'work.modelRoles');
     expect(en).toHaveLength(6);
-    expect(en[0]).toMatchObject({ state: 'warning', text: 'New model: role pending — model-new-0 (anthropic-api); no role may use it until a person assigns one',
+    expect(en[0]).toMatchObject({ state: 'warning', text: 'New model: role pending — model-new-0 (anthropic-api); no tier-based role may use it until a person assigns one',
       next: 'deckent models roles set --channel anthropic-api --model model-new-0 --tier <tier> --roles <roles> --scope live' });
     expect(en[5]).toMatchObject({ state: 'warning', text: 'New model: role pending — 2 more catalog models; see deckent models roles', next: 'deckent models roles --scope live' });
     expect(doctorChecks(report, facts({ pendingRoleModels: pending.slice(0, 1) }), 'tr').find(row => row.id === 'work.modelRoles')?.text).toContain('Yeni model: rol bekliyor');
