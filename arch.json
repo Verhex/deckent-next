@@ -4676,6 +4676,8 @@
         "src/adapters/core/beuser-realm",
         "src/adapters/core/beuser-surface",
         "src/adapters/core/file-artifacts",
+        "src/adapters/core/installation-artifacts",
+        "src/platform/core/host",
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/sqlite-model-activation",
         "src/capabilities/core/artifacts",

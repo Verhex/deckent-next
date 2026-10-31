@@ -41,12 +41,18 @@ it('shows EN/TR walk/report help without a host effect and refuses incomplete, d
     expect(chunks.at(-1)).toContain(`deckent beuser ${action}`);
   }
   expect(chunks[0]).not.toBe(chunks[1]);
-  expect(() => parseBeuserArguments(['beuser', 'walk', '--journey', 'j'])).toThrow();
+  // Owner S9: --candidate is optional (default: this package's build); --journey stays required.
+  expect(() => parseBeuserArguments(['beuser', 'walk', '--candidate', '/candidate'])).toThrow();
+  expect(parseBeuserArguments(['beuser', 'walk', '--journey', 'j'])).toMatchObject({ journey: 'j', candidate: undefined, scope: undefined });
   expect(() => parseBeuserArguments(['beuser', 'walk', '--journey', 'j', '--candidate', '/candidate', '--principal', 'owner'])).toThrow();
   expect(() => parseBeuserArguments(['beuser', 'report', '--run', 'r', '--run', 'other'])).toThrow();
   await expect(beuserCommand(['beuser', 'walk', '--journey', 'j', '--candidate', '/candidate', '--scope', 'scope'], {})).rejects.toMatchObject({ code: 'EXECUTION_NOT_CONFIGURED' });
   const setup = vi.fn(), ttyOut = { ...stdout, isTTY: true };
   await expect(beuserCommand(['beuser', 'setup', '--profile', 'p', '--scope', 'scope'], {
+    env: { CLAUDECODE: '1' }, stdin: { isTTY: true } as never, stdout: ttyOut, setupBeuser: setup,
+  })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  // The one-command walk (no --scope) shows the model choice and setup card: an AI-marked terminal is refused before any controller step.
+  await expect(beuserCommand(['beuser', 'walk', '--journey', 'onboarding'], {
     env: { CLAUDECODE: '1' }, stdin: { isTTY: true } as never, stdout: ttyOut, setupBeuser: setup,
   })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
   expect(setup).not.toHaveBeenCalled();
@@ -71,6 +77,8 @@ it('reports daemon-attested filesystem proof separately in EN/TR and locale-free
   expect(JSON.parse(formatBeuserReport(value, { json: true, locale: 'tr' }))).toEqual(value);
   const tr = formatBeuserReport(value, { json: false, locale: 'tr' }), en = formatBeuserReport(value, { json: false, locale: 'en' });
   expect(tr).toContain('daemon-attested'); expect(tr).toContain('bağımsız dosya sistemi kanıtı yok');
+  expect(en).toContain('Walker onboarding:'); expect(en).toContain('Judge for onboarding:');
+  expect(tr).toContain('Yürüyücü onboarding:'); expect(tr).toContain('onboarding yargıcı:');
   expect(en).toContain('daemon-attested'); expect(en).toContain('no independent filesystem proof');
   expect(() => formatBeuserReport({ ...value, cleanup: [{ ...value.cleanup[0], filesystemProof: { schemaVersion: 1, source: 'rm-exit' } }] }, { json: true, locale: 'en' })).toThrow();
 });

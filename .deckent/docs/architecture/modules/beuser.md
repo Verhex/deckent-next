@@ -112,7 +112,7 @@ raw manifest `sha256`, complete measured `fileCount` (including both metadata fi
 creation share the same loader: bounded stable package measurement recomputes the
 manifest digest, checks file count/package measurement and source identity against
 both release metadata and the manifest-pinned build identity, then runs the existing
-full distribution and credential verifier. Any mismatch returns localized
+full distribution and credential verifier. One-command preview also reads release identity only after successful measurement, reusing the same measured-size, hash-checked, regular-file reader with `O_NOFOLLOW | O_NONBLOCK`. Oversized, symlink, FIFO and changed metadata cannot start an unbounded sibling read. Any mismatch returns localized
 `BEUSER_CANDIDATE_MISMATCH` before launch. Neither metadata record is excluded.
 Old inline journey profiles must be regenerated; generic JSON guards, supervisor
 adapter v1, binding/evidence contracts, ledger and protocol versions are unchanged.
@@ -125,6 +125,28 @@ pool owner provisions the matching pool separately; a failed pool step is return
 can be reconciled by repeating setup. An equal registry is not rewritten; a different existing
 registry or pool is refused for governed reconciliation. `beuser.*` remains a protected root;
 execution profiles continue to live in the general execution registry.
+
+### One-command walk (owner S9, alpha.60 source candidate)
+
+`deckent beuser walk --journey <id> [--candidate <path>]` without `--scope` runs from any folder on the
+person's terminal (an AI-marked or piped terminal is refused before any step). Its controller is the
+private Deckent installation at `<global state root>/beuser-controller` (folder name and the profile's
+terminal, bounds and pool values in the versioned `assets/beuser/controller.json`); its scope is that
+installation's `terminal.scopeId`. The command creates only the folder: the person installs it and
+connects subscriptions or keys there with the existing onboarding and `/provider` (`cd <controller> &&
+deckent`); without an active connected model it prints that next step and refuses
+`BEUSER_MODEL_UNAVAILABLE` with nothing staged. Otherwise a card lists the connected models with
+a toggle for each walker and a Continue row. Each provider starts with its first active, invocable seed recommendation, or its first connected catalog row when no seed recommendation is available. The person selects 1–4 walkers, then one judge in a separate card; the first recommended subscription model is preselected for the judge, falling back visibly to the first recommended connected model. Empty and over-ceiling selections stay on the walker card with a correction message. No model is chosen silently.
+The profile is built in product code the way the packaged example builds it (first branch, first
+persona, its probe set, v3 start state) from this package's journey, persona and calibration assets
+and the measured candidate, with one distinct profile and Task per selected walker: by default this package's own build, which must be a staged dev-release
+(a source checkout is refused `BEUSER_CANDIDATE_MISMATCH`). The environment reference digests the realm
+recipe revision and the controller's configured image (null when absent; the walk then reports
+`EXECUTION_NOT_CONFIGURED`). Contributor receipts are recorded as unavailable. The setup card shows
+journey, candidate version and revision, each walker, the judge, per-walker shared walk/judge budget and completion reservation, aggregate call/token/cost ceilings, execution/in-flight slots before→after and the content digest. A judge also selected as a walker is labelled `reduced`; a different model alone remains `unknown` independence, with unavailable contributor receipts. The judge consumes each walker's existing envelope; the limits registry is unchanged; Esc or Cancel applies nothing. Setup in this mode may replace an existing registry
+only when all its profiles are BeUser profiles. `beuser-controller-2` records the lead's measured capacity ceiling of four execution/in-flight slots; the selected walk uses exactly its walker count. Only these two pool fields may change, after the person sees before→after and approves; other pool fields remain equal. The existing policy-checked pool capacity command owns a stored capacity change (including occupied-shrink refusal). This requires installation-wide `set-capacity` authority; a scope-only owner grant is refused as `POLICY_DENIED`, even after the person approves the setup card. Setup never creates that grant, and the normal installer provisions a fresh pool. Config and pool are separate durable writes; a failure after config publication remains explicit and requires reconciliation, never a fabricated completed walk. Any other difference is still `BEUSER_SETUP_CONFLICT`. The walk then runs under the
+same admission; human output separates walker diagnostics from each judge verdict, preserving unknown results. The output ends with the walked revision and `cd <controller> && deckent beuser
+report`. The `--scope` form is unchanged and also defaults `--candidate` to this package's build.
 
 ### Walker and evaluator models (owner 2026-10-31)
 
