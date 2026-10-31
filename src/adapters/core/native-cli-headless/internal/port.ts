@@ -54,13 +54,13 @@ function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prep
 /** The governed result in the chat-completion shape the Brain reads; counters keep the reported model id and quota windows, never a cost. */
 function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress) {
   const usage = line.usage, input = count(usage.input_tokens), output = count(usage.output_tokens), cacheRead = count(usage.cache_read_input_tokens), cacheWrite = count(usage.cache_creation_input_tokens);
-  const reported = line.modelUsage?.[prepared.model] ?? {};
+  // The per-model counters only as reported and valid; otherwise none (unknown is never a provider-reported zero).
+  const reported = reportedCounters(line.modelUsage?.[prepared.model], ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens']) ?? {};
   return Object.freeze({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: prepared.model, choices: [{ index: 0, message: { role: 'assistant', content: line.result ?? '' },
     finish_reason: line.stopReason !== null && guards.lengthStopReasons.includes(line.stopReason) ? 'length' : 'stop' }],
   headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason, egress: { ...egress, ...headlessEgressReasons(egress) } } },
   usage: { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output, total_tokens: input + cacheRead + cacheWrite + output, cache_read: cacheRead, cache_write: cacheWrite,
-    modelUsage: { [prepared.model]: { inputTokens: count(reported.inputTokens), outputTokens: count(reported.outputTokens), cacheReadInputTokens: count(reported.cacheReadInputTokens),
-      cacheCreationInputTokens: count(reported.cacheCreationInputTokens) } }, quota } });
+    modelUsage: { [prepared.model]: reported }, quota } });
 }
 /** The Claude Code stream-json turn: init guard, no retry, model checks on every message, quota windows, then the result's own guard. */
 function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: string, onDelta?: ModelInvocationDeltaSink): HeadlessTurn {

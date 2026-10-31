@@ -27,10 +27,10 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
   return {
     line(raw) {
       const line = parseCodexExecLine(raw);
+      // The completed turn is final: no further line (parsed or not; a blank one is no line) may follow it.
+      if (usage && !(line.kind === 'invalid' && line.reason === 'blank')) return reject('invalid-response', { refusal: 'guard', field: 'after-turn' });
       if (line.kind === 'invalid') return null;
       const { type, item } = line;
-      // The completed turn is final: nothing may change its answer or counters afterwards.
-      if (usage) return reject('invalid-response', { refusal: 'guard', field: 'after-turn' });
       if (type === 'thread.started') { if (thread) return reject('invalid-response', { refusal: 'guard', field: 'thread' }); thread = true; return null; }
       if (type === 'turn.started') return ++turns > prepared.entry.headless.maxTurns || !thread ? reject('invalid-response', { refusal: 'guard', field: 'turn' }) : null;
       if (type === 'error' || type === 'turn.failed') return failure(line.errorText, type);

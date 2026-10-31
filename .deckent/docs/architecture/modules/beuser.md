@@ -47,10 +47,11 @@ The limits registry contains the `b1-dogfood-provisional-1` profile and, from `b
 `b1-dogfood-provisional-2`, which the packaged journeys, personas and calibration use: 256 calls,
 16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged. Their finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
-and replacement. Each model call reserves the invocation adapter's measured prompt count, including
-the served template, plus the requested completion cap. A missing, unsupported or failed counter
-refuses the call as `BEUSER_LIMITS_UNAVAILABLE` before inference; a byte-based estimate cannot admit
-a strict token reservation. The preview, count and send retain the same profile pin. An envelope that
+and replacement. Each model call reserves its prompt size plus the requested completion cap: the
+invocation adapter's measured prompt count (including the served template) where the transport has a
+counter, otherwise the registry-declared estimate described under token reservations below (CLI
+headless steps and the ChatGPT sign-in). A failed counter, or a transport with neither, refuses the
+call as `BEUSER_LIMITS_UNAVAILABLE` before inference; an estimate is never a count. The preview, count and send retain the same profile pin. An envelope that
 exceeds the configured or provider-reported window or remaining budget is refused before invocation. Valid final provider usage can reduce
 only that call's token reservation once; missing or uncertain usage retains it, and an overrun refuses
 without widening the bound. Call counts and monetary reservations remain consumed. A typed local

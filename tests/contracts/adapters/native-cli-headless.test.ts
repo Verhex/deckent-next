@@ -255,8 +255,10 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
         await write({ steps: ended(usage) });
         expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'usage' });
       }
-      await write({ steps: ended(valid, [{ type: 'item.completed', item: { id: 'item_9', type: 'agent_message', text: 'B' } }]) });
-      expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'after-turn' });
+      for (const late of [{ type: 'item.completed', item: { id: 'item_9', type: 'agent_message', text: 'B' } }, 'not json']) {
+        await write({ steps: ended(valid, [late as Record<string, unknown>]) });
+        expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'after-turn' });
+      }
       await write({ steps: ended({ input_tokens: 0, output_tokens: 0 }) });
       await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'A' } }] }, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
       for (const login of ['api-key', 'none'] as const) {

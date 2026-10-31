@@ -183,9 +183,9 @@ thread and one turn and stops the process on any item other than the answer and 
 `item.<type>`); an error line is `quota` (the worker's `providers.json` patterns), `login-required` (registry patterns) or `invalid-output`.
 The guard acts on an event the CLI reports, so it is not a pre-effect block: the read-only sandbox and the realm bound what could already
 have run, and the realm still leaves its private memory and the login directory's state writable. The completed turn is final (any later
-line is `guard`, field `after-turn`), and its usage must carry valid input and output counters, with cache counts within the input total;
+non-blank line, parsed or not, is `guard`, field `after-turn`), and its usage must carry valid input and output counters, with cache counts within the input total;
 a missing, empty or malformed record is `guard`, field `usage` (the Claude result's four counters likewise), so an unknown consumption
-never settles a reservation as zero.
+never settles a reservation as zero; per-model counters that are missing or invalid stay absent, never a provider-reported zero.
 The preflight reads `codex login status` (exit 0 and `Logged in using ChatGPT` on stderr; an API key is `HEADLESS_LOGIN_REQUIRED`). The
 stream names no model, so the answer is attributed to the argv-pinned id (`modelEvidence: argv`), weaker than the Claude guard; the
 worker's rollout reader does not apply because the call keeps no session file. The flags are sourced from `codex exec --help` 0.166.0 and
