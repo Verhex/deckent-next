@@ -270,7 +270,8 @@
         "src/surfaces/core/terminal-hub",
         "src/surfaces/core/siwc",
         "src/surfaces/core/terminal-provider",
-        "src/surfaces/core/terminal-session"
+        "src/surfaces/core/terminal-session",
+        "src/surfaces/core/terminal-beuser"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [

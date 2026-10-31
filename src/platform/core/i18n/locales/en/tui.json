@@ -1208,5 +1208,6 @@
   "tui.theme.sample.diffAdded": "+ added line",
   "tui.theme.sample.diffRemoved": "- removed line",
   "tui.theme.sample.mutedId": "id: preview-only",
-  "tui.theme.sample.codeBlock": "Code block: | console.log(ready);"
+  "tui.theme.sample.codeBlock": "Code block: | console.log(ready);",
+  "tui.beuser.slash": "Inspect BeUser walks and limits"
 }

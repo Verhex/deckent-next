@@ -148,6 +148,41 @@ only when all its profiles are BeUser profiles. `beuser-controller-2` records th
 same admission; human output separates walker diagnostics from each judge verdict, preserving unknown results. The output ends with the walked revision and `cd <controller> && deckent beuser
 report`. The `--scope` form is unchanged and also defaults `--candidate` to this package's build.
 
+### BS part 2b author slice (alpha.60 candidate)
+
+An omitted `--journey` opens a list of the packaged journey files on the person's terminal,
+with the package's recommendation marked; AI and pipe callers cannot answer it. Esc cancels.
+Sequential cards resume the input stream paused by the previous card; decision arming and
+text/key filtering remain unchanged.
+The existing exclusive write-lock custody protects a walk across processes and is checked again
+before setup publication: a second invocation refuses with `BEUSER_WALK_RUNNING` and points to
+`/beuser`, without another Run. Unsupported controller config versions retain their typed
+`CONFIG_VERSION_UNSUPPORTED` refusal instead of becoming a missing-model suggestion.
+
+For an existing pool resize, installation-wide `set-capacity` authorization is checked before
+any config publication. A denial preserves the authored config bytes. The capacity owner checks
+authority again when applying; a failure after config publication returns `applied-unverified`,
+and the CLI states the partial effect. This is not an atomic config/pool transaction.
+
+`/beuser` opens the terminal monitor through the production CLI host and workline settings port.
+It shows the recorded Run/journey, walker and judge models, branch progress, elapsed time, pinned
+limits and early-stop reasons. Parked Run reasons remain visible before a report exists. State
+and observation age do not prove process liveness; `r` refreshes and Esc closes only the window.
+The next walk's limits are shown separately from the recorded walk's snapshot.
+
+Owner 2026-11-01: `beuser.limits` can narrow time, reruns, steps and spend through the same
+ConfigApplication policy/approval/digest/audit writer. Values above the code ceiling are refused
+with the versioned-record remedy. The monitor offers presets, an exact preview and a separate
+armed person card with no default answer; it has no inline field editor or AI/MCP write route.
+An approval-held change opens the existing approval surface and writes nothing until the same
+pending command is approved and resubmitted. Denial leaves config unchanged.
+
+New setup/admission pins effective budgets in journey profile v4. The Attempt, captured supervisor,
+realm, monitor record and recovery consume that snapshot, including its code/config source; later
+config cannot rewrite a recorded Attempt. v2/v3 records still resolve their original limits revision
+and original start-state semantics; no ledger migration is introduced. Author checks and fixture PTYs
+are separate from the assembled release BeUser walk, native-platform and independent acceptance.
+
 ### Walker and evaluator models (owner 2026-10-31)
 
 The `beuser-walker` and `beuser-evaluator` roles declare `admits: "connected"` in the model role registry

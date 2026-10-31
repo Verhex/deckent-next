@@ -1208,5 +1208,6 @@
   "tui.theme.sample.diffAdded": "+ eklenen satır",
   "tui.theme.sample.diffRemoved": "- kaldırılan satır",
   "tui.theme.sample.mutedId": "kimlik: yalnız-önizleme",
-  "tui.theme.sample.codeBlock": "Kod bloğu: | console.log(ready);"
+  "tui.theme.sample.codeBlock": "Kod bloğu: | console.log(ready);",
+  "tui.beuser.slash": "BeUser yürüyüşlerini ve sınırlarını incele"
 }

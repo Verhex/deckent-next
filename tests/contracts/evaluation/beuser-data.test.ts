@@ -10,7 +10,7 @@ import good from '../../../assets/beuser/calibration/known-good.json' with { typ
 import bad from '../../../assets/beuser/calibration/known-bad.json' with { type: 'json' };
 import { beuserBindingSchema, beuserSealedRubricSchema } from '#domain/core/beuser/index.js';
 import { pinBeuserWalkerSummary, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserArrangeRegistrySchema, beuserArrangePlan } from '#engine/core/beuser-contract/index.js';
-import { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
+import { beuserJourneyProfileSchema, beuserProfileLimits, pinBeuserProfile } from '#composition/core/supervisors/index.js';
 import { BEUSER_REALM_RECIPE } from '#adapters/core/beuser-realm/index.js';
 import arrange from '../../../assets/beuser/arrange.json' with { type: 'json' };
 import { beuserReliabilityPolicySchema } from '#engine/core/beuser/index.js';
@@ -119,6 +119,20 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
     const startState = { schemaVersion: 2, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, states: ['T1'] };
     const ok = (value: object) => beuserJourneyProfileSchema.safeParse(value).success;
     expect(ok(v2)).toBe(true);
+    const old = beuserJourneyProfileSchema.parse(v2), v3 = beuserJourneyProfileSchema.parse({ ...v2, schemaVersion: 3, startState });
+    expect(beuserProfileLimits(old)).toEqual(BEUSER_LIMITS_REGISTRY.profiles[0]);
+    expect(beuserProfileLimits(v3)).toEqual(BEUSER_LIMITS_REGISTRY.profiles[0]);
+    const v4 = pinBeuserProfile(v3, { maxWallMs: 10000, maxSteps: 30, maxReruns: 1, maxCost: 0.5 });
+    expect(v4).toMatchObject({ schemaVersion: 4, startState, limitsRevision: v2.limitsRevision,
+      limits: { maxWallMs: 10000, maxWaitMs: 10000, cleanupDeadlineMs: 10000, maxSteps: 30, maxReruns: 1, maxCost: 0.5, source: 'config' } });
+    expect(beuserProfileLimits(pinBeuserProfile(v4, {}))).toEqual(v4.limits);
+    expect(beuserProfileLimits(pinBeuserProfile(v4, { maxWallMs: 1200000, maxSteps: 242, maxReruns: 2, maxCost: 1 }))).toEqual(v4.limits);
+    expect(ok({ ...v4, limits: undefined })).toBe(false);
+    expect(ok({ ...v3, limits: v4.limits })).toBe(false);
+    for (const change of [{ maxWallMs: 1200001 }, { maxSteps: 243 }, { maxReruns: 3 }, { maxCost: 1.01 }, { maxCalls: 129 }, { currency: 'OTHER' }, { revision: 'other' }, { source: 'invented' }])
+      expect(ok({ ...v4, limits: { ...v4.limits, ...change } }), JSON.stringify(change)).toBe(false);
+    expect(pinBeuserProfile(old, {}).startState).toBeUndefined();
+
     expect(ok({ ...v2, schemaVersion: 3, startState })).toBe(true);
     expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, states: [] } })).toBe(true);
     expect(ok({ ...v2, startState })).toBe(false);

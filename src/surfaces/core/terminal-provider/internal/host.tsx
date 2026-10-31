@@ -13,6 +13,7 @@ export function SettingsPanel({ kind, ports, labels, push, onError, errorText, o
   const [theme, setTheme] = useState(false);
   if ((kind === 'theme' || kind === 'config' && theme) && ports.theme) return <ThemePanel port={ports.theme} labels={labels} push={push}
     openApproval={openApproval} onError={onError} onClose={onClose} />;
+  if (kind === 'beuser' && ports.beuser) return ports.beuser.render({ labels, push, onError, onClose, openApproval });
   if (kind === 'hub' && ports.hub) return ports.hub.render({ labels, push, onError, onClose });
   if (kind === 'mode' && ports.mode) return <ModePanel port={ports.mode} labels={labels} onError={onError} onClose={onClose} />;
   if (kind === 'policy' && ports.policy && labels.policy) return <PolicyPanel port={ports.policy} labels={labels} push={push} onError={onError} onClose={onClose} />;

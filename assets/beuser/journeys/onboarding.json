@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "revision": "b1-onboarding-1",
   "journeyId": "onboarding",
+  "recommended": true,
   "limitsProfile": "b1-dogfood-provisional-3",
   "branches": [
     {

@@ -24,7 +24,7 @@ export interface WorklineActionLabels {
   readonly watchNotInitialized?: string; readonly watchAccessDenied?: string;
   readonly watchAccessStopped?: string;
   readonly statusLine: string;
-  readonly unknownCommand: string;
+  readonly unknownCommand: string; readonly commandUnavailable?: string;
   /** The same registry-derived labels as the palette; optional for callers without a composer. */
   readonly composer?: { readonly slash: Readonly<Record<string, string>> };
   /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
@@ -133,6 +133,7 @@ export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
   const { labels, watch, ledger } = context;
+  if (command === 'beuser') return { entries: [notice('error', fillTemplate(labels.commandUnavailable ?? labels.ledgerUnavailable, { part: command }))] };
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
   if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };

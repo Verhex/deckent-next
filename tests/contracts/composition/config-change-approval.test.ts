@@ -94,6 +94,27 @@ describe('config-change approval: request, decision, apply', () => {
     // Without --expect the same command id previews the new layer: another change, another request — never the old allow.
     expect(await f.app.submit('set', { ...f.command, commandId: 'cmd-1', keyPath: 'max_workers', value: 2 })).toMatchObject({ status: 'approval-pending' });
     expect(await bytesOf(f.path)).toBe(after); expect(f.auditCount()).toBe(audits + 1);
+    // BS-B7: all four config limits narrow, with no extra effect owner or approval bypass.
+    const beforeLimits = await bytesOf(f.path);
+    for (const [keyPath, value] of [['beuser.limits.maxWallMs', 3600001], ['beuser.limits.maxReruns', 3], ['beuser.limits.maxSteps', 243], ['beuser.limits.maxCost', 3.01],
+      ['beuser.limits', { maxCost: 3.01 }], ['beuser', { limits: { maxSteps: 243 } }]] as const) {
+      await expect(f.app.submit('set', { ...f.command, commandId: `raise-${keyPath}`, keyPath, value })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION', message: expect.stringContaining('Config only narrows') });
+      expect(await bytesOf(f.path)).toBe(beforeLimits);
+    }
+    await f.app.submit('set', { ...f.command, commandId: 'narrow-allow', keyPath: 'beuser.limits', value: { maxWallMs: 900000, maxReruns: 1, maxSteps: 120, maxCost: 1 } });
+    expect(JSON.parse((await bytesOf(f.path))!).beuser.limits).toEqual({ maxWallMs: 900000, maxReruns: 1, maxSteps: 120, maxCost: 1 });
+    await f.writePolicy(principals => [{ id: 'company-limits-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals, resource: { kind: 'config', ids: ['project:beuser.limits.maxSteps'] } }]);
+    const held = await f.app.submit('set', { ...f.command, commandId: 'narrow-card', keyPath: 'beuser.limits.maxSteps', value: 60 });
+    expect(held.status).toBe('approval-pending'); if (held.status !== 'approval-pending') throw new Error('expected person card');
+    expect(JSON.parse((await bytesOf(f.path))!).beuser.limits.maxSteps).toBe(120);
+    expect(approvalSubject((await f.list()).find(row => row.request.approvalId === held.approval.approvalId)!.request)).toMatchObject({ keyPath: 'beuser.limits.maxSteps', before: '120', after: '60' });
+    await f.decide(held.approval.approvalId, 'allow', 'allow-narrow-card');
+    expect(await f.app.submit('set', { ...f.command, commandId: 'narrow-card', keyPath: 'beuser.limits.maxSteps', value: 60, expect: held.expect })).toMatchObject({ status: 'applied' });
+    expect(JSON.parse((await bytesOf(f.path))!).beuser.limits.maxSteps).toBe(60);
+    await f.writePolicy(principals => [{ id: 'company-limits-deny', effect: 'deny', actions: ['write'], scopes: ['installation'], principals, resource: { kind: 'config', ids: ['project:beuser.limits.maxSteps'] } }]);
+    const deniedBytes = await bytesOf(f.path);
+    await expect(f.app.submit('set', { ...f.command, commandId: 'narrow-deny', keyPath: 'beuser.limits.maxSteps', value: 30 })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await bytesOf(f.path)).toBe(deniedBytes);
   });
 
   it('unset is approval-held the same way (after = removed, no value digest)', async () => {
@@ -293,7 +314,7 @@ describe('REVIEW2561 R1: the AI floor over the real terminal boundary keys, on t
       { id: 'company-fetch-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals: both, resource: { kind: 'config', ids: ['project:terminal.fetch'] } },
       { id: 'company-mcp-approvals', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['installation'], principals: both, resource: { kind: 'approval', ids: 'all' } }]);
     const asMcp = { ...f.command, principal: mcp }, before = await bytesOf(f.path);
-    const widening: readonly [string, unknown][] = [['terminal.shell.realm', 'host'], ['terminal.shell.environment', ['AWS_SECRET_ACCESS_KEY']],
+    const widening: readonly [string, unknown][] = [['beuser.limits.maxSteps', 30], ['beuser.limits', { maxSteps: 30 }], ['beuser', { limits: { maxSteps: 30 } }], ['terminal.shell.realm', 'host'], ['terminal.shell.environment', ['AWS_SECRET_ACCESS_KEY']],
       ['terminal.fetch.egress', 'approval'], ['terminal.fetch.allowedHosts', ['evil.example']], ['terminal.shell', { schemaVersion: 1, realm: 'host' }],
       ['terminal.fetch', { schemaVersion: 1, egress: 'allowlist', allowedHosts: ['evil.example'] }], ['terminal', { shell: { schemaVersion: 1, realm: 'host' } }]];
     for (const [keyPath, value] of widening) {

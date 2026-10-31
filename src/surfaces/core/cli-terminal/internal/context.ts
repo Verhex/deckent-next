@@ -59,6 +59,7 @@ export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
 export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommandContext, HubCommandContext, Pick<ModelCommandContext, 'inspectModelRoles' | 'inspectModelBinding' | 'inspectModelActivation' | 'manageProviderSpend'> {
   /** BeUser DR3-02: the configured pool's hold (`deckent pool status`), read for the /do card. */
+  inspectBeuserMonitor?: (options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-beuser/index.js').BeuserMonitorView | null>;
   inspectPoolHold?: (root: string, query: { schemaVersion: 1; scopeId: string; poolId?: string | undefined }, options: ConfigLoadOptions) => Promise<import('#engine/index.js').PoolHoldView>;
   changeDeliveryDismissal?: (root: string, input: Readonly<{ scopeId: string; runId: string; taskId: string; attemptId: string; action: 'dismiss' | 'restore' }>, options: ConfigLoadOptions) => Promise<void>; /* BeUser M-33: person card */
   openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;

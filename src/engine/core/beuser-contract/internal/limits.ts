@@ -27,3 +27,43 @@ export function pinBeuserLimits(input: unknown): BeuserLimits {
   if (!parsed.success) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
   return parsed.data;
 }
+
+/** Versioned persisted profile invariant, not configurable business policy. */
+export const BEUSER_JOURNEY_PROFILE_VERSION = 4;
+type LimitProfile = { readonly schemaVersion: number; readonly limitsRevision: string; readonly limits?: BeuserLimits | undefined };
+/** The four configurable budgets may narrow; every other ceiling and metadata field keeps its versioned meaning. */
+export function validPinnedBeuserLimits(revision: string, limits: BeuserLimits): boolean {
+  const ceiling = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === revision);
+  if (!ceiling) return false;
+  const keys = ['maxWallMs', 'maxReruns', 'maxSteps', 'maxCost'] as const;
+  if (keys.some(key => limits[key] > ceiling[key])) return false;
+  const expected = { ...ceiling, ...Object.fromEntries(keys.map(key => [key, limits[key]])),
+    maxWaitMs: Math.min(ceiling.maxWaitMs, limits.maxWallMs), cleanupDeadlineMs: Math.min(ceiling.cleanupDeadlineMs, limits.maxWallMs),
+    source: keys.some(key => limits[key] < ceiling[key]) ? 'config' : ceiling.source };
+  return Object.entries(expected).every(([key, value]) => limits[key as keyof BeuserLimits] === value);
+}
+/** Recorded execution/recovery never re-read mutable config. v2/v3 keep their original registry lookup. */
+export function beuserProfileLimits(data: LimitProfile): BeuserLimits {
+  const limits = data.schemaVersion === BEUSER_JOURNEY_PROFILE_VERSION ? data.limits : BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === data.limitsRevision);
+  if (!limits) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+  return limits;
+}
+/** Pin budget data at setup/new Attempt admission; recorded recovery uses beuserProfileLimits directly. */
+export type BeuserLimitOverrides = { readonly [K in 'maxWallMs' | 'maxReruns' | 'maxSteps' | 'maxCost']?: number | undefined };
+export function narrowBeuserLimits(data: LimitProfile, overrides: BeuserLimitOverrides): BeuserLimits {
+  const base = beuserProfileLimits(data), keys = ['maxWallMs', 'maxReruns', 'maxSteps', 'maxCost'] as const;
+  const budgets = Object.fromEntries(keys.map(key => [key, Math.min(base[key], overrides[key] ?? base[key])]));
+  const maxWallMs = budgets['maxWallMs']!;
+  const limits = { ...base, ...budgets, maxWaitMs: Math.min(base.maxWaitMs, maxWallMs), cleanupDeadlineMs: Math.min(base.cleanupDeadlineMs, maxWallMs) };
+  const ceiling = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === data.limitsRevision)!;
+  limits.source = keys.some(key => limits[key] < ceiling[key]) ? 'config' : ceiling.source;
+  return beuserLimitsSchema.parse(limits);
+}
+/** New snapshot only: callers validate the profile and config at their trust boundaries before pinning. */
+export function pinBeuserProfile<T extends LimitProfile>(data: T, overrides: BeuserLimitOverrides): Omit<T, 'schemaVersion' | 'limits'> & { schemaVersion: typeof BEUSER_JOURNEY_PROFILE_VERSION; limits: BeuserLimits } {
+  return { ...data, schemaVersion: BEUSER_JOURNEY_PROFILE_VERSION, limits: narrowBeuserLimits(data, overrides) };
+}
+const monitorModel = z.object({ channelId: z.string(), modelId: z.string() }).strict();
+/** Read-only observation snapshot; not authority or process liveness. Optional limits preserve old monitor records. */
+export const beuserMonitorRecord = z.object({ schemaVersion: z.literal(1), runId: z.string(), journey: z.string(), startedAt: z.number(),
+  walkers: z.array(z.object({ id: z.string(), walker: monitorModel, judge: monitorModel, limitsRevision: z.string(), limits: beuserLimitsSchema.optional() }).strict()) }).strict();
