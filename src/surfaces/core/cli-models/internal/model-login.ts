@@ -29,11 +29,11 @@ function parse(argv: readonly string[]) {
 const dirLine = (dir: Readonly<{ configDir: string; owned: boolean }>, locale: Locale) => dir.owned ? t('headless.login.dirOwned', { dir: terminalSafeText(dir.configDir) }, locale)
   : t('headless.login.dirOther', { dir: terminalSafeText(dir.configDir) }, locale);
 /** The sign-in's outcome in the person's words: signed in (kind and plan), not signed in, or stopped. */
-export function renderHeadlessLogin(view: HeadlessLoginView, locale: Locale): string {
+export function renderHeadlessLogin(view: HeadlessLoginView, locale: Locale, connection: string): string {
   const lines = [dirLine(view, locale)];
   if (view.exit !== 'completed') lines.push(view.exit === 'cancelled' ? t('headless.login.cancelled', {}, locale) : t('headless.login.failed', {}, locale));
-  lines.push(view.signedIn ? t('headless.login.signedIn', { method: terminalSafeText(view.authMethod ?? '-'), plan: view.subscriptionType ? ` (${terminalSafeText(view.subscriptionType)})` : '' }, locale)
-    : t('headless.login.notSignedIn', {}, locale));
+  lines.push(view.signedIn ? t('headless.login.signedIn', { method: terminalSafeText(view.authMethod ?? '-'), plan: view.subscriptionType ? ` (${terminalSafeText(view.subscriptionType)})` : '',
+    connection: terminalSafeText(connection) }, locale) : t('headless.login.notSignedIn', { connection: terminalSafeText(connection) }, locale));
   return lines.join('\n');
 }
 
@@ -51,10 +51,10 @@ export async function modelLoginCommand(argv: readonly string[], context: ModelC
   const value = (flag: string) => parsed.values.get(flag);
   const command = { connection: value('--connection')!, ...(value('--config-dir') ? { configDir: value('--config-dir')! } : {}),
     ...(value('--executable') ? { executable: value('--executable')! } : {}), ...(parsed.sso ? { sso: true } : {}) };
-  const view = await login(command, { env: context.env ?? process.env }, async dir => await askModelsCard(context, locale, { title: t('headless.login.card.title', {}, locale),
+  const view = await login(command, { env: context.env ?? process.env }, async dir => await askModelsCard(context, locale, { title: t('headless.login.card.title', { connection: terminalSafeText(command.connection) }, locale),
     body: [dirLine(dir, locale), t('headless.login.card.what', {}, locale)],
     options: modelsConfirmOptions(locale) }) === 'apply');
   if (!view) { reportModelsCancelled(context, locale); return EXIT_CODES.error; }
-  emit(renderHeadlessLogin(view, locale), { ...sinks, ...(view.signedIn ? {} : { level: 'warning' as const }) });
+  emit(renderHeadlessLogin(view, locale, command.connection), { ...sinks, ...(view.signedIn ? {} : { level: 'warning' as const }) });
   return view.signedIn && view.exit === 'completed' ? undefined : EXIT_CODES.error;
 }

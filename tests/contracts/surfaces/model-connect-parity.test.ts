@@ -89,7 +89,7 @@ describe('models.connect surface parity', () => {
     await run([]);
     const base = { schemaVersion: 1, commandId: 'c-9', scopeId: 'scope', connection: 'claude-cli-subscription', endpoint: null, model: { nativeId: 'vendor-model' } };
     expect(seen).toEqual([{ ...base, cli: { executable: '/opt/cli', configDir: '/home/p/.claude' }, delegate: ['ai'] }, { ...base, delegate: [] }, base]);
-    expect(out[0]).toContain('Claude login used: /home/p/.claude'); expect(out[0]).toContain('Besides you, these may use this login after your consent: ai.');
+    expect(out[0]).toContain('CLI login used: /home/p/.claude'); expect(out[0]).toContain('Besides you, these may use this login after your consent: ai.');
     for (const bad of [['--delegate', 'everyone'], ['--executable', 'relative/cli']]) await expect(run(bad)).rejects.toMatchObject({ code: expect.stringMatching(/^(CLI_USAGE|MODEL_CONNECT_INVALID)$/u) });
     const help: string[] = [];
     await modelsCommand(['models', 'connect', '--help', '--lang', 'tr'], { root: '/p', env: {}, stdout: { write: (text: string) => { help.push(text); return true; } } as never, connectModel: async () => cli });
