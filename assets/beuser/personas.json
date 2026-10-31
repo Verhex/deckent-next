@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "revision": "b1-personas-1",
-  "limitsProfile": "b1-dogfood-provisional-1",
+  "limitsProfile": "b1-dogfood-provisional-2",
   "personas": [
     {
       "schemaVersion": 1,
