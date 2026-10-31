@@ -54,13 +54,16 @@ const connect = (nativeId: string, commandId: string, connection = 'anthropic-ap
   ({ schemaVersion: 1, commandId, scopeId: 'scope', connection, endpoint, model: { nativeId } });
 
 describe.skipIf(process.platform !== 'linux')('models.connect from a registered catalog row', () => {
-  it('BeUser M-24: a CLI worker channel without a worker image says the image comes first (never "check the key"), nothing written', async () => {
+  it('BeUser M-24: a worker-only CLI channel (Cursor) without a worker image says the image comes first (never "check the key"); Codex, a headless kind, is not refused for the image (owner 2026-10-31); nothing written', async () => {
     const f = await harness(true), before = JSON.stringify(await f.config());
-    await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'codex-first', scopeId: 'scope', connection: 'codex-cli-subscription', endpoint: null, model: { pull: 'available' } }, f.options))
-      .rejects.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED', params: { cli: 'codex' } });
+    await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'cursor-first', scopeId: 'scope', connection: 'cursor-cli-subscription', endpoint: null, model: { pull: 'available' } }, f.options))
+      .rejects.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED', params: { cli: 'cursor' } });
     // Mert M-35: the single-model form (`--model`) passes the same gate in the shared application path, no roles assigned.
+    await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'cursor-model', scopeId: 'scope', connection: 'cursor-cli-subscription', endpoint: null, model: { nativeId: 'composer-2.5' } }, f.options))
+      .rejects.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED', params: { cli: 'cursor' } });
+    // Codex without an image reaches its headless preflight instead (this harness has no Codex CLI), and still writes nothing.
     await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'codex-model', scopeId: 'scope', connection: 'codex-cli-subscription', endpoint: null, model: { nativeId: 'gpt-6.1-sol' } }, f.options))
-      .rejects.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED', params: { cli: 'codex' } });
+      .rejects.not.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED' });
     expect(JSON.stringify(await f.config())).toBe(before);
   });
   it('a new Anthropic model connects with the price its row states (sealed to the row); a row without terms is refused before any write', async () => {
