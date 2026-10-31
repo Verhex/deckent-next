@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { render, useApp } from 'ink';
-import { ErrorRegistry, emit, resolveLocale, colorCapability, type ConfigLoadOptions, type Locale, type OutputSink } from '#platform/index.js';
+import { useApp } from 'ink';
+import { ErrorRegistry, emit, resolveLocale, colorCapability, loadConfigTerminalLaunch, type ConfigLoadOptions, type Locale, type OutputSink } from '#platform/index.js';
 import type { ProjectInstructionPort, InstructionInitPreview } from '#engine/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { humanRecordText } from '#surfaces/core/terminal-render/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
+import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
 import { InstructionChoiceWindow } from './window.js';
 import { projectInstructionLabels, projectSkeleton, type ProjectInstructionLabels } from './labels.js';
 
@@ -39,10 +40,12 @@ export async function instructionInitCommand(argv: readonly string[], context: {
   if (previewOnly) { emit({ schemaVersion: preview.schemaVersion, digest: preview.digest, changes: preview.changes.map(change => ({ path: change.path, append: humanRecordText(change.append) })), bridges: preview.bridges }, { stdout, json: true }); return; }
   if (!process.stdin.isTTY || !stdout.isTTY || typeof process.stdin.setRawMode !== 'function' || context.env?.['TERM'] === 'dumb') throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   let result: unknown = null, failure: unknown;
-  const palette = resolveWorklinePalette(colorCapability({ env: context.env ?? process.env, isTTY: true, argv }));
-  const view = render(<WorklinePaletteProvider palette={palette}><InstructionInitWindow port={port} initial={preview} labels={labels} skeleton={skeleton} finish={(value, error) => { result = value; failure = error; }} /></WorklinePaletteProvider>,
-    { stdout, stdin: process.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
-  try { await view.waitUntilExit(); } finally { view.unmount(); }
+  const env = context.env ?? process.env;
+  const presentation = await loadConfigTerminalLaunch(context.root ?? process.cwd(), { env }).catch(() => null);
+  const setting = TERMINAL_THEME_SETTINGS.find(value => value === presentation?.terminal['theme']) ?? TERMINAL_THEME_SETTINGS[0];
+  const theme = { setting, capability: colorCapability({ env, isTTY: true, argv }), colorfgbg: env['COLORFGBG'] };
+  await runTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, stdout, stdin: process.stdin, clearScreen: false, fullscreen: false,
+    view: () => <InstructionInitWindow port={port} initial={preview} labels={labels} skeleton={skeleton} finish={(value, error) => { result = value; failure = error; }} /> });
   if (failure) throw failure;
   if (result) emit(result, { stdout, render: () => labels.done });
 }

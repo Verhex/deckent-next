@@ -1,7 +1,7 @@
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
-import { lazySessionStore, serviceAbsenceWatch, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+import { terminalPalette, lazySessionStore, serviceAbsenceWatch, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -9,9 +9,10 @@ import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
+import { reportedTerminalBackground, type TerminalThemeRequest } from '#surfaces/core/terminal-host/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { terminalDeliveryPort } from './deliver-port.js';
 import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -383,7 +384,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
   const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly notify?: 'bell' | 'off'; readonly viewportRows?: number };
-  const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
+  const theme: TerminalThemeRequest = { setting: presentation.theme ?? TERMINAL_THEME_SETTINGS[0], capability: colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), colorfgbg: env['COLORFGBG'] };
+  const palette = () => terminalPalette(theme.setting, theme.capability, theme.colorfgbg, reportedTerminalBackground());
   const ascii = prefersAsciiGlyphs(env);
   const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
   const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
@@ -465,7 +467,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.inspectMonitor ? { monitorWindow: async () => {
       const surface = await loadMonitorSurface(), inspect = context.inspectMonitor!;
       return surface.monitorWindowView({ load: () => inspect(root, options), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii,
-        palette: resolveWorklinePalette(theme.tier, theme.theme), errorText: error => surface.monitorFailureText(error, locale),
+        palette: palette(), errorText: error => surface.monitorFailureText(error, locale),
         ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}) });
     } } : {}),
     ...(accessNotices.length || chat?.skippedDefault ? { openingNotices: [...accessNotices, ...(chat?.skippedDefault ? [{ level: 'warning' as const, text: t('terminal.model.defaultNotHere', {}, locale) }] : [])] } : {}),
@@ -474,7 +476,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       const building = await context.runningImageBuild?.(root, options).catch(() => false) === true, restarted = await context.restartRuntimeService!(root, options);
       return [t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale), ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n');
     }, restartNotes: async () => await context.runningImageBuild?.(root, options).catch(() => false) === true ? [t('cli.runtime.card.imageBuild', {}, locale)] : [] } : {}),
-    palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, startup,
+    palette: palette(), theme, ascii, startup,
     ...(ledger ? { ledger } : {}), ...(deliveryPort && !pickerNeedsTextFallback(env, true) ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),

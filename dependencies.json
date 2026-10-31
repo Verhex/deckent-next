@@ -210,7 +210,6 @@
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/cli-human",
-        "src/surfaces/core/config-window",
         "src/surfaces/core/terminal-onboarding",
         "src/surfaces/core/terminal-session"
       ],

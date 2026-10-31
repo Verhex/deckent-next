@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import { render, useApp } from 'ink';
-import { colorCapability, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { RenderGlyphsContext, humanRecordText, prefersAsciiGlyphs, resolveRenderGlyphs, span } from '#surfaces/core/terminal-render/index.js';
+import { useApp } from 'ink';
+import { colorCapability, loadConfigTerminalLaunch, terminalSafeText, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
+import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
+import { humanRecordText, prefersAsciiGlyphs, span } from '#surfaces/core/terminal-render/index.js';
 import { CardCopyContext, QuestionRows, Window, WindowStackProvider, WINDOW_PRIORITY, questionStep, type QuestionState } from '#surfaces/core/terminal-window/index.js';
-import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
+import { openTerminalHost, streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { cardCopyLabels, type CliCardRequest } from './card.js';
 
 /** The card body: the terminal's bounded window and question rows, answered once; Esc, Ctrl+C or the window's close give no answer. */
@@ -31,23 +31,19 @@ function CliCard({ request, hints, known, finish }: { readonly request: CliCardR
 }
 
 export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin: NodeJS.ReadStream; stdout: NodeJS.WriteStream; env: NodeJS.ProcessEnv;
-  locale: Locale; hints: string; signal?: AbortSignal; known?: KnownSecretSnapshot }>): Promise<string | null> {
+  root?: string; locale: Locale; hints: string; signal?: AbortSignal; known?: KnownSecretSnapshot }>): Promise<string | null> {
   let chosen: string | null = null;
   // An abort event fires once: a signal already aborted at mount is never heard by a later listener, so exit before drawing (Astra 2661 P2).
   if (io.signal?.aborted) return null;
-  const palette = resolveWorklinePalette(colorCapability({ env: io.env, isTTY: true, argv: [] }));
-  const view = render(<WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={resolveRenderGlyphs(prefersAsciiGlyphs(io.env))}>
-    <CardCopyContext.Provider value={streamCardCopy(io.stdout, cardCopyLabels(io.locale), io.env)}>
-    <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
-    </CardCopyContext.Provider>
-  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
-  // Cancellation of the command closes the card with no answer.
-  const abort = () => { chosen = null; view.unmount(); };
-  io.signal?.addEventListener('abort', abort, { once: true });
-  // `interactive: true` (as monitor and workline): the caller already admitted a person on a real terminal from its own environment; Ink's
-  // default reads `process.env.CI` instead and would hold every frame until exit, so an embedding host with CI set saw no card (CI-104).
-  // Ink draws the first frame inside render(); a cancellation during that draw preceded the listener above.
-  if (io.signal?.aborted) abort();
-  try { await view.waitUntilExit(); } finally { io.signal?.removeEventListener('abort', abort); view.unmount(); }
+  const presentation = await loadConfigTerminalLaunch(io.root ?? process.cwd(), { env: io.env }).catch(() => null);
+  if (io.signal?.aborted) return null;
+  const setting = TERMINAL_THEME_SETTINGS.find(value => value === presentation?.terminal['theme']) ?? TERMINAL_THEME_SETTINGS[0];
+  const theme = { setting, capability: colorCapability({ env: io.env, isTTY: true, argv: process.argv }), colorfgbg: io.env['COLORFGBG'] };
+  const host = await openTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, stdout: io.stdout, stdin: io.stdin,
+    ...(io.signal ? { signal: io.signal } : {}), ascii: prefersAsciiGlyphs(io.env), clearScreen: false, fullscreen: false,
+    view: () => <CardCopyContext.Provider value={streamCardCopy(io.stdout, cardCopyLabels(io.locale), io.env)}>
+      <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
+    </CardCopyContext.Provider> });
+  try { await host.wait(); } finally { await host.close(); }
   return io.signal?.aborted ? null : chosen;
 }

@@ -1,14 +1,22 @@
 import { configCommand } from '#surfaces/core/config/index.js';
-import { createElement } from 'react';
-import { render } from 'ink';
-import { ErrorRegistry, colorTier, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { createElement, type ComponentProps } from 'react';
+import { useApp, useInput } from 'ink';
+import { ErrorRegistry, colorCapability, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { MonitorQuery, MonitorSnapshot, MonitorSourceMemo } from '#engine/index.js';
-import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { terminalPalette, useWorklinePalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
+import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
 import { prefersAsciiGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { MonitorCommandContext } from './context.js';
 import { MonitorApp } from './app.js';
 import { renderMonitorText } from './text.js';
 import { filterSnapshot, type MonitorFilters } from './view.js';
+
+// The host can repaint after a terminal scheme change; the monitor reads that same live palette.
+function ThemedMonitor(props: Omit<ComponentProps<typeof MonitorApp>, 'palette'>) {
+  const { exit } = useApp();
+  useInput((input, key) => { if (key.ctrl && input === 'c') exit(); });
+  return createElement(MonitorApp, { ...props, palette: useWorklinePalette() });
+}
 
 /** The data lane's read (composition): every observed install as one observe-only MonitorSnapshot; the live view passes its memo (MON-CPU-FIX). */
 export type MonitorHandler = (root: string, options: ConfigLoadOptions, query?: MonitorQuery, memo?: MonitorSourceMemo) => Promise<MonitorSnapshot>;
@@ -89,14 +97,14 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
     return;
   }
   // The command already selected the interactive TTY lane; do not let Ink infer a different lane from ambient CI.
-  const palette = resolveWorklinePalette(colorTier({ env, isTTY: true, noColor: parsed.noColor }));
-  const instance = render(createElement(MonitorApp, { load, intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters, verbose: parsed.verbose,
-    ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
-    errorText: (error: unknown) => monitorFailureText(error, locale) }), { interactive: true, alternateScreen: true, patchConsole: false,
-    ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}) });
-  const stop = () => instance.unmount();
-  context.signal?.addEventListener('abort', stop, { once: true });
-  try { await instance.waitUntilExit(); } finally { context.signal?.removeEventListener('abort', stop); }
+  const setting = (config['terminal'] as { theme?: typeof TERMINAL_THEME_SETTINGS[number] } | undefined)?.theme ?? TERMINAL_THEME_SETTINGS[0];
+  const theme = { setting, capability: colorCapability({ env, isTTY: true, noColor: parsed.noColor }), colorfgbg: env['COLORFGBG'] };
+  await runTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, ascii,
+    ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
+    ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}), ...(context.signal ? { signal: context.signal } : {}),
+    view: () => createElement(ThemedMonitor, { load, intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, filters, verbose: parsed.verbose,
+      ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
+      errorText: (error: unknown) => monitorFailureText(error, locale) }) });
 }
 
 /** `/monitor` in the interactive terminal: the same text snapshot as notice lines (`--install`/`--scope` accepted). */

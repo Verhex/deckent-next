@@ -46,9 +46,11 @@ for wait, send in steps:
     if send:
         os.write(fd, send.encode()); read_for(0.6)
 read_for(0.3)
-try: os.kill(pid, 9); os.waitpid(pid, 0)
-except OSError: pass
-sys.stdout.write(json.dumps({'marks': marks, 'output': out.decode('utf8', 'replace')}))
+ended, status = os.waitpid(pid, os.WNOHANG)
+code = os.waitstatus_to_exitcode(status) if ended else None
+if not ended:
+    os.kill(pid, 9); os.waitpid(pid, 0)
+sys.stdout.write(json.dumps({'marks': marks, 'output': out.decode('utf8', 'replace'), 'code': code}))
 `;
 
 it('the built monitor keeps its status and key-hint rows fixed across tabs, help, Config and the filter (PTY)', async () => {
@@ -62,8 +64,14 @@ it('the built monitor keeps its status and key-hint rows fixed across tabs, help
     ['Showing all', '?'], ['Legend', '\u001b'], ['a all/changed', '/'], ['Enter keeps', '\u001b'], ['a all/changed', 'q']];
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'monitor', '--lang', 'en']), JSON.stringify(steps), String(rows), String(columns)],
     { cwd: project, env: { ...process.env, HOME: join(root, 'home'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', COLUMNS: String(columns) }, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
-  const result = JSON.parse(stdout) as { marks?: number[]; timeout?: string; output: string };
+  const result = JSON.parse(stdout) as { marks?: number[]; timeout?: string; output: string; code?: number | null };
   if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-4000)}`);
+  expect(result.code).toBe(0);
+  // Switching to the shared theme host must preserve Ink's earlier Ctrl+C exit, including from the filter.
+  const interrupted = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'monitor', '--lang', 'en']),
+    JSON.stringify([['Tab/', '/'], ['Enter keeps', '\u0003']]), String(rows), String(columns)],
+    { cwd: project, env: { ...process.env, HOME: join(root, 'home'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' }, timeout: 30_000 });
+  expect((JSON.parse(interrupted.stdout) as { code: number | null }).code).toBe(0);
   const hintRows = new Set<number>(), statusRows = new Set<number>();
   for (const [index, mark] of result.marks!.entries()) {
     const screen = terminalBuffers(result.output.slice(0, mark).replace(/\r?\n/g, '\r\n'), columns, rows);

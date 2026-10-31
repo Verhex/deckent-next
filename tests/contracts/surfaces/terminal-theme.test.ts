@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { PALETTE_THEMES, THEME_BACKGROUNDS, THEME_PALETTES, THEME_TEXT_MINIMUM, resolveTerminalTheme, resolveWorklinePalette, terminalPalette } from '#surfaces/core/terminal-kit/index.js';
 import { colorCapability, colorTier } from '#platform/index.js';
@@ -27,7 +28,7 @@ describe('terminal themes (T2 T-READABLE)', () => {
       expect(resolveWorklinePalette('none', theme)[role]).toEqual({});
     }
   });
-  it('every truecolor text role reaches 4.5:1 (high contrast 7:1) and every border role 3:1 on each reference background, the owner\'s #F0ECE5 included', () => {
+  it('every truecolor text role reaches 4.5:1 (high contrast 7:1) and every border role 3:1 on each reference background, the owner\'s #F0ECE5 included', async () => {
     const failures: string[] = [];
     expect(THEME_BACKGROUNDS.light).toContain('#F0ECE5'); expect(THEME_BACKGROUNDS['light-high-contrast']).toContain('#F0ECE5');
     expect([THEME_TEXT_MINIMUM['dark-high-contrast'], THEME_TEXT_MINIMUM['light-high-contrast'], THEME_TEXT_MINIMUM.light]).toEqual([7, 7, 4.5]);
@@ -40,6 +41,14 @@ describe('terminal themes (T2 T-READABLE)', () => {
       }
     }
     expect(failures).toEqual([]);
+    // L3: contrast-safe roles matter only when each real mount uses the background-aware host, rather than the default dark palette.
+    for (const path of ['cli-human/internal/card-view.tsx', 'terminal-onboarding/internal/provider.tsx', 'project-instructions/internal/setup-window.tsx',
+      'project-instructions/internal/init.tsx', 'config-window/internal/window.tsx', 'monitor/internal/command.ts', 'cli-terminal/internal/terminal.ts']) {
+      const source = await readFile(`src/surfaces/core/${path}`, 'utf8');
+      expect(source, path).toContain('terminalPalette(');
+      expect(source, path).not.toMatch(/resolveWorklinePalette\(|color=["']|\\(?:x1b|u001b)\[/u);
+      expect(source, path).toMatch(/\btheme[,}]/u);
+    }
   });
 
   it('the 256-colour approximations keep 4.5:1 for text roles and 3:1 for borders; light 16-colour sets use no yellow and no bright 9x on text', () => {

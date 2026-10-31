@@ -2895,7 +2895,9 @@
         "src/surfaces/core/terminal-theme",
         "src/engine/core/resource-observation",
         "src/domain/core/work-cost",
-        "src/surfaces/core/recovery-text"
+        "src/surfaces/core/recovery-text",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-host"
       ],
       "plan": "MONITOR"
     },
@@ -2921,13 +2923,14 @@
     "src/surfaces/core/config-window": {
       "dependencies": [
         "src/platform/core/output",
-        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/config",
-        "src/surfaces/core/terminal-provider"
+        "src/surfaces/core/terminal-provider",
+        "src/platform/core/config",
+        "src/surfaces/core/terminal-host"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3225,7 +3228,8 @@
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-theme",
-        "src/engine/core/setup"
+        "src/engine/core/setup",
+        "src/surfaces/core/terminal-host"
       ],
       "plan": "SURFACES"
     },
@@ -3684,7 +3688,6 @@
         "src/platform/core/host",
         "src/platform/core/config",
         "src/platform/core/config-fields",
-        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-window",
@@ -4381,13 +4384,13 @@
         "src/platform/core/output",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-render",
-        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-host",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/cli-identity",
-        "src/surfaces/core/terminal-provider"
+        "src/surfaces/core/terminal-provider",
+        "src/platform/core/config"
       ],
       "plan": "SURFACES"
     },
