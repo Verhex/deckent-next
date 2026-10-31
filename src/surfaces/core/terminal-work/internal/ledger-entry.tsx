@@ -23,14 +23,15 @@ export function isToolStep(entry: WorkLedgerEntry | undefined): boolean {
 
 /**
  * The one spacing rule of the conversation (TERM-POLISH, owner 2026-10-20): a row gets one blank line above it when it is a tool step or
- * follows one, so a tool step stands apart from the answer text before and after it and from the next tool step; consecutive text rows and
- * the lines inside a row stay together. T1 (alpha.54, the Claude Code behaviour): the person's own message also gets a blank line above it when anything
+ * follows one, so a tool step stands apart from the answer text before and after it and from the next tool step. Markdown units carry
+ * their block/paragraph boundary from the segmenter. T1 (alpha.54): the person's own message also gets a blank line above it when anything
  * precedes it, so a new prompt stands apart from the answer before it. The live region applies the same rule (`AssistantLive` `spaceBefore`), so a row landing never jumps.
  */
 export function stepSpaceBefore(previous: WorkLedgerEntry | undefined, entry: WorkLedgerEntry): boolean {
   // Tema L6 §4.2: an answer's footer has no margin of its own; what follows it (a system line, the next prompt) gets the one blank line.
   const footer = previous?.kind === 'chat' && previous.assistant?.kind === 'footer';
-  return previous !== undefined && (isToolStep(entry) || isToolStep(previous) || footer || (entry.kind === 'chat' && entry.role === 'user'));
+  return previous !== undefined && (isToolStep(entry) || isToolStep(previous) || footer || (entry.kind === 'chat' && (entry.role === 'user' ||
+    (entry.role === 'assistant' && entry.assistant !== undefined && 'spaceBefore' in entry.assistant && entry.assistant.spaceBefore === true))));
 }
 
 /** `stepSpaceBefore` for a buffered row: its neighbour from the kept history, else the bounded tail; none after `/clear`. */

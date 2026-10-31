@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
-import { DeckentJsonSchemaValidator, getConfigFieldDefault, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
+import type { StdioServerParameters } from '@modelcontextprotocol/client/stdio';
+import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, readBuildIdentity, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
@@ -11,10 +12,12 @@ import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from '#adapters/core
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
 import { mcpEndpointRefusal } from './registry.js';
 import { modelTextPrefix } from '#domain/index.js';
+import { boundedMcpTransport } from './input.js';
 
 /** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the `initialize` era as the fallback — 2025-11-25
  * offered first, every earlier published revision accepted when a server answers with it (spec 2025-11-25 lifecycle "Version Negotiation"; YTK-40). */
 export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
+export const MCP_CLIENT_IDENTITY = createHash('sha256').update(JSON.stringify([PACKAGE_VERSION, readBuildIdentity()?.sourceTreeSha256 ?? null, MCP_CLIENT_PROTOCOL_VERSIONS])).digest('hex');
 /** K4: the directory (under the data root's `integrations`) that holds each `sandbox-net` server's private HOME. */
 export const MCP_SERVER_HOMES_DIR = 'mcp-home';
 /** Bounds of what one server may declare and of the stderr tail kept for `inspect`. */
@@ -52,7 +55,7 @@ export class McpRedirectRefusedError extends Error {
 }
 /** Streamable HTTP redirects carry resolved `$DECK:` headers and the original call body (Astra 2444 R1): only method-preserving 307/308,
  * within the approved origin and endpoint rule, at most three hops. Every transport request stays manual, regardless of requestInit. */
-export function createMcpRedirectFetch(approvedServerUrl: string, fetchImplementation: typeof fetch = fetch): typeof fetch {
+export function createMcpRedirectFetch(approvedServerUrl: string, fetchImplementation: typeof fetch = fetch, maxBytes = getConfigFieldDefault('mcp').inputMaxBytes): typeof fetch {
   const approvedOrigin = new URL(approvedServerUrl).origin;
   return async (input, init) => {
     let current: URL;
@@ -66,7 +69,20 @@ export function createMcpRedirectFetch(approvedServerUrl: string, fetchImplement
       const refused = mcpEndpointRefusal(current.href);
       if (refused) throw new McpRedirectRefusedError(refused);
       const response = await fetchImplementation(original ? new Request(current, original.clone()) : current, original ? { redirect: 'manual' } : options);
-      if (response.status < 300 || response.status >= 400) return response;
+      if (response.status < 300 || response.status >= 400) {
+        if (!response.body) return response;
+        const reader = response.body.getReader(); let received = 0;
+        const tooLarge = () => Object.assign(new Error('MCP_HTTP_RESPONSE_TOO_LARGE'), { code: 'MCP_HTTP_RESPONSE_TOO_LARGE', maxBytes });
+        if (Number(response.headers.get('content-length')) > maxBytes) { void reader.cancel().catch(() => undefined); throw tooLarge(); }
+        return new Response(new ReadableStream<Uint8Array>({ async pull(controller) {
+          try { const chunk = await reader.read();
+            if (chunk.done) { controller.close(); return; }
+            received += chunk.value.byteLength;
+            if (received > maxBytes) { void reader.cancel().catch(() => undefined); controller.error(tooLarge()); return; }
+            controller.enqueue(chunk.value);
+          } catch (error) { controller.error(error); }
+        }, cancel: reason => reader.cancel(reason) }, { highWaterMark: 0 }), { status: response.status, statusText: response.statusText, headers: response.headers });
+      }
       // Redirect responses are not returned to the SDK; release their bodies even when the next target is refused.
       await response.body?.cancel().catch(() => undefined);
       if (response.status !== 307 && response.status !== 308) throw new McpRedirectRefusedError('status-' + response.status);
@@ -166,6 +182,7 @@ interface ServerState {
   generation: number;
   starts: number;
   failed: string | null;
+  inputRefusal?: string;
   stderr: Buffer;
   listing: { readonly generation: number; readonly tools: ReadonlyMap<string, PinnedTool> } | null;
   last: Extract<McpServerOpen, { ok: true }> | null;
@@ -192,8 +209,8 @@ export interface McpPoolView {
 let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio')]> | undefined;
 const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio')]);
 /** Every page of the server's tool list (one deadline for the whole walk, each page also bounded); the pin then covers every page. */
-const listAllTools = async (client: Client, timeoutMs: number) =>
-  (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.timeout(timeoutMs * 2) })).tools as McpLiveTool[];
+const listAllTools = async (client: Client, timeoutMs: number, signal: AbortSignal) =>
+  (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs * 2)]) })).tools as McpLiveTool[];
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
 /** One listed tool as the pin binds it: its digest and exactly the digest-covered fields (frozen; nothing unpinned reaches the SDK). Deckent's
  * validator never writes into a schema (the SDK might); every use still gets a fresh copy of the frozen pin; `compiles` caches whether the
@@ -224,7 +241,7 @@ export class McpClientPool implements McpPoolView {
   private closed = false;
   /** `maxServers`: the most processes this pool keeps (every view together; the config's `mcp.maxServers`); a new one closes the idle one
    * longest unused first, and none idle refuses the start. */
-  constructor(signal: AbortSignal, private readonly options: { readonly maxServers?: number; readonly now?: () => number } = {}) {
+  constructor(private readonly signal: AbortSignal, private readonly options: { readonly maxServers?: number; readonly now?: () => number } = {}) {
     if (signal.aborted) this.closed = true;
     else signal.addEventListener('abort', () => { void this.close(); }, { once: true });
   }
@@ -251,7 +268,7 @@ export class McpClientPool implements McpPoolView {
   private openIn(namespace: string, server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
     const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0,
       server.url ?? null, Object.entries(server.headers ?? {}).sort(), context.cwd, context.sandboxes.map(sandbox => sandbox.kind), context.homeRoot ?? null,
-      server.binding?.scope ?? null, context.homeScope ?? null])).digest('hex');
+      server.binding?.scope ?? null, context.homeScope ?? null, settings.inputMaxBytes])).digest('hex');
     const name = `${namespace}\0${server.id}`;
     let state = this.states.get(name);
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); this.states.delete(name); state = undefined; }
@@ -287,10 +304,10 @@ export class McpClientPool implements McpPoolView {
     }
     const client = state.client!;
     let tools: McpLiveTool[];
-    try { tools = await listAllTools(client, settings.connectTimeoutMs); }
+    try { tools = await listAllTools(client, settings.connectTimeoutMs, this.signal); }
     catch (error) {
       if (errorCode(error) === 'LIST_PAGINATION_EXCEEDED') return { ok: false, reason: 'too-many-tools', detail: `more than ${MCP_CLIENT_LIST_PAGES_MAX} pages` };
-      return { ok: false, reason: 'list-failed', detail: String(errorCode(error) ?? 'failed') };
+      return { ok: false, reason: 'list-failed', detail: state.inputRefusal ?? String(errorCode(error) ?? 'failed') };
     }
     if (tools.length > MCP_CLIENT_TOOLS_MAX) return { ok: false, reason: 'too-many-tools', detail: `${tools.length} > ${MCP_CLIENT_TOOLS_MAX}` };
     state.listing = { generation: state.generation, tools: pinnedTools(tools) };
@@ -302,9 +319,15 @@ export class McpClientPool implements McpPoolView {
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
     const [{ Client, StreamableHTTPClientTransport }, { StdioClientTransport }] = await loadClientSdk();
+    delete state.inputRefusal;
+    const maxBytes = Math.min(settings.inputMaxBytes, INPUT_VALIDATION_LIMITS.mcp.maxBytes);
+    const bound = <T extends import('@modelcontextprotocol/client').Transport>(value: T) => boundedMcpTransport(value, maxBytes,
+      error => { state.inputRefusal = error.code; void transport.close().catch(() => undefined); });
     // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.
-    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'manual' }, fetch: createMcpRedirectFetch(server.url!) })
-      : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
+    const transport = bound(server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'manual' }, fetch: createMcpRedirectFetch(server.url!, fetch, maxBytes) })
+      : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: maxBytes }));
+    // SDK 2.3.1 clones the exact base transport through its constructor for disposable discovery. Guard that sibling too, preserving its reaper.
+    if (transport instanceof StdioClientTransport) Object.defineProperty(transport, 'constructor', { value: function(params: StdioServerParameters) { return bound(new StdioClientTransport(params)); } });
     if (transport instanceof StdioClientTransport) transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
       state.stderr = next.length > MCP_CLIENT_STDERR_TAIL_BYTES ? next.subarray(next.length - MCP_CLIENT_STDERR_TAIL_BYTES) : next;
@@ -315,23 +338,28 @@ export class McpClientPool implements McpPoolView {
     const client = new Client({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { supportedProtocolVersions: [...MCP_CLIENT_PROTOCOL_VERSIONS],
       versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } }, listMaxPages: MCP_CLIENT_LIST_PAGES_MAX,
       jsonSchemaValidator: validator });
-    try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
+    // SDK negotiation probes precede Client's handlers; close the transport explicitly on cancellation too.
+    const abortStart = () => { void transport.close().catch(() => undefined); };
+    this.signal.addEventListener('abort', abortStart, { once: true });
+    try { this.signal.throwIfAborted(); await client.connect(transport, { timeout: settings.connectTimeoutMs, signal: this.signal }); if (state.inputRefusal) throw Object.assign(new Error(state.inputRefusal), { code: state.inputRefusal }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
       // A failed HTTP start may name the expanded endpoint or a header value: every resolved value is cut out before anything shows it.
-      const detail = String(errorCode(error) ?? (error as Error)?.message ?? 'failed');
+      const detail = state.inputRefusal ?? String(errorCode(error) ?? (error as Error)?.message ?? 'failed');
       const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(server.transport === 'http'
         ? redactText(detail, [server.url!, ...Object.values(server.headers ?? {}), ...(server.secrets ?? [])], 400) : detail, 200) };
-      if (!launch.sandbox) return failed;
+      if (this.signal.aborted) return { ...failed, detail: 'cancelled' };
+      if (!launch.sandbox) return server.transport !== 'http' && errorCode(error) === 'ENOENT' ? { ...failed, detail: 'ENOENT (PATH)' } : failed;
       // MCP-SANDBOX-PATHS: a sandboxed start that failed is explained by probing the same view (what it hides, or what the command needs
       // from outside it); the outcome stays a failure — never a start on the host instead.
       const diagnosed = await diagnoseSandboxedStart({ file: launch.command, prefix: launch.sandbox.prefix }, { command: launch.sandbox.command,
         args: launch.sandbox.args, pathVariable: launch.env['PATH'] ?? process.env['PATH'], cwd });
       if (!diagnosed) return failed;
       // Not found on this machine either (no name: the command may carry an expanded `${VAR}`; the cards show its template).
-      if (diagnosed.kind === 'not-found') return { ...failed, detail: 'command not found' };
+      if (diagnosed.kind === 'not-found') return { ...failed, detail: 'ENOENT (PATH)' };
       return { ok: false, reason: 'sandbox-unreachable', detail: diagnosed.diagnosis.kind, diagnosis: diagnosed.diagnosis };
     }
+    finally { this.signal.removeEventListener('abort', abortStart); }
     if (this.closed) { await client.close().catch(() => undefined); return { ok: false, reason: 'start-failed', detail: 'the service is stopping' }; }
     state.generation++; state.client = client; state.validator = validator;
     client.onclose = () => { if (state.client === client) state.client = null; };
@@ -359,7 +387,7 @@ export class McpClientPool implements McpPoolView {
     const client = state.client;
     if (!client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
-      try { state.listing = { generation: state.generation, tools: pinnedTools(await listAllTools(client, options.timeoutMs)) }; }
+      try { state.listing = { generation: state.generation, tools: pinnedTools(await listAllTools(client, options.timeoutMs, options.signal)) }; }
       catch { return { outcome: 'refused', reason: 'not-connected' }; }
     }
     const pinned = state.listing.tools.get(tool);

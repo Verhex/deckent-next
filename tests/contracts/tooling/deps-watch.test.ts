@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 // Tooling runs against source; the network is injected so the whole producer-to-report pipeline is exercised offline.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { bundledAdvisoryFindings, integrityOf, licenseAllowed, osvSeverity, runWatch, supplyChainProblems } from '../../../scripts/deps-watch.mjs';
+import { bundledAdvisoryFindings, integrityOf, licenseAllowed, newFindings, osvSeverity, runWatch, supplyChainProblems } from '../../../scripts/deps-watch.mjs';
 
 type Finding = { severity: string; kind: string; subject: string; detail: string };
 const roots: string[] = [];
@@ -79,6 +79,17 @@ describe('deps-watch', () => {
     expect(integrityOf(out)[0]).toMatch(/^unreadable report: /u);
   });
   it('rates OSV records fail-closed and evaluates SPDX expressions', () => {
+    const zod = { severity: 'HIGH', kind: 'vulnerability', subject: 'zod@3.25.76', detail: 'GHSA-mrhx-c7xc-m3w5 known, not accepted' };
+    const report = (findings: Finding[]) => ({ schemaVersion: 1, date: '2026-10-31', findings });
+    const known = report([zod]), added = { ...zod, detail: 'GHSA-new a new advisory' };
+    expect(newFindings(known, known)).toMatchObject({ exitCode: 0, added: [], known: [zod] });
+    expect(newFindings(known, report([zod, added]))).toMatchObject({ exitCode: 1, added: [added], known: [zod] });
+    expect(newFindings(known, report([{ ...zod, severity: 'CRITICAL' }])).exitCode).toBe(1);
+    expect(newFindings(known, report([{ ...zod, subject: 'zod@4.6.5 (embedded in host@2)' }])).exitCode).toBe(1);
+    expect(newFindings(report([{ ...zod, severity: 'MITIGATED' }]), known).exitCode).toBe(1);
+    expect(newFindings(null, known).exitCode).toBe(2);
+    expect(newFindings({ ...known, findings: [{}] }, known).exitCode).toBe(2);
+    expect(newFindings({ ...known, date: '2026-11-01' }, known).exitCode).toBe(2);
     expect(osvSeverity({ id: 'MAL-1' }).severity).toBe('CRITICAL');
     expect(osvSeverity({ id: 'GHSA-x', database_specific: { severity: 'MODERATE' } })).toEqual({ severity: 'MEDIUM', rated: true });
     expect(osvSeverity({ id: 'GHSA-x', affected: [{ ecosystem_specific: { severity: 'critical' } }] }).severity).toBe('CRITICAL');
@@ -115,6 +126,10 @@ describe('deps-watch', () => {
     expect(markdown).toContain('# deps-watch 2026-11-15');
     expect(markdown).toContain('| CRITICAL | vulnerability | tool@2.0.0 [dev] | MAL-2026-1 malicious |');
     expect(markdown).toContain('GHSA-unrated (unrated; counted HIGH)');
+    const repeated = await runWatch({ root, outDir: join(out, 'repeat'), today: '2026-11-15', fetchJson,
+      signatures: async () => ({ invalid: [{ name: 'host', version: '1.0.0' }], missing: [] }), previous: report });
+    expect(repeated.exitCode).toBe(1); expect(repeated.report.newFindings).toMatchObject({ exitCode: 0, added: [] });
+    expect(await readFile(repeated.files[1], 'utf8')).toContain('known (not accepted)');
   });
 
   it('passes a clean tree and fails closed when a source cannot be read', async () => {

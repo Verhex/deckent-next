@@ -79,6 +79,7 @@ function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale)
         endpoint: inference.endpoint ?? t('terminal.value.none', {}, locale) }, locale)
       : t('terminal.status.inferenceAbsent', {}, locale),
     t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale),
+    chat?.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : chat?.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale),
     t('terminal.status.hint', {}, locale),
   ].join('\n');
 }
@@ -407,6 +408,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // Owner 2026-10-30: in a person's terminal (setup cards at hand) the status row says a missing model is set up with /setup.
     target, model: modelName ?? chat?.reference?.modelId ?? (onboarding ? t('onboarding.model.status', {}, locale) : chatTarget(chat, locale)),
     ...(chat?.reference ? { provider: providerDisplayName(chat.reference.providerId, context.providerConnect, locale) } : {}),
+    // QW 16b: the plan's tool state (available | none | unknown) reaches the workline once, beside the model name.
+    ...(chat?.tools ? { modelTools: chat.tools } : {}),
     systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, maxTrackedRuns: ((config['terminal'] ?? getConfigMetadata().find(row => row.key === 'terminal')?.defaultValue) as { maxTrackedRuns?: number } | undefined)?.maxTrackedRuns, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.

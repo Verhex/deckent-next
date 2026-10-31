@@ -199,6 +199,7 @@ it('rates reports, prioritises severity and assigns appeals to a different moder
 it('serves escaped public pages from the moderated API and rejects cross-origin or unauthenticated writes', async c => {
   const f = await fixture(c); f.time(300); await f.publish(); await f.review(); await f.review('1.0.0', moderator2, f.mod2.context);
   const handler = createHubServiceHttpHandler(f.app, { endpoint: 'https://hub.example/', addressId: () => f.address, publicContext: f.owner.context });
+  expect((await handler.fetch(new Request('https://hub.example/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ values: Array(16384).fill(0) }) }))).status).toBe(413);
   const page = await handler.fetch(new Request('https://hub.example/profiles/acme'));
   expect(page.status).toBe(200); expect(await page.text()).toContain('ACME &lt;safe&gt;');
   const api = await handler.fetch(new Request('https://hub.example/api/packages')); expect((await api.json() as unknown[])).toHaveLength(1);

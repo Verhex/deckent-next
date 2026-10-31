@@ -66,7 +66,7 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
     applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query, { heal: false }),
     releaseQuota: command => releaseConfiguredQuota(root, command), inspectPoolHold: query => inspectConfiguredPoolHold(root, query, { heal: false }), applyPoolHold: command => applyConfiguredPoolHold(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
-    inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }), { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
+    inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }), { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes, ...(config.admission ? { graph: config.admission.graph } : {}) }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
       { responseMaxBytes: config.mcp.responseMaxBytes }),
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },

@@ -698,6 +698,7 @@
   "mcp.start.toolsChanged": "MCP server {name}: {count} pinned tool(s) changed or went missing since you approved it, so they are not offered to the model; run /mcp approve {name} to review and re-approve them.",
   "mcp.start.notRecorded": "MCP server {name}: this failure could not be recorded; its card may be asked again.",
   "mcp.start.notDecided": "MCP server {name} was not decided: {code}.",
+  "mcp.start.secretMissing": "The key {key} is missing. Store it at your terminal with deckent secret set {key} --main.",
   "mcp.start.grantRefused": "MCP server {name} is trusted, but its tools were not allowed: {reason}. Calls to them are denied by policy.",
   "mcp.start.secretRefused": "MCP server {name} did not start: the main-vault key {key} is not granted to this project. Grant it at your own terminal with deckent secret grant {key} --scope {scope} (AI sessions cannot), or take the key out of the server's entry.",
   "mcp.grant.notNow": "Not now: the key {key} stays closed to this project (/mcp or deckent secret grant {key} opens it later).",

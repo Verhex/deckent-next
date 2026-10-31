@@ -19,7 +19,10 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   const { name } = notice;
   if (notice.kind === 'tools-changed') return t('mcp.start.toolsChanged', { name, count: notice.count }, locale);
   if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
-  if (notice.kind === 'not-decided') return t('mcp.start.notDecided', { name, code: notice.code }, locale);
+  if (notice.kind === 'not-decided') {
+    const why = t('mcp.start.notDecided', { name, code: [notice.code, notice.detail].filter(Boolean).join(': ') }, locale);
+    return notice.code === 'secret-unresolved' && notice.detail ? `${why} ${t('mcp.start.secretMissing', { key: notice.detail }, locale)}` : why;
+  }
   if (notice.kind === 'grant-refused') return t('mcp.start.grantRefused', { name, reason: mcpGrantReasonText(notice.reason, locale) }, locale); if (notice.kind === 'secret-refused') { const params = { name, key: notice.key, scope: notice.scope }; return notice.code === 'SECRET_PROJECT_MISSING' ? t('mcp.start.secretProjectMissing', params, locale) : notice.code === 'DECK_DECLARATION_REQUIRED' ? t('mcp.start.secretUndeclared', params, locale) : notice.code === 'SECRET_PROJECT_IDENTITY_REQUIRED' ? t('mcp.start.secretNoIdentity', params, locale) : t('mcp.start.secretRefused', params, locale); }
   const { failure } = notice, diagnosis = failure.diagnosis;
   const why = diagnosis?.kind === 'path-hidden'
@@ -41,7 +44,7 @@ export function mcpGrantReasonText(reason: string, locale: Locale): string {
 }
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
-  readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
+  readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly sessionId?: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof openTurnMcp>[0]['emit']; readonly sandboxes: McpLaunchContext['sandboxes']; readonly cwd: string;
   /** MCP-SANDBOX-PATHS: what could not be decided or started this turn, typed (v30: the result's `notices`, rendered by the surface) — never silent. */
   readonly onNotices?: (notices: readonly McpStartNotice[]) => void }) {
@@ -54,7 +57,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
     grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
-  keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
+  keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId, ...(input.sessionId ? { sessionId: input.sessionId } : {}),
   signal: input.signal, emit: input.emit, locale, describeNotice: notice => { notices.push(notice); return ''; }, ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
   if (notices.length) input.onNotices?.(notices);
   if (!opened.settings) return null;
@@ -99,7 +102,7 @@ async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: '
 /** `deckent mcp …` and `/mcp`: the scoped registry files, the trust records (audited, over this project's ledger) and, for `list`/trust decisions, the
  * server started in its realm. `ask` shows a trust card and answers the owner's decision; `locale` is the calling surface's (default: this
  * process's environment, then the configured language). */
-export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
+export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale, signal?: AbortSignal) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), environment = options.env ?? process.env, principal = readLocalOsIdentity();
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout, false, environment) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
@@ -108,10 +111,10 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   // `--yes` included, and before any start, audit or write; the MCP actor never decides. In-turn cards are already witnessed by `decideApproval`.
   const peer = localPrincipalPeer(), channel = localPrincipalChannel(), witnessed: McpCommandContext['ask'] = async card => {
     await assertAuthorityWitness('mcpTrust', channel, { attest: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) }); return ask(card); };
-  const context: McpCommandContext = { projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
+  const context: McpCommandContext = { ...(signal ? { signal } : {}), projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
     grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
-    secret: async name => projectCredentialResolver(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, options).resolve(name), limits: { inputMaxBytes: config.mcp.inputMaxBytes }, // KER-17: as a turn
+    secret: async name => projectCredentialResolver(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, options).resolve(name), limits: { inputMaxBytes: config.mcp.inputMaxBytes, maxServers: config.mcp.maxServers }, // KER-17: as a turn
     audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) };
   // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
   // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.

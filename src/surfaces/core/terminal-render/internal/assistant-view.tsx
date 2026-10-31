@@ -262,7 +262,7 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
   const toolOnly = activeTool !== null && !waiting && !narration && lines.length === 0 && projection.hiddenCount === 0;
   const group = toolGroup.length > 0, rest = Boolean(waiting || narration) || lines.length > 0 || projection.hiddenCount > 0;
   return (
-    <Box flexDirection="column" marginTop={spaceBefore && !toolOnly && !group ? 1 : 0}>
+    <Box flexDirection="column" marginTop={(spaceBefore || tail.spaceBefore) && !toolOnly && !group ? 1 : 0}>
       {group && <ToolGroupRunning steps={toolGroup} tool={activeTool} labels={labels} clock={clock} />}
       <Box flexDirection="column" marginTop={group && rest ? 1 : 0}>
         {waiting && <WaitingLine waiting={waiting} labels={labels} clock={clock} />}

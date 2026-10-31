@@ -10,6 +10,7 @@ import { SETUP_FIELDS } from './fields-setup.js';
 import { MODEL_FIELDS } from './fields-models.js';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, OUTPUT_MODES } from '#platform/core/common/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
+import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
 
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './field.js';
 const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
@@ -81,7 +82,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     mcp: z.object({ optInGroups: z.array(z.string().regex(/^[a-z][a-z0-9.-]{0,47}$/u)).max(64).default([]) }).strict().default({}),
   }).strict().default({})),
   mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({
-    inputMaxBytes: z.number().int().positive().safe().default(1048576),
+    inputMaxBytes: z.number().int().positive().max(INPUT_VALIDATION_LIMITS.mcp.maxBytes).default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
     /** Security (MCP pool scope isolation): the most MCP server processes the runtime service keeps across all scopes and projects. */
@@ -89,7 +90,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   service: field('config.field.service', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', z.object({
     identity: z.object({ scopeId: z.string().min(1), serviceId: z.string().min(1) }).strict().nullable().default(null),
-    inputMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
+    inputMaxBytes: z.number().int().positive().max(INPUT_VALIDATION_LIMITS.ipc.maxBytes).default(1048576),
     responseMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
     maxConnections: z.number().int().positive().safe().default(32),
     maxConcurrentRequests: z.number().int().positive().safe().default(16),

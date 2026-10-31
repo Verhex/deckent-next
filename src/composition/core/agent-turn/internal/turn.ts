@@ -134,7 +134,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // MCP-SANDBOX-PATHS: a server that could not be decided or started is named by a typed notice of the result (v30; never in `note`).
     let mcpNotices: readonly ChatTurnNotice[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
-      turnId: command.turnId, signal, emit: emitApproval, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor }), cwd: workspace.scope.root }) : null;
+      turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}), signal, emit: emitApproval, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor }), cwd: workspace.scope.root }) : null;
     // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).

@@ -5,3 +5,4 @@ export * from './internal/short-id.js';
 export { mapBounded } from './internal/bounded.js';
 export { unifiedDiff } from './internal/unified-diff.js';
 export { displayAddress } from './internal/display-address.js';
+export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from './internal/input-limits.js';

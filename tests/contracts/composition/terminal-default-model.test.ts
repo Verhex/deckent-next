@@ -108,7 +108,14 @@ describe('terminal.defaultModel through the governed writer', () => {
     await writeFile(globalPath, JSON.stringify({ terminal: { defaultModel: ref('mine'), chat: chat('user') }, provider_catalog: catalog }));
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ terminal: { chat: chat('team') } }));
     clearConfigCache();
-    expect(await describeTerminalChat(root, options)).toMatchObject({ status: 'ready', reference: ref('team'), source: 'project' });
+    expect(await describeTerminalChat(root, options)).toMatchObject({ status: 'ready', reference: ref('team'), source: 'project', tools: 'unknown' });
+    for (const [state, tools] of [['supported', 'available'], ['unsupported', 'none'], ['unknown', 'unknown']] as const) {
+      const updated = structuredClone(catalog) as typeof catalog & { providers: { models: { protocols: { capabilities: unknown[] }[] }[] }[] };
+      (updated.providers[0]!.models[0]!.protocols[0]!.capabilities as unknown[]) = [{ id: 'tool-calls', version: 1, state }];
+      await writeFile(globalPath, JSON.stringify({ terminal: { defaultModel: ref('mine'), chat: chat('user') }, provider_catalog: updated })); clearConfigCache();
+      expect(await describeTerminalChat(root, options)).toMatchObject({ reference: ref('team'), tools });
+    }
+    await writeFile(globalPath, JSON.stringify({ terminal: { defaultModel: ref('mine'), chat: chat('user') }, provider_catalog: catalog })); clearConfigCache();
     expect(await configuredTerminalModel(root, options, ref('pinned'))).toEqual({ reference: ref('pinned'), source: 'session' });
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({}));
     clearConfigCache();
