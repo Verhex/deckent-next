@@ -128,7 +128,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
       } };
     const result = await new BeuserApplication(ports, budget).walk(context, pinBeuserWalkerSummary(data.summary));
     if (capturedSurface && !context.signal.aborted) await capturedSurface.close(context);
-    const diagnostic = beuserDiagnosticSchema.parse({ schemaVersion: 1, trace,
+    const diagnostic = beuserDiagnosticSchema.parse({ schemaVersion: 1, trace, reservation: model.reservations(),
       finding: (result.reason === 'loop' || result.reason === 'observing' || result.reason === 'patience') && lastScreen ? { schemaVersion: 1, binding: context.binding,
         branch: context.binding.identity.taskId, persona: data.summary.personaId, code: result.reason === 'patience' ? 'persona-patience' : 'persona-stuck',
         reason: result.reason, outcome: 'RED', controllerValidity,

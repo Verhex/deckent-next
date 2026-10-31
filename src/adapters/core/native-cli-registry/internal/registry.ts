@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import asset from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
-import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
+import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, promptFramingAllowanceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
 
 const argument = z.string().min(1).refine(value => !value.includes('\0'));
 const flag = z.string().regex(/^--[a-z][a-z-]*$/);
@@ -42,7 +42,7 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
     maxInFlight: positive, maxInFlightSource: argument }).strict().readonly(), login: z.object({ args: argumentsSchema, ssoFlag: flag, timeoutMs: positive,
     env: z.object({ inherit: names, fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly() }).strict().readonly(),
     source: argument }).strict().readonly(), systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
-  forbiddenFlags: z.array(flag).min(1).readonly(),
+  forbiddenFlags: z.array(flag).min(1).readonly(), promptFramingAllowance: promptFramingAllowanceSchema,
   /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
    * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */
   preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema, hiddenFlagsSource: argument,

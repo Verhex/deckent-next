@@ -26,7 +26,7 @@ export function createSiwcResponsesPort(options: { readonly now: () => number;
   };
   return Object.freeze({
     billingAxis: 'subscription' as const,
-    responseBytesUpperBound(value: unknown) { return modelInvocationNativeResponseUpperBound(target(value).limits.responseMaxBytes); },
+    responseBytesUpperBound(value: unknown) { return modelInvocationNativeResponseUpperBound(target(value).limits.responseMaxBytes); }, estimatePrompt(value: unknown) { return Buffer.byteLength(target(value).body, 'utf8') + I.promptFramingAllowance.tokens; }, // estimate: exact body bytes + allowance
     async prepare(profileInput: unknown, bindingInput: unknown, requestInput: unknown) {
       const envelope = openAiChatWireObjectSchema.safeParse(profileInput), profile = envelope.success && modelInvocationProfileSchema.safeParse(envelope.data);
       if (!profile || !profile.success || profile.data.schemaVersion !== 2 || profile.data.billingAxis !== 'subscription'

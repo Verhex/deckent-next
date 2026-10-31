@@ -219,6 +219,7 @@
           "source": "s3c lane 2026-10-24 from CLI 2.1.309 `auth login --help` (empty config dir, no login run): --claudeai = Claude subscription (the default, named so a Console login is never chosen), --sso forces the SSO flow. The CLI's own sign-in runs in the person's terminal with inherited stdio, outside the realm (its browser OAuth needs the person's browser and the sign-in hosts, which the realm's API-only gateway does not reach); Deckent captures none of its bytes. Inherited names: the browser opener and terminal of the person (unmeasured against a real sign-in until the lead's run); every deny name stays out. timeoutMs stays below refreshLock.staleMs: the login holds the login dir's lock." },
         "systemPromptFlag": "--system-prompt-file",
         "systemPromptFile": "system.txt",
+        "promptFramingAllowance": {"tokens": 2048, "basis": "measured", "source": "HEADLESS-0 2026-10-23 (CLI 2.1.309, --safe-mode --restricted, run-dir HOME): a one-turn probe with a near-empty system and user text reported 586 prompt tokens (2 input + 584 cache); its input bytes were not retained. 2048 is a stated margin over that observation; re-measure for each CLI version."},
         "forbiddenFlags": [
           "--fallback-model",
           "--bare",

@@ -339,7 +339,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);
-        const counted = await measurePeerConfiguredModel(projectRoot, invocation, peer, options, measureSignal, 'feature').catch(() => null);
+        // Only the provider's own count is a count; a transport's byte estimate falls through to this turn's own tagged upper bound.
+        const measured = await measurePeerConfiguredModel(projectRoot, invocation, peer, options, measureSignal, 'feature').catch(() => null);
+        const counted = measured?.quality === 'provider-count' ? measured : null;
         const windows = [profileWindow, counted?.windowTokens ?? null].filter((value): value is number => value !== null);
         const windowTokens = windows.length ? Math.min(...windows) : null;
         if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };

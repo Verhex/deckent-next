@@ -44,10 +44,11 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
   return { ...prompt, memory, invocationSettings: { ...(settings.maxCompletionTokens === null ? {} : { maxCompletionTokens: settings.maxCompletionTokens }),
     ...(settings.reasoning === 'off' ? { reasoning: settings.reasoning } : {}) } };
 }
-/** Provider count when available; UTF-8 bytes plus configured framing is a conservative tagged estimate otherwise. */
+/** Provider count when available; UTF-8 bytes plus configured framing is a conservative tagged estimate otherwise (a transport's own
+ * `estimated` measurement is not a count and is ignored here: the Brain keeps its configured framing). */
 export function assertBrainContextFits(command: ModelInvocationCommand, config: unknown, profileWindow: number | null,
-  measurement: Readonly<{ promptTokens: number; windowTokens: number | null }> | null) {
-  const limits = brainPlannerConfigSchema.parse(config).context;
+  measured: Readonly<{ promptTokens: number; windowTokens: number | null; quality?: 'provider-count' | 'estimated' }> | null) {
+  const limits = brainPlannerConfigSchema.parse(config).context, measurement = measured?.quality === 'estimated' ? null : measured;
   const bytes = new TextEncoder().encode(JSON.stringify(command.nativeRequest)).length;
   if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
   const windows = [profileWindow, measurement?.windowTokens ?? null].filter((value): value is number => value !== null);

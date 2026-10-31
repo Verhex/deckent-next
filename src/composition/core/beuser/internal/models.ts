@@ -14,6 +14,8 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
   choices: BeuserModelComposition['choices'], contributorModels: readonly unknown[], budget: BeuserCallBudget, completionTokens: number,
   evaluatorInput: () => unknown) {
   const pins = new Map<string, Awaited<ReturnType<typeof prepareConfiguredModelAs>>>();
+  // How each admitted call's token reservation was sized; retained with the walk's diagnostic and shown in the report.
+  const reservations = { providerCount: 0, estimated: 0 };
   const models = createBeuserModelPort({ choices, contributorModels, walkerModels: [], independence: 'reduced', credential: undefined,
     now: Date.now,
     async sources(ctx) {
@@ -24,17 +26,20 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
         try { return await reader.loadRecord(scopeId, reference); } finally { reader.close(); }
       } }, profiles: c.config['provider_invocation_profiles'], catalog };
     },
-    async prepare(ctx, role, reference, input, remaining) {
+    async prepare(ctx, role, reference, input, remaining, catalogModel) {
       const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: ctx.binding.identity.scopeId, options,
         messages: beuserModelMessages(role, input, role === 'beuser-evaluator' ? evaluatorInput() : undefined) }, false, reference, { maxCompletionTokens: completionTokens, jsonOutput: 'if-supported' });
       const pinned = await prepareConfiguredModelAs(root, prepared.command, ctx.principal, options, ctx.signal);
       const profile = pinned.profile;
       const spending = pinned.spending;
       const measured = pinned.measurement;
-      if (!measured || measured.quality !== 'provider-count') throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+      // A provider count, or (owner 2026-10-31, option B) a transport without a counter: bytes sent plus its registry framing allowance.
+      // The completion part is `completionTokens`; a CLI cannot be told that cap, so an overrun shows only in the reported usage (settled below).
+      if (!measured || (measured.quality !== 'provider-count' && measured.quality !== 'estimated')) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
       const tokens = measured.promptTokens + completionTokens;
-      // The window comes from the pinned profile or, for a local server that reports it with the count (vLLM /tokenize max_model_len), from the measurement.
-      const window = profile?.contextWindowTokens ?? measured.windowTokens;
+      // The window comes from the pinned profile, a local server's count (vLLM /tokenize max_model_len) or, last, the scope catalog's declared row.
+      const declared = (catalogModel as { contextWindow?: unknown } | null | undefined)?.contextWindow;
+      const window = profile?.contextWindowTokens ?? measured.windowTokens ?? (typeof declared === 'number' ? declared : null);
       if (!profile || !window || !Number.isSafeInteger(window) || !Number.isSafeInteger(measured.promptTokens) || measured.promptTokens < 0
         || !Number.isSafeInteger(tokens) || tokens > window || (measured.windowTokens !== null && tokens > measured.windowTokens)
         || tokens > remaining.tokens || profile.limits.timeoutMs > ctx.limits.maxWallMs
@@ -45,6 +50,7 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
         || spending?.quote && spending.quote.currency !== remaining.currency) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
       const cost = spending?.quote ? Number(currencyAmountText(spending.quote.maxChargeMinorUnits, remaining.currency, 'en', false).replaceAll(',', '')) : 0;
       pins.set(prepared.command.commandId, pinned);
+      if (measured.quality === 'estimated') reservations.estimated++; else reservations.providerCount++;
       return { command: prepared.command, tokens, cost, currency: remaining.currency };
     },
     tokensUsed(result) {
@@ -62,5 +68,5 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
     } },
     async cancel() { throw new BeuserContractError('BEUSER_INPUT_INVALID'); },
   }, budget);
-  return { models, decode: (value: Parameters<typeof decodeBeuserWalkerOutput>[0]) => decodeBeuserWalkerOutput(value, context.binding) };
+  return { models, reservations: () => Object.freeze({ ...reservations }), decode: (value: Parameters<typeof decodeBeuserWalkerOutput>[0]) => decodeBeuserWalkerOutput(value, context.binding) };
 }

@@ -49,3 +49,8 @@ export type CatalogTariffSeal = z.infer<typeof catalogTariffSealSchema>;
 /** The spend authority's re-read of a sealed tariff (security review M4): the registered row's own `connect.tariff` term when the ledger catalog
  * holds exactly that (channel, exact model id) at exactly the sealed revision, else null. A seal is never trusted on its own. */
 export type CatalogTariffLookup = (seal: CatalogTariffSeal, modelId: string, scopeId: string) => Promise<unknown>;
+/** Owner 2026-10-31 (BeUser option B): the tokens a transport without a counter (a subscription CLI, ChatGPT sign-in) adds around the bytes it
+ * sends (identity, plugin and turn framing, hidden instructions). A prompt estimate is the UTF-8 bytes sent plus `tokens`; `measured` cites a retained
+ * observation in `source`, `unmeasured` states a conservative value without one. Registry data of each such transport; never a count or a proven bound. */
+export const promptFramingAllowanceSchema = z.object({ tokens: z.number().int().positive().safe(), basis: z.enum(['measured', 'unmeasured']),
+  source: z.string().min(1).max(1024) }).strict().readonly();

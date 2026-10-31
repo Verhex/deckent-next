@@ -33,6 +33,7 @@
   "beuser.report.counts": "Defined {defined}; selected {selected}; walked {walked}; concurrent {concurrent}.",
   "beuser.report.calibration": "Calibration {revision}: traps {trapHits}/{trapTotal}, false RED {falseRed}/{goodTotal}; minimum hit rate {minimumHitRate}, maximum false RED rate {maximumFalseRedRate}; k {k}, retries {retries}.",
   "beuser.report.reliability": "Reliability: {completed}/{attempted} completed.",
+  "beuser.report.reservation": "Token reservations: {providerCount} counted by the provider, {estimated} estimated (bytes sent plus the channel's framing allowance; a CLI does not enforce the completion cap).",
   "beuser.report.cost": "Cost: {cost} {currency}; elapsed: {elapsedMs} ms.",
   "beuser.report.segment": "Segment {segment}: outcome {outcome}; authorization {authorization}; safety {safety}; experience {experience}; validity {validity}; independence {independence}.",
   "beuser.report.stuck": "Diagnostic finding — {outcome}: persona {persona} is stuck in branch {branch} (repeated screen/action). Screen {screenRef}: {screen}. Evidence: {refs}.",

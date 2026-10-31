@@ -11,6 +11,7 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
     t('beuser.report.cohort', { cohort: safe(report.cohort) }, locale), t('beuser.report.counts', report.counts, locale),
     t('beuser.report.calibration', { ...report.calibration, revision: safe(report.calibration.revision) }, locale),
     t('beuser.report.reliability', report.reliability, locale),
+    ...(report.reservation ? [t('beuser.report.reservation', report.reservation, locale)] : []),
     t('beuser.report.cost', { cost: report.cost ?? unknown, currency: safe(report.currency), elapsedMs: report.elapsedMs ?? unknown }, locale)];
   const filesystemSources = { 'kernel-proven': t('beuser.report.filesystem.kernel-proven', {}, locale),
     'daemon-attested': t('beuser.report.filesystem.daemon-attested', {}, locale), unknown: t('beuser.report.filesystem.unknown', {}, locale) };

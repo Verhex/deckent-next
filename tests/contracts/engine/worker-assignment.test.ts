@@ -62,7 +62,7 @@ it('takes the first admissible candidate of the WorkClass list and seals it; ear
   const task = execution.tasks[0]!, pin = readWorkerModelPin(task.profile.parameters)!;
   expect(pin.pin).toEqual({ channelId: standard.channel, modelId: standard.model, auxiliaryModelIds: [] });
   expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'standard', version: 2 },
-    candidateIndex: 0, channelId: standard.channel, modelId: standard.model, catalogRevision: 'claude-cli-subscription-2026-10-08', modelRevision: 7, activationRevision: 5,
+    candidateIndex: 0, channelId: standard.channel, modelId: standard.model, catalogRevision: 'claude-cli-subscription-2026-10-31', modelRevision: 7, activationRevision: 5,
     // A1: the Claude catalog declares no vendor default and the list names no deviation, so the CLI's own default stays in place.
     effort: { level: null, source: 'cli-default' }, skipped: [] });
   expect(pin.reasoningEffort).toMatchObject({ level: null, source: 'cli-default' });

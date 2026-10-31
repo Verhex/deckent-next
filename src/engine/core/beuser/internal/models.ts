@@ -35,9 +35,10 @@ export interface BeuserModelComposition {
   /** `required` refuses an evaluator whose maker is unknown or shared with a contributor or walker; `reduced` (BeUser, owner 2026-10-31) calls it
    * and the verdict only labels its independence (independent/reduced/unknown). */
   readonly independence: 'required' | 'reduced';
-  /** Trusted provider codec uses its current profile, tariff/quote and remaining envelope. No rubric/system authority in walker input. */
+  /** Trusted provider codec uses its current profile, tariff/quote and remaining envelope. No rubric/system authority in walker input.
+   * `catalogModel` is the scope catalog's row for the target (its declared window is the last fallback when neither profile nor counter names one). */
   readonly prepare: (context: BeuserContext, role: BeuserModelRole, reference: NonNullable<ReturnType<typeof roleModelInvocationReference>>,
-    input: unknown, remaining: ReturnType<BeuserCallBudget['remaining']>) => Promise<{ command: ModelInvocationCommand; tokens: number; cost: number; currency: string }>;
+    input: unknown, remaining: ReturnType<BeuserCallBudget['remaining']>, catalogModel: unknown) => Promise<{ command: ModelInvocationCommand; tokens: number; cost: number; currency: string }>;
   readonly cancel: (context: BeuserContext, invocationId: string) => Promise<void>;
   readonly now: () => number;
   /** Trusted codec reads final provider counters; missing usage retains the complete reservation. */
@@ -64,7 +65,7 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
     if (role === 'beuser-evaluator' && ports.independence === 'required' && !beuserIndependentRows([target], () => maker, ports.contributorModels, walkers).length) return unavailable('independence');
     const reference = roleModelInvocationReference(source.roles, source.profiles, context.binding.identity.scopeId, target);
     if (!reference) return unavailable('model-unknown');
-    const prepared = await ports.prepare(context, role, reference, input, budget.remaining());
+    const prepared = await ports.prepare(context, role, reference, input, budget.remaining(), model);
     if (prepared.command.scopeId !== context.binding.identity.scopeId || JSON.stringify(prepared.command.reference) !== JSON.stringify(reference)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     context.signal.throwIfAborted();
     const settleTokens = budget.reserve(prepared.tokens, prepared.cost, prepared.currency);

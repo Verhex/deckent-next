@@ -48,9 +48,13 @@ export interface ModelInvocationNativePort {
   /** Context measurement (T-L5): the provider's own token count of exactly the prepared request and, when reported, the served
    * window. Null when this model or server has no counter or the count failed; never a model execution, receipt or spend. */
   measure?(prepared: unknown, signal?: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null } | null>;
+  /** A transport without a counter (subscription CLI, ChatGPT sign-in; owner 2026-10-31): UTF-8 bytes of exactly what it sends plus its
+   * registry-declared framing allowance. Pure; an estimate, never a count or a proven bound (the provider may add hidden context). */
+  estimatePrompt?(prepared: unknown): number;
 }
-/** A provider count of one prepared request (T-L5); callers use a tagged upper bound when there is none. */
-export interface ModelInvocationMeasurement { readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: 'provider-count' }
+/** One prepared request's prompt size (T-L5): `provider-count` is the provider's own count; `estimated` is the transport's byte estimate
+ * (`estimatePrompt`), which a caller must never treat as a count. Callers use their own tagged upper bound when there is neither. */
+export interface ModelInvocationMeasurement { readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: 'provider-count' | 'estimated' }
 export interface ModelInvocationNativeRegistry {
   resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null;
   /** Called only after initial identity, policy, activation and profile checks; no secrets or model execution. */
@@ -208,9 +212,13 @@ export class ModelInvocationApplication {
     const { binding, profile, native } = await this.admittedTarget(command, true);
     assertSubscriptionRawUse(principal, profile, this.entry);
     assertSubscriptionDelegation(principal, profile);
-    if (!native.measure) return null;
+    if (!native.measure && !native.estimatePrompt) return null;
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    if (!native.measure) {
+      const estimated = native.estimatePrompt!(prepared);
+      return Number.isSafeInteger(estimated) && estimated > 0 ? Object.freeze({ promptTokens: estimated, windowTokens: null, quality: 'estimated' as const }) : null;
+    }
     const counted = await native.measure(prepared, signal);
     if (!counted || !Number.isSafeInteger(counted.promptTokens) || counted.promptTokens < 0
       || (counted.windowTokens !== null && (!Number.isSafeInteger(counted.windowTokens) || counted.windowTokens <= 0))) return null;

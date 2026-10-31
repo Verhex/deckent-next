@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema as id, beuserBindingSchema, beuserTranscriptEntrySchema } from '#domain/index.js';
+import { identitySchema as id, counterSchema, beuserBindingSchema, beuserTranscriptEntrySchema } from '#domain/index.js';
 
 /** Diagnostic observation, never a replacement for acceptance, calibration or cleanup evidence. Walk20: a persona out of wait patience
  * is `persona-patience` (reason `patience`); a loop or only observing is `persona-stuck`. */
@@ -13,6 +13,8 @@ export const beuserDiagnosticSchema = z.object({ schemaVersion: z.literal(1),
   trace: z.array(z.object({ evidenceRef: id, kind: beuserTranscriptEntrySchema.unwrap().shape.kind,
     artifactRef: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict().readonly()),
   finding: beuserStuckFindingSchema.nullable(),
+  /** Owner 2026-10-31: how many model calls reserved tokens on a provider count and how many on a transport's byte estimate (absent: older record). */
+  reservation: z.object({ providerCount: counterSchema, estimated: counterSchema }).strict().readonly().optional(),
 }).strict().refine(v => new Set(v.trace.map(row => row.evidenceRef)).size === v.trace.length
   && (!v.finding || v.trace.some(row => row.kind === 'screen' && row.evidenceRef === v.finding!.screenRef)
     && v.finding.evidenceRefs.every(ref => v.trace.some(row => row.artifactRef === ref)))).readonly();

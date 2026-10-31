@@ -83,6 +83,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
     billingAxis: 'subscription' as const,
     responseBytesUpperBound(prepared: unknown) { if (!prepared || typeof prepared !== 'object' || !tokens.has(prepared)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'token' });
       return modelInvocationNativeResponseUpperBound((prepared as Prepared).profile.limits.responseMaxBytes); },
+    estimatePrompt(value: unknown) { if (!value || typeof value !== 'object' || !tokens.has(value)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'token' }); const p = value as Prepared; return Buffer.byteLength(p.system, 'utf8') + Buffer.byteLength(p.user, 'utf8') + p.entry.headless.promptFramingAllowance.tokens; }, // system + user bytes + allowance
     async preflight(profile: ModelInvocationProfile, signal?: AbortSignal) { const { definition, entry } = target(profile); await headlessPreflight(entry, definition, options.now, options.isolation, signal); },
     async prepare(profileInput: unknown, bindingInput: unknown, requestInput: unknown): Promise<unknown> {
       const { profile, definition, entry } = target(profileInput);

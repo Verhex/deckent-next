@@ -7,7 +7,7 @@ export type { ModelBindingDefinition, ModelReference } from './internal/binding.
 export { PROVIDER_CATALOG_DOCUMENT_SCHEMA_VERSION, CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, EXACT_MODEL_ID_MAX_LENGTH,
   exactModelIdSchema, modelLifecycleSchema, catalogChannelSchema, catalogModelSchema, providerCatalogDocumentSchema,
   parseProviderCatalogDocument, reportedNameConflict, connectTermsMisplaced, catalogPinModelEvidence, workerModelPinEvidenceShape } from './internal/catalog-document.js';
-export { reportedModelNameSchema, catalogTariffSealSchema } from './internal/catalog-metadata.js';
+export { reportedModelNameSchema, catalogTariffSealSchema, promptFramingAllowanceSchema } from './internal/catalog-metadata.js';
 export type { CatalogTariffLookup, CatalogTariffSeal } from './internal/catalog-metadata.js';
 export type { ProviderCatalogDocument, CatalogChannel, CatalogModel, ModelLifecycle, CatalogPinModelEvidence } from './internal/catalog-document.js';
 

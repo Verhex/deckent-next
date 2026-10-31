@@ -2,6 +2,7 @@ import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
 import type { OAuthConnectionProtocol } from '#engine/index.js';
 import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js';
+import { promptFramingAllowanceSchema } from '#domain/index.js';
 const positive = z.number().int().positive().safe(), url = z.string().url().startsWith('https://');
 const sourced = { source: url, observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) };
 const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
@@ -13,7 +14,7 @@ const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: 
   refreshPolicySource: z.object({ ...sourced, kind: z.literal('deckent-policy') }).strict(),
   usageSummary: z.object({ ...sourced, days: positive, maxEntries: positive, timeoutMs: positive, manageUrl: url }).strict(),
   inference: z.object({ ...sourced, adapter: z.object({ id: z.string().min(1), version: positive }).strict(), endpoint: url, modelsEndpoint: url,
-    modelsMaxEntries: positive, modelsMaxBytes: positive, modelFieldMaxChars: positive, visibility: z.string().min(1), namespace: z.object({ name: z.string().min(1), description: z.string() }).strict() }).strict(),
+    modelsMaxEntries: positive, modelsMaxBytes: positive, modelFieldMaxChars: positive, visibility: z.string().min(1), namespace: z.object({ name: z.string().min(1), description: z.string() }).strict(), promptFramingAllowance: promptFramingAllowanceSchema }).strict(),
   requestRules: z.object({ ...sourced, allowedFields: z.array(z.string()).min(1), unverifiedFields: z.array(z.string()), forbiddenFields: z.array(z.string()).min(1),
     store: z.literal(false), stream: z.literal(true) }).strict().refine(r => [...r.allowedFields, ...r.unverifiedFields].every(f => !r.forbiddenFields.includes(f))
       && r.allowedFields.every(f => !r.unverifiedFields.includes(f))),

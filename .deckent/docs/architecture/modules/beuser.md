@@ -144,10 +144,27 @@ that channel; this rule neither skips nor widens it.
 Several walkers run at once through the existing pool: each journey profile carries its own walker and evaluator
 choice, and a walk reserves a wave of pending tasks under the admission's `executionSlots` and `inFlightSlots`
 and runs it in parallel. One admission can therefore list three profiles whose walkers are, for example, a Claude
-subscription model, a Codex subscription model and a local vLLM model, with `executionSlots: 3`. The bounds stay
+subscription model, a Codex model through the ChatGPT sign-in (the Codex CLI has no invocation adapter yet) and a
+local vLLM model, with `executionSlots: 3`. The bounds stay
 the existing ones: each profile's limits revision (steps, wall time, calls, tokens and cost per walk), the pool
 slots, each invocation profile's `maxInFlight` and context window (a local server's window and concurrency), and
 the subscription's own quota (a quota refusal is a typed rejection of that call, never a model substitution).
+
+Token reservations (owner 2026-10-31, option B). A call reserves its prompt size plus the profile's
+`completionTokens`. The prompt size is the provider's own count when the transport has one (`provider-count`, for
+example a local server's `/tokenize`). A transport without a counter, the Claude CLI headless step and the ChatGPT
+sign-in (SIWC) responses port, gives an `estimated` size instead: the UTF-8 bytes it sends (the CLI's system and user
+text; the SIWC request body) plus a registry-declared `promptFramingAllowance` for what the transport adds around them
+(`{tokens, basis: measured|unmeasured, source}`, schema in the provider catalog domain). The Claude headless entry
+(`assets/native-coding/commands.json`) declares 2048, `measured`: HEADLESS-0 (2026-10-23, CLI 2.1.309) saw 586 prompt
+tokens for a near-empty one-turn probe, so 2048 is a stated margin over it and is re-measured per CLI version. The SIWC
+entry (`provider-siwc/internal/registry.json`) declares 1024, `unmeasured`: no retained usage figure exists for that
+endpoint. An estimate is never a count or a proven bound; the Brain and the agent turn ignore it and keep their own
+tagged estimate. The CLI cannot be told the completion cap and hidden thinking is not bounded by response bytes, so
+each call is settled to the usage the transport reports: a reported total above the reservation stops the walk with
+`BEUSER_LIMITS_UNAVAILABLE` and the whole reservation stays charged. The context window is the profile's, a local
+counter's, or last the scope catalog row's declared window (Claude CLI rows: 1M, Haiku 4.5 200K, sources fetched
+2026-10-31 in the row provenance). The walk report counts the calls reserved on each basis (`reservation`).
 
 Missing walk profiles return `BEUSER_PROFILE_REQUIRED` with the setup next step. A missing report
 directory or record returns `BEUSER_REPORT_NOT_FOUND` with the walk next step. Corrupt records,

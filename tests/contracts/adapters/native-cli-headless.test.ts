@@ -183,6 +183,12 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
     await expect(c.port.prepare(c.profile, binding, request(over))).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID' });
     expect(await c.log()).toEqual([]);
   });
+  it('estimates a prompt without a counter as the system and user UTF-8 bytes plus the registry framing allowance, with no spawn', async () => {
+    const c = await connection(), user = 'Grüße '.repeat(10), prepared = await c.port.prepare(c.profile, binding, request({ messages: [{ role: 'system', content: 's' }, { role: 'user', content: user }] }));
+    expect(headless.promptFramingAllowance).toMatchObject({ basis: 'measured', tokens: 2048 });
+    expect(c.port.estimatePrompt!(prepared)).toBe(1 + Buffer.byteLength(user, 'utf8') + headless.promptFramingAllowance.tokens);
+    expect(() => c.port.estimatePrompt!({})).toThrow(); expect(await c.log()).toEqual([]);
+  });
   it('passes a registry effort level as the effort flag', async () => {
     const c = await connection({ steps: happy() });
     await c.call(null, { reasoning_effort: 'low' });

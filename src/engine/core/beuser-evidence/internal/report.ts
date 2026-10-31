@@ -17,6 +17,8 @@ export const beuserReportSchema = z.object({ schemaVersion: z.literal(1), simula
   criticalCoverage: z.array(z.object({ criterion: id, walked: counterSchema, valid: counterSchema, invalid: counterSchema, unknown: counterSchema }).strict()
     .refine(v => v.valid + v.invalid <= v.walked && v.walked <= v.valid + v.invalid + v.unknown)),
   reliability: z.object({ completed: counterSchema, attempted: counterSchema }).strict(),
+  /** Owner 2026-10-31: model calls whose token reservation was a provider count or a transport's byte estimate (absent: an older report). */
+  reservation: z.object({ providerCount: counterSchema, estimated: counterSchema }).strict().optional(),
   cost: measured, currency: id, elapsedMs: measured,
 }).strict().refine(v => v.counts.concurrent <= v.counts.walked && v.counts.walked <= v.counts.selected && v.counts.selected <= v.counts.defined
   && v.reliability.completed <= v.reliability.attempted && v.calibration.cohort === v.cohort
