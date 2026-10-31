@@ -52,6 +52,7 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale, r
   if (result.budget?.state === 'missing') lines.push(t('models.connect.budgetMissing', { scope: result.scopeId, usd: SCOPE_BUDGET_CHOICES.defaultPresetUsd }, locale));
   if (result.budget?.state === 'unknown') lines.push(t('models.connect.budgetUnknown', { scope: result.scopeId, code: result.budget.code ?? '-' }, locale));
   if (result.service === 'stale') lines.push(t('models.connect.restart', {}, locale));
+  if (result.worker === 'image-required') lines.push(t('models.connect.workerImageRequired', {}, locale));
   // S3-3: the CLI login it uses and who besides the person may spend it (the consent the person wrote).
   if (result.cli) lines.push(result.cli.owned ? t('headless.connect.loginOwned', { dir: result.cli.configDir }, locale) : t('headless.connect.login', { dir: result.cli.configDir }, locale), result.cli.delegate.length
     ? t('headless.connect.delegated', { classes: result.cli.delegate.join(', ') }, locale) : t('headless.connect.personOnly', {}, locale));

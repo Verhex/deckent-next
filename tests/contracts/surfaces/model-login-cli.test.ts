@@ -52,8 +52,8 @@ it('negative: an AI tool, a pipe and --json are refused before the handler runs 
   expect(calls).toEqual([]); expect(card.asked).toEqual([]);
 });
 it('the person sees the exact dir on a card first, then the outcome (kind and plan only); a declined card signs nothing in and exits 1', async () => {
-  for (const [lang, title, words] of [['en', 'Sign the Brain in to Claude?', ['Login directory: ' + DIR + " (the Brain's own", 'Deckent captures nothing', 'Signed in: claude.ai (max)']],
-    ['tr', "Brain Claude'a giriş yapsın mı?", ['Giriş dizini: ' + DIR + " (Brain'in kendi", 'Deckent gösterdiği hiçbir şeyi almaz', 'Giriş yapıldı: claude.ai (max)']]] as const) {
+  for (const [lang, title, words] of [['en', 'Sign the Brain in for claude-cli-subscription?', ['Login directory: ' + DIR + " (the Brain's own", 'Deckent captures nothing', 'Signed in: claude.ai (max)']],
+    ['tr', 'Brain claude-cli-subscription için giriş yapsın mı?', ['Giriş dizini: ' + DIR + " (Brain'in kendi", 'Deckent gösterdiği hiçbir şeyi almaz', 'Giriş yapıldı: claude.ai (max)']]] as const) {
     const f = await project(), calls: unknown[] = [], out = capture(); card.interactive = true; card.asked = []; card.answers = ['apply'];
     expect(await modelsCommand([...LOGIN, '--sso', '--lang', lang], { root: f.root, env: f.env, stdin: tty(), stdout: out.sink, ...handler(calls) } as never)).toBeUndefined();
     expect(card.asked.map(request => request.title)).toEqual([title]);
@@ -64,17 +64,24 @@ it('the person sees the exact dir on a card first, then the outcome (kind and pl
   const f = await project(), calls: unknown[] = []; card.interactive = true; card.answers = [null];
   expect(await modelsCommand([...LOGIN, '--config-dir', '/home/p/other'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, stderr: capture().sink, ...handler(calls) } as never)).toBe(1);
   expect(calls).toEqual([['login', { connection: 'claude-cli-subscription', configDir: '/home/p/other' }]]);
+  // Codex (owner 2026-10-31): the card and the result name the connection, never another CLI.
+  const codex = await project(), out = capture(); card.interactive = true; card.asked = []; card.answers = ['apply'];
+  expect(await modelsCommand(['models', 'login', '--connection', 'codex-cli-subscription'], { root: codex.root, env: codex.env, stdin: tty(), stdout: out.sink,
+    ...handler([], { configDir: DIR, owned: true, exit: 'completed', signedIn: true, authMethod: 'chatgpt', subscriptionType: null }) } as never)).toBeUndefined();
+  expect(card.asked.map(request => request.title)).toEqual(['Sign the Brain in for codex-cli-subscription?']);
+  expect(out.text()).toContain('Signed in: chatgpt. Connect the Brain with `deckent models connect --connection codex-cli-subscription ...`');
+  expect(`${card.asked[0]!.body!.join('\n')}\n${out.text()}`).not.toMatch(/Claude/u);
 });
 it('a stopped or unfinished sign-in says so and exits 1; another dir is named as the person\'s own', () => {
-  expect(renderHeadlessLogin({ configDir: '/x', owned: false, exit: 'cancelled', signedIn: false, authMethod: null, subscriptionType: null }, 'en')).toBe(
+  expect(renderHeadlessLogin({ configDir: '/x', owned: false, exit: 'cancelled', signedIn: false, authMethod: null, subscriptionType: null }, 'en', 'claude-cli-subscription')).toBe(
     'Login directory: /x (named by you; not the Brain\'s own).\nThe sign-in was stopped; nothing else was changed.\n'
-    + 'Not signed in with a Claude subscription: the Brain cannot use this directory yet. Run the sign-in again.');
-  expect(renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: false, authMethod: null, subscriptionType: null }, 'tr')).toContain('Giriş tamamlanmadı');
+    + 'Not signed in with a subscription for claude-cli-subscription: the Brain cannot use this directory yet. Run the sign-in again.');
+  expect(renderHeadlessLogin({ configDir: '/x', owned: true, exit: 'failed', signedIn: false, authMethod: null, subscriptionType: null }, 'tr', 'claude-cli-subscription')).toContain('Giriş tamamlanmadı');
 });
 it('help names the own dir, the account switch and the refusals', async () => {
   const f = await project(), out = capture();
   await modelsCommand(['models', 'login', '--help'], { root: f.root, env: f.env, stdout: out.sink } as never);
-  for (const word of ['deckent models login --connection claude-cli-subscription', 'deckent models login --connection chatgpt-login', 'always prints the sign-in link',
+  for (const word of ['deckent models login --connection claude-cli-subscription', 'codex-cli-subscription', 'deckent models login --connection chatgpt-login', 'always prints the sign-in link',
     'never in a backup', 'switch account', '--sso', 'an AI tool, MCP, CI, a pipe or --json is refused'])
     expect(out.text()).toContain(word);
   // FIX9: prose wraps at the width, never at a hard break in mid-sentence (a short row followed by its own continuation).

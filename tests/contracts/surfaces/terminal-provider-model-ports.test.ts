@@ -552,7 +552,7 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
     connectModel: async () => { throw ErrorRegistry.createError('HEADLESS_LOGIN_REQUIRED'); } }, options, 'en', error => formatHumanError(error, { locale: 'en', noColor: true }));
   const outcome = await port.connect({ kind: 'claude-cli-subscription', endpoint: null, key: null });
   const text = outcome.lines.map(line => line.text).join('\n');
-  expect(text).toContain('deckent models login --connection claude-cli-subscription'); expect(outcome.stored).toBe(false);
+  expect(text).toContain('deckent models login --connection <connection>'); expect(text).toContain('claude-cli-subscription or codex-cli-subscription'); expect(outcome.stored).toBe(false);
 });
 
 it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models instead of "-"', async () => {

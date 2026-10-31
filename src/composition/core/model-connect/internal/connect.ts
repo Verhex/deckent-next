@@ -41,7 +41,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       defaults: registry.profileDefaults,
       async available(id, base) {
         const kind = kindOf(id)!;
-        if (kind.connect?.catalogOnly) { const seed = await readProviderConnectSeed(kind.connect.seed!), ids = workerConnectionModelIds(seed, effective as never); if (ids.length) return ids; throw ErrorRegistry.createError('MODEL_CONNECT_WORKER_IMAGE_REQUIRED', { params: { cli: seed.providers[0]?.channel.cli ?? kind.id } }); } // BeUser M-24: the image comes first
+        if (kind.connect?.catalogOnly) { const seed = await readProviderConnectSeed(kind.connect.seed!), ids = workerConnectionModelIds(seed, effective as never); if (ids.length || kind.connect.headless) return ids; throw ErrorRegistry.createError('MODEL_CONNECT_WORKER_IMAGE_REQUIRED', { params: { cli: seed.providers[0]?.channel.cli ?? kind.id } }); } // BeUser M-24: the image comes first (owner 2026-10-31: for a headless kind it gates only the worker activation)
         if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc) { const ids = (await siwc.models()).map(row => row.slug); pulled.set(id, ids); return ids; }
         if (!kind.probe?.listsModels) return null;
         const ids = (await listConfiguredConnectionModels(projectRoot, String(scopeId), id, base, options, host)).map(row => row.nativeId);

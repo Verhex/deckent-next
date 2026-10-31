@@ -136,12 +136,14 @@ export class ModelConnectApplication {
     const effective = (): ProviderCatalog | null => layers.effective['provider_catalog'] === undefined ? null : parseProviderCatalog(layers.effective['provider_catalog']);
     const models: NonNullable<ModelConnectResult['models']>[number][] = [];
     const commands: ModelConnectCommand[] = [];
+    let workerIds: readonly string[] | null = null, worker: ModelConnectResult['worker'];
     if ('pull' in command.model) {
       if (kind.connect.pull === 'pick') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       const seed = kind.connect.seed ? await ports.seed(kind.connect.seed) : null;
-      const live = ports.available ? await ports.available(kind.id, base ?? '') : null;
+      // Owner 2026-10-31: a headless worker kind connects without a worker image; the image list gates only its worker activation.
+      const listed = ports.available ? await ports.available(kind.id, base ?? '') : null, live = kind.connect.headless ? null : listed; if (kind.connect.headless) workerIds = listed;
       // BeUser M-01: a headless CLI pull connects the models with an admitted CLI version; the others are listed, never a refusal of the whole pull.
-      const ready = (provider: { channel?: { kind?: string } | null }, model: { minCliVersion?: string | null }) => kind.connect!.catalogOnly === true || provider.channel?.kind !== 'native-cli' || Boolean(model.minCliVersion); // a headless CLI model needs its admitted CLI version
+      const ready = (provider: { channel?: { kind?: string } | null }, model: { minCliVersion?: string | null }) => (kind.connect!.catalogOnly === true && !kind.connect!.headless) || provider.channel?.kind !== 'native-cli' || Boolean(model.minCliVersion); // a headless CLI model needs its admitted CLI version
       for (const provider of seed?.providers ?? []) for (const model of provider.models) if (model.lifecycle.state === 'active' && !ready(provider, model)) models.push({ nativeId: model.nativeId, state: 'notInCatalog', code: 'MODEL_CONNECT_MODEL_UNKNOWN' });
       const candidates = seed ? seed.providers.flatMap(provider => provider.models.filter(model => model.lifecycle.state === 'active' && ready(provider, model)).map(model => model.nativeId)) : live ?? [];
       for (const nativeId of candidates) {
@@ -150,8 +152,8 @@ export class ModelConnectApplication {
       }
       for (const nativeId of live ?? []) if (!candidates.includes(nativeId)) models.push({ nativeId, state: 'notInCatalog' });
     } else { // Mert M-35: a single-model catalog-only connect passes the same worker-image gate as the pull form (the port refuses without one)
-      const live = kind.connect.catalogOnly && ports.available ? await ports.available(kind.id, base ?? '') : null, nativeId = 'nativeId' in command.model ? command.model.nativeId : command.model.reference.modelId;
-      if (live && !live.includes(nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN'); commands.push(command); }
+      const listed = kind.connect.catalogOnly && ports.available ? await ports.available(kind.id, base ?? '') : null, nativeId = 'nativeId' in command.model ? command.model.nativeId : command.model.reference.modelId;
+      if (kind.connect.headless) workerIds = listed; else if (listed && !listed.includes(nativeId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN'); commands.push(command); }
     const targets = await Promise.all(commands.map(item => this.target(kind, item, effective(), base ?? '')));
     const target = targets[0];
     if (!target) throw new ModelConnectError('MODEL_CONNECT_NO_AVAILABLE', models);
@@ -162,7 +164,7 @@ export class ModelConnectApplication {
     const notCarried: { reference: ModelReference; code: string }[] = [], carriedModels: ModelReference[] = [];
     const result = (status: ModelConnectResult['status'], approval: ModelConnectResult['approval'] = null, keyStored: boolean | null = null,
       service: ModelConnectResult['service'] = null): ModelConnectResult => Object.freeze({ schemaVersion: 1, operation: MODEL_CONNECT_OPERATION_ID, commandId: command.commandId,
-      scopeId, connection: command.connection, status, reference: target.reference, ...('pull' in command.model ? { models: [...models] } : {}), credentialRef, keyStored, steps: Object.freeze({ ...steps }), notCarried: Object.freeze([...notCarried]), carriedModels: Object.freeze([...carriedModels]), tariff, ...(cli ? { cli } : {}), approval, service });
+      scopeId, connection: command.connection, status, reference: target.reference, ...('pull' in command.model ? { models: [...models] } : {}), credentialRef, keyStored, steps: Object.freeze({ ...steps }), notCarried: Object.freeze([...notCarried]), carriedModels: Object.freeze([...carriedModels]), tariff, ...(cli ? { cli } : {}), ...(worker ? { worker } : {}), approval, service });
     const write = async (keyPath: string, value: unknown, layer: ModelConnectLayer, id: string) => {
       const pending = await ports.write({ keyPath, value, layer, commandId: id });
       layers = await ports.layers();
@@ -255,12 +257,14 @@ export class ModelConnectApplication {
     // 4. The chat activation at the current revision (after the profile: activation checks the profile's delivery).
     const activation = await ports.activation(target.reference);
     if (!(activation?.state === 'active' && activation.catalogRevision === binding.catalogRevision && activation.binding.digest === binding.binding.digest)) {
-      await ports.activate({ commandId: step(command.commandId, 'activate', String(index)), reference: target.reference, expectedRevision: activation?.revision ?? 0,
+      // Without an admitted worker image a headless worker kind takes the chat activation only (the combined one would also switch the worker model on).
+      await (kind.connect.headless && !workerIds?.includes(target.nativeId) ? ports.carryActivate ?? ports.activate : ports.activate)({ commandId: step(command.commandId, 'activate', String(index)), reference: target.reference, expectedRevision: activation?.revision ?? 0,
         catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
       steps.activation = 'written';
     }
     }
-    if (await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) steps.activation = 'written';
+    if (kind.connect.headless && !workerIds?.includes(target.nativeId)) worker = 'image-required'; // the image gates only the worker activation, and the result says so
+    else if (await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) { steps.activation = 'written'; if (kind.connect.headless) worker ??= 'written'; } else if (kind.connect.headless) worker ??= 'present';
     models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });
     }
     if (!profiled) steps.profile = 'skipped';

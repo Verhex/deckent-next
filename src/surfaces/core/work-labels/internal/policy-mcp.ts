@@ -56,5 +56,6 @@ export function modelConnectLines(result: ModelConnectResult, label: string, loc
       models: result.notCarried.map(item => `${item.reference.modelId} (${item.code})`).join(', ') }, locale) }] : []),
     ...(result.tariff === 'unmetered' ? [{ label: t('tui.provider.model.field.spend', {}, locale), text: t('models.connect.unmetered', {}, locale), tone: 'warning' as const }] : []),
     ...(result.service === 'stale' ? [{ label: t('tui.provider.model.field.service', {}, locale), text: t('models.connect.restart', {}, locale), tone: 'warning' as const }] : []),
+    ...(result.worker === 'image-required' ? [{ label: t('tui.provider.model.field.steps', {}, locale), text: t('models.connect.workerImageRequired', {}, locale), tone: 'warning' as const }] : []),
 ];
 }
