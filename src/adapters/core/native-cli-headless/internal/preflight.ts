@@ -32,6 +32,22 @@ export function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[
     return Object.fromEntries(AUTH_FIELDS.filter(key => Object.hasOwn(value, key)).map(key => [key, (value as Record<string, unknown>)[key]]));
   } catch { return null; }
 }
+/** The CLI's own login status, by registry data: `json` (allowlisted fields on stdout, the login dir it names) or `status` (the exit code and one exact
+ * line; another exit-0 login kind, such as an API key, is not a subscription login). `unreadable`: neither shape (a typed preflight refusal). */
+export type HeadlessAuth = Readonly<{ state: 'signed-in'; authMethod: string; apiProvider: string | null; subscriptionType: string | null }>
+  | Readonly<{ state: 'signed-out' | 'unreadable' | 'config-dir' }>;
+export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Readonly<{ exitCode: number | null; stdout: string; stderr: string }>, configDir: string): HeadlessAuth {
+  if ('kind' in auth) {
+    const lines = (auth.stream === 'stderr' ? output.stderr : output.stdout).split(/\r?\n/u).map(line => line.trim()), match = auth.loggedIn.find(row => lines.includes(row.line));
+    return output.exitCode === 0 && match ? { state: 'signed-in', authMethod: match.authMethod, apiProvider: null, subscriptionType: null }
+      : output.exitCode === 0 || output.exitCode === 1 ? { state: 'signed-out' } : { state: 'unreadable' };
+  }
+  const fields = authStatus(output.stdout);
+  if (!fields || typeof fields.loggedIn !== 'boolean') return { state: 'unreadable' };
+  if (fields.loggedIn !== true || !auth.authMethods.includes(String(fields.authMethod)) || !auth.apiProviders.includes(String(fields.apiProvider))) return { state: 'signed-out' };
+  if (auth.configDirectoryMatch && fields.configDirectory !== configDir) return { state: 'config-dir' };
+  return { state: 'signed-in', authMethod: String(fields.authMethod), apiProvider: String(fields.apiProvider), subscriptionType: typeof fields.subscriptionType === 'string' ? fields.subscriptionType : null };
+}
 /**
  * No model call: version range, every required flag (help or the hidden parser probe), and the login kind from `auth status`, all spawned
  * with the one built environment from the connection's run dir, inside the realm (S3-5). Pass → per-process seal plus a 0600 record in the state
@@ -89,13 +105,12 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
       const probe = hidden.get(flag);
       if (probe === undefined ? !help.includes(flag) : !(await accepted(probe))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'flags' });
     }
-    const auth = authStatus((await run(headless.preflight.authStatusArgs)).stdout);
-    if (!auth || typeof auth.loggedIn !== 'boolean') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'auth-status' });
-    if (auth.loggedIn !== true || !headless.auth.authMethods.includes(String(auth.authMethod)) || !headless.auth.apiProviders.includes(String(auth.apiProvider))) refuse('HEADLESS_LOGIN_REQUIRED');
-    if (headless.auth.configDirectoryMatch && auth.configDirectory !== definition.configDir) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+    const auth = headlessAuth(headless.auth, await run(headless.preflight.authStatusArgs), definition.configDir);
+    if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED');
+    if (auth.state !== 'signed-in') refuse('HEADLESS_PREFLIGHT_FAILED', { check: auth.state === 'config-dir' ? 'config-dir' : 'auth-status' });
     const sealed = Object.freeze({ version: version, flagSetDigest, runDir, env, isolation: isolated });
     await record({ state: 'open', version, size: info.size, mtimeMs: info.mtimeMs, isolation: isolated,
-      auth: { authMethod: auth.authMethod, apiProvider: auth.apiProvider, subscriptionType: typeof auth.subscriptionType === 'string' ? auth.subscriptionType : null } });
+      auth: { authMethod: auth.authMethod, apiProvider: auth.apiProvider, subscriptionType: auth.subscriptionType } });
     passed.set(key, sealed); return sealed;
   } catch (error) { return closed(error); }
 }

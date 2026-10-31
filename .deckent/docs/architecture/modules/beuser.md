@@ -152,12 +152,13 @@ the subscription's own quota (a quota refusal is a typed rejection of that call,
 
 Token reservations (owner 2026-10-31, option B). A call reserves its prompt size plus the profile's
 `completionTokens`. The prompt size is the provider's own count when the transport has one (`provider-count`, for
-example a local server's `/tokenize`). A transport without a counter, the Claude CLI headless step and the ChatGPT
+example a local server's `/tokenize`). A transport without a counter, the Claude and Codex CLI headless steps and the ChatGPT
 sign-in (SIWC) responses port, gives an `estimated` size instead: the UTF-8 bytes it sends (the CLI's system and user
 text; the SIWC request body) plus a registry-declared `promptFramingAllowance` for what the transport adds around them
 (`{tokens, basis: measured|unmeasured, source}`, schema in the provider catalog domain). The Claude headless entry
 (`assets/native-coding/commands.json`) declares 2048, `measured`: HEADLESS-0 (2026-10-23, CLI 2.1.309) saw 586 prompt
-tokens for a near-empty one-turn probe, so 2048 is a stated margin over it and is re-measured per CLI version. The SIWC
+tokens for a near-empty one-turn probe, so 2048 is a stated margin over it and is re-measured per CLI version. The Codex
+headless entry declares 24576, `unmeasured` (unsourced, conservative): above the 21320 input tokens of a retained tooled worker turn. The SIWC
 entry (`provider-siwc/internal/registry.json`) declares 1024, `unmeasured`: no retained usage figure exists for that
 endpoint. An estimate is never a count or a proven bound; the Brain and the agent turn ignore it and keep their own
 tagged estimate. The CLI cannot be told the completion cap and hidden thinking is not bounded by response bytes, so

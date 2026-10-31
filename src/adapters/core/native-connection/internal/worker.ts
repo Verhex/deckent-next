@@ -456,19 +456,29 @@ export function normalizeCodexLine(line: string, state: NormalizerState, codex: 
   catch { countUnmapped(state, 'codex-invalid'); }
   return events;
 }
+/** One `codex exec --json` line as typed fields: the one parser of this wire, shared by the worker normalizer and the headless model port (Codex
+ * headless 2026-10-31). Pure and total: `item` is the line's item object (item.* lines), `errorText` the failure text of turn.failed, error and an
+ * error item; a missing or mistyped field is null. */
+export type CodexExecLine = { readonly kind: 'invalid'; readonly reason: 'non-json' | 'non-object' | 'blank' }
+  | { readonly kind: 'event'; readonly data: Json; readonly type: string; readonly item: Json | null; readonly errorText: string | null };
+export function parseCodexExecLine(line: string): CodexExecLine {
+  let parsed: unknown;
+  try { parsed = JSON.parse(line); } catch { return { kind: 'invalid', reason: line.trim() ? 'non-json' : 'blank' }; }
+  const data = record(parsed);
+  if (!data) return { kind: 'invalid', reason: 'non-object' };
+  const type = typeof data.type === 'string' ? data.type : 'untyped', item = type.startsWith('item.') ? record(data.item) : null;
+  const errorText = type === 'turn.failed' ? record(data.error)?.message : type === 'error' ? data.message : type === 'item.completed' && item?.type === 'error' ? item.message : null;
+  return { kind: 'event', data, type, item, errorText: typeof errorText === 'string' ? errorText : null };
+}
 function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormalizerState, now: number, events: BridgeEvent[]): void {
   const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
   const miss = (type: string, count = 1) => countUnmapped(state, type, count);
   const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
-  let parsed: unknown;
-  try { parsed = JSON.parse(line); } catch { if (line.trim()) miss('non-json'); return; }
-  const data = record(parsed);
-  if (!data) { miss('non-object'); return; }
-  const type = typeof data.type === 'string' ? data.type : 'untyped';
+  const parsed = parseCodexExecLine(line);
+  if (parsed.kind === 'invalid') { if (parsed.reason !== 'blank') miss(parsed.reason); return; }
+  const { data, type, errorText } = parsed;
   if (type === 'thread.started' && codex.threadId === null && typeof data.thread_id === 'string') codex.threadId = data.thread_id;
-  const errorText = type === 'turn.failed' ? record(data.error)?.message : type === 'error' ? data.message
-    : type === 'item.completed' && record(data.item)?.type === 'error' ? record(data.item)?.message : null;
-  if (typeof errorText === 'string' && state.quotaPolicy?.codexPatterns.some(pattern => new RegExp(pattern, 'i').test(errorText))) {
+  if (errorText !== null && state.quotaPolicy?.codexPatterns.some(pattern => new RegExp(pattern, 'i').test(errorText))) {
     emit('quota-exhausted', { source: 'codex-text', resetsAtMs: null });
   }
   /** Stable, bounded, schema-valid tool id: a plain short native id as is, otherwise a digest (never the redacted text). */
@@ -481,7 +491,7 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
     codex.calls.add(key); emit('tool.call', { toolId: id, name, toolClass, target, detail: detail || null });
   };
   if (type === 'item.started' || type === 'item.completed') {
-    const item = record(data.item);
+    const item = parsed.item;
     if (!item || typeof item.id !== 'string' || typeof item.type !== 'string') { miss('item-invalid'); return; }
     const rawId = item.id, id = toolId(rawId), done = type === 'item.completed', status = item.status;
     if (item.type === 'agent_message') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(typeof item.text === 'string' ? item.text : ''), thinking: false, excerpt: red(item.text, 240) }); }

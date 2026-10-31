@@ -172,6 +172,20 @@ across PID namespaces wrongly, and Deckent cannot serialize sessions it does not
 exists and serializes its own spawns per login directory with a 0600 lock in the global headless root; past the registry wait it refuses
 with `HEADLESS_LOGIN_BUSY`. The S3-3 switch `models.headless.preview` is retired: the key still parses and is no longer offered.
 
+The Codex CLI has the same headless step (owner 2026-10-31). Its connect kind `codex-cli-subscription` stays a worker kind (the admitted
+worker image comes first, and connect still activates the worker model) and, with `connect.headless`, also writes the declaration, a
+`native-cli-headless` profile in the catalog family `codex-jsonl` (registry `headless.protocolFamily`) and the chat activation; `deckent
+models login --connection codex-cli-subscription` signs the Brain's own `headless/logins/codex` in with `codex login` (ChatGPT, file
+credential store). The call is one `codex exec --json` turn with the read-only sandbox, approvals never, no persisted session, user config
+and execpolicy rules ignored, every documented tool switch off and the system prompt as `model_instructions_file`; the message is on stdin
+and `CODEX_HOME` is the login directory. Codex has no turn flag and no tool-disable flag for `apply_patch`, so the line guard enforces one
+thread and one turn and stops the process on any item other than the answer and its reasoning (a tool item is `guard`, field
+`item.<type>`); an error line is `quota` (the worker's `providers.json` patterns), `login-required` (registry patterns) or `invalid-output`.
+The preflight reads `codex login status` (exit 0 and `Logged in using ChatGPT` on stderr; an API key is `HEADLESS_LOGIN_REQUIRED`). The
+stream names no model, so the answer is attributed to the argv-pinned id (`modelEvidence: argv`), weaker than the Claude guard; the
+worker's rollout reader does not apply because the call keeps no session file. The flags are sourced from `codex exec --help` 0.166.0 and
+learn.chatgpt.com; the realm bounds are the Claude ones and the step is unmeasured against a real Codex turn.
+
 When a subscription quota is exhausted, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command
 id; otherwise it returns `HEADLESS_QUOTA_EXHAUSTED` with the reset time. The wait appears in the standalone monitor and MCP

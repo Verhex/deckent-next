@@ -9,7 +9,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, endpointMayCarr
 export type ModelConnectLayer = 'project' | 'global';
 /** What `models.connect` needs of one registry kind (the adapter's data, read through the port: engine never imports an adapter). */
 export type ModelConnectKind = Readonly<{ id: string; available: boolean; endpoint: Readonly<{ default: string | null; editable: boolean }>;
-  keyRequired: boolean; connect: Readonly<{ chatPath: string | null; seed: string | null; priceRequired?: boolean; personOnly?: boolean; preview?: boolean; catalogOnly?: boolean; pull?: 'available' | 'pick' }> | null }>;
+  keyRequired: boolean; connect: Readonly<{ chatPath: string | null; seed: string | null; priceRequired?: boolean; personOnly?: boolean; preview?: boolean; catalogOnly?: boolean; headless?: boolean; pull?: 'available' | 'pick' }> | null }>;
 /** `deliveryHeadroomBytes`: result-frame bytes a seeded profile keeps unused on its tightest surface, so later governed growth of the same profile
  * (cache TTL, a TLS CA, a longer catalog revision, version digits) still delivers (P1 DELIVERY-FIT 2026-10-09: an exact fit failed after `cache: '5m'`). */
 export type ModelConnectDefaults = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number; maxInFlight: number; maxOutputTokens: number; currency: string;
@@ -117,7 +117,10 @@ export class ModelConnectApplication {
     const principal = await ports.principal();
     if (kind.connect.personOnly && isAiPrincipal(principal)) throw new ModelConnectError('HEADLESS_PERSON_REQUIRED');
     if (kind.connect.catalogOnly && !ports.workerActivate) throw new ModelConnectError('MODEL_CONNECT_NOT_CONNECTABLE');
-    if (kind.connect.catalogOnly && (command.cli || command.delegate || command.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_INVALID');
+    // Codex headless (owner 2026-10-31): a worker kind with a headless step also writes the declaration, profile and chat activation (its CLI login
+    // and consent choices are allowed); the worker image gate and worker activation stay its own.
+    const profiled = !kind.connect.catalogOnly || kind.connect.headless === true;
+    if (kind.connect.catalogOnly && (command.workspaceId || (!profiled && (command.cli || command.delegate)))) throw new ModelConnectError('MODEL_CONNECT_INVALID');
     // A CLI kind has no address and no key: its adapter step names the executable and the login directory instead.
     const chatPath = kind.connect.chatPath, address = command.endpoint ?? kind.endpoint.default, base = chatPath === null || address === null ? null : ports.endpoint(address);
     if (base === null && chatPath !== null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_INVALID');
@@ -166,7 +169,7 @@ export class ModelConnectApplication {
       return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath, layer }) : null;
     };
     // Validate every tariff before the first write. One catalog and declaration change for the entire connection.
-    const adapters = kind.connect.catalogOnly ? [] : await Promise.all(targets.map(target => ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId,
+    const adapters = !profiled ? [] : await Promise.all(targets.map(target => ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId,
       maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}), existing: null })));
     tariff = adapters.some(adapter => adapter.tariff === 'published') ? 'published' : 'unmetered'; cli = adapters[0]?.cli;
     const seeds = [...new Map(targets.filter(target => target.seed !== null).map(target => [target.seed!.revision, target.seed!])).values()];
@@ -184,7 +187,7 @@ export class ModelConnectApplication {
     const layer: ModelConnectLayer = where.project || !where.global ? 'project' : 'global';
     let next = layers[layer]['provider_catalog'] === undefined ? null : parseProviderCatalog(layers[layer]['provider_catalog']);
     let changed = false;
-    for (const target of targets) if (!kind.connect.catalogOnly && target.declare) { const declared = declareConnectedModel(next, target.declare); if (declared) { next = declared; changed = true; } }
+    for (const target of targets) if (profiled && target.declare) { const declared = declareConnectedModel(next, target.declare); if (declared) { next = declared; changed = true; } }
     if (changed) {
       const carry = await this.carryable(effective(), targets.map(target => target.reference));
       const stopped = await write('provider_catalog', next, layer, step(command.commandId, 'declaration'));
@@ -199,11 +202,11 @@ export class ModelConnectApplication {
           steps.carried++; carriedModels.push(item.reference);
         } catch (error) { notCarried.push({ reference: item.reference, code: String((error as { code?: unknown })?.code ?? 'MODEL_ACTIVATION_FAILED') }); }
       }
-    } else if (!kind.connect.catalogOnly && targets.some(target => target.declare)) steps.declaration = 'present';
+    } else if (profiled && targets.some(target => target.declare)) steps.declaration = 'present';
     const authored = { global: layers.global['provider_invocation_profiles'] !== undefined, project: layers.project['provider_invocation_profiles'] !== undefined };
-    const profileLayers: ModelConnectLayer[] = kind.connect.catalogOnly ? [] : authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
+    const profileLayers: ModelConnectLayer[] = !profiled ? [] : authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
     const planned = new Map(profileLayers.map(layer => [layer, [...(((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [])]]));
-    for (const [index, target] of (kind.connect.catalogOnly ? [] : targets).entries()) {
+    for (const [index, target] of (!profiled ? [] : targets).entries()) {
     const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}) };
     const adapter = adapters[index]!;
     const binding = await ports.binding(target.reference);
@@ -246,7 +249,7 @@ export class ModelConnectApplication {
       steps.profile = 'written';
     }
     for (const [index, target] of targets.entries()) {
-    if (!kind.connect.catalogOnly) {
+    if (profiled) {
     const binding = await ports.binding(target.reference);
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 4. The chat activation at the current revision (after the profile: activation checks the profile's delivery).
@@ -260,7 +263,7 @@ export class ModelConnectApplication {
     if (await ports.workerActivate?.(target.reference, step(command.commandId, 'worker', String(index)))) steps.activation = 'written';
     models.push({ nativeId: target.nativeId, reference: target.reference, state: 'connected' });
     }
-    if (kind.connect.catalogOnly) steps.profile = 'skipped';
+    if (!profiled) steps.profile = 'skipped';
     // 5. One record of the connection (names only), then the key's presence and the running service's state for the person.
     await ports.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId, principal: { issuer: principal.issuer, subject: principal.subject },
       policyRevision: await ports.policyRevision(), atMs: this.now(), subject: { kind: 'model-connect', commandId: command.commandId, connection: command.connection,

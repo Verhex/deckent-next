@@ -1,6 +1,6 @@
 // S3-3 `models connect claude-cli-subscription` through the real configured paths (governed config writer, ledger catalog, activation, audit) with
 // a scripted fake CLI: no real CLI and no model call. Model ids come from the packaged seed, never from this file.
-import { lstat, mkdir, readFile, readdir, realpath, symlink } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,6 +8,9 @@ import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins } from '#composition/core/model-connect/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import seed from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
+import codexSeed from '../../../assets/model-catalog/codex-cli-subscription.json' with { type: 'json' };
+import { roleModelInvocationReference } from '#engine/index.js';
+import { CODEX_FAMILY, writeFakeCodexCli } from '../../fixtures/native-headless/codex.js';
 import { writeFakeCli } from '../../fixtures/native-headless/stream.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -108,9 +111,28 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     // The person's override signs a dir they name in instead (an AI actor never reaches this: refused above for every input).
     expect(await login(yes, true, { configDir: h.configDir })).toMatchObject({ configDir: h.configDir, owned: false });
   });
-  it('N9: a CLI that is not logged in is refused typed and nothing is written', async () => {
+  it('N9: a CLI that is not logged in is refused typed and nothing is written; Codex: the worker kind with an admitted image also writes a headless profile a role finds', async () => {
     const h = await harness(true, { loggedIn: false });
     await expect(h.connect('c-1')).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
     expect(await h.profile()).toBeUndefined();
+    // Codex (owner 2026-10-31): the image gate stays first; with an admitted worker CLI the connect writes the declaration, the headless profile
+    // (catalog family, the consent given) and the chat activation beside the worker activation. Preflight only: no model call.
+    const codexDir = join(h.f.data, 'codex-login'), codexModel = codexSeed.recommendedActivations[0]!.modelIds[0]!, path = join(h.f.project, '.deckent/config.json');
+    await mkdir(codexDir, { mode: 0o700 });
+    const codexExe = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(codexDir, 'config.toml') });
+    const codex = (commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope', connection: 'codex-cli-subscription', endpoint: null,
+      model: { nativeId: codexModel }, cli: { executable: codexExe, configDir: codexDir }, delegate: ['ai'] }, { env: h.f.env });
+    await expect(codex('x-0')).rejects.toMatchObject({ code: 'MODEL_CONNECT_WORKER_IMAGE_REQUIRED' });
+    const config = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    await writeFile(path, JSON.stringify({ ...config, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { profiles: [{ id: 'codex-worker', version: 1,
+      parameters: { nativeSubscription: { provider: 'codex', preflight: { cliVersion: 'codex-cli 9.1.0' } } } }] } } }));
+    await expect(codex('x-1')).resolves.toMatchObject({ status: 'connected', cli: { configDir: codexDir, delegate: ['ai'] },
+      steps: { declaration: 'written', profile: 'written', activation: 'written' } });
+    const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    const profiles = (written['provider_invocation_profiles'] as { profiles: (Profile & { protocol: { family: string } })[] }).profiles;
+    expect(profiles.find(item => item.protocol.family === CODEX_FAMILY)).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', adapter: { id: 'native-cli-headless',
+      definition: { executable: codexExe, configDir: codexDir, delegatedUse: { classes: ['ai'] } } } });
+    expect(roleModelInvocationReference({ modelRoles: undefined, providerCatalog: written['provider_catalog'], activation: async () => null }, written['provider_invocation_profiles'], 'scope',
+      { channelId: 'codex-cli-subscription', modelId: codexModel })).toMatchObject({ providerId: 'codex-cli-subscription' });
   });
 });

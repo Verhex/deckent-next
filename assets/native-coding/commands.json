@@ -107,6 +107,243 @@
         "source": "https://learn.chatgpt.com/docs/developer-commands#codex-app-server",
         "observedOn": "2026-10-26",
         "support": "experimental"
+      },
+      "headless": {
+        "schemaVersion": 1,
+        "revision": "codex-headless-2026-10-31",
+        "protocolFamily": "codex-jsonl",
+        "source": "Codex headless lane 2026-10-31 from the installed `codex exec --help` (codex-cli 0.166.0) and learn.chatgpt.com docs read 2026-10-31 (docs/non-interactive-mode, docs/developer-commands, docs/config-file/config-reference; the pages carry no date): one `codex exec` turn, read-only sandbox, approvals never, no persisted session, user config and execpolicy rules ignored, every documented tool switch off (shell, unified exec, web search, view_image, apps, multi-agent, remote plugins, hooks, memories, skills), built-in instructions replaced by the system prompt file. No toggle for apply_patch is documented: the line guard refuses any tool item, the sandbox is read-only and the realm writes only the run dir and the login dir. --strict-config is documented for config.toml fields only; the -c switches reduce, the line guard enforces. No model call was made.",
+        "args": [
+          "exec",
+          "--json",
+          "--color",
+          "never",
+          "--ignore-user-config",
+          "--ignore-rules",
+          "--ephemeral",
+          "--skip-git-repo-check",
+          "--strict-config",
+          "--sandbox",
+          "read-only",
+          "-c",
+          "approval_policy=\"never\"",
+          "-c",
+          "cli_auth_credentials_store=\"file\"",
+          "-c",
+          "forced_login_method=\"chatgpt\"",
+          "-c",
+          "features.shell_tool=false",
+          "-c",
+          "features.unified_exec=false",
+          "-c",
+          "web_search=\"disabled\"",
+          "-c",
+          "tools.view_image=false",
+          "-c",
+          "features.apps=false",
+          "-c",
+          "features.multi_agent=false",
+          "-c",
+          "features.remote_plugin=false",
+          "-c",
+          "features.hooks=false",
+          "-c",
+          "features.memories=false",
+          "-c",
+          "skills.include_instructions=false",
+          "-c",
+          "skills.bundled.enabled=false",
+          "-c",
+          "project_doc_max_bytes=0",
+          "-c",
+          "history.persistence=\"none\"",
+          "-c",
+          "check_for_update_on_startup=false",
+          "-c",
+          "analytics.enabled=false"
+        ],
+        "maxTurns": 1,
+        "turnBound": "stream",
+        "connect": {
+          "configDirSource": "owner 2026-10-24 s3c (as for the Claude CLI): without --config-dir the Brain uses its own login dir <Deckent state root>/<layout headlessLogins>/codex (0700, never read by Deckent), signed in by `deckent models login`",
+          "pathSearchDirectories": 64,
+          "pathSearchTimeoutMs": 5000,
+          "maxInFlight": 1,
+          "maxInFlightSource": "S3-DESIGN §7 seed 1 (provisional): one run dir per connection; send empties it, so calls on one connection never overlap"
+        },
+        "login": {
+          "args": [
+            "-c",
+            "cli_auth_credentials_store=\"file\"",
+            "login"
+          ],
+          "ssoFlag": null,
+          "timeoutMs": 540000,
+          "env": {
+            "inherit": [
+              "HOME",
+              "PATH",
+              "TERM",
+              "COLORTERM",
+              "LANG",
+              "LC_ALL",
+              "DISPLAY",
+              "WAYLAND_DISPLAY",
+              "BROWSER",
+              "XDG_RUNTIME_DIR",
+              "WSL_DISTRO_NAME",
+              "WSL_INTEROP"
+            ],
+            "fixed": {}
+          },
+          "source": "Codex headless lane 2026-10-31 from learn.chatgpt.com/docs/developer-commands (read 2026-10-31): `codex login` signs in with ChatGPT in the browser (--device-auth = device code, --with-api-key reads a key: neither is used). The file credential store is named so the realm can read the login without a keyring (config-reference cli_auth_credentials_store). Runs in the person's terminal with inherited stdio, outside the realm, as for the Claude CLI; no SSO switch. Unmeasured against a real sign-in."
+        },
+        "systemPromptFlag": "--config",
+        "systemPromptArgs": [
+          "-c",
+          "model_instructions_file=\"{file}\""
+        ],
+        "systemPromptFile": "system.txt",
+        "forbiddenFlags": [
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--dangerously-bypass-hook-trust",
+          "--approve-for-me",
+          "--add-dir",
+          "--worktree",
+          "--image",
+          "--oss",
+          "--local-provider",
+          "--profile",
+          "--output-schema",
+          "--output-last-message",
+          "--enable",
+          "--cd",
+          "--cyber-access-program",
+          "--thread-source"
+        ],
+        "promptFramingAllowance": {
+          "tokens": 24576,
+          "basis": "unmeasured",
+          "source": "Codex headless lane 2026-10-31, unsourced and conservative: no headless Codex turn was measured (no model call). The retained worker turn tests/fixtures/native-codex/exec-0.163.0-ok.stdout.jsonl (CLI 0.163.0, built-in instructions and every tool on, prompt bytes not retained) reported 21320 input tokens for a two-token answer; the headless argv replaces the built-in instructions and turns the tools off, so its framing should be lower. 24576 is a stated ceiling over that observation; measure per CLI version."
+        },
+        "preflight": {
+          "versionArgs": [
+            "--version"
+          ],
+          "versionPattern": "^codex-cli (\\d+\\.\\d+\\.\\d+)",
+          "helpArgs": [
+            "exec",
+            "--help"
+          ],
+          "authStatusArgs": [
+            "-c",
+            "cli_auth_credentials_store=\"file\"",
+            "login",
+            "status"
+          ],
+          "hiddenFlagsSource": "Codex headless lane 2026-10-31: `codex exec --help` (0.166.0) lists every flag the call uses (--config, --model, --sandbox, --json, --color, --ephemeral, --ignore-user-config, --ignore-rules, --skip-git-repo-check, --strict-config); none is hidden.",
+          "hiddenFlags": []
+        },
+        "auth": {
+          "kind": "status",
+          "stream": "stderr",
+          "loggedIn": [
+            {
+              "line": "Logged in using ChatGPT",
+              "authMethod": "chatgpt"
+            }
+          ],
+          "source": "openai/codex main codex-rs/cli/src/login.rs run_login_status (read 2026-10-31): every line goes to stderr; a ChatGPT login prints 'Logged in using ChatGPT' and exits 0, an API key prints 'API key configured - …' and exits 0 (not a subscription: login required), 'Not logged in' exits 1."
+        },
+        "env": {
+          "fixed": {
+            "PATH": "/usr/bin:/bin",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8"
+          },
+          "runDir": [
+            "HOME",
+            "TMPDIR"
+          ],
+          "configDir": "CODEX_HOME",
+          "deny": [
+            "CODEX_API_KEY",
+            "OPENAI_API_KEY"
+          ]
+        },
+        "guards": {
+          "allowedItems": [
+            "agent_message",
+            "reasoning"
+          ],
+          "loginPatterns": [
+            "\\bunauthorized\\b",
+            "\\bnot logged in\\b",
+            "\\blog ?in again\\b"
+          ],
+          "source": "Codex headless lane 2026-10-31: item types from learn.chatgpt.com/docs/non-interactive-mode (agent messages, reasoning, command executions, file changes, MCP tool calls) and the pinned SDK items the worker normalizer reads (web_search, todo_list, error); only the answer and its reasoning are allowed. Login patterns are unsourced (fail-closed: an unmatched error item is invalid output); quota patterns are providers.json quotaPolicy.codexPatterns. The retained worker stream shows an error item about hook timeouts before the turn: hooks are off here, and any error item still refuses."
+        },
+        "limits": {
+          "stdinMaxBytes": 10485760,
+          "maxLineBytes": 1048576,
+          "stderrMaxBytes": 65536,
+          "preflightTimeoutMs": 15000,
+          "preflightOutputBytes": 262144,
+          "killGraceMs": 3000,
+          "responseFramingBytes": 65536
+        },
+        "isolation": {
+          "source": "bubblewrap 0.13.0 bwrap.xml (the bundled locked build's own manual source, read 2026-10-23): --unshare-all, --unshare-user, --disable-userns (requires --unshare-user), --die-with-parent, --proc, --dev, --size + --tmpfs, --perms, --ro-bind, --ro-bind-try, --bind, --chdir. No --share-net: the network namespace stays empty and only the gateway socket leads out. No --new-session: the runner's detached spawn already starts a session without a controlling terminal, and the process group must reach the CLI so SIGINT ends the turn first. S3-5 lane.",
+          "shell": "/bin/sh",
+          "socketPath": "/run/deckent-egress.sock",
+          "proxy": {
+            "host": "127.0.0.1",
+            "port": 18080,
+            "env": [
+              "HTTPS_PROXY",
+              "HTTP_PROXY",
+              "https_proxy",
+              "http_proxy"
+            ],
+            "clear": [
+              "NO_PROXY",
+              "no_proxy"
+            ]
+          },
+          "configVisible": [
+            "auth.json",
+            "config.toml"
+          ],
+          "configVisibleSource": "Codex headless lane 2026-10-31 (no run): the CLI keeps its ChatGPT login in $CODEX_HOME/auth.json (learn.chatgpt.com/docs/non-interactive-mode: 'Treat ~/.codex/auth.json like a password'); config.toml stays readable so `login status` (which has no --ignore-user-config) can start in a person-named login dir; the call ignores it (--ignore-user-config) and Deckent never reads either file. Every other existing entry is masked. Unmeasured against the real CLI until the lead's run.",
+          "configMaxEntries": 4096,
+          "refreshLock": {
+            "names": [],
+            "waitMs": 30000,
+            "pollMs": 100,
+            "staleMs": 600000,
+            "source": "Codex headless lane 2026-10-31: no refresh-lock file name of the Codex CLI is documented, so none is named (no invented name); Deckent still serializes its own spawns per login dir. Whether the CLI refreshes auth.json under its own lock is unverified."
+          },
+          "limits": {
+            "tmpfsBytes": 67108864,
+            "fileSizeBlocks": 131072,
+            "fileSizeBlocksSource": "POSIX ulimit -f counts 512-byte blocks (dash; bash in POSIX mode): 131072 blocks = 64 MiB, the largest file the isolated CLI may write",
+            "openFiles": 1024,
+            "cpuSeconds": 60,
+            "cpuGraceSeconds": 5,
+            "processes": 64,
+            "dataBytes": 2147483648,
+            "sampleMs": 50,
+            "attributionPermille": 900,
+            "exits": {
+              "cpu-time": 201,
+              "processes": 202,
+              "memory": 203
+            },
+            "boundsSource": "Codex headless lane 2026-10-31: provisional, the Claude realm's bounds (f5, measured with CLI 2.1.309) reused unchanged; the Codex CLI's own peaks (native binary) are unmeasured until the lead's real call.",
+            "limiter": "/usr/bin/prlimit",
+            "limiterSource": "prlimit(1) util-linux 2.39 --cpu=soft:hard, --nproc, --data (a single value sets soft and hard); setrlimit(2) man-pages 6.7: RLIMIT_CPU SIGXCPU at soft then SIGKILL at hard, RLIMIT_DATA covers brk and mmap since Linux 4.7, RLIMIT_NPROC counts threads (per user namespace since Linux 5.14 ucounts)"
+          }
+        }
       }
     },
     "claude": {

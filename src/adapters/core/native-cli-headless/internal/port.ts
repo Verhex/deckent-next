@@ -1,24 +1,22 @@
 import { headlessEgressReasons } from '#domain/index.js';
 import { realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, splitModelInvocationDelta, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
-  type HeadlessEgress, type ModelInvocationProfile, type ModelInvocationRejectionReason } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
+  type HeadlessEgress, type ModelInvocationProfile } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliHeadless, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { nativeQuotaPolicy, parseClaudeStreamLine, type ClaudeStreamLine } from '#adapters/core/native-connection/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER, nativeCliHeadlessDefinitionSchema, refuse, type HeadlessRejectionBody, type NativeCliHeadlessDefinition } from './contract.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER, nativeCliHeadlessDefinitionSchema, refuse } from './contract.js';
+import { codexTurn } from './codex.js';
 import { headlessArgv, type HeadlessEntry } from './env.js';
 import { emptyRunDir, headlessPreflight, type HeadlessPreflight } from './preflight.js';
 import { runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
+import { emitDelta, reject, type HeadlessTurn, type HeadlessTurnFactory, type Prepared, type Refusal } from './turn.js';
 
-/** Line parsers by event-stream data (registry `eventStream`); a family without one has no headless step. */
-const PARSERS: Readonly<Record<string, (line: string) => ClaudeStreamLine>> = { 'claude-code-stream-json': parseClaudeStreamLine };
-type Prepared = Readonly<{ profile: ModelInvocationProfile; definition: NativeCliHeadlessDefinition; entry: HeadlessEntry; model: string; system: string; user: string;
-  effortArgs: readonly string[] }>;
+/** One call's line guard and result by event-stream data (registry `eventStream`); a family without one has no headless step. */
+const TURNS: Readonly<Record<string, HeadlessTurnFactory>> = { 'claude-code-stream-json': claudeTurn, 'codex-exec-json': codexTurn };
 type Quota = Record<string, { utilizationPermille: number; resetsAtMs: number | null }>;
-type Refusal = Readonly<{ reason: ModelInvocationRejectionReason; status: number | null; body: HeadlessRejectionBody }>;
-const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extract<HeadlessRejectionBody, { schemaVersion: 1 }>, 'schemaVersion'>, status: number | null = null): Refusal =>
-  Object.freeze({ reason, status, body: { schemaVersion: 1 as const, ...body } });
+type ClaudeGuards = Extract<HeadlessEntry['headless']['guards'], { apiKeySources: unknown }>;
 const list = (value: unknown) => Array.isArray(value) ? value : null;
 const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const SCALE = 1000; // Stream reset timestamps are Unix seconds; receipts carry milliseconds.
@@ -28,8 +26,8 @@ const ms = (seconds: unknown) => typeof seconds === 'number' && seconds >= 0 && 
 
 /** Init guard: the exact CLI version, the pinned model, no tool, MCP server or skill, only allowlisted builtin plugins, the registry permission
  * mode, a claude.ai-login key source and the connection's own run dir as cwd. The first failing field is returned (the process is stopped). */
-function initGuard(line: Extract<ClaudeStreamLine, { kind: 'init' }>, prepared: Prepared, preflight: HeadlessPreflight, runDir: string): Refusal | null {
-  const { guards } = prepared.entry.headless, plugins = list(line.plugins);
+function initGuard(line: Extract<ClaudeStreamLine, { kind: 'init' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, runDir: string): Refusal | null {
+  const plugins = list(line.plugins);
   if (line.model !== prepared.model) return reject('model-mismatch', { refusal: 'model-mismatch', field: 'init.model' });
   const failed = line.cliVersion !== preflight.version ? 'cliVersion' : line.apiKeySource === null || !guards.apiKeySources.includes(line.apiKeySource) ? 'apiKeySource'
     : line.permissionMode !== guards.permissionMode ? 'permissionMode' : list(line.tools)?.length !== 0 ? 'tools' : list(line.mcpServers)?.length !== 0 ? 'mcpServers'
@@ -38,8 +36,8 @@ function initGuard(line: Extract<ClaudeStreamLine, { kind: 'init' }>, prepared: 
   return failed ? reject('invalid-response', { refusal: 'guard', field: failed }) : null;
 }
 /** Result guard and mapping: provider signals first (quota, credits, login), then turn/permission bounds and exact model usage. */
-function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared): Refusal | null {
-  const { guards } = prepared.entry.headless, status = line.apiErrorStatus;
+function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards): Refusal | null {
+  const status = line.apiErrorStatus;
   if (line.isError || line.subtype !== 'success') {
     if (line.errors.some(error => guards.creditsErrors.includes(error))) return reject('http-status', { refusal: 'credits-required', status }, status);
     if (status !== null && guards.quotaStatuses.includes(status)) return reject('http-status', { refusal: 'quota', status, resetsAtMs: null }, status);
@@ -53,15 +51,47 @@ function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prep
   return models.length === 1 && models[0] === prepared.model ? null : reject('model-mismatch', { refusal: 'model-mismatch', field: 'modelUsage' });
 }
 /** The governed result in the chat-completion shape the Brain reads; counters keep the reported model id and quota windows, never a cost. */
-function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress) {
+function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, guards: ClaudeGuards, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress) {
   const usage = line.usage, input = count(usage.input_tokens), output = count(usage.output_tokens), cacheRead = count(usage.cache_read_input_tokens), cacheWrite = count(usage.cache_creation_input_tokens);
   const reported = line.modelUsage?.[prepared.model] ?? {};
   return Object.freeze({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: prepared.model, choices: [{ index: 0, message: { role: 'assistant', content: line.result ?? '' },
-    finish_reason: line.stopReason !== null && prepared.entry.headless.guards.lengthStopReasons.includes(line.stopReason) ? 'length' : 'stop' }],
+    finish_reason: line.stopReason !== null && guards.lengthStopReasons.includes(line.stopReason) ? 'length' : 'stop' }],
   headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason, egress: { ...egress, ...headlessEgressReasons(egress) } } },
   usage: { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output, total_tokens: input + cacheRead + cacheWrite + output, cache_read: cacheRead, cache_write: cacheWrite,
     modelUsage: { [prepared.model]: { inputTokens: count(reported.inputTokens), outputTokens: count(reported.outputTokens), cacheReadInputTokens: count(reported.cacheReadInputTokens),
       cacheCreationInputTokens: count(reported.cacheCreationInputTokens) } }, quota } });
+}
+/** The Claude Code stream-json turn: init guard, no retry, model checks on every message, quota windows, then the result's own guard. */
+function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: string, onDelta?: ModelInvocationDeltaSink): HeadlessTurn {
+  const { guards } = prepared.entry.headless;
+  if (!('apiKeySources' in guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
+  const quotaPolicy = nativeQuotaPolicy(), quota: Quota = {};
+  let init = false, result: Extract<ClaudeStreamLine, { kind: 'result' }> | null = null;
+  return {
+    line(raw) {
+      const line = parseClaudeStreamLine(raw);
+      if (line.kind === 'init') { const refusal = init ? reject('invalid-response', { refusal: 'guard', field: 'init' }) : initGuard(line, prepared, guards, preflight, runDir); init = true; return refusal; }
+      if (line.kind === 'system' && line.subtype === 'api_retry') return reject('invalid-response', { refusal: 'guard', field: 'api_retry' });
+      if ((line.kind === 'assistant' || line.kind === 'result') && !init) return reject('invalid-response', { refusal: 'guard', field: 'init' });
+      if (line.kind === 'assistant') {
+        if (typeof line.message.model === 'string' && line.message.model !== prepared.model) return reject('model-mismatch', { refusal: 'model-mismatch', field: 'assistant.model' });
+        for (const block of line.blocks) if (block.type === 'text' && typeof block.text === 'string' && block.text) emitDelta(onDelta, block.text);
+      } else if (line.kind === 'rate-limit') {
+        for (const [window, value] of line.windows) if (typeof value.utilization === 'number') quota[window] = { utilizationPermille: Math.round(Math.min(1, Math.max(0, value.utilization)) * PERMILLE), resetsAtMs: ms(value.resetsAt) };
+        const resetsAtMs = ms(line.resetsAt);
+        if (line.errorCode !== null && guards.creditsErrors.includes(line.errorCode)) return reject('http-status', { refusal: 'credits-required', status: null });
+        if (line.status !== null && quotaPolicy.claudeRejectedStatuses.includes(line.status)) return reject('http-status', { refusal: 'quota', resetsAtMs, status: guards.quotaStatuses[0] ?? null }, guards.quotaStatuses[0] ?? null);
+      } else if (line.kind === 'result') { if (result) return reject('invalid-response', { refusal: 'guard', field: 'result' }); result = line; }
+      return null;
+    },
+    end(exit, egress) {
+      const finished = result as Extract<ClaudeStreamLine, { kind: 'result' }> | null;
+      // A provider refusal inside the run ends with an error result and a non-zero exit; it is still a complete, typed rejection.
+      const mapped = finished && exit.exited ? resultRefusal(finished, prepared, guards) : null;
+      if (mapped) return { refusal: mapped };
+      return finished && exit.exited && exit.exitCode === 0 ? { response: assemble(finished, prepared, guards, preflight, quota, egress) } : null;
+    },
+  };
 }
 /**
  * The headless native port (S3-2). `prepare` is pure; `preflight` (the registry's pre-claim acquisition step) spawns no model call; `send`
@@ -76,7 +106,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
     if (!parsed.success || parsed.data.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER.id || parsed.data.adapter.version !== NATIVE_CLI_HEADLESS_ADAPTER.version
       || parsed.data.schemaVersion !== 2 || parsed.data.billingAxis !== 'subscription') refuse('HEADLESS_REQUEST_INVALID', { reason: 'profile' });
     const definition = nativeCliHeadlessDefinitionSchema.safeParse(parsed.data.adapter.definition), entry = nativeCliHeadless(parsed.data.protocol.family);
-    if (!definition.success || !entry || !Object.hasOwn(PARSERS, entry.command.capabilities.eventStream)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
+    if (!definition.success || !entry || !Object.hasOwn(TURNS, entry.command.capabilities.eventStream)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
     return { profile: parsed.data, definition: definition.data, entry };
   };
   return Object.freeze({
@@ -107,27 +137,10 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       if (!input || typeof input !== 'object' || !tokens.has(input)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'token' });
       const prepared = input as Prepared; tokens.delete(prepared);
       const { headless } = prepared.entry, preflight = await headlessPreflight(prepared.entry, prepared.definition, options.now, options.isolation, signal);
-      const parse = PARSERS[prepared.entry.command.capabilities.eventStream]!, quotaPolicy = nativeQuotaPolicy(), runDir = await realpath(preflight.runDir);
-      const promptFile = join(preflight.runDir, headless.systemPromptFile), quota: Quota = {};
-      let refusal: Refusal | null = null, init = false, result: Extract<ClaudeStreamLine, { kind: 'result' }> | null = null;
-      const onLine = (raw: string): 'stop' | void => {
-        const line = parse(raw);
-        if (line.kind === 'init') { refusal = init ? reject('invalid-response', { refusal: 'guard', field: 'init' }) : initGuard(line, prepared, preflight, runDir); init = true; }
-        else if (line.kind === 'system' && line.subtype === 'api_retry') refusal = reject('invalid-response', { refusal: 'guard', field: 'api_retry' });
-        else if ((line.kind === 'assistant' || line.kind === 'result') && !init) refusal = reject('invalid-response', { refusal: 'guard', field: 'init' });
-        else if (line.kind === 'assistant') {
-          if (typeof line.message.model === 'string' && line.message.model !== prepared.model) refusal = reject('model-mismatch', { refusal: 'model-mismatch', field: 'assistant.model' });
-          else for (const block of line.blocks) if (block.type === 'text' && typeof block.text === 'string' && block.text) {
-            for (const delta of splitModelInvocationDelta('text', block.text)) { try { onDelta?.(delta); } catch { /* Presentation only. */ } }
-          }
-        } else if (line.kind === 'rate-limit') {
-          for (const [window, value] of line.windows) if (typeof value.utilization === 'number') quota[window] = { utilizationPermille: Math.round(Math.min(1, Math.max(0, value.utilization)) * PERMILLE), resetsAtMs: ms(value.resetsAt) };
-          const resetsAtMs = ms(line.resetsAt);
-          if (line.errorCode !== null && headless.guards.creditsErrors.includes(line.errorCode)) refusal = reject('http-status', { refusal: 'credits-required', status: null });
-          else if (line.status !== null && quotaPolicy.claudeRejectedStatuses.includes(line.status)) refusal = reject('http-status', { refusal: 'quota', resetsAtMs, status: headless.guards.quotaStatuses[0] ?? null }, headless.guards.quotaStatuses[0] ?? null);
-        } else if (line.kind === 'result') { if (result) refusal = reject('invalid-response', { refusal: 'guard', field: 'result' }); else result = line; }
-        return refusal ? 'stop' : undefined;
-      };
+      const runDir = await realpath(preflight.runDir), promptFile = join(preflight.runDir, headless.systemPromptFile);
+      const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta);
+      let refusal: Refusal | null = null;
+      const onLine = (raw: string): 'stop' | void => { refusal ??= turn.line(raw); return refusal ? 'stop' : undefined; };
       let evidence;
       try {
         await emptyRunDir(preflight.runDir);
@@ -143,16 +156,15 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       // f5: every settled call names what the realm's gateway did (counts and refused host names only).
       const { egress } = evidence, settle = (value: Refusal) => Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER,
         value.reason, value.status, Buffer.from(JSON.stringify({ ...value.body, egress }), 'utf8'), true) });
-      const stopped = refusal as Refusal | null, finished = result as Extract<ClaudeStreamLine, { kind: 'result' }> | null;
+      const stopped = refusal as Refusal | null;
       if (stopped) return settle(stopped);
       // f5: a realm bound (CPU time, tasks, data size) ended the turn: typed, never an unknown outcome or a retry.
       if (evidence.limit) return settle(reject('response-limit', { refusal: 'resource-limit', field: evidence.limit }));
       if (evidence.reason === 'output-limit' || evidence.reason === 'line-limit') return settle(reject('response-limit', { refusal: 'response-limit' }));
-      // A provider refusal inside the run ends with an error result and a non-zero exit; it is still a complete, typed rejection.
-      const mapped = finished && evidence.reason === 'exit' ? resultRefusal(finished, prepared) : null;
-      if (mapped) return settle(mapped);
-      if (!finished || evidence.reason !== 'exit' || evidence.exitCode !== 0) throw new Error('HEADLESS_OUTCOME_UNKNOWN');
-      const response = assemble(finished, prepared, preflight, quota, egress);
+      const ended = turn.end({ exited: evidence.reason === 'exit', exitCode: evidence.exitCode }, egress);
+      if (ended && 'refusal' in ended) return settle(ended.refusal);
+      if (!ended) throw new Error('HEADLESS_OUTCOME_UNKNOWN');
+      const response = ended.response;
       return Buffer.byteLength(JSON.stringify(response)) > prepared.profile.limits.responseMaxBytes ? settle(reject('response-limit', { refusal: 'response-limit' })) : response;
     },
   });

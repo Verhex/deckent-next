@@ -1,11 +1,13 @@
-import { readdir, readFile, stat, utimes } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, utimes } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile, type ModelInvocationDelta } from '#domain/index.js';
-import { NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort } from '#adapters/core/native-cli-headless/index.js';
 import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
-import { PROMPT, binding, cleanupConnections, connection, request } from '../../fixtures/native-headless/connection.js';
+import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
+import { CODEX_FAMILY, codexAnswer, codexHeadless, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 // S3-5: every headless CLI spawn runs in the bubblewrap realm; a host without one is covered by the real-sandbox guard, not silently here.
@@ -203,5 +205,51 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
     // N5: an alias as the bound native id never reaches the argv.
     const alias = registry.adapters.claude.modelAliases[0]!, aliased = parseModelBindingDefinition({ ...binding, model: { ...binding.model, nativeId: alias } });
     await expect(c.port.prepare(c.profile, aliased, request({ model: alias }))).rejects.toMatchObject({ code: 'HEADLESS_REQUEST_INVALID', params: { reason: 'model-alias' } });
+  });
+});
+
+describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (fake Codex CLI, no real CLI, no model call)', () => {
+  it('runs one read-only, tool-less exec turn and settles a tool item, a quota failure and a non-subscription login as typed refusals', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-codex-headless-'))), configDir = join(root, 'login'), bin = join(root, 'bin'), logPath = join(configDir, 'config.toml');
+    try {
+      await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
+      let bump = 0;
+      const write = async (scenario: Omit<FakeCodexScenario, 'logPath'>) => { const path = await writeFakeCodexCli(bin, { logPath, ...scenario }); await utimes(path, new Date(), new Date(Date.now() + ++bump * 9000)); return path; };
+      const executable = await write({ steps: codexAnswer('{"ok":true}').map(line => ({ line })) });
+      const codexBinding = parseModelBindingDefinition({ encodingVersion: 1, provider: { id: 'cli-subscription', version: 1 },
+        model: { id: 'pinned', version: 1, nativeId: PINNED, protocols: [{ family: CODEX_FAMILY, version: 'v1', capabilities: [] }] } });
+      const profile = parseModelInvocationProfile({ schemaVersion: 2, billingAxis: 'subscription', id: 'codex', version: 1, scopeId: 'scope',
+        reference: { providerId: 'cli-subscription', providerVersion: 1, modelId: 'pinned', modelVersion: 1 }, bindingDigest: 'a'.repeat(64), protocol: { family: CODEX_FAMILY, version: 'v1' },
+        adapter: { ...NATIVE_CLI_HEADLESS_ADAPTER, definition: { schemaVersion: 1, executable, configDir, stateDir: join(root, 'state'), ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: null } },
+        allocation: { id: 'allocation', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 5000 } });
+      const port = createNativeCliHeadlessPort({ now: () => 1, isolation: testIsolation }), deltas: ModelInvocationDelta[] = [];
+      const call = async () => { await port.preflight(profile); return port.send(await port.prepare(profile, codexBinding, request({ reasoning_effort: 'high' })), undefined, delta => deltas.push(delta)); };
+      const log = async () => (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[]; env: Record<string, string>; stdin?: string; system?: string });
+      // The answer: the argv-pinned model, the CLI's split input counters, the user message on stdin and the system prompt as the instructions file.
+      await expect(call()).resolves.toMatchObject({ native: { model: PINNED, choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', modelEvidence: 'argv' } },
+        usage: { prompt_tokens: 1200, completion_tokens: 7, cache_read: 1000, modelUsage: { [PINNED]: { inputTokens: 200, outputTokens: 7, cacheReadInputTokens: 1000 } } } });
+      expect(deltas.map(delta => delta.text).join('')).toBe('{"ok":true}');
+      const spawned = await log(), made = spawned.find(entry => entry.mode === 'call')!;
+      expect(spawned.map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call']);
+      expect(made.stdin).toBe(PROMPT); expect(made.system).toBe('You are a planner. Answer only JSON.'); expect(made.argv.join(' ')).not.toContain(PROMPT);
+      expect(made.argv.slice(0, 11)).toEqual(['exec', '--json', '--color', 'never', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--strict-config', '--sandbox', 'read-only']);
+      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.apps=false',
+        'features.multi_agent=false', 'features.hooks=false', 'model_reasoning_effort=high', '--model', PINNED]));
+      expect(made.argv).not.toContain('--max-turns');
+      for (const flag of codexHeadless.forbiddenFlags) expect(made.argv.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
+      expect(made.env).toMatchObject({ CODEX_HOME: configDir, HOME: join(root, 'state', 'run'), PATH: '/usr/bin:/bin' });
+      for (const name of codexHeadless.env.deny) expect(made.env).not.toHaveProperty(name);
+      // A tool item stops the process (the guard, never a run tool); a quota failure is quota; an API-key or absent login refuses before any call.
+      await write({ steps: [...codexAnswer('x').slice(0, 2), { type: 'item.started', item: { id: 'item_2', type: 'command_execution', command: 'bash -lc ls', status: 'in_progress' } }].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'item.command_execution' });
+      await write({ steps: [...codexAnswer('x').slice(0, 2), { type: 'turn.failed', error: { message: 'You have hit your usage limit reached for this plan' } }].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'quota' });
+      for (const login of ['api-key', 'none'] as const) {
+        const before = (await log()).filter(entry => entry.mode === 'call').length;
+        await write({ login, steps: codexAnswer('x').map(line => ({ line })) });
+        await expect(call()).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
+        expect((await log()).filter(entry => entry.mode === 'call')).toHaveLength(before);
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

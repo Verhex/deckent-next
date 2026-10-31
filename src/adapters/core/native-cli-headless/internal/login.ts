@@ -7,7 +7,7 @@ import { refuse } from './contract.js';
 import { headlessExecutable } from './connect.js';
 import { buildHeadlessEnv, headlessLoginEnv } from './env.js';
 import { loginRecordPath, withLoginLock } from './login-lock.js';
-import { authStatus, emptyRunDir, privateDir } from './preflight.js';
+import { emptyRunDir, headlessAuth, privateDir } from './preflight.js';
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
 
 /** How the CLI's own sign-in ended (`cancelled`: the person stopped it; `failed`: a non-zero exit or the registry time bound). */
@@ -46,7 +46,9 @@ export async function runHeadlessLogin(input: HeadlessLoginInput): Promise<Headl
   const config = await lstat(input.configDir).catch(() => null);
   if (!config?.isDirectory() || config.uid !== uid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
   await privateDir(input.stateDir, uid); await privateDir(runDir, uid);
-  const env = headlessLoginEnv(headless, input.env, input.configDir), args = [...headless.login.args, ...(input.sso ? [headless.login.ssoFlag] : [])];
+  // A CLI without an SSO switch refuses the SSO choice before anything starts.
+  if (input.sso && !headless.login.ssoFlag) refuse('HEADLESS_REQUEST_INVALID', { reason: 'sso' });
+  const env = headlessLoginEnv(headless, input.env, input.configDir), args = [...headless.login.args, ...(input.sso ? [headless.login.ssoFlag!] : [])];
   const exit = await withLoginLock(entry, input.configDir, input.stateDir, input.now, async (): Promise<HeadlessLoginExit> => {
     input.signal?.throwIfAborted();
     // Ctrl+C belongs to the sign-in (same foreground group): this process stays to release the lock and report. Synchronous, as for `$EDITOR`:
@@ -63,9 +65,9 @@ export async function runHeadlessLogin(input: HeadlessLoginInput): Promise<Headl
   await emptyRunDir(runDir);
   const status = await runHeadlessIsolated(entry, input.isolation, { executable, args: headless.preflight.authStatusArgs, env: buildHeadlessEnv(headless, runDir, input.configDir),
     stateDir: input.stateDir, runDir, configDir: input.configDir, now: input.now }, { timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, input.signal);
-  const auth = status.reason === 'exit' && !status.limit ? authStatus(Buffer.from(status.stdoutBase64, 'base64').toString('utf8')) : null;
-  const signedIn = auth?.loggedIn === true && headless.auth.authMethods.includes(String(auth.authMethod)) && headless.auth.apiProviders.includes(String(auth.apiProvider))
-    && (!headless.auth.configDirectoryMatch || auth.configDirectory === input.configDir);
-  return Object.freeze({ schemaVersion: 1, configDir: input.configDir, owned: input.owned, exit, signedIn, authMethod: signedIn ? text(auth?.authMethod) : null,
-    subscriptionType: signedIn ? text(auth?.subscriptionType) : null });
+  const decoded = (base64: string) => Buffer.from(base64, 'base64').toString('utf8');
+  const auth = status.reason === 'exit' && !status.limit ? headlessAuth(headless.auth, { exitCode: status.exitCode, stdout: decoded(status.stdoutBase64), stderr: decoded(status.stderrBase64) }, input.configDir) : null;
+  const signedIn = auth?.state === 'signed-in';
+  return Object.freeze({ schemaVersion: 1, configDir: input.configDir, owned: input.owned, exit, signedIn, authMethod: signedIn ? text(auth.authMethod) : null,
+    subscriptionType: signedIn ? text(auth.subscriptionType) : null });
 }
