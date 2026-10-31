@@ -125,14 +125,14 @@ const noticeText = (max: number) => z.string().min(1).max(max);
  * renders it from its own catalog. `note` no longer carries MCP text.
  */
 export const mcpStartNoticeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('start-failed'), name: noticeText(64), failure: z.object({ code: noticeText(64), phase: z.enum(['launch', 'trusted', 'tools']),
+  z.object({ kind: z.literal('start-failed'), name: noticeText(64), failure: z.object({ code: noticeText(64), phase: z.enum(['launch', 'trusted', 'tools', 'decision']),
     detail: z.string().max(200).optional(), diagnosis: z.union([
       z.object({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: z.number().int().min(-1).max(1_024), path: z.string().max(4_096),
         target: z.string().max(4_096).optional() }).strict(),
       z.object({ kind: z.enum(['package-runner', 'container-daemon']), runner: z.string().max(64) }).strict()]).optional() }).strict() }).strict(),
   z.object({ kind: z.literal('tools-changed'), name: noticeText(64), count }).strict(),
   z.object({ kind: z.literal('not-recorded'), name: noticeText(64) }).strict(),
-  z.object({ kind: z.literal('not-decided'), name: noticeText(64), code: noticeText(64) }).strict(),
+  z.object({ kind: z.literal('not-decided'), name: noticeText(64), code: noticeText(64), detail: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,255}$/u).optional() }).strict(),
   z.object({ kind: z.literal('grant-refused'), name: noticeText(64), reason: noticeText(64) }).strict(),
   z.object({ kind: z.literal('secret-refused'), name: noticeText(64), key: noticeText(256), scope: noticeText(256), code: noticeText(64) }).strict(),
 ]);

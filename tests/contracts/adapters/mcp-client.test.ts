@@ -163,6 +163,9 @@ describe('MCP client: calls, bounds and failures', () => {
     const broken = { ...f.server([]), args: [join(f.root, 'missing.mjs')] };
     const failed = await p.open(broken, settings([broken], { connectTimeoutMs: 3_000 }), context(f.root));
     expect(failed).toMatchObject({ ok: false });
+    const absent = { ...f.server([]), command: 'no-such-mcp-server-command' };
+    expect(await p.open(absent, settings([absent], { connectTimeoutMs: 3_000 }), context(f.root)))
+      .toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
     const caged = { ...f.server([pinOf(echo)]), realm: 'require-sandbox' as const };
     expect(await p.open(caged, settings([caged]), context(f.root))).toMatchObject({ ok: false, reason: 'sandbox-unavailable' });
     expect(f.events()).toEqual([]);
@@ -172,6 +175,44 @@ describe('MCP client: calls, bounds and failures', () => {
     expect(opened.ok && opened.posture).toContain('sandbox: none');
     await expect.poll(() => p.stderr('fx'), { timeout: 5_000 }).toContain('fixture stderr');
     expect(p.stderr('fx')).not.toContain('abcdef0123456789abcdef');
+    // A raw legacy peer isolates the inbound gate from a fixture SDK's own result validation.
+    const replies = join(f.root, 'reply.json'), script = join(f.root, 'raw.mjs'), log = join(f.root, 'raw.jsonl');
+    writeFileSync(script, `import { readFileSync, appendFileSync } from 'node:fs'; import { createInterface } from 'node:readline';
+const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');
+createInterface({ input: process.stdin }).on('line', line => { const m = JSON.parse(line), config = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+  appendFileSync(process.argv[3], JSON.stringify({ method: m.method, pid: process.pid }) + '\\n');
+  if (m.id === undefined) return;
+  if (m.method === config.method) return send({ id: m.id, result: config.result });
+  if (m.method === 'initialize') return send({ id: m.id, result: { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'raw', version: '1' } } });
+  if (m.method === 'tools/list') return send({ id: m.id, result: { tools: [config.tool] } });
+  send({ id: m.id, error: { code: -32601, message: 'Method not found' } }); });`);
+    const nested = (depth: number) => { let value: unknown = false; for (let i = 2; i < depth; i++) value = { child: value }; return value; };
+    for (const [method, result, accepted] of [
+      ['server/discover', { padding: Array(4_096).fill(false) }, false],
+      ['initialize', { padding: Array(4_096).fill(false) }, false],
+      ['tools/list', { tools: [], padding: Array(4_089).fill(false) }, true], // 6 + 4089 = 4095 nodes.
+      ['tools/list', { tools: [], padding: Array(4_090).fill(false) }, false],
+      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(4_086).fill(false) }, true], // 9 + 4086 = 4095.
+      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(4_087).fill(false) }, false],
+      ['tools/call', { content: Array(4_096).fill({ type: 'invalid', text: false }) }, false],
+      ['tools/call', { content: [], padding: nested(32) }, true],
+      ['tools/call', { content: [], padding: nested(33) }, false],
+    ] as const) {
+      writeFileSync(replies, JSON.stringify({ method, result, tool: echo })); writeFileSync(log, '');
+      const guarded = pool(), target = { ...f.server([pinOf(echo)]), args: [script, replies, log] }, cfg = settings([target]);
+      const opened = await guarded.open(target, cfg, context(f.root));
+      if (method === 'server/discover' || method === 'initialize') expect(opened).toMatchObject({ ok: false, reason: 'start-failed', detail: 'MCP_INPUT_LIMIT' });
+      else if (method === 'tools/list') expect(opened).toMatchObject(accepted ? { ok: true } : { ok: false, reason: 'list-failed', detail: 'MCP_INPUT_LIMIT' });
+      else {
+        expect(opened).toMatchObject({ ok: true });
+        expect(await guarded.call('fx', 'echo', pinOf(echo).digest, {}, { timeoutMs: 3_000, signal: new AbortController().signal }))
+          .toMatchObject(accepted ? { outcome: 'answered' } : { outcome: 'unknown' });
+      }
+      const requests = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { method: string });
+      expect(requests.filter(row => row.method === method)).toHaveLength(1); // Every rejection is terminal for that request, never replayed.
+      if (method === 'server/discover') expect(requests.map(row => row.method)).toEqual(['server/discover']);
+      await guarded.close();
+    }
   }, 30_000);
 
   it.skipIf(process.platform === 'win32')('requires POSIX launcher/private credential custody: REALM-NOTICE: a sandbox that wins after a preferred one was passed over names that fallback on the card posture (the shell\'s own line)', async () => {
@@ -452,7 +493,8 @@ describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start
   }, 60_000);
   it('a command that exists nowhere is "not found", not a sandbox problem; a package runner that fails in the view is named as one', async () => {
     const f = setup();
-    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'command not found' });
+    expect(await open(f, 'no-such-mcp-server-command', [], 'host')).toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
+    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
     expect(await open(f, 'npx', ['-y', 'some-mcp-server'])).toMatchObject({ ok: false, reason: 'sandbox-unreachable', diagnosis: { kind: 'package-runner', runner: 'npx' } });
   }, 60_000);
 });

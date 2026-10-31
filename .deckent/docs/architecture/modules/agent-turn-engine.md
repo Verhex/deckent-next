@@ -69,6 +69,12 @@ approval or witness wait and never answers a card; each joins once as the person
 none joins after a cancel, and the result's `steer.returned` names the lines that did not join. A v29 terminal's `chatTurn` is closed
 unanswered (`LOCAL_RUNTIME_TRANSPORT`); the lifecycle window is `[30, 29]`. Stores:
 `agent_turns`/`agent_turn_tool_calls` (T-L3b2). Errors: `AGENT_TURN_IN_PROGRESS | CONFLICT | CORRUPT | INVALID | UNAVAILABLE`.
+MCP `not-decided` notices carry a short `code` (at most 64 characters) and an optional identifier-shaped `detail` (at most 256);
+suggested commands are rendered from the surface's EN/TR catalog. Start failure phases include `decision`. A repeated failure with
+the same client/definition identity, code and detail adds no new turn notice; `/mcp` still renders the recorded failure on each query.
+The MCP client's HTTP and stdio transports bound raw bytes and guard every delivered JSON-RPC message with the shared MCP node/depth
+limits before discovery, era codecs and tool list/result validation. The SDK's JSON-RPC envelope parser precedes this guard. Stdio's
+disposable discovery sibling uses the same guard; an over-limit reply closes the transport without forwarding or replaying the request.
 Reading tools needs an explicit policy grant (`agent-tool`, ids `read_file`, `list_dir`, `grep`, `glob`, action `invoke`);
 without it every call is `denied`.
 **Terminal agent turns (T-L3d).** The interactive terminal's turns are `chatTurn` turns (`streamTerminalAgentTurn`): a fresh turn id per
