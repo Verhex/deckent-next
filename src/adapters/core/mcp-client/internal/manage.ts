@@ -3,9 +3,9 @@ import { lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/prom
 import { dirname, join } from 'node:path';
 import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
   SystemTrustedClock, type KnownSecretSnapshot, type Locale, type ProductLayout } from '#platform/index.js';
-import { displayMcpDiagnosis } from './diagnose.js';
+import { displayMcpDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, mcpToolsChangedRecord, mcpWithheldTools, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
-  type McpStartNoticeRenderer } from './failures.js';
+  type McpStartNoticeRenderer } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { MCP_SERVER_HOMES_DIR, McpClientPool, type McpLaunchContext, type McpPoolView, type McpSendRefusal, type McpServerOpen } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings, type McpTrustBinding } from './pin.js';
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpToolGrantPort, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';

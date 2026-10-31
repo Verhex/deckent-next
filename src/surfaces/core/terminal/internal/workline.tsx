@@ -16,7 +16,7 @@ import { ErrorRegistry, redactForRecord, type KnownSecretSnapshot } from '#platf
 import { isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
-import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
+import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from '#surfaces/core/terminal-session/index.js';
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
@@ -29,8 +29,8 @@ import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryEntry,
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from '#surfaces/core/terminal-conversation/index.js';
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
-import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
-import { askGrantWindow, askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
+import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from '#surfaces/core/terminal-session/index.js';
+import { askGrantWindow, askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from '#surfaces/core/terminal-session/index.js';
 import { CLEAR_SCREEN_AND_SCROLLBACK, CLEAR_SCROLLBACK, startupFrame, writeStartup, type WorklineStartup } from '#surfaces/core/terminal-host/index.js';
 import { useTranscriptBlocks } from './workline-transcript.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';

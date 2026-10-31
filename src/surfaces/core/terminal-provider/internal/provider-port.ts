@@ -1,11 +1,10 @@
-import { modelConnectLines } from '#surfaces/core/work-labels/index.js';
+import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
-import { workerChannelText } from '#surfaces/core/work-labels/index.js';
-import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
+import type { ProviderConnectKindView, ProviderConnectProbeView, ProviderPanelHost } from './context.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { providerDisplayName } from './provider-label.js';
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
@@ -55,7 +54,7 @@ function custodyText(backend: string, locale: Locale): string {
   return t('tui.panel.provider.transparency', { backend }, locale);
 }
 
-type Host = Pick<TerminalLaunchContext, 'siwc' | 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret' | 'inspectModelCatalog'>
+type Host = ProviderPanelHost
   & { observeSetup?: (root: string, options: ConfigLoadOptions) => Promise<{ observation: { families?: Readonly<Record<string, unknown>> } }> };
 async function workerReadiness(host: Host, root: string, scopeId: string, options: ConfigLoadOptions, channelId: string, locale: Locale) { // BeUser D-05b
   const channel = (await host.inspectModelCatalog?.(root, { schemaVersion: 1, scopeId }, options).catch(() => null))?.channels.find(row => row.channelId === channelId);

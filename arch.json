@@ -1108,7 +1108,8 @@
         "src/surfaces/core/terminal",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-render",
-        "src/surfaces/core/work-labels"
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/terminal-session"
       ],
       "plan": "SURFACES"
     },
@@ -1187,8 +1188,7 @@
         "src/domain/core/policy",
         "src/platform/core/redaction",
         "src/platform/core/config-fields",
-        "src/surfaces/core/config",
-        "src/surfaces/core/siwc"
+        "src/surfaces/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -1241,7 +1241,6 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
-        "src/domain/core/agent-turn",
         "src/domain/core/policy",
         "src/platform/core/redaction",
         "src/surfaces/core/approval-presentation",
@@ -1259,7 +1258,9 @@
         "src/surfaces/core/terminal-conversation",
         "src/surfaces/core/terminal-host",
         "src/domain/core/run",
-        "src/surfaces/core/terminal-onboarding"
+        "src/surfaces/core/terminal-onboarding",
+        "src/surfaces/core/terminal-session",
+        "src/surfaces/core/terminal-provider"
       ],
       "plan": "SURFACES"
     },
@@ -1426,7 +1427,6 @@
         "src/surfaces/core/work-labels",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-picker",
-        "src/domain/core/model-activation",
         "src/engine/core/project-instructions",
         "src/surfaces/core/project-instructions",
         "src/engine/core/model-invocation",
@@ -1444,7 +1444,8 @@
         "src/surfaces/core/cli-hub",
         "src/surfaces/core/terminal-hub",
         "src/engine/core/bootstrap-identity",
-        "src/surfaces/core/terminal-conversation"
+        "src/surfaces/core/terminal-conversation",
+        "src/surfaces/core/terminal-provider"
       ],
       "plan": "SURFACES"
     },
@@ -1912,7 +1913,8 @@
         "src/engine/core/runtime",
         "src/adapters/core/provider-siwc",
         "src/composition/core/secrets",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/adapters/core/mcp-start-diagnosis"
       ],
       "plan": "SURFACES"
     },
@@ -2716,7 +2718,8 @@
         "src/platform/core/config-fields",
         "src/platform/core/i18n",
         "src/adapters/core/mcp-trust",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/adapters/core/mcp-start-diagnosis"
       ],
       "plan": "SURFACES"
     },
@@ -2920,9 +2923,9 @@
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-window",
-        "src/surfaces/core/terminal-panels",
         "src/surfaces/core/work-labels",
-        "src/surfaces/core/config"
+        "src/surfaces/core/config",
+        "src/surfaces/core/terminal-provider"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -4380,7 +4383,8 @@
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-host",
         "src/surfaces/core/terminal-theme",
-        "src/surfaces/core/cli-identity"
+        "src/surfaces/core/cli-identity",
+        "src/surfaces/core/terminal-provider"
       ],
       "plan": "SURFACES"
     },
@@ -4732,6 +4736,47 @@
         "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
+    },
+    "src/adapters/core/mcp-start-diagnosis": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/adapters/core/mcp-trust",
+        "src/domain/core/agent-tool"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-provider": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/surfaces/core/cli-models",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-picker",
+        "src/platform/core/i18n",
+        "src/surfaces/core/siwc",
+        "src/surfaces/core/work-labels",
+        "src/platform/core/errors",
+        "src/domain/core/model-activation",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/inference-serving",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-session": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/domain/core/agent-turn",
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-work",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/platform/core/redaction",
+        "src/surfaces/core/terminal-conversation",
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-panels"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

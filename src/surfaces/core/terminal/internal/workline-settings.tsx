@@ -2,7 +2,8 @@ import { useCallback, useMemo, useRef } from 'react';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { systemSummaryEntry, type LocalExecution, type WorklinePanel } from '#surfaces/core/terminal-work/index.js';
 import type { PanelSnapshot, TerminalLocalContext } from '#surfaces/core/terminal-kit/index.js';
-import { SettingsPanel, type ModelPanelChoice, type ModelPanelReference, type ModelPanelSource, type PanelKind, type PanelLabels, type PanelPorts } from '#surfaces/core/terminal-panels/index.js';
+import { type ModelPanelChoice, type ModelPanelReference, type ModelPanelSource, type PanelKind, type PanelLabels, type PanelPorts } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import type { WorklinePermissionModePort } from './workline-mode.js';
 

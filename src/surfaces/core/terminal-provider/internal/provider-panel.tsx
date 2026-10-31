@@ -3,13 +3,7 @@ const SiwcWindow = lazy(loadSiwcWindow);
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { EntryWindow } from './entry.js';
-import { LinesWindow, QuestionWindow, panelWindowLines } from './lines.js';
-import { PickerWindow } from './picker-window.js';
-import { BudgetWindow, budgetEntry } from './budget-panel.js';
-import { CacheWindow, cacheEntry } from './cache-panel.js';
-import type { BudgetPanelView, CachePanelView, PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOutcome, ProviderPanelKind, ProviderPanelLabels, ProviderPanelPort, ProviderPanelView,
-  ProviderSecretGrantPort } from './contract.js';
+import { EntryWindow, LinesWindow, QuestionWindow, panelWindowLines, PickerWindow, BudgetWindow, budgetEntry, CacheWindow, cacheEntry, type BudgetPanelView, type CachePanelView, type PanelLabels, type PanelNotice, type ProviderConnectOutcome, type ProviderModelOutcome, type ProviderPanelKind, type ProviderPanelLabels, type ProviderPanelPort, type ProviderPanelView, type ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
 export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false, signIn?: string): PickerTree {
@@ -39,7 +33,7 @@ export function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPa
 type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | null; workspaces: readonly Readonly<{ id: string; name: string }>[] } | Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
   | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null; grant?: boolean }
   | { kind: 'optional-key'; target: ProviderPanelKind; endpoint: string | null }
-  | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('./contract.js').PanelLine[] }
+  | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }
   | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
   | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
   | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }>;

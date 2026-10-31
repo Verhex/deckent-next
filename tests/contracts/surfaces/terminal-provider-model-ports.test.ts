@@ -7,7 +7,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
-import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-panels/index.js';
+import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { ModelInvocableNowApplication, type ModelInvocability, type InvocableModels } from '#engine/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';

@@ -11,7 +11,7 @@ export type { TerminalChatMessage, TerminalChatPlanHandler, TerminalChatPlanView
 export { mcpPanelPort, mcpServerStateWord, mcpTrustQuestion, type McpPanelRequest, type McpPanelRun } from './internal/mcp-panel.js';
 export { secretGrantCardPort, type TerminalSecretGrantHandlers } from './internal/secret-grant-card.js';
 export { modelPanelSource } from './internal/model-panel.js';
-export { providerPanelPort, providerOutcomeWord } from './internal/provider-panel.js';
+export { providerPanelPort, providerOutcomeWord } from '#surfaces/core/terminal-provider/index.js';
 export { cachePanelPort, cachePaybackReuses } from './internal/cache-panel.js';
 export { protocolPanelPort } from './internal/protocol-panel.js';
 export { policyPanelPort } from './internal/policy-panel.js';

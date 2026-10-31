@@ -1,10 +1,6 @@
-import { ConfigPanel } from './config-panel.js';
-import { McpPanel } from './mcp-panel.js';
-import { ModePanel } from './mode-panel.js';
+import { ConfigPanel, McpPanel, ModePanel, PolicyPanel, type PanelKind, type PanelLabels, type PanelNotice, type PanelPorts } from '#surfaces/core/terminal-panels/index.js';
 import { ModelPanel } from './model-panel.js';
 import { ProviderPanel } from './provider-panel.js';
-import { PolicyPanel } from './policy-panel.js';
-import type { PanelKind, PanelLabels, PanelNotice, PanelPorts } from './contract.js';
 
 /**
  * The one open settings window of the workline (T3 L4): `/mode`, `/config`, `/mcp`, and (T4) `/model` or `/provider`. It is a layer of the window stack while open (the

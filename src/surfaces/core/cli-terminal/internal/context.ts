@@ -1,3 +1,5 @@
+import type { ProviderPanelHost } from '#surfaces/core/terminal-provider/index.js';
+export type { ProviderConnectHost, ProviderConnectKindView, ProviderConnectProbeView, TerminalSecretNamesHandler, TerminalSecretChange, TerminalSecretSetHandler, TerminalSecretDeleteHandler, ProviderSecretStepView, ProviderCustodyView } from '#surfaces/core/terminal-provider/index.js';
 import type { HubCommandContext } from '#surfaces/core/cli-hub/index.js';
 import type { PermissionMode } from '#domain/index.js';
 import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
@@ -41,34 +43,6 @@ type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnT
  * The slice of the host's command context the interactive terminal reads (TERMINAL-LAUNCH, design A); the CLI's command context extends it.
  * Commands that live in the CLI (`doctor`, `/mcp`, the cancellation text) reach the terminal as {@link TerminalLaunchPorts}, never as an import.
  */
-/** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
-export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
-  catalogProviderId?: string | null;
-  secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
-  /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
-  pull?: 'available' | 'pick';
-  connectFamily?: string | null; seeded?: boolean;
-  /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
-  priceRequired?: boolean;
-  /** İ-12: the registry billing class (kinds arrive no-spend first: subscription, local, then metered). */
-  billing?: 'subscription' | 'local' | 'metered' }>;
-/** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
-export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: string }>;
-/** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
-export interface ProviderConnectHost {
-  readonly kinds: readonly ProviderConnectKindView[];
-  endpoint(text: string): Readonly<{ ok: true; base: string }> | Readonly<{ ok: false; reason: string }>;
-  probe(input: Readonly<{ kind: string; endpoint: string | null; key: string | null }>, signal?: AbortSignal): Promise<ProviderConnectProbeView>;
-  /** T4-B: the key's store name at an address (the generic row derives it from the host); the seed models of a seeded kind (exact ids, names). */
-  /** Key names an earlier release stored that no row uses any more, and the row to store the key under instead (registry data). */
-  readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
-  workspaces?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions): Promise<readonly Readonly<{ id: string; name: string }>[]>;
-  secretName?(kind: string, endpoint: string | null): string | null;
-  seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
-  /** Seedless endpoint discovery after address selection; the same configured read used by models.connect. */
-  discoverModels?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions):
-    Promise<readonly Readonly<{ nativeId: string; displayName: string; priced: boolean }>[]>;
-}
 /** TESLIM-PENCERESI: the same handlers as `deckent task integration-check|integration-prepare|patch-preview`, read by the delivery window. */
 export type TerminalIntegrationCheckHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['check']>;
 export type TerminalIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
@@ -77,21 +51,13 @@ export type TerminalPatchPreviewHandler = (root: string, identity: AttemptIdenti
 export type TerminalDeliveryHandlers = Readonly<{ assertAvailable(): Promise<void>;
   deliver(root: string, command: IntegrationDeliveryCommand, options: ConfigLoadOptions): ReturnType<WorkspaceDeliveryApplication['deliver']>;
   adopt(root: string, command: IntegrationAdoptionCommand, options: ConfigLoadOptions): ReturnType<WorkspaceAdoptionApplication['adopt']> }>;
-/** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
-export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
-export type TerminalSecretChange = Readonly<{ schemaVersion: 1; scopeId: string; name: string; action: 'set' | 'delete'; backend: string; removed: boolean | null }>;
-export type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
-export type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
-export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
-export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 /** The engine's `ProfileCachePlan` as this unit reads it (no engine model-activation import here). */
 export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference; ttl: string; modelId: string; writeRatio: number; readRatio: number }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown> }>[]; shared: readonly ModelReference[] }>;
 export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
   detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
-export interface TerminalLaunchContext extends MonitorCommandContext, HubCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
-  | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend' | 'siwc'> {
+export interface TerminalLaunchContext extends ProviderPanelHost, MonitorCommandContext, HubCommandContext, Pick<ModelCommandContext, 'inspectModelRoles' | 'inspectModelBinding' | 'inspectModelActivation' | 'manageProviderSpend'> {
   /** BeUser DR3-02: the configured pool's hold (`deckent pool status`), read for the /do card. */
   inspectPoolHold?: (root: string, query: { schemaVersion: 1; scopeId: string; poolId?: string | undefined }, options: ConfigLoadOptions) => Promise<import('#engine/index.js').PoolHoldView>;
   changeDeliveryDismissal?: (root: string, input: Readonly<{ scopeId: string; runId: string; taskId: string; attemptId: string; action: 'dismiss' | 'restore' }>, options: ConfigLoadOptions) => Promise<void>; /* BeUser M-33: person card */
@@ -110,11 +76,9 @@ export interface TerminalLaunchContext extends MonitorCommandContext, HubCommand
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
-  providerConnect?: ProviderConnectHost;
   /** CACHE-SLICE1: the scope's existing profiles offered the 5-minute prompt cache, and the per-layer profile documents that switch it on (read only). */
   planProfileCache?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileCachePlan>;
   inspectModelReadiness?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<unknown>;
-  inspectInvocableModels?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InvocableModels>;
   prepareModelSwitch?: (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions, reasoning?: 'off') => Promise<void>;
   planProfileProtocol?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<TerminalProfileProtocolPlan>;
   openProviderWorkspaces?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{
@@ -122,13 +86,6 @@ export interface TerminalLaunchContext extends MonitorCommandContext, HubCommand
     list(id: string): Promise<readonly Readonly<{ id: string; name: string }>[] >;
     plan(id: string, workspaceId: string): Promise<{ shared: readonly ModelReference[]; writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[] }>;
   }>;
-  listSecretNames?: TerminalSecretNamesHandler;
-  setSecret?: TerminalSecretSetHandler;
-  /** U1: custody is checked before key entry; the same governed connection keeps partial key/grant results. */
-  prepareMainSecret?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<ProviderCustodyView>;
-  connectProviderSecret?: (root: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean }>, options: ConfigLoadOptions) => Promise<Readonly<{
-    name: string; backend: string | null; custody: ProviderSecretStepView; key: ProviderSecretStepView; grant: ProviderSecretStepView }>>;
-  deleteSecret?: TerminalSecretDeleteHandler;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
   /** Managed interactive startup only; status and piped observation never call this write port. */

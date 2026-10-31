@@ -5,7 +5,7 @@ import { ErrorRegistry, prepareProductFile, t, type KnownSecretSnapshot, type Lo
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
-import { displayMcpDiagnosis } from './diagnose.js';
+import { displayMcpDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext, type McpPoolView } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, mcpToolWireName, type McpClientServerSettings } from './pin.js';
 import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, type McpScope, type McpServerEntry } from './registry.js';
