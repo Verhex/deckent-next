@@ -1,0 +1,4 @@
+{
+  "note": "Journey queued-messages (alpha.60 WL): how many waiting lines (added to the turn, then queued) are listed above the composer before a +n row. Data, not code.",
+  "visibleRows": 3
+}

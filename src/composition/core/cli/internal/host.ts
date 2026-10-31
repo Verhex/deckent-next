@@ -1,7 +1,7 @@
 import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTreeChanges } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
-import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
+import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, steerRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions, inspectLegacyProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { inspectConfiguredAdminPaths } from './admin-paths.js';
@@ -35,7 +35,7 @@ import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredP
 import { ensureConfiguredRuntimeService, managerRunning, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { previewConfiguredUninstall, applyConfiguredUninstall, previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, inspectAnchoredPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnerBaselineInstallation, inspectOwnerBaselineInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
-import { builtinAgentToolClass, inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
+import { builtinAgentToolClass, inspectConfiguredShellRealm, renderMcpStartNotice, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
@@ -137,6 +137,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       check: (root, scopeId, name, opts) => assertConfiguredProjectCredential(root, scopeId, name, opts).catch(error => { throw queryFailure(error); }) },
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady, toolClass: builtinAgentToolClass,
+        // v30: Ctrl+Enter's line for the running turn (owner S5) and the typed MCP notices in this terminal's language (tema L6).
+        steerChatTurn: steerRuntimeChatTurn, describeNotice: notice => renderMcpStartNotice(notice, locale),
         // PRE-8 v2: the provider credential decision before the turn binds (no value read); SECRET_GRANT_REQUIRED opens the first-use card.
         credential: (root, opts, reference, scope) => assertConfiguredTerminalCredential(root, reference, scope, opts).catch(error => { throw queryFailure(error); }),
         settledUsage: async (root, command, round, options) => {

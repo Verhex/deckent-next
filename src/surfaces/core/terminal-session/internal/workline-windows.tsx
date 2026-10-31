@@ -29,7 +29,8 @@ export interface SlashWindowLabels {
     readonly clear: string; readonly clearDetail: string; readonly clearTitle: string; /** `{count}` `{bytes}` `{path}` */ readonly clearBody: string;
     readonly clearPrompt: string; readonly pathTitle: string };
   readonly unknown: { readonly title: string; /** `{command}` */ readonly body: string; readonly closest: string; readonly none: string;
-    /** The last row: every command (opens `/help`). */ readonly all: string; readonly allDetail: string };
+    /** The last row: every command (opens `/help`). */ readonly all: string; readonly allDetail: string;
+    /** Owner S4: commands are English only (no alias in another language); how to list them. */ readonly english: string };
 }
 
 /** Neutral English tests and a missing catalog fall back to; the composition always passes the catalog's words. */
@@ -155,10 +156,11 @@ export function pathSpec(words: SlashWindowLabels, path: string): SlashPickSpec 
  * The unknown-command window: the commands closest to what was typed (prefix, then subsequence) to pick one, and always a last row with every
  * command (its id `help` opens the `/help` window).
  */
+/** An unknown command: its name, that commands are English, the one nearest command when there is one (`nearestSlashCommand`), and `/help`. */
 export function unknownCommandSpec(words: SlashWindowLabels, command: string, matches: readonly SlashCommand[], describe: (command: SlashCommand) => string): SlashPickSpec {
   const u = words.unknown;
   const all = matches.some(match => match.name === 'help') ? [] : [{ id: 'help', label: u.all, detail: u.allDetail }];
-  return { title: u.title, hints: words.hints, bodyRows: 2,
-    body: () => [{ spans: [span(fillTemplate(u.body, { command: `/${command}` }), { bold: true })] }, { spans: [span(matches.length ? u.closest : u.none)] }],
+  return { title: u.title, hints: words.hints, card: true, // the whole body stays readable: name, English-only note, suggestion line
+    body: () => [{ spans: [span(fillTemplate(u.body, { command: `/${command}` }), { bold: true })] }, { spans: [span(u.english)] }, { spans: [span(matches.length ? u.closest : u.none)] }],
     tree: { title: u.title, items: [...matches.map(match => ({ id: match.name, label: `/${match.name}`, detail: describe(match) })), ...all] } };
 }

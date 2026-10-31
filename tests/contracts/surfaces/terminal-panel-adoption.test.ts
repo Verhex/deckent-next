@@ -17,7 +17,7 @@ const roots: string[] = [], views: Array<{ unmount(): void }> = [];
 afterEach(async () => { views.splice(0).forEach(view => view.unmount()); vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 function gate() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
 const result = (command: ChatTurnCommand, answer = 'ANSWER'): ChatTurnResult => ({ schemaVersion: 1, turnId: command.turnId,
-  finish: 'stop', note: null, rounds: 1, toolCalls: 0, answer, answerBytes: answer.length, replayed: false, recorded: true });
+  finish: 'stop', note: null, rounds: 1, toolCalls: 0, answer, answerBytes: answer.length, replayed: false, recorded: true, notices: [], steer: { joined: [], returned: [] } });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'desktop-o7-adoption-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data');

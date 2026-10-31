@@ -89,6 +89,8 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   // The probe reads the answer in raw mode (no echo, no line buffering); keys typed meanwhile wait in order for Ink, Ctrl+C ends the wait.
   const ask = () => mouse!.background.ask(query => { try { out.write(query); } catch { /* the terminal is gone */ } }, LIMITS.backgroundProbeMs);
   if (probing && reported === undefined) { try { realInput.setRawMode(true); } catch { /* not a raw-capable TTY */ } reported = await ask(); }
+  // Ink asks a TTY for the kitty keyboard protocol as it renders (owner S5); raw mode first, so the terminal's answer is never echoed on screen.
+  if (out.isTTY === true && realInput.isTTY === true) try { realInput.setRawMode(true); } catch { /* not a raw-capable TTY */ }
   let setting = request?.setting;
   const drawn = () => request && setting ? terminalPalette(setting, request.capability, request.colorfgbg, reported) : options.palette;
   let palette = drawn();
@@ -109,7 +111,9 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(tree(view, palette),
-    { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
+    // Owner S5 (alpha.60 WL): the kitty keyboard protocol where the terminal answers Ink's query (`CSI ? u`), so Ctrl+Enter is a key of its own;
+    // a terminal without it keeps its keys and Alt+Enter stands in. Ink switches the mode off on unmount and around a suspension (the editor).
+    { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true, kittyKeyboard: { mode: 'auto' as const } } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
       ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
       stdout: options.clearScreen === false ? out : mainScreenOutput(out) });
   const stop = () => instance.unmount();

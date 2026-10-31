@@ -1,7 +1,7 @@
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
-import { RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
+import { nearestSlashCommand, RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
 import { paletteCommand } from '#surfaces/core/terminal-composer/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
@@ -42,6 +42,12 @@ describe('terminal slash registry', () => {
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'workers')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'run')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'runs')).toBe(true);
+    // Owner S4: names are English only (no alias in another language); /uninstall hands its shell command over. An unknown name gets exactly
+    // one nearest command (prefix, else at most the registry's edit distance) or none: never a guess for a tie, a short stray word or Turkish.
+    expect(WORKLINE_SLASH_COMMANDS.every(cmd => /^[a-z-]+$/u.test(cmd.name))).toBe(true);
+    expect(WORKLINE_SLASH_COMMANDS.find(cmd => cmd.name === 'uninstall')).toMatchObject({ shellCommand: 'deckent uninstall' });
+    for (const typed of ['unistall', 'unintsall', 'uni', 'UNINSTAL']) expect(nearestSlashCommand(typed)?.name, typed).toBe('uninstall');
+    for (const typed of ['kaldır', 'kaldir', 'xyzzy', 'zz', 're']) expect(nearestSlashCommand(typed), typed).toBeNull();
   });
 
   it('reserves no name now that /copy and /rename are registered', () => {

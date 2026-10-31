@@ -57,13 +57,13 @@ describe('T3 Alt+Up takes the last queued message back (workline)', () => {
     const turns = gatedTurns(), view = mount({ completeTurn: turns.completeTurn });
     await view.type('one\r'); await until(() => turns.sent.length === 1, 'first turn busy');
     await view.type('two\r'); await view.type('three\r');
-    await until(() => view.stdout.text.includes('QUEUED: three'), 'two lines queued');
+    await until(() => view.stdout.text.includes('• three'), 'two lines queued');
     view.stdin.write(ALT_UP);
     await until(() => view.stdout.text.includes('BACK: three') && view.stdout.text.includes('> three|'), 'three back in the draft');
     // A draft is never replaced: a second Alt+Up leaves `two` queued.
     view.stdin.write(ALT_UP); await settle(40);
     expect(view.stdout.text).not.toContain('BACK: two');
-    await view.type(' again\r'); await until(() => view.stdout.text.includes('QUEUED: three again'), 'edited line queued again');
+    await view.type(' again\r'); await until(() => view.stdout.text.includes('• three again'), 'edited line queued again');
     turns.gates[0]!(); await until(() => turns.sent.length === 2, 'second turn');
     turns.gates[1]!(); await until(() => turns.sent.length === 3, 'third turn');
     turns.gates[2]!(); await until(() => view.stdout.text.includes('REPLY-3'), 'last reply');
@@ -74,7 +74,7 @@ describe('T3 Alt+Up takes the last queued message back (workline)', () => {
     const turns = gatedTurns(), view = mount({ completeTurn: turns.completeTurn });
     view.stdin.write(ALT_UP); await settle(30);
     await view.type('one\r'); await until(() => turns.sent.length === 1, 'first turn busy');
-    await view.type('two\r'); await until(() => view.stdout.text.includes('QUEUED: two'), 'queued');
+    await view.type('two\r'); await until(() => view.stdout.text.includes('• two'), 'queued');
     turns.gates[0]!(); await until(() => turns.sent.length === 2, 'two started');
     view.stdin.write(ALT_UP); await settle(40);
     expect(view.stdout.text).not.toContain('BACK:');
@@ -118,7 +118,7 @@ describe('T4 Ctrl+G edits the draft in the external editor (workline)', () => {
   it('carries the help lines and the refusal words in both languages', () => {
     for (const locale of ['en', 'tr'] as const) {
       const shortcuts = terminalComposerLabels(locale).shortcuts.split('\n');
-      expect(shortcuts.at(-3)).toMatch(/^Alt\+/u); expect(shortcuts.at(-2)).toMatch(/^Ctrl\+G /u);
+      expect(shortcuts.at(-4)).toMatch(/^Alt\+/u); expect(shortcuts.at(-3)).toMatch(/^Ctrl\+Enter /u); expect(shortcuts.at(-2)).toMatch(/^Ctrl\+G /u);
       expect(Object.keys(terminalHandoffLabels(locale).editor).sort()).toEqual(['exit', 'failed', 'no-editor', 'not-started', 'too-large', 'unsafe']);
     }
     expect(terminalHandoffLabels('tr').withdrawn).not.toBe(terminalHandoffLabels('en').withdrawn);

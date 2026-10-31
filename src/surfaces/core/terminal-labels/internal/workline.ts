@@ -19,7 +19,7 @@ export function slashWindowLabels(locale: Locale): SlashWindowLabels {
       clear: t('terminal.window.scratch.clear', {}, locale), clearDetail: t('terminal.window.scratch.clearDetail', {}, locale), clearTitle: t('terminal.window.scratch.clearTitle', {}, locale), clearBody: t('terminal.window.scratch.clearBody', {}, locale), clearPrompt: t('terminal.window.scratch.clearPrompt', {}, locale),
       pathTitle: t('terminal.window.scratch.pathTitle', {}, locale) },
     unknown: { title: t('terminal.window.unknown.title', {}, locale), body: t('terminal.window.unknown.body', {}, locale), closest: t('terminal.window.unknown.closest', {}, locale), none: t('terminal.window.unknown.none', {}, locale),
-      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
+      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale), english: t('terminal.window.unknown.english', {}, locale) } };
 }
 
 
@@ -41,6 +41,14 @@ export function worklineLabels(locale: Locale, statusLine: string): WorklineLabe
     runNotFound: t('terminal.workline.runNotFound', {}, locale), workersEmpty: t('terminal.workline.workersEmpty', {}, locale),
     runsEmpty: t('terminal.workline.runsEmpty', {}, locale), serviceRestartUnavailable: t('terminal.service.restartUnavailable', {}, locale),
     queued: t('terminal.workline.queued', {}, locale),
+    queue: { service: t('terminal.workline.queuedService', {}, locale), window: t('terminal.workline.queuedWindow', {}, locale),
+      command: t('terminal.workline.queuedCommand', {}, locale), withdraw: t('tuiqueue.withdraw', {}, locale), more: t('tuiqueue.more', {}, locale), steered: t('tuiqueue.steered', {}, locale),
+      steerFull: t('tuiqueue.steerFull', {}, locale), steerReturned: t('tuiqueue.steerReturned', {}, locale), steerBack: t('tuiqueue.steerBack', {}, locale) },
+    uninstall: { title: t('terminal.workline.uninstall.title', {}, locale), lines: [t('terminal.workline.uninstall.where', {}, locale), t('terminal.workline.uninstall.what', {}, locale),
+      t('terminal.workline.uninstall.keeps', {}, locale)], label: t('terminal.workline.uninstall.label', {}, locale),
+      copy: t('terminal.workline.uninstall.copy', {}, locale), close: t('terminal.workline.uninstall.close', {}, locale), summary: t('terminal.workline.uninstall.summary', {}, locale),
+      copied: t('terminal.workline.uninstall.copied', {}, locale) },
+    toolsNone: t('terminal.workline.toolsNone', {}, locale),
     runUsage: t('terminal.slash.runUsage', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
     render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale), handoff: terminalHandoffLabels(locale),

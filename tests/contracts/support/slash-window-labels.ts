@@ -11,5 +11,5 @@ export const SLASH_WINDOW_TEST_LABELS: SlashWindowLabels = { picker: pickerLabel
   scratch: { title: 'Scratch', status: '{count} {bytes} {limit}', folder: 'Folder', more: '+{count}', empty: 'empty', fileDetail: '{bytes}', clear: 'Clear', clearDetail: '',
     clearTitle: 'Clear?', clearBody: '{count} {bytes} {path}', clearPrompt: 'y/n', pathTitle: 'Path' },
   unknown: { title: words('terminal.window.unknown.title'), body: words('terminal.window.unknown.body'), closest: words('terminal.window.unknown.closest'),
-    none: words('terminal.window.unknown.none'), all: words('terminal.window.unknown.all'), allDetail: words('terminal.window.unknown.allDetail') } };
+    none: words('terminal.window.unknown.none'), all: words('terminal.window.unknown.all'), allDetail: words('terminal.window.unknown.allDetail'), english: words('terminal.window.unknown.english') } };
 export const TYPED_ARGUMENT_NOTE = words('terminal.window.typedArgument');

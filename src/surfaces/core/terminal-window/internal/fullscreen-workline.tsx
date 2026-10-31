@@ -11,7 +11,7 @@ import { highlightCells, lineRange, selectedText, type SelectionPoint } from './
 /**
  * Full-window Workline (TERMINAL-SABIT-DUZEN, owner 2026-10-18; the Claude Code fullscreen renderer's model): the view owns the alternate
  * screen and is exactly one frame tall. Top to bottom: the chat viewport (only the conversation; it takes what is left and keeps its newest
- * line at the bottom), windows and cards (capped at half the frame, they shrink the viewport, never move the bar), the input bar, and a
+ * line at the bottom), one blank row, windows and cards (capped at half the frame, they shrink the viewport, never move the bar), the input bar, and a
  * fixed-height information region (state, mode, work, hints). The bar's bottom row therefore depends only on the terminal size and the
  * information height: a growing chat, a streamed answer or a window opening and closing never moves it.
  */
@@ -32,6 +32,8 @@ export function FullscreenWorkline({ viewport, above, bar, info }: { readonly vi
   return <WindowStackProvider composerDefault reservedRows={Math.max(0, (size.rows || 24) - cap)}><MainScreenContext.Provider value={false}>
     <Box flexDirection="column" height={rows} width={columns} overflow="hidden">
       {viewport}
+      {/* Tema L6 §4.2: one fixed blank row between the conversation and the bottom region (it never moves the bar). */}
+      <Box height={1} flexShrink={0} />
       <Box flexDirection="column" flexShrink={0} maxHeight={cap} overflow="hidden" justifyContent="flex-end">{above}</Box>
       <BarSlot>{bar}</BarSlot>
       <Box flexDirection="column" flexShrink={0} height={fullscreenInfoRows(rows)} overflow="hidden">{info}</Box>

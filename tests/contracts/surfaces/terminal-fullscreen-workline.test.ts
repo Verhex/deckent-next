@@ -68,9 +68,9 @@ describe('full-window Workline: fixed bar', () => {
     await until(() => view.stdout.frame.includes('answer-25-line-59') && view.stdout.frame.includes('READY'), 'stream end');
     expect(new Set([...rowsWhileStreaming, barRow(frameOf(view), 24)])).toEqual(new Set([empty]));
     expect(view.stdout.frame).toContain('typed while streaming');
-    // Newest line sits right above the bar (bottom-anchored conversation).
+    // Newest line sits right above the bar (bottom-anchored conversation), with tema L6's one fixed blank row between them.
     const frame = frameOf(view);
-    expect(frame.slice(empty - 2, empty).some(row => row.includes('answer-25-line-59') || row.trim() !== '')).toBe(true);
+    expect(frame[empty - 1]).toBe(''); expect(frame.slice(empty - 3, empty - 1).some(row => row.includes('answer-25-line-59'))).toBe(true);
   });
 
   it('a long approval card opens above the bar and closes again with the bar on the same row (owner finding 2026-10-18)', async () => {

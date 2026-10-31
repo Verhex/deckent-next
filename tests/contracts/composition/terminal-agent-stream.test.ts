@@ -7,7 +7,7 @@ import { builtinAgentToolClass } from '#composition/core/agent-turn/index.js';
 
 const input = { projectRoot: '/project', scopeId: 'scope', messages: [{ role: 'user' as const, content: 'what?' }], options: {} };
 const result = (over: Partial<ChatTurnResult> = {}): ChatTurnResult => ({ schemaVersion: 1, turnId: 't', finish: 'stop', note: null, rounds: 2, toolCalls: 1,
-  answer: 'It exports a.', answerBytes: 13, replayed: false, recorded: true, ...over });
+  answer: 'It exports a.', answerBytes: 13, replayed: false, recorded: true, notices: [], steer: { joined: [], returned: [] }, ...over });
 function ports(run: (command: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) => Promise<ChatTurnResult>) {
   const commands: ChatTurnCommand[] = [], cancelled: ChatTurnCancellation[] = [];
   const value: TerminalAgentTurnPorts = {
@@ -30,26 +30,40 @@ function toolLines(deltas: readonly TurnDelta[]) {
 }
 
 describe('terminal agent turn stream', () => {
+  // v30 (owner S5, tema L6): the bound turn hands its steer to the surface, a joined line keeps its steerId, and done carries the steer outcome
+  // and each MCP notice with its rendered text and a key of kind, server and code (its free detail is no part of the key).
   it('maps service events to deltas, carries the tool target to its finished line, and ends with one done and the note', async () => {
+    const steered: unknown[] = [], notFound = { kind: 'start-failed' as const, name: 'files', failure: { code: 'MCP_START_FAILED', phase: 'launch' as const, detail: 'pid 7' } };
     const p = ports(async (command, onEvent) => {
       onEvent({ kind: 'reasoning', text: 'think' });
       onEvent({ kind: 'message', message: { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'read_file', argumentsJson: '{}' }] } });
       onEvent({ kind: 'tool.started', callId: 'c1', name: 'read_file', target: 'src/a.ts' });
       onEvent({ kind: 'tool.finished', callId: 'c1', name: 'read_file', status: 'ok', ms: 4, bytes: 20 });
+      onEvent({ kind: 'message', message: { role: 'user', content: 'also b' }, steerId: 's1' });
       onEvent({ kind: 'usage', round: 2, promptTokens: 30, completionTokens: 5 });
       onEvent({ kind: 'text', text: 'It exp' });
-      return result({ turnId: command.turnId, note: 'NOTE' });
+      return result({ turnId: command.turnId, note: 'NOTE', steer: { joined: ['s1'], returned: ['s2'] },
+        notices: [notFound, { ...notFound, failure: { ...notFound.failure, detail: 'pid 8' } }, { kind: 'not-decided', name: 'files', code: 'MCP_TRUST_REQUIRED' }] });
     });
-    const deltas = await collect(streamTerminalAgentTurn(input, p.value));
+    let steer: ((id: string, content: string) => Promise<string>) | undefined;
+    const deltas = await collect(streamTerminalAgentTurn({ ...input, onTurnBound: (_binding, given) => { steer = given; } }, { ...p.value,
+      steerChatTurn: async (_root, line) => { steered.push(line); return { schemaVersion: 1, turnId: line.turnId, steerId: line.steerId, state: 'queued' }; },
+      describeNotice: notice => `MCP ${notice.kind} ${notice.name}` }));
+    await expect(steer!('s9', 'and c')).resolves.toBe('queued');
+    expect(steered).toEqual([{ schemaVersion: 1, scopeId: 'scope', turnId: p.commands[0]!.turnId, steerId: 's9', content: 'and c' }]);
+    const key = (kind: string, code: string) => JSON.stringify([kind, 'files', code]);
     expect(deltas).toEqual([{ kind: 'reasoning', text: 'think' },
       { kind: 'message', message: { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'read_file', argumentsJson: '{}' }] } },
       { kind: 'tool', phase: 'started', callId: 'c1', name: 'read_file', target: 'src/a.ts', status: null, ms: null },
       { kind: 'tool', phase: 'finished', callId: 'c1', name: 'read_file', target: 'src/a.ts', status: 'ok', ms: 4 },
+      { kind: 'message', message: { role: 'user', content: 'also b' }, steerId: 's1' },
       { kind: 'usage', promptTokens: 30, completionTokens: 5, reasoningTokens: null },
       { kind: 'text', text: 'It exp' },
       // The tail the events did not carry is completed from the bounded result.
       { kind: 'text', text: 'orts a.' },
-      { kind: 'done', finish: 'stop', note: 'NOTE' }]);
+      { kind: 'done', finish: 'stop', note: 'NOTE', steer: { joined: ['s1'], returned: ['s2'] }, notices: [
+        { key: key('start-failed', 'launch:MCP_START_FAILED'), text: 'MCP start-failed files' }, { key: key('start-failed', 'launch:MCP_START_FAILED'), text: 'MCP start-failed files' },
+        { key: key('not-decided', 'MCP_TRUST_REQUIRED'), text: 'MCP not-decided files' }] }]);
     // A fresh turn id per turn; the history is sent as given.
     expect(p.commands[0]).toMatchObject({ schemaVersion: 1, scopeId: 'scope', messages: input.messages });
     expect(p.commands[0]!.turnId).toMatch(/^[0-9a-f-]{36}$/); expect(p.cancelled).toEqual([]);
