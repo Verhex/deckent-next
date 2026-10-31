@@ -17,7 +17,7 @@ export async function findPeerWorkspaceFiles(projectRoot: string, input: unknown
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const query = parsed.data;
   const context = await loadPeerInvocationContext(projectRoot, query.scopeId, options, peer, 'read');
-  const index = await host.index(projectRoot, agentWorkspaceDeny(projectRoot, context.layout));
+  const index = await host.index(projectRoot, agentWorkspaceDeny(projectRoot, context.layout, false, options.env));
   const paths = rankWorkspacePaths(index.paths, query.query, query.limit);
   // The answer always fits the caller's delivery bound: the lowest-ranked candidates are dropped first.
   while (paths.length > 0 && resultBytes({ schemaVersion: 1, paths, truncated: true, incomplete: true }) > delivery.maxResultBytes) paths.pop();
@@ -29,7 +29,7 @@ export async function attachPeerWorkspaceFile(projectRoot: string, input: unknow
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const request = parsed.data;
   const context = await loadPeerInvocationContext(projectRoot, request.scopeId, options, peer, 'read');
-  const scope = await createWorkspaceScope(projectRoot, agentWorkspaceDeny(projectRoot, context.layout));
+  const scope = await createWorkspaceScope(projectRoot, agentWorkspaceDeny(projectRoot, context.layout, false, options.env));
   let maxBytes = Math.min(request.maxBytes, WORKSPACE_ATTACHMENT_MAX_BYTES);
   for (;;) {
     const read = await readWorkspaceAttachment(scope, request.path, maxBytes, signal);

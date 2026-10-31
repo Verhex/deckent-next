@@ -101,7 +101,7 @@ async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: '
  * process's environment, then the configured language). */
 export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), environment = options.env ?? process.env, principal = readLocalOsIdentity();
-  const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
+  const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout, false, environment) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
   // SEC-1 (owner A48-D5): a trust decision is an authority write. The witness (this process, or the service peer that asked) comes before any card,

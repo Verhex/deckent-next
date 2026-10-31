@@ -24,13 +24,13 @@ export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Obje
  * moved inside the project (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and
  * shell paths and feeds both shell sandboxes' deny views, and the composer's `@file` picker uses it too.
  */
-export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, fullAccess = false): readonly string[] {
+export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, fullAccess = false, env?: Environment): readonly string[] {
   // MODES-3: a full-access turn opens only the repository internals (`.git`: commit, branch, push); credentials and product state stay closed.
   const base = fullAccess ? CREDENTIAL_WORKSPACE_DENY : DEFAULT_WORKSPACE_READ_DENY;
   // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
   // PRE-8 v2 (law audit MAJOR 2): `.deck` steers which vault a key is read from; humans edit it, the agent never reads or writes it (full access
   // included). It holds no value, so it stays out of the worker-tree secret gate (a committed `.deck` never refuses a worker).
-  return Object.freeze([...base, ...agentProductStateDeny(projectRoot, layout), DECK_FILE.fileName, `${DECK_FILE.fileName}.*`, `${MCP_PROJECT_REGISTRY_PATH}*`,
+  return Object.freeze([...base, ...agentProductStateDeny(projectRoot, layout, env), DECK_FILE.fileName, `${DECK_FILE.fileName}.*`, `${MCP_PROJECT_REGISTRY_PATH}*`,
     MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
 }
 /** MODES-3 `edit-authority`: the installation's configuration file inside the project (it decides where policy, bindings and approvals live, the
@@ -50,17 +50,12 @@ export function agentAuthorityPaths(projectRoot: string, layout: ProductLayout):
  */
 export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, environments: readonly Readonly<Record<string, string | undefined>>[]): NonNullable<ShellSandboxLayout['hardFloor']> {
   const bootstrap = dirname(layout.bootstrapConfigPath), rel = relative(bootstrap, projectRoot);
-  const roots = [join(projectRoot, dirname(MCP_PROJECT_REGISTRY_PATH)), layout.root, ...(rel === '' || !rel.startsWith('..') && !isAbsolute(rel) ? [] : [bootstrap])], globals: string[] = [];
-  for (const environment of environments) {
-    const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
-    // P5a (lead 2026-10-31): the conventional root is sealed even before it exists (the view creates it 0700): nothing can be planted for a later CLI.
-    globals.push(...resolved ? [resolved] : [], ...conventional && conventional !== resolved ? [conventional] : []);
-  }
-  roots.push(...globals);
+  const globals = agentGlobalStateRoots(environments);
+  const roots = [join(projectRoot, dirname(MCP_PROJECT_REGISTRY_PATH)), layout.root, ...(rel === '' || !rel.startsWith('..') && !isAbsolute(rel) ? [] : [bootstrap]), ...globals];
   const credentials = CREDENTIAL_WORKSPACE_DENY.map(createGlobMatcher);
   const inProject = (path: string) => relative(projectRoot, path).split(sep).join('/'), resources = Object.keys(layout.resources) as ProductResource[];
   // P5a: a global state root's own registry resources (the CLI compile cache, `state/…`) are product paths too when that root lies in the project.
-  const layouts = [layout, resolveProductLayout({ projectRoot }), ...globals.map(root => resolveProductLayout({ projectRoot: root, root, bootstrapConfigPath: join(root, PRODUCT_LAYOUT_REGISTRY.resources.config) }))];
+  const layouts = [layout, resolveProductLayout({ projectRoot }), ...globals.map(globalLayout)];
   const products = [...layouts.flatMap(each => resources.map(resource => inProject(productResourcePath(each, resource)))),
     inProject(layout.root), inProject(layout.bootstrapConfigPath), MCP_PROJECT_REGISTRY_PATH, ...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.startsWith(`${dirname(MCP_PROJECT_REGISTRY_PATH)}/`)).map(pattern => pattern.split('/*')[0]!)];
   return Object.freeze({ roots: Object.freeze([...new Set(roots)]), homeDenied: (path: string) => credentials.some(match => match(path)), product: (path: string) =>
@@ -81,6 +76,17 @@ export function sealedRootEntryRefused(projectRoot: string, hardFloor: ReturnTyp
     try { const info = lstatSync(join(projectRoot, dir)); return !info.isDirectory(); } catch { return true; }
   });
 }
+type Environment = Readonly<Record<string, string | undefined>>;
+/** The global state roots of the configuration and process environments: each one's resolved root and the conventional `~/.deckent`, which is
+ * protected even before it exists (P5a, lead 2026-10-31: nothing can be planted for a later default-root CLI). One derivation for the shell hard
+ * floor and the edit/read deny lists. */
+function agentGlobalStateRoots(environments: readonly Environment[]): string[] {
+  return [...new Set(environments.flatMap(environment => {
+    const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
+    return [...resolved ? [resolved] : [], ...conventional && conventional !== resolved ? [conventional] : []];
+  }))];
+}
+const globalLayout = (root: string) => resolveProductLayout({ projectRoot: root, root, bootstrapConfigPath: join(root, PRODUCT_LAYOUT_REGISTRY.resources.config) });
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
   return Object.freeze((Object.keys(layout.resources) as ProductResource[]).filter(resource => !AGENT_READABLE_PRODUCT_RESOURCES.includes(resource)).flatMap(resource => {
@@ -89,9 +95,11 @@ function agentProductStatePaths(projectRoot: string, layout: ProductLayout): rea
   }));
 }
 /** The deny patterns of the product's own state: each protected resource, anything under it, its sidecars and a writer's hidden temporary;
- * a shell command naming one of these is refused outright — no approval opens product management (owner F2, Astra 2162). */
-export function agentProductStateDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
-  return Object.freeze(agentProductStatePaths(projectRoot, layout).flatMap(path => {
+ * a shell command naming one of these is refused outright — no approval opens product management (owner F2, Astra 2162). P5a: the same for
+ * every global state root inside the project (`env` and this process's environment, as the shell hard floor), e.g. its compile cache. */
+export function agentProductStateDeny(projectRoot: string, layout: ProductLayout, env: Environment = process.env): readonly string[] {
+  const paths = [layout, ...agentGlobalStateRoots([env, process.env]).map(globalLayout)].flatMap(each => agentProductStatePaths(projectRoot, each));
+  return Object.freeze([...new Set(paths)].flatMap(path => {
     const slash = path.lastIndexOf('/');
     return [`${path}*`, `${path}/**`, `${path.slice(0, slash + 1)}.${path.slice(slash + 1)}*`];
   }));
@@ -123,7 +131,7 @@ export function agentShellSandboxLayout(projectRoot: string, layout: ProductLayo
 /** Doctor's realm report and sandbox self-test with a standart turn's own layout (no scratch area); the test runs only once every state root exists (the view creates missing ones; doctor writes nothing). */
 export async function inspectAgentShellRealm(input: { readonly mode: ShellRealmReport['mode']; readonly stateDir: string | null; readonly projectRoot: string; readonly layout: ProductLayout;
   readonly env: Readonly<Record<string, string | undefined>> }): Promise<ShellRealmReport> {
-  const { projectRoot, layout, env } = input, scope = await createWorkspaceScope(projectRoot, agentWorkspaceDeny(projectRoot, layout, false));
+  const { projectRoot, layout, env } = input, scope = await createWorkspaceScope(projectRoot, agentWorkspaceDeny(projectRoot, layout, false, env));
   const writeFloor = agentTurnWriteFloor(agentAuthorityPaths(projectRoot, layout), false, await isSelfSourceProject(projectRoot));
   const sandbox = agentShellSandboxLayout(projectRoot, layout, scope, writeFloor, false, null, env);
   return inspectShellRealmSelection({ mode: input.mode, stateDir: input.stateDir, project: scope, sandboxes: shippedShellSandboxes(sandbox), ...(sandbox.hardFloor.roots.every(root => existsSync(root)) ? { selfTest: { environment: env } } : {}) });

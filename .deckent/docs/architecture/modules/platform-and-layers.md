@@ -59,7 +59,8 @@ seals that conventional root even before it exists (the open view creates it 070
 therefore waits until it exists). Only the runtime service and the bare terminal fill it, and only below an existing global root of this user; every other command reads it (`readOnly`, Node ≥ 26.8; on Node 24 it runs without it), so read-only commands stay
 byte-identical on disk. It is used only as a real, owner-only directory of this user; `NODE_DISABLE_COMPILE_CACHE` or the registry's
 `DECKENT_DISABLE_COMPILE_CACHE` turns it off. Agent shells: global roots are hidden (outside the project) or sealed (inside it; the hard floor
-counts every global root's registry resources as product paths). Uninstall removes Node's per-version directory as a cache member when the
+counts every global root's registry resources as product paths, and the agent edit/read deny lists name the same in-project paths from the
+same global-root derivation). Uninstall removes Node's per-version directory as a cache member when the
 installation's root is the global root; a project installation keeps the shared global root. Enterprise executables can call the same function
 from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
 
