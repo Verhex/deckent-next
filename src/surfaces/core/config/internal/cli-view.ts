@@ -13,7 +13,7 @@ export type ConfigPanelPortView = ReturnType<typeof configPanelPort>;
  * there, so the CLI start never reaches Ink. Absent: `deckent config` stays the plain summary.
  */
 export type ConfigPanelOpener = (port: ConfigPanelPortView, io: Readonly<{ stdin: NodeJS.ReadStream; stdout: NodeJS.WriteStream; env: NodeJS.ProcessEnv;
-  locale: Locale; signal?: AbortSignal }>) => Promise<readonly string[]>;
+  locale: Locale; root?: string; signal?: AbortSignal }>) => Promise<readonly string[]>;
 
 const section = (key: string) => key.split('.')[0]!;
 

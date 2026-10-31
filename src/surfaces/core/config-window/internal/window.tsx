@@ -18,7 +18,7 @@ export const mountConfigPanel: ConfigPanelOpener = async (port, io) => {
   const pushed: string[] = [];
   let failure: unknown = null;
   if (io.signal?.aborted) return pushed;
-  const presentation = await loadConfigTerminalLaunch(process.cwd(), { env: io.env }).catch(() => null);
+  const presentation = await loadConfigTerminalLaunch(io.root ?? process.cwd(), { env: io.env }).catch(() => null);
   if (io.signal?.aborted) return pushed;
   const setting = TERMINAL_THEME_SETTINGS.find(value => value === presentation?.terminal['theme']) ?? TERMINAL_THEME_SETTINGS[0];
   const theme = { setting, capability: colorCapability({ env: io.env, isTTY: true, argv: process.argv }), colorfgbg: io.env['COLORFGBG'] };

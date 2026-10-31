@@ -52,7 +52,8 @@ describe('settings windows in the workline', () => {
   });
   it('rich terminal (I-1): a typed /config argument opens the config window with the one-time note and never shows the typed text', async () => {
     const texts: string[] = [], modelInputs: unknown[] = [];
-    const themes: string[] = [], writes: string[] = [];
+    const themes: string[] = [], writes: string[] = []; let bindings = 0;
+    const themeControl = { background: () => '#f0ece5', apply: (setting: string) => themes.push(setting) };
     const ports: PanelPorts = { config: { inspect: async () => ({ title: 'CONFIG-WINDOW', notes: [], fields: [] }), parse: () => ({ ok: false, reason: '-' }),
       write: async () => { throw new Error('no write'); } }, theme: {
         title: 'THEME-WINDOW', inspect: async () => ({ current: 'auto', source: 'SOURCE-PROJECT-SHADOW', notes: [],
@@ -61,7 +62,7 @@ describe('settings windows in the workline', () => {
         words: { hints: 'PREVIEW SAVE ESC', current: 'CURRENT', preview: 'SAMPLES', contrast: '{ratio}:1', inherited: 'UNMEASURED', noColor: 'NO-COLOR', sessionOnly: 'SESSION-ONLY',
           samples: [{ text: 'LINK-PREVIEW', role: 'link' }] }, apply: setting => themes.push(setting),
         write: async setting => { writes.push(setting); return { status: 'applied', lines: ['THEME-SAVED'], approvalId: null }; } } };
-    const view = mountWorkline({ labels: { ...labels, windows: SLASH_WINDOW_TEST_LABELS }, panels: { ports, labels: terminalPanelLabels('en') },
+    const view = mountWorkline({ labels: { ...labels, windows: SLASH_WINDOW_TEST_LABELS }, themeControl, panels: { ports: { ...ports, theme: control => { bindings++; expect(control).toBe(themeControl); return ports.theme!; } }, labels: terminalPanelLabels('en') },
       config: async args => { texts.push(args); return ['TEXT-CONFIG']; }, completeTurn: async messages => { modelInputs.push(messages); return 'MODEL-OUTPUT'; } });
     mounted.push(view.instance);
     await settle(40);
@@ -86,6 +87,7 @@ describe('settings windows in the workline', () => {
     await settle(60); view.stdin.write(DOWN); await settle(40); view.stdin.write(ENTER);
     await until(() => writes.length === 1, 'theme saved');
     expect(themes).toEqual(['light']); expect(writes).toEqual(['light']); expect(modelInputs).toEqual([]);
+    expect(bindings).toBe(1); // Preview, close and save keep the same host-bound theme port.
   });
 
   it('typed config arguments still open selection;  Esc at the window\'s first level closes it and the composer takes keys again', async () => {

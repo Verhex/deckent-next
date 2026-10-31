@@ -154,6 +154,7 @@ export interface WorklineProps {
   readonly monitorWindow?: MonitorWindowLoader;
   /** T3 L4: the `/config` and `/mcp` window ports and every panel's words; `/mode`'s port is this view's own mode port. Absent: text commands only. */
   readonly panels?: WorklinePanels;
+  readonly themeControl?: TerminalHostContext['theme'];
   /** SW-1: bare `/help`, `/status`, `/usage`, `/doctor`, `/scope`, `/context` open information windows (typed models; one summary line on close). Absent: text. */
   readonly info?: WorklineInfo;
   /** Spend refusal recovery, through the host's governed account/management ports. */
@@ -346,7 +347,7 @@ export function WorklineApp(props: WorklineProps) {
     } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
-  const settings = useWorklineSettings({ panels: props.panels, permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+  const settings = useWorklineSettings({ panels: props.panels, ...(props.themeControl ? { themeControl: props.themeControl } : {}), permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
@@ -588,7 +589,7 @@ export function WorklineApp(props: WorklineProps) {
     const showLive = (kind: Parameters<typeof liveWin.show>[0]) => liveWin.show(kind, parseSlashLine(execution.input.text)?.command === 'do' ? 'background' : 'foreground');
     if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: { ...liveWin, show: showLive }, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable, onRunsSeen: completion.dismiss })) return true;
     // T4: `/provider` and `/hub` are windows only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'policy' || slash.command === 'hub' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || slash.command === 'theme' || slash.command === 'policy' || slash.command === 'hub' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
       try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
@@ -885,7 +886,7 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
 /** The workline is the host's view: the host owns start-up, mouse, OSC 52 copy, the alternate screen and the terminal restore (`terminal-host`). */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ascii, startup, shell, theme, ...props } = options;
-  const view = (context: TerminalHostContext, handed?: ReturnType<TerminalShell['take']>) => createElement(WorklineApp, { ...props, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}),
+  const view = (context: TerminalHostContext, handed?: ReturnType<TerminalShell['take']>) => createElement(WorklineApp, { ...props, themeControl: context.theme, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}),
     transcriptExit: context.transcriptExit, ...(handed ? { initialDraft: handed.draft, queuedInputs: handed.queued, armedAt: handed.armedAt } : {}),
     ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.handover ? { handover: context.handover } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}),
     ...(context.clipboard ? { clipboard: context.clipboard } : {}), ...(context.notify ? { notify: context.notify } : {}) });
