@@ -544,7 +544,7 @@ acceptance is still open. Alpha.58 adds one answer-key rule for every card ((y)/
 single choices), prepared start states for BeUser walks, a person's witness for install profiles wider than the first-run
 template, and MCP/SDK refusals to stop a service systemd runs. Alpha.59 opens the terminal faster, lets you put
 off connecting a model, makes card text copyable and folds consecutive file reads into one line. The alpha.60 candidate draws the
-terminal's first frame in about a third of a second (a message sent before the service answers waits behind a visible notice), lets BeUser
+terminal's first frame in about a third of a second (bare `deckent`, measured on one Linux machine; a message sent before the service answers waits behind a visible notice), lets BeUser
 walk with any connected model and adds a Codex CLI subscription sign-in and connection. The protected layer switches still start off;
 their real-use proof and the ChatGPT-plan Codex worker activation remain gates before the beta. The beta then hardens
 these layers through real use, and Desktop app development starts alongside it.

@@ -29,7 +29,7 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   profili başına seçin.
 - **BeUser, abonelik CLI'sinin ya da ChatGPT girişinin token'larını tahminle ayırır (alpha.60).** Bu taşıyıcıların token sayacı yoktur;
   bu yüzden bir çağrı istek baytlarını ve taşıyıcının eklediği çerçeve için registry payını ayırır (Claude CLI 2048, ChatGPT girişi 1024,
-  Codex CLI 24576; yalnız Claude değeri ölçüldü). Bilinmeyen kullanım asla sıfır sayılmaz: rezervasyon yüklü kalır. Geçici yürüyüş profili
+  Codex CLI 24576; yalnız Claude değeri ölçüldü) ve profilin tamamlama payını ayırır. Bilinmeyen kullanım asla sıfır sayılmaz: rezervasyon yüklü kalır. Geçici yürüyüş profili
   (`b1-dogfood-provisional-2`, `beuser-limits-5`) yürüyüş başına 256 çağrı, 16 777 216 token, bir saat ve fiyatlı modeller için 3 USD
   verir. *Etki:* bu tavanlar planlama sınırıdır; ölçülmüş kapasite, harcama izni ya da kota sözü değildir ve yürüyüş tahmin yüzünden erken
   durabilir. *Yol:* henüz yok; ölçüm tahminlerin yerini sonra alır.
@@ -52,15 +52,22 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**
   *Etki:* giriş çubuğu, pencereler ve renkler orada bozulabilir. *Yol:* düz bir Linux ya da WSL2 terminali kullanın.
-- **Terminal, Deckent her şeyi denetlemeden ilk karesini çizer (alpha.60).** Tam pencere düzeni ve bir kapsamla kare yaklaşık saniyenin
-  üçte birinde görünür (0,34 sn sıcak, 0,35 sn soğuk; önceden 2,24 ve 3,21 sn; WSL2'de Node 26.13.0 ile bir Linux sözde-terminali, her
-  biri beş koşu) ve giriş alanı sıcakta 0,88 sn, soğukta 1,76 sn sonra göndermeye hazırdır. Kimlik, kapsam ve emekli klasör denetimleri
-  yine kareden önce çalışır ve her zamanki metin ve çıkış kodu 78 ile reddeder; çalışma zamanı servisi, oturum ve kurulum kareden sonra
-  gelir. Servis yanıtlamadan gönderilen satır tek bir notun ("Göndermeden önce runtime servisi bekleniyor…") arkasında bekler, servis
-  yanıtlar yanıtlamaz gider ve üzerinde Ctrl+C hiçbir şey göndermez; başarısız bir başlatma satıra kendi hatasını verir ve taslak olarak
+- **Terminal, Deckent her şeyi denetlemeden ilk karesini çizer (alpha.60).** Tam pencere düzeniyle çıplak `deckent` (ya da `--scope <id>`)
+  için kare yaklaşık saniyenin üçte birinde görünür (0,34 sn sıcak, 0,35 sn soğuk; önceden 2,24 ve 3,21 sn) ve Workline'ın kip satırı
+  sıcakta 0,88 sn, soğukta 1,76 sn sonra çizilir. Yazmak ilk kareden itibaren çalışır; gönderdiğiniz satır bekler (aşağıda) ve çalışma
+  zamanı servisi yanıtlayınca gider; aynı ölçümde yaklaşık 3,6 sn sıcak, 4,7 sn soğuk. Kareden önce yalnız kapsam biçimi ve emekli klasör
+  denetimi çalışır; kimlik kabulü ve taşınma durdurması kareden sonra çalışır ve biri reddederse pencere kapatılır, her zamanki metin
+  çıkış kodu 78 ile yazılır. Servis, oturum ve kurulum kareden sonra gelir. O zamana dek gönderilen satır tek bir notun ("Göndermeden önce
+  runtime servisi bekleniyor…") arkasında bekler ve servis yanıtlayıp ilk kip okunduğunda gider; başlatma kabuğu hâlâ "Hazırlanıyor…"
+  gösterirken satırlarınızı yalnız sıraya alır (Ctrl+C birini geri almaz; Ctrl+D ya da ikinci Ctrl+C pencereyi kapatır); Workline devralınca
+  bekleyen satırda Ctrl+C hiçbir şey göndermez, `/exit` hiç beklemez ve başarısız bir başlatma satıra kendi hatasını verip taslak olarak
   tutar. Kurulum yalnız hiçbir şey yazmadıysanız kendiliğinden açılır; yazdıysanız tek satır "Kurulum: N adım bekliyor — /setup" der.
-  Satır içi düzen, `--full-access`, kapsamsız açılış, emekli klasör, `TERM=dumb` ve borular önceki açılış yolunu izler ve ölçülmedi;
-  sayılar tek makineden gelir, başka yerde söz değildir. *Yol:* gerekmez; `/setup` adımları her an açar.
+  Hedef, sıcakta 300 ms ve soğukta 1 sn altında ilk karedi: soğuk karşılandı, sıcak karşılanmadı (344 ms; kalan adım programın kendi
+  kodunu paketlemek). Satır içi düzen, `--full-access`, kapsamsız açılış, emekli klasör, `TERM=dumb` ve borular önceki açılış yolunu izler
+  ve ölçülmedi. Sayılar tek bir WSL2 makinesinde beş koşunun medyanıdır (Node 26.13.0, 110x30 sözde-terminal, kurulum ertelenmiş,
+  derleme önbelleği dolu; "soğuk" runtime servisinin durdurulmuş olması demektir) ve birleştirmeden önceki entegrasyon derlemesindedir;
+  sonraki commit'ler kapatma, kaldırma ve önbellek kayıtlarını değiştirdi, çizimi değil, ve yeniden ölçülmedi. *Yol:* gerekmez; `/setup`
+  adımları her an açar.
 - **Fareyle kopyalama, kart kopyalama (Ctrl+Y ya da kart üzerinde sürükleme, alpha.59) ve `/copy [n]` terminalinizin pano dizisini
   (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı (katlanmış araç çağrısı satırına tıklama, alpha.59, yalnız
   süreç içi bir terminal testinde); fiziksel Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller
@@ -235,9 +242,10 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   dosya seçer; `--sso` yoktur). Sonra `deckent models connect --connection codex-cli-subscription --executable <yol> --config-dir <dizin>
   --delegate system` bağlar: `--executable` yoksa PATH'teki ilk `codex`, `--config-dir` yoksa Brain'in kendi girişi kullanılır;
   `--delegate none|ai|system|ai,system` sizden başka kimin girişi kullanabileceğini belirtir (verilmezse önceki seçiminiz kalır). Bağlamak
-  işçi imajı istemez: kabul edilmiş imaj yoksa yalnız sohbeti ve tek seferlik çağrıları bağlar, hiçbir işçi modelini etkinleştirmez ve bunu
+  işçi imajı istemez: kabul edilmiş imaj yoksa çağrı profilini ve araçsız tek seferlik model çağrıları (örneğin BeUser) için sohbet etkinleştirmesini yazar, hiçbir işçi modelini etkinleştirmez ve bunu
   söyler ("bu CLI sürümünü kabul eden bir işçi imajı henüz yok"); işçilerde de kullanmak için imajı `/setup`'ta kurup yeniden bağlayın. Claude
-  bağlantısıyla aynı bubblewrap, kota ve onay kuralları geçerlidir (aşağıda). *Etki:* Codex çıktısı yanıttan fazlasını gösterdiğinde
+  bağlantısıyla aynı bubblewrap, onay ve giriş başına tek süreç kuralları geçerlidir (aşağıda), kota ChatGPT planınızınkidir; Deckent kendi
+  çalıştırdığınız bir Codex oturumunun yenileme kilidini gözlemez. *Etki:* Codex çıktısı yanıttan fazlasını gösterdiğinde
   Deckent süreci durdurur, ama CLI'nin bildirdiği olaylara tepki verir; bu etkiden önce bir engel değildir: salt okunur korumalı alan ve
   Deckent'in realm'i zaten çalışmış olabilecekleri sınırlar. Model adı Codex'in bildirdiği değil, Deckent'in verdiği addır ve adım gerçek
   bir Codex turuna karşı ölçülmedi. Başarılı girişi Codex işçisinin kullanılabilir olduğunun kanıtı saymayın.
@@ -753,8 +761,8 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Derleme önbelleğini silmek, başlayan bir süreçle yarışabilir (alpha.60).** Daha hızlı başlangıç, geleneksel genel kökün altındaki
   (`state/compile-cache`) bir önbelleği doldurur; kaldırma onu yalnız kayıtlı her yazıcı bittikten sonra siler. Silmenin son taramasından
   hemen sonra kendini kaydeden bir süreç o klasörü boş olmayan bırakabilir; böylece bir kaldırma önbellek kısmen silinmiş halde
-  `EFFECT_TARGET_UNKNOWN` ile biter. Önbellek dışında hiçbir şeye dokunulmaz ve tamamlandı denmez. *Yol:* kaldırmayı yeniden çalıştırın;
-  tamamlanır. Varsayılan olmayan genel kök önbelleksiz çalışır.
+  `EFFECT_TARGET_UNKNOWN` ile biter. Bu silme önbellek dışında hiçbir şeye dokunmaz ve tamamlandı demez. *Yol:* kaldırmayı yeniden çalıştırın;
+  yazıcıları yeniden denetleyip sürer; bilinmeyen sonuç hiçbir zaman tamamlanma değildir. Varsayılan olmayan genel kök önbelleksiz çalışır.
 
 ## Masaüstü ve diğer yüzeyler
 

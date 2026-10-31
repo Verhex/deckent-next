@@ -540,7 +540,7 @@ yürüyüşlerini içerir. Alpha.58 her kart için tek cevap tuşu kuralı (evet
 gösterilen numara), BeUser yürüyüşleri için hazırlanmış başlangıç durumları, ilk kurulum şablonundan geniş kurulum
 profillerine kişi tanığı ve systemd'nin çalıştırdığı servisi durdurmaya MCP/SDK retleri ekler. Alpha.59 terminali daha hızlı açar,
 model bağlamayı ertelemeye izin verir, kart metnini kopyalanabilir yapar ve art arda dosya okumalarını tek satırda toplar.
-Alpha.60 adayı terminalin ilk karesini saniyenin yaklaşık üçte birinde çizer (servis yanıtlamadan gönderilen mesaj görünür bir notun
+Alpha.60 adayı terminalin ilk karesini saniyenin yaklaşık üçte birinde çizer (çıplak `deckent`, tek Linux makinesinde ölçüldü; servis yanıtlamadan gönderilen mesaj görünür bir notun
 arkasında bekler), BeUser'ın bağlı her modelle yürümesine izin verir ve Codex CLI abonelik girişi ile bağlantısı ekler.
 Korunan katman anahtarları kapalı başlar;
 gerçek kullanım kanıtları ve ChatGPT planındaki Codex işçisinin etkinleştirilmesi beta öncesi kapılardır. Beta bu katmanları

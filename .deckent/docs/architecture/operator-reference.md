@@ -95,7 +95,7 @@ one section; other sections link to it.
   open a budget there to read its spend account (limit, reserved, settled). How money is reserved and settled:
   [Spend settlement](#spend-settlement).
 - **Subscriptions today:** a Claude Code worker runs with your own Claude login; a subscription-backed Brain (the planner
-  behind `/do`) is available through `claude-cli-subscription` (see
+  behind `/do`) is available through `claude-cli-subscription` or `codex-cli-subscription` (see
   [Core layers](#core-layers-memory-agents-model-roles-recovery)); terminal chat with a Claude subscription is still not
   supported, so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet.
 - **Cursor workers:** register the packaged Cursor subscription catalog with `deckent models catalog register --scope <id>
@@ -115,10 +115,14 @@ one section; other sections link to it.
 - **Before you start:** your installation needs the current first-run policy; an older one upgrades first (see
   [First-run setup](#first-run-setup)).
 - **Onboarding:** the first interactive terminal open shows sequential setup screens in front of the Workline. `/setup` revisits them.
-  Since alpha.60 the window and composer are drawn first (first frame about 0.34 s in the measured full-window case, ready to send after
-  0.88 s warm and 1.76 s cold) and setup follows once the runtime service has answered: its card opens by itself only while you have
+  Since alpha.60 the window and composer are drawn first (for bare `deckent` in the full-window layout: first frame about 0.34 s, the mode row
+  after 0.88 s warm and 1.76 s cold; typing works from the first frame, an early line goes when the service answers, about 3.6 s warm and
+  4.7 s cold; measured on the integration build, see [known limits](../../../docs/known-limits.md)) and setup follows once the runtime service has answered: its card opens by itself only while you have
   typed nothing, otherwise one line says "Setup: N steps waiting — /setup" and what you typed stays the draft. A line you send before
-  the service answers waits behind one notice and goes as soon as it does; Ctrl+C on it sends nothing; `/exit` never waits.
+  the service answers waits behind one notice and goes once the service has answered and the first mode was read; while the launch shell still says
+  "Preparing…" lines only queue (Ctrl+C does not take one back; Ctrl+D or a second Ctrl+C closes the window); after the Workline has taken over,
+  Ctrl+C on a waiting line sends nothing and `/exit` never waits. Identity admission and the relocation stop run after the first frame; a
+  refusal closes the window and prints the usual text with exit code 78.
   Escape defers only the current screen for this person and launch folder. On relaunch, each operation is observed again; a closed screen
   never proves that its operation completed. AI, MCP, pipes and CI do not answer person-only screens. Esc · Later on the model card
   (alpha.59) holds while no model is usable: later opens skip the card, the status row says "Model not connected — /setup" and `/setup`
@@ -585,10 +589,11 @@ upgrades with `deckent policy upgrade --template current --scope <id> --preview`
   `deckent doctor` shows a Brain login row per connection. While the CLI's own refresh lock exists or another Brain call holds the
   login, a call waits up to the registry bound and is then refused with `HEADLESS_LOGIN_BUSY`; a leftover lock from a crashed Claude
   session keeps refusing until you remove it.
-  The Codex CLI works the same way (alpha.60): `deckent models login --connection codex-cli-subscription [--config-dir <abs dir>]
+  The Codex CLI is connected the same way (alpha.60): `deckent models login --connection codex-cli-subscription [--config-dir <abs dir>]
   [--executable <abs path>]` runs `codex login` (ChatGPT; no `--sso`) into the Brain's own `headless/logins/codex`, then `deckent models
   connect --connection codex-cli-subscription --executable <abs path> --config-dir <abs dir> --delegate system` connects it (each flag as above).
-  Without an admitted worker image the connect still succeeds for chat and one-shot calls (BeUser) and says that no worker model was activated.
+  Without an admitted worker image the connect still succeeds for tool-less one-shot model calls (BeUser) and says that no worker model was activated.
+  Its quota is your ChatGPT plan's, and Deckent does not observe the refresh lock of a Codex session you run yourself.
 - **Quota question.** A worker Run whose quota wait ended asks you: `deckent run resume --quota wait` keeps waiting,
   `deckent run resume --quota next-candidate` uses the next candidate of the WorkClass list; closing the Run stays a separate choice.
   Keeping the wait is offered at most `runRuntime.quotaRecovery.maxRewaits` (3) times, then `RUN_QUOTA_WAIT_LIMIT`.

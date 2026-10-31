@@ -29,7 +29,7 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   profile.
 - **BeUser reserves a subscription CLI's or the ChatGPT sign-in's tokens by estimate (alpha.60).** These transports have no token
   counter, so a call reserves the request bytes plus a registry allowance for the framing the transport adds (Claude CLI 2048, ChatGPT
-  sign-in 1024, Codex CLI 24576; only the Claude figure was measured). Unknown usage is never settled as zero: the reservation stays
+  sign-in 1024, Codex CLI 24576; only the Claude figure was measured) plus the profile's completion allowance. Unknown usage is never settled as zero: the reservation stays
   charged. The provisional walk profile (`b1-dogfood-provisional-2`, limits `beuser-limits-5`) allows 256 calls, 16 777 216 tokens, one
   hour and 3 USD for priced models per walk. *Impact:* these ceilings are planning bounds, not measured capacity, spend permission or a
   quota promise, and a walk can stop early on an estimate. *Workaround:* none yet; measurement replaces the estimates later.
@@ -52,15 +52,22 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
-- **The terminal draws its first frame before Deckent has checked everything (alpha.60).** With the full-window layout and a scope,
-  the frame appears in about a third of a second (0.34 s warm, 0.35 s cold, against 2.24 s and 3.21 s before; one Linux pseudo-terminal
-  on WSL2 with Node 26.13.0, five runs each) and the composer is ready to send after 0.88 s warm and 1.76 s cold. Identity, scope and
-  retired-folder checks still run before the frame and refuse with their usual text and exit code 78; the runtime service, the session
-  and setup follow it. A line sent before the service answers waits behind one notice ("Waiting for the runtime service before
-  sending…"), goes as soon as it answers, and Ctrl+C on it sends nothing; a failed start gives it its error and keeps it as the draft.
-  Setup opens by itself only while you have typed nothing; otherwise one line says "Setup: N steps waiting — /setup". Inline layout,
-  `--full-access`, no scope, a retired folder, `TERM=dumb` and pipes take the earlier launch path and were not measured; the numbers
-  come from one machine and are not a promise elsewhere. *Workaround:* none needed; `/setup` opens the steps at any time.
+- **The terminal draws its first frame before Deckent has checked everything (alpha.60).** For bare `deckent` (or `--scope <id>`) on a
+  terminal with the full-window layout, the frame appears in about a third of a second (0.34 s warm, 0.35 s cold, against 2.24 s and
+  3.21 s before) and the Workline's mode row is drawn after 0.88 s warm and 1.76 s cold. Typing works from the first frame; a line you
+  send waits (below) and goes once the runtime service has answered, about 3.6 s warm and 4.7 s cold in the same measurement. Only the
+  scope format and the retired-folder check run before the frame; identity admission and the relocation stop run after it, and if one
+  refuses, the window is closed and the usual text is printed with exit code 78. The service, session and setup follow the frame. A
+  line sent before then waits behind one notice ("Waiting for the runtime service before sending…") and goes when the service has
+  answered and the first mode was read; while the launch shell still shows "Preparing…" it only queues your lines (Ctrl+C does not take
+  one back; Ctrl+D or a second Ctrl+C closes the window); once the Workline has taken over, Ctrl+C on a waiting line sends nothing, `/exit`
+  never waits, and a failed start gives the line its error and keeps it as the draft. Setup opens by itself only while you have typed
+  nothing; otherwise one line says "Setup: N steps waiting — /setup". The goal was a first frame under 300 ms warm and under 1 s cold: cold
+  is met, warm is not (344 ms; the remaining step is bundling the program's own code). Inline layout, `--full-access`, no scope, a retired
+  folder, `TERM=dumb` and pipes take the earlier launch path and were not measured. The numbers are medians of five runs on one WSL2
+  machine (Node 26.13.0, pseudo-terminal 110x30, setup deferred, compile cache filled; "cold" means the runtime service was stopped) on the
+  integration build before the merge; later commits changed teardown, uninstall and the cache records, not drawing, and were not
+  re-measured. *Workaround:* none needed; `/setup` opens the steps at any time.
 - **Copying with the mouse, card copy (Ctrl+Y or a drag over a card, alpha.59) and `/copy [n]` use your terminal's clipboard sequence
   (OSC 52)** and were proven only on a Linux pseudo-terminal (a click on a collapsed tool-call line, alpha.59, only in an in-process
   terminal test), not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until
@@ -233,9 +240,10 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   `--executable` name another login directory or binary; there is no `--sso`). Then `deckent models connect --connection
   codex-cli-subscription --executable <path> --config-dir <dir> --delegate system` connects it: without `--executable` the first `codex`
   on the PATH is used, without `--config-dir` the Brain's own login, and `--delegate none|ai|system|ai,system` states who besides you may
-  use the login (absent keeps your earlier choice). Connecting does not need a worker image: without an admitted one it connects chat and
-  one-shot calls only, activates no worker model and says so ("no worker image admits this CLI version yet"); build the image in `/setup`
-  and connect again to use it for workers too. The same bubblewrap, quota and consent rules as the Claude connection apply (below). *Impact:*
+  use the login (absent keeps your earlier choice). Connecting does not need a worker image: without an admitted one it writes the invocation profile and the chat activation for
+  tool-less one-shot model calls (for example BeUser), activates no worker model and says so ("no worker image admits this CLI version yet"); build the image in `/setup`
+  and connect again to use it for workers too. The same bubblewrap sandbox, consent and one-spawn-per-login rules as the Claude connection apply (below), against your ChatGPT
+  plan's quota; Deckent does not observe the refresh lock of a Codex session you run yourself. *Impact:*
   Deckent stops the Codex process when its output line shows more than the answer, but it acts on events the CLI reports, so this is
   not a block before the effect: the read-only sandbox and Deckent's realm bound what could already have run. The model name is the one
   Deckent passed, not one Codex reported, and the step has not been measured against a real Codex turn. Do not read a successful sign-in as proof that a Codex worker is available.
@@ -751,7 +759,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Removing the compile cache can race a starting process (alpha.60).** The faster start fills a cache under the conventional global
   root (`state/compile-cache`); uninstall removes it only after every recorded writer has ended. A process that records itself just
   after the removal's final scan can leave that folder non-empty, so one uninstall ends `EFFECT_TARGET_UNKNOWN` with the cache partly
-  removed. Nothing outside the cache is touched and no completion is claimed. *Workaround:* run the uninstall again; it completes. A
+  removed. That removal touches nothing outside the cache and claims no completion. *Workaround:* run the uninstall again; it re-checks the
+  writers and continues, and an unknown result is never a completion. A
   non-default global root runs without the cache.
 
 ## Desktop and other surfaces
