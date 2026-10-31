@@ -2,6 +2,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { ModelConnectResult } from '#domain/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
@@ -10,7 +11,7 @@ import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
 import { QuestionWindow, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
-import { SettingsPanel, modelPanelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
+import { SettingsPanel, modelPanelTree, providerPanelTree, providerPanelPort, type ProviderWindowPort } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle as settleWorkline, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
@@ -810,6 +811,44 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
   await armed(view.frame, 'n without key'); await view.press('n', 100);
   expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null }]);
   expect(prepared).toBe(0); expect(calls.errors).toEqual([]);
+  // PV R1: actual consent UI + real provider port; faults occur before or after the fixture's delegate write.
+  for (const widening of [true, false]) for (const fault of ['mutation', 'observation'] as const) {
+    const kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null }, requests: unknown[] = [];
+    let persisted: readonly ('ai' | 'system')[] = widening ? [] : ['system'];
+    const subscription = providerPanelPort('fixture-project', 'scope', { providerConnect: {
+      kinds: [{ id: kind.id, labelKey: kind.label, available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
+        secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }),
+      probe: async () => { throw new Error('unused'); }, loginDir: async () => ({ owned: '/fixture/login' }),
+      login: async () => ({ configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }) },
+      connectModel: async (_root, command) => {
+        if (command.delegate && fault === 'mutation') throw ErrorRegistry.createError('POLICY_DENIED');
+        if (command.delegate) persisted = command.delegate;
+        requests.push(command.delegate ?? null);
+        return { status: 'connected', reference: { providerId: kind.id, providerVersion: 1, modelId: 'm', modelVersion: 1 }, models: [], notCarried: [], carriedModels: [],
+          cli: { configDir: '/fixture/login', owned: true, delegate: [...persisted] }, steps: {}, tariff: 'unmetered' } as unknown as ModelConnectResult;
+      }, inspectInvocableModels: async () => {
+        if (requests.length > 1 && fault === 'observation') throw ErrorRegistry.createError('POLICY_DENIED');
+        return { schemaVersion: 1, scopeId: 'scope', models: [] };
+      } }, {}, 'en', () => 'POLICY_DENIED').subscription!;
+    const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
+    const ui = mount(panel('provider', { provider }).element, 120, 40);
+    await settle(80); await ui.press(`${ENTER}${ENTER}${ENTER}`, 120); // kind, login, default dir; fake login in suspended Ink
+    expect(ui.frame()).toContain('Who may use this login now:');
+    await ui.press(`${DOWN}${ENTER}`, 60); // tick/untick system
+    expect(requests).toEqual([null]);
+    await ui.press(`\u001B[A${ENTER}`, 60); // confirm selection
+    if (widening) {
+      expect(ui.frame()).toContain('Let system');
+      expect(requests).toEqual([null]); // approve-card-then-assert: Enter cannot consent; wait for armed hints and answer y.
+      await armed(ui.frame, subscription.words.questionKeys); await ui.press('y', 100);
+    }
+    const summary = t(fault === 'mutation' ? 'tui.provider.login.notApplied' : 'tui.provider.login.appliedUnverified', {}, 'en');
+    expect(ui.frame()).toContain(summary); expect(ui.frame()).toContain('POLICY_DENIED');
+    expect(ui.frame()).not.toContain('Who may use this login now:');
+    expect(persisted).toEqual(fault === 'mutation' ? widening ? [] : ['system'] : widening ? ['system'] : []);
+    expect(requests).toHaveLength(fault === 'mutation' ? 1 : 2);
+    mounted.pop()!.unmount();
+  }
 });
 
 it('U1 a stored main key opens the existing first-use card without re-entry; only its answer unlocks model binding', async () => {

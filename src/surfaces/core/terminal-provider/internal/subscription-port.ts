@@ -5,7 +5,7 @@ import type { PanelLine, ProviderModelOutcome } from '#surfaces/core/terminal-pa
 import { type ProviderConnectHost, type ProviderDelegateClass, type ProviderSubscriptionPort } from './context.js';
 
 type Connect = (kind: string, cli: ModelConnectCommand['cli'] | null, delegate: readonly ProviderDelegateClass[] | undefined) =>
-  Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null }>>;
+  Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null; observationFailed?: true }>>;
 const quoted = (value: string) => /^[A-Za-z0-9_@%+=:,./-]+$/u.test(value) ? value : `'${value.replace(/'/gu, `'\\''`)}'`;
 
 /**
@@ -53,10 +53,19 @@ export function subscriptionPort(input: Readonly<{ scopeId: string; options: Con
     },
     async connect(kind, configDir, delegate) {
       const cli = configDir && configDir !== owned.get(kind) ? { configDir } : null;
-      const { outcome, result } = await input.connectModel(kind, cli, delegate), classes = (result?.cli?.delegate ?? []) as readonly ProviderDelegateClass[];
+      const { outcome, result, observationFailed } = await input.connectModel(kind, cli, delegate).catch((error: unknown) => ({ result: null, observationFailed: false,
+        outcome: { connected: false, title: input.kindLabel(kind), summary: '', approvalId: null,
+          lines: [{ label: t('tui.provider.field.check', {}, locale), text: errorText(error), tone: 'warning' as const }] } }));
+      if (!result) {
+        const summary = t('tui.provider.login.notApplied', {}, locale);
+        return { ...outcome, title: summary, summary, state: 'not-applied', delegate: null, lines: [{ label: '', text: summary, tone: 'warning' }, ...outcome.lines] };
+      }
+      if (result.status === 'approval-pending') return { ...outcome, state: 'approval-pending', delegate: null };
+      if (observationFailed) return { ...outcome, state: 'applied-unverified', delegate: null };
+      const classes = (result.cli?.delegate ?? []) as readonly ProviderDelegateClass[];
       const lines: PanelLine[] = [...outcome.lines, ...(result?.cli ? [{ label: t('tui.provider.login.field.delegate', {}, locale),
         text: classes.length ? t('headless.connect.delegated', { classes: classes.join(', ') }, locale) : t('tui.provider.login.personOnly', {}, locale) }] : [])];
-      return { ...outcome, lines, delegate: classes };
+      return { ...outcome, state: 'applied', lines, delegate: classes };
     },
   };
 }

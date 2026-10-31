@@ -906,6 +906,8 @@
   "tui.provider.login.doneTitle": "{kind}: giriş yapıldı",
   "tui.provider.login.failedTitle": "{kind}: giriş tamamlanmadı",
   "tui.provider.login.field.delegate": "Kim kullanabilir",
+  "tui.provider.login.notApplied": "Uygulanmadı. İzin değişikliği başarısız oldu.",
+  "tui.provider.login.appliedUnverified": "Uygulandı, ancak son durum doğrulanamadı. İzinleri yeniden değiştirmeden önce bağlantıyı inceleyin.",
   "tui.provider.login.personOnly": "Yalnızca siz: yapay zekâ aktörleri, arka plan rolleri ve MCP istemcileri reddedilir.",
   "tui.provider.login.consentNow": "Bağlandı. Bu girişi şu an kim kullanabilir: {who}. Enter ile işaretleyin, sonra ilk satırı seçin; hiçbir şey işaretlenmezse yalnızca siz. Esc şimdiki hâlini korur.",
   "tui.provider.login.brainOnly": "Brain için bağlandı: /do planlaması ve BeUser bu aboneliği kullanır (bağlanırken denetimi yalıtım içinde çalıştı). Terminal sohbeti henüz CLI aboneliği kullanmaz; sohbet için bir API anahtarı bağlayın ya da ChatGPT ile giriş yapın.",

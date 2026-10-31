@@ -906,6 +906,8 @@
   "tui.provider.login.doneTitle": "{kind}: signed in",
   "tui.provider.login.failedTitle": "{kind}: sign-in did not finish",
   "tui.provider.login.field.delegate": "Who may use it",
+  "tui.provider.login.notApplied": "Not applied. The permission change failed.",
+  "tui.provider.login.appliedUnverified": "Applied, but the final state could not be verified. Inspect the connection before changing permissions again.",
   "tui.provider.login.personOnly": "Only you: AI actors, background roles and MCP clients are refused.",
   "tui.provider.login.consentNow": "Connected. Who may use this login now: {who}. Tick with Enter, then choose the first row; nothing ticked means only you. Esc keeps it as it is now.",
   "tui.provider.login.brainOnly": "Connected for the Brain: /do planning and BeUser use this subscription (its check ran in isolation when it connected). Terminal chat does not use a CLI subscription yet; for chat connect an API key or Sign in with ChatGPT.",

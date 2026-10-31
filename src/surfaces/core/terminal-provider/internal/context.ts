@@ -57,6 +57,8 @@ export interface ProviderPanelHost extends Pick<ModelCommandContext, 'inspectMod
 }
 /** PV: who besides the person may use a CLI subscription login (S10: never MCP). */
 export type ProviderDelegateClass = 'ai' | 'system';
+export type ProviderSubscriptionOutcome = ProviderModelOutcome & (Readonly<{ state: 'applied'; delegate: readonly ProviderDelegateClass[] }>
+  | Readonly<{ state: 'not-applied' | 'approval-pending' | 'applied-unverified'; delegate: null }>);
 /**
  * PV 3 (owner S10): `/provider` signs a CLI subscription in and connects it — the login dir (the Brain's own by default), the CLI's own sign-in
  * on this terminal (the window hands the terminal over), the governed connect, then the person's delegated-use card. 2a: the refusal card of a
@@ -73,6 +75,6 @@ export interface ProviderSubscriptionPort {
   /** The CLI's own sign-in (null dir: the Brain's own); `refused`: nothing started (person check, isolation, a missing CLI). */
   login(kind: string, configDir: string | null): Promise<Readonly<{ signedIn: boolean; refused: boolean; title: string; lines: readonly PanelLine[] }>>;
   /** The governed connect; `delegate` absent keeps the earlier choice. `delegate` in the outcome: who may use the login now. */
-  connect(kind: string, configDir: string | null, delegate?: readonly ProviderDelegateClass[]): Promise<ProviderModelOutcome & Readonly<{ delegate: readonly ProviderDelegateClass[] }>>;
+  connect(kind: string, configDir: string | null, delegate?: readonly ProviderDelegateClass[]): Promise<ProviderSubscriptionOutcome>;
 }
 export type ProviderWindowPort = ProviderPanelPort & { readonly subscription?: ProviderSubscriptionPort };

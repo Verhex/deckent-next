@@ -120,7 +120,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     } catch (error) { lines.push({ label: '', text: errorText(error), tone: 'warning' }); }
   };
   /** One governed `models.connect` of a chosen model; PV: a CLI subscription also names its login dir and the person's delegated-use choice. */
-  async function connectChosen(request: ProviderModelRequest, extra: Pick<ModelConnectCommand, 'cli' | 'delegate'> = {}): Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null }>> {
+  async function connectChosen(request: ProviderModelRequest, extra: Pick<ModelConnectCommand, 'cli' | 'delegate'> = {}): Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null; observationFailed?: true }>> {
     const kind = kindOf(request.kind), label = kindLabel(kind, request.kind, locale);
     const choice = request.model === PULL ? { pull: 'available' as const } : request.model.startsWith(SEED) ? { nativeId: request.model.slice(SEED.length) } : (() => {
       const match = /^([^@/]+)@(\d+)\/([^@/]+)@(\d+)$/u.exec(request.model.slice(DECLARED.length));
@@ -145,7 +145,14 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
     while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
     const lines = modelConnectLines(result, `${label} · ${shown}`, locale, kind?.billing);
-    const reading = result.status === 'connected' ? await host.inspectInvocableModels?.(root, scopeId, options) : null;
+    let reading;
+    try { reading = result.status === 'connected' ? await host.inspectInvocableModels?.(root, scopeId, options) : null; }
+    catch (error) {
+      // The mutation already returned success. A failed observation must never turn it into an old consent result or trigger another write.
+      const summary = t('tui.provider.login.appliedUnverified', {}, locale);
+      return { result, observationFailed: true, outcome: { connected: true, title: summary, summary, approvalId: null,
+        lines: [{ label: '', text: summary, tone: 'warning' }, { label: t('tui.provider.field.check', {}, locale), text: errorText(error), tone: 'warning' }] } };
+    }
     const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
     const usable = candidates.some(row => row.availability.invocable);
     // PV: the readiness read is the terminal chat's (its protocol families); a CLI subscription connects for the Brain, whose check ran isolated at connect.

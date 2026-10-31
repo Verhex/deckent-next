@@ -558,17 +558,21 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   // PV 3: the /provider sign-in: the person check refuses before any dir or spawn; the person's run names the Brain's own dir, the CLI's own sign-in result,
   // and the connect carries only the dir and the consent the card gave (never MCP); a dir the person names goes as `cli.configDir`.
   const commands: ModelConnectCommand[] = [], ref = { providerId: 'claude-cli-subscription', providerVersion: 1, modelId: 'm', modelVersion: 1 };
-  let person = false;
-  const signIn = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [{ ...claude, headlessLogin: true }],
+  let person = false, mutationFails = false, observationFails = false;
+  let persisted: readonly ('ai' | 'system')[] = [];
+  const subscription = (locale: 'en' | 'tr') => providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [{ ...claude, headlessLogin: true }],
     loginDir: async () => { if (!person) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } }); return { owned: '/state/logins/claude' }; },
     login: async command => ({ configDir: command.configDir ?? '/state/logins/claude', owned: !command.configDir, exit: 'completed', signedIn: true, authMethod: 'claude.ai', subscriptionType: 'max' }) },
-  connectModel: async (_root, command) => { commands.push(command); return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
+  connectModel: async (_root, command) => { if (mutationFails) throw ErrorRegistry.createError('POLICY_DENIED');
+    commands.push(command); persisted = command.delegate ?? persisted; return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
     status: 'connected', reference: ref, models: [{ nativeId: 'm', state: 'connected', reference: ref }], credentialRef: null, keyStored: null, steps: { catalog: 'present', declaration: 'skipped',
       profile: 'written', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current',
-    cli: { configDir: command.cli?.configDir ?? '/state/logins/claude', owned: !command.cli, delegate: command.delegate ?? [] } } as ModelConnectResult; },
+    cli: { configDir: command.cli?.configDir ?? '/state/logins/claude', owned: !command.cli, delegate: [...persisted] } } as ModelConnectResult; },
   // The chat readiness read refuses a CLI subscription by protocol: that is its expected Brain-only state, worded as such (never "Connected, unavailable").
-  inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: ref, label: 'm', nativeId: 'm', catalogRevision: 'r', bindingDigest: '',
-    availability: { invocable: false, reason: { code: 'MODEL_INVOCATION_UNAVAILABLE' } } }] }) as never }, options, 'en', errorText).subscription!;
+  inspectInvocableModels: async () => { if (observationFails) throw ErrorRegistry.createError('POLICY_DENIED');
+    return { schemaVersion: 1, scopeId: 'scope', models: [{ reference: ref, label: 'm', nativeId: 'm', catalogRevision: 'r', bindingDigest: '',
+      availability: { invocable: false, reason: { code: 'MODEL_INVOCATION_UNAVAILABLE' } } }] } as never; } }, options, locale, errorText).subscription!;
+  const signIn = subscription('en');
   expect(signIn.kinds).toEqual(['claude-cli-subscription']);
   expect(await signIn.prepare('claude-cli-subscription')).toMatchObject({ owned: null, lines: [{ text: 'ERR:AUTHORITY_WITNESS_REQUIRED' }] });
   person = true;
@@ -582,6 +586,25 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   await signIn.connect('claude-cli-subscription', '/home/person/.claude', []);
   expect(commands.map(command => [command.cli ?? null, command.delegate ?? null, command.model])).toEqual([[null, null, { pull: 'available' }], [null, ['ai'], { pull: 'available' }],
     [{ configDir: '/home/person/.claude' }, [], { pull: 'available' }]]);
+  // R1: widening and narrowing must report the new mutation, never an older successful consent.
+  for (const locale of ['en', 'tr'] as const) for (const wanted of [['ai'], []] as const) {
+    const before = wanted.length ? [] : ['ai'] as const;
+    persisted = before; mutationFails = true; observationFails = false;
+    const writes = commands.length, card = subscription(locale);
+    const refused = await card.connect(claude.id, null, wanted);
+    expect(commands).toHaveLength(writes); expect(persisted).toEqual(before);
+    expect(refused).toMatchObject({ state: 'not-applied', connected: false, delegate: null,
+      summary: t('tui.provider.login.notApplied', {}, locale) });
+    expect(refused.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');
+    expect(refused.lines.map(line => line.text)).not.toContain(t('tui.provider.login.personOnly', {}, locale));
+    mutationFails = false; observationFails = true;
+    const uncertain = await card.connect(claude.id, null, wanted);
+    expect(commands).toHaveLength(writes + 1); expect(persisted).toEqual(wanted);
+    expect(uncertain).toMatchObject({ state: 'applied-unverified', connected: true, delegate: null,
+      summary: t('tui.provider.login.appliedUnverified', {}, locale) });
+    expect(uncertain.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');
+    expect(uncertain.lines.map(line => line.text)).not.toContain(t('tui.provider.login.personOnly', {}, locale));
+  }
 });
 
 it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models instead of "-"', async () => {

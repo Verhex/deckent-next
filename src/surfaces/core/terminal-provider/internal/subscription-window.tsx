@@ -36,10 +36,9 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
     void (async () => {
       const done = await handOver(fillTemplate(words.banner, { kind: kind.label }), () => port.login(kind.id, configDir));
       if (!done || !done.signedIn) { ended(done?.title ?? kind.label, done?.lines ?? [], !done?.refused); return; }
-      const outcome = await connect(configDir).catch(() => null);
-      if (!outcome) { ended(done.title, done.lines, true); return; }
+      const outcome = await connect(configDir);
       const shown = { ...outcome, lines: [...done.lines, ...outcome.lines] };
-      if (!outcome.connected) { onDone(shown); return; }
+      if (outcome.state !== 'applied') { onDone(shown); return; }
       // Lead 2026-10-31: the card opens with the consent in force ticked (none on a first connect, S10), so an unchanged Enter keeps it; revoking is an untick.
       show({ kind: 'consent', outcome: shown, configDir, now: outcome.delegate, ticked: outcome.delegate, pos: 0 });
     })();
@@ -62,7 +61,7 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
     return <QuestionWindow title={fillTemplate(words.question, { classes: ticked.join(', '), kind: kind.label })} lines={[]} hints={words.questionKeys} position={labels.position}
       onAnswer={answer => {
         if (!answer) { show({ kind: 'consent', outcome, configDir, now, ticked, pos: 0 }); return; }
-        show({ kind: 'busy' }); connect(configDir, ticked).then(onDone, () => onDone(outcome));
+        show({ kind: 'busy' }); void connect(configDir, ticked).then(onDone);
       }} />;
   }
   const { outcome, configDir, now, ticked } = step, box = (id: ProviderDelegateClass) => `[${ticked.includes(id) ? 'x' : ' '}] `;
@@ -78,6 +77,6 @@ export function SubscriptionWindow({ port, kind, labels, onDone, onBack }: { rea
       if (ticked.length === now.length && ticked.every(item => now.includes(item))) { onDone(outcome); return; }
       // Widening asks once more on an armed card; narrowing (fewer classes, or only you) is sent at once.
       if (ticked.some(item => !now.includes(item))) { show({ kind: 'confirm', outcome, configDir, now, ticked }); return; }
-      show({ kind: 'busy' }); connect(configDir, ticked).then(onDone, () => onDone(outcome));
+      show({ kind: 'busy' }); void connect(configDir, ticked).then(onDone);
     }} />;
 }
