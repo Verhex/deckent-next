@@ -1,6 +1,6 @@
 import { modelConnectLines, workerChannelText } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
@@ -127,10 +127,11 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       return match ? { reference: { providerId: match[1]!, providerVersion: Number(match[2]), modelId: match[3]!, modelVersion: Number(match[4]) } } : null;
     })();
     const shown = request.model === PULL ? t('tui.provider.pull', {}, locale) : 'nativeId' in (choice ?? {}) ? (choice as { nativeId: string }).nativeId : request.model.slice(DECLARED.length);
-    const refused = (text: string) => ({ result: null, outcome: { connected: false, title: t('tui.provider.model.refused', { model: shown }, locale),
+    const refused = (text: string, phase?: unknown) => ({ result: null,
+      failureState: phase === 'before-profile-write' ? 'not-applied' as const : phase === 'profile-written' ? 'applied-unverified' as const : 'unknown' as const, outcome: { connected: false, title: t('tui.provider.model.refused', { model: shown }, locale),
       lines: [{ label: t('tui.provider.model.field.model', {}, locale), text: `${label} · ${shown}` }, { label: t('tui.provider.field.check', {}, locale), text, tone: 'warning' as const }],
       summary: t('tui.provider.model.refused', { model: shown }, locale), approvalId: null } });
-    if (!choice) return refused(t('tui.provider.unavailable', {}, locale));
+    if (!choice) return refused(t('tui.provider.unavailable', {}, locale), 'before-profile-write');
     // A connection waiting for approval continues under the same command id (its config approval names it); anything else is a new command.
     const pendingKey = JSON.stringify([request.kind, request.endpoint, request.model]);
     const command: ModelConnectCommand = { schemaVersion: 1, commandId: pendingConnections.get(pendingKey) ?? randomUUID(), scopeId, connection: request.kind,
@@ -140,7 +141,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       pendingConnections.delete(pendingKey);
       // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
       if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
-      return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error)); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
+      return refused(request.model === PULL && ['MODEL_CONNECT_MODEL_UNKNOWN', 'MODEL_CONNECT_NO_AVAILABLE'].includes(String((error as { code?: unknown } | null)?.code)) ? `${t('tui.provider.pull.none', { kind: label }, locale)} ${errorText(error)}` : errorText(error), error instanceof DeckentError ? error.params?.['connectPhase'] : undefined); // BeUser M-01: nothing to connect, then the typed cause; never an internal id
     }
     if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
     while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);

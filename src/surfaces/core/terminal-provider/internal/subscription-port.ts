@@ -5,7 +5,7 @@ import type { PanelLine, ProviderModelOutcome } from '#surfaces/core/terminal-pa
 import { type ProviderConnectHost, type ProviderDelegateClass, type ProviderPanelHost, type ProviderSubscriptionPort } from './context.js';
 
 type Connect = (kind: string, cli: ModelConnectCommand['cli'] | null, delegate: readonly ProviderDelegateClass[] | undefined) =>
-  Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null; observationFailed?: true }>>;
+  Promise<Readonly<{ outcome: ProviderModelOutcome; result: ModelConnectResult | null; observationFailed?: true; failureState?: 'not-applied' | 'applied-unverified' | 'unknown' }>>;
 const quoted = (value: string) => /^[A-Za-z0-9_@%+=:,./-]+$/u.test(value) ? value : `'${value.replace(/'/gu, `'\\''`)}'`;
 
 /** Display only: the same authored profile layers as ModelConnectApplication; submit still decides every write. */
@@ -67,13 +67,15 @@ export function subscriptionPort(input: Readonly<{ root: string; policy: Provide
     },
     async connect(kind, configDir, delegate) {
       const cli = configDir && configDir !== owned.get(kind) ? { configDir } : null;
-      const { outcome, result, observationFailed } = await input.connectModel(kind, cli, delegate).catch((error: unknown) => ({ result: null, observationFailed: false,
+      const { outcome, result, observationFailed, failureState } = await input.connectModel(kind, cli, delegate).catch((error: unknown) => ({ result: null, observationFailed: false, failureState: 'unknown' as const,
         outcome: { connected: false, title: input.kindLabel(kind), summary: '', approvalId: null,
           lines: [{ label: t('tui.provider.field.check', {}, locale), text: errorText(error), tone: 'warning' as const }] } }));
       const blocked = await delegationBlocked(input.root, scopeId, input.policy, options, locale);
       if (!result) {
-        const summary = t('tui.provider.login.notApplied', {}, locale);
-        return { ...outcome, delegationBlocked: blocked, title: summary, summary, state: 'not-applied', delegate: null,
+        const state = failureState ?? 'unknown';
+        const summary = state === 'not-applied' ? t('tui.provider.login.notApplied', {}, locale)
+          : state === 'applied-unverified' ? t('tui.provider.login.appliedUnverified', {}, locale) : t('tui.provider.login.unknown', {}, locale);
+        return { ...outcome, delegationBlocked: blocked, title: summary, summary, state, delegate: null,
           lines: [{ label: '', text: summary, tone: 'warning' }, ...outcome.lines, ...(blocked ? [{ label: words.configPolicy, text: blocked, tone: 'warning' as const }] : [])] };
       }
       if (result.status === 'approval-pending') return { ...outcome, delegationBlocked: blocked, state: 'approval-pending', delegate: null };

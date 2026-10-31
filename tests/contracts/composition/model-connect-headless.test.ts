@@ -3,7 +3,11 @@
 import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as platform from '#platform/index.js';
+import * as catalog from '#composition/core/provider-catalog/index.js';
+import * as configComposition from '#composition/core/config/index.js';
+import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins } from '#composition/core/model-connect/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
@@ -38,6 +42,7 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
   return { f, configDir, executable, connect, profile, spawns };
 }
 
+const platformPrune = platform.pruneConfigBackups;
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
   it('S3-5: the kind needs no preview switch any more: it connects wherever its isolation realm works, the retired key set or not', async () => {
@@ -73,6 +78,48 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect((await h.profile())!.adapter.definition['delegatedUse']).toEqual(consent);
     expect(await h.connect('c-5', { delegate: [] })).toMatchObject({ steps: { profile: 'written' }, cli: { delegate: [] } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toBeNull();
+    // R5: real config publication followed by a rejected prune/read/binding, through the production provider port.
+    for (const wanted of [['ai'], []] as const) for (const fault of ['before', 'prune', 'layers', 'binding'] as const) {
+      const before = wanted.length ? [] : ['ai'];
+      await h.connect(`reset-${wanted.length}-${fault}`, { delegate: before });
+      const path = join(h.f.project, '.deckent/config.json'), bytesBefore = await readFile(path, 'utf8');
+      let attempts = 0, caught: unknown;
+      const readLayers = configComposition.snapshotConfiguredConfig, readBinding = catalog.inspectModelBinding;
+      let published = false;
+      const prune = vi.spyOn(platform, 'pruneConfigBackups').mockImplementation(async (...args) => {
+        if (fault === 'prune') throw new Error('fixture prune rejection after publication');
+        await platformPrune(...args); published = true;
+      });
+      const layers = vi.spyOn(configComposition, 'snapshotConfiguredConfig').mockImplementation(async (...args) => {
+        if (fault === 'layers' && published) throw platform.ErrorRegistry.createError('CONFIG_READ_IO_HOLD');
+        return readLayers(...args);
+      });
+      const binding = vi.spyOn(catalog, 'inspectModelBinding').mockImplementation(async (...args) => {
+        if (fault === 'binding' && published) throw platform.ErrorRegistry.createError('POLICY_DENIED');
+        return readBinding(...args);
+      });
+      try {
+        const port = providerPanelPort(h.f.project, 'scope', { providerConnect: {
+          kinds: [{ id: 'claude-cli-subscription', labelKey: 'tui.provider.kind.claudeCli', available: true, endpointDefault: null, endpointEditable: false,
+            keyRequired: false, secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }),
+          probe: async () => { throw new Error('unused'); }, loginDir: async () => ({ owned: h.configDir }), login: async () => null },
+          connectModel: async (_root, command) => {
+            attempts++;
+            try { return await h.connect(command.commandId, { delegate: command.delegate, ...(fault === 'before' ? { model: { nativeId: 'missing-fixture-model' } } : {}) }); }
+            catch (error) { caught = error; throw error; }
+          } }, { env: h.f.env }, 'en', error => String((error as { code: string }).code)).subscription!;
+        const outcome = await port.connect('claude-cli-subscription', null, wanted);
+        const code = fault === 'before' ? 'MODEL_CONNECT_MODEL_UNKNOWN' : fault === 'prune' ? 'CONFIG_BACKUP_PRUNE_FAILED' : fault === 'layers' ? 'CONFIG_READ_IO_HOLD' : 'POLICY_DENIED';
+        expect(caught).toMatchObject({ code, params: { connectPhase: fault === 'before' ? 'before-profile-write' : fault === 'prune' ? 'profile-write-started' : 'profile-written' } });
+        expect(outcome).toMatchObject({ connected: false, delegate: null, state: fault === 'before' ? 'not-applied' : fault === 'prune' ? 'unknown' : 'applied-unverified' });
+        expect(outcome.lines.map(line => line.text).join('\n')).toContain(code); expect(attempts).toBe(1);
+        if (fault === 'prune') expect(outcome.summary).toContain('/provider');
+        if (fault === 'before') expect(await readFile(path, 'utf8')).toBe(bytesBefore);
+        else expect(await readFile(path, 'utf8')).not.toBe(bytesBefore);
+        const consent = (await h.profile())!.adapter.definition['delegatedUse'] as { classes: string[] } | null;
+        expect(consent?.classes ?? []).toEqual(fault === 'before' ? before : wanted);
+      } finally { prune.mockRestore(); layers.mockRestore(); binding.mockRestore(); }
+    }
   });
   it('without flags: the first CLI of the registry name in PATH (S7: that path, not its realpath) and s3c the Brain\'s own login dir (never ~/.claude); none in PATH is refused typed', async () => {
     const h = await harness(true), bin = join(h.f.data, 'path-bin'), home = h.f.env.HOME;

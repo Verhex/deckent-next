@@ -910,6 +910,7 @@
   "tui.provider.login.doneTitle": "{kind}: giriş yapıldı",
   "tui.provider.login.failedTitle": "{kind}: giriş tamamlanmadı",
   "tui.provider.login.field.delegate": "Kim kullanabilir",
+  "tui.provider.login.unknown": "İzin değişikliğinin sonucu bilinmiyor; son durum doğrulanamadı. İzinleri yeniden değiştirmeden önce bağlantıyı incelemek için /provider penceresini yeniden açın.",
   "tui.provider.login.notApplied": "Uygulanmadı. İzin değişikliği başarısız oldu.",
   "tui.provider.login.appliedUnverified": "Uygulandı, ancak son durum doğrulanamadı. İzinleri yeniden değiştirmeden önce bağlantıyı inceleyin.",
   "tui.provider.login.personOnly": "Yalnızca siz: yapay zekâ aktörleri, arka plan rolleri ve MCP istemcileri reddedilir.",

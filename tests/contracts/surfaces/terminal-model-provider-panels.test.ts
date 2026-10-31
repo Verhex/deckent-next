@@ -815,7 +815,7 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
   expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null }]);
   expect(prepared).toBe(0); expect(calls.errors).toEqual([]);
   // PV R1: actual consent UI + real provider port; faults occur before or after the fixture's delegate write.
-  for (const widening of [true, false]) for (const fault of ['mutation', 'observation'] as const) {
+  for (const widening of [true, false]) for (const fault of ['mutation', 'persist', 'post-write', 'untyped', 'observation'] as const) {
     const kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null }, requests: unknown[] = [];
     let persisted: readonly ('ai' | 'system')[] = widening ? [] : ['system'];
     const subscription = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: inspectDelegationPermission('allow'), providerConnect: {
@@ -824,9 +824,11 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
       probe: async () => { throw new Error('unused'); }, loginDir: async () => ({ owned: '/fixture/login' }),
       login: async () => ({ configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }) },
       connectModel: async (_root, command) => {
-        if (command.delegate && fault === 'mutation') throw ErrorRegistry.createError('POLICY_DENIED');
+        if (command.delegate && fault === 'mutation') throw ErrorRegistry.createError('POLICY_DENIED', { params: { connectPhase: 'before-profile-write' } });
         if (command.delegate) persisted = command.delegate;
         requests.push(command.delegate ?? null);
+        if (command.delegate && ['persist', 'post-write', 'untyped'].includes(fault)) throw ErrorRegistry.createError('POLICY_DENIED',
+          { params: fault === 'untyped' ? {} : { connectPhase: fault === 'persist' ? 'profile-write-started' : 'profile-written' } });
         return { status: 'connected', reference: { providerId: kind.id, providerVersion: 1, modelId: 'm', modelVersion: 1 }, models: [], notCarried: [], carriedModels: [],
           cli: { configDir: '/fixture/login', owned: true, delegate: [...persisted] }, steps: {}, tariff: 'unmetered' } as unknown as ModelConnectResult;
       }, inspectInvocableModels: async () => {
@@ -845,8 +847,9 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
       expect(requests).toEqual([null]); // approve-card-then-assert: Enter cannot consent; wait for armed hints and answer y.
       await armed(ui.frame, subscription.words.questionKeys); await ui.press('y', 100);
     }
-    const summary = t(fault === 'mutation' ? 'tui.provider.login.notApplied' : 'tui.provider.login.appliedUnverified', {}, 'en');
-    expect(ui.frame()).toContain(summary); expect(ui.frame()).toContain('POLICY_DENIED');
+    const summary = t(fault === 'mutation' ? 'tui.provider.login.notApplied' : fault === 'persist' || fault === 'untyped' ? 'tui.provider.login.unknown' : 'tui.provider.login.appliedUnverified', {}, 'en');
+    expect(ui.frame().replace(/[\s│]/gu, '')).toContain(summary.replace(/\s/gu, ''));
+    if (fault === 'persist' || fault === 'untyped') expect(ui.frame()).toContain('/provider'); expect(ui.frame()).toContain('POLICY_DENIED');
     expect(ui.frame()).not.toContain('Who may use this login now:');
     expect(persisted).toEqual(fault === 'mutation' ? widening ? [] : ['system'] : widening ? ['system'] : []);
     expect(requests).toHaveLength(fault === 'mutation' ? 1 : 2);

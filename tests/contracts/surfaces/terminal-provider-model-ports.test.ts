@@ -563,6 +563,7 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   // and the connect carries only the dir and the consent the card gave (never MCP); a dir the person names goes as `cli.configDir`.
   const commands: ModelConnectCommand[] = [], ref = { providerId: 'claude-cli-subscription', providerVersion: 1, modelId: 'm', modelVersion: 1 };
   let person = false, mutationFails = false, observationFails = false;
+  let connectFault: 'persist' | 'post-write' | 'untyped' | null = null;
   let persisted: readonly ('ai' | 'system')[] = [];
   let authored: readonly ('global' | 'project')[] = [], policy: 'allow' | 'require-approval' | 'deny' | 'unreadable' | 'missing' = 'allow';
   const permissionReads: string[][] = [];
@@ -611,8 +612,11 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
     loginDir: async () => { if (!person) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } }); return { owned: '/state/logins/claude' }; },
     login: async command => ({ configDir: command.configDir ?? '/state/logins/claude', owned: !command.configDir, exit: 'completed', signedIn: true, authMethod: 'claude.ai', subscriptionType: 'max' }) },
   inspectDelegationPermission,
-  connectModel: async (_root, command) => { if (mutationFails) throw ErrorRegistry.createError('POLICY_DENIED');
-    commands.push(command); persisted = command.delegate ?? persisted; return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
+  connectModel: async (_root, command) => { if (mutationFails) throw ErrorRegistry.createError('POLICY_DENIED', { params: { connectPhase: 'before-profile-write' } });
+    commands.push(command); persisted = command.delegate ?? persisted;
+    if (connectFault) throw ErrorRegistry.createError(connectFault === 'persist' ? 'CONFIG_BACKUP_PRUNE_FAILED' : 'POLICY_DENIED',
+      { params: connectFault === 'untyped' ? {} : { connectPhase: connectFault === 'persist' ? 'profile-write-started' : 'profile-written' } });
+    return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
     status: 'connected', reference: ref, models: [{ nativeId: 'm', state: 'connected', reference: ref }], credentialRef: null, keyStored: null, steps: { catalog: 'present', declaration: 'skipped',
       profile: 'written', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current',
     cli: { configDir: command.cli?.configDir ?? '/state/logins/claude', owned: !command.cli, delegate: [...persisted] } } as ModelConnectResult; },
@@ -645,9 +649,21 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
       summary: t('tui.provider.login.notApplied', {}, locale) });
     expect(refused.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');
     expect(refused.lines.map(line => line.text)).not.toContain(t('tui.provider.login.personOnly', {}, locale));
-    mutationFails = false; observationFails = true;
+    mutationFails = false;
+    for (connectFault of ['persist', 'post-write', 'untyped']) {
+      persisted = before;
+      const attempts = commands.length, failed = await card.connect(claude.id, null, wanted);
+      expect(commands).toHaveLength(attempts + 1); expect(persisted).toEqual(wanted); // no automatic retry or assumed rollback
+      expect(failed).toMatchObject({ state: connectFault === 'post-write' ? 'applied-unverified' : 'unknown', connected: false, delegate: null,
+        summary: t(connectFault === 'post-write' ? 'tui.provider.login.appliedUnverified' : 'tui.provider.login.unknown', {}, locale) });
+      expect(failed.lines.map(line => line.text).join('\n')).toContain(connectFault === 'persist' ? 'CONFIG_BACKUP_PRUNE_FAILED' : 'POLICY_DENIED');
+      expect(failed.lines.map(line => line.text)).not.toContain(t('tui.provider.login.notApplied', {}, locale));
+      if (connectFault !== 'post-write') expect(failed.summary).toContain('/provider');
+    }
+    connectFault = null; persisted = before; observationFails = true;
+    const observations = commands.length;
     const uncertain = await card.connect(claude.id, null, wanted);
-    expect(commands).toHaveLength(writes + 1); expect(persisted).toEqual(wanted);
+    expect(commands).toHaveLength(observations + 1); expect(persisted).toEqual(wanted);
     expect(uncertain).toMatchObject({ state: 'applied-unverified', connected: true, delegate: null,
       summary: t('tui.provider.login.appliedUnverified', {}, locale) });
     expect(uncertain.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');

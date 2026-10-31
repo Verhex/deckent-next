@@ -910,6 +910,7 @@
   "tui.provider.login.doneTitle": "{kind}: signed in",
   "tui.provider.login.failedTitle": "{kind}: sign-in did not finish",
   "tui.provider.login.field.delegate": "Who may use it",
+  "tui.provider.login.unknown": "The permission change outcome is unknown; the final state could not be verified. Reopen /provider to inspect the connection before changing permissions again.",
   "tui.provider.login.notApplied": "Not applied. The permission change failed.",
   "tui.provider.login.appliedUnverified": "Applied, but the final state could not be verified. Inspect the connection before changing permissions again.",
   "tui.provider.login.personOnly": "Only you: AI actors, background roles and MCP clients are refused.",

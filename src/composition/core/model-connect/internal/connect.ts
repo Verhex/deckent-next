@@ -21,6 +21,7 @@ import { modelConnectCommandSchema } from '#domain/index.js';
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
+  let connectPhase: 'before-profile-write' | 'profile-write-started' | 'profile-written' = 'before-profile-write';
   try {
     const registry = host.registry ?? PROVIDER_CONNECT_REGISTRY, scopeId = (input as { scopeId?: unknown } | null)?.scopeId;
     const kindOf = (id: string) => registry.kinds.find(kind => kind.id === id) ?? null;
@@ -76,7 +77,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         return { global: snapshot.global, project: snapshot.project, effective };
       },
       async write(change) {
-        const outcome = await config.submit('set', { ...change, principal: await principal(), scopeId: String(scopeId) });
+        const actor = await principal();
+        // submit can reject after publication (e.g. backup pruning); a rejection alone proves no rollback.
+        if (change.keyPath === 'provider_invocation_profiles') connectPhase = 'profile-write-started';
+        const outcome = await config.submit('set', { ...change, principal: actor, scopeId: String(scopeId) });
+        if (change.keyPath === 'provider_invocation_profiles' && outcome.status === 'applied') connectPhase = 'profile-written';
         return outcome.status === 'approval-pending' ? { approvalId: outcome.approval.approvalId } : null;
       },
       async catalogHas(channelId, nativeId) {
@@ -112,10 +117,13 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const result = await app.connect(input);
     return result.status === 'connected' && result.tariff === 'published' ? Object.freeze({ ...result, budget: await connectBudget(projectRoot, result.scopeId, options) }) : result;
   } catch (error) { const wanted = (input as { model?: { nativeId?: unknown; reference?: { modelId?: unknown } } } | null)?.model, requested = wanted?.nativeId ?? wanted?.reference?.modelId;
-    if (error instanceof OAuthConnectionError) throw ErrorRegistry.createError(error.code, { params: error.reason ? { reason: error.reason } : {} });
-    if (error instanceof ModelConnectError) throw ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
-    if (error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
-    throw error instanceof DeckentError ? error : queryFailure(error);
+    let normalized: unknown = error;
+    if (error instanceof OAuthConnectionError) normalized = ErrorRegistry.createError(error.code, { params: error.reason ? { reason: error.reason } : {} });
+    if (error instanceof ModelConnectError) normalized = ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId.replace(/[\p{Cc}\p{Cf}]/gu, '?')).join(', '), ...error.code === 'MODEL_CONNECT_MODEL_UNKNOWN' && typeof requested === 'string' ? { model: requested.slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?'), connection: String((input as { connection?: unknown } | null)?.connection ?? '-').slice(0, 200).replace(/[\p{Cc}\p{Cf}]/gu, '?') } : {} } }); // KER-07
+    if (error instanceof ProviderConnectError) normalized = ErrorRegistry.createError(error.code);
+    const failure = normalized instanceof DeckentError ? normalized : queryFailure(normalized);
+    throw new DeckentError(failure.code, failure.message, failure.suggestion, failure.docLink, failure.whatHappened, failure.why, failure.howToFix,
+      failure.category, { cause: failure }, failure.localize, Object.freeze({ ...failure.params, connectPhase }));
   }
 }
 /** İ-12 budget step: the priced-turn gate's own rule (`model-invocation/internal/native.ts` budgetFor — the scope's account, else a configured budget). */
