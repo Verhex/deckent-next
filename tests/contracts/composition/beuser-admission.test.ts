@@ -1,4 +1,6 @@
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -106,6 +108,39 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'fixture', expectedBinding: bindingPin });
     parameters.choices = { 'beuser-walker': { channelId: reference.providerId, modelId: reference.modelId }, 'beuser-evaluator': { channelId: reference.providerId, modelId: reference.modelId } };
     await writeFile(profilePath, JSON.stringify(admission));
+    // R1: untrusted release metadata is refused before the setup card, without config or Run writes.
+    const releasePath = join(candidate, 'release.json'), releaseBytes = await readFile(releasePath), beforeBad = await readFile(configPath, 'utf8');
+    const ledgerBefore = await readFile(storage.path), badCandidates: Record<string, unknown> = {};
+    for (const kind of ['oversized', 'symlink', 'fifo']) {
+      await rm(releasePath);
+      if (kind === 'oversized') await writeFile(releasePath, Buffer.alloc(20 * 1024 * 1024, 32));
+      else if (kind === 'symlink') await symlink(join(candidate, 'dist', 'build-identity.json'), releasePath);
+      else await promisify(execFile)('mkfifo', [releasePath]);
+      const started = performance.now(), result = await oneCommand('onboarding', ['--candidate', candidate], [{ when: card, send: '\r' }]);
+      expect(result.code, result.output).toBe(1); expect(result.output).toContain('BEUSER_CANDIDATE_MISMATCH');
+      expect(result.output).not.toContain('Start BeUser walk'); expect(performance.now() - started).toBeLessThan(10000);
+      expect(await readFile(configPath, 'utf8')).toBe(beforeBad); expect(await readFile(storage.path)).toEqual(ledgerBefore);
+      badCandidates[kind] = result;
+      await rm(releasePath); await writeFile(releasePath, releaseBytes);
+    }
+    // A separate process pins measurement first, then changes that file: bounded allocation, nofollow/nonblock and a finite process deadline.
+    const readerUrl = new URL('../../../dist/adapters/core/beuser-realm/index.js', import.meta.url).href;
+    const readerScript = `import { readMeasuredBeuserRecord } from ${JSON.stringify(readerUrl)};
+      try { await readMeasuredBeuserRecord(process.argv[1], JSON.parse(process.argv[2])); process.exitCode = 2; }
+      catch (error) { if (error.code !== 'BEUSER_CANDIDATE_MISMATCH') throw error; console.log(error.code); }`;
+    const releasePin = measured.files.find(file => file.path === 'release.json')!;
+    for (const kind of ['changed', 'grown', 'symlink', 'fifo']) {
+      await rm(releasePath);
+      if (kind === 'changed') await writeFile(releasePath, Buffer.alloc(releasePin.size, 32));
+      else if (kind === 'grown') await writeFile(releasePath, Buffer.concat([releaseBytes, Buffer.from('extra')]));
+      else if (kind === 'symlink') await symlink(join(candidate, 'dist', 'build-identity.json'), releasePath);
+      else await promisify(execFile)('mkfifo', [releasePath]);
+      const started = performance.now(), result = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', readerScript, candidate, JSON.stringify(releasePin)], { timeout: 5000 });
+      expect(result.stdout.trim()).toBe('BEUSER_CANDIDATE_MISMATCH'); expect(performance.now() - started).toBeLessThan(5000);
+      expect(await readFile(configPath, 'utf8')).toBe(beforeBad); expect(await readFile(storage.path)).toEqual(ledgerBefore);
+      badCandidates[`after-measurement-${kind}`] = result;
+      await rm(releasePath); await writeFile(releasePath, releaseBytes);
+    }
     const installed = await runInTerminal(argv, root, env, [{ when: '↑↓ choose · Enter confirm · Esc cancel', send: 'y' }]);
     expect(installed.output).toContain('Install BeUser profile'); expect(installed.output).toContain('Apply (y)');
     expect(installed.code, installed.output).toBe(0); expect(lastJson(installed.output)).toMatchObject({ status: 'applied', pool: { status: 'created' } });
@@ -229,7 +264,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     expect(swapped).toMatchObject({ poolId: 'pool', registry: { revision: 'beuser-controller-onboarding', profiles: [{ parameters: { candidateRoot: candidate,
       choices: { 'beuser-walker': { channelId: 'fixture-channel', modelId: 'fixture-model' } } } }] } });
     clearConfigCache(); expect(await readConfiguredBeuserReport(root, 'scope', undefined, options)).toEqual(oneReport);
-    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked,
+    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ sourceHead: '7c5e5671fabc16a6b848dc4e05955275523920bb', evidenceClass: 'author-compiled-cli-fixture', badCandidates, missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked,
       noModel, badJourney, refusedCard, fromPackage, one }, null, 2));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'changed;\n');
     await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'onboarding', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });

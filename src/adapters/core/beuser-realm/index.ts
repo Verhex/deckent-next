@@ -9,7 +9,7 @@ export type { BeuserRealmEvidence, BeuserEvidenceRetention } from './internal/ad
 
 export { readBeuserInstallationSummary, createBeuserRealmCustody, createBeuserRealm, createBeuserChannel, createBeuserArrange } from './internal/custody.js';
 export { beuserPrivateRecord, retainBeuserJson } from './internal/records.js';
-export { readBeuserCandidate } from './internal/candidate.js';
+export { readBeuserCandidate, readMeasuredBeuserRecord } from './internal/candidate.js';
 export { verifyBeuserDistribution } from './internal/distribution.js';
 
 export { createBeuserRemovalReadback } from './internal/removal.js';

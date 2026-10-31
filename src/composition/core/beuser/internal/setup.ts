@@ -6,7 +6,7 @@ import personas from '../../../../../assets/beuser/personas.json' with { type: '
 import calibration from '../../../../../assets/beuser/calibration/manifest.json' with { type: 'json' };
 import controllerData from '../../../../../assets/beuser/controller.json' with { type: 'json' };
 import { executionRegistrySchema } from '#domain/index.js';
-import { readInstallationProfileFile, readBeuserCandidate, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
+import { readInstallationProfileFile, readBeuserCandidate, readMeasuredBeuserRecord, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
 import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest } from '#engine/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { CONFIG_FIELDS, ErrorRegistry, globalStateRoot, loadConfig, sha256, type ConfigLoadOptions } from '#platform/index.js';
@@ -54,8 +54,9 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
   if (!models.length || !choice) return { status: models.length ? 'choose-model' : 'model-required', controller, models };
   if (!models.some(row => row.channelId === choice.channelId && row.modelId === choice.modelId)) throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE');
   const candidateRoot = await canonicalRealmPath(resolve(input.candidate ?? BEUSER_PACKAGE_ROOT), 'directory');
-  const [measured, release] = await Promise.all([measureInstalledPackage(candidateRoot, c.config.installation.packageMeasurement),
-    readFile(join(candidateRoot, 'release.json'), 'utf8').then(text => JSON.parse(text) as { sourceCommit: string; sourceTreeSha256: string })]).catch(() => { throw mismatch(); });
+  const measured = await measureInstalledPackage(candidateRoot, c.config.installation.packageMeasurement).catch(() => { throw mismatch(); });
+  const release = await readMeasuredBeuserRecord(candidateRoot, measured.files.find(file => file.path === 'release.json')).catch(() => { throw mismatch(); });
+  if (typeof release['sourceCommit'] !== 'string' || typeof release['sourceTreeSha256'] !== 'string') throw mismatch();
   const manifest = measured.files.find(file => file.path === 'manifest.json'), files = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
   if (measured.declaredMissing.length || !manifest) throw mismatch();
   // The packaged example's selection: the journey's first rubric branch, its first persona and that branch's own probe set.
@@ -72,7 +73,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
     // Admission replaces every pending identity, including the nonce, so equal choices keep an equal document.
     realmId: pending, nonce: '00000000-0000-4000-8000-000000000000', transcriptId: pending };
   const parameters = { schemaVersion: 3, binding, summary, limitsRevision: limits.revision, candidateRoot, packageDigest: measured.measurementDigest,
-    candidateManifest: { sha256: manifest.sha256, fileCount: measured.files.length, sourceCommit: release.sourceCommit, sourceTreeSha256: release.sourceTreeSha256, version: measured.packageVersion },
+    candidateManifest: { sha256: manifest.sha256, fileCount: measured.files.length, sourceCommit: release['sourceCommit'], sourceTreeSha256: release['sourceTreeSha256'], version: measured.packageVersion },
     startState: { schemaVersion: 2, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, states: branch.initialStates },
     size: controllerData.size, bounds: controllerData.bounds, completionTokens: controllerData.completionTokens, rubric: journey.rubric,
     choices: { 'beuser-walker': choice, 'beuser-evaluator': choice }, contributorModels: [{ maker: null, evidence: 'contributor-receipts-unavailable' }],
@@ -83,7 +84,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
     profiles: [{ id, version: 1, adapter: { id: 'beuser', version: 1 }, parameters }], kinds: [{ kind: input.journey, profile: { id, version: 1 }, workspaceDelivery: 'none' }],
     evaluators: [{ id: 'beuser', version: 1, implementation: { id: 'beuser', version: 1 } }] } };
   const result = await install(root, { scopeId, apply: input.apply, ...(input.expect ? { expect: input.expect } : {}) }, options, async () => admission, true);
-  return { ...result, controller, models, candidate: { root: candidateRoot, version: measured.packageVersion, revision: release.sourceCommit }, limits };
+  return { ...result, controller, models, candidate: { root: candidateRoot, version: measured.packageVersion, revision: release['sourceCommit'] }, limits };
 }
 
 /** Validates a complete admission document and installs it through ConfigApplication. `replace` (the controller only) swaps a BeUser-only registry and keeps its pool. */

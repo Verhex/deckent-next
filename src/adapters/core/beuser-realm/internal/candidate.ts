@@ -9,11 +9,12 @@ import { verifyBeuserDistribution } from './distribution.js';
 
 const mismatch = (): never => { throw new BeuserContractError('BEUSER_CANDIDATE_MISMATCH'); };
 /** Read only bytes pinned by the bounded package measurement; never allocate from a new file's size. */
-async function record(root: string, file: MeasuredPackageFile | undefined): Promise<Record<string, unknown>> {
+export async function readMeasuredBeuserRecord(root: string, file: MeasuredPackageFile | undefined): Promise<Record<string, unknown>> {
   if (!file || constants.O_NOFOLLOW === undefined || constants.O_NONBLOCK === undefined) return mismatch();
-  const handle = await open(join(root, file.path), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const handle = await open(join(root, file.path), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => mismatch());
   try {
-    if (!(await handle.stat()).isFile()) return mismatch();
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size !== file.size) return mismatch();
     const bytes = Buffer.alloc(file.size); let offset = 0;
     while (offset < bytes.length) { const part = await handle.read(bytes, offset, bytes.length - offset, offset); if (!part.bytesRead) break; offset += part.bytesRead; }
     if (offset !== bytes.length || sha256(bytes) !== file.sha256) return mismatch();
@@ -30,8 +31,8 @@ export async function readBeuserCandidate(root: string, reference: BeuserCandida
     if (measured.files.find(file => file.path === 'manifest.json')?.sha256 !== pin.sha256
       || measured.files.length !== pin.fileCount || measured.packageVersion !== pin.version
       || measured.measurementDigest !== packageDigest || measured.declaredMissing.length) return mismatch();
-    const release = await record(root, measured.files.find(file => file.path === 'release.json'));
-    const build = await record(root, measured.files.find(file => file.path === 'dist/build-identity.json'));
+    const release = await readMeasuredBeuserRecord(root, measured.files.find(file => file.path === 'release.json'));
+    const build = await readMeasuredBeuserRecord(root, measured.files.find(file => file.path === 'dist/build-identity.json'));
     if (release['sourceCommit'] !== pin.sourceCommit || release['sourceTreeSha256'] !== pin.sourceTreeSha256
       || build['sourceCommit'] !== pin.sourceCommit || build['sourceTreeSha256'] !== pin.sourceTreeSha256) return mismatch();
     const files = measured.files.map(({ path, sha256, size }) => ({ path, sha256, size }));
