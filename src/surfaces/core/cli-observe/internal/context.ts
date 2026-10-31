@@ -10,6 +10,7 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 /** The host operations the kernel commands (doctor, paths, policy vocabulary) use; the CLI's full command context satisfies it. */
 export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandContext, 'verifyAudit' | 'inspectToolchainCurrency' | 'inspectSecretStore' | 'inspectSecretInventory' | 'describeRuntimeService'
   | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
+  inspectLegacyProjectInstructions?: (root: string) => Promise<boolean>;
   inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
   /** BeUser D-05: the read-only monitor snapshot (ledger, no service), read by doctor for Runs parked after repeated failures. */
   inspectMonitor?: import('#surfaces/core/monitor/index.js').MonitorHandler;

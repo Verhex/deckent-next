@@ -1,1 +1,1 @@
-export { configuredProjectInstructions } from './internal/context.js';
+export { configuredProjectInstructions, inspectLegacyProjectInstructions } from './internal/context.js';

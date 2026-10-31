@@ -711,7 +711,7 @@ it('F8: an admitted keep-data whose only cache vanished after the card still com
 it('delete everything removes the bridges init wrote (a file init created whole, else only its line) and this folder\'s own vault slice; a changed DECKENT.md or bridge line and a repository-shared slice stay and are listed', async () => {
   if (process.platform !== 'linux' || !existsSync('/usr/bin/git')) { console.info('verify-not-run: bridge purge needs Linux custody and /usr/bin/git'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
-  const { projectVaultDirectory, admitProjectVault, directoryLocation, previewProjectInstructions, createWorkspaceScope, WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } = await import('#adapters/index.js');
+  const { projectVaultDirectory, admitProjectVault, directoryLocation, createWorkspaceScope, WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } = await import('#adapters/index.js');
   const root = await mkdtemp(join(tmpdir(), 'deckent-bridges-'));
   try {
     const { project, local, options, phrase, install } = await projectInstallation(root), layout = await install(), ledger = productResourcePath(layout, 'ledger');
@@ -719,7 +719,8 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     // The person's own bytes after the line: CRLF, invalid UTF-8 and no final newline all stay exactly as they are (M4).
     const team = Buffer.concat([Buffer.from('# Team rules\r\nrule: '), Buffer.from([0xff, 0xfe]), Buffer.from('\r\nlast line')]), deck = join(project, 'DECKENT.md'), claude = join(project, 'CLAUDE.md'), agents = join(project, 'AGENTS.md');
     // Init's own preview and file target (the approval broker before it needs a person's terminal): its committed journal names the bytes it wrote.
-    const preview = await previewProjectInstructions(project, ['claude-code', 'agents-md'], name => `# ${name}\n`);
+    const preview = { changes: [{ path: 'DECKENT.md', beforeDigest: 'absent', after: '# project\n' },
+      { path: 'CLAUDE.md', beforeDigest: 'absent', after: '@DECKENT.md\n' }, { path: 'AGENTS.md', beforeDigest: 'absent', after: 'Read DECKENT.md\n' }] }; // Historical init v1 receipts, not new S6 output.
     const writer = new WorkspaceFileTarget(await createWorkspaceScope(project), productResourcePath(layout, 'fileEffects'));
     for (const [index, change] of preview.changes.entries()) await writer.apply({ target: { kind: writer.kind, id: change.path }, operation: WORKSPACE_FILE_WRITE_OPERATION.operation,
       idempotencyKey: String(index).repeat(64), expectedVersion: change.beforeDigest, input: { content: change.after } });
@@ -747,7 +748,7 @@ it('delete everything removes the bridges init wrote (a file init created whole,
     // M12: this folder's record in the global instruction-trust store (written by its owner) goes with delete-everything; another folder's stays.
     const { openHostProjectInstructionReader, instructionTrustDirectory } = await import('#adapters/index.js'), elsewhere = join(root, 'elsewhere');
     await mkdir(elsewhere); await writeFile(join(elsewhere, 'DECKENT.md'), '# elsewhere\n');
-    const trusted = async (folder: string) => { const reader = await openHostProjectInstructionReader(folder, options.env as NodeJS.ProcessEnv), view = await reader.inspect();
+    const trusted = async (folder: string) => { const reader = await openHostProjectInstructionReader(folder, options.env as NodeJS.ProcessEnv, undefined, ['DECKENT.md']), view = await reader.inspect();
       if (view.status !== 'trust-required') throw new Error(view.status); await reader.trust(view.source.digest); };
     await trusted(project); await trusted(elsewhere);
     const trustStore = instructionTrustDirectory(options.env), records = (await readdir(trustStore)).filter(name => /^[a-f0-9]{64}$/u.test(name));

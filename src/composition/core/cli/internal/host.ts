@@ -2,7 +2,7 @@ import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel, workingTr
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { inspectConfiguredRefusedRequests, planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
-import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
+import { configuredProjectInstructions, inspectLegacyProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { inspectConfiguredAdminPaths } from './admin-paths.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
@@ -86,7 +86,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry), runningImageBuild: async (projectRoot, options) => ['requested', 'waiting-docker', 'acquiring'].includes((await inspectConfiguredWorkerImage(projectRoot, options).catch(() => null))?.phase ?? ''), localRunOffer: configuredLocalRunOffer, workingTreeChanges: (projectRoot, options) => workingTreeChanges(projectRoot, options.env ?? process.env),
-    openProjectInstructions: configuredProjectInstructions,
+    openProjectInstructions: configuredProjectInstructions, inspectLegacyProjectInstructions,
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
     openTerminalSessions: (projectRoot, options, folder) => openConfiguredTerminalSessions(projectRoot, options, folder), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
