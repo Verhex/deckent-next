@@ -261,7 +261,7 @@ it.skipIf(process.platform !== 'linux' || !sandbox)('production subscription CLI
   await mkdir(bin); await mkdir(configDir, { mode: 0o700 });
   const reply = (over: Record<string, unknown> = {}) => [uiLine(), initLine({ model: MODEL }), assistantLine('{}', MODEL), rateLimitLine(), resultLine('{}', over, MODEL)].map(line => ({ line }));
   const executable = await writeFakeCli(bin, { logPath, initCwd: 'actual', stepsByCall: [reply(), reply(),
-    reply({ usage: { input_tokens: 400_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 9 } })] });
+    reply({ usage: { input_tokens: 400_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 9 } }), reply({ usage: {} })] });
   const f = await brainProviderFixture({ noCharge: true, budget: null, modelRoles: null, headless: { executable, configDir, stateDir: join(root, 'state') } });
   const spawns = async () => existsSync(logPath) ? (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string }) : [];
   const calls = async () => (await spawns()).filter(entry => entry.mode === 'call').length;
@@ -312,6 +312,10 @@ it.skipIf(process.platform !== 'linux' || !sandbox)('production subscription CLI
     const before = budget.remaining().tokens;
     await expect(model.models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
     expect(await calls()).toBe(3); expect(budget.remaining().calls).toBe(7); expect(budget.remaining().tokens).toBeLessThan(before);
+    // Astra 2848 R2: a result without counters is a typed rejection, never a zero, so the whole reservation stays charged.
+    const kept = budget.remaining().tokens;
+    await expect(model.models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { invocation: { receipt: { outcome: { state: 'rejected' } } } } });
+    expect(await calls()).toBe(4); expect(budget.remaining().calls).toBe(6); expect(budget.remaining().tokens).toBeLessThan(kept);
   } finally { await f.close(); await rm(root, { recursive: true, force: true }); }
 });
 

@@ -147,7 +147,7 @@ that channel; this rule neither skips nor widens it.
 Several walkers run at once through the existing pool: each journey profile carries its own walker and evaluator
 choice, and a walk reserves a wave of pending tasks under the admission's `executionSlots` and `inFlightSlots`
 and runs it in parallel. One admission can therefore list three profiles whose walkers are, for example, a Claude
-subscription model, a Codex model through the ChatGPT sign-in (the Codex CLI has no invocation adapter yet) and a
+subscription model, a Codex model through the ChatGPT sign-in or the Codex CLI headless step and a
 local vLLM model, with `executionSlots: 3`. The bounds stay
 the existing ones: each profile's limits revision (steps, wall time, calls, tokens and cost per walk), the pool
 slots, each invocation profile's `maxInFlight` and context window (a local server's window and concurrency), and

@@ -144,10 +144,14 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
     expect(result).toMatchObject({ kind: 'rejected', evidence: { reason } });
     expect(body(result)).toMatchObject(refusal);
   });
-  it('N15 keeps a max-tokens stop as a length finish (the Brain reads it as truncated, not invalid)', async () => {
+  it('N15 keeps a max-tokens stop as a length finish (the Brain reads it as truncated, not invalid); a result without valid counters is never a zero', async () => {
     const c = await connection();
     await expect(c.call([{ line: initLine() }, { line: resultLine('{"draft":', { stop_reason: 'max_tokens' }) }])).resolves
       .toMatchObject({ native: { choices: [{ message: { content: '{"draft":' }, finish_reason: 'length' }] } });
+    // Astra 2848 R2: an empty, partial or malformed usage record is unknown consumption: typed, so no caller settles it as zero.
+    for (const usage of [{}, { input_tokens: 2, output_tokens: 9 }, { input_tokens: 2, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: '9' }]) {
+      expect(body(await c.call([{ line: initLine() }, { line: resultLine('x', { usage }) }]))).toMatchObject({ refusal: 'guard', field: 'usage' });
+    }
   });
   it.each([
     ['a missing result', [{ line: initLine() }, { exit: 0 }]],
@@ -244,6 +248,17 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'item.command_execution' });
       await write({ steps: [...codexAnswer('x').slice(0, 2), { type: 'turn.failed', error: { message: 'You have hit your usage limit reached for this plan' } }].map(line => ({ line })) });
       expect(body(await call())).toMatchObject({ refusal: 'quota' });
+      // Astra 2848 R2/R3: unknown counters are no zero, and nothing after the completed turn changes its answer; a reported zero stays a zero.
+      const ended = (usage: unknown, after: Record<string, unknown>[] = []) => [...codexAnswer('A').slice(0, 4), { type: 'turn.completed', usage }, ...after].map(line => ({ line }));
+      const valid = { input_tokens: 10, cached_input_tokens: 4, output_tokens: 2 };
+      for (const usage of [{}, { output_tokens: 2 }, { ...valid, input_tokens: '10' }, { ...valid, output_tokens: -1 }, { ...valid, cached_input_tokens: 11 }, { ...valid, cache_write_input_tokens: 1.5 }]) {
+        await write({ steps: ended(usage) });
+        expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'usage' });
+      }
+      await write({ steps: ended(valid, [{ type: 'item.completed', item: { id: 'item_9', type: 'agent_message', text: 'B' } }]) });
+      expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'after-turn' });
+      await write({ steps: ended({ input_tokens: 0, output_tokens: 0 }) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'A' } }] }, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
       for (const login of ['api-key', 'none'] as const) {
         const before = (await log()).filter(entry => entry.mode === 'call').length;
         await write({ login, steps: codexAnswer('x').map(line => ({ line })) });

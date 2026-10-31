@@ -11,7 +11,7 @@ import { codexTurn } from './codex.js';
 import { headlessArgv, type HeadlessEntry } from './env.js';
 import { emptyRunDir, headlessPreflight, type HeadlessPreflight } from './preflight.js';
 import { runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
-import { emitDelta, reject, type HeadlessTurn, type HeadlessTurnFactory, type Prepared, type Refusal } from './turn.js';
+import { emitDelta, reject, reportedCounters, type HeadlessTurn, type HeadlessTurnFactory, type Prepared, type Refusal } from './turn.js';
 
 /** One call's line guard and result by event-stream data (registry `eventStream`); a family without one has no headless step. */
 const TURNS: Readonly<Record<string, HeadlessTurnFactory>> = { 'claude-code-stream-json': claudeTurn, 'codex-exec-json': codexTurn };
@@ -46,6 +46,7 @@ function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prep
     return reject('invalid-response', { refusal: 'invalid-output', subtype: line.subtype.slice(0, 64) });
   }
   if (count(line.data.num_turns) > prepared.entry.headless.maxTurns) return reject('invalid-response', { refusal: 'guard', field: 'num_turns' });
+  if (!reportedCounters(line.usage, ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'])) return reject('invalid-response', { refusal: 'guard', field: 'usage' });
   if (list(line.data.permission_denials)?.length !== 0) return reject('invalid-response', { refusal: 'guard', field: 'permission_denials' });
   const models = Object.keys(line.modelUsage ?? {});
   return models.length === 1 && models[0] === prepared.model ? null : reject('model-mismatch', { refusal: 'model-mismatch', field: 'modelUsage' });
