@@ -91,7 +91,7 @@ it('applies the confirmed real temp cache through the production broker and gene
     await writeFile(join(data, 'state/compile-cache/stray'), 'KEEP', { mode: 0o600 });
     // Astra 2862 R2: a writer record (here of an ended process) is a member too: checked before the removal, then removed with the cache.
     const ended = execFileSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }), writers = join(data, 'state/compile-cache/writers');
-    await mkdir(writers, { mode: 0o700 }); await writeFile(join(writers, ended), JSON.stringify({ schemaVersion: 1, pid: Number(ended), startedAtMs: Date.now() }), { mode: 0o600 });
+    await mkdir(writers, { mode: 0o700 }); await writeFile(join(writers, `${ended}-1-a`), JSON.stringify({ schemaVersion: 1, pid: Number(ended), startedAtMs: Date.now() }), { mode: 0o600 });
     const actor = readLocalOsIdentity();
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval'].map(kind => ({
       id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' },

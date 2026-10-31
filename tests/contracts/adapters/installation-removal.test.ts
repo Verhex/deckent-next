@@ -42,7 +42,7 @@ it('removes only the owner-named members of a cache, keeping same-user strays an
   for (const dir of [version, writers]) await mkdir(dir, { mode: 0o700, recursive: true }); await writeFile(join(version, 'code'), 'CODE', { mode: 0o600 });
   const witnessed = (budgetMs: number) => new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'compileCache', path: compile, ownershipDigest: 'b'.repeat(64),
     members: ['^(?:v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+|writers)$'] }], [], { maxEntries: 20, maxDepth: 3 }, async work => work(), undefined,
-  { resourceId: 'compileCache', directory: 'writers', budgetMs, pollMs: 20 });
+  { resourceId: 'compileCache', directory: 'writers', fence: 'removing', budgetMs, pollMs: 20 });
   const remove = async (target: InstallationCacheRemovalTarget) => { const at = { kind: target.kind, id: 'compileCache' };
     return target.apply({ target: at, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'compile', expectedVersion: (await target.observe(at)).version, input: null }); };
   await writeFile(join(writers, '4242'), 'not a record', { mode: 0o600 });
@@ -50,11 +50,12 @@ it('removes only the owner-named members of a cache, keeping same-user strays an
   await rm(join(writers, '4242'));
   const late = spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(join(version, 'late'))}, 'LATE', { mode: 0o600 }), 400); setTimeout(() => {}, 900);`], { stdio: 'ignore' });
   const exited = new Promise(resolve => late.once('exit', resolve));
-  await writeFile(join(writers, String(late.pid)), JSON.stringify({ schemaVersion: 1, pid: late.pid, startedAtMs: Date.now() }), { mode: 0o600 });
+  await writeFile(join(writers, `${late.pid}-1-a`), JSON.stringify({ schemaVersion: 1, pid: late.pid, startedAtMs: Date.now() }), { mode: 0o600 });
   await expect(remove(witnessed(50))).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); expect(await readFile(join(version, 'code'), 'utf8')).toBe('CODE');
   await expect(remove(witnessed(10_000))).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' }); await exited;
   expect(await readFile(join(version, 'code'), 'utf8')).toBe('CODE'); expect(await readFile(join(version, 'late'), 'utf8')).toBe('LATE');
-  await remove(witnessed(1000)); for (const gone of [version, writers]) await expect(lstat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await readFile(join(compile, 'removing'), 'utf8')).toBe('');   // refused: the fence stays, so no writer fills before the rerun
+  await remove(witnessed(1000)); for (const gone of [version, writers, join(compile, 'removing')]) await expect(lstat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('removes cache members only through their pinned parent: a link planted after the scan touches nothing outside', async () => {

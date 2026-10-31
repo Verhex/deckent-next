@@ -48,5 +48,6 @@
   "rootEnvironmentKey": "DECKENT_HOME",
   "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME",
   "compileCacheOffEnvironmentKey": "DECKENT_DISABLE_COMPILE_CACHE",
-  "compileCacheWritersDirectory": "writers"
+  "compileCacheWritersDirectory": "writers",
+  "compileCacheRemovalFence": "removing"
 }

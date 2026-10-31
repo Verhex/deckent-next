@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, link, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -86,14 +86,22 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     const versioned = (await readdir(cache)).find(name => !name.startsWith('writers')), filled = await listing();
     // Astra 2862 R2: a filling process records itself (pid, start time) before it can write; the next filling call prunes the ended one's record.
     const [record] = await readdir(join(cache, 'writers')), recorded = JSON.parse(await readFile(join(cache, 'writers', record!), 'utf8')) as { pid: number; startedAtMs: number };
-    expect(recorded.pid).toBe(Number(record)); expect(Number.isFinite(recorded.startedAtMs)).toBe(true);
+    expect(record!.startsWith(`${recorded.pid}-${recorded.startedAtMs}-`)).toBe(true);
     expect(versioned).toMatch(/^v\d+\.\d+\.\d+-/u);
     expect([(await stat(cache)).mode & 0o777, (await stat(join(cache, versioned!))).mode & 0o777]).toEqual([0o700, 0o700]);
     expect(filled.length).toBeGreaterThan(1);
     // Any other command only reads it (or runs without it before Node 26.8): `--help --all` loads modules the bare call did not, and writes none.
     expect(run(['--help', '--all']).status).toBe(0);
     expect(await listing()).toEqual(filled);
-    run([]); const [next] = await readdir(join(cache, 'writers')); expect(next).not.toBe(record); expect(await readdir(join(cache, 'writers'))).toHaveLength(1);
+    // Astra 2864 R2-a: a record is a new exclusive leaf (a name already there — link or not — is never opened); a pre-existing symlink or hardlink
+    // to an outside file, or a stale name, never changes that file; a record that cannot be made (writers not writable) means no fill.
+    const sentinel = join(home, 'sentinel'); await writeFile(sentinel, 'OUTSIDE', { mode: 0o600 });
+    await symlink(sentinel, join(cache, 'writers', '99999999-1-link')); await link(sentinel, join(cache, 'writers', '99999998-1-hard'));
+    run([]); expect(await readFile(sentinel, 'utf8')).toBe('OUTSIDE');
+    const [next] = (await readdir(join(cache, 'writers'))).filter(name => !name.startsWith('9999999')); expect(next).not.toBe(record);
+    expect((await readdir(join(cache, 'writers'))).sort()).toEqual([next, '99999998-1-hard', '99999999-1-link'].sort());   // the ended record pruned; links left as they are
+    for (const planted of ['99999999-1-link', '99999998-1-hard']) await rm(join(cache, 'writers', planted));
+    await chmod(join(cache, 'writers'), 0o500); const unwritable = await listing(); run([]); expect(await listing()).toEqual(unwritable); await chmod(join(cache, 'writers'), 0o700);
     const refilled = await listing(); filled.splice(0, filled.length, ...refilled);
     // A non-default global root (DECKENT_GLOBAL_HOME elsewhere) is not sealed by every agent floor: no cache is read or written there or here.
     const other = join(home, 'other-root'); await mkdir(join(other, 'state/compile-cache'), { recursive: true, mode: 0o700 });
@@ -114,6 +122,29 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     await chmod(cache, 0o755); await rm(join(cache, versioned!), { recursive: true });
     run([]);
     expect(await readdir(cache)).toEqual(['writers']); expect(await readdir(join(cache, 'writers'))).toEqual([next]);   // nothing written, no new writer record
+    // Astra 2864 R2-b (Dekker order): uninstall's removal creates its fence before it reads the records; a writer records itself before it looks for
+    // the fence. A writer that recorded first (here alive 3 s) is waited for; one that starts while the removal waits sees the fence, withdraws its
+    // record and does not fill; after the first writer ends, the cache, the records and the fence are removed — nothing written after.
+    await chmod(cache, 0o700);
+    // Each writer then loads a module of its own, so its exit-time cache write is real (the cache's version moves).
+    const writer = async (aliveMs: number) => { const fresh = join(home, `fresh-${aliveMs}.mjs`); await writeFile(fresh, `export const at = ${aliveMs};\n`);
+      const child = spawn(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(pathToFileURL(resolve(dist, 'platform/core/state-root/index.js')).href)}); `
+      + `process.stdout.write(m.enableDeckentCompileCache([], process.env, process.platform)); await import(${JSON.stringify(pathToFileURL(fresh).href)}); setTimeout(() => {}, ${aliveMs});`], { cwd: home, env: { PATH: process.env['PATH'] ?? '', HOME: home } });
+      let said = ''; child.stdout.on('data', chunk => { said += String(chunk); }); return { said: () => said, ended: new Promise(done => child.once('exit', done)) }; };
+    const { InstallationCacheRemovalTarget } = await import('#adapters/index.js');   // loaded before the first writer starts its lifetime
+    const first = await writer(3000); for (let at = Date.now(); !first.said() && Date.now() - at < 10_000;) await new Promise(done => setTimeout(done, 20));
+    expect(first.said()).toBe('enabled');
+    const target = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'compileCache', path: cache, ownershipDigest: 'c'.repeat(64), members: ['^(?:v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+|writers)$'] }],
+      [], { maxEntries: 10_000, maxDepth: 4 }, async work => work(), undefined, { resourceId: 'compileCache', directory: 'writers', fence: 'removing', budgetMs: 20_000, pollMs: 20 });
+    let firstEnded = false; void first.ended.then(() => { firstEnded = true; });
+    const at = { kind: target.kind, id: 'compileCache' }, apply = (expectedVersion: string | null) => target.apply({ target: at, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'compile', expectedVersion, input: null });
+    // The version observed before the first writer's exit-time write: the removal waits for it, then refuses the moved version (nothing removed, fence kept).
+    const refused = apply((await target.observe(at)).version).then(() => 'removed', (error: { code?: string }) => `${error.code}:${firstEnded}`);
+    for (let since = Date.now(); Date.now() - since < 10_000;) { try { await stat(join(cache, 'removing')); break; } catch { await new Promise(done => setTimeout(done, 10)); } }
+    const late = await writer(0); await late.ended; expect(late.said()).toBe('unavailable');   // started after the fence: no record left, no fill
+    expect(await refused).toBe('EFFECT_TARGET_PRECONDITION:true'); expect(await readdir(cache)).toContain('removing');
+    expect((await readdir(join(cache, 'writers'))).every(name => !name.startsWith(String(process.pid)))).toBe(true);
+    await apply((await target.observe(at)).version); await expect(stat(cache)).rejects.toMatchObject({ code: 'ENOENT' });   // the rerun removes cache, records and fence
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 

@@ -76,7 +76,8 @@ for step in steps:
     read_for(0.5)
     marks.append(len(out.decode('utf8', 'replace')))
     # One write per key: an escape sequence (an arrow) stays whole, so the terminal reads it as one key (T3 L4 windows).
-    for key in re.findall(r'\x1b\[[A-Z0-9~]+|.', send, re.S):
+    # An Alt+key (ESC + one character) is one write, as a terminal sends it; split, a busy view may flush the ESC alone before the key arrives.
+    for key in re.findall(r'\x1b\[[A-Z0-9~]+|\x1b[^\[]|.', send, re.S):
         os.write(fd, key.encode()); time.sleep(0.01)
     sent_at = len(out)
 deadline = time.time() + 25
