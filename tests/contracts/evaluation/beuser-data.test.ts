@@ -34,6 +34,8 @@ it('loads all seven assets through frozen C1/C5 parsers and resolves every perso
   const profile = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === personas.limitsProfile);
   expect(profile).toBeDefined();
   expect(new Set(personas.personas.map(row => row.personaId)).size).toBe(personas.personas.length);
+  expect(personas.personas.find(row => row.personaId === 'ayse')?.patience.maxWaitMs).toBe(45000);
+  expect(personas.personas.find(row => row.personaId === 'mert')?.patience.maxWaitMs).toBe(30000);
   for (const input of personas.personas) {
     const summary = pinBeuserWalkerSummary(input);
     // Walk20: each decision may cost a guard read plus its action; the first look and a stop's read come on top.

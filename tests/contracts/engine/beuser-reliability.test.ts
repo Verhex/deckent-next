@@ -138,9 +138,13 @@ it('an active connected model without a role row invokes; required independence 
   await expect(models.evaluate(h.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'unavailable', reason: 'not-active' });
   expect(h.invoke).not.toHaveBeenCalled();
   const reduced = modelHarness();
-  const fallback = createBeuserModelPort({ ...reduced.ports, independence: 'reduced' }, new BeuserCallBudget(limits));
+  const evaluatorBudget = new BeuserCallBudget(limits), fallback = createBeuserModelPort({ ...reduced.ports, independence: 'reduced' }, evaluatorBudget);
   await expect(fallback.evaluate(reduced.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { maker: 'zai', role: 'beuser-evaluator' } });
   expect(reduced.invoke).toHaveBeenCalledOnce();
+  expect(evaluatorBudget.remaining()).toMatchObject({ calls: 1, tokens: 50, cost: 0.9 });
+  await fallback.evaluate(reduced.ctx, 'a'.repeat(64));
+  await expect(fallback.evaluate(reduced.ctx, 'a'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+  expect(reduced.invoke).toHaveBeenCalledTimes(2); expect(evaluatorBudget.remaining()).toMatchObject({ calls: 0, tokens: 0 });
   const unknown = modelHarness({});
   await expect(createBeuserModelPort(unknown.ports, new BeuserCallBudget(limits)).evaluate(unknown.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'unavailable', reason: 'maker-unknown' });
   await expect(createBeuserModelPort({ ...unknown.ports, independence: 'reduced' }, new BeuserCallBudget(limits)).evaluate(unknown.ctx, 'a'.repeat(64)))

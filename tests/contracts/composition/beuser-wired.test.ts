@@ -256,7 +256,9 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
       const model = vi.spyOn(engine, 'createBeuserModelPort').mockReturnValue({
         walker: vi.fn(async () => { skew += engine.BEUSER_WALK_RULES.settleMs; return { state: 'invoked', receipt: { role: 'beuser-walker', maker: 'fixture-walker', invocation: {
           receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: '{"kind":"type","text":"fixture-private"}' } }] } },
-        } } }; }), evaluate: vi.fn(), cancel: vi.fn(),
+        } } }; }), evaluate: vi.fn(async (ctx: engine.BeuserContext) => ({ state: 'invoked', receipt: { role: 'beuser-evaluator', maker: 'fixture-evaluator', invocation: {
+          receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: JSON.stringify({ verdict: 'friction', evidenceRefs: [`${ctx.binding.transcriptId}:loop`] }) } }] } },
+        } } })), cancel: vi.fn(),
       } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
       const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
       // Walk17 S2: the second identical repeat on an unchanged screen stops before a third effect, after (walk19R) one more read of that screen.
@@ -265,7 +267,11 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
       expect(report).toMatchObject({ counts: { walked: 1 }, findings: [{ branch: 'persona', persona: 'person', code: 'persona-stuck', outcome: 'RED', reason: 'loop' }],
         unknown: cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }], reliability: { completed: 0, attempted: 1 } });
       const { terminal } = await f.records();
-      expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown', evidence: null });
+      expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown',
+        evidence: cleanupProven ? { validity: 'valid', experience: { verdict: 'friction' } } : null });
+      const modelPort = model.mock.results[0]!.value;
+      expect(modelPort.evaluate).toHaveBeenCalledTimes(cleanupProven ? 1 : 0);
+      if (cleanupProven) expect(report.segments[0]?.verdict).toMatchObject({ outcome: 'unknown', experience: 'friction', authorization: 'unknown', safety: 'unknown' });
       // First look, then per typed text its walk20 guard read and the input, then the stop's read.
       expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', ...Array(6).fill(['action', 'screen']).flat(), 'friction']);
       expect(arrangeCalls.map(args => args.includes('--workdir'))).toEqual([true, false]);
@@ -299,7 +305,8 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
         const record = (await storage.store.readDispatch(request))!;
         const manager = recordedExecutionSupervisor(record, { config, layout: config.productLayout, store: storage.store, artifacts });
         expect(await manager.observe(request)).toMatchObject({ result: cleanupProven ? { kind: 'exited', exitCode: 1 } : { kind: 'unknown' } });
-        if (cleanupProven) expect(await manager.collectOutputFiles!(request)).toEqual([]);
+        // PAKET-2 BH: an early stop now seals the transcript, so the terminal record carries exactly the sealed evidence file.
+        if (cleanupProven) expect((await manager.collectOutputFiles!(request)).map(file => file.name)).toEqual(['beuser-evidence']);
         else await expect(manager.collectOutputFiles!(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
         expect(keys).toEqual(['fixture-private', 'fixture-private']);
       } finally { storage.store.close(); }

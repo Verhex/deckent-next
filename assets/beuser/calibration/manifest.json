@@ -14,7 +14,7 @@
     }
   ],
   "blindSetDigest": "a8f6adc8d50472965b8cc2a321646f808ce50bbbfda9442862ade23ff6474530",
-  "limitsProfile": "b1-dogfood-provisional-2",
+  "limitsProfile": "b1-dogfood-provisional-3",
   "access": {
     "filesAndOracle": "deterministic-scorer-only",
     "modelInput": "presentation-only",
@@ -53,7 +53,7 @@
     "independence": "unknown"
   },
   "rerun": {
-    "boundsFrom": "b1-dogfood-provisional-2",
+    "boundsFrom": "b1-dogfood-provisional-3",
     "changedEligibleModelOrPersona": true,
     "lowCalibrationGreenIsEvidence": false,
     "differentCohortsAreIndependentSamples": false

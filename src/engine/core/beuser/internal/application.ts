@@ -43,7 +43,11 @@ export class BeuserApplication {
       const created = checkRealm(await controller.call('beuser-sandbox', 'create', ctx => this.ports.realm.create(ctx)), 'created');
       checkRealm(await controller.call('beuser-sandbox', 'create', ctx => this.ports.realm.admit(ctx, created)), 'admitted');
       if (this.ports.arrange) await arrangeBeuserStart(controller, this.ports.arrange);
-      await walkBeuser(controller, this.ports);
+      try { await walkBeuser(controller, this.ports); }
+      catch (error) {
+        if (!(error instanceof BeuserWalkStopped) || !['patience', 'loop', 'observing', 'bound'].includes(error.reason)) throw error;
+        reason = error.reason;
+      }
       const finalized = await controller.call('beuser-transcript', 'inspect', ctx => this.ports.evidence.finalize(ctx));
       assertBeuserAccess(controller.context, finalized.binding, context.principal, { kind: 'beuser-transcript', id: finalized.binding.transcriptId }, 'inspect');
       if (!/^[a-f0-9]{64}$/u.test(finalized.transcriptDigest) || !finalized.evidenceRefs.length) throw new BeuserWalkStopped('unknown');
@@ -89,8 +93,9 @@ export class BeuserApplication {
     else if (controllerValidity === 'unknown' && state !== 'invalid') { state = 'unknown'; reason ??= 'unknown'; }
     // C5's retained verdict requires the outer controller's destruction proof; never read a pre-cleanup verdict.
     const remainingWallMs = context.limits.maxWallMs - (performance.now() - startedAt);
-    if (cleanup === 'destroyed' && transcriptDigest && !context.signal.aborted && remainingWallMs > 0) {
-      const readDeadline = beuserDeadline(Math.min(context.limits.maxWaitMs, remainingWallMs)), readContext = { ...context, signal: AbortSignal.any([context.signal, readDeadline.signal]) };
+    if (cleanup === 'destroyed' && controllerValidity === 'valid' && state !== 'invalid' && transcriptDigest
+      && (reason === null || ['patience', 'loop', 'observing', 'bound'].includes(reason)) && !context.signal.aborted && !this.budget?.signal.aborted && remainingWallMs > 0) {
+      const readDeadline = beuserDeadline(Math.min(context.limits.maxWaitMs, remainingWallMs)), readContext = { ...context, signal: AbortSignal.any([context.signal, readDeadline.signal, ...(this.budget ? [this.budget.signal] : [])]) };
       try {
         const readback = await beuserBounded(readContext.signal, () => this.ports.evidence.readback(readContext));
         assertBeuserAccess(readContext, readback.binding, context.principal, { kind: 'beuser-transcript', id: readback.binding.transcriptId }, 'inspect');
@@ -98,10 +103,8 @@ export class BeuserApplication {
           const checked = beuserVerdictSchema.parse(readback.verdict);
           assertBeuserAccess(readContext, checked.binding, context.principal, { kind: 'attempt', id: checked.binding.identity.attemptId }, 'evaluate');
           if (checked.transcriptDigest !== transcriptDigest) throw new BeuserWalkStopped('drift');
-          if (controllerValidity === 'valid' && state !== 'invalid') {
-            verdict = checked;
-            state = verdict.validity === 'unknown' ? 'unknown' : verdict.validity !== 'valid' ? 'invalid' : verdict.outcome === 'unknown' ? 'unknown' : 'completed';
-          }
+          verdict = checked;
+          state = verdict.validity === 'unknown' ? 'unknown' : verdict.validity !== 'valid' ? 'invalid' : verdict.outcome === 'unknown' ? 'unknown' : 'completed';
         }
       } catch (error) {
         reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code

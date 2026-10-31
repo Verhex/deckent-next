@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-personas-1",
-  "limitsProfile": "b1-dogfood-provisional-2",
+  "revision": "b1-personas-2",
+  "limitsProfile": "b1-dogfood-provisional-3",
   "personas": [
     {
       "schemaVersion": 1,
@@ -40,7 +40,7 @@
       },
       "patience": {
         "maxSteps": 80,
-        "maxWaitMs": 20000
+        "maxWaitMs": 45000
       },
       "attentionMs": 60000
     },
@@ -81,7 +81,7 @@
       },
       "patience": {
         "maxSteps": 100,
-        "maxWaitMs": 10000
+        "maxWaitMs": 30000
       },
       "attentionMs": 30000
     },
