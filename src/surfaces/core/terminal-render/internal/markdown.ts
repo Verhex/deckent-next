@@ -21,6 +21,18 @@ const ORDERED = /^(\s*)(\d{1,9}[.)])\s+(.*)$/;
 const QUOTE = /^\s*>\s?(.*)$/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 
+export type MarkdownBlock = 'prose' | 'heading' | 'list' | 'quote' | 'rule' | 'code' | 'table';
+/** Shared by complete replies and streaming units; an indented list continuation stays in its list. */
+export function markdownBlock(text: string, previous: MarkdownBlock | null = null): MarkdownBlock {
+  if (RULE.test(text)) return 'rule';
+  if (HEADING.test(text)) return 'heading';
+  if (BULLET.test(text) || ORDERED.test(text) || (previous === 'list' && /^\s+\S/.test(text))) return 'list';
+  return QUOTE.test(text) ? 'quote' : 'prose';
+}
+export function markdownSpaceBefore(previous: MarkdownBlock | null, current: MarkdownBlock, blank = false): boolean {
+  return previous !== null && (blank || previous !== current || current === 'heading' || current === 'rule' || current === 'code' || current === 'table');
+}
+
 function renderCode(block: readonly string[], closed: boolean, options: MarkdownOptions): RenderedLine[] {
   const { glyphs, width } = options;
   const label = FENCE.exec(block[0] ?? '')?.[2] ?? '';
@@ -60,27 +72,29 @@ function renderLine(text: string, options: MarkdownOptions): RenderedLine {
 export function renderMarkdown(markdown: string, options: MarkdownOptions): RenderedLine[] {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
   const out: RenderedLine[] = [];
-  let lastBlank = false;
+  let previous: MarkdownBlock | null = null, blank = false;
   for (let index = 0; index < lines.length; index++) {
     const text = lines[index]!;
+    if (text.trim() === '') { blank = true; continue; }
     const fence = FENCE.exec(text);
+    const table = !fence && text.includes('|') && isTableSeparator(lines[index + 1] ?? '');
+    const current: MarkdownBlock = fence ? 'code' : table ? 'table' : markdownBlock(text, previous);
+    if (markdownSpaceBefore(previous, current, blank)) out.push(line([]));
+    previous = current; blank = false;
     if (fence) {
       const marker = fence[1]!;
       let end = index + 1;
       while (end < lines.length && !(lines[end]!.trim().startsWith(marker) && /^(`+|~+)$/.test(lines[end]!.trim()))) end++;
       const closed = end < lines.length;
       out.push(...renderCode(lines.slice(index, closed ? end + 1 : end), closed, options));
-      index = closed ? end : lines.length; lastBlank = false; continue;
+      index = closed ? end : lines.length; continue;
     }
-    if (text.includes('|') && isTableSeparator(lines[index + 1] ?? '')) {
+    if (table) {
       let end = index + 2;
       while (end < lines.length && lines[end]!.includes('|') && lines[end]!.trim() !== '') end++;
       out.push(...renderTable(lines.slice(index, end), options.width, options.glyphs, options.projectText));
-      index = end - 1; lastBlank = false; continue;
+      index = end - 1; continue;
     }
-    const blank = text.trim() === '';
-    if (blank && lastBlank) continue;
-    lastBlank = blank;
     out.push(renderLine(text, options));
   }
   return out;
