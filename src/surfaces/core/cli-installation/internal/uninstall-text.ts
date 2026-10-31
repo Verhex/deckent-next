@@ -27,7 +27,7 @@ export function uninstallMessages(locale: Locale): Readonly<Record<string, strin
     'group.cache': t('cli.uninstall.group.cache', {}, locale), 'group.work': t('cli.uninstall.group.work', {}, locale),
     'group.settings': t('cli.uninstall.group.settings', {}, locale), 'group.identity': t('cli.uninstall.group.identity', {}, locale),
     'group.history': t('cli.uninstall.group.history', {}, locale), 'group.backups': t('cli.uninstall.group.backups', {}, locale),
-    'group.workspaces': t('cli.uninstall.group.workspaces', {}, locale), 'group.service': t('cli.uninstall.group.service', {}, locale),
+    'group.workspaces': t('cli.uninstall.group.workspaces', {}, locale), 'group.service': t('cli.uninstall.group.service', {}, locale), 'group.sandbox': t('cli.uninstall.group.sandbox', {}, locale),
     'group.shared': t('cli.uninstall.group.shared', {}, locale), 'group.images': t('cli.uninstall.group.images', {}, locale),
     'tier.keep-data': t('cli.uninstall.tier.keep-data', {}, locale), 'tier.keep-work': t('cli.uninstall.tier.keep-work', {}, locale),
     'tier.all': t('cli.uninstall.tier.all', {}, locale),

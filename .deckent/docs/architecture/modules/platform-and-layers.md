@@ -59,18 +59,21 @@ seals that conventional root even before it exists (the open view creates it 070
 so its fixed self-test leaves an absent conventional root other than the configured one out of its view instead of not running). Only the runtime service and the bare terminal fill it, and only below an existing global root of this user; every other command reads it (`readOnly`, Node ≥ 26.8; on Node 24 it runs without it), so read-only commands stay
 byte-identical on disk. It is used only as a chain of real directories of this user (root without group/other write; `state`, the cache and its per-version directories owner-only; no link; the cache's real path is its own path); `NODE_DISABLE_COMPILE_CACHE` or the registry's
 `DECKENT_DISABLE_COMPILE_CACHE` turns it off. Agent shells: global roots are hidden (outside the project) or sealed (inside it; the hard floor
-counts every global root's registry resources as product paths, and the agent edit/read deny lists name the same in-project paths from the
+counts every global root's registry resources as product paths — the bundled bwrap copy's `bin` included (Astra 2867) — and the agent edit/read deny lists name the same in-project paths from the
 same global-root derivation). Uninstall removes Node's per-version directory as a cache member when the
 installation's root is the global root, only after every recorded cache writer has ended: each filling process (runtime service, bare
-terminal) records itself as a new exclusive leaf (`writers/<pid>-<start>-<random>`, created `wx` 0600 — an existing name, link or not, is never
-opened; ended writers' plain single-link records are unlinked by the next filling start) before Node can write the cache at its exit, and only then
-looks for the removal fence (`removing`); the removal creates that fence exclusively first, then waits for the recorded processes (registry
-`cacheWriterWitness` bound) — Dekker order: the remover sees the record or the writer sees the fence, withdraws its record and runs without the
-cache. An unreadable record or a writer still running at the bound refuses with nothing removed and the fence kept (a rerun continues); the
-records are a member removed with the cache, the fence last. Known limit (owner 2026-10-31, Astra 2867 R2-b): a writer that passes its first
-check and creates its record after the remover's final scan can leave the records directory non-empty, so that one removal ends
-`EFFECT_TARGET_UNKNOWN` with the cache partly removed (no data outside the cache, no false completion; a rerun completes); an atomic
-rename fence of the records directory is a follow-up card. Uninstall also waits for
+terminal) first looks for the removal fence (`removing`; present: it creates nothing and runs without the cache), then records itself as a new
+exclusive leaf (`writers/<pid>-<start>-<random>`, created `wx` 0600 — an existing name, link or not, is never opened; ended writers' plain
+single-link records are unlinked by the next filling start) before Node can write the cache at its exit, and only then looks for the fence
+again. The removal creates that fence exclusively first (an existing one of a refused removal must be this user's plain single-link file with
+mode & 077 == 0), then renames `writers/` to `writers.<random>` — the linearization point (Astra 2867 R2-b) — and waits for the processes of
+every record in every records directory (registry `cacheWriterWitness` bound, start time guards pid reuse). Dekker order: a record made before
+the rename moves with it and is waited for; a writer that checks after it sees the fence, withdraws its record from either location, never
+keeps a `writers/` it made, and runs without the cache. The records are coordination, never a member: removed with the cache, but no part of the
+members or their version (the rename or a withdrawal never moves it, and a removed cache with an ended writer's leftover record observes as
+absent, so a resumed removal settles as applied — Astra 2876), and a `writers/` that reappears during the removal belongs to such a late writer and is left to it, so a late writer never leaves
+the removal half done. A writer suspended across the whole removal (its first check before the fence, its record after the fence is gone) can fill a cache directory that survived the removal (a kept stray beside it); that equals a new writer after the removal, never a half-removal. An unreadable record or a writer still running at the bound refuses with nothing removed and the fence kept (a rerun
+continues); the records are a member removed with the cache, the fence last. Uninstall also waits for
 the stopped service's own process within its stop budget; a project installation keeps the shared global root. Enterprise executables can call the same function
 from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
 

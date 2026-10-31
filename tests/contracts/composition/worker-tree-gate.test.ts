@@ -164,11 +164,13 @@ it('passes a declared dependency tree outside the checkout with a 20 MB native b
   const userinfo = ['https://', 'fixture-user', ':', 'fixture-pass', '@example.invalid'].join('');
   const dependencies = { 'deps/.package-lock.json': '{"lockfileVersion":3}\n', 'deps/native/binding.node': binding, 'deps/zod/tests/string.test.ts': `parse("${userinfo}");\n` };
   const mounts = [{ source: 'deps', target: '/deps', dependencyTree: { lockfile: '.package-lock.json' } }];
-  const f = await fixture(context, { 'README.md': '# project\n' }, undefined, { dependencies, mounts, workTarget: true });
+  // Astra 2867: the project's own `bin/` binds as before beside the product's `bin` resource (guarded by its absolute path, never `<cwd>/bin`).
+  const f = await fixture(context, { 'README.md': '# project\n' }, undefined, { dependencies: { ...dependencies, 'bin/tool': '#!/bin/sh\n' }, mounts: [...mounts, { source: 'bin', target: '/tools' }], workTarget: true });
   try {
     const capture = vi.spyOn(DockerSupervisor.prototype, 'captureProfile').mockRejectedValue(Object.assign(new Error('reached the supervisor'), { code: 'FIXTURE_REACHED' }));
     await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toBeTruthy();
     expect(capture).toHaveBeenCalledTimes(1); expect(await f.auditPage()).toEqual([]);
+    expect((capture.mock.contexts[0] as unknown as { options: { readOnlyMounts?: unknown } }).options.readOnlyMounts).toContainEqual({ source: join(f.project, 'bin'), target: '/tools' });
     const digest = createHash('sha256').update(binding).digest('hex'), by = 'dependencyTree:/deps';
     const entries = [{ path: 'deps/native/binding.node', rule: `native-binary:elf:sha256=${digest}`, by }, { path: 'deps/zod/tests/string.test.ts', rule: 'pattern:url-userinfo', by }];
     expect(await f.auditPage('worker-tree-excluded')).toEqual([{ kind: 'worker-tree-excluded', runId: 'r', taskId: 'a', attemptId: f.identity.attemptId, count: 2, entries }]);

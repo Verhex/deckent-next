@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { access, chmod, link, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -127,14 +127,23 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     // record and does not fill; after the first writer ends, the cache, the records and the fence are removed — nothing written after.
     await chmod(cache, 0o700);
     // Each writer then loads a module of its own, so its exit-time cache write is real (the cache's version moves).
-    const writer = async (aliveMs: number) => { const fresh = join(home, `fresh-${aliveMs}.mjs`); await writeFile(fresh, `export const at = ${aliveMs};\n`);
-      const child = spawn(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(pathToFileURL(resolve(dist, 'platform/core/state-root/index.js')).href)}); `
-      + `process.stdout.write(m.enableDeckentCompileCache([], process.env, process.platform)); await import(${JSON.stringify(pathToFileURL(fresh).href)}); setTimeout(() => {}, ${aliveMs});`], { cwd: home, env: { PATH: process.env['PATH'] ?? '', HOME: home } });
-      let said = ''; child.stdout.on('data', chunk => { said += String(chunk); }); return { said: () => said, ended: new Promise(done => child.once('exit', done)) }; };
+    // `hold`: the writer stops, until its gate (a FIFO) is written, after its first fence check or after its record — node:fs patched by a preload.
+    const preload = join(home, 'hold.cjs'); await writeFile(preload, "const fs = require('node:fs'), { lstatSync, writeFileSync } = fs, { HOLD_AT: at, HOLD_GATE: gate } = process.env; let held = false;\n"
+      + "const hold = () => { if (held) return; held = true; fs.writeSync(1, 'held '); fs.readFileSync(gate); };\n"
+      + "if (at === 'first-check') fs.lstatSync = (path, ...rest) => { if (!String(path).endsWith('/removing')) return lstatSync(path, ...rest); try { return lstatSync(path, ...rest); } finally { hold(); } };\n"
+      + "if (at === 'record') fs.writeFileSync = (path, ...rest) => { const done = writeFileSync(path, ...rest); if (/\\/writers\\/\\d+-/u.test(String(path))) hold(); return done; };\n"
+      + "require('node:module').syncBuiltinESMExports();\n");
+    const writer = async (aliveMs: number, hold?: 'first-check' | 'record') => { const fresh = join(home, `fresh-${aliveMs}.mjs`), gate = join(home, `gate-${hold}`); await writeFile(fresh, `export const at = ${aliveMs};\n`);
+      if (hold) execFileSync('mkfifo', [gate]);
+      const child = spawn(process.execPath, [...hold ? ['--require', preload] : [], '--input-type=module', '-e', `const m = await import(${JSON.stringify(pathToFileURL(resolve(dist, 'platform/core/state-root/index.js')).href)}); `
+      + `process.stdout.write(m.enableDeckentCompileCache([], process.env, process.platform)); await import(${JSON.stringify(pathToFileURL(fresh).href)}); setTimeout(() => {}, ${aliveMs});`], { cwd: home, env: { PATH: process.env['PATH'] ?? '', HOME: home, ...hold ? { HOLD_AT: hold, HOLD_GATE: gate } : {} } });
+      let said = ''; child.stdout.on('data', chunk => { said += String(chunk); }); const ended = new Promise(done => child.once('exit', done));
+      for (let at = Date.now(); hold && !said && Date.now() - at < 10_000;) await new Promise(done => setTimeout(done, 20));
+      return { said: () => said, ended, release: () => writeFile(gate, 'go') }; };
     const { InstallationCacheRemovalTarget } = await import('#adapters/index.js');   // loaded before the first writer starts its lifetime
     const first = await writer(3000); for (let at = Date.now(); !first.said() && Date.now() - at < 10_000;) await new Promise(done => setTimeout(done, 20));
     expect(first.said()).toBe('enabled');
-    const target = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'compileCache', path: cache, ownershipDigest: 'c'.repeat(64), members: ['^(?:v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+|writers)$'] }],
+    const target = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'compileCache', path: cache, ownershipDigest: 'c'.repeat(64), members: ['^(?:v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+|writers(?:\\.[0-9a-f]{16})?)$'] }],
       [], { maxEntries: 10_000, maxDepth: 4 }, async work => work(), undefined, { resourceId: 'compileCache', directory: 'writers', fence: 'removing', budgetMs: 20_000, pollMs: 20 });
     let firstEnded = false; void first.ended.then(() => { firstEnded = true; });
     const at = { kind: target.kind, id: 'compileCache' }, apply = (expectedVersion: string | null) => target.apply({ target: at, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'compile', expectedVersion, input: null });
@@ -143,8 +152,23 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     for (let since = Date.now(); Date.now() - since < 10_000;) { try { await stat(join(cache, 'removing')); break; } catch { await new Promise(done => setTimeout(done, 10)); } }
     const late = await writer(0); await late.ended; expect(late.said()).toBe('unavailable');   // started after the fence: no record left, no fill
     expect(await refused).toBe('EFFECT_TARGET_PRECONDITION:true'); expect(await readdir(cache)).toContain('removing');
-    expect((await readdir(join(cache, 'writers'))).every(name => !name.startsWith(String(process.pid)))).toBe(true);
+    expect(await readdir(cache)).not.toContain('writers');   // the rename moved the records aside and the late writer made none
     await apply((await target.observe(at)).version); await expect(stat(cache)).rejects.toMatchObject({ code: 'ENOENT' });   // the rerun removes cache, records and fence
+    // Astra 2867 R2-b (the rename is the linearization point): one writer held after its first fence check, one after its record. The removal
+    // renames `writers` (the held record moves along) and waits; the first, released then, makes `writers`, sees the fence and leaves it; the
+    // second withdraws its record from the renamed directory. Neither fills, and the one removal completes (never half).
+    run([]); const checked = await writer(0, 'first-check'), stalled = await writer(0, 'record');
+    expect([checked.said(), stalled.said()]).toEqual(['held ', 'held ']);
+    const removal = apply((await target.observe(at)).version).then(() => 'removed', (error: { code?: string }) => String(error.code));
+    for (let since = Date.now(); !(await readdir(cache)).some(name => name.startsWith('writers.')) && Date.now() - since < 10_000;) await new Promise(done => setTimeout(done, 10));
+    await checked.release(); await checked.ended; expect({ said: checked.said(), names: (await readdir(cache)).filter(name => !name.startsWith('v')).sort() }).toEqual({ said: 'held unavailable', names: ['removing', expect.stringMatching(/^writers\.[0-9a-f]{16}$/u)] });
+    // A `writers` that reappears during the removal (here a crashed late writer's, its process ended) is never a member: the removal completes and leaves it.
+    const ended = execFileSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }), crashed = join(cache, 'writers', `${ended}-1-late`);
+    await mkdir(dirname(crashed), { mode: 0o700 }); await writeFile(crashed, JSON.stringify({ schemaVersion: 1, pid: Number(ended), startedAtMs: 1 }), { mode: 0o600 });
+    await stalled.release(); await stalled.ended; expect(stalled.said()).toBe('held unavailable');
+    expect(await removal).toBe('removed'); expect([await readdir(cache), await readdir(dirname(crashed))]).toEqual([['writers'], [`${ended}-1-late`]]);
+    // Astra 2876 R1: that leftover is coordination, never a member: the removed cache observes as absent, so a resumed effect proves `applied`.
+    expect([await target.inspect(at), await target.lookup(at, 'compile')]).toEqual([{ members: [], unlisted: [], version: null }, { status: 'applied', version: null }]);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
