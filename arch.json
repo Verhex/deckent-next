@@ -265,6 +265,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/platform/core/common",
         "src/adapters/core/local-principal",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/setup-detect-coding",
@@ -5825,6 +5826,13 @@
         "src/engine/core/workspace-patch/internal/delivery-run.ts",
         "src/engine/core/workspace-patch/internal/delivery.ts",
         "src/surfaces/core/mcp/internal/delivery.ts"
+      ]
+    },
+    "cliBootstrap": {
+      "note": "P5a (owner 2026-10-31): the deckent bin and runtime service entry enable Node's compile cache before the CLI graph loads, so it may import the dependency-free platform common unit (registry JSON, node: built-ins) instead of the platform barrel; startup-graph pins its static reach.",
+      "entry": "src/composition/core/cli/internal/entry.ts",
+      "unitImports": [
+        "src/platform/core/common"
       ]
     },
     "publicExtensions": {

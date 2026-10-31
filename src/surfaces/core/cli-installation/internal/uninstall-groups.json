@@ -7,6 +7,7 @@
     "cache": [
       "scratch",
       "treeScanCache",
+      "compileCache",
       "bwrap-realm",
       "build-cache"
     ],

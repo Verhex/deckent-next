@@ -20,7 +20,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   const installationId = identity.value.installationId, globalRoot = dirname(await resolveGlobalConfigReadPath(options.env, options.platform));
   const projectData = join(config.projectRoot, DECKENT_DIR), bounds = config.installation.packageMeasurement;
   const rooted = layout.root === globalRoot || layout.root === projectData, env = options.env ?? process.env;
-  const candidates = (['scratch', 'treeScanCache'] as const).filter(resource => rooted
+  const candidates = (['scratch', 'treeScanCache', 'compileCache'] as const).filter(resource => rooted
     && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && inside(layout.root, productResourcePath(layout, resource)));
   const tracked = await configuredTracking(config);
   const protectedPaths = [...new Set([...(layout.root === projectData ? [] : [projectData]), layout.bootstrapConfigPath, ...Object.keys(layout.resources)

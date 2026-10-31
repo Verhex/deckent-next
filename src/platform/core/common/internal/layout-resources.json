@@ -36,7 +36,8 @@
     "brainWaits": "state/brain-waits",
     "headlessLogins": "headless/logins",
     "workerImageBuilders": "state/worker-image-builders",
-    "onboarding": "state/onboarding.json"
+    "onboarding": "state/onboarding.json",
+    "compileCache": "state/compile-cache"
   },
   "bootstrapResource": "config",
   "fixedResources": [
@@ -45,5 +46,6 @@
     "projectIdentity"
   ],
   "rootEnvironmentKey": "DECKENT_HOME",
-  "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME"
+  "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME",
+  "compileCacheOffEnvironmentKey": "DECKENT_DISABLE_COMPILE_CACHE"
 }

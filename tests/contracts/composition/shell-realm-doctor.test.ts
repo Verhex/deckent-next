@@ -54,7 +54,8 @@ it('doctor shows the realm in its human lines in the product\'s own sandbox word
 it('doctor runs one command through the selected sandbox with the turn\'s own layout and names a failure once (SANDBOX-SPAWN 2026-10-18)', async () => {
   // Every state root exists (the global one outside the project), so the self-test may run; it creates nothing.
   const f = await fixture(), out = capture(), stateDir = join(f.project, '..', 'global'), env = { ...f.env, DECKENT_GLOBAL_HOME: stateDir };
-  await Promise.all([stateDir, join(f.project, '.deckent'), resolveProductLayout({ projectRoot: f.project }).root].map(dir => mkdir(dir, { recursive: true })));
+  // P5a: the conventional root of HOME is a state root of every floor, sealed even before it exists, so it exists here too.
+  await Promise.all([stateDir, join(f.project, '.deckent'), resolveProductLayout({ projectRoot: f.project }).root, join(f.env.HOME, '.deckent')].map(dir => mkdir(dir, { recursive: true })));
   const tree = async () => (await readdir(join(f.project, '..'), { recursive: true })).sort();
   const before = await tree();
   await runKernelCommand(['doctor', '--json'], { root: f.project, env, stdout: out.sink, inspectShellRealm: inspectConfiguredShellRealm });
