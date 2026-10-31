@@ -1,5 +1,5 @@
 import { composeCore } from '#composition/core/root/index.js';
-import { ConfigApplication, ConfigChangeApprovalBroker, assertAuthorityWitness, assertConfigPersonWitness, evaluateConfigWrite, type AuthorityWitness, type ConfigApprovalPort, type ConfigChangeSubject,
+import { ConfigApplication, ConfigApplicationError, ConfigChangeApprovalBroker, assertAuthorityWitness, assertConfigPersonWitness, evaluateConfigWrite, type AuthorityWitness, type ConfigApprovalPort, type ConfigChangeSubject,
   type ConfigDocumentPort, type ConfigSnapshot } from '#engine/index.js';
 import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
 import { attestLocalInteractiveTerminal, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
@@ -61,7 +61,7 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
       const context = await load(inputs[0]!.scopeId);
       return inputs.map(input => {
         try { const decided = evaluateConfigWrite(context.document, context.principal, input); return { decision: decided.decision, ruleId: decided.ruleId }; }
-        catch (error) { if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: null }; throw error; }
+        catch (error) { if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: error instanceof ConfigApplicationError && typeof error.params?.['ruleId'] === 'string' ? error.params['ruleId'] : null }; throw error; }
       });
     },
     async admit(input, subject, authorization) {

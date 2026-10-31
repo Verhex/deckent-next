@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths, resolveProductLayout, productResourcePath, ErrorRegistry, formatHumanError, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -10,6 +10,10 @@ import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 import { ModelInvocableNowApplication, type ModelInvocability, type InvocableModels } from '#engine/index.js';
+import { main as runConfiguredCli } from '#composition/core/cli/index.js';
+import * as cliSurface from '#surfaces/index.js';
+import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
@@ -529,7 +533,7 @@ it('BeUser M-01: a refused check shows its typed cause; "connect all" with nothi
 
 it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-in, image), never "Connected, unusable"', async () => {
   const { root, options } = await project({});
-  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false };
+  const codex = { ...connectHost('ok').kinds[1]!, id: 'codex-cli-subscription', pull: 'available' as const, connectFamily: 'codex-jsonl', endpointEditable: false, billing: 'subscription' as const };
   const ref = { providerId: 'codex-cli-subscription', providerVersion: 1, modelId: 'gpt-x', modelVersion: 1 };
   const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] },
     connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'codex-cli-subscription', status: 'connected', reference: ref,
@@ -543,6 +547,8 @@ it('BeUser D-05b: a CLI worker channel shows its real readiness (channel, sign-i
   const text = outcome.lines.map(line => line.text).join('\n');
   expect(text).toContain('Connected as a codex worker channel'); expect(text).toContain('Channel on: yes'); expect(text).toContain('signed in on this machine: yes');
   expect(text).toContain('worker image has codex: no'); expect(text).not.toContain('Connected, unavailable');
+  // PV 2d: a subscription is worded as its CLI login and usage quota, never as a local server at a zero tariff.
+  expect(text).toContain(t('models.connect.subscription', {}, 'en')); expect(text).not.toMatch(/local server|zero tariff/u);
 });
 
 it('BeUser M-01: Connect on a key-less CLI subscription runs its model connection and shows that check\'s cause, not "The chat turn failed"', async () => {
@@ -554,6 +560,139 @@ it('BeUser M-01: Connect on a key-less CLI subscription runs its model connectio
   const outcome = await port.connect({ kind: 'claude-cli-subscription', endpoint: null, key: null });
   const text = outcome.lines.map(line => line.text).join('\n');
   expect(text).toContain('deckent models login --connection <connection>'); expect(text).toContain('claude-cli-subscription or codex-cli-subscription'); expect(outcome.stored).toBe(false);
+  // PV 3: the /provider sign-in: the person check refuses before any dir or spawn; the person's run names the Brain's own dir, the CLI's own sign-in result,
+  // and the connect carries only the dir and the consent the card gave (never MCP); a dir the person names goes as `cli.configDir`.
+  const commands: ModelConnectCommand[] = [], ref = { providerId: 'claude-cli-subscription', providerVersion: 1, modelId: 'm', modelVersion: 1 };
+  let person = false, mutationFails = false, observationFails = false;
+  let connectFault: 'persist' | 'post-write' | 'untyped' | null = null;
+  let persisted: readonly ('ai' | 'system')[] = [];
+  let authored: readonly ('global' | 'project')[] = [], policy: 'allow' | 'require-approval' | 'deny' | 'unreadable' | 'missing' = 'allow';
+  const permissionReads: string[][] = [];
+  const localPrincipal = process.platform !== 'win32';
+  if (localPrincipal) await applyPolicyTemplateInstallation(root, 'scope', options);
+  const principal = localPrincipal ? await resolveConfiguredConfigPrincipal(root, 'scope', options) : null, policyPath = productResourcePath(resolveProductLayout({ projectRoot: root }), 'policy');
+  const installedPolicy = (localPrincipal ? JSON.parse(await readFile(policyPath, 'utf8')) : { grants: [] }) as { grants: unknown[] };
+  if (!localPrincipal) console.info('verify-not-run: PV configured policy producer requires a POSIX OS principal; typed port negatives remain active');
+  const globalPath = resolveGlobalConfigPaths(options.env).platformPath, projectPath = join(root, '.deckent/config.json');
+  const document = { provider_invocation_profiles: { schemaVersion: 1, profiles: [] } };
+  const writePolicy = async () => {
+    if (!principal) return;
+    const principals = [{ issuer: principal.issuer, subject: principal.subject }];
+    await writeFile(policyPath, JSON.stringify({ ...installedPolicy, grants: [...installedPolicy.grants,
+      { id: 'pv-config-write', effect: 'allow', actions: ['write'], scopes: 'all', principals, resource: { kind: 'config', ids: 'all' } },
+      ...(policy === 'deny' || policy === 'require-approval' ? [{ id: 'managed-no-config', effect: policy, actions: ['write'], scopes: 'all', principals,
+        resource: { kind: 'config', ids: [`${authored.at(-1) ?? 'project'}:provider_invocation_profiles`] } }] : [])] }), { mode: 0o600 });
+    clearConfigCache();
+  };
+  await writePolicy();
+  let inspect: TerminalLaunchContext['inspectDelegationPermission'];
+  const entry = vi.spyOn(cliSurface, 'main').mockImplementation(async (_argv, context) => { inspect = (await context!.loadHost!()).inspectDelegationPermission; return 0; });
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
+  vi.stubEnv('DECKENT_GLOBAL_HOME', options.env.DECKENT_GLOBAL_HOME); vi.stubEnv('HOME', options.env.HOME);
+  try { expect(await runConfiguredCli(['--lang', 'en'])).toBe(0); }
+  finally { entry.mockRestore(); cwd.mockRestore(); vi.unstubAllEnvs(); }
+  expect(inspect).toBeTypeOf('function');
+  const inspectDelegationPermission: NonNullable<typeof inspect> = async (...args) => {
+    if (policy === 'unreadable') throw new Error('unreadable');
+    if (policy === 'missing') return null;
+    if (!localPrincipal) {
+      const layers: ('global' | 'project')[] = authored.length ? [...authored] : ['project'];
+      permissionReads.push(layers.map(layer => `${layer}:provider_invocation_profiles`));
+      return { layers, decisions: layers.map(layer => ({ layer, ruleId: 'managed-no-config',
+        decision: policy === 'deny' && layer === authored.at(-1) ? 'deny' : policy === 'require-approval' ? 'require-approval' : 'allow' })) };
+    }
+    const paths = [projectPath, globalPath, policyPath], before = await Promise.all(paths.map(path => readFile(path, 'utf8').catch(() => null)));
+    const view = await inspect!(...args);
+    expect(await Promise.all(paths.map(path => readFile(path, 'utf8').catch(() => null)))).toEqual(before);
+    expect(Object.keys(view!).sort()).toEqual(['decisions', 'layers']);
+    for (const row of view!.decisions) expect(Object.keys(row).sort()).toEqual(['decision', 'layer', 'ruleId']);
+    permissionReads.push(view!.layers.map(layer => `${layer}:provider_invocation_profiles`));
+    return view;
+  };
+  const subscription = (locale: 'en' | 'tr') => providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [{ ...claude, headlessLogin: true }],
+    loginDir: async () => { if (!person) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } }); return { owned: '/state/logins/claude' }; },
+    login: async command => ({ configDir: command.configDir ?? '/state/logins/claude', owned: !command.configDir, exit: 'completed', signedIn: true, authMethod: 'claude.ai', subscriptionType: 'max' }) },
+  inspectDelegationPermission,
+  connectModel: async (_root, command) => { if (mutationFails) throw ErrorRegistry.createError('POLICY_DENIED', { params: { connectPhase: 'before-profile-write' } });
+    commands.push(command); persisted = command.delegate ?? persisted;
+    if (connectFault) throw ErrorRegistry.createError(connectFault === 'persist' ? 'CONFIG_BACKUP_PRUNE_FAILED' : 'POLICY_DENIED',
+      { params: connectFault === 'untyped' ? {} : { connectPhase: connectFault === 'persist' ? 'profile-write-started' : 'profile-written' } });
+    return { schemaVersion: 1, operation: 'models.connect', commandId: command.commandId, scopeId: 'scope', connection: command.connection,
+    status: 'connected', reference: ref, models: [{ nativeId: 'm', state: 'connected', reference: ref }], credentialRef: null, keyStored: null, steps: { catalog: 'present', declaration: 'skipped',
+      profile: 'written', activation: 'present', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current',
+    cli: { configDir: command.cli?.configDir ?? '/state/logins/claude', owned: !command.cli, delegate: [...persisted] } } as ModelConnectResult; },
+  // The chat readiness read refuses a CLI subscription by protocol: that is its expected Brain-only state, worded as such (never "Connected, unavailable").
+  inspectInvocableModels: async () => { if (observationFails) throw ErrorRegistry.createError('POLICY_DENIED');
+    return { schemaVersion: 1, scopeId: 'scope', models: [{ reference: ref, label: 'm', nativeId: 'm', catalogRevision: 'r', bindingDigest: '',
+      availability: { invocable: false, reason: { code: 'MODEL_INVOCATION_UNAVAILABLE' } } }] } as never; } }, options, locale, errorText).subscription!;
+  const signIn = subscription('en');
+  expect(signIn.kinds).toEqual(['claude-cli-subscription']);
+  expect(await signIn.prepare('claude-cli-subscription')).toMatchObject({ owned: null, lines: [{ text: 'ERR:AUTHORITY_WITNESS_REQUIRED' }] });
+  person = true;
+  const ready = await signIn.prepare('claude-cli-subscription');
+  expect(ready.owned).toBe('/state/logins/claude'); expect(ready.lines.map(line => line.text).join('\n')).toContain('deckent models login --connection claude-cli-subscription');
+  expect(await signIn.login('claude-cli-subscription', null)).toMatchObject({ signedIn: true, refused: false });
+  const first = await signIn.connect('claude-cli-subscription', null);
+  expect(first.delegate).toEqual([]); expect(first).toMatchObject({ connected: true, summary: t('tui.provider.login.brainOnly', {}, 'en') });
+  expect(first.lines.map(line => line.text)).toContain(t('tui.provider.login.brainOnly', {}, 'en'));
+  expect((await signIn.connect('claude-cli-subscription', '/state/logins/claude', ['ai'])).delegate).toEqual(['ai']);
+  await signIn.connect('claude-cli-subscription', '/home/person/.claude', []);
+  expect(commands.map(command => [command.cli ?? null, command.delegate ?? null, command.model])).toEqual([[null, null, { pull: 'available' }], [null, ['ai'], { pull: 'available' }],
+    [{ configDir: '/home/person/.claude' }, [], { pull: 'available' }]]);
+  // R1: widening and narrowing must report the new mutation, never an older successful consent.
+  for (const locale of ['en', 'tr'] as const) for (const wanted of [['ai'], []] as const) {
+    const before = wanted.length ? [] : ['ai'] as const;
+    persisted = before; mutationFails = true; observationFails = false;
+    const writes = commands.length, card = subscription(locale);
+    const refused = await card.connect(claude.id, null, wanted);
+    expect(commands).toHaveLength(writes); expect(persisted).toEqual(before);
+    expect(refused).toMatchObject({ state: 'not-applied', connected: false, delegate: null,
+      summary: t('tui.provider.login.notApplied', {}, locale) });
+    expect(refused.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');
+    expect(refused.lines.map(line => line.text)).not.toContain(t('tui.provider.login.personOnly', {}, locale));
+    mutationFails = false;
+    for (connectFault of ['persist', 'post-write', 'untyped']) {
+      persisted = before;
+      const attempts = commands.length, failed = await card.connect(claude.id, null, wanted);
+      expect(commands).toHaveLength(attempts + 1); expect(persisted).toEqual(wanted); // no automatic retry or assumed rollback
+      expect(failed).toMatchObject({ state: connectFault === 'post-write' ? 'applied-unverified' : 'unknown', connected: false, delegate: null,
+        summary: t(connectFault === 'post-write' ? 'tui.provider.login.appliedUnverified' : 'tui.provider.login.unknown', {}, locale) });
+      expect(failed.lines.map(line => line.text).join('\n')).toContain(connectFault === 'persist' ? 'CONFIG_BACKUP_PRUNE_FAILED' : 'POLICY_DENIED');
+      expect(failed.lines.map(line => line.text)).not.toContain(t('tui.provider.login.notApplied', {}, locale));
+      if (connectFault !== 'post-write') expect(failed.summary).toContain('/provider');
+    }
+    connectFault = null; persisted = before; observationFails = true;
+    const observations = commands.length;
+    const uncertain = await card.connect(claude.id, null, wanted);
+    expect(commands).toHaveLength(observations + 1); expect(persisted).toEqual(wanted);
+    expect(uncertain).toMatchObject({ state: 'applied-unverified', connected: true, delegate: null,
+      summary: t('tui.provider.login.appliedUnverified', {}, locale) });
+    expect(uncertain.lines.map(line => line.text).join('\n')).toContain('POLICY_DENIED');
+    expect(uncertain.lines.map(line => line.text)).not.toContain(t('tui.provider.login.personOnly', {}, locale));
+  }
+  mutationFails = false; observationFails = false;
+  // R3: the display uses the same authored-layer selection as governed connect; a denied layer blocks both classes.
+  for (const locale of ['en', 'tr'] as const) for (authored of [[], ['project'], ['global'], ['global', 'project']] as const) {
+    const layers = authored.length ? authored : ['project'];
+    await mkdir(dirname(globalPath), { recursive: true });
+    await writeFile(globalPath, JSON.stringify(authored.includes('global') ? document : {}), { mode: 0o600 });
+    await writeFile(projectPath, JSON.stringify(authored.includes('project') ? document : {}), { mode: 0o600 });
+    policy = 'allow'; await writePolicy();
+    expect((await subscription(locale).connect(claude.id, null)).delegationBlocked).toBeNull();
+    expect(permissionReads.at(-1)).toEqual(layers.map(layer => `${layer}:provider_invocation_profiles`));
+    policy = 'require-approval'; await writePolicy();
+    expect((await subscription(locale).connect(claude.id, null)).delegationBlocked).toBeNull();
+    if (authored.length) {
+      policy = 'deny'; await writePolicy();
+      const denied = await subscription(locale).connect(claude.id, null);
+      expect(denied.delegationBlocked).toBe(t('tui.provider.login.policyBlocked', { policy: 'managed-no-config', layer: authored.at(-1)! }, locale));
+      mutationFails = true;
+      const refused = await subscription(locale).connect(claude.id, null);
+      expect(refused.state).toBe('not-applied'); expect(refused.lines.map(line => line.text)).toContain(denied.delegationBlocked);
+      mutationFails = false;
+    }
+    for (policy of ['unreadable', 'missing']) expect((await subscription(locale).connect(claude.id, null)).delegationBlocked).toBe(t('tui.provider.login.policyUnread', {}, locale));
+  }
 });
 
 it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models instead of "-"', async () => {
@@ -565,4 +704,14 @@ it('BeUser M-28 tail: a keyless CLI channel row counts its active catalog models
   expect(view.kinds[0]!.detail).toBe('7 model(s) connected');
   const none = await providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [codex] } }, options, 'en', errorText).inspect();
   expect(none.kinds[0]!.detail).toBe('-');
+  // PV 2a: without usable isolation the CLI subscription row is disabled with its reason before anything is chosen; its card names the typed cause and the rows usable here.
+  const host = { ...secrets().host, connectModel: async () => { throw new Error('NOT_REACHED'); }, providerConnect: { ...connectHost('ok'), kinds: [{ ...codex, billing: 'subscription' as const, headlessLogin: true },
+    connectHost('ok').kinds[0]!], isolationRefusal: async () => ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: 'launcher' } }),
+    loginDir: async () => ({ owned: '/x' }), login: async () => null } };
+  const blocked = providerPanelPort(root, 'scope', host, options, 'en', errorText), listed = await blocked.inspect();
+  expect(listed.kinds[0]).toMatchObject({ blocked: t('tui.provider.isolation.blocked', {}, 'en') }); expect(listed.kinds[0]!.detail).toMatch(/^subscription: no API key, uses your plan's usage quota · /u);
+  expect(listed.kinds[1]!.blocked).toBeNull();
+  const card = blocked.subscription!.refusal('codex-cli-subscription', ['Anthropic API']);
+  expect(card.lines.map(line => line.text)).toEqual(['ERR:HEADLESS_ISOLATION_UNAVAILABLE', 'Anthropic API', t('tui.provider.isolation.next', {}, 'en')]);
+  expect((await providerPanelPort(root, 'scope', { ...host, providerConnect: { ...host.providerConnect, isolationRefusal: async () => null } }, options, 'en', errorText).inspect()).kinds[0]!.blocked).toBeNull();
 });

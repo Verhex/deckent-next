@@ -9,7 +9,8 @@ export function evaluateConfigWrite(document: unknown, principal: VerifiedPrinci
   if (principal.issuer !== input.principal.issuer || principal.subject !== input.principal.subject || !input.principal.scopeIds.includes(input.scopeId)) throw new ConfigApplicationError('POLICY_DENIED');
   const resource = { kind: policyResources.config.kind, id: `${input.layer ?? 'project'}:${input.keyPath}` }, action = policyResources.config.actions[0];
   const decision = evaluatePolicy(document, { principal, scopeId: input.scopeId, action, resource });
-  if (decision.decision === 'deny' || input.layer === 'global' && !delegationWithin(policySchema.parse(document), principal,
+  if (decision.decision === 'deny') throw new ConfigApplicationError('POLICY_DENIED', decision.ruleId ? { ruleId: decision.ruleId } : undefined);
+  if (input.layer === 'global' && !delegationWithin(policySchema.parse(document), principal,
     [{ id: 'config-global', effect: decision.decision, actions: [action], scopes: 'all', resource: { kind: resource.kind, ids: [resource.id] } }]).ok) throw new ConfigApplicationError('POLICY_DENIED');
   return Object.freeze({ decision: decision.decision, revision: decision.revision, ruleId: decision.ruleId ?? null });
 }

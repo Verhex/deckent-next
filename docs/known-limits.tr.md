@@ -252,8 +252,11 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. alpha.55'ten beri Brain (`/do`'nun arkasındaki planlayıcı)
   da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir. Brain kendi, Deckent'e ait giriş
   dizinine (`headless/logins/claude`, yedeğe girmez) `deckent models login --connection claude-cli-subscription` ile giriş yapar,
-  sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Yalnız Deckent'in bubblewrap
-  korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar). Claude aboneliğiyle terminal
+  sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Terminalin `/provider` penceresi de aynısını yapar
+  (alpha.60): önce giriş dizinini gösterir, terminali CLI'ın kendi girişine devreder (Ctrl+C durdurur; kayıttaki süre sınırı bitirir),
+  bağlar, sonra sizden başka kimin bu girişi kullanabileceğini sorar (ilk bağlantıda system ve ai işaretsiz, yeniden bağlantıda geçerli onay işaretli; MCP asla). Yalnız Deckent'in bubblewrap
+  korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar); yoksa `/provider` Claude ve
+  Codex abonelik satırlarını bu nedenle devre dışı gösterir ve yerine kullanılabilecek sağlayıcıları listeler. Claude aboneliğiyle terminal
   sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** Aboneliklerden yalnız ChatGPT ile giriş terminal
   sohbetine hizmet eder (aşağıda); kapsam bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` içinde ChatGPT ile giriş

@@ -119,7 +119,7 @@ describe('config permissions read for the /config window (T3 L4)', () => {
     const read = await f.app.permissions({ principal: f.command.principal, scopeId: 'installation', keys: ['max_workers', 'language', 'terminal.theme', 'secrets.token'], layers: ['project'] });
     expect(read).toEqual([
       { keyPath: 'max_workers', layer: 'project', decision: 'require-approval', ruleId: 'company-config-approval' },
-      { keyPath: 'language', layer: 'project', decision: 'deny', ruleId: null },
+      { keyPath: 'language', layer: 'project', decision: 'deny', ruleId: 'company-config-deny' },
       { keyPath: 'terminal.theme', layer: 'project', decision: 'allow', ruleId: expect.any(String) },
       { keyPath: 'secrets.token', layer: 'project', decision: 'refused', ruleId: null }]);
     // The same decisions the write meets: the denied key is refused, the approval-held one opens a card instead of writing.

@@ -15,3 +15,4 @@ export * from './internal/table.js';
 export * from './internal/text-width.js';
 export { formatContextTokens } from './internal/token-count.js';
 export { modelProviderSpans, type ModelProviderLabel } from './internal/model-provider.js';
+export { TerminalHandoverContext, useTerminalHandover } from './internal/handover.js';
