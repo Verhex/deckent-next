@@ -63,6 +63,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     walkBeuser: async (...args) => (await import('#composition/core/beuser/index.js')).walkConfiguredBeuser(...args).catch(error => { throw queryFailure(error); }),
     readBeuserReport: async (...args) => (await import('#composition/core/beuser/index.js')).readConfiguredBeuserReport(...args),
     setupBeuser: async (...args) => (await import('#composition/core/beuser/index.js')).setupConfiguredBeuser(...args).catch(error => { throw queryFailure(error); }),
+    inspectBeuserMonitor: async options => (await import('#composition/core/beuser/index.js')).inspectConfiguredBeuserMonitor(options).catch(error => { throw queryFailure(error); }),
     listBeuserJourneys: async () => (await import('#composition/core/beuser/index.js')).listConfiguredBeuserJourneys(),
     verifyAudit: verifyConfiguredAudit, listAudit: listConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,

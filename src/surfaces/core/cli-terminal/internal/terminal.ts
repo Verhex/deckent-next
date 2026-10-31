@@ -1,3 +1,4 @@
+import { configuredBeuserPanelPort } from './beuser-panel.js';
 import { themePanelPort } from './theme-panel.js';
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { permissionModeOpener } from './mode-open-card.js';
@@ -116,7 +117,8 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
     ? { protocol: protocolPanelPort(root, scopeId, { ...context, planProfileProtocol }, options, locale) } : {};
   const openProviderWorkspaces = context.openProviderWorkspaces;
   const workspace = openProviderWorkspaces && context.configApplication && context.resolveConfigPrincipal ? { workspace: workspacePanelPort(root, scopeId, { ...context, openProviderWorkspaces }, options, locale) } : {};
-  return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale),
+  return { panels: { labels: terminalPanelLabels(locale), ports: {
+    ...(context.inspectBeuserMonitor ? { beuser: configuredBeuserPanelPort(context, options, locale) } : {}), ...(context.configApplication ? { config: configPanelPort(root, context, options, locale),
       theme: (control: TerminalHostContext['theme']) => themePanelPort(root, context, options, locale, {
         setting: (config as { terminal?: { theme?: TerminalThemeSetting } }).terminal?.theme ?? TERMINAL_THEME_SETTINGS[0],
         capability: colorCapability({ env, isTTY: true, argv: process.argv }), colorfgbg: env['COLORFGBG'], ...control }) } : {}),

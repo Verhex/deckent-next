@@ -164,15 +164,24 @@ any config publication. A denial preserves the authored config bytes. The capaci
 authority again when applying; a failure after config publication returns `applied-unverified`,
 and the CLI states the partial effect. This is not an atomic config/pool transaction.
 
-The terminal-beuser component and read-only producer show the recorded Run/journey, walker and
-judge models, branch results, elapsed time, registry ceilings and early-stop reasons. Run state
-and an observation's age do not prove process liveness; `r` refreshes the snapshot and Esc closes
-only the window. The `/beuser` workline/launch connection and shared unit/dependency registration
-remain the lead's integration step (the author card reserves those files to TH-A INT). They are
-not a shipped command in this author worktree. Config narrowing and the in-monitor person card
-remain blocked on a versioned profile decision that pins the exact narrowed limits through
-Attempt execution and recovery; current profiles pin only `limitsRevision`. Author fixtures
-and checks do not establish assembled BeUser, native-platform or independent acceptance.
+`/beuser` opens the terminal monitor through the production CLI host and workline settings port.
+It shows the recorded Run/journey, walker and judge models, branch progress, elapsed time, pinned
+limits and early-stop reasons. Parked Run reasons remain visible before a report exists. State
+and observation age do not prove process liveness; `r` refreshes and Esc closes only the window.
+The next walk's limits are shown separately from the recorded walk's snapshot.
+
+Owner 2026-11-01: `beuser.limits` can narrow time, reruns, steps and spend through the same
+ConfigApplication policy/approval/digest/audit writer. Values above the code ceiling are refused
+with the versioned-record remedy. The monitor offers presets, an exact preview and a separate
+armed person card with no default answer; it has no inline field editor or AI/MCP write route.
+An approval-held change opens the existing approval surface and writes nothing until the same
+pending command is approved and resubmitted. Denial leaves config unchanged.
+
+New setup/admission pins effective budgets in journey profile v4. The Attempt, captured supervisor,
+realm, monitor record and recovery consume that snapshot, including its code/config source; later
+config cannot rewrite a recorded Attempt. v2/v3 records still resolve their original limits revision
+and original start-state semantics; no ledger migration is introduced. Author checks and fixture PTYs
+are separate from the assembled release BeUser walk, native-platform and independent acceptance.
 
 ### Walker and evaluator models (owner 2026-10-31)
 

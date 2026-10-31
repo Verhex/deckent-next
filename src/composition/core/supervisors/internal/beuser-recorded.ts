@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { beuserBindingSchema } from '#domain/index.js';
 import { beuserEvidenceSchema, type ArtifactStore } from '#capabilities/index.js';
 import { beuserPrivateRecord } from '#adapters/index.js';
-import { BEUSER_LIMITS_REGISTRY, BeuserContractError, SupervisorError, beuserEvaluatorFor, beuserBindingDigest, sameSandboxRequest, sandboxResultSchema,
+import { beuserProfileLimits, BeuserContractError, SupervisorError, beuserEvaluatorFor, beuserBindingDigest, sameSandboxRequest, sandboxResultSchema,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type DispatchRecord, type DispatchStore, type ExecutionSupervisor, type SupervisorProfileSource, type SandboxRequest, type BeuserContext } from '#engine/index.js';
 import { sha256, inspectProductDirectory, type ResolvedConfig, type ProductLayout } from '#platform/index.js';
 import { profileData } from './beuser-profile.js';
@@ -13,8 +13,7 @@ import { openConfiguredBeuserRealmOwner } from './beuser-realm.js';
 export function recordedBeuserSupervisor(recorded: DispatchRecord, input: {
   readonly config: ResolvedConfig; readonly layout: ProductLayout; readonly store: Pick<DispatchStore, 'readDispatch'>; readonly artifacts: ArtifactStore;
 }): ExecutionSupervisor & SupervisorProfileSource {
-  const data = profileData(recorded.profile), limits = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === data.limitsRevision);
-  if (!limits) throw new BeuserContractError('BEUSER_INPUT_INVALID');
+  const data = profileData(recorded.profile), limits = beuserProfileLimits(data);
   const context = (): BeuserContext => { if (!recorded.grant) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     return { binding: data.binding, principal: beuserEvaluatorFor(recorded.grant.principal, recorded.request.identity.scopeId), limits, signal: new AbortController().signal }; };
   let opened: ReturnType<typeof openConfiguredBeuserRealmOwner> | undefined;

@@ -4,7 +4,7 @@ import { terminalSafeText } from '#platform/core/output/index.js';
 import type { ZodIssue } from 'zod';
 /** `allowed`: the values an enum takes (BeUser KER-05: the refusal names them, so the next attempt can succeed). */
 export interface ConfigIssue { readonly path: string; readonly reason: string; readonly allowed?: readonly string[] }
-export const configIssue = (prefix: readonly (string | number)[], issue: ZodIssue): ConfigIssue => ({ path: [...prefix, ...issue.path].join('.'), reason: issue.code,
+export const configIssue = (prefix: readonly (string | number)[], issue: ZodIssue): ConfigIssue => ({ path: [...prefix, ...issue.path].join('.'), reason: issue.code === 'too_big' && [...prefix, ...issue.path].join('.').startsWith('beuser.limits.') ? 'BEUSER_LIMITS_UNAVAILABLE' : issue.code,
   ...(issue.code === 'invalid_enum_value' ? { allowed: issue.options.map(String) } : {}) });
 export interface ConfigWarning { readonly code: string; readonly path: string; readonly message: string }
 /** A reason that is a registered error code renders as `CODE: <localized sentence>`; common schema reasons are localized and other issue names stay literal. */

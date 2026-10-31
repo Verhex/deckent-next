@@ -14,7 +14,7 @@ import { configPersonWitness, createConfiguredConfigApplication, snapshotConfigu
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity } from '#composition/core/runs/index.js';
-import { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
+import { beuserJourneyProfileSchema, pinBeuserProfile, beuserProfileLimits } from '#composition/core/supervisors/index.js';
 import { withConfiguredBeuserWalkCustody } from './custody.js';
 
 /** This package's own build: the default candidate of `deckent beuser walk` (owner S9). A source checkout has no staged manifest and is refused. */
@@ -103,8 +103,8 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
     entry: { mode: 'pty', nodeExecutable: BEUSER_REALM_RECIPE.nodeExecutable, args: [] }, probes: probeSet.probes, calibration: calibration.calibration };
   const profiles = walkers.map((walker, index) => {
     const profileId = `${id}-walker-${index + 1}`;
-    return { id: profileId, version: 1, adapter: { id: 'beuser', version: 1 }, parameters: { ...parameters,
-      binding: { ...binding, identity: { ...binding.identity, taskId: profileId } }, choices: { 'beuser-walker': walker, 'beuser-evaluator': evaluator } } };
+    return { id: profileId, version: 1, adapter: { id: 'beuser', version: 1 }, parameters: pinBeuserProfile(beuserJourneyProfileSchema.parse({ ...parameters,
+      binding: { ...binding, identity: { ...binding.identity, taskId: profileId } }, choices: { 'beuser-walker': walker, 'beuser-evaluator': evaluator } }), c.config.beuser.limits) };
   });
   const existing = c.config.admission;
   const admission = { ...(existing ?? controllerData.pool), executionSlots: walkers.length, inFlightSlots: walkers.length,
@@ -112,7 +112,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
       kinds: profiles.map((profile, index) => ({ kind: `${input.journey}-walker-${index + 1}`, profile: { id: profile.id, version: 1 }, workspaceDelivery: 'none' })),
       evaluators: [{ id: 'beuser', version: 1, implementation: { id: 'beuser', version: 1 } }] } };
   const result = await install(root, { scopeId, apply: input.apply, ...(input.expect ? { expect: input.expect } : {}) }, options, async () => admission, true);
-  return { ...result, controller, models, ceiling, candidate: { root: candidateRoot, version: measured.packageVersion, revision: release['sourceCommit'] }, limits,
+  return { ...result, controller, models, ceiling, candidate: { root: candidateRoot, version: measured.packageVersion, revision: release['sourceCommit'] }, limits: beuserProfileLimits(beuserJourneyProfileSchema.parse(profiles[0]!.parameters)),
     slots: { before: result.poolBefore,
       after: { executionSlots: walkers.length, inFlightSlots: walkers.length } }, completionTokens: controllerData.completionTokens,
     independence: walkers.some(walker => walker.channelId === evaluator.channelId && walker.modelId === evaluator.modelId) ? 'reduced' : 'unknown' };
@@ -129,14 +129,15 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   const admitted = admission.data;
   const parsed = executionRegistrySchema.safeParse(admission.data.registry);
   if (!parsed.success || !parsed.data.profiles.length) throw invalid();
-  const registry = parsed.data;
+  const registry = { ...parsed.data, profiles: parsed.data.profiles.map(profile => {
+    const data = beuserJourneyProfileSchema.safeParse(profile.parameters);
+    if (!data.success || profile.adapter.id !== 'beuser' || profile.adapter.version !== 1) throw invalid();
+    return { ...profile, parameters: pinBeuserProfile(data.data, c.config.beuser.limits) };
+  }) };
+  const installed = { ...admitted, registry };
   await modelSources(c, async sources => {
     for (const profile of registry.profiles) {
-      if (profile.adapter.id !== 'beuser' || profile.adapter.version !== 1) throw invalid();
-      const data = beuserJourneyProfileSchema.safeParse(profile.parameters);
-      if (!data.success) throw invalid();
-      const p = data.data;
-      if (!BEUSER_LIMITS_REGISTRY.profiles.some(limit => limit.revision === p.limitsRevision)) throw ErrorRegistry.createError('BEUSER_LIMITS_UNAVAILABLE');
+      const p = profile.parameters;
       if (await canonicalRealmPath(p.candidateRoot, 'directory') !== p.candidateRoot) throw invalid();
       await readBeuserCandidate(p.candidateRoot, p.candidateManifest, c.config.installation.packageMeasurement,
         p.packageDigest, p.binding.candidate.stateDigest);
@@ -150,19 +151,19 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   const existing = read.effective.admission;
   // This installer never replaces an unrelated registry; only the controller may change its slot counts after the setup card.
   // The config loader uses null-prototype JSON objects; prototypes do not change the selected data.
-  const same = existing && isDeepStrictEqual(existing, admission.data, { skipPrototype: true });
-  const swap = replace && existing && admission.data.executionSlots <= controllerData.pool.executionSlots && admission.data.inFlightSlots <= controllerData.pool.inFlightSlots
-    && isDeepStrictEqual({ ...existing, registry: null, executionSlots: null, inFlightSlots: null }, { ...admission.data, registry: null, executionSlots: null, inFlightSlots: null }, { skipPrototype: true })
+  const same = existing && isDeepStrictEqual(existing, installed, { skipPrototype: true });
+  const swap = replace && existing && installed.executionSlots <= controllerData.pool.executionSlots && installed.inFlightSlots <= controllerData.pool.inFlightSlots
+    && isDeepStrictEqual({ ...existing, registry: null, executionSlots: null, inFlightSlots: null }, { ...installed, registry: null, executionSlots: null, inFlightSlots: null }, { skipPrototype: true })
     && executionRegistrySchema.safeParse(existing.registry).data?.profiles.every(profile => profile.adapter.id === 'beuser');
   if (existing && !same && !swap) throw ErrorRegistry.createError('BEUSER_SETUP_CONFLICT');
   const heldPool = replace && existing ? await inspectConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId: input.scopeId }, options) : null;
-  if (heldPool && (heldPool.occupancy.execution > admission.data.executionSlots || heldPool.occupancy.inFlight > admission.data.inFlightSlots)) throw ErrorRegistry.createError('RUN_POOL_CAPACITY_OCCUPIED');
-  const digest = sha256(JSON.stringify({ project: read.digest, global: read.global, admission: admission.data, capacity: heldPool?.capacity ?? null }));
-  const result = { schemaVersion: 1 as const, status: same ? 'current' : 'preview', digest, admission: admission.data, poolBefore: heldPool?.capacity ?? null };
+  if (heldPool && (heldPool.occupancy.execution > installed.executionSlots || heldPool.occupancy.inFlight > installed.inFlightSlots)) throw ErrorRegistry.createError('RUN_POOL_CAPACITY_OCCUPIED');
+  const digest = sha256(JSON.stringify({ project: read.digest, global: read.global, admission: installed, capacity: heldPool?.capacity ?? null }));
+  const result = { schemaVersion: 1 as const, status: same ? 'current' : 'preview', digest, admission: installed, poolBefore: heldPool?.capacity ?? null };
   if (!input.apply) return result;
   if (input.expect !== digest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
   return withConfiguredBeuserWalkCustody(root, input.scopeId, options, async () => {
-  const capacity = { executionSlots: admitted.executionSlots, inFlightSlots: admitted.inFlightSlots };
+  const capacity = { executionSlots: installed.executionSlots, inFlightSlots: installed.inFlightSlots };
   if (replace && heldPool && !isDeepStrictEqual(heldPool.capacity, capacity, { skipPrototype: true })) {
     assertPoolControlAllowed(await new PoolControlPolicyAuthorization({ load: async () => c.document })
       .decide('set-capacity', admitted.poolId, input.scopeId, c.principal));
@@ -172,7 +173,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
     const app = createConfiguredConfigApplication(root, options, current => {
       if (!isDeepStrictEqual(current.global, read.global)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
     });
-    const written = await app.submit('set', { keyPath: 'admission', value: admission.data, layer: 'project', expect: read.digest,
+    const written = await app.submit('set', { keyPath: 'admission', value: installed, layer: 'project', expect: read.digest,
       scopeId: input.scopeId, principal: c.principal, commandId: `beuser-setup-${digest}` });
     if (written.status !== 'applied') return { ...result, status: 'approval-pending', approval: written };
     status = 'applied';
@@ -181,7 +182,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   const pool = await installConfiguredExecutionPool(root, input.scopeId, true, options);
   // Installer policy is immutable; the existing capacity owner records an effective override separately.
   if (replace && heldPool && (pool.status === 'current' || pool.status === 'conflict' && pool.reason === 'pool-policy')) {
-    const capacity = { executionSlots: admitted.executionSlots, inFlightSlots: admitted.inFlightSlots };
+    const capacity = { executionSlots: installed.executionSlots, inFlightSlots: installed.inFlightSlots };
     if (!isDeepStrictEqual(heldPool.capacity, capacity, { skipPrototype: true })) {
       await applyConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId: input.scopeId, commandId: `beuser-pool-${digest}`, capacity }, options);
     }

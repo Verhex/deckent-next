@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
 import { createRecordedCancellationDelivery } from '#composition/core/runs/index.js';
-import { recordedExecutionSupervisor } from '#composition/core/supervisors/index.js';
+import { recordedExecutionSupervisor, beuserJourneyProfileSchema, beuserProfileLimits } from '#composition/core/supervisors/index.js';
 import { BeuserRealmApplication } from '#engine/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { admitConfiguredBeuserWalk, readConfiguredBeuserReport, inspectConfiguredBeuserMonitor, validateBeuserSupervisorProfile } from '#composition/core/beuser/index.js';
@@ -83,6 +83,11 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     const ai = await runInTerminal(argv, root, { ...env, CLAUDECODE: '1' });
     expect(ai.code).toBe(1); expect(ai.output).toContain('AUTHORITY_WITNESS_REQUIRED');
     expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined();
+    await writeFile(profilePath, JSON.stringify({ ...admission, registry: { ...admission.registry, profiles: [{ ...admission.registry.profiles[0], parameters: { ...parameters, schemaVersion: 99 } }] } }));
+    const malformedProfile = await runInTerminal(argv, root, env);
+    expect(malformedProfile.code, malformedProfile.output).toBe(1); expect(malformedProfile.output).toContain('BEUSER_INPUT_INVALID');
+    expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined();
+    await writeFile(profilePath, JSON.stringify(admission));
     // One command from an unrelated folder: without a connected model it names the controller's next step and stages nothing; a bad journey id is typed.
     const elsewhere = join(base, 'elsewhere'), card = '↑↓ choose · Enter confirm · Esc cancel';
     await mkdir(elsewhere); config.terminal = { scopeId: 'scope' }; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
@@ -170,7 +175,13 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     const emptyReport = await runInTerminal([process.execPath, cli, 'beuser', 'report', '--scope', 'scope', '--json', '--lang', 'en'], root, env);
     expect(emptyReport.code).toBe(1); expect(emptyReport.output).toContain('BEUSER_REPORT_NOT_FOUND'); expect(emptyReport.output).toContain('deckent beuser walk');
     clearConfigCache();
+    const beforePin = await readFile(configPath, 'utf8');
+    await writeFile(configPath, JSON.stringify({ ...JSON.parse(beforePin), beuser: { limits: { maxWallMs: 600000, maxReruns: 1, maxSteps: 120, maxCost: 0.5 } } })); clearConfigCache();
     const admitted = await admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options);
+    const pinnedData = beuserJourneyProfileSchema.parse(admitted.profiles.get('persona')!.parameters);
+    expect(pinnedData).toMatchObject({ schemaVersion: 4, limits: { maxWallMs: 600000, maxReruns: 1, maxSteps: 120, maxCost: 0.5, source: 'config' } });
+    await writeFile(configPath, beforePin); clearConfigCache(); // later config changes cannot rewrite this Attempt's captured profile
+
     expect(admitted.principal).toEqual(beuserEvaluatorFor(admitted.c.principal, 'scope'));
     const definition = admitted.definitions[0]!;
     expect(definition.binding.identity).toMatchObject({ scopeId: 'scope', runId: admitted.runId, taskId: 'persona', generation: 1 });
@@ -189,7 +200,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
       await management.grantLaunch({ claim, principal: admitted.c.principal, now: 1 }); }
     finally { management.close(); }
     const reopened = await openConfiguredAttemptStore(root, options), ctx = { binding: definition.binding, principal: admitted.principal,
-      limits: BEUSER_LIMITS_REGISTRY.profiles[0]!, signal: new AbortController().signal };
+      limits: beuserProfileLimits(pinnedData), signal: new AbortController().signal };
     const directory = join(await prepareProductDirectory(admitted.c.layout, 'crashes'), 'beuser-custody');
     const custody = await adapters.createBeuserRealmCustody({ context: ctx, request, store: reopened.store, owner, directory,
       timeoutMs: admitted.c.config.configFile.writeLockTimeoutMs });
@@ -206,7 +217,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
       async create() { throw new Error('NO_RECOVERY_LAUNCH'); }, async inspect() { throw new Error('NO_RECOVERY_ADMISSION'); }, remove }, input.custody));
     const docker = vi.spyOn(adapters, 'recordedDockerSupervisor');
     // Management access comes from current config; the realm/profile/custody come from the recorded dispatch.
-    const managementConfig = { ...admitted.c.config, execution: { ...admitted.c.config.execution, docker: { executable: '/usr/bin/docker',
+    const managementConfig = { ...admitted.c.config, beuser: { limits: { maxWallMs: 60000, maxSteps: 30 } }, execution: { ...admitted.c.config.execution, docker: { executable: '/usr/bin/docker',
       imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216,
       logMaxSizeKiB: 64, logMaxFiles: 2, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 } } };
     const delivery = () => createRecordedCancellationDelivery(reopened.store, managementConfig, admitted.c.layout, admitted.c.principal,
@@ -223,6 +234,7 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
         { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts })).toThrow('SUPERVISOR_PROFILE_INVALID');
       expect(() => recordedExecutionSupervisor({ ...recorded, profile: { ...profile, adapterVersion: 2 } },
         { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts })).toThrow('SUPERVISOR_PROFILE_INVALID');
+      expect(beuserProfileLimits(beuserJourneyProfileSchema.parse(recorded.profile.parameters))).toEqual(beuserProfileLimits(pinnedData));
       const manager = recordedExecutionSupervisor(recorded, { config: managementConfig, layout: admitted.c.layout, store: reopened.store, artifacts });
       await expect(manager.cancel({ ...request, identity: { ...request.identity, generation: 2 } })).rejects.toThrow('SUPERVISOR_IDENTITY_CONFLICT');
       expect(remove).toHaveBeenCalledOnce();
@@ -360,8 +372,8 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     expect(monitor).toMatchObject({ journey: 'onboarding', walkers: [{ walker: { channelId: 'fixture-channel' } }, { walker: { channelId: 'fixture-extra-1' } }] });
     expect(monitor!.report).toEqual(await readConfiguredBeuserReport(freshRoot, 'scope', monitor!.runId, freshOptions));
     expect(monitor!.walkers.every(row => row.limits?.revision && row.judge.channelId === 'fixture-extra-1')).toBe(true);
-    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ sourceHead: 'f34e5fd08c8e17139c356316f8ace6e1be43f4aa', evidenceClass: 'author-compiled-cli-fixture', oldVersion, busy, badCandidates, freshController, over, empty, twoCancelled, deniedCapacity, two, freshWalk, missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked,
-      monitor, pickedJourney, cancelledJourney, noModel, badJourney, refusedCard, fromPackage, one }, null, 2));
+    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ sourceHead: 'c09b78681d349ec941b10c2633d0a6b2f8ff17e7', evidenceClass: 'author-compiled-cli-fixture', oldVersion, busy, badCandidates, freshController, over, empty, twoCancelled, deniedCapacity, two, freshWalk, missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked,
+      monitor, pinnedProfile: pinnedData, malformedProfile, pickedJourney, cancelledJourney, noModel, badJourney, refusedCard, fromPackage, one }, null, 2));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'changed;\n');
     await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'onboarding', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
     // A foreign candidate is refused before creating another Run, without a verify=true test adapter.

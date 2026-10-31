@@ -3,6 +3,8 @@ import { Writable, PassThrough } from 'node:stream';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { fullscreenFrameRows, fullscreenInfoRows, mouseFilteredInput, promptJump, scrollViewport, searchViewport, takeMouseReports, viewportLines, viewportStart, type ViewportBlocks } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
+import { beuserPanelPort } from '#surfaces/core/terminal-beuser/index.js';
+import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -131,6 +133,27 @@ describe('full-window Workline: fixed bar', () => {
       expect(frame.every(row => cells(row) <= columns)).toBe(true);
     }
     expect(view.stdout.text.split('\u001b[').slice(1).some(sequence => /^[\d;]*m/u.test(sequence))).toBe(false);
+    const writes: unknown[] = [], settings = { root: '/fixture/controller', expect: 'digest', values: { maxWallMs: 3600000, maxReruns: 2, maxSteps: 242, maxCost: 3 },
+      currency: 'USD', source: 'code' as const, revision: 'ceiling-v1', presets: [{ key: 'maxWallMs' as const, value: 900000 }] };
+    const panelLabels = terminalPanelLabels('en');
+    const monitor = mount({ panels: { labels: panelLabels, ports: { beuser: beuserPanelPort({ inspect: async () => null, limitConfig: async () => settings,
+      writeLimit: async (...args) => { writes.push(args); settings.values.maxWallMs = 900000; return { status: 'applied', lines: ['limit applied'], approvalId: null }; } }, 'en') } } });
+    await until(() => monitor.stdout.frame.includes('READY'), 'beuser ready');
+    const beforeMonitor = barRow(frameOf(monitor), 24);
+    monitor.stdin.write('/beuser\r'); await until(() => monitor.stdout.frame.includes('BeUser monitor'), '/beuser monitor');
+    expect(barRow(frameOf(monitor), 24)).toBe(beforeMonitor);
+    expect(monitor.stdout.frame).toContain('3600000');
+    monitor.stdin.write('l'); await until(() => monitor.stdout.frame.includes('Choose a smaller limit'), 'limit presets');
+    monitor.stdin.write('\r'); await until(() => monitor.stdout.frame.includes('Preview BeUser limit change'), 'limit preview');
+    expect(writes).toEqual([]);
+    monitor.stdin.write('\r'); await until(() => monitor.stdout.frame.includes('Apply BeUser limit change'), 'person card');
+    await settle(300); monitor.stdin.write('\r'); await settle(40); expect(writes).toEqual([]); // no highlighted answer
+    monitor.stdin.write('y'); await until(() => writes.length === 1, 'card then write');
+    expect(writes).toEqual([['maxWallMs', 900000, 'digest']]);
+    await until(() => monitor.stdout.frame.includes('BeUser monitor') && monitor.stdout.frame.includes('900000'), 'new limit in monitor');
+    monitor.stdin.write('\u001b'); await until(() => !monitor.stdout.frame.includes('BeUser monitor'), 'Esc closes monitor');
+    expect(barRow(frameOf(monitor), 24)).toBe(beforeMonitor);
+
   });
 });
 

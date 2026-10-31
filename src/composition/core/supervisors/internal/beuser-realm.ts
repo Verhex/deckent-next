@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { userInfo } from 'node:os';
 import { beuserDigest, type ArtifactStore } from '#capabilities/index.js';
 import { pinRealmOptions, createBeuserRealmCustody, createBeuserRealm, createBeuserRemovalReadback, beuserPrivateRecord } from '#adapters/index.js';
-import { BEUSER_LIMITS_REGISTRY, BeuserContractError, beuserBindingDigest, type BeuserContext, type SandboxRequest, type SupervisorProfile,
+import { beuserProfileLimits, BeuserContractError, beuserBindingDigest, type BeuserContext, type SandboxRequest, type SupervisorProfile,
   type DispatchStore, type BeuserRealmCustody } from '#engine/index.js';
 import { ErrorRegistry, sha256, prepareProductDirectory, type ProductLayout, type ResolvedConfig } from '#platform/index.js';
 import { profileData } from './beuser-profile.js';
@@ -12,7 +12,7 @@ export async function openConfiguredBeuserRealmOwner(c: { readonly config: Resol
   request: SandboxRequest, profile: SupervisorProfile, store: Pick<DispatchStore, 'readDispatch'>, artifacts: ArtifactStore, owner: string,
   created?: (id: string) => Promise<void>) {
   const data = profileData(profile), config = c.config;
-  const limits = BEUSER_LIMITS_REGISTRY.profiles.find(item => item.revision === data.limitsRevision);
+  const limits = beuserProfileLimits(data);
   if (!limits || JSON.stringify(limits) !== JSON.stringify(context.limits)) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
   if (beuserBindingDigest(data.binding) !== beuserBindingDigest(context.binding) || beuserDigest(request.identity) !== beuserDigest(context.binding.identity)) throw new BeuserContractError('BEUSER_INPUT_INVALID');
   const control = config.execution?.docker; if (!control) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');

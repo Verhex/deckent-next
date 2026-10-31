@@ -9,6 +9,10 @@ export type ConfigChoiceDeclaration = Readonly<
   | { kind: 'reference'; source: ConfigChoiceSource; multiple?: boolean }
   | { kind: 'entry'; format: 'host' | 'url'; presets: readonly string[]; multiple?: boolean }>;
 export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclaration>> = Object.freeze({
+  'beuser.limits.maxWallMs': { kind: 'numeric', unit: 'ms', step: 60000, presets: [60000, 300000, 900000, 1800000] },
+  'beuser.limits.maxReruns': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2] },
+  'beuser.limits.maxSteps': { kind: 'numeric', unit: 'count', step: 1, presets: [30, 60, 120, 240] },
+  'beuser.limits.maxCost': { kind: 'numeric', unit: 'count', step: 0.25, presets: [0.25, 0.5, 1, 2] },
   'audit.schemaVersion': { kind: 'schema' },
   'audit.checkpointIntervalMs': { kind: 'numeric', unit: 'ms', step: 1000, presets: [1000, 10000, 60000, 300000] },
   'audit.pageSize': { kind: 'numeric', unit: 'count', step: 1, presets: [10, 100, 1000] },

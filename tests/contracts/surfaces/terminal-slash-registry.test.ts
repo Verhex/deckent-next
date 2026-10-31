@@ -31,6 +31,8 @@ async function open(props: Partial<WorklineProps> = {}) {
 
 describe('terminal slash registry', () => {
   it('lists core commands and parses slash lines', () => {
+    expect(WORKLINE_SLASH_COMMANDS.find(cmd => cmd.name === 'beuser')).toEqual({ name: 'beuser', group: 'settings', descriptionKey: 'tui.beuser.slash' });
+    expect(parseSlashLine('/beuser')).toEqual({ command: 'beuser', args: '' });
     expect(parseSlashLine('/status')).toEqual({ command: 'status', args: '' });
     expect(parseSlashLine('  /help  ')).toEqual({ command: 'help', args: '' });
     expect(parseSlashLine('/exit now')).toEqual({ command: 'exit', args: 'now' });
@@ -128,8 +130,8 @@ describe('terminal slash registry', () => {
     await type(view, '/status \r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), `dispatch ${command.name} then status`);
     expect(view.stdout.text).not.toContain('UNKNOWN');
-    if (command.name === 'do') {
-      expect(view.stdout.text).toContain('NO-PORT do');
+    if (command.name === 'do' || command.name === 'beuser') {
+      expect(view.stdout.text).toContain(`NO-PORT ${command.name}`);
       expect(view.stdout.text).not.toContain('NO-PORT {part}');
     }
     expect(completeTurn).not.toHaveBeenCalled();
