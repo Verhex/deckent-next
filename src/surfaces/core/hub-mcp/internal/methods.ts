@@ -5,6 +5,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema, identitySchema, requireBoundedHubJson } from '#domain/index.js';
 import { HubClientError, HubModeratedApplication, HubRevocationApplication, decodeHubBundle, encodeHubBundle, type HubServerApplication, type HubServerContext } from '#engine/index.js';
 import { t, ErrorRegistry, type Locale } from '#platform/index.js';
+import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 
 export interface HubMcpOptions {
   /** Installation registry value; H9 seeds the owner-selected extension identity. */
@@ -62,7 +63,11 @@ export function registerHubMethods(server: Server, app: HubServerApplication, co
         return executeHubService(app, context(request), p.operation, p.input, request.mcpReq.signal); } };
   }
   const invoke = async (entry: Entry, input: unknown, request: ServerContext) => {
-    try { request.mcpReq.signal.throwIfAborted(); return await entry.run(input, request); }
+    try {
+      request.mcpReq.signal.throwIfAborted();
+      if (!inputWithinValidationLimit(input, entry === tools.hub_service ? INPUT_VALIDATION_LIMITS.hubService : INPUT_VALIDATION_LIMITS.hub)) throw new ProtocolError(-32602, t('error.HUB_LIMIT_EXCEEDED', {}, options.locale));
+      return await entry.run(entry.schema.parse(input), request);
+    }
     catch (error) {
       if (error instanceof z.ZodError) throw new ProtocolError(-32602, t('error.HUB_PACKAGE_INVALID', {}, options.locale));
       if (error instanceof ProtocolError) throw error;
@@ -79,7 +84,7 @@ export function registerHubMethods(server: Server, app: HubServerApplication, co
   if (options.lifecycle?.yank) tools.hub_yank = { ...bindLifecycle('yank'), description: t('hub.tool.yank', {}, options.locale) };
   if (options.lifecycle?.revoke) tools.hub_revoke = { ...bindLifecycle('revoke'), description: t('hub.tool.revoke', {}, options.locale) };
   if (options.lifecycle?.feed) methods['hub/revocations/get'] = bindLifecycle('feed');
-  for (const [method, entry] of Object.entries(methods)) server.setRequestHandler(method, { params: entry.schema }, async (p, request) => {
+  for (const [method, entry] of Object.entries(methods)) server.setRequestHandler(method, { params: z.unknown() }, async (p, request) => {
     if (!server.getClientCapabilities()?.extensions?.[options.extensionId]) throw new ProtocolError(-32601, t('error.HUB_RESOURCE_UNKNOWN', {}, options.locale));
     return { ...cache, value: await invoke(entry, p, request) };
   });

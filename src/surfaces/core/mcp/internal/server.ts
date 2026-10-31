@@ -10,6 +10,7 @@ import type { ProviderSpendManagementResult } from '#engine/index.js';
 import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
+import { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/index.js';
 import { operationToolDefinitions } from './operation-tools.js';
 import { rootObjectSchema } from './input-schema.js';
 import { mcpMonitorQuerySchema, monitorCollectionQuery, projectMonitorForMcp } from './monitor-page.js';
@@ -110,11 +111,11 @@ export interface McpApplications {
   /** The installation's reachable catalog descriptors; the operation tool hints are derived from them (absent = empty catalog). */
   operationCatalog?: readonly OperationDescriptor[];
 }
-export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: number }
+export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: number; graph?: Readonly<{ maxTasks: number; maxEdges: number; maxDepth: number }> }
 /** Local protocol surface. Injected applications own identity, policy and data access.
  * Mutators are advertised only when composition explicitly supplies their application handler. */
 export function createMcpServer(applications: McpApplications, limits: McpLimits, locale: Locale) {
-  z.object({ maxConcurrentCalls: z.number().int().positive().safe(), responseMaxBytes: z.number().int().positive().safe() }).strict().parse(limits);
+  z.object({ maxConcurrentCalls: z.number().int().positive().safe(), responseMaxBytes: z.number().int().positive().safe(), graph: z.object({ maxTasks: z.number().int().positive().safe(), maxEdges: z.number().int().positive().safe(), maxDepth: z.number().int().positive().safe() }).strict().optional() }).strict().parse(limits);
   // idempotent: true only when engine/adapter code proves a commandId-keyed (or identity-keyed) durable
   // replay returns the prior result without a second effect; evidence is file:line-cited per tool in
   // proof/D03-MCP-IDEMPOTENT-2026-09-27/review.md. No default — every entry states it explicitly.
@@ -368,6 +369,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     active++;
     try {
       const args = request.params.arguments ?? {};
+      if (!inputWithinValidationLimit(args, tool.name === 'propose_run' || tool.name === 'plan_run'
+        ? graphInputValidationLimit(limits.graph) : INPUT_VALIDATION_LIMITS.mcp)) return failure(id, 'MCP_INPUT_INVALID');
       const ingress = await checkModelIngressArguments(args, notice => applications.recordModelIngress
         ? applications.recordModelIngress(notice, args) : Promise.reject(new AuditError('AUDIT_UNAVAILABLE')));
       if (!ingress.ok) return failure(id, 'MCP_INPUT_INVALID', { note: ingress.text });

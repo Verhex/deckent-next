@@ -86,7 +86,7 @@ const closeAnchor = (anchor: LedgerAnchor) => { const db = anchor.db; delete anc
   if (missingCancellation.length) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: missingCancellation.join(', ') } });
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
   const endpoint = await prepareRuntimeSocket(config.productLayout, true, reason => { void Promise.resolve(observer.onRuntimeSocketHealed?.({ reason })).catch(() => undefined); });
-  /* LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start. */ const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
+  /* LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start. */ const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'), config.admission?.graph);
   const anchor: LedgerAnchor = {};
   try { await assertNoUninstallHold(config.productLayout.root); await assertNotRetired(config.productLayout.root); return await startUnderCustody(projectRoot, observer, options, config, guard, ports, anchor); }
   catch (error) { closeAnchor(anchor); await guard.release(); throw error; }
