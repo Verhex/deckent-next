@@ -344,10 +344,20 @@ The controller seals the transcript after `patience`, `loop`, `observing` or an 
 `bound`, including one `stopped` friction row with the last screen and proposed action
 (typed text withheld). Persona decision exhaustion is `patience`; the admitted execution
 budget remains `bound`. The existing readback invokes the experience evaluator after
-proven destruction and a valid controller audit, once per readback. An unknown, cancelled,
+proven destruction and a valid controller audit. An unknown, cancelled,
 deadline, drift or leak stop, uncertain cleanup, unavailable audit or exhausted wall
 budget cannot start that evaluator. Its calls, tokens and cost use the existing shared
 reservation envelope; no evaluator capacity is added.
+
+The judge, after a normal finish or an early stop, is one readback phase. A malformed,
+schema-invalid or foreign-reference answer gets the same bounded format correction as the
+walker (`correctBeuserModelOutput`): each later call carries `BEUSER_MODEL_OUTPUT_INVALID`
+as feedback, at most the smallest of the admitted calls, the admitted steps and the persona
+step patience, every call reserved from the same envelope. There is no evaluator-specific
+retry or second phase. A refused reservation ends the phase; repeated invalid output ends
+it with `BEUSER_MODEL_OUTPUT_INVALID`, no verdict and no evidence file. A failed judge never
+erases an early stop: the walk keeps its stop reason and RED persona finding, and the terminal
+record carries the judge failure separately (`judgeFailure`), reported as its own unknown row.
 
 This retains the existing acceptance gates: experience advice cannot replace missing
 business readback, authorization/safety probes or calibration. Such a walk can now retain

@@ -27,7 +27,7 @@ export function recordedBeuserSupervisor(recorded: DispatchRecord, input: {
     const read = await beuserPrivateRecord(directory, `terminal-${sha256(JSON.stringify(recorded.request.identity))}`, limits.maxArtifactBytes).read();
     if (read.kind !== 'ready') return null;
     const value = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(),
-      reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: beuserEvidenceSchema.nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
+      reason: z.string().nullable().optional(), judgeFailure: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: beuserEvidenceSchema.nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
     if (beuserBindingDigest(value.binding) !== beuserBindingDigest(data.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return value;
   };

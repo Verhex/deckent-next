@@ -158,7 +158,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
     if (!lease?.handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); return `beuser-${lease.handle.incarnation}`; };
   const readTerminal = async () => {
     const read = await terminal.read(); if (read.kind !== 'ready') return null;
-    const record = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: z.unknown().nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
+    const record = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), judgeFailure: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: z.unknown().nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
     if (beuserBindingDigest(record.binding) !== beuserBindingDigest(context.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return record;
   };
@@ -171,7 +171,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
       const { result, evidence, diagnostic } = await harness.walk(budget);
       const lease = await harness.custody.load({ ...context, signal: new AbortController().signal });
       const observed = lease?.handle ? beuserWalkSandboxResult(`beuser-${lease.handle.incarnation}`, result) : null;
-      await terminal.write({ binding: context.binding, result: observed, reason: result.reason, cleanup: result.cleanup, filesystemProof: result.filesystemProof, evidence, diagnostic });
+      await terminal.write({ binding: context.binding, result: observed, reason: result.reason, judgeFailure: result.judgeFailure, cleanup: result.cleanup, filesystemProof: result.filesystemProof, evidence, diagnostic });
       // A pre-publish refusal has custody but no process result. Keep dispatch unresolved without inventing a handle.
       if (!observed) throw noHandle;
       return observed;
@@ -207,7 +207,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
     }
     const held = await readTerminal();
     const evidence = held?.evidence ? beuserEvidenceSchema.parse(held.evidence) : null;
-    return { ...outcome, reason: held?.reason ?? null, cleanup: held?.cleanup ?? 'unknown', filesystemProof: held?.filesystemProof ?? { schemaVersion: 1 as const, source: 'unknown' as const }, diagnostic: held?.diagnostic,
+    return { ...outcome, reason: held?.reason ?? null, judgeFailure: held?.judgeFailure ?? null, cleanup: held?.cleanup ?? 'unknown', filesystemProof: held?.filesystemProof ?? { schemaVersion: 1 as const, source: 'unknown' as const }, diagnostic: held?.diagnostic,
       walked: held?.diagnostic?.trace.some(row => row.kind === 'screen') ?? evidence?.transcript.some(row => row.entry.kind === 'screen') ?? false };
   } finally { budget.close(); }
 }

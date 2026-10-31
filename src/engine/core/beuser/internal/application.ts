@@ -18,9 +18,13 @@ export interface BeuserWalkPorts extends WalkerPorts {
   /** Trusted start state; runs on the admitted realm before the first look. Absent: today's empty realm. */
   readonly arrange?: BeuserArrangement | undefined;
 }
+/** Early stops that keep their transcript and reach the judge; the stop stays the walk's reason whatever the judge does. */
+const RETAINED_STOPS: readonly string[] = ['patience', 'loop', 'observing', 'bound'];
 export interface BeuserWalkResult {
   readonly binding: BeuserContext['binding']; readonly verdict: BeuserVerdict | null;
   readonly state: 'completed' | 'unknown' | 'invalid'; readonly reason: string | null;
+  /** The judge readback's failure after a retained early stop (its own unknown row); null when it succeeded, did not run or `reason` carries it. */
+  readonly judgeFailure: string | null;
   readonly filesystemProof?: BeuserFilesystemProof;
   readonly cleanup: 'destroyed' | 'quarantined' | 'unknown'; readonly transcriptDigest: string | null;
 }
@@ -31,7 +35,7 @@ export class BeuserApplication {
     summary = pinBeuserWalkerSummary(summary);
     if (sha256(encodeCommandProjection('beuser-persona:1', summary)) !== context.binding.personaDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     const controller = new BeuserController(context, summary, this.budget);
-    let verdict: BeuserVerdict | null = null, state: BeuserWalkResult['state'] = 'unknown', reason: string | null = null;
+    let verdict: BeuserVerdict | null = null, state: BeuserWalkResult['state'] = 'unknown', reason: string | null = null, judgeFailure: string | null = null;
     let filesystemProof: BeuserFilesystemProof = { schemaVersion: 1, source: 'unknown' };
     let transcriptDigest: string | null = null, cleanup: BeuserWalkResult['cleanup'] = 'unknown';
     const checkRealm = (observation: BeuserRealmObservation, expected: BeuserRealmObservation['state']) => {
@@ -45,7 +49,7 @@ export class BeuserApplication {
       if (this.ports.arrange) await arrangeBeuserStart(controller, this.ports.arrange);
       try { await walkBeuser(controller, this.ports); }
       catch (error) {
-        if (!(error instanceof BeuserWalkStopped) || !['patience', 'loop', 'observing', 'bound'].includes(error.reason)) throw error;
+        if (!(error instanceof BeuserWalkStopped) || !RETAINED_STOPS.includes(error.reason)) throw error;
         reason = error.reason;
       }
       const finalized = await controller.call('beuser-transcript', 'inspect', ctx => this.ports.evidence.finalize(ctx));
@@ -94,7 +98,7 @@ export class BeuserApplication {
     // C5's retained verdict requires the outer controller's destruction proof; never read a pre-cleanup verdict.
     const remainingWallMs = context.limits.maxWallMs - (performance.now() - startedAt);
     if (cleanup === 'destroyed' && controllerValidity === 'valid' && state !== 'invalid' && transcriptDigest
-      && (reason === null || ['patience', 'loop', 'observing', 'bound'].includes(reason)) && !context.signal.aborted && !this.budget?.signal.aborted && remainingWallMs > 0) {
+      && (reason === null || RETAINED_STOPS.includes(reason)) && !context.signal.aborted && !this.budget?.signal.aborted && remainingWallMs > 0) {
       const readDeadline = beuserDeadline(Math.min(context.limits.maxWaitMs, remainingWallMs)), readContext = { ...context, signal: AbortSignal.any([context.signal, readDeadline.signal, ...(this.budget ? [this.budget.signal] : [])]) };
       try {
         const readback = await beuserBounded(readContext.signal, () => this.ports.evidence.readback(readContext));
@@ -107,14 +111,16 @@ export class BeuserApplication {
           state = verdict.validity === 'unknown' ? 'unknown' : verdict.validity !== 'valid' ? 'invalid' : verdict.outcome === 'unknown' ? 'unknown' : 'completed';
         }
       } catch (error) {
-        reason = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code
+        const failure = error instanceof BeuserWalkStopped ? error.reason : error instanceof BeuserContractError ? error.code
         : error instanceof DOMException && error.name === 'TimeoutError' ? 'deadline' : error instanceof DOMException && error.name === 'AbortError' ? 'cancelled' : 'unknown';
-        if (reason === 'drift' || reason === 'BEUSER_TARGET_NOT_SANDBOX') state = 'invalid';
-        if (reason === 'BEUSER_TARGET_NOT_SANDBOX') await this.ports.refusal(context);
+        // A failed judge never erases an observed early stop (its RED finding); it is recorded beside it.
+        if (reason !== null && RETAINED_STOPS.includes(reason)) judgeFailure = failure; else reason = failure;
+        if (failure === 'drift' || failure === 'BEUSER_TARGET_NOT_SANDBOX') state = 'invalid';
+        if (failure === 'BEUSER_TARGET_NOT_SANDBOX') await this.ports.refusal(context);
       }
       finally { readDeadline.close(); }
     }
-    return Object.freeze({ binding: context.binding, verdict, state, reason, cleanup, filesystemProof, transcriptDigest });
+    return Object.freeze({ binding: context.binding, verdict, state, reason, judgeFailure, cleanup, filesystemProof, transcriptDigest });
   }
 }
 
