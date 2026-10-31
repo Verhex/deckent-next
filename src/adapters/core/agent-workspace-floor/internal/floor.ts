@@ -119,8 +119,7 @@ export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel:
 
 /** The configured data root as a project-relative POSIX path, or undefined when it is the project or lies outside it (`ShellSandboxLayout.dataRoot`). */
 export function agentDataRootRel(projectRoot: string, layout: ProductLayout): string | undefined {
-  const rel = relative(projectRoot, layout.root);
-  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel.split(sep).join('/');
+  const rel = relative(projectRoot, layout.root); return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel.split(sep).join('/');
 }
 /** SANDBOX-SPAWN (2026-10-18): a turn's shell sandbox layout — one derivation for the turn and doctor's self-test, so doctor runs the view a call gets. */
 export function agentShellSandboxLayout(projectRoot: string, layout: ProductLayout, scope: WorkspaceScope, writeFloor: (rel: string) => boolean, fullAccess: boolean, scratchDir: string | null,
@@ -128,11 +127,12 @@ export function agentShellSandboxLayout(projectRoot: string, layout: ProductLayo
   const dataRoot = agentDataRootRel(projectRoot, layout);
   return { project: scope, scratchDir, writeFloor, ...(dataRoot ? { dataRoot } : {}), ...(fullAccess ? { repositoryWritable: true } : {}), hardFloor: agentShellHardFloor(projectRoot, layout, [env, process.env]) };
 }
-/** Doctor's realm report and sandbox self-test with a standart turn's own layout (no scratch area); the test runs only once every state root exists (the view creates missing ones; doctor writes nothing). */
+/** Doctor's realm report and sandbox self-test with a standart turn's own layout (no scratch area); it runs once every state root exists (the view creates missing ones; doctor writes nothing) — P5a: an absent conventional `~/.deckent` other than the configured root (a turn creates it 0700 to seal it) is left out of the fixed self-test's view instead. */
 export async function inspectAgentShellRealm(input: { readonly mode: ShellRealmReport['mode']; readonly stateDir: string | null; readonly projectRoot: string; readonly layout: ProductLayout;
   readonly env: Readonly<Record<string, string | undefined>> }): Promise<ShellRealmReport> {
   const { projectRoot, layout, env } = input, scope = await createWorkspaceScope(projectRoot, agentWorkspaceDeny(projectRoot, layout, false, env));
   const writeFloor = agentTurnWriteFloor(agentAuthorityPaths(projectRoot, layout), false, await isSelfSourceProject(projectRoot));
-  const sandbox = agentShellSandboxLayout(projectRoot, layout, scope, writeFloor, false, null, env);
-  return inspectShellRealmSelection({ mode: input.mode, stateDir: input.stateDir, project: scope, sandboxes: shippedShellSandboxes(sandbox), ...(sandbox.hardFloor.roots.every(root => existsSync(root)) ? { selfTest: { environment: env } } : {}) });
+  const sandbox = agentShellSandboxLayout(projectRoot, layout, scope, writeFloor, false, null, env), absent = new Set([env, process.env].map(each => each['HOME'] ? globalStateRoot({ HOME: each['HOME'] }) : null).filter(root => root && root !== globalStateRoot(env) && !existsSync(root)));
+  const tested = { ...sandbox, hardFloor: { ...sandbox.hardFloor, roots: sandbox.hardFloor.roots.filter(root => !absent.has(root)) } };
+  return inspectShellRealmSelection({ mode: input.mode, stateDir: input.stateDir, project: scope, sandboxes: shippedShellSandboxes(tested), ...(tested.hardFloor.roots.every(root => existsSync(root)) ? { selfTest: { environment: env } } : {}) });
 }

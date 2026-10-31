@@ -54,8 +54,9 @@ it('doctor shows the realm in its human lines in the product\'s own sandbox word
 it('doctor runs one command through the selected sandbox with the turn\'s own layout and names a failure once (SANDBOX-SPAWN 2026-10-18)', async () => {
   // Every state root exists (the global one outside the project), so the self-test may run; it creates nothing.
   const f = await fixture(), out = capture(), stateDir = join(f.project, '..', 'global'), env = { ...f.env, DECKENT_GLOBAL_HOME: stateDir };
-  // P5a: the conventional root of HOME is a state root of every floor, sealed even before it exists, so it exists here too.
-  await Promise.all([stateDir, join(f.project, '.deckent'), resolveProductLayout({ projectRoot: f.project }).root, join(f.env.HOME, '.deckent')].map(dir => mkdir(dir, { recursive: true })));
+  // P5a: the conventional root of HOME (here absent, the global root being elsewhere) is sealed by every turn's view, which creates it 0700 first;
+  // doctor creates nothing, so its self-test runs without it (hosted CI: no ~/.deckent at all) and leaves it absent.
+  await Promise.all([stateDir, join(f.project, '.deckent'), resolveProductLayout({ projectRoot: f.project }).root].map(dir => mkdir(dir, { recursive: true })));
   const tree = async () => (await readdir(join(f.project, '..'), { recursive: true })).sort();
   const before = await tree();
   await runKernelCommand(['doctor', '--json'], { root: f.project, env, stdout: out.sink, inspectShellRealm: inspectConfiguredShellRealm });
@@ -64,7 +65,7 @@ it('doctor runs one command through the selected sandbox with the turn\'s own la
   const sandboxed = report.selected === 'bubblewrap' || report.selected === 'landlock';
   console.info('shell realm doctor self-test:', JSON.stringify({ selected: report.selected, selfTest: report.selfTest }));
   expect(report.selfTest).toMatchObject(sandboxed ? { status: 'ok', detail: null, durationMs: expect.any(Number) } : { status: 'not-run', detail: null, durationMs: null });
-  expect(await tree()).toEqual(before);
+  expect(await tree()).toEqual(before); expect(existsSync(join(f.env.HOME, '.deckent'))).toBe(false);
   // A missing state root (the first fixture's global root): no self-test, and doctor still creates nothing.
   const fresh = capture();
   await runKernelCommand(['doctor', '--json'], { root: f.project, env: f.env, stdout: fresh.sink, inspectShellRealm: inspectConfiguredShellRealm });

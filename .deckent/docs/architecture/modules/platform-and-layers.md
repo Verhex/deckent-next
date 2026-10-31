@@ -55,8 +55,8 @@ unit's registry; arch `guards.cliBootstrap`; its own unit so node-free units suc
 `compileCache` (`state/compile-cache`) under the global state root, resolved by the state-root unit's `resolveGlobalStateRoot`, which the host unit's
 `globalStateRoot`/`resolveGlobalScopePaths` also use. It is used only at the conventional global root (the one without
 `DECKENT_GLOBAL_HOME`/`DECKENT_HOME`; a non-default root runs without it, since no agent floor seals every such root), and every agent floor
-seals that conventional root even before it exists (the open view creates it 0700, so nothing can be planted for a later CLI; doctor's self-test
-therefore waits until it exists). Only the runtime service and the bare terminal fill it, and only below an existing global root of this user; every other command reads it (`readOnly`, Node ≥ 26.8; on Node 24 it runs without it), so read-only commands stay
+seals that conventional root even before it exists (the open view creates it 0700, so nothing can be planted for a later CLI; doctor creates nothing,
+so its fixed self-test leaves an absent conventional root other than the configured one out of its view instead of not running). Only the runtime service and the bare terminal fill it, and only below an existing global root of this user; every other command reads it (`readOnly`, Node ≥ 26.8; on Node 24 it runs without it), so read-only commands stay
 byte-identical on disk. It is used only as a chain of real directories of this user (root without group/other write; `state`, the cache and its per-version directories owner-only; no link; the cache's real path is its own path); `NODE_DISABLE_COMPILE_CACHE` or the registry's
 `DECKENT_DISABLE_COMPILE_CACHE` turns it off. Agent shells: global roots are hidden (outside the project) or sealed (inside it; the hard floor
 counts every global root's registry resources as product paths, and the agent edit/read deny lists name the same in-project paths from the
