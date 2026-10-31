@@ -43,7 +43,7 @@ async function turnOf(f: Awaited<ReturnType<typeof modeRuntime>>, name: string, 
 
   const finished = events.find(event => event.kind === 'tool.finished');
   const cards = events.filter(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>[];
-  return { events, cards, status: finished?.kind === 'tool.finished' ? finished.status : null, note: String((answer.response.result as { note?: unknown }).note ?? '') };
+  return { events, cards, status: finished?.kind === 'tool.finished' ? finished.status : null, notices: (answer.response.result as { notices: readonly { kind: string }[] }).notices };
 }
 const FULL_ACCESS = { id: 'company-full-access', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: me, resource: { kind: 'permission-mode', ids: ['full-access'] } };
 async function v5Project(mode: Mode | null, person = me[0]!, extra: Record<string, unknown>[] = []) {
@@ -61,7 +61,7 @@ describe.skipIf(process.platform !== 'linux')('first-run v5: trust → grant →
     const first = await turnOf(f, 'mcp__files__echo', { text: 'one' }, 'allow', 't1');
     expect(first.cards.length).toBeGreaterThanOrEqual(5); // launch + tools windows of both servers, then the call's own card
     expect(first.status).toBe('ok');
-    expect(first.note).not.toContain('were not allowed');
+    expect(first.notices.filter(notice => notice.kind === 'grant-refused')).toEqual([]);
     expect(stdio.calls().map(call => call.name)).toEqual(['echo']);
     expect(mcpGrants(f.data).map(grant => [grant.resource.kind, grant.resource.ids, grant.effect, grant.modeEligible])).toEqual(expect.arrayContaining([
       ['mcp-server', ['files'], 'require-approval', true], ['mcp-server', ['web'], 'require-approval', true]]));

@@ -29,7 +29,7 @@ export async function executeRuntimeApplicationOperation(operations: RuntimeRunA
     reconcileAttempt: input => operations.reconcileAttempt(attemptIdentitySchema.parse(input)),
     recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
   } satisfies Record<Exclude<RuntimeServiceOperation, 'clearSessionStanding' | 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
-    | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'manageProviderSpend' | 'chatTurn' | 'cancelChatTurn'
+    | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'manageProviderSpend' | 'chatTurn' | 'cancelChatTurn' | 'steerChatTurn'
     | 'findWorkspaceFiles' | 'attachWorkspaceFile' | 'executeOperation' | 'compensateOperation' | 'inspectOperation' | 'inspectPermissionMode' | 'setPermissionMode'
     | 'inspectScratch' | 'clearScratch' | 'setSecret' | 'deleteSecret' | 'switchSecretStore' | 'enqueueTargetQueueRollback' | 'enqueueTargetQueue' | 'inspectTargetQueue' | 'listTargetQueue' | 'challengeTargetQueue' | 'answerTargetQueue' | 'executeTargetQueue'>, RuntimeOperationHandler>;
   if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');

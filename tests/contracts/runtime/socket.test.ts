@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, observeRuntimeSocket, prepareRuntimeSocket, requestLocalRuntime, runtimeSocketLocation, startLocalRuntimeSocketServer,
+import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, observeRuntimeSocket, prepareRuntimeSocket, requestLocalRuntime, runtimeSocketLocation, startLocalRuntimeSocketServer, turnLocalRuntime,
   type LocalRuntimeSocketOptions } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { encodeServiceFrame, ServiceFrameError } from '../../../src/adapters/core/local-runtime-socket/index.js';
@@ -91,7 +91,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket request admi
       seen.push(`${request.schemaVersion}:${request.operation}`); return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result: { operation: request.operation } };
     });
     try {
-      // A v27 client describing a v28 service receives its own envelope version.
+      // A v29 client describing a v30 service receives its own envelope version.
       await expect(requestLocalRuntime(options, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION - 1, requestId: 'request-1', operation: 'describeService', input: {} }))
         .resolves.toMatchObject({ requestId: 'request-1', ok: true, result: { operation: 'describeService' } });
       // Effectful or other operations stay current-version only (refused before dispatch, no client-side downgrade either).
@@ -99,10 +99,24 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket request admi
       const raw = await connect(options.endpoint);
       raw.end(encodeServiceFrame({ schemaVersion: 24, requestId: 'request-3', operation: 'inspectRun', input: {} }, options.inputMaxBytes));
       await once(raw, 'close');
-      // Protocol v28 (Run proposals): the window is [28, 27]; a v22 lifecycle envelope is outside it and never dispatched.
+      // A lifecycle envelope older than the window ([30, 29] since v30) is outside it and never dispatched.
       const outside = await connect(options.endpoint);
       outside.end(encodeServiceFrame({ schemaVersion: 22, requestId: 'request-4', operation: 'describeService', input: {} }, options.inputMaxBytes));
       await once(outside, 'close');
+      // v30 (L0): a v29 terminal's chat turn is closed unanswered — no byte comes back, so its client raises the typed LOCAL_RUNTIME_TRANSPORT.
+      const v29 = await connect(options.endpoint), answered: Buffer[] = []; v29.on('data', chunk => answered.push(chunk));
+      v29.end(encodeServiceFrame({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION - 1, requestId: 'request-5', operation: 'chatTurn', delivery: { maxResultBytes: 4096 },
+        input: { schemaVersion: 1, scopeId: 'scope', turnId: 'turn', messages: [{ role: 'user', content: 'hi' }] } }, options.inputMaxBytes));
+      await once(v29, 'close');
+      expect(answered).toEqual([]);
+      // A turn closed unanswered is that typed error on the client (seen here from a v30 client at a service that does not speak v30).
+      const older = createServer(socket => socket.once('data', () => socket.destroy())), olderEndpoint = join(dirname(options.endpoint), 'older.sock');
+      await new Promise<void>(resolve => older.listen(olderEndpoint, resolve)); await chmod(olderEndpoint, 0o600);
+      try {
+        await expect(turnLocalRuntime({ ...options, endpoint: olderEndpoint }, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-6', operation: 'chatTurn',
+          delivery: { maxResultBytes: 4096 }, input: { schemaVersion: 1, scopeId: 'scope', turnId: 'turn', messages: [{ role: 'user', content: 'hi' }] } }, () => undefined))
+          .rejects.toSatisfy(error => { expectCode(error, 'LOCAL_RUNTIME_TRANSPORT'); return true; });
+      } finally { older.close(); }
       expect(seen).toEqual([`${RUNTIME_SERVICE_SCHEMA_VERSION}:describeService`]);
     } finally { await server.dispose(); }
   });

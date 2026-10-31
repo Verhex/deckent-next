@@ -5071,6 +5071,15 @@
     ],
     "invariants": [
       {
+        "file": "src/domain/core/agent-turn/internal/contract.ts",
+        "symbol": "CHAT_TURN_RESULT_NOTICES/CHAT_TURN_STEER_LINES",
+        "values": [
+          "32",
+          "16"
+        ],
+        "reason": "Runtime protocol v30 frame bounds (alpha.60 PAKET-2 TP): at most 32 typed notices per turn result and 16 steered lines per turn; versioned wire invariants like the other frame bounds, not policy."
+      },
+      {
         "file": "src/surfaces/core/hub-mcp/internal/server.ts",
         "symbol": "listParams/cursor",
         "values": [

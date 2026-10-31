@@ -160,7 +160,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'invokeModel' || request.operation === 'invokeModelStream' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
           ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost, stream)
-          : request.operation === 'chatTurn' || request.operation === 'cancelChatTurn'
+          : request.operation === 'chatTurn' || request.operation === 'cancelChatTurn' || request.operation === 'steerChatTurn'
           ? executeConfiguredRuntimeChatTurnOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost, turn)
           : request.operation === 'findWorkspaceFiles' || request.operation === 'attachWorkspaceFile' || isRuntimeServiceScratchOperation(request.operation)
           ? executeConfiguredRuntimeWorkspaceFileOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, workspaceFiles, turnStop.signal)
