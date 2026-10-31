@@ -190,6 +190,7 @@ def main():
             chunk = b''
         if not chunk:
             eof = True
+            scheduled.clear()
             reap()
             return False
         terminal_queries(chunk)

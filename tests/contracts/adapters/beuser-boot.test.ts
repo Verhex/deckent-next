@@ -2,6 +2,7 @@ import * as processes from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -60,9 +61,11 @@ async function producer(mode: 'pty' | 'argv', program: string, corrupt?: (boot: 
   const realm = new BeuserRealmApplication({ create: async () => handle, inspect: async () => ({ valid: true, evidenceRefs: ['fixture-readback'] }),
     remove: async () => ({ processesAbsent: true, cgroupAbsent: true, filesystemAbsent: true, evidenceRefs: ['fixture-removal'] }) }, custody);
   const boots: BeuserDriverBoot[] = [], exits: Promise<{ code: number | null; signal: NodeJS.Signals | null }>[] = [], diagnostics: string[] = [];
+  const children: processes.ChildProcessWithoutNullStreams[] = [];
   const launch = vi.mocked(processes.spawn).mockReset().mockImplementation(() => {
     const child = realSpawn('python3', [driver, String(context.limits.maxArtifactBytes)],
       { env: { PATH: process.env['PATH'] ?? '', PYTHONDONTWRITEBYTECODE: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    children.push(child);
     exits.push(new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal }))));
     child.stderr.on('data', (bytes: Buffer) => diagnostics.push(bytes.toString()));
     const write = child.stdin.write.bind(child.stdin);
@@ -91,7 +94,7 @@ async function producer(mode: 'pty' | 'argv', program: string, corrupt?: (boot: 
   const surface = createBeuserSurface({ context, realm: channel, size, bounds, ...(terminalFixture ? { terminalFixture } : {}), catalog: journey.catalog,
     sink: async (_ctx, event) => { events.push(event); } });
   closers.push(() => surface.close(context));
-  return { surface, channel, boot, boots, directory, events, launch, exits, diagnostics, journey, options, handle };
+  return { surface, channel, boot, boots, directory, events, launch, exits, diagnostics, journey, options, handle, children };
 }
 
 it.skipIf(process.platform !== 'linux')('production boot starts the real PTY entry and preserves approval then nonce refusal', async () => {
@@ -152,6 +155,35 @@ it.skipIf(process.platform !== 'linux')('production boot starts the real PTY ent
     expect(JSON.stringify(delayed.events)).toContain('terminalExchange');
     await delayed.surface.close(context);
   }
+  // EOF before the delayed OSC reply must leave the open control pipe idle, without a late PTY write.
+  const early = await producer('pty', `
+    require('node:fs').writeSync(1, '\\x1b]11;?\\x1b\\\\'); process.exit(23);
+  `, undefined, { ...terminalFixture, osc11: { ...terminalFixture.osc11, delayMs: 400 } });
+  await early.surface.look(context);
+  await early.surface.wait(context, 300);
+  expect(early.events.at(-1)).toMatchObject({ process: { state: 'eof', exitCode: 23 } });
+  const child = early.children[0]!;
+  const clockTicks = Number(processes.execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim());
+  expect(clockTicks).toBeGreaterThan(0);
+  const cpuMs = async () => {
+    const stat = await readFile(`/proc/${child.pid}/stat`, 'utf8');
+    // Fields 14/15 (utime/stime), after pid and the parenthesized command name.
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/u);
+    return (Number(fields[11]) + Number(fields[12])) * 1000 / clockTicks;
+  };
+  const before = await cpuMs();
+  expect(child.stdin.writableEnded).toBe(false);
+  await sleep(800); // No control request until well past the 400 ms reply deadline.
+  const used = await cpuMs() - before;
+  expect(child.exitCode).toBeNull(); expect(child.stdin.writableEnded).toBe(false);
+  expect(used, `idle driver consumed ${used} ms CPU`).toBeLessThan(100);
+  await early.surface.look(context);
+  expect(early.events.at(-1)).toMatchObject({ process: { state: 'eof', exitCode: 23 } });
+  const exchanges = early.events.flatMap(row => (row as { screen?: { terminalExchange?: { query: string; response: string | null }[] } }).screen?.terminalExchange ?? []);
+  expect(exchanges).toEqual([expect.objectContaining({ query: 'osc11', response: null })]);
+  expect(early.diagnostics).toEqual([]);
+  await early.surface.close(context);
+  expect(await early.exits[0]).toEqual({ code: null, signal: 'SIGKILL' });
 });
 
 it.skipIf(process.platform !== 'linux')('production boot argv twin launches the exact command tuple on the real driver', async () => {
