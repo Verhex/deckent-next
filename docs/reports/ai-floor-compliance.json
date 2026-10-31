@@ -57,7 +57,7 @@
     "src/domain/core/provider-catalog/internal/catalog.ts": "b37d9fd13c4e3a419eb6d3a6f8706998c290dc82a0b3c828237fbed0871ffeaf",
     "src/domain/core/provider-catalog/internal/endpoint-key.ts": "c8dd1bc19a4d4a92776062154ebd4b367930cdee6a682e16e5726f756fea258a",
     "src/domain/core/provider-catalog/internal/model-maker.ts": "60e41e31e47a9c621ca43dc67f769402590e4cc119b93d84bc44923a832d1ac2",
-    "src/domain/core/provider-catalog/internal/model-role.ts": "6fb7ec74e6c901089a9856c2eb883d32f1ae14558d97370f472c4bd93cdb47a8",
+    "src/domain/core/provider-catalog/internal/model-role.ts": "50371cc3a11c763ccc813748cfac70e5440c18f5f2c2ec53baa3a86c7bcc8037",
     "src/domain/core/provider-catalog/internal/native-cli.ts": "8f851efd6722046f990e9d8b9cad0923941213b944bec0812597e43c4a329bc6",
     "src/domain/core/provider-catalog/internal/worker-effort.ts": "4d1c44394c8721605d9c217421b005211f980108b30c4061d008ff376fc40fcc",
     "src/domain/core/recovery/index.ts": "8dba4782e7fe0c7cd7ba1b22e3a08a4dfa6ca40391fa419bfeefe9e4db350fa7",
