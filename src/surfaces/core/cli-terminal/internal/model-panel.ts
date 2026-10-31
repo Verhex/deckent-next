@@ -4,7 +4,7 @@ import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
-import { providerDisplayName } from './provider-label.js';
+import { providerDisplayName } from '#surfaces/core/terminal-provider/index.js';
 import { modelInvocabilityText, reservationAmountText } from '#surfaces/core/model-invocability/index.js';
 
 // The config surface reaches the terminal renderer; load it only when a default-model write happens (startup graph stays light).

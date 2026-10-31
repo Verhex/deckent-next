@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 import { modelProviderSpans, plainText, SpanText, fitStatusRow, worklineStatusSegments } from '#surfaces/core/terminal-render/index.js';
 import { addSessionUsage, EMPTY_SESSION_USAGE, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { SystemSummaryLine, infoWindowLines, type InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
-import { modelPanelTree } from '#surfaces/core/terminal-panels/index.js';
+import { modelPanelTree } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import { t, snapshotKnownSecrets } from '#platform/index.js';

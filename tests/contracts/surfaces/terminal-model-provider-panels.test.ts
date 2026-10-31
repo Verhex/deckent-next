@@ -8,8 +8,9 @@ import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/
 import { CardCopyContext, DECISION_ARM_DEFAULT, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
-import { QuestionWindow, SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
+import { QuestionWindow, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel, modelPanelTree, providerPanelTree } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle as settleWorkline, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 

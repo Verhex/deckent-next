@@ -300,7 +300,7 @@ was passed over adds the same `… instead of …` line to the server's posture 
 today (Landlock has no long-lived launch: a refused bubblewrap means host or refusal, both already named). Open: the pre-start launch
 card (`mcpRealmPosture`) still says only what the realm means ("said at the start"); the actual selection and any fallback appear after
 the start, on the tools card and every call card (options: pre-select with `usable()` on the launch card, or keep — lead/owner). A sandboxed start that fails is diagnosed in the same view
-(MCP-SANDBOX-PATHS, 2026-09-29; `mcp-client/internal/diagnose.ts`): the command is resolved on this machine with the server's PATH (not found
+(MCP-SANDBOX-PATHS, 2026-09-29; `mcp-start-diagnosis/internal/diagnose.ts`): the command is resolved on this machine with the server's PATH (not found
 → `start-failed` "command not found", no name), then it and every existing absolute-path argument (≤ 16) are probed through the launcher's
 own prefix (`bwrap <view> -- /bin/sh -c '[ -e … ]'`; our `sh`/`test` only, never server code; 5 s bound; a failed probe leaves the SDK
 reason). The first path the view hides is named (`sandbox-unreachable`, `path-hidden` with role command/argument and the link target when

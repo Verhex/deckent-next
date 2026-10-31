@@ -3,7 +3,7 @@ import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { withConfigWriteLock } from '#platform/index.js';
-import { MCP_SCOPES, MCP_SERVER_NAME } from './registry.js';
+import { MCP_SCOPES, MCP_SERVER_NAME } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 
 /**

@@ -1,6 +1,7 @@
 import { render, useApp } from 'ink';
 import { t, colorCapability } from '#platform/index.js';
-import { SettingsPanel, type PanelLabels, type ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
+import { type PanelLabels, type ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
 import { CardCopyContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';

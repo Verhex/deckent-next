@@ -7,7 +7,7 @@ import { describeSandboxFallback, describeSandboxRejections, describeShellWriteP
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
-import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
+import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
 import { mcpEndpointRefusal } from './registry.js';
 import { modelTextPrefix } from '#domain/index.js';

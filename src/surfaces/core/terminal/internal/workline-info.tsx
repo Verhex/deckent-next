@@ -5,7 +5,7 @@ import { InfoWindow, type ContextInfoLabels, type InfoSurfaceLabels, type InfoVi
   type InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { systemSummaryEntry, type LocalExecution } from '#surfaces/core/terminal-work/index.js';
-import type { WindowSlot } from './workline-windows.js';
+import type { WindowSlot } from '#surfaces/core/terminal-session/index.js';
 
 /** SW-1: the typed information-window ports and their words (`terminalAdminPorts(...).info`). */
 export type WorklineInfo = Readonly<{ ports: InfoViewPorts; labels: InfoSurfaceLabels }>;

@@ -23,13 +23,13 @@ import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
 import { workspacePanelPort } from './workspace-panel.js';
 import { protocolPanelPort } from './protocol-panel.js';
-import { providerPanelPort } from './provider-panel.js';
+import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { policyPanelPort } from './policy-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts, spendRecoveryView } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver, BrainPlanProgress } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
-import { providerDisplayName } from './provider-label.js';
+import { providerDisplayName } from '#surfaces/core/terminal-provider/index.js';
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
 const ADMISSION_DEFERRED = {

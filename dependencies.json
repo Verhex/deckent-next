@@ -211,7 +211,8 @@
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/config-window",
-        "src/surfaces/core/terminal-onboarding"
+        "src/surfaces/core/terminal-onboarding",
+        "src/surfaces/core/terminal-session"
       ],
       "purpose": "Interactive terminal (TUI) renderer: layout, input and paste handling for the Deckent terminal.",
       "features": [
@@ -266,7 +267,9 @@
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-onboarding",
         "src/surfaces/core/terminal-hub",
-        "src/surfaces/core/siwc"
+        "src/surfaces/core/siwc",
+        "src/surfaces/core/terminal-provider",
+        "src/surfaces/core/terminal-session"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [
