@@ -2,15 +2,18 @@ import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
 const SiwcWindow = lazy(loadSiwcWindow);
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { EntryWindow, LinesWindow, QuestionWindow, panelWindowLines, PickerWindow, BudgetWindow, budgetEntry, CacheWindow, cacheEntry, type BudgetPanelView, type CachePanelView, type PanelLabels, type PanelNotice, type ProviderConnectOutcome, type ProviderModelOutcome, type ProviderPanelKind, type ProviderPanelLabels, type ProviderPanelPort, type ProviderPanelView, type ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
+import { PICKER_INITIAL, pickerView, type PickerNode, type PickerOutcome, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { EntryWindow, LinesWindow, QuestionWindow, panelWindowLines, PickerWindow, BudgetWindow, budgetEntry, CacheWindow, cacheEntry, type BudgetPanelView, type CachePanelView, type PanelLabels, type PanelNotice, type ProviderConnectOutcome, type ProviderModelOutcome, type ProviderPanelKind, type ProviderPanelLabels, type ProviderPanelView, type ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
+import type { ProviderWindowPort } from './context.js';
+import { SubscriptionWindow } from './subscription-window.js';
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
-export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false, signIn?: string): PickerTree {
+export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false, signIn?: string, login?: Readonly<{ kinds: readonly string[]; action: string }>): PickerTree {
   return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.pendingNote ? `${kind.pendingNote} · ${kind.detail}` : kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
     // FIX8b: the ChatGPT sign-in row has no key or catalog: its one action opens the sign-in window.
     ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.id === signIn ? { childTitle: kind.label, children: [{ id: 'connect', label: labels.actions.signIn }] } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
-      : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : kind.keyName === null ? labels.actions.connectNoKey : kind.keyRequired ? labels.actions.connect : labels.actions.connectKeyOptional }, // BeUser: a CLI subscription signs in, no key
+      : { childTitle: kind.label, children: [...(login?.kinds.includes(kind.id) ? [{ id: 'login', label: login.action }] : []), // PV 3: sign in with the CLI, then connect
+      { id: 'connect', label: kind.keyStored ? labels.actions.replace : kind.keyName === null ? labels.actions.connectNoKey : kind.keyRequired ? labels.actions.connect : labels.actions.connectKeyOptional }, // BeUser: a CLI subscription signs in, no key
       ...(kind.keyStored && kind.grantRequired ? [{ id: 'grant', label: labels.actions.grant }] : []),
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
       ...(models && (kind.models.length || kind.discoversModels) ? [{ id: 'model', label: labels.actions.model, ...(kind.modelBlocked ? { blocked: { reason: kind.modelBlocked } } : {}) }] : []),
@@ -36,7 +39,8 @@ type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | n
   | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }
   | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
   | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
-  | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }>;
+  | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }
+  | { kind: 'subscription'; target: ProviderPanelKind } | { kind: 'refusal'; title: string; lines: readonly import('#surfaces/core/terminal-panels/index.js').PanelLine[] }>;
 /** The typed refusal that opens the first-use card: a main-vault key without a grant in this project (name and project only, never a value). */
 const grantRefusal = (error: unknown): Readonly<{ name: string; project: string }> | null => {
   const { code, params } = (error ?? {}) as { code?: unknown; params?: Record<string, unknown> };
@@ -50,7 +54,7 @@ const BUDGET = ':budget', CACHE = ':cache';
  * key, through the runtime service), or disconnect it (the stored key is removed). Results stay in the window (owner 2026-10-08: slash output
  * only in a window); the key lives only in the entry and the one connect call: it is never drawn, pushed to scrollback or kept here.
  */
-export function ProviderPanel({ port, labels, push, openApproval, onError, onClose }: { readonly port: ProviderPanelPort; readonly labels: PanelLabels;
+export function ProviderPanel({ port, labels, push, openApproval, onError, onClose }: { readonly port: ProviderWindowPort; readonly labels: PanelLabels;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval?: (approvalId: string) => void; readonly onError: (error: unknown) => void;
   readonly onClose: () => void }) {
   const words = labels.provider;
@@ -111,6 +115,9 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     {...(openApproval ? { openApproval: (approvalId: string) => { openApproval(approvalId); onClose(); } } : {})} />;
   if (step.kind === 'grant') return <QuestionWindow title={step.question.title} lines={step.question.lines} hints={step.question.prompt} position={labels.position}
     onAnswer={value => step.answer(value === true)} />;
+  if (step.kind === 'subscription' && port.subscription) return <SubscriptionWindow port={port.subscription} kind={step.target} labels={labels} onBack={back}
+    onDone={outcome => setStep({ kind: 'connected', outcome })} />;
+  if (step.kind === 'refusal') return <LinesWindow title={step.title} lines={step.lines} hints={words.resultHints} position={labels.position} onClose={back} />;
   if (step.kind === 'result') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={back} />;
   // T4-B: a model connection's result; closing it leaves its one system summary line (and opens the approval card policy asked for).
   if (step.kind === 'connected') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={() => {
@@ -213,6 +220,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       setStep({ kind: 'busy' }); granting(() => port.secretGrant!.check!(target.keyName!), () => back()); return;
     }
     if (action === 'disconnect') { setStep({ kind: 'confirm', target }); return; }
+    if (action === 'login' && port.subscription) { setStep({ kind: 'subscription', target }); return; }
     if ((action === 'model' || action === 'connect') && port.siwc?.connection === target.id) { setStep({ kind: 'siwc' }); return; }
     if (action === 'model') {
       if (target.endpointEditable) setStep({ kind: 'endpoint', target, forModel: true }); else chooseModels(target, null);
@@ -224,9 +232,16 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
+  const tree = withRows(providerPanelTree(view, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
+    budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache));
+  // PV 2a: Enter on a CLI subscription this host cannot run opens its refusal card, which lists the rows that can be used here.
+  const refused = (outcome: PickerOutcome) => {
+    const shown = outcome.kind === 'blocked' && state.trail.length === 0 ? pickerView(tree, state) : null, row = shown?.rows[shown.pos], card = port.subscription;
+    if (!row || !card?.kinds.includes(row.id)) return;
+    setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
+  };
   return <PickerWindow title={title(view.title)} body={body} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
-    tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel), port.siwc?.connection), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))}
-    onResult={result => chosen(result, state)} />;
+    tree={tree} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
 const BODY_ROWS = 1;

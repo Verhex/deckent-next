@@ -4,9 +4,10 @@ import { isAbsolute, join } from 'node:path';
 import type { ModelConnectCommand } from '#domain/index.js';
 import { ModelConnectError, assertAuthorityWitness, type AuthorityWitness, type ConnectedAdapter } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, attestLocalInteractiveTerminal, headlessConnectionAdapter, headlessConsent, headlessOwnedLoginDir, localPrincipalChannel, localPrincipalPeer,
-  prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, shellSandboxCapabilities, type HeadlessLoginResult, type ProviderConnectKind } from '#adapters/index.js';
-import { ErrorRegistry, globalStateRoot, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, resolveProductLayout,
-  type ConfigLoadOptions } from '#platform/index.js';
+  prepareHeadlessConnection, readHeadlessLogins, readProviderConnectSeed, runHeadlessLogin, shellSandboxCapabilities, type HeadlessLoginResult,
+  type ProviderConnectKind } from '#adapters/index.js';
+import { ErrorRegistry, automationMarker, globalStateRoot, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath,
+  resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions } from '#platform/index.js';
 
 type Env = NodeJS.ProcessEnv;
 const stateRoot = (env: Env) => resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env).stateDir;
@@ -18,6 +19,15 @@ async function ownedLoginDir(family: string, env: Env): Promise<string> {
   return headlessOwnedLoginDir(family, resource);
 }
 const isolation = (env: Env) => async () => (await shellSandboxCapabilities(globalStateRoot(env))).bubblewrap;
+/** PV 2a: why a CLI subscription cannot run on this host before anything is chosen (the same typed refusal connect and login give), or null. */
+export async function headlessIsolationRefusal(options: ConfigLoadOptions = {}): Promise<Error | null> {
+  const capability = process.platform === 'linux' ? await isolation(options.env ?? process.env)().catch(() => null) : null;
+  return capability?.status === 'available' && capability.launcher ? null
+    : ErrorRegistry.createError('HEADLESS_ISOLATION_UNAVAILABLE', { params: { check: capability?.status === 'restricted' ? 'user-namespace' : 'launcher' } });
+}
+/** The person at this terminal: a controlling TTY and no AI-agent or CI marker of the installation's list (PV: an agent with a PTY tool is not the person). */
+export const headlessPersonWitness = (env: Env, agents: readonly string[]): AuthorityWitness =>
+  ({ attest: async () => automationMarker(env, agents) === null && await attestLocalInteractiveTerminal() });
 /**
  * S3-3: the CLI kind's connect ports. The adapter part is prepared once per command after the engine's person check (S3-5: the isolation realm
  * first, then executable, login dir — s3c: the Brain's own unless the person names one —, uid, preflight inside the realm; no model call), and the
@@ -45,6 +55,13 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
     },
   };
 }
+/** PV 3: the person check and the kind check of `models login`, then the Brain's own login dir (created 0700), so the `/provider` window can show it before anything starts. */
+export async function headlessLoginDir(connection: string, options: ConfigLoadOptions, witness: AuthorityWitness) {
+  await assertAuthorityWitness('models.login', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), witness);
+  const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(item => item.id === connection), family = kind?.connect?.personOnly ? kind.connect.protocolFamily : undefined;
+  if (!kind?.available || !family) throw ErrorRegistry.createError('MODEL_CONNECT_NOT_CONNECTABLE');
+  return { family, owned: await ownedLoginDir(family, options.env ?? process.env) };
+}
 /** The doctor's Brain-login rows (no spawn, nothing created): s3c each connection says whether it uses the Brain's own login dir. */
 export async function readConfiguredHeadlessLogins(section: unknown, scopeId: string, options: ConfigLoadOptions = {}) {
   const root = await realpath(configuredHeadlessLoginRoot(options)).catch(() => null);
@@ -58,10 +75,7 @@ export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: st
  */
 export async function loginConfiguredHeadless(command: HeadlessLoginCommand, options: ConfigLoadOptions, confirm: (dir: Readonly<{ configDir: string; owned: boolean }>) => Promise<boolean>,
   witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }): Promise<HeadlessLoginResult | null> {
-  await assertAuthorityWitness('models.login', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), witness);
-  const kind = PROVIDER_CONNECT_REGISTRY.kinds.find(item => item.id === command.connection), family = kind?.connect?.personOnly ? kind.connect.protocolFamily : undefined;
-  if (!kind?.available || !family) throw ErrorRegistry.createError('MODEL_CONNECT_NOT_CONNECTABLE');
-  const env = options.env ?? process.env, owned = await ownedLoginDir(family, env);
+  const { family, owned } = await headlessLoginDir(command.connection, options, witness), env = options.env ?? process.env;
   const configDir = command.configDir === undefined ? owned : isAbsolute(command.configDir) ? await realpath(command.configDir).catch(() => null) : null;
   if (!configDir) throw ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'config-dir' } });
   if (!await confirm({ configDir, owned: configDir === owned })) return null;

@@ -60,6 +60,7 @@ it('the person sees the exact dir on a card first, then the outcome (kind and pl
     expect(calls).toEqual([['login', { connection: 'claude-cli-subscription', sso: true }], ['signed']]);
     const shown = `${card.asked[0]!.body!.join('\n')}\n${out.text()}`;
     for (const word of words) expect(shown).toContain(word);
+    expect(out.text()).toMatch(/^\n/u); // PV 2e: the result starts on its own line after the CLI's own sign-in output
   }
   const f = await project(), calls: unknown[] = []; card.interactive = true; card.answers = [null];
   expect(await modelsCommand([...LOGIN, '--config-dir', '/home/p/other'], { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, stderr: capture().sink, ...handler(calls) } as never)).toBe(1);
