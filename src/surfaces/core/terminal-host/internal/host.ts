@@ -85,7 +85,7 @@ export async function openTerminalHost(options: TerminalHostOptions): Promise<Te
   const attention = options.attention === true && out.isTTY === true && options.clearScreen !== false;
   const realInput = stdin ?? process.stdin, request = options.theme;
   const probing = request !== undefined && request.capability !== 'none' && out.isTTY === true && realInput.isTTY === true;
-  const mouse = (fullscreen || attention || probing) && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
+  const mouse = realInput.isTTY === true && out.isTTY === true ? mouseFilteredInput(realInput) : null;
   // The probe reads the answer in raw mode (no echo, no line buffering); keys typed meanwhile wait in order for Ink, Ctrl+C ends the wait.
   const ask = () => mouse!.background.ask(query => { try { out.write(query); } catch { /* the terminal is gone */ } }, LIMITS.backgroundProbeMs);
   if (probing && reported === undefined) { try { realInput.setRawMode(true); } catch { /* not a raw-capable TTY */ } reported = await ask(); }

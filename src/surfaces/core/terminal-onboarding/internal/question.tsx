@@ -34,6 +34,7 @@ export function OnboardingQuestionView({ question, locale, finish, copy = null, 
       setCopied(result.ok ? fillTemplate(copy.labels.sent, { count: [...text].length }) : result.reason === 'too-large' ? fillTemplate(copy.labels.tooLarge, { bytes: result.bytes, max: copy.maxBytes }) : copy.labels.unavailable);
       return;
     }
+    if (key.return && (key.ctrl || key.meta)) return;
     if (key.escape) { send({ id: 'later' }); return; }
     if (key.ctrl && input === 'c') { send({ id: 'exit' }); return; }
     if (key.pageUp) { scroll(value => Math.max(0, value - bodyHeight)); return; }

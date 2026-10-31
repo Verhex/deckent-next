@@ -188,6 +188,7 @@ it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and ap
     await until(() => frame.includes('Preparing…'), 'preparing'); stdin.write('\r'); await until(() => frame.includes('keys ignored'), 'ignored key note');
     release(); await until(() => frame.includes('> Enter · Continue'), 'permission card'); await settle(200);
     expect(applied).toEqual([]); expect(main().split('Step 1/2').length - 1).toBe(1); expect(main()).not.toContain('Choose a profile');
+    for (const modified of ['\u001b[13;5u', '\u001b\r']) { stdin.write(modified); await settle(60); expect(applied).toEqual([]); }
     stdin.write('\r'); expect(await result).toBe('applied'); expect(applied).toEqual(['p'.repeat(64)]); expect(main()).not.toContain('Step 1/2');
   } finally { stdin.destroy(); stdout.destroy(); }
 });

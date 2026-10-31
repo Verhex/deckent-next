@@ -1,7 +1,10 @@
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BACKGROUND_QUERY, createFocusTracker, mouseFilteredInput, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
-import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
+import { createElement, Fragment } from 'react';
+import { useInput } from 'ink';
+import { openTerminalHost } from '#surfaces/core/terminal-host/index.js';
+import { WorklineApp, runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, WORKLINE_TEST_LABELS, settle, until } from '../support/workline-harness.js';
 
 // T2 (alpha.54): the terminal is asked for focus reports (mode 1004) and rings BEL only while it reported that its window lost focus.
@@ -69,6 +72,7 @@ describe('focus reports', () => {
       expect(await Promise.race([probe, settle(30).then(() => 'still open')]), `${at}`).toBeNull(); await settle(5); expect(seen.join('')).toBe(kitty);
     }
     read('\u001b[?62c'); filtered.close();
+    await kittyOpening();
   });
 });
 
@@ -154,3 +158,34 @@ describe('the terminal host', () => {
     await finish();
   });
 });
+
+/** R3: real host → Ink negotiation + useInput broadcast → onboarding automatic opening, with no composer dependency. */
+async function kittyOpening() {
+  const reply = '\u001b[?0u';
+  for (const fullscreen of [false, true]) for (const variant of ['whole', 'split', 'typed'] as const) {
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true, columns: 80, rows: 24 });
+    let output = '', prepared!: (value: unknown) => void;
+    const opening = new Promise(resolve => { prepared = resolve; }), typed: string[] = [], shown: string[] = [];
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    function Observer() { useInput(input => { typed.push(input); }); return null; }
+    const host = await openTerminalHost({ palette: resolveWorklinePalette('none'), stdin: stdin as never, stdout: stdout as never, fullscreen,
+      view: context => createElement(Fragment, null, createElement(Observer), createElement(WorklineApp, {
+        context: { installationId: 'i', projectId: 'p', scopeId: 's' }, labels: WORKLINE_TEST_LABELS, target: 'scope', systemPrompt: 'S', historyMessages: 10, completeTurn: async () => 'x', errorText: String,
+        ...(context.handover ? { handover: context.handover } : {}),
+        onboarding: { opening, modelDraft: 'D', waiting: () => 'WAITING', open: async () => null } as never,
+      })) });
+    try {
+      await host.flushed(); await until(() => output.includes('READY') && output.includes('\u001b[?u'), 'first frame and negotiation');
+      if (variant === 'whole') stdin.write(reply);
+      else for (const part of ['\u001b', '[?', '0', 'u']) { stdin.write(part); await settle(2); }
+      await until(() => output.includes('\u001b[>1u'), 'Ink enabled kitty');
+      // Every split, including a repeated late report after negotiation, stays out of every useInput subscriber.
+      for (let at = 1; at < reply.length; at++) { stdin.write(reply.slice(0, at)); stdin.write(reply.slice(at)); }
+      if (variant === 'typed') stdin.write(`x${reply}y`);
+      await settle(30); expect(typed.join(''), `${fullscreen}/${variant}`).toBe(variant === 'typed' ? 'xy' : '');
+      prepared({ total: 1, notice: null, show: async () => { shown.push('card'); return { intent: null, notice: { level: 'info', text: 'OPENED' } }; } });
+      await until(() => output.includes(variant === 'typed' ? 'WAITING' : 'OPENED'), 'automatic setup decision');
+      expect(shown).toEqual(variant === 'typed' ? [] : ['card']);
+    } finally { await host.close(); stdin.destroy(); stdout.destroy(); }
+  }
+}

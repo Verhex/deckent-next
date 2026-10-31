@@ -80,6 +80,7 @@ export function useTurnSteer(options: { readonly labels: QueueLabels | undefined
   const observe = useCallback((delta: TurnDelta) => {
     if (delta.kind === 'message' && delta.steerId) { const entry = take(delta.steerId); if (entry) latest.current.joined(entry.text); }
     if (delta.kind !== 'done') return;
+    for (const id of delta.steer?.joined ?? []) { const entry = take(id); if (entry) latest.current.joined(entry.text); }
     for (const item of delta.notices ?? []) if (!said.current.has(item.key)) { said.current.add(item.key); latest.current.push([systemSummaryEntry(item.text, 'warning')]); }
     giveBack((delta.steer?.returned ?? []).map(take).filter(entry => entry !== null), delta.finish === 'cancelled' || delta.finish === 'error');
   }, []);

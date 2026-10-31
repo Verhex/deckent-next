@@ -2,6 +2,7 @@ import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
+import { mountWorkline } from '../support/workline-harness.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalHandoffLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -80,6 +81,7 @@ describe('T3 Alt+Up takes the last queued message back (workline)', () => {
     expect(view.stdout.text).not.toContain('BACK:');
     turns.gates[1]!(); await until(() => view.stdout.text.includes('REPLY-2'), 'two answered once');
     expect(turns.sent).toEqual(['one', 'two']);
+    await finalSteerReconciliation();
   });
 });
 
@@ -124,3 +126,35 @@ describe('T4 Ctrl+G edits the draft in the external editor (workline)', () => {
     expect(terminalHandoffLabels('tr').withdrawn).not.toBe(terminalHandoffLabels('en').withdrawn);
   });
 });
+
+/** R2: final custody through the public Workline, including the conversation and subsequent queued turn. */
+async function finalSteerReconciliation() {
+  for (const path of ['final-only', 'message-and-final', 'returned', 'cancelled', 'error'] as const) {
+    let release!: () => void, id = '';
+    const gate = new Promise<void>(resolve => { release = resolve; }), sent: string[] = [];
+    const view = mountWorkline({ context: { installationId: 'i', projectId: 'p', scopeId: 's' }, labels: { ...labels, queue: { service: '', window: '', command: '', withdraw: '', more: '', steered: 'ADDED', steerFull: '', steerReturned: 'RETURN {text}', steerBack: 'BACK {text}' } },
+      streamTurn: async function* (messages, _signal, options) {
+        sent.push(String(messages.at(-1)?.content));
+        if (sent.length === 1) {
+          options?.onTurnBound?.({ scopeId: 's', sessionId: options?.sessionId ?? null, turnId: 't', phase: 'command-generated' }, async steerId => { id = steerId; return 'queued'; });
+          await gate;
+          if (path === 'message-and-final') yield { kind: 'message', steerId: id, message: { role: 'user', content: 'one intent' } };
+          const took = path === 'final-only' || path === 'message-and-final';
+          yield { kind: 'done', finish: path === 'cancelled' || path === 'error' ? path : 'stop', steer: { joined: took ? [id] : [], returned: took ? [] : [id] } };
+          yield { kind: 'done', finish: 'stop', steer: { joined: took ? [id] : [], returned: took ? [] : [id] } };
+        } else yield { kind: 'done', finish: 'stop' };
+      } });
+    try {
+      await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('start\r');
+      await until(() => sent.length === 1, 'bound turn'); view.stdin.write('one intent'); await settle(); view.stdin.write('\u001b[13;5u');
+      await until(() => Boolean(id) && view.stdout.frame.includes('ADDED'), `line pending (${path})`); release();
+      await until(() => view.stdout.frame.includes('READY') && !view.stdout.frame.includes('ADDED'), 'final settled'); await settle(60);
+      if (path === 'final-only' || path === 'message-and-final') {
+        expect(view.stdout.frame.match(/one intent/gu), path).toHaveLength(1);
+        expect(view.stdout.frame, path).not.toContain('> one intent'); expect(view.stdout.text).not.toMatch(/BACK one intent|RETURN one intent/u);
+      } else if (path === 'returned') { expect(sent).toEqual(['start', 'one intent']); expect(view.stdout.text).toContain('RETURN one intent'); }
+      else { expect(view.stdout.frame, path).toContain('> one intent'); expect(view.stdout.text).toContain('BACK one intent'); }
+      expect(sent, path).toEqual(path === 'returned' ? ['start', 'one intent'] : ['start']);
+    } finally { release(); view.instance.unmount(); view.stdin.destroy(); view.stdout.destroy(); }
+  }
+}
