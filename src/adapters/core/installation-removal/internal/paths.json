@@ -43,6 +43,9 @@
     ],
     "treeScanCache": [
       "^[a-f0-9]{64}\\.json$"
+    ],
+    "compileCache": [
+      "^v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+$"
     ]
   },
   "sharedSecretFiles": [

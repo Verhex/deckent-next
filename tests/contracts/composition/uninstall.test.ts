@@ -85,6 +85,10 @@ it('applies the confirmed real temp cache through the production broker and gene
     await writeFile(join(data, AREA, 'cache'), 'DISPOSABLE', { mode: 0o600 });
     // M1: a private same-user file in the canonical cache tree has no owner record; it is kept and listed.
     await writeFile(join(data, 'state/scratch/customer-record'), 'KEEP', { mode: 0o600 });
+    // P5a: the CLI compile cache under this global root: Node's per-version directory is its member; a stray beside it is kept.
+    const compiled = join(data, `state/compile-cache/v26.13.0-x64-0123abcd-${process.getuid!()}`);
+    await mkdir(compiled, { recursive: true, mode: 0o700 }); await writeFile(join(compiled, '89abcdef'), 'CODE', { mode: 0o600 });
+    await writeFile(join(data, 'state/compile-cache/stray'), 'KEEP', { mode: 0o600 });
     const actor = readLocalOsIdentity();
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval'].map(kind => ({
       id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' },
@@ -115,15 +119,18 @@ it('applies the confirmed real temp cache through the production broker and gene
     const result = await applyConfiguredUninstall(project, command, { confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; } }, options);
     expect(plan.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'remove', members: [join(data, AREA)] });
     expect(plan.items.find(item => item.locator === join(data, 'state/scratch/customer-record'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
+    expect(plan.items.find(item => item.resourceId === 'compileCache')).toMatchObject({ action: 'remove', members: [compiled] });
     expect(result.status).toBe('completed'); expect(cards).toBe(1);
     await expect(lstat(join(data, 'state/scratch', 'a'.repeat(32)))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(compiled)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(data, 'state/compile-cache/stray'), 'utf8')).toBe('KEEP');
     expect(await readFile(join(data, 'state/scratch/customer-record'), 'utf8')).toBe('KEEP');
     expect(await readFile(join(project, '.deckent/keep'), 'utf8')).toBe('PROJECT');
     expect(await lstat(ledger)).toBeTruthy(); expect(await lstat(join(data, 'approvals', keyFile))).toBeTruthy();
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await applyConfiguredUninstall(project, { ...command, commandId: 'replay' }, { confirm: async () => true }, options)).status).toBe('noop');
     const effects = JSON.parse(await readFile(join(result.recoveryLocation!, 'effects.json'), 'utf8'));
-    expect(effects.body.records).toHaveLength(1); expect(effects.body.records[0]).toMatchObject({ state: 'settled', intent: { approval: { approvalId: expect.any(String) } } });
+    expect(effects.body.records).toHaveLength(2);   // one settled removal per cache resource (scratch, compileCache)
+    for (const record of effects.body.records) expect(record).toMatchObject({ state: 'settled', intent: { approval: { approvalId: expect.any(String) } } });
   } finally { tail.at = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 

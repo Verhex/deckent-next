@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,7 +34,7 @@ async function staticReach(entry: string) {
 // Packages whose import cost is large enough that a process must opt in (dynamic import) rather than inherit them.
 const HEAVY = ['ink', 'react', '@modelcontextprotocol/server', '@modelcontextprotocol/client'];
 const entries = { 'SDK entry': 'index.js', 'extensions entry (before runCli/runMcp)': 'extensions.js',
-  'CLI entry (`--version`, `runtime serve`, every subcommand)': 'composition/core/cli/internal/entry.js' };
+  'CLI entry (`--version`, `runtime serve`, every subcommand)': 'composition/core/cli/internal/entry.js', 'CLI behind the bootstrap': 'composition/core/cli/internal/cli-main.js' };
 
 for (const [label, entry] of Object.entries(entries)) {
   it(`${label} statically reaches none of the heavy packages`, async () => {
@@ -59,9 +59,42 @@ it('the inlined server-info meta key equals the SDK constant it replaces', async
 // ~1000 modules, ~0.33 s of a ~0.45 s start), nor the CLI host that binds every composition unit; a command loads them on its first call.
 const HOST_GRAPH = ['adapters/index.js', 'engine/index.js', 'composition/core/root/index.js', 'composition/core/cli/internal/host.js', 'surfaces/core/cli-observe/index.js'];
 
-it('the CLI entry statically reaches none of the host graph (adapters, engine, composition root, CLI host)', async () => {
-  const { files } = await staticReach(resolve(dist, 'composition/core/cli/internal/entry.js'));
+// P5a (owner 2026-10-31): the bin is a bootstrap that loads only the platform common unit (node: built-ins, registry JSON) before Node's compile
+// cache is on; the cache lives only in an existing private global state root, so a call before any installation writes nothing in HOME.
+it('the CLI bootstrap reaches only the common unit and the CLI none of the host graph; the compile cache lives only in a private global root', async () => {
+  const boot = await staticReach(resolve(dist, 'composition/core/cli/internal/entry.js'));
+  expect([...boot.files].map(file => relative(dist, file)).filter(file => file !== 'composition/core/cli/internal/entry.js' && !file.startsWith('platform/core/common/'))).toEqual([]);
+  expect([...boot.packages.keys()]).toEqual([]);
+  const { files } = await staticReach(resolve(dist, 'composition/core/cli/internal/cli-main.js'));
   expect(HOST_GRAPH.filter(path => files.has(resolve(dist, path)))).toEqual([]);
+  if (process.platform === 'win32') return;   // the cache needs POSIX ownership; Windows runs without it
+  const home = await mkdtemp(join(tmpdir(), 'deckent-compile-cache-'));
+  try {
+    const cache = join(home, '.deckent/state/compile-cache'), entry = resolve(dist, 'composition/core/cli/internal/entry.js');
+    const run = (argv: string[], env: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, [entry, ...argv], { cwd: home, encoding: 'utf8', env: { PATH: process.env['PATH'] ?? '', HOME: home, ...env } });
+    const listing = async () => (await readdir(cache, { recursive: true })).sort();
+    run([]); expect(run(['--version']).status).toBe(0);
+    expect(await readdir(home)).toEqual([]);   // no global root yet: nothing is created
+    await mkdir(join(home, '.deckent'), { mode: 0o700 });
+    run([], { DECKENT_DISABLE_COMPILE_CACHE: '1' });
+    expect(await readdir(join(home, '.deckent'))).toEqual([]);   // the registered off switch
+    run([]);   // the bare terminal fills the cache
+    const [versioned] = await readdir(cache), filled = await listing();
+    expect(versioned).toMatch(/^v\d+\.\d+\.\d+-/u);
+    expect([(await stat(cache)).mode & 0o777, (await stat(join(cache, versioned!))).mode & 0o777]).toEqual([0o700, 0o700]);
+    expect(filled.length).toBeGreaterThan(1);
+    // Any other command only reads it (or runs without it before Node 26.8): `--help --all` loads modules the bare call did not, and writes none.
+    expect(run(['--help', '--all']).status).toBe(0);
+    expect(await listing()).toEqual(filled);
+    // A non-default global root (DECKENT_GLOBAL_HOME elsewhere) is not sealed by every agent floor: no cache is read or written there or here.
+    const other = join(home, 'other-root'); await mkdir(join(other, 'state/compile-cache'), { recursive: true, mode: 0o700 });
+    run([], { DECKENT_GLOBAL_HOME: other }); run(['--help'], { DECKENT_GLOBAL_HOME: other });
+    expect(await readdir(join(other, 'state/compile-cache'))).toEqual([]); expect(await listing()).toEqual(filled);
+    // A cache directory others may write is never used.
+    await chmod(cache, 0o755); await rm(join(cache, versioned!), { recursive: true });
+    run([]);
+    expect(await readdir(cache)).toEqual([]);
+  } finally { await rm(home, { recursive: true, force: true }); }
 });
 
 it.each([['--version'], ['--help'], ['operation', '--help'], ['--help', '--all', '--lang', 'tr'], ['no-such-command']].map(argv => [argv.join(' '), argv] as const))('`deckent %s` loads none of the host graph at run time', async (_label, argv) => {
@@ -96,7 +129,7 @@ it('a closed stdout reader ends the CLI quietly with 141', async () => {
 // A lazy edge fails only when its command runs, so every `import()` target of the CLI start path must load from the build (the names are
 // pinned by the type checker through `lazyFunction`).
 it('every lazy edge of the CLI start path loads from the build', async () => {
-  const sources = ['composition/core/cli/internal/entry.js', 'surfaces/index.js', 'surfaces/core/cli/internal/entry.js', 'surfaces/core/cli/internal/kernel-commands.js'];
+  const sources = ['composition/core/cli/internal/entry.js', 'composition/core/cli/internal/cli-main.js', 'surfaces/index.js', 'surfaces/core/cli/internal/entry.js', 'surfaces/core/cli/internal/kernel-commands.js'];
   const targets = new Set<string>();
   for (const source of sources) {
     for (const match of (await readFile(resolve(dist, source), 'utf8')).matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)) {

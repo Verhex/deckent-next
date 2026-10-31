@@ -1,6 +1,6 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { globalStateRoot, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
+import { globalStateRoot, PRODUCT_LAYOUT_REGISTRY, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceScope, CREDENTIAL_WORKSPACE_DENY, DEFAULT_WORKSPACE_READ_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
@@ -44,20 +44,24 @@ export function agentAuthorityPaths(projectRoot: string, layout: ProductLayout):
 /**
  * OPEN-SANDBOX (owner MODES-3 checkpoint 4): the hard floor of a full-access turn's open shell view (`ShellSandboxLayout.hardFloor`). Roots: the
  * project's `.deckent` (MCP registry's directory), the data root, the bootstrap configuration's directory unless it holds the project, the global
- * state root of the configuration and process environments, an existing conventional `~/.deckent` (never created). Credentials: the Core read
+ * state root of the configuration and process environments, the conventional `~/.deckent` (sealed even before it exists, P5a). Credentials: the Core read
  * floor without repository internals. `product` (owner Y, 2026-09-30): registry resources under this and the default layout, the data root, the
  * bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads — any other existing subdirectory of a sealed root is the project's.
  */
 export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, environments: readonly Readonly<Record<string, string | undefined>>[]): NonNullable<ShellSandboxLayout['hardFloor']> {
   const bootstrap = dirname(layout.bootstrapConfigPath), rel = relative(bootstrap, projectRoot);
-  const roots = [join(projectRoot, dirname(MCP_PROJECT_REGISTRY_PATH)), layout.root, ...(rel === '' || !rel.startsWith('..') && !isAbsolute(rel) ? [] : [bootstrap])];
+  const roots = [join(projectRoot, dirname(MCP_PROJECT_REGISTRY_PATH)), layout.root, ...(rel === '' || !rel.startsWith('..') && !isAbsolute(rel) ? [] : [bootstrap])], globals: string[] = [];
   for (const environment of environments) {
     const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
-    roots.push(...resolved ? [resolved] : [], ...conventional && conventional !== resolved && existsSync(conventional) ? [conventional] : []);
+    // P5a (lead 2026-10-31): the conventional root is sealed even before it exists (the view creates it 0700): nothing can be planted for a later CLI.
+    globals.push(...resolved ? [resolved] : [], ...conventional && conventional !== resolved ? [conventional] : []);
   }
+  roots.push(...globals);
   const credentials = CREDENTIAL_WORKSPACE_DENY.map(createGlobMatcher);
   const inProject = (path: string) => relative(projectRoot, path).split(sep).join('/'), resources = Object.keys(layout.resources) as ProductResource[];
-  const products = [...[layout, resolveProductLayout({ projectRoot })].flatMap(each => resources.map(resource => inProject(productResourcePath(each, resource)))),
+  // P5a: a global state root's own registry resources (the CLI compile cache, `state/…`) are product paths too when that root lies in the project.
+  const layouts = [layout, resolveProductLayout({ projectRoot }), ...globals.map(root => resolveProductLayout({ projectRoot: root, root, bootstrapConfigPath: join(root, PRODUCT_LAYOUT_REGISTRY.resources.config) }))];
+  const products = [...layouts.flatMap(each => resources.map(resource => inProject(productResourcePath(each, resource)))),
     inProject(layout.root), inProject(layout.bootstrapConfigPath), MCP_PROJECT_REGISTRY_PATH, ...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.startsWith(`${dirname(MCP_PROJECT_REGISTRY_PATH)}/`)).map(pattern => pattern.split('/*')[0]!)];
   return Object.freeze({ roots: Object.freeze([...new Set(roots)]), homeDenied: (path: string) => credentials.some(match => match(path)), product: (path: string) =>
     products.some(product => product === path || product.startsWith(`${path}/`) || path.startsWith(`${product}/`)) });
