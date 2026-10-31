@@ -65,8 +65,8 @@
     "report:ai-floor": "node scripts/ai-floor-report.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.3.1",
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@xterm/addon-unicode11": "0.9.0",
     "@xterm/headless": "6.0.0",
     "ink": "7.1.1",
@@ -87,5 +87,16 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true
+  },
+  "overrides": {
+    "@modelcontextprotocol/client": {
+      "zod": "4.6.7"
+    },
+    "@modelcontextprotocol/server": {
+      "zod": "4.6.7"
+    },
+    "@modelcontextprotocol/core": {
+      "zod": "4.6.7"
+    }
   }
 }
