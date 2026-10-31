@@ -77,6 +77,8 @@ it('reports daemon-attested filesystem proof separately in EN/TR and locale-free
   expect(JSON.parse(formatBeuserReport(value, { json: true, locale: 'tr' }))).toEqual(value);
   const tr = formatBeuserReport(value, { json: false, locale: 'tr' }), en = formatBeuserReport(value, { json: false, locale: 'en' });
   expect(tr).toContain('daemon-attested'); expect(tr).toContain('bağımsız dosya sistemi kanıtı yok');
+  expect(en).toContain('Walker onboarding:'); expect(en).toContain('Judge for onboarding:');
+  expect(tr).toContain('Yürüyücü onboarding:'); expect(tr).toContain('onboarding yargıcı:');
   expect(en).toContain('daemon-attested'); expect(en).toContain('no independent filesystem proof');
   expect(() => formatBeuserReport({ ...value, cleanup: [{ ...value.cleanup[0], filesystemProof: { schemaVersion: 1, source: 'rm-exit' } }] }, { json: true, locale: 'en' })).toThrow();
 });

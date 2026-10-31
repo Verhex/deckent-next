@@ -3,12 +3,13 @@ import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import type { BeuserReport } from '#engine/index.js';
 import { formatBeuserReport } from './report.js';
-type Model = { readonly channelId: string; readonly modelId: string };
+type Model = { readonly channelId: string; readonly modelId: string; readonly recommended?: boolean; readonly subscription?: boolean };
 /** The one-command walk's setup step (no `--scope`): the private controller, its connected models and, once a model is chosen, the candidate and limits. */
-type SetupResult = { status: string; digest?: string; admission?: unknown; controller?: { root: string; scopeId: string | null }; models?: readonly Model[];
-  candidate?: { root: string; version: string; revision: string }; limits?: { maxSteps: number; maxWallMs: number; maxCalls: number; maxCost: number; currency: string } };
+type SetupResult = { status: string; digest?: string; admission?: unknown; controller?: { root: string; scopeId: string | null }; models?: readonly Model[]; ceiling?: number; independence?: string; completionTokens?: number;
+  slots?: { before: { executionSlots: number; inFlightSlots: number } | null; after: { executionSlots: number; inFlightSlots: number } };
+  candidate?: { root: string; version: string; revision: string }; limits?: { maxSteps: number; maxWallMs: number; maxCalls: number; maxTokens: number; maxCost: number; currency: string } };
 type SetupInput = { scopeId: string; profile: string; apply: boolean; expect?: string }
-  | { journey: string; candidate?: string | undefined; choice?: Model | undefined; apply: boolean; expect?: string | undefined };
+  | { journey: string; candidate?: string | undefined; walkers?: readonly Model[] | undefined; evaluator?: Model | undefined; apply: boolean; expect?: string | undefined };
 const MS_PER_MINUTE = 60_000;
 type Card = (request: Parameters<typeof askCliCard>[0]) => Promise<string | null>;
 export interface BeuserCommandContext extends CliBaseContext {
@@ -81,17 +82,41 @@ async function walkOneCommand(journey: string, candidate: string | undefined, js
   const at = { controller: terminalSafeText(controller?.root ?? '') }, cancelled = () => emit(t('beuser.walk.cancelled', {}, locale), sinks);
   if (!controller?.scopeId || !models.length) { emit(t('beuser.walk.connect', at, locale), { ...sinks, level: 'warning' }); throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE'); }
   const label = (model: Model) => terminalSafeText(`${model.channelId} / ${model.modelId}`);
-  const picked = await card({ title: t('beuser.walk.model', {}, locale), body: [t('beuser.walk.modelBody', at, locale)], initial: '0', // the recommended model is preselected, never silent
-    options: models.map((model, index) => ({ id: String(index), label: index ? label(model) : t('beuser.walk.recommended', { model: label(model) }, locale) })) });
-  const choice = picked === null ? undefined : models[Number(picked)];
+  const selected = new Set(models.flatMap((model, index) => model.recommended ? [index] : []));
+  const ceiling = step.ceiling!;
+  let selectionError = '';
+  for (;;) {
+    const picked = await card({ title: t('beuser.walk.model', {}, locale),
+      body: [t('beuser.walk.modelBody', { ...at, ceiling }, locale), ...(selectionError ? [selectionError] : [])], initial: 'continue',
+      options: [...models.map((model, index) => ({ id: String(index), label: `${selected.has(index) ? '[x]' : '[ ]'} ${model.recommended ? t('beuser.walk.recommended', { model: label(model) }, locale) : label(model)}` })),
+        { id: 'continue', label: t('beuser.walk.continue', {}, locale) }] });
+    if (picked === null) { cancelled(); return; }
+    if (picked === 'continue') {
+      if (selected.size > 0 && selected.size <= ceiling) break;
+      selectionError = t('beuser.walk.selectionLimit', { ceiling, count: selected.size }, locale); continue;
+    }
+    const index = Number(picked);
+    if (models[index]) { if (selected.has(index)) selected.delete(index); else selected.add(index); }
+  }
+  const walkers = [...selected].sort((a, b) => a - b).map(index => ({ channelId: models[index]!.channelId, modelId: models[index]!.modelId }));
+  const preferred = models.findIndex(model => model.recommended && model.subscription), first = models.findIndex(model => model.recommended);
+  const judge = await card({ title: t('beuser.walk.judge', {}, locale), body: [t('beuser.walk.judgeBody', {}, locale)], initial: String(preferred >= 0 ? preferred : Math.max(0, first)),
+    options: models.map((model, index) => ({ id: String(index), label: label(model) })) });
+  const choice = judge === null ? undefined : models[Number(judge)];
   if (!choice) { cancelled(); return; }
-  const preview = await context.setupBeuser('', { ...input, choice }, options), limits = preview.limits!, chosen = preview.candidate!;
+  const evaluator = { channelId: choice.channelId, modelId: choice.modelId };
+  const preview = await context.setupBeuser('', { ...input, walkers, evaluator }, options), limits = preview.limits!, chosen = preview.candidate!, slots = preview.slots!;
   const answer = await card({ title: t('beuser.walk.card', {}, locale), body: [t('beuser.walk.cardBody', { journey: terminalSafeText(journey), version: terminalSafeText(chosen.version),
-    revision: terminalSafeText(chosen.revision), model: label(choice), steps: limits.maxSteps, minutes: Math.ceil(limits.maxWallMs / MS_PER_MINUTE), calls: limits.maxCalls, cost: limits.maxCost,
-    currency: terminalSafeText(limits.currency), digest: preview.digest ?? '' }, locale)],
-  options: [{ id: 'apply', role: 'yes', label: t('beuser.setup.apply', {}, locale) }, { id: 'cancel', role: 'no', label: t('beuser.setup.cancel', {}, locale) }] });
+    revision: terminalSafeText(chosen.revision), steps: limits.maxSteps, minutes: Math.ceil(limits.maxWallMs / MS_PER_MINUTE), calls: limits.maxCalls * walkers.length, cost: limits.maxCost * walkers.length,
+    tokens: limits.maxTokens * walkers.length, currency: terminalSafeText(limits.currency), digest: preview.digest ?? '' }, locale),
+    ...walkers.map((walker, index) => t('beuser.walk.walker', { index: index + 1, model: label(walker), cost: limits.maxCost, currency: limits.currency,
+      tokens: limits.maxTokens, completion: preview.completionTokens! }, locale)),
+    t('beuser.walk.evaluator', { model: label(evaluator), independence: preview.independence ?? 'unknown' }, locale),
+    t('beuser.walk.slots', { before: slots.before ? `${slots.before.executionSlots}/${slots.before.inFlightSlots}` : t('beuser.walk.newPool', {}, locale),
+      after: `${slots.after.executionSlots}/${slots.after.inFlightSlots}`, ceiling }, locale)],
+    options: [{ id: 'apply', role: 'yes', label: t('beuser.setup.apply', {}, locale) }, { id: 'cancel', role: 'no', label: t('beuser.setup.cancel', {}, locale) }] });
   if (answer !== 'apply') { cancelled(); return; }
-  const applied = await context.setupBeuser('', { ...input, choice, apply: true, expect: preview.digest }, options);
+  const applied = await context.setupBeuser('', { ...input, walkers, evaluator, apply: true, expect: preview.digest }, options);
   if (applied.status !== 'applied' && applied.status !== 'current') { emit(t('beuser.setup.result', { status: applied.status, digest: applied.digest ?? '' }, locale), sinks); return; }
   const report = await context.walkBeuser(controller.root, { scopeId: controller.scopeId, journey, candidate: chosen.root }, options, context.signal);
   emit(formatBeuserReport(report, { json, locale }), sinks);
