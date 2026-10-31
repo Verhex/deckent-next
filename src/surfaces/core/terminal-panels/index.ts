@@ -11,3 +11,4 @@ export { ConfigRecordWindow } from './internal/config-records.js';
 export { PolicyPanel } from './internal/policy-panel.js';
 export { BudgetWindow, budgetEntry } from './internal/budget-panel.js';
 export { WorkspaceWindow } from './internal/workspace-panel.js';
+export { ThemePanel } from './internal/theme-panel.js';

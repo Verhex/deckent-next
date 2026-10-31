@@ -57,6 +57,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
   { name: 'setup', group: 'settings', descriptionKey: 'terminal.slash.setup' },
   { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
+  { name: 'theme', group: 'settings', descriptionKey: 'tui.theme.slash' },
   // T4 PROVIDER-CONNECT: connect a provider (masked key, free check, secret store) or disconnect it; a window only.
   { name: 'provider', group: 'settings', descriptionKey: 'terminal.slash.provider' },
   { name: 'monitor', group: 'info', descriptionKey: 'terminal.slash.monitor' },

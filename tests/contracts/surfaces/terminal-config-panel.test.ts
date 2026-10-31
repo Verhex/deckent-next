@@ -12,6 +12,7 @@ import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 import { configPanelPort, configSchemaChoices, configShortcut, configSlash, configTtySlash, type ConfigCommandContext } from '#surfaces/core/config/index.js';
 import { configPanelTree } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
+import { themePanelPort } from '#surfaces/core/cli-terminal/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 
 // T3 L4 PANELS — `/config`: the window's port over the L2 write path, its policy locks (a read, never a write), the `key=value` shortcut and
@@ -41,7 +42,7 @@ function context(permissions: readonly ConfigWritePermission[] | Error | null, s
   principal = true): ConfigCommandContext {
   const app = {
     inspect: async () => ({ schemaVersion: 1, digest: null, layer: 'project', fields: FIELDS }),
-    explain: async () => ({ apply: 'live' }),
+    explain: async () => FIELDS[0],
     permissions: async () => { if (permissions instanceof Error) throw permissions; return permissions; },
     submit: async (action: string, input: Record<string, unknown>) => { seen.push({ action, input });
       return outcome ?? { status: 'applied', approvalId: null, result: { keyPath: input['keyPath'], layer: input['layer'], beforeDigest: null, afterDigest: digest('x'), backupPath: null, overridden: false } }; },
@@ -96,6 +97,19 @@ describe('/config window port', () => {
     const held = await configPanelPort(root, context([], [], pending), options, 'en').write({ action: 'set', keyPath: 'max_workers', value: 2, layer: 'project' });
     expect(held).toMatchObject({ status: 'approval-pending', approvalId: 'appr-9' });
     expect(held.lines.join('\n')).toContain('Nothing was written');
+    // TH-A L4: the new human picker reuses exactly the global submit path, including pending command custody.
+    const appliedThemes: string[] = [], themeSeen: { action: string; input: Record<string, unknown> }[] = [];
+    const runtime = { setting: 'auto' as const, capability: 'truecolor' as const, background: () => '#f0ece5', apply: (value: string) => { appliedThemes.push(value); } };
+    const theme = themePanelPort(root, context([], themeSeen), options, 'tr', runtime);
+    expect((await theme.inspect()).choices).toHaveLength(9);
+    expect(theme.palette('light').link.color).toBe('#0B6A9E');
+    expect(() => theme.palette('not-a-theme')).toThrow(); expect(themeSeen).toEqual([]);
+    theme.apply('light'); await theme.write('light');
+    expect(appliedThemes).toEqual(['light']);
+    expect(themeSeen[0]).toMatchObject({ action: 'set', input: { keyPath: 'terminal.theme', value: 'light', layer: 'global', scopeId: 'scope' } });
+    const themeHeld = await themePanelPort(root, context([], [], pending), options, 'en', runtime).write('dark');
+    expect(themeHeld.status).toBe('approval-pending'); expect(themeHeld.approvalId).toBe('appr-9');
+    expect(themeHeld.lines.join('\n')).toContain('Nothing was written');
   });
   it('an entry is read by the key\'s own schema: the text itself, else its JSON; a value that does not fit says what it takes and is not sent', async () => {
     composeCore();

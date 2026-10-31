@@ -15,3 +15,4 @@ export { providerPanelPort, providerOutcomeWord } from '#surfaces/core/terminal-
 export { cachePanelPort, cachePaybackReuses } from './internal/cache-panel.js';
 export { protocolPanelPort } from './internal/protocol-panel.js';
 export { policyPanelPort } from './internal/policy-panel.js';
+export { themePanelPort } from './internal/theme-panel.js';

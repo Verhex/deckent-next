@@ -6,7 +6,7 @@ import { cells, wrapCells } from './text-width.js';
  */
 /** SW-1: information-window roles (section header, bold key, muted id, chip states, selected row) ride the same span path. */
 export type SpanRole = 'model' | 'provider' | 'accent' | 'muted' | 'code' | 'link' | 'info' | 'success' | 'warning' | 'error' | 'modeIndicator' | 'diffAdded' | 'diffRemoved'
-  | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'selection';
+  | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'selection' | 'assistantLabel' | 'assistant' | 'stateConnected' | 'stateDisconnected';
 export type Span = Readonly<{ text: string; role?: SpanRole; bold?: boolean; italic?: boolean; strike?: boolean;
   /** Trusted classifier marker identity; a literal look-alike in input never carries this field. */
   hiddenCodePoint?: number }>;
