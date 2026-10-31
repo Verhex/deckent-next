@@ -49,6 +49,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: composerShortcuts(locale),
     placeholder: t('terminal.workline.placeholder', {}, locale), stashed: t('terminal.composer.stashed', {}, locale),
+    steerPlaceholder: { kitty: t('tuiqueue.steerPlaceholder.kitty', {}, locale), other: t('tuiqueue.steerPlaceholder.other', {}, locale) },
     slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
       .map(key => [key, catalog[key] ?? key])) };
 }
@@ -56,7 +57,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
 /** The keyboard help panel: the composer's lines with T3 (Alt+Up) and T4 (Ctrl+G) from their own families placed before the closing `?` line. */
 function composerShortcuts(locale: Locale): string {
   const lines = t('terminal.composer.shortcuts', {}, locale).split('\n');
-  return [...lines.slice(0, -1), t('tuiqueue.shortcut', {}, locale), t('tuieditor.shortcut', {}, locale), ...lines.slice(-1)].join('\n');
+  return [...lines.slice(0, -1), t('tuiqueue.shortcut', {}, locale), t('tuiqueue.steerShortcut', {}, locale), t('tuieditor.shortcut', {}, locale), ...lines.slice(-1)].join('\n');
 }
 
 /** T3/T4: a message taken back out of the queue and an editor that left the draft as it was (tuiqueue.*, tuieditor.*). */

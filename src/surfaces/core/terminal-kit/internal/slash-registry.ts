@@ -1,4 +1,6 @@
-/** Slash command registry — behavior contract; full catalog ports from legacy repl incrementally. */
+import SUGGEST from './slash-suggest.json' with { type: 'json' };
+
+/** Slash command registry — behavior contract; full catalog ports from legacy repl incrementally. Names are English only (owner S4). */
 export interface SlashCommand {
   readonly name: string;
   readonly descriptionKey: string;
@@ -9,6 +11,8 @@ export interface SlashCommand {
   readonly argumentKey?: string;
   /** The rich terminal keeps the typed argument because no window takes its place (SLASH-WINDOWS I-1 runs every other command bare). */
   readonly typedArgument?: true;
+  /** The CLI command this one hands to the person's shell, shown and copied exactly (owner S4: `/uninstall` never removes in the terminal). */
+  readonly shellCommand?: string;
 }
 
 /** The groups `/help` lists commands under, in display order; each heading is a catalog text (`labelKey`). */
@@ -63,6 +67,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'scope', group: 'info', descriptionKey: 'terminal.slash.scope' },
   // M2 follow-up: which exact catalog model holds which tier/roles (the `deckent models roles show` view); read-only, assigning stays `models roles set`.
   { name: 'roles', group: 'info', descriptionKey: 'terminal.slash.roles' },
+  // Owner S4 (alpha.60): explains removal and gives the copyable `deckent uninstall`; removal itself runs in the shell, never in this terminal.
+  { name: 'uninstall', group: 'settings', descriptionKey: 'terminal.slash.uninstall', shellCommand: 'deckent uninstall' },
   { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
@@ -142,6 +148,33 @@ export function slashHelpText(labels: Readonly<Record<string, string>>, commands
     return [[labels[group.labelKey] ?? group.id, ...rows].join('\n')];
   }).join('\n\n');
   return labels[SLASH_HELP_TITLE_KEY] ? `${labels[SLASH_HELP_TITLE_KEY]}\n${groups}` : groups;
+}
+
+/** Edits between two names (insert, delete, change, swap of neighbours: the optimal string alignment distance). */
+function editDistance(a: string, b: string): number {
+  const rows = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+    rows[i]![j] = Math.min(rows[i - 1]![j]! + 1, rows[i]![j - 1]! + 1, rows[i - 1]![j - 1]! + cost);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) rows[i]![j] = Math.min(rows[i]![j]!, rows[i - 2]![j - 2]! + 1);
+  }
+  return rows[a.length]![b.length]!;
+}
+
+/**
+ * The one command an unknown typed name most likely meant (git/npm "did you mean"): the shortest command it begins, else the closest within
+ * `maxDistance` edits and one edit per `lettersPerEdit` letters (registry data `slash-suggest.json`). A tie, a name in another alphabet
+ * (`/kaldır`: commands are English, it is no typo) or nothing near gives null — never a wrong confident suggestion.
+ */
+export function nearestSlashCommand(name: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): SlashCommand | null {
+  const typed = name.toLowerCase();
+  if (!/^[a-z0-9-]+$/u.test(typed)) return null;
+  const prefixed = commands.filter(command => command.name.startsWith(typed)).sort((a, b) => a.name.length - b.name.length);
+  if (prefixed.length) return prefixed.length > 1 && prefixed[1]!.name.length === prefixed[0]!.name.length ? null : prefixed[0]!;
+  const allowed = Math.min(SUGGEST.maxDistance, Math.floor(typed.length / SUGGEST.lettersPerEdit));
+  const near = commands.map(command => ({ command, distance: editDistance(typed, command.name) })).filter(item => item.distance <= allowed)
+    .sort((a, b) => a.distance - b.distance);
+  return near.length === 0 || (near.length > 1 && near[1]!.distance === near[0]!.distance) ? null : near[0]!.command;
 }
 
 export function parseSlashLine(line: string): { command: string; args: string } | null {

@@ -77,7 +77,7 @@ export type McpStartNotice =
   | { readonly kind: 'start-failed'; readonly name: string; readonly failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'> }
   | { readonly kind: 'tools-changed'; readonly name: string; readonly count: number }
   | { readonly kind: 'not-recorded'; readonly name: string }
-  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string; readonly detail?: string }
+  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string; readonly detail?: string | undefined }
   /** K1: trusted, but the approver's grant for its tools was not written (the reason: `delegation`, `unsupported`, …). */
   | { readonly kind: 'grant-refused'; readonly name: string; readonly reason: string } | { readonly kind: 'secret-refused'; readonly name: string; readonly key: string; readonly scope: string; readonly code: string };
 /** Renders one notice as owner-facing text (the host's catalog, in its locale). */

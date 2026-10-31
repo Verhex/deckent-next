@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentToolClass, AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult, ModelReference } from '#domain/index.js';
+import type { AgentToolClass, AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnNotice, ChatTurnResult, ChatTurnSteer, ChatTurnSteerResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import type { PanelTurnBinding, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import type { PanelTurnBinding, TurnDelta, TurnSteer } from '#surfaces/core/terminal-kit/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
 
 /** Runtime `chatTurn` / `cancelChatTurn` (v12); the shipped executable wires the local runtime client. */
@@ -19,6 +19,10 @@ export interface TerminalAgentTurnPorts {
   credential?(projectRoot: string, options: ConfigLoadOptions, reference: ModelReference | undefined, scopeId: string): Promise<void>;
   /** alpha.59 L6: the declared class of a registered tool by its name (null: not a tool this client knows); presentation only. */
   toolClass?(name: string): AgentToolClass | null;
+  /** v30 (owner S5): one person line for this client's running turn, joined at its next model-call boundary; absent: lines only queue. */
+  steerChatTurn?(projectRoot: string, input: ChatTurnSteer, options: ConfigLoadOptions): Promise<ChatTurnSteerResult>;
+  /** v30 (tema L6): a typed MCP start notice in the person's words (the composition's one renderer); absent: language-neutral kind and server. */
+  describeNotice?(notice: ChatTurnNotice): string;
 }
 export interface TerminalAgentTurnInput {
   readonly projectRoot: string;
@@ -34,7 +38,8 @@ export interface TerminalAgentTurnInput {
   readonly fullAccess?: true;
   /** T4 MODEL-SWITCH (v23): the session's pinned model; the service uses exactly it or refuses typed. */
   readonly reference?: ModelReference;
-  readonly onTurnBound?: (binding: PanelTurnBinding) => void;
+  /** The turn's command identity once generated and, with a steer port, the way to add a person line to it (v30). */
+  readonly onTurnBound?: (binding: PanelTurnBinding, steer?: TurnSteer) => void;
 }
 type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown };
 
@@ -75,7 +80,9 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };
-  input.onTurnBound?.({ scopeId: command.scopeId, sessionId: command.sessionId ?? null, turnId: command.turnId, phase: 'command-generated' });
+  const steer: TurnSteer | undefined = ports.steerChatTurn ? async (steerId, content) => (await ports.steerChatTurn!(input.projectRoot,
+    { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId, steerId, content }, input.options)).state : undefined;
+  input.onTurnBound?.({ scopeId: command.scopeId, sessionId: command.sessionId ?? null, turnId: command.turnId, phase: 'command-generated' }, steer);
   signal.throwIfAborted();
   signal.addEventListener('abort', onAbort, { once: true });
   let finished = false;
@@ -104,18 +111,27 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     if (result.answer !== null && result.answer.startsWith(roundText) && result.answer.length > roundText.length) {
       yield { kind: 'text', text: result.answer.slice(roundText.length) };
     }
-    yield { kind: 'done', finish: result.finish, note: result.note };
+    const { notices, steer: lines } = result;
+    yield { kind: 'done', finish: result.finish, note: result.note, ...(lines.joined.length || lines.returned.length ? { steer: lines } : {}),
+      ...(notices.length ? { notices: notices.map(notice => ({ key: noticeKey(notice), text: ports.describeNotice?.(notice) ?? `${notice.name}: ${notice.kind}` })) } : {}) };
   } finally {
     signal.removeEventListener('abort', onAbort);
     if (!finished && !outcome) { local.abort(); await cancel(); }
   }
 }
 
+/** Tema L6: what makes an MCP notice new for the person — its kind, server and code (not its free detail), so a repeat is shown once. */
+function noticeKey(notice: ChatTurnNotice): string {
+  const code = notice.kind === 'start-failed' ? `${notice.failure.phase}:${notice.failure.code}` : notice.kind === 'not-decided' ? notice.code
+    : notice.kind === 'grant-refused' ? notice.reason : notice.kind === 'secret-refused' ? `${notice.code}:${notice.key}` : notice.kind === 'tools-changed' ? String(notice.count) : '';
+  return JSON.stringify([notice.kind, notice.name, code]);
+}
+
 function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, compacting: boolean, names: ReadonlyMap<string, string> = new Map(), compactionThresholdTokens?: number): TurnDelta {
   switch (event.kind) {
     case 'text': case 'reasoning': return { kind: event.kind, text: event.text };
     case 'usage': return { kind: 'usage', promptTokens: event.promptTokens, completionTokens: event.completionTokens, reasoningTokens: null };
-    case 'message': return { kind: 'message', message: event.message };
+    case 'message': return { kind: 'message', message: event.message, ...(event.steerId ? { steerId: event.steerId } : {}) };
     case 'context': return { kind: 'context', promptTokens: event.promptTokens, windowTokens: event.windowTokens, quality: event.quality,
       ...(compacting ? { compacting } : {}), ...(compactionThresholdTokens === undefined ? {} : { compactionThresholdTokens }) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };

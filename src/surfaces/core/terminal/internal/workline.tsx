@@ -3,11 +3,11 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
-import { cardCopy, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
+import { cardCopy, runCopyCommand, runTerminalHost, type TerminalHostContext, type TerminalShell, type TerminalThemeRequest, useAttentionNotice, useDraftHandoffs, type ClipboardResult, type CopyLabels, type DraftHandoffLabels, type ExternalEditorPort, type TerminalHandover } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, keepsTypedArgument, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
-  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
+  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, nearestSlashCommand, secretGrantTurn, offerMcpGrants, treeChangeLine, openingGate, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels, type ToolGroupView } from '#surfaces/core/terminal-render/index.js';
@@ -25,7 +25,7 @@ import { CardCopyContext, Window, WindowDecideHintContext, WindowOpeningContext,
   WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
-import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
+import { Composer, type ComposerLabels, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from '#surfaces/core/terminal-conversation/index.js';
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
@@ -38,6 +38,7 @@ import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/termi
 import { openTaskAction, type TaskWindowAction } from '#surfaces/core/terminal-work/index.js';
 import { useDeliveryWindows, type DeliveryWindowLabels, type TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
 import { shortId } from '#platform/index.js';
+import { QueuedLines, useTurnSteer, type QueueLabels, type QueueReason } from './workline-queue.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -78,6 +79,12 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly viewport?: ChatViewportLabels;
   /** A decision's hint row before its keys count (terminal.decision.*); neutral marks without them. */
   readonly decisionArm?: DecisionArmLabels;
+  /** Journey queued-messages: why queued lines wait (`queued` names a running turn), the withdraw key and the added-line words; neutral without them. */
+  readonly queue?: QueueLabels;
+  /** Owner S4: the `/uninstall` window — what removal does, why it runs in the shell, and the copyable command (`summary`/`copied`: `{command}`). */
+  readonly uninstall?: Readonly<{ title: string; lines: readonly string[]; label: string; copy: string; close: string; summary: string; copied: string }>;
+  /** ADAYLAR 16b: the configured model cannot use tools here (said once at the start). */
+  readonly toolsNone?: string;
 }
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
 export type WorklineErrorText = (error: unknown) => string;
@@ -182,6 +189,8 @@ export interface WorklineProps {
    *  through the opening's send gate. */
   readonly initialDraft?: ComposerHistoryEntry | null; readonly armedAt?: number | null; // a first idle Ctrl+C in the shell: the next one quits
   readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>[];
+  /** ADAYLAR 16b (QW): whether the configured model takes tools (`describeTerminalChat` `tools`); `none` is said once as a system line. */
+  readonly modelTools?: 'available' | 'none' | 'unknown';
 }
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
 function StackComposer({ elsewhere, ...props }: ComponentProps<typeof Composer> & { readonly elsewhere?: () => boolean }) {
@@ -221,7 +230,7 @@ export function WorklineApp(props: WorklineProps) {
   const handoffs = useDraftHandoffs<TerminalLocalContext, ComposerHistoryEntry>({ controller: panel.controller, say: (level, text) => push([notice(level, text)]), labels: labels.handoff,
     editor: props.externalEditor, handover: props.handover, hold });
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
-  const [turnRunning, setTurnRunning] = useState(false);
+  const [turnRunning, setTurnRunning] = useState(false), [chatting, setChatting] = useState(false); // `chatting`: a chat line runs (either path), for the queue's reason
   const [planning, setPlanning] = useState(false);
   const [planWait, setPlanWait] = useState<Readonly<{ body: string; hint: string }> | null>(null);
   const [doRunning, setDoRunning] = useState(false);
@@ -313,7 +322,9 @@ export function WorklineApp(props: WorklineProps) {
   workRef.current = work; decide.current = work.decideApproval;
   const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}', onTaskAction: action => taskActionRef.current(action) });
   liveRef.current = liveWin;
-  const refreshMode = mode.refresh, [gate] = useState(() => openingGate(Promise.all([props.opening?.ready, mode.read]))); // B: no line goes before the service and the first mode read
+  const refreshMode = mode.refresh, [opened] = useState(() => Promise.all([props.opening?.ready, mode.read])), [gate] = useState(() => openingGate(opened)); // B: no line goes before the service and the first mode read
+  const [serviceReady, setServiceReady] = useState(false);
+  useEffect(() => { let live = true; const ready = () => { if (live) setServiceReady(true); }; opened.then(ready, ready); return () => { live = false; }; }, [opened]);
   const reasoning = useReasoningPreview(push, labels.reasoning);
   // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
   const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
@@ -343,10 +354,12 @@ export function WorklineApp(props: WorklineProps) {
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
-  const opening = useRef(props.openingNotices), later = useRef(props.opening?.notices);
+  const opening = useRef(props.openingNotices), later = useRef(props.opening?.notices), tools = useRef(props.modelTools);
   useEffect(() => {
     const said = (notices: WorklineProps['openingNotices']) => { if (notices?.length) push(notices.map(item => notice(item.level, item.text))); };
     said(opening.current); void later.current?.().then(said, () => undefined);
+    // ADAYLAR 16b: a configured model without tool use is said once, before the person asks it to read or change anything.
+    if (tools.current === 'none' && labels.toolsNone) push([systemSummaryEntry(labels.toolsNone, 'warning')]);
   }, [push]); useEffect(() => props.serviceLost?.(text => push([notice('error', text)])), [props.serviceLost, push]);
   useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
@@ -360,8 +373,11 @@ export function WorklineApp(props: WorklineProps) {
   const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
   const openSetup = useRef<(signal: AbortSignal, focus?: OnboardingFocus) => Promise<void>>(async () => undefined);
   const serviceStarted = useRef(false), offeredGrants = useRef(new Set<string>()); // BeUser M-09: one automatic start per absence, until a turn completes
+  const submitRef = useRef<(text: string, mentions: readonly string[], entry: ComposerHistoryEntry) => void>(() => undefined);
+  const turnSteer = useTurnSteer({ labels: labels.queue, push, errorText, submit: (text, mentions, entry) => submitRef.current(text, mentions, entry),
+    restore: text => setDraft(last => ({ seq: (last?.seq ?? 0) + 1, entry: { text, pastes: [] } })), joined: text => push([chat('user', text)]) });
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
-    push([chat('user', text)]);
+    push([chat('user', text)]); setChatting(true);
     const startedAtMs = Date.now();
     const signal = execution.signal;
     const stream = panel.stream(execution);
@@ -386,7 +402,7 @@ export function WorklineApp(props: WorklineProps) {
         // PRE-8: a turn refused by its local preflight (never bound to the service) may start once more after the first-use grant card.
         let bound = false;
         const start = () => props.streamTurn!(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId,
-          onTurnBound: binding => { bound = true; stream.onTurnBound(binding); }, ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) });
+          onTurnBound: (binding, steer) => { bound = true; stream.onTurnBound(binding); turnSteer.bind(steer ?? null); }, ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) });
         // While the card waits the turn waits for the person, not the model: the open tail is hidden and comes back for the restarted turn.
         const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => {
           setLive(null); return askGrantWindow(slot, position, question, cancel).finally(() => setLive({ step: opened, lead: true })); };
@@ -405,6 +421,7 @@ export function WorklineApp(props: WorklineProps) {
           state = step.state;
           const entries = streamStepEntries(step);
           if (entries.length) push(entries);
+          turnSteer.observe(delta); // after the step's rows: a joined line follows the round it joined, a notice follows the answer's footer
           setLive(delta.kind === 'done' ? null : { step, lead: !state.answered });
         }
         // An agent turn's history is exactly its message events (tool calls and results included); a plain stream adds its answer.
@@ -435,7 +452,7 @@ export function WorklineApp(props: WorklineProps) {
       }
       throw error;
     } finally {
-      setLive(null); setTurnRunning(false);
+      setLive(null); setTurnRunning(false); setChatting(false); turnSteer.bind(null, true); // a line no result settled goes back into the input
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
@@ -447,6 +464,16 @@ export function WorklineApp(props: WorklineProps) {
     // /setup (whole, or only the model card) and the opening's card may connect a model: the status row then names the configured one instead of the startup label.
     opened: async () => { const configured = props.panels?.ports.model ? (await props.panels.ports.model.inspect().catch(() => null))?.choices.find(choice => choice.configured) : undefined; if (configured) setConfiguredLabels({ model: configured.label, provider: configured.providerLabel ?? configured.group }); } });
   openSetup.current = onboarding.open;
+  // Owner S4: removal runs in the shell with the service stopped and the person's confirmation; here only its explanation and the command.
+  const uninstallWindow = async () => {
+    const words = labels.uninstall, rich = labels.windows, command = WORKLINE_SLASH_COMMANDS.find(entry => entry.name === 'uninstall')?.shellCommand;
+    if (!words || !command) { push([notice('error', fillTemplate(labels.commandUnavailable, { part: 'uninstall' }))]); return; }
+    const summary = fillTemplate(words.summary, { command });
+    const choice = rich ? await windows.ask({ title: words.title, hints: rich.hints, card: true, body: () => [...words.lines.map(text => ({ spans: [span(text)] })),
+      { label: [span(words.label)], spans: [span(command, { bold: true })] }], tree: { title: words.title, items: [{ id: 'copy', label: words.copy, detail: command }, { id: 'close', label: words.close }] } }) : null;
+    const copied = choice === 'copy' ? props.clipboard?.(command) : undefined;
+    push([copied?.ok ? notice('info', fillTemplate(words.copied, { command })) : systemSummaryEntry(summary)]);
+  };
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
@@ -523,9 +550,10 @@ export function WorklineApp(props: WorklineProps) {
     }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
     const rich = labels.windows;
+    if (slash.command === 'uninstall') { await uninstallWindow(); return true; }
     if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
-      const typed = slash.command;
-      const choice = await windows.ask(unknownCommandSpec(rich, typed, slashMatches(`/${typed}`).slice(0, 8), command => labels.composer.slash[command.descriptionKey] ?? ''));
+      const typed = slash.command, nearest = nearestSlashCommand(typed); // owner S4: one nearest English command, never a guess
+      const choice = await windows.ask(unknownCommandSpec(rich, typed, nearest ? [nearest] : [], command => labels.composer.slash[command.descriptionKey] ?? ''));
       if (choice !== null && !execution.signal.aborted) return performRef.current(`/${choice}`, [], execution);
       return true;
     }
@@ -659,13 +687,18 @@ export function WorklineApp(props: WorklineProps) {
   // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
   // A command no window replaces (`/do`, `/copy`, `/rename`; registry `typedArgument`) keeps it, redacted for the record (TRM-40).
   const bareSlash = (text: string): string => { const slash = parseSlashLine(text); return slash && keepsTypedArgument(slash.command) ? redactForRecord(text, props.knownSecrets) : labels.windows && slash?.args ? `/${slash.command}` : text; };
+  // Journey queued-messages: a line sent while another runs waits in the FIFO and is listed above the composer (`QueuedLines`), not in the conversation.
+  const waiting = useRef(new Map<string, string>());
   const submit = (typed: string, mentions: readonly string[] = [], entry?: ComposerHistoryEntry) => {
     const before = panel.controller.snapshot(), text = bareSlash(typed), inputId = `input-${++inputSequence.current}`;
     if (text !== typed) typedArgumentInputs.current.add(inputId);
     if (panel.controller.send({ kind: 'submit', context: before.context, inputId, text, mentions }) && before.active) {
-      push([notice('info', `${labels.queued}: ${text.trim()}`)]); handoffs.remember(inputId, entry ?? { text, pastes: [] });
+      const kept = new Set(panel.controller.snapshot().queued.map(item => item.inputId));
+      for (const id of waiting.current.keys()) if (!kept.has(id)) waiting.current.delete(id);
+      waiting.current.set(inputId, text.trim()); handoffs.remember(inputId, entry ?? { text, pastes: [] });
     }
   };
+  submitRef.current = submit;
   const handedOver = useRef(false); // alpha.60 C: the shell's sent lines go once, in order, through the same submit and send gate
   useEffect(() => { if (handedOver.current) return; handedOver.current = true; for (const line of props.queuedInputs ?? []) submit(line.text, line.mentions, line.entry); }, []);
   const withdraw = () => { const taken = handoffs.withdraw(); if (taken) typedArgumentInputs.current.delete(taken.inputId); return taken?.entry ?? null; };
@@ -730,11 +763,15 @@ export function WorklineApp(props: WorklineProps) {
     queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
     selfSource={props.selfSource} cancellable={(turnRunning || planning) && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)}
     context={contextStatus(session.measured, labels.render, labels.sessions?.locale)} />;
+  // The real reason the queue waits now: the opening's send gate, the running turn, an open window, else the command still running.
+  const reason: QueueReason = !serviceReady ? 'service' : chatting ? 'turn' : othersOpen ? 'window' : 'command', words = labels.queue ?? NEUTRAL_QUEUE_LABELS;
+  const queueNode = <QueuedLines queued={state.queued.flatMap(item => { const text = waiting.current.get(item.inputId); return text === undefined ? [] : [humanRecordText(text, props.knownSecrets)]; })}
+    steered={turnSteer.steered.map(text => humanRecordText(text, props.knownSecrets))} reason={reason === 'turn' ? labels.queued : words[reason]} labels={words} />;
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
     busy={busy} historyText={bareSlash} remember={remember} restore={draft} armedAt={props.armedAt ?? null} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
-    onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
+    onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} steer={turnSteer.steerable} onSteer={turnSteer.add} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
   const hintNode = copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
@@ -775,7 +812,7 @@ export function WorklineApp(props: WorklineProps) {
       viewport={<WheelContext.Provider value={props.wheel ?? null}><PointerContext.Provider value={pointerSelection}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} onClick={toggleGroup} /></PointerContext.Provider></WheelContext.Provider>}
       above={<>
         {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
-        {windowsNode}</>}
+        {windowsNode}{queueNode}</>}
       bar={composerNode}
       info={<>{statusNode}{infoRows >= 3 ? activityNode : null}{infoRows >= 2 ? hintNode : null}</>} />
     : <Box flexDirection="column">
@@ -783,11 +820,14 @@ export function WorklineApp(props: WorklineProps) {
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} />}
       </Static>
       <PinnedWorkline enabled={pinnedMode} footer={<>
-      {/* The banner wraps (never truncates): on a narrow terminal it still says how to quit; the footer's height is measured, not fixed. */}
+      {/* The banner wraps (never truncates): on a narrow terminal it still says how to quit; the footer's height is measured, not fixed. Tema L6
+          §4.2: one fixed blank row above it, so the last conversation line never touches the bottom region. */}
+      <Text> </Text>
       {!pinned || size.rows >= 8 ? <Text {...palette.accent}>{labels.banner}</Text> : null}
       {statusNode}
       {fullAccessNode}
       {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} /> : null}
+      {queueNode}
       {composerNode}
       {!pinned || size.rows >= 5 ? hintNode : null}
       </>}>
@@ -815,6 +855,8 @@ export function WorklineApp(props: WorklineProps) {
 
 const EMPTY_ROWS: readonly LedgerRow[] = Object.freeze([]);
 const NEUTRAL_ARM_LABELS: DecisionArmLabels = Object.freeze({ arming: '…', ignored: '… ×' });
+const NEUTRAL_QUEUE_LABELS: QueueLabels = Object.freeze({ service: '…', window: '…', command: '…', withdraw: 'Alt+Up', more: '+{count}', steered: '+', steerFull: '{limit} × {text}',
+  steerReturned: '→ {text}', steerBack: '← {text}' });
 /** The information row's context segment: the same measurement and words as `/context` (`terminal.render.context`); before one, "unknown". */
 function contextStatus(measured: Readonly<{ promptTokens: number; windowTokens: number | null; quality: string }> | null, render: AssistantRenderLabels, locale: 'en' | 'tr' | undefined): string | undefined {
   if (!measured) return render.contextUnknown;
@@ -836,21 +878,24 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly startup?: WorklineStartup;
   /** alpha.60 C: the launch shell's open host; the Workline takes it (same alternate screen, input owner and restore) with its draft and sent lines. */
   readonly shell?: TerminalShell;
+  /** TEMA-OKUNURLUK: the host draws `terminalPalette` of this request (its own background probe) instead of `palette`. */
+  readonly theme?: TerminalThemeRequest;
 }
 
 /** The workline is the host's view: the host owns start-up, mouse, OSC 52 copy, the alternate screen and the terminal restore (`terminal-host`). */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
-  const { palette, stdin, stdout, signal, ascii, startup, shell, ...props } = options;
+  const { palette, stdin, stdout, signal, ascii, startup, shell, theme, ...props } = options;
   const view = (context: TerminalHostContext, handed?: ReturnType<TerminalShell['take']>) => createElement(WorklineApp, { ...props, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}),
     transcriptExit: context.transcriptExit, ...(handed ? { initialDraft: handed.draft, queuedInputs: handed.queued, armedAt: handed.armedAt } : {}),
     ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.handover ? { handover: context.handover } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}),
     ...(context.clipboard ? { clipboard: context.clipboard } : {}), ...(context.notify ? { notify: context.notify } : {}) });
   // alpha.60 C: the launch shell's host is taken as it is (closed in the shell with Ctrl+D: nothing opens); otherwise the host opens here.
-  if (shell) { if (!shell.host.open()) return; const handed = shell.take(); shell.host.setView(context => view(context, handed), palette); await shell.host.wait(); }
-  else await runTerminalHost({ palette, ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}), ...(signal ? { signal } : {}), ...(ascii !== undefined ? { ascii } : {}),
+  // The shell's host keeps the palette it draws (TH-A: its theme request and later background answers); passing one here would replace it.
+  if (shell) { if (!shell.host.open()) return; const handed = shell.take(); shell.host.setView(context => view(context, handed)); await shell.host.wait(); }
+  else await runTerminalHost({ palette, ...(theme ? { theme } : {}), ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}), ...(signal ? { signal } : {}), ...(ascii !== undefined ? { ascii } : {}),
     ...(props.attention ? { attention: true } : {}),
     ...(props.clearScreen !== undefined ? { clearScreen: props.clearScreen } : {}), ...(props.fullscreen !== undefined ? { fullscreen: props.fullscreen } : {}),
-    ...(startup ? { inlineStartup: out => writeStartup(out, startup, palette) } : {}), view: context => view(context) });
+    ...(startup ? { inlineStartup: (out, chosen) => writeStartup(out, startup, chosen) } : {}), view: context => view(context) });
   // BeUser AYSE-22: like Claude Code, closing says how to come back to the saved conversation.
   const out = stdout ?? process.stdout, hint = props.sessions ? props.labels.sessions?.exitHint : undefined;
   if (hint && out.isTTY) try { out.write(`${hint}\n`); } catch { /* the terminal is gone */ }

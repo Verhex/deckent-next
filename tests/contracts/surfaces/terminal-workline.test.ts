@@ -111,15 +111,14 @@ describe('ledger buffer (Ink Static contract)', () => {
     const seen: (readonly { role: string; content: string }[])[] = [];
     const call = { id: 'c1', name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' };
     const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
-      seen.push(messages);
-      if (seen.length > 1) { yield { kind: 'text' as const, text: 'second' }; yield { kind: 'done' as const, finish: 'stop' as const }; return; }
+      seen.push(messages); const files = { key: 'files', text: 'NOTICE-FILES' }, other = { key: 'other', text: 'NOTICE-OTHER' }; if (seen.length > 1) { yield { kind: 'text' as const, text: 'second' }; yield { kind: 'done' as const, finish: 'stop' as const, notices: [files, other] }; return; }
       yield { kind: 'message' as const, message: { role: 'assistant' as const, content: '', toolCalls: [call] } };
       yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c1', name: 'read_file', target: 'src/a.ts', status: null, ms: null };
       yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c1', name: 'read_file', target: 'src/a.ts', status: 'ok' as const, ms: 12 };
       yield { kind: 'message' as const, message: { role: 'tool' as const, toolCallId: 'c1', name: 'read_file', content: 'export const a = 1;' } };
       yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c2', name: 'grep', target: 'secret', status: null, ms: null };
       yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c2', name: 'grep', target: 'secret', status: 'denied' as const, ms: 1 };
-      yield { kind: 'done' as const, finish: 'error' as const, note: 'CLOSURE-NOTE' };
+      yield { kind: 'done' as const, finish: 'error' as const, note: 'CLOSURE-NOTE', notices: [files] };
     };
     const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 10,
       labels: { ...labels, render: { ...labels.render, elapsed: '{seconds} SEC' } } });
@@ -135,6 +134,8 @@ describe('ledger buffer (Ink Static contract)', () => {
     await until(() => seen.length === 2, 'second turn');
     expect(seen[1]!.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'user']);
     expect(seen[1]![3]).toMatchObject({ role: 'tool', toolCallId: 'c1', content: 'export const a = 1;' });
+    await until(() => view.stdout.frame.includes('NOTICE-OTHER'), 'tema L6: a new notice key'); expect(view.stdout.frame.match(/NOTICE-FILES/gu)).toHaveLength(1); // once per key, after the answer
+    expect(view.stdout.frame.indexOf('CLOSURE-NOTE')).toBeLessThan(view.stdout.frame.indexOf('NOTICE-FILES'));
   });
 
   it('replaces the history with a compaction and continues the next turn from it', async () => {
@@ -293,8 +294,8 @@ describe('workline view rendered by Ink', () => {
     view.stdin.write('\u0003'); await until(() => aborted === 1, 'ctrl+c cancels busy turn');
     await until(() => view.stdout.text.includes('ERR:TURN-ABORTED'), 'cancel notice');
     await view.type('again\r'); await until(() => seen.length === 2, 'second turn');
-    // Enter while busy queues the line instead of dropping or blocking it; it runs once the turn has finished.
-    await view.type('/help\r'); await until(() => view.stdout.text.includes('QUEUED: /help'), 'input queued while busy');
+    // Enter while busy queues the line (listed above the composer under its real reason: a turn runs); it runs once the turn has finished.
+    await view.type('/help\r'); await until(() => view.stdout.frame.includes('QUEUED · Alt+Up') && view.stdout.frame.includes('• /help'), 'input queued while busy');
     expect(view.stdout.text).not.toContain(HELP_NOTICE);
     view.stdin.write('\u001b'); await until(() => aborted === 2, 'esc cancels');
     await until(() => view.stdout.text.includes(HELP_NOTICE), 'queued line runs after the turn');
@@ -320,7 +321,7 @@ describe('workline view rendered by Ink', () => {
     }) });
     await view.type('one\r'); await until(() => sent.length === 1, 'first turn busy');
     await view.type('two\r'); await view.type('/status\r'); await view.type('three\r');
-    await until(() => view.stdout.text.includes('QUEUED: three'), 'three lines queued');
+    await until(() => view.stdout.frame.includes('• three'), 'three lines queued');
     gates[0]!(); await until(() => sent.length === 2, 'queued text turn');
     expect(view.stdout.text).not.toContain('STATUS-LINE');
     gates[1]!(); await until(() => view.stdout.text.includes('STATUS-LINE') && sent.length === 3, '/status then the next text turn');
@@ -335,7 +336,7 @@ describe('workline view rendered by Ink', () => {
     const view = mount({ completeTurn: async messages => { sent.push(messages.at(-1)!.content); return 'REPLY-AFTER'; },
       ledger: { scopeId: 'scope-a', async listWorkers() { calls++; await gate; return workers(1, 0); }, async inspectRun() { return null; } } });
     await view.type('/workers\r'); await until(() => calls === 1, '/workers pending');
-    await view.type('after\r'); await until(() => view.stdout.text.includes('QUEUED: after'), 'text queued behind /workers');
+    await view.type('after\r'); await until(() => view.stdout.frame.includes('• after'), 'text queued behind /workers'); expect(view.stdout.frame).not.toContain('QUEUED');
     await settle(40);
     expect(sent).toEqual([]);
     release();
@@ -353,7 +354,7 @@ describe('workline view rendered by Ink', () => {
     let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
     await view.type('one\r'); await until(() => sent.length === 1, 'turn busy');
     for (const line of ['/status', 'two', '/exit', 'never']) await view.type(`${line}\r`);
-    await until(() => view.stdout.text.includes('QUEUED: never'), 'lines queued');
+    await until(() => view.stdout.frame.includes('• /exit') && view.stdout.frame.includes('+1'), 'lines queued (three rows and +1)');
     gates[0]!(); await until(() => sent.length === 2, 'queued text turn after the queued command');
     expect(view.stdout.text).toContain('STATUS-LINE');
     expect(exited).toBe(false);

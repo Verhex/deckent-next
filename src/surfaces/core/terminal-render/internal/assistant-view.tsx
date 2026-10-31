@@ -198,7 +198,7 @@ function UnitBody({ unit, labels, groupView, width }: { readonly unit: Assistant
   }
   if (unit.kind === 'footer') {
     return (
-      <Box flexDirection="column" paddingLeft={INDENT} marginBottom={1}>
+      <Box flexDirection="column" paddingLeft={INDENT}>
         {unit.finish === 'length' && <Text {...palette.warning}>{labels.truncated}</Text>}
         {unit.finish === 'error' && providerRejectionHint(unit.note, labels) ? <Text {...palette.error} wrap="wrap">{providerRejectionHint(unit.note, labels)}</Text> : null}
         {unit.note ? <Text {...(unit.finish === 'error' ? palette.error : palette.muted)} wrap="wrap">{unit.note}</Text> : null}

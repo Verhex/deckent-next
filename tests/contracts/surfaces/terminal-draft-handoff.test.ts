@@ -2,6 +2,7 @@ import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
+import { mountWorkline } from '../support/workline-harness.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalHandoffLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -57,13 +58,13 @@ describe('T3 Alt+Up takes the last queued message back (workline)', () => {
     const turns = gatedTurns(), view = mount({ completeTurn: turns.completeTurn });
     await view.type('one\r'); await until(() => turns.sent.length === 1, 'first turn busy');
     await view.type('two\r'); await view.type('three\r');
-    await until(() => view.stdout.text.includes('QUEUED: three'), 'two lines queued');
+    await until(() => view.stdout.text.includes('• three'), 'two lines queued');
     view.stdin.write(ALT_UP);
     await until(() => view.stdout.text.includes('BACK: three') && view.stdout.text.includes('> three|'), 'three back in the draft');
     // A draft is never replaced: a second Alt+Up leaves `two` queued.
     view.stdin.write(ALT_UP); await settle(40);
     expect(view.stdout.text).not.toContain('BACK: two');
-    await view.type(' again\r'); await until(() => view.stdout.text.includes('QUEUED: three again'), 'edited line queued again');
+    await view.type(' again\r'); await until(() => view.stdout.text.includes('• three again'), 'edited line queued again');
     turns.gates[0]!(); await until(() => turns.sent.length === 2, 'second turn');
     turns.gates[1]!(); await until(() => turns.sent.length === 3, 'third turn');
     turns.gates[2]!(); await until(() => view.stdout.text.includes('REPLY-3'), 'last reply');
@@ -74,12 +75,13 @@ describe('T3 Alt+Up takes the last queued message back (workline)', () => {
     const turns = gatedTurns(), view = mount({ completeTurn: turns.completeTurn });
     view.stdin.write(ALT_UP); await settle(30);
     await view.type('one\r'); await until(() => turns.sent.length === 1, 'first turn busy');
-    await view.type('two\r'); await until(() => view.stdout.text.includes('QUEUED: two'), 'queued');
+    await view.type('two\r'); await until(() => view.stdout.text.includes('• two'), 'queued');
     turns.gates[0]!(); await until(() => turns.sent.length === 2, 'two started');
     view.stdin.write(ALT_UP); await settle(40);
     expect(view.stdout.text).not.toContain('BACK:');
     turns.gates[1]!(); await until(() => view.stdout.text.includes('REPLY-2'), 'two answered once');
     expect(turns.sent).toEqual(['one', 'two']);
+    await finalSteerReconciliation();
   });
 });
 
@@ -118,9 +120,41 @@ describe('T4 Ctrl+G edits the draft in the external editor (workline)', () => {
   it('carries the help lines and the refusal words in both languages', () => {
     for (const locale of ['en', 'tr'] as const) {
       const shortcuts = terminalComposerLabels(locale).shortcuts.split('\n');
-      expect(shortcuts.at(-3)).toMatch(/^Alt\+/u); expect(shortcuts.at(-2)).toMatch(/^Ctrl\+G /u);
+      expect(shortcuts.at(-4)).toMatch(/^Alt\+/u); expect(shortcuts.at(-3)).toMatch(/^Ctrl\+Enter /u); expect(shortcuts.at(-2)).toMatch(/^Ctrl\+G /u);
       expect(Object.keys(terminalHandoffLabels(locale).editor).sort()).toEqual(['exit', 'failed', 'no-editor', 'not-started', 'too-large', 'unsafe']);
     }
     expect(terminalHandoffLabels('tr').withdrawn).not.toBe(terminalHandoffLabels('en').withdrawn);
   });
 });
+
+/** R2: final custody through the public Workline, including the conversation and subsequent queued turn. */
+async function finalSteerReconciliation() {
+  for (const path of ['final-only', 'message-and-final', 'returned', 'cancelled', 'error'] as const) {
+    let release!: () => void, id = '';
+    const gate = new Promise<void>(resolve => { release = resolve; }), sent: string[] = [];
+    const view = mountWorkline({ context: { installationId: 'i', projectId: 'p', scopeId: 's' }, labels: { ...labels, queue: { service: '', window: '', command: '', withdraw: '', more: '', steered: 'ADDED', steerFull: '', steerReturned: 'RETURN {text}', steerBack: 'BACK {text}' } },
+      streamTurn: async function* (messages, _signal, options) {
+        sent.push(String(messages.at(-1)?.content));
+        if (sent.length === 1) {
+          options?.onTurnBound?.({ scopeId: 's', sessionId: options?.sessionId ?? null, turnId: 't', phase: 'command-generated' }, async steerId => { id = steerId; return 'queued'; });
+          await gate;
+          if (path === 'message-and-final') yield { kind: 'message', steerId: id, message: { role: 'user', content: 'one intent' } };
+          const took = path === 'final-only' || path === 'message-and-final';
+          yield { kind: 'done', finish: path === 'cancelled' || path === 'error' ? path : 'stop', steer: { joined: took ? [id] : [], returned: took ? [] : [id] } };
+          yield { kind: 'done', finish: 'stop', steer: { joined: took ? [id] : [], returned: took ? [] : [id] } };
+        } else yield { kind: 'done', finish: 'stop' };
+      } });
+    try {
+      await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('start\r');
+      await until(() => sent.length === 1, 'bound turn'); view.stdin.write('one intent'); await settle(); view.stdin.write('\u001b[13;5u');
+      await until(() => Boolean(id) && view.stdout.frame.includes('ADDED'), `line pending (${path})`); release();
+      await until(() => view.stdout.frame.includes('READY') && !view.stdout.frame.includes('ADDED'), 'final settled'); await settle(60);
+      if (path === 'final-only' || path === 'message-and-final') {
+        expect(view.stdout.frame.match(/one intent/gu), path).toHaveLength(1);
+        expect(view.stdout.frame, path).not.toContain('> one intent'); expect(view.stdout.text).not.toMatch(/BACK one intent|RETURN one intent/u);
+      } else if (path === 'returned') { expect(sent).toEqual(['start', 'one intent']); expect(view.stdout.text).toContain('RETURN one intent'); }
+      else { expect(view.stdout.frame, path).toContain('> one intent'); expect(view.stdout.text).toContain('BACK one intent'); }
+      expect(sent, path).toEqual(path === 'returned' ? ['start', 'one intent'] : ['start']);
+    } finally { release(); view.instance.unmount(); view.stdin.destroy(); view.stdout.destroy(); }
+  }
+}

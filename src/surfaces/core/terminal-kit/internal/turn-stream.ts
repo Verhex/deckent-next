@@ -1,4 +1,5 @@
 import type { PanelTurnBinding } from './panel-contract.js';
+import { CHAT_TURN_STEER_LINES } from '#domain/index.js';
 import type { AgentContextQuality, AgentShellPosture, AgentToolApprovalSettlement, AgentToolCardCall, AgentToolClass, AgentToolUndo, ApprovalPreviewCutFacts, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 
 /** `tool.finished`'s optional `cleanup` (Astra 2124), derived from the agent-turn event rather than importing the agent-tool
@@ -41,8 +42,9 @@ export type TurnDelta =
    * the called tool's declared class from the client's registered tool metadata (never a wire field); absent for a tool it does not know. */
   | { readonly kind: 'tool'; readonly phase: 'started' | 'finished'; readonly callId: string; readonly name: string; readonly target: string | null;
     readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup; readonly toolClass?: AgentToolClass }
-  /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
-  | { readonly kind: 'message'; readonly message: AgentChatMessage }
+  /** A message the turn appended: the caller's history continues from exactly these (not rendered). `steerId` (v30): the person's line
+   * added with `TurnSteer` joined the turn here, at a model-call boundary. */
+  | { readonly kind: 'message'; readonly message: AgentChatMessage; readonly steerId?: string }
   /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. `compacting` (TL-A, derived on the
    * client from this measurement and the engine's own rule, not a wire field): the service summarizes older messages before the round. */
   | { readonly kind: 'context'; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality;
@@ -66,8 +68,17 @@ export type TurnDelta =
     readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */
   | { readonly kind: 'output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
-  /** `note` is the engine's deterministic closure text when the turn ended without a model answer. */
-  | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null };
+  /** `note` is the engine's deterministic closure text when the turn ended without a model answer. v30: `notices` — the turn's MCP start
+   * notices, each with its text in the person's language and a `key` (kind, server, code) the surface shows once per key; `steer` — the
+   * added lines that joined and those the turn returned unsent (the person's to send again). */
+  | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null; readonly notices?: readonly TurnNotice[];
+    readonly steer?: Readonly<{ joined: readonly string[]; returned: readonly string[] }> };
+export type TurnNotice = Readonly<{ key: string; text: string }>;
+/** v30 steer (owner S5): adds one person line to the bound running turn at its next model-call boundary (never into an approval or witness
+ * wait). `queued`: it joins (a `message` delta with this `steerId`) or comes back in `done.steer.returned`; `not-running`/`full`: nothing kept. */
+export type TurnSteer = (steerId: string, content: string) => Promise<'queued' | 'not-running' | 'full'>;
+/** How many lines one turn takes this way (the v30 protocol bound, named in the `full` refusal). */
+export const TURN_STEER_LINES = CHAT_TURN_STEER_LINES;
 
 /** `reasoning: 'off'` (`/reasoning off`, protocol v16): the turn asks the model to run without thinking; absent otherwise. */
 /** `turn.sessionId` (v16, SCR-A) names the conversation: the service keeps its scratch area across the conversation's turns. */
@@ -75,7 +86,7 @@ export type TurnDelta =
 /** `turn.reference` (v23, T4 MODEL-SWITCH): the model this session pinned with `/model`; the service uses exactly it or refuses. */
 export type WorklineModelReference = Readonly<{ providerId: string; providerVersion: number; modelId: string; modelVersion: number }>;
 export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true;
-  reference?: WorklineModelReference; onTurnBound?: (binding: PanelTurnBinding) => void }>) => AsyncIterable<TurnDelta>;
+  reference?: WorklineModelReference; onTurnBound?: (binding: PanelTurnBinding, steer?: TurnSteer) => void }>) => AsyncIterable<TurnDelta>;
 
 /** Collects a stream into the final answer text (for line mode and tests); reasoning is excluded. */
 export async function collectTurnText(stream: AsyncIterable<TurnDelta>): Promise<{ readonly text: string; readonly finish: Extract<TurnDelta, { kind: 'done' }>['finish'] | null }> {

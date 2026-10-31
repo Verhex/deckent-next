@@ -21,6 +21,9 @@ export interface ComposerLabels {
   readonly placeholder?: string;
   /** Shown while a draft is put aside with Ctrl+S and the composer is empty (how to bring it back). */
   readonly stashed?: string;
+  /** Owner S5: the placeholder while a running turn takes an added line — naming Ctrl+Enter once the terminal reported a key in the kitty
+   * keyboard protocol, Alt+Enter (which works everywhere) before. */
+  readonly steerPlaceholder?: Readonly<{ kitty: string; other: string }>;
   /** Slash description and argument texts by catalog key (`SlashCommand.descriptionKey` / `argumentKey`). */
   readonly slash: Readonly<Record<string, string>>;
 }
@@ -38,6 +41,9 @@ export interface ComposerProps {
   /** `mentions`: the draft's `@path` tokens outside paste chips (attached by the owner through the service, never read here). */
   /** `entry`: the draft as typed (chips unexpanded), before `historyText`. */
   readonly onSubmit: (text: string, mentions: readonly string[], entry: ComposerHistoryEntry) => void;
+  /** Owner S5: a running turn takes an added line now (Ctrl+Enter, Alt+Enter); `onSteer` gets it as `onSubmit` would. */
+  readonly steer?: boolean;
+  readonly onSteer?: (text: string, mentions: readonly string[], entry: ComposerHistoryEntry) => void;
   readonly onCancel: () => void;
   readonly onExit: () => void;
   /** Persistent history; load/append failures never block input (history is a convenience, not a submit precondition). */
@@ -114,15 +120,15 @@ export function Composer(props: ComposerProps): ReactNode {
   const clock = () => (latest.current.now ?? Date.now)();
 
   const dispatch = useCallback((key: ComposerKey): void => {
-    const { busy, policy, onSubmit, onCancel, onExit, history, mentions, historyText, onWithdraw, onEditor } = latest.current;
+    const { busy, policy, onSubmit, onCancel, onExit, history, mentions, historyText, onWithdraw, onEditor, onSteer } = latest.current;
     const result = reduceComposer(current.current, key, { now: clock(), busy, pasteChip: latest.current.labels.pasteChip, ...(policy ? { policy } : {}),
-      ...(onEditor ? { editor: true } : {}) });
+      ...(onEditor ? { editor: true } : {}), ...(latest.current.steer && onSteer ? { steer: true } : {}) });
     // Exit before any state update: a render scheduled beside unmount can keep the TTY referenced.
     if (result.intents.some(intent => intent.type === 'exit')) { onExit(); return; }
     // The remembered form of a submitted line (recall and persistent history) is the owner's; the in-memory entry is replaced in place.
     const remembered = new Map<object, ComposerHistoryEntry>();
     for (const intent of result.intents) {
-      if (intent.type !== 'submit' || !historyText) continue;
+      if ((intent.type !== 'submit' && intent.type !== 'steer') || !historyText) continue;
       const text = historyText(intent.entry.text);
       if (text !== intent.entry.text) remembered.set(intent.entry, { text, pastes: intent.entry.pastes.filter(paste => text.includes(paste.chip)) });
     }
@@ -142,11 +148,11 @@ export function Composer(props: ComposerProps): ReactNode {
           if (text !== null) { const body = cleanText(text).replace(/\n+$/u, ''); dispatch({ type: 'restore', entry: { text: body, pastes: [] } }); }
         }, ignore).finally(() => { editing.current = false; });
       }
-      else if (intent.type === 'submit') {
+      else if (intent.type === 'submit' || intent.type === 'steer') {
         const entry = remembered.get(intent.entry) ?? intent.entry;
         void (async () => history?.append(entry))().catch(ignore);
         // The owner gets the draft as typed (T3 gives it back on Alt+Up); only recall and history keep the remembered form.
-        onSubmit(intent.text, intent.mentions, intent.entry);
+        (intent.type === 'steer' && onSteer ? onSteer : onSubmit)(intent.text, intent.mentions, intent.entry);
       } else if (intent.type === 'mention' && mentions) {
         lookup.current?.abort();
         if (lookupTimer.current) clearTimeout(lookupTimer.current);
@@ -181,7 +187,10 @@ export function Composer(props: ComposerProps): ReactNode {
     return () => clearTimeout(timer);
   }, [dispatch, state.armedAt]);
   const active = props.active ?? true;
+  // Ink sets `eventType` only on a key it read in the kitty keyboard protocol: from then on Ctrl+Enter is a key of its own here.
+  const [kitty, setKitty] = useState(false);
   useInput((input, key) => {
+    if (key.eventType !== undefined) setKitty(true);
     if (latest.current.acceptsInput?.() === false) return;
     const mapped = composerKey(input, key);
     if (mapped) dispatch(mapped);
@@ -201,7 +210,8 @@ export function Composer(props: ComposerProps): ReactNode {
   const first = Math.max(0, Math.min(caretAt - visible + 1, rows.length - visible));
   const auxiliary = Math.max(0, cap - borderRows - visible - exitRows);
   // Dim only in a colour tier: the `none` tier (NO_COLOR) renders the hint as plain text without ANSI codes.
-  const placeholder = state.text === '' ? labels.placeholder ?? '' : '';
+  const steerWords = props.steer && props.onSteer ? labels.steerPlaceholder : undefined;
+  const placeholder = state.text !== '' ? '' : steerWords ? (kitty ? steerWords.kitty : steerWords.other) : labels.placeholder ?? '';
   const dimmable = Object.keys(palette.accent).length > 0;
   const match = state.search ? searchMatches(state)[state.search.skip]?.text ?? '' : '';
   return (

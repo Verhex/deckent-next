@@ -73,7 +73,8 @@ export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: N
     for (const event of read.pointer) for (const listener of pointers) listener(event);
   };
   // Terminal answers first (color-reports.ts): what is held there is released into this same path, so it still passes the mouse and focus filters.
-  const colors = createAnswerFilter(deliver);
+  // Ink 7.1.1 negotiates on `data`, but its App reads keys on `readable`: replies never enter that queue.
+  const colors = createAnswerFilter(deliver, reply => { out.emit('data', reply); });
   const onData = (chunk: Buffer | string) => colors.push(typeof chunk === 'string' ? chunk : decoder.write(chunk));
   real.on('data', onData);
   const input = Object.assign(out, {

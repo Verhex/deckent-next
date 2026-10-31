@@ -84,6 +84,7 @@ describe('InfoWindow (SW-1)', () => {
     expect(view.frame()).toContain('› /command-25');
     await view.press(UP);
     expect(view.frame()).toContain('› /command-24');
+    for (const bytes of ['\u001b[13;5u', '\u001b\r']) { await view.press(bytes); expect(closed).toEqual([]); }
     await view.press('\r');
     expect(closed).toEqual(['cmd-24']);
   });

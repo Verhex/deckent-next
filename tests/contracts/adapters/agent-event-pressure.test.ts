@@ -46,7 +46,7 @@ it.each(['en', 'tr'] as const)('preserves a producer frame failure through SQLit
     const replay = await runDurableAgentTurn({ ...claimed, signal: new AbortController().signal, emit: () => undefined }, store, { ...ports, contextFailure: () => null });
     expect(replay).toMatchObject({ finish: 'error', replayed: true, note: failed.note });
     expect(invokeRound).toHaveBeenCalledTimes(1);
-    return { schemaVersion: 1 as const, turnId, ...replay, answer: null, answerBytes: 0 };
+    return { schemaVersion: 1 as const, turnId, notices: [], steer: { joined: [], returned: [] }, ...replay, answer: null, answerBytes: 0 };
   };
   try {
     // Exercise the actual generated binding: the durable failure and replay belong to that exact command.

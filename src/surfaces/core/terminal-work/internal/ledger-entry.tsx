@@ -28,7 +28,9 @@ export function isToolStep(entry: WorkLedgerEntry | undefined): boolean {
  * precedes it, so a new prompt stands apart from the answer before it. The live region applies the same rule (`AssistantLive` `spaceBefore`), so a row landing never jumps.
  */
 export function stepSpaceBefore(previous: WorkLedgerEntry | undefined, entry: WorkLedgerEntry): boolean {
-  return previous !== undefined && (isToolStep(entry) || isToolStep(previous) || (entry.kind === 'chat' && (entry.role === 'user' ||
+  // Tema L6 §4.2: an answer's footer has no margin of its own; what follows it (a system line, the next prompt) gets the one blank line.
+  const footer = previous?.kind === 'chat' && previous.assistant?.kind === 'footer';
+  return previous !== undefined && (isToolStep(entry) || isToolStep(previous) || footer || (entry.kind === 'chat' && (entry.role === 'user' ||
     (entry.role === 'assistant' && entry.assistant !== undefined && 'spaceBefore' in entry.assistant && entry.assistant.spaceBefore === true))));
 }
 
