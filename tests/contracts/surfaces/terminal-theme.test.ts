@@ -17,7 +17,7 @@ const xterm = (index: number) => {
 
 describe('terminal themes (T2 T-READABLE)', () => {
   it('model blue and provider purple both reach 4.5:1 in truecolor and ansi256 on dark/light reference backgrounds', () => {
-    for (const theme of PALETTE_THEMES) for (const role of ['model', 'provider'] as const) {
+    for (const theme of PALETTE_THEMES) for (const role of ['model', 'provider', 'stateConnected', 'stateDisconnected'] as const) {
       const entry = THEME_PALETTES[theme][role];
       // The 16-colour themes carry no hex: the terminal's own palette draws them (measured as a report, proof/ALPHA60/PAKET-2/THA).
       expect(entry.hex === null).toBe(THEME_BACKGROUNDS[theme].length === 0);

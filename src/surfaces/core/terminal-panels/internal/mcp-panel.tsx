@@ -14,8 +14,10 @@ type Action = keyof McpPanelLabels['actions'];
 const ACTIONS: readonly Action[] = ['detail', 'approve', 'revoke', 'reconnect', 'remove'];
 
 /** `/mcp` as a list: "add a server" first, then each server (status, tools, realm, scope) with what can be done to it now. */
-export function mcpPanelTree(list: McpPanelList, labels: McpPanelLabels): PickerTree {
-  const servers: PickerNode[] = list.servers.map(server => ({ id: server.name, label: server.attention ? `! ${server.name}` : server.name,
+export function mcpPanelTree(list: McpPanelList, labels: McpPanelLabels, ascii = false): PickerTree {
+  const servers: PickerNode[] = list.servers.map(server => ({ id: server.name, label: server.name,
+    glyph: server.state === 'connected' ? (ascii ? '+' : '✔') : server.state === 'checking' ? (ascii ? '...' : '…') : '!',
+    tone: server.state === 'connected' ? 'stateConnected' : server.state === 'checking' ? 'muted' : 'stateDisconnected',
     detail: [server.status, server.tools, server.realm, server.scope].filter(Boolean).join(' · '), keywords: [server.launch], childTitle: server.name,
     children: [...(server.grantKey ? [{ id: 'grant', label: labels.actions.grant }] : []), ...ACTIONS.filter(action => server.trusted || (action !== 'revoke' && action !== 'reconnect')).map(action => ({ id: action, label: labels.actions[action] }))] }));
   return { title: labels.title, items: [{ id: ADD, label: labels.add, detail: labels.addDetail }, ...servers] };
@@ -55,20 +57,36 @@ export function mcpArgs(text: string): string[] {
  */
 export function McpPanel({ port, labels, push, onError, errorText, onClose }: { readonly port: McpPanelPort; readonly labels: PanelLabels;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly errorText: (error: unknown) => string; readonly onClose: () => void }) {
-  const words = labels.mcp;
+  const words = labels.mcp, glyphs = useRenderGlyphs();
   const [list, setList] = useState<McpPanelList | null>(null);
   const [view, setView] = useState<View>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
   const draft = useRef<Draft>(emptyDraft());
   const answer = useRef<((value: boolean | null) => void) | null>(null);
-  const reload = useCallback(async () => { setList(await port.list()); }, [port]);
+  const checking = useRef<AbortController | null>(null);
+  const reload = useCallback(async () => {
+    checking.current?.abort();
+    const controller = new AbortController(); checking.current = controller;
+    const initial = await port.list({ checking: true, signal: controller.signal });
+    if (controller.signal.aborted) return;
+    setList(initial);
+    void port.list({ health: true, signal: controller.signal }).then(result => { if (!controller.signal.aborted) setList(result); }, async error => {
+      if (controller.signal.aborted) return;
+      exits.current.onError(error);
+      try { const fallback = await port.list({ signal: controller.signal }); if (!controller.signal.aborted) setList(fallback); }
+      catch (failure) { if (!controller.signal.aborted) { exits.current.onError(failure); exits.current.onClose(); } }
+    });
+  }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
-  useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
+  useEffect(() => { void reload().catch(error => { if (!checking.current?.signal.aborted) { exits.current.onError(error); exits.current.onClose(); } });
+    return () => { checking.current?.abort(); answer.current?.(null); answer.current = null; };
+  }, [reload]);
   const back = (at: PickerState = PICKER_INITIAL) => { setState(at); setGeneration(value => value + 1); setView({ kind: 'list' }); };
   const ask = (question: McpTrustQuestion) => new Promise<boolean | null>(resolve => { answer.current = resolve; setView({ kind: 'question', question }); });
   const run = async (work: () => Promise<readonly string[]>) => {
+    checking.current?.abort();
     setView({ kind: 'busy' });
     try { push([{ level: 'info', text: (await work()).join('\n') }]); } catch (error) { onError(error); }
     try { await reload(); } catch (error) { onError(error); }
@@ -83,7 +101,7 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
     onAnswer={value => { if (value) void run(() => port.remove(view.name)); else back(state); }} />;
   if (view.kind === 'wizard') return <McpWizard step={view.step} problem={view.problem ?? null} port={port} labels={labels} draft={draft.current}
     onStep={step => setView({ kind: 'wizard', step })} onCancel={() => back()}
-    onDone={finished => { setView({ kind: 'busy' }); port.add(finished, ask).then(async lines => { push([{ level: 'info', text: lines.join('\n') }]);
+    onDone={finished => { checking.current?.abort(); setView({ kind: 'busy' }); port.add(finished, ask).then(async lines => { push([{ level: 'info', text: lines.join('\n') }]);
       try { await reload(); } catch (error) { onError(error); } back(); }, error => {
       const code = String((error as { code?: unknown })?.code);
       if (NAME_REFUSALS.has(code)) { setView({ kind: 'wizard', step: 'name', problem: errorText(error) }); return; }
@@ -92,7 +110,7 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
       onError(error); back();
     }); }} />;
   const chosen = (result: PickerResult, at: PickerState) => {
-    if (result.kind !== 'selected') { onClose(); return; }
+    if (result.kind !== 'selected') { checking.current?.abort(); onClose(); return; }
     if (result.id === ADD) { draft.current = emptyDraft(); setView({ kind: 'wizard', step: 'transport' }); return; }
     const [name, action] = result.path;
     if (!name || !action) { back(at); return; }
@@ -103,7 +121,7 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   };
   const body: WindowLine[] = list.servers.length ? [] : [{ spans: [span(words.none, { role: 'muted' })] }];
   return <PickerWindow title={[span(words.title)]} body={[...body, ...list.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} bodyRows={BODY_ROWS}
-    tree={mcpPanelTree(list, words)} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
+    tree={mcpPanelTree(list, words, glyphs.ascii)} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
     onResult={result => chosen(result, state)} />;
 }
 

@@ -105,6 +105,9 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     try {
       const listed = await runMcpCommand({ verb: 'list' }, { ...w.context, limits: { maxServers: 1 } }) as { servers: { name: string }[] };
       expect(listed.servers.map(item => item.name)).toEqual(['web-docs', 'web-two']); expect(peak).toBe(1); expect(probe).toHaveBeenCalledTimes(2);
+      probe.mockImplementation(async () => ({ ok: false, reason: 'start-failed', detail: 'REQUEST_TIMEOUT' }));
+      expect(await runMcpCommand({ verb: 'list' }, { ...w.context, limits: { maxServers: 1 } })).toMatchObject({ servers: [
+        { name: 'web-docs', health: 'timed-out' }, { name: 'web-two', health: 'timed-out' }] });
       const controller = new AbortController(); probe.mockClear().mockImplementation(async () => { controller.abort(); return { ok: false, reason: 'start-failed' }; });
       await expect(runMcpCommand({ verb: 'list' }, { ...w.context, signal: controller.signal, limits: { maxServers: 1 } })).rejects.toMatchObject({ name: 'AbortError' });
       expect(probe).toHaveBeenCalledTimes(1);
