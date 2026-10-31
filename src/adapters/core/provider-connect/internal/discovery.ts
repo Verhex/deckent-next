@@ -69,19 +69,32 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
   } finally { void reader?.cancel().catch(() => undefined); }
 }
 /** Only the selected exact id becomes a catalog fact. A list is evidence of availability, not tools, vision, context size or reasoning. */
-/** BeUser AYSE-16: a keyless loopback server (free) is asked once whether it accepts OpenAI tool calls (one offered tool, one output token; 200 = yes). */
-export async function probeLocalToolCalls(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, options: ProviderProbeOptions = {}): Promise<boolean> {
+/** A keyless loopback check measures acceptance of tool parameters, never a real tool execution; a timeout is unknown. */
+export async function probeLocalToolCalls(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, options: ProviderProbeOptions = {}): Promise<boolean | null> {
   const base = providerProbeBase(kind, endpoint), path = kind.connect?.chatPath, tool = { type: 'function', function: { name: 'deckent_connect_check', parameters: { type: 'object', properties: {} } } };
-  if (!path || endpointMayCarryKey(base) || kind.connect?.adapter !== 'openai-chat-http') return false;
-  return ((options.fetch ?? fetch) as unknown as typeof fetch)(`${base}${path}`, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs), headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: nativeId, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, tools: [tool], tool_choice: 'auto' }) }).then(response => { void response.body?.cancel().catch(() => undefined); return response.status === 200; }, () => false);
+  if (!path || endpointMayCarryKey(base) || kind.connect?.adapter !== 'openai-chat-http') return null;
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs), signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  signal.throwIfAborted();
+  try {
+    const response = await ((options.fetch ?? fetch) as unknown as typeof fetch)(`${base}${path}`, { method: 'POST', redirect: 'manual', signal, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: nativeId, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, tools: [tool], tool_choice: 'auto' }) });
+    const reader = response.body?.getReader();
+    try {
+      signal.throwIfAborted();
+      if (response.status === 200) return true;
+      if (!reader || response.status !== 400 && response.status !== 422) return null;
+      // Only a refusal naming tools is evidence; an unrelated invalid-parameter response proves nothing about tools.
+      const part = await readProviderPart(reader, signal);
+      return !part.done && /tool(?:s|[_ -]choice|[_ -]calls?)/iu.test(new TextDecoder().decode(part.value.subarray(0, PROVIDER_CONNECT_LIMITS.modelListBytes))) ? false : null;
+    } finally { void reader?.cancel().catch(() => undefined); }
+  } catch { options.signal?.throwIfAborted(); return null; }
 }
-export function discoveredProviderCatalog(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, toolCalls = false): ProviderCatalogDocument {
+export function discoveredProviderCatalog(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, toolCalls: boolean | null = null): ProviderCatalogDocument {
   const base = providerProbeBase(kind, endpoint), channelId = providerDiscoveryChannel(kind, endpoint);
   const modelId = `model-${createHash('sha256').update(nativeId).digest('hex').slice(0, 32)}`;
   return parseProviderCatalogDocument({ schemaVersion: 2, revision: `${channelId}-${modelId}`, providers: [{ id: channelId, version: 1,
     channel: { kind: ['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname) ? 'local-server' : 'http-api', cli: null, aliases: [] },
     models: [{ id: modelId, version: 1, nativeId, protocols: [{ family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION,
-      capabilities: toolCalls ? [{ id: OPENAI_CHAT_TOOL_CALLS_CAPABILITY, version: 1, state: 'supported' }] : [] }], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
+      capabilities: toolCalls === null ? [] : [{ id: OPENAI_CHAT_TOOL_CALLS_CAPABILITY, version: 1, state: toolCalls ? 'supported' : 'unsupported' }] }], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
       minCliVersion: null, efforts: [], aliases: [] }] }] });
 }

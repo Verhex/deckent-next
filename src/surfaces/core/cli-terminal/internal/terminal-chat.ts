@@ -14,6 +14,7 @@ export type TerminalChatPlanView = Readonly<{
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
+  tools?: 'available' | 'none' | 'unknown';
 }>;
 
 /** One governed model invocation per turn in the caller's scope; abort requests cancellation of that invocation. */

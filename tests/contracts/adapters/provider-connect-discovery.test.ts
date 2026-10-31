@@ -148,15 +148,29 @@ it('Astra R2 (alpha.56.1): a network failure keeps one display address (scheme, 
   const workspaces = { ...anthropic, connect: { ...anthropic.connect!, workspaceList: { ...anthropic.connect!.workspaceList!, path: `//review-user:${canary}@api.anthropic.com/v1/organizations/workspaces` } } };
   expect(await failure(listKindProviderWorkspaces(workspaces, 'https://api.anthropic.com', key, { fetch: down }))).toBe('https://api.anthropic.com/v1/organizations/workspaces');
 });
-it('BeUser AYSE-16/M-04 (alpha.56.1): a keyless loopback server that accepts one tool call declares tool-calls; a refusal or remote endpoint declares none', async () => {
+it('BeUser AYSE-16/M-04 (alpha.56.1): a keyless loopback server that accepts one tool call declares tool-calls; a refusal declares none and uncertainty stays unknown', async () => {
   const sent: { url: string; init: RequestInit }[] = [];
-  const probe = (status: number): ProviderProbeFetch => async (url, init) => { sent.push({ url: String(url), init: init! }); return new Response('{}', { status }); };
+  const probe = (status: number): ProviderProbeFetch => async (url, init) => { sent.push({ url: String(url), init: init! }); return new Response(status === 400 ? '{"error":{"message":"auto tool choice requires a tool parser"}}' : '{}', { status }); };
   expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: probe(200) })).toBe(true);
   expect(sent[0]).toMatchObject({ url: 'http://127.0.0.1:8000/v1/chat/completions', init: { method: 'POST', redirect: 'manual' } });
   expect(JSON.parse(String(sent[0]!.init.body))).toMatchObject({ model: 'm', max_tokens: 1, tool_choice: 'auto', tools: [{ type: 'function' }] });
   expect(new Headers(sent[0]!.init.headers).get('authorization')).toBeNull();
   expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: probe(400) })).toBe(false);
-  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: async () => { throw new Error('down'); } })).toBe(false);
-  expect(await probeLocalToolCalls(generic, 'https://llm.example/v1', 'm', { fetch: probe(200) })).toBe(false); expect(sent).toHaveLength(2);
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: async () => { throw new Error('down'); } })).toBeNull();
+  expect(await probeLocalToolCalls(generic, 'https://llm.example/v1', 'm', { fetch: probe(200) })).toBeNull(); expect(sent).toHaveLength(2);
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: probe(503) })).toBeNull();
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: reply('{"error":"bad max_tokens"}', 400) })).toBeNull();
+  const timeout: ProviderProbeFetch = async (_url, init) => new Promise((_resolve, reject) => init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true }));
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { fetch: timeout, timeoutMs: 20 })).toBeNull();
+  let bodyCancelled = false;
+  expect(await probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { timeoutMs: 20,
+    fetch: async () => new Response(new ReadableStream({ cancel() { bodyCancelled = true; } }), { status: 400 }) })).toBeNull();
+  expect(bodyCancelled).toBe(true);
+  const cancelled = AbortSignal.abort(new Error('caller-cancelled'));
+  await expect(probeLocalToolCalls(local, 'http://127.0.0.1:8000/v1', 'm', { signal: cancelled, fetch: probe(200) })).rejects.toThrow('caller-cancelled');
+  for (const [support, expected] of [[false, 'unsupported'], [null, null]] as const) {
+    const capabilities = discoveredProviderCatalog(local, 'http://127.0.0.1:8000', 'm', support).providers[0]!.models[0]!.protocols[0]!.capabilities;
+    expect(capabilities).toEqual(expected ? [{ id: 'tool-calls', version: 1, state: expected }] : []);
+  }
   expect(discoveredProviderCatalog(local, 'http://127.0.0.1:8000', 'm', true).providers[0]!.models[0]!.protocols[0]!.capabilities).toEqual([{ id: 'tool-calls', version: 1, state: 'supported' }]);
 });
