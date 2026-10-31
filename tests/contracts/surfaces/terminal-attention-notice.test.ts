@@ -59,6 +59,15 @@ describe('focus reports', () => {
     probe = ask(1_000); read('\u001b['); read('99;5u'); expect(await probe).toBeNull();
     read('\u001b]11;rgb:ff/'); await settle(80); read('z'); read(`\u001b]11;rgb:${'f'.repeat(70)}`); await settle(10);
     expect(seen.join('')).toBe(`\u001b]11;rgb:ffab\r\u001b]11;rgb:f\u0003\u001b[99;5u\u001b]11;rgb:ff/z\u001b]11;rgb:${'f'.repeat(70)}`);
+    // Astra 2886 R1: a new cut answer after a completed one gets its own window (t0 ESC, t40 answer + new cut answer, t60 its end: nothing leaks).
+    seen.length = 0; read('\u001b[?62c'); probe = ask(1_000); read('\u001b'); await settle(40);
+    read('\u001b]11;rgb:f0/ec/e5\u0007\u001b]11;rgb:1e/1e/'.slice(1)); await settle(20); read('1e\u0007\u001b[?62c');
+    expect(await probe).toBe('#1E1E1E'); await settle(60); expect(seen.join('')).toBe('');
+    // Astra 2886 R2: kitty's Ctrl+C (with and without an event type) cut at every byte still ends the probe and reaches Ink whole.
+    for (const kitty of ['\u001b[99;5u', '\u001b[99;5:1u']) for (let at = 1; at < kitty.length; at++) {
+      seen.length = 0; probe = ask(1_000); read(kitty.slice(0, at)); read(kitty.slice(at));
+      expect(await Promise.race([probe, settle(30).then(() => 'still open')]), `${at}`).toBeNull(); await settle(5); expect(seen.join('')).toBe(kitty);
+    }
     read('\u001b[?62c'); filtered.close();
   });
 });

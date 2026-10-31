@@ -13,9 +13,10 @@ export const PALETTE_NOTICES_OFF = '\u001b[?2031l';
 // eslint-disable-next-line no-control-regex -- terminal answers are control sequences.
 const ANSWER = /\u001b\]1([01]);([ -~]{0,64}?)(?:\u0007|\u001b\\)|\u001b\[\?[\d;]{0,32}c|\u001b\[\?997;\d{1,3}n/gu;
 // The start of an answer at the end of a read, byte by byte in the answer grammar only (`rgb:`/`rgba:` and hex digits, CSI `?` digits), so a key
-// that no answer contains (Enter, Ctrl+C, a space) ends it at once. Also a bare `ESC [`, so a mouse or focus report cut there reaches its filter whole.
+// that no answer contains (Enter, Ctrl+C, a space) ends it at once. Also a bare `ESC [`, so a mouse or focus report cut there reaches its filter whole,
+// and the start of kitty's Ctrl+C (`CSI 99 ; 5 [: event] u`), so it is recognised whole however the read is cut.
 // eslint-disable-next-line no-control-regex -- terminal answers are control sequences.
-const ANSWER_START = /\u001b(?:\](?:1(?:[01](?:;(?:rgba?:[0-9a-f/]*\u001b?|rgba?|rg|r)?)?)?)?|\[(?:\?[\d;]*)?)?$/iu;
+const ANSWER_START = /\u001b(?:\](?:1(?:[01](?:;(?:rgba?:[0-9a-f/]*\u001b?|rgba?|rg|r)?)?)?)?|\[(?:\?[\d;]*|9(?:9(?:;(?:5(?::\d?)?)?)?)?)?)?$/iu;
 // Ctrl+C as a byte or in the kitty keyboard protocol (`CSI 99 ; 5 u`, optionally with an event type).
 // eslint-disable-next-line no-control-regex -- Ctrl+C is a control character.
 const INTERRUPT = /\u0003|\u001b\[99;5(?::\d)?u/u;
@@ -36,7 +37,8 @@ export type BackgroundProbe = Readonly<{
 
 /**
  * The input stage before the mouse and focus filters: `push` takes every terminal answer out of a read and passes the rest to `deliver` in order.
- * An answer cut at the end of a read is held, bounded by `answerMaxBytes` and by `answerHoldMs` from its first byte; past either bound, or when the
+ * An answer cut at the end of a read is held, bounded by `answerMaxBytes` and by `answerHoldMs` from its own first byte (a new cut answer starts
+ * its own window); past either bound, or when the
  * next byte leaves the answer grammar, the held bytes go to `deliver` as ordinary input (never dropped, never kept). A lone ESC at the end of a
  * read is held the same way (the escape-time rule of tmux/vim: a 2031 notice comes unasked, so any read may end inside one) and then is the
  * Escape key. One probe at a time; answers that arrive with no probe open are dropped (the theme chosen at start-up stays).
@@ -50,7 +52,10 @@ export function createAnswerFilter(deliver: (text: string) => void): Readonly<{ 
   const stop = () => { clearTimeout(timer); timer = undefined; };
   const release = () => { stop(); const text = held; held = ''; pass(text); };
   const push = (chunk: string) => {
+    const before = held;
+    let matched = false;
     let text = (held + chunk).replace(ANSWER, (whole, which: string | undefined, value: string | undefined) => {
+      matched = true;
       if (which === '1') { if (open) open.color = parseTerminalColor(value ?? ''); }
       else if (whole.endsWith('n')) { for (const listener of listeners) listener(); }
       else if (which === undefined && open) finish(open.color);
@@ -58,7 +63,9 @@ export function createAnswerFilter(deliver: (text: string) => void): Readonly<{ 
     });
     const start = ANSWER_START.exec(text);
     held = start && start[0].length <= LIMITS.answerMaxBytes ? start[0] : '';
-    if (held) text = text.slice(0, start!.index); else stop();
+    // The held bytes continue the earlier cut answer only when nothing of it was consumed or passed; any other held start gets a fresh window.
+    if (!held || !(before && !matched && start!.index === 0)) stop();
+    if (held) text = text.slice(0, start!.index);
     if (held && timer === undefined) timer = setTimeout(release, LIMITS.answerHoldMs);
     pass(text);
   };
