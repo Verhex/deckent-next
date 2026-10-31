@@ -67,7 +67,10 @@ opened; ended writers' plain single-link records are unlinked by the next fillin
 looks for the removal fence (`removing`); the removal creates that fence exclusively first, then waits for the recorded processes (registry
 `cacheWriterWitness` bound) — Dekker order: the remover sees the record or the writer sees the fence, withdraws its record and runs without the
 cache. An unreadable record or a writer still running at the bound refuses with nothing removed and the fence kept (a rerun continues); the
-records are a member removed with the cache, the fence last. Uninstall also waits for
+records are a member removed with the cache, the fence last. Known limit (owner 2026-10-31, Astra 2867 R2-b): a writer that passes its first
+check and creates its record after the remover's final scan can leave the records directory non-empty, so that one removal ends
+`EFFECT_TARGET_UNKNOWN` with the cache partly removed (no data outside the cache, no false completion; a rerun completes); an atomic
+rename fence of the records directory is a follow-up card. Uninstall also waits for
 the stopped service's own process within its stop budget; a project installation keeps the shared global root. Enterprise executables can call the same function
 from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
 
