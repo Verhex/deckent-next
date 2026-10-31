@@ -2,9 +2,10 @@ import { displayAddress } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { endpointMayCarryKey, exactModelIdSchema, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from '#adapters/core/provider-openai-chat/index.js';
-import { PROVIDER_CONNECT_LIMITS, type ProviderConnectKind } from './registry.js';
+import { PROVIDER_CONNECT_LIMITS, PROVIDER_CONNECT_REGISTRY, type ProviderConnectKind } from './registry.js';
 import { providerProbeBase, type ProviderProbeOptions } from './probe.js';
 import { ProviderModelListError, readProviderPart, providerListHttpError } from './failure.js';
+const toolRejectionPatterns = PROVIDER_CONNECT_REGISTRY.toolRejection.messagePatterns.map(pattern => new RegExp(pattern, 'iu'));
 export { ProviderModelListError } from './failure.js';
 /** A separate channel for each kind/address: equal API ids at two servers never overwrite each other's profiles. */
 export function providerDiscoveryChannel(kind: ProviderConnectKind, endpoint: string | null): string {
@@ -69,19 +70,40 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
   } finally { void reader?.cancel().catch(() => undefined); }
 }
 /** Only the selected exact id becomes a catalog fact. A list is evidence of availability, not tools, vision, context size or reasoning. */
-/** BeUser AYSE-16: a keyless loopback server (free) is asked once whether it accepts OpenAI tool calls (one offered tool, one output token; 200 = yes). */
-export async function probeLocalToolCalls(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, options: ProviderProbeOptions = {}): Promise<boolean> {
+/** A keyless loopback check measures acceptance of tool parameters, never a real tool execution; a timeout is unknown. */
+export async function probeLocalToolCalls(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, options: ProviderProbeOptions = {}): Promise<boolean | null> {
   const base = providerProbeBase(kind, endpoint), path = kind.connect?.chatPath, tool = { type: 'function', function: { name: 'deckent_connect_check', parameters: { type: 'object', properties: {} } } };
-  if (!path || endpointMayCarryKey(base) || kind.connect?.adapter !== 'openai-chat-http') return false;
-  return ((options.fetch ?? fetch) as unknown as typeof fetch)(`${base}${path}`, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs), headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: nativeId, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, tools: [tool], tool_choice: 'auto' }) }).then(response => { void response.body?.cancel().catch(() => undefined); return response.status === 200; }, () => false);
+  if (!path || endpointMayCarryKey(base) || kind.connect?.adapter !== 'openai-chat-http') return null;
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs), signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  signal.throwIfAborted();
+  try {
+    const response = await ((options.fetch ?? fetch) as unknown as typeof fetch)(`${base}${path}`, { method: 'POST', redirect: 'manual', signal, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: nativeId, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, tools: [tool], tool_choice: 'auto' }) });
+    const reader = response.body?.getReader();
+    try {
+      signal.throwIfAborted();
+      if (response.status === 200) return true;
+      if (!reader || response.status !== 400 && response.status !== 422) return null;
+      // Parse the bounded error envelope; echoed request fields never establish a tool refusal.
+      const chunks: Uint8Array[] = []; let bytes = 0;
+      for (;;) {
+        const part = await readProviderPart(reader, signal); if (part.done) break;
+        if (part.value.byteLength > PROVIDER_CONNECT_LIMITS.bodyPrefixBytes - bytes) return null;
+        chunks.push(part.value); bytes += part.value.byteLength;
+      }
+      const { param, code, message } = (JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, bytes))) as
+        { error?: { param?: unknown; code?: unknown; message?: unknown } } | null)?.error ?? {};
+      return [param, code].some(field => typeof field === 'string' && PROVIDER_CONNECT_REGISTRY.toolRejection.parameters.includes(field))
+        || typeof message === 'string' && toolRejectionPatterns.some(pattern => pattern.test(message)) ? false : null;
+    } finally { void reader?.cancel().catch(() => undefined); }
+  } catch { options.signal?.throwIfAborted(); return null; }
 }
-export function discoveredProviderCatalog(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, toolCalls = false): ProviderCatalogDocument {
+export function discoveredProviderCatalog(kind: ProviderConnectKind, endpoint: string | null, nativeId: string, toolCalls: boolean | null = null): ProviderCatalogDocument {
   const base = providerProbeBase(kind, endpoint), channelId = providerDiscoveryChannel(kind, endpoint);
   const modelId = `model-${createHash('sha256').update(nativeId).digest('hex').slice(0, 32)}`;
   return parseProviderCatalogDocument({ schemaVersion: 2, revision: `${channelId}-${modelId}`, providers: [{ id: channelId, version: 1,
     channel: { kind: ['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname) ? 'local-server' : 'http-api', cli: null, aliases: [] },
     models: [{ id: modelId, version: 1, nativeId, protocols: [{ family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION,
-      capabilities: toolCalls ? [{ id: OPENAI_CHAT_TOOL_CALLS_CAPABILITY, version: 1, state: 'supported' }] : [] }], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
+      capabilities: toolCalls === null ? [] : [{ id: OPENAI_CHAT_TOOL_CALLS_CAPABILITY, version: 1, state: toolCalls ? 'supported' : 'unsupported' }] }], lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null },
       minCliVersion: null, efforts: [], aliases: [] }] }] });
 }

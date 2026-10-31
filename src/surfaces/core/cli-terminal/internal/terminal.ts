@@ -79,6 +79,7 @@ function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale)
         endpoint: inference.endpoint ?? t('terminal.value.none', {}, locale) }, locale)
       : t('terminal.status.inferenceAbsent', {}, locale),
     t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale),
+    chat?.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : chat?.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale),
     t('terminal.status.hint', {}, locale),
   ].join('\n');
 }
