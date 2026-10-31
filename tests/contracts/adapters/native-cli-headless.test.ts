@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, utimes } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseModelBindingDefinition, parseModelInvocationProfile, type ModelInvocationDelta } from '#domain/index.js';
+import { parseModelBindingDefinition, parseModelInvocationProfile, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort } from '#adapters/core/native-cli-headless/index.js';
-import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
+import { ErrorRegistry } from '#platform/index.js';
+import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, writeFakeCli, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { CODEX_FAMILY, codexAnswer, codexHeadless, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
@@ -64,6 +65,25 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     await utimes(c.executable, new Date(), new Date(Date.now() + 9000));
     await expect(c.call()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
     expect(JSON.parse(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0' });
+    // S7 (owner 2026-10-31): the person's path is kept and resolved per call. A self-update moves the symlink A → B and deletes A: one new check, then the
+    // call runs B (doctor: "CLI updated"); a path that leads nowhere is the typed "CLI missing — reconnect" refusal, before any spawn.
+    const linked = await connection({ steps: happy() }), link = join(linked.root, 'codex'), binB = join(linked.root, 'release-b');
+    await symlink(linked.executable, link); await mkdir(binB);
+    const pinned = parseModelInvocationProfile({ ...linked.profile, adapter: { ...linked.profile.adapter, definition: { ...linked.profile.adapter.definition as object, executable: link } } });
+    const run = async () => { await linked.port.preflight(pinned); return linked.port.send(await linked.port.prepare(pinned, binding, request())); };
+    await expect(run()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.1.0' } } });
+    const b = await writeFakeCli(binB, { initCwd: 'actual', logPath: linked.logPath, version: '9.3.0',
+      steps: happy().map(step => 'line' in step && typeof step.line === 'object' && step.line.subtype === 'init' ? { line: initLine({ claude_code_version: '9.3.0' }) } : step) });
+    await rm(link); await symlink(b, link); await rm(linked.executable);
+    await expect(run()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
+    expect((await linked.log()).map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call', 'version', 'help', 'auth', 'call']);
+    expect(JSON.parse(await readFile(join(linked.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0', updatedFrom: '9.1.0', executable: b });
+    await rm(b);
+    const missing = await linked.port.preflight(pinned).catch((error: unknown) => error);
+    expect(missing).toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
+    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'en')?.message).toContain('Reconnect: deckent models connect --connection <connection>');
+    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'tr')?.message).toContain('Yeniden bağlanın: deckent models connect --connection <bağlantı>');
+    expect((await linked.log()).filter(entry => entry.mode === 'version')).toHaveLength(2);
   });
   it.each([
     ['N7 vanished executable', { executable: '/nonexistent/headless-cli' }, 'HEADLESS_CLI_UNAVAILABLE', undefined],
@@ -156,9 +176,10 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
   it.each([
     ['a missing result', [{ line: initLine() }, { exit: 0 }]],
     ['a crash after a success line', [{ line: initLine() }, { line: resultLine('x') }, { exit: 3 }]],
-  ])('throws for %s so the receipt is unknown, with no retry', async (_label, steps) => {
-    const c = await connection();
-    await expect(c.call(steps as FakeStep[])).rejects.toThrow();
+  ])('settles %s as incomplete evidence (the receipt stays unknown) with its exit code, with no retry', async (_label, steps) => {
+    const c = await connection(), result = await c.call(steps as FakeStep[]);
+    expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
+    expect(body(result)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: (steps.at(-1) as { exit: number }).exit, signal: null });
     expect((await c.log()).filter(entry => entry.mode === 'call')).toHaveLength(1);
   });
   it('N10/N11 interrupts on timeout and on cancel (SIGINT first), then reports an unknown outcome', async () => {
@@ -237,7 +258,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(spawned.map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call']);
       expect(made.stdin).toBe(PROMPT); expect(made.system).toBe('You are a planner. Answer only JSON.'); expect(made.argv.join(' ')).not.toContain(PROMPT);
       expect(made.argv.slice(0, 11)).toEqual(['exec', '--json', '--color', 'never', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--strict-config', '--sandbox', 'read-only']);
-      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.apps=false',
+      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false',
         'features.multi_agent=false', 'features.hooks=false', 'model_reasoning_effort=high', '--model', PINNED]));
       expect(made.argv).not.toContain('--max-turns');
       for (const flag of codexHeadless.forbiddenFlags) expect(made.argv.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
@@ -248,6 +269,24 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'item.command_execution' });
       await write({ steps: [...codexAnswer('x').slice(0, 2), { type: 'turn.failed', error: { message: 'You have hit your usage limit reached for this plan' } }].map(line => ({ line })) });
       expect(body(await call())).toMatchObject({ refusal: 'quota' });
+      // 1b (WALK21): a CLI that ends before a complete turn (a refused argv: exit 2, plain stderr carrying a secret) is incomplete evidence, so the outcome
+      // stays unknown with its exit code and a redacted, bounded stderr tail (never a cause-less throw).
+      await write({ steps: [{ stderr: 'Error loading config.toml: unknown configuration field `tools.view_image` in -c/--config override\nAuthorization: Bearer w12Fictional0123456789\n' }, { exit: 2 }] });
+      const exited = await call();
+      expect(exited).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', httpStatus: null, body: { complete: false } } });
+      expect(body(exited)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2, signal: null, stderrSummary: expect.stringContaining('unknown configuration field `tools.view_image`') });
+      expect(JSON.stringify(body(exited))).not.toContain('w12Fictional0123456789');
+      expect(Buffer.byteLength(body(exited).stderrSummary)).toBeLessThanOrEqual(codexHeadless.limits.stderrSummaryBytes);
+      expect(readHeadlessRejection((exited as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2 });
+      // Lead 2026-10-31: the CLI's own counted reconnect notices (probe/2 shape) are tolerated up to the registry bound; past it, or any other error line, refuses.
+      const reconnect = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'error', message: `Reconnecting... ${i + 2}/5 (stream disconnected before completion: failed to lookup address information: Try again)` }));
+      const answered = codexAnswer('R');
+      await write({ steps: [...answered.slice(0, 2), ...reconnect(2), ...answered.slice(2)].map(line => ({ line })) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'R' } }] } });
+      await write({ steps: [...answered.slice(0, 2), ...reconnect(codexHeadless.guards.maxReconnects + 1), ...answered.slice(2)].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'reconnect-limit' });
+      await write({ steps: [...answered.slice(0, 2), { type: 'error', message: 'Reconnecting... waiting for network' }, ...answered.slice(2)].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'error' });
       // Astra 2848 R2/R3: unknown counters are no zero, and nothing after the completed turn changes its answer; a reported zero stays a zero.
       const ended = (usage: unknown, after: Record<string, unknown>[] = []) => [...codexAnswer('A').slice(0, 4), { type: 'turn.completed', usage }, ...after].map(line => ({ line }));
       const valid = { input_tokens: 10, cached_input_tokens: 4, output_tokens: 2 };

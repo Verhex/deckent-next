@@ -1,5 +1,5 @@
 {
-  "error.HEADLESS_CLI_UNAVAILABLE": "The subscription CLI for the Brain was not found at the connected path, or it moved (for example after a Node.js or CLI reinstall). Nothing was sent to a model and no other model was chosen. Connect the subscription Brain again with the new path.",
+  "error.HEADLESS_CLI_UNAVAILABLE": "The subscription CLI is missing at the connected path (it was removed, or the path no longer leads to a program). Nothing was sent to a model and no other model was chosen. Reconnect: deckent models connect --connection <connection> --scope <scope> --model <model> --command-id <id> [--executable <abs path>] (without --executable the first one in PATH is used). A CLI that only updated itself behind the same path keeps working.",
   "error.HEADLESS_OWNER_MISMATCH": "The subscription Brain belongs to another operating-system user. A process may use only its own person's CLI login; nothing was started and no other model was chosen.",
   "error.HEADLESS_PREFLIGHT_FAILED": "The subscription Brain's check before use failed, so the channel stays closed. No model was called and no other model was chosen; the check runs again on the next call.",
   "error.HEADLESS_PREFLIGHT_FAILED.version": "The installed subscription CLI version is older than this model needs, or its version could not be read. The channel stays closed; no model was called and no other model was chosen. Update the CLI, then try again.",
@@ -53,5 +53,6 @@
   "headless.login.notSignedIn": "Not signed in with a subscription for {connection}: the Brain cannot use this directory yet. Run the sign-in again.",
   "headless.connect.loginOwned": "CLI login used: {dir} (the Brain's own; the CLI reads it itself, Deckent never opens it).",
   "doctor.headless.owned": "; the Brain's own login directory",
-  "doctor.headless.notOwned": "; not the Brain's own login directory (it keeps working): sign the Brain's own in, then connect again"
+  "doctor.headless.notOwned": "; not the Brain's own login directory (it keeps working): sign the Brain's own in, then connect again",
+  "doctor.headless.updated": "; CLI updated {from} → {to} (checked again before use)"
 }

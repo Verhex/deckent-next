@@ -1,5 +1,5 @@
 {
-  "error.HEADLESS_CLI_UNAVAILABLE": "Abonelik Brain'inin CLI'ı bağlanan yolda bulunamadı ya da yeri değişti (örneğin Node.js veya CLI yeniden kurulunca). Modele hiçbir şey gönderilmedi, başka bir model seçilmedi. Abonelik Brain'ini yeni yolla yeniden bağlayın.",
+  "error.HEADLESS_CLI_UNAVAILABLE": "Abonelik CLI'ı bağlanan yolda yok (kaldırılmış ya da yol artık bir programa çıkmıyor). Modele hiçbir şey gönderilmedi, başka bir model seçilmedi. Yeniden bağlanın: deckent models connect --connection <bağlantı> --scope <kapsam> --model <model> --command-id <kimlik> [--executable <mutlak yol>] (--executable olmadan PATH'teki ilk CLI kullanılır). Aynı yolun arkasında yalnızca kendini güncelleyen bir CLI çalışmaya devam eder.",
   "error.HEADLESS_OWNER_MISMATCH": "Abonelik Brain'i başka bir işletim sistemi kullanıcısına ait. Bir süreç yalnız kendi kişisinin CLI girişini kullanabilir; hiçbir şey başlatılmadı, başka bir model seçilmedi.",
   "error.HEADLESS_PREFLIGHT_FAILED": "Abonelik Brain'inin kullanım öncesi denetimi geçmedi, kanal kapalı kalıyor. Hiçbir model çağrılmadı, başka bir model seçilmedi; denetim bir sonraki çağrıda yeniden koşar.",
   "error.HEADLESS_PREFLIGHT_FAILED.version": "Kurulu abonelik CLI'ının sürümü bu modelin istediğinden eski ya da sürüm okunamadı. Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi. CLI'yi güncelleyip yeniden deneyin.",
@@ -53,5 +53,6 @@
   "headless.login.notSignedIn": "{connection} için bir abonelikle giriş yapılmadı: Brain bu dizini henüz kullanamaz. Girişi yeniden çalıştırın.",
   "headless.connect.loginOwned": "Kullanılan CLI girişi: {dir} (Brain'in kendi dizini; CLI onu kendisi okur, Deckent hiçbir zaman açmaz).",
   "doctor.headless.owned": "; Brain'in kendi giriş dizini",
-  "doctor.headless.notOwned": "; Brain'in kendi giriş dizini değil (çalışmaya devam eder): Brain'in kendi dizininde giriş yapın, sonra yeniden bağlayın"
+  "doctor.headless.notOwned": "; Brain'in kendi giriş dizini değil (çalışmaya devam eder): Brain'in kendi dizininde giriş yapın, sonra yeniden bağlayın",
+  "doctor.headless.updated": "; CLI güncellendi: {from} → {to} (kullanmadan önce yeniden denetlendi)"
 }

@@ -20,9 +20,11 @@ export function headlessEgressReasons(value: HeadlessEgress): { reasons: Record<
     otherReasons: value.otherReasons ?? { unknown: value.other } };
 }
 /**
- * S3 headless step: the adapter-composed body of a rejected receipt (never CLI output, model text or stderr), so a consumer can name the cause:
+ * S3 headless step: the adapter-composed body of a rejected receipt (never CLI output or model text), so a consumer can name the cause:
  * `guard` (field), `model-mismatch`, `quota` (resetsAtMs), `credits-required`, `login-required`, `invalid-output` (subtype), `provider-error`
  * (status), `response-limit`; f5: `resource-limit` (field: cpu-time, processes or memory) and `egress`, the call's gateway summary.
+ * v4 `process-exit` (owner S12/HL 2026-10-31): the CLI ended before a complete turn (an unknown receipt's incomplete evidence) with its exit
+ * code, signal and a redacted, bounded stderr summary, the only CLI text a body may carry.
  */
 const baseRejectionSchema = z.object({ schemaVersion: z.literal(1),
   refusal: z.enum(['guard', 'model-mismatch', 'quota', 'credits-required', 'login-required', 'invalid-output', 'provider-error', 'response-limit', 'resource-limit']),
@@ -32,7 +34,9 @@ const baseRejectionSchema = z.object({ schemaVersion: z.literal(1),
 export const headlessRejectionBodySchema = z.discriminatedUnion('schemaVersion', [baseRejectionSchema.unwrap(),
   baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable') }).strict(),
   z.object({ schemaVersion: z.literal(3), refusal: z.enum(['usage-unavailable', 'service-unavailable']),
-    code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u).optional(), status: counterSchema.max(599).min(400).nullable() }).strict()]).readonly();
+    code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u).optional(), status: counterSchema.max(599).min(400).nullable() }).strict(),
+  z.object({ schemaVersion: z.literal(4), refusal: z.literal('process-exit'), exitCode: counterSchema.nullable(), signal: z.string().min(1).max(32).nullable(),
+    stderrSummary: z.string().max(65_536), egress: headlessEgressSchema.optional() }).strict()]).readonly();
 export type HeadlessRejectionBody = z.infer<typeof headlessRejectionBodySchema>;
 /** Legacy CLI readers keep their original evidence scope; composition explicitly supplies any additional subscription adapter ids. */
 export const NATIVE_CLI_HEADLESS_ADAPTER_ID = 'native-cli-headless';

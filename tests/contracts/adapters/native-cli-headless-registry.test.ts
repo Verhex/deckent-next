@@ -22,7 +22,7 @@ describe('S3-1 headless registry data', () => {
     const codex = nativeCliHeadless(CODEX_FAMILY)!;
     expect(codex.command.capabilities.eventStream).toBe('codex-exec-json');
     expect(codex.headless.args).toEqual(expect.arrayContaining(['--sandbox', 'read-only', '--ephemeral', '--ignore-user-config', '--ignore-rules', 'approval_policy="never"',
-      'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'tools.view_image=false', 'features.apps=false', 'features.multi_agent=false']));
+      'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false', 'features.multi_agent=false']));
     for (const flag of codex.headless.forbiddenFlags) expect(codex.headless.args.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
     expect([codex.command.capabilities.maxTurns, codex.headless.turnBound]).toEqual([null, 'stream']);
     const unbounded = structuredClone(registry) as unknown as { adapters: { codex: { headless: Record<string, unknown> } } };

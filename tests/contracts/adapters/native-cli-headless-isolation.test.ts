@@ -126,12 +126,16 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
   }, 30_000);
   it('f5 negative: a crash away from every bound, or a CLI exit with a reserved code, is never named a bound (unknown outcome)', async () => {
     const c = await connection();
-    await expect(c.call(bounded({ burn: 'abort' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
-    await expect(c.call([{ line: initLine() }, { exit: headless.isolation.limits.exits['cpu-time'] }])).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    // 1b: the crash settles as incomplete evidence (unknown receipt) with the mirrored exit code, never a typed bound.
+    for (const [steps, exitCode] of [[bounded({ burn: 'abort' }), 134], [[{ line: initLine() }, { exit: headless.isolation.limits.exits['cpu-time'] }], 1]] as const) {
+      const evidence = (await c.call(steps as FakeStep[]) as { evidence: Parameters<typeof readHeadlessRejection>[0] & { reason: string } }).evidence;
+      expect(evidence).toMatchObject({ reason: 'interrupted', body: { complete: false } });
+      expect(readHeadlessRejection(evidence)).toMatchObject({ refusal: 'process-exit', exitCode });
+    }
   }, 30_000);
   it('f5 negative: an interrupted turn near the data bound is never named a bound (its outcome stays unknown)', async () => {
     const c = await connection();
-    await expect(c.call(bounded({ lower: ['--data=+1048576'], burn: 'interrupt' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    expect(await c.call(bounded({ lower: ['--data=+1048576'], burn: 'interrupt' }))).toMatchObject({ evidence: { reason: 'interrupted', body: { complete: false } } });
     expect((await c.log()).map(entry => entry.mode)).toContain('interrupted');
   }, 30_000);
   it('keeps SIGINT first through the realm: a cancelled turn is interrupted inside the sandbox, then the outcome is unknown', async () => {
