@@ -1,3 +1,4 @@
+import { themePanelPort } from './theme-panel.js';
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
@@ -12,7 +13,7 @@ import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServin
 import { prefersAsciiGlyphs, runTerminalWorkline, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
-import { reportedTerminalBackground, type TerminalThemeRequest } from '#surfaces/core/terminal-host/index.js';
+import { reportedTerminalBackground, type TerminalHostContext, type TerminalThemeRequest } from '#surfaces/core/terminal-host/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { terminalDeliveryPort } from './deliver-port.js';
 import { deliveryWindowLabels, runtimeBuildSkew, terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -115,7 +116,10 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
     ? { protocol: protocolPanelPort(root, scopeId, { ...context, planProfileProtocol }, options, locale) } : {};
   const openProviderWorkspaces = context.openProviderWorkspaces;
   const workspace = openProviderWorkspaces && context.configApplication && context.resolveConfigPrincipal ? { workspace: workspacePanelPort(root, scopeId, { ...context, openProviderWorkspaces }, options, locale) } : {};
-  return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
+  return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale),
+      theme: (control: TerminalHostContext['theme']) => themePanelPort(root, context, options, locale, {
+        setting: (config as { terminal?: { theme?: TerminalThemeSetting } }).terminal?.theme ?? TERMINAL_THEME_SETTINGS[0],
+        capability: colorCapability({ env, isTTY: true, argv: process.argv }), colorfgbg: env['COLORFGBG'], ...control }) } : {}),
     ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
     ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale, context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined) } : {}),

@@ -41,6 +41,7 @@ describe('C-SETUP: bare deckent config', () => {
     const f = fixture({ openConfigPanel: opened, stdin: tty, stdout: { isTTY: true, columns: 100, write: (s: string) => { f.output.push(s); } } });
     await configCommand(['config'], f.context);
     expect(opened).toHaveBeenCalledOnce(); expect(f.output.join('')).toContain('Saved'); expect(f.app.inspect).not.toHaveBeenCalled();
+    expect(opened.mock.calls[0]![1].root).toBe(f.context.root);
     const port = opened.mock.calls[0]![0];
     expect(typeof port.inspect).toBe('function'); expect(typeof port.write).toBe('function'); expect(port.records).toBeDefined();
     for (const extra of [{ stdin: { isTTY: false } }, { env: { CLAUDECODE: '1' } }]) {

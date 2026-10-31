@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import { loadConfigTerminalLaunch, uninstallRetired, colorCapability, resolveLocale, t, terminalSafeText, PACKAGE_VERSION, TERMINAL_SCOPE_ID_SCHEMA, type Locale } from '#platform/index.js';
 import { openTerminalShell, STARTUP_BANNERS, type TerminalShell, type WorklineStartup } from '#surfaces/core/terminal-host/index.js';
-import { resolveTerminalTheme, resolveWorklinePalette, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting } from '#surfaces/core/terminal-theme/index.js';
+import { terminalPalette, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting } from '#surfaces/core/terminal-theme/index.js';
 import { prefersAsciiGlyphs, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { terminalStartupLabels, worklineLabels } from '#surfaces/core/terminal-labels/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -25,10 +25,10 @@ export async function openLaunchShell(words: readonly string[], language: string
   if (!config || !scopeId || terminalSafeText(scopeId) !== scopeId || !valid(terminal.theme, TERMINAL_THEME_SETTINGS) || !valid(terminal.banner, STARTUP_BANNERS)
     || terminal.layout === 'inline' || terminal.clearOnStart === false || await uninstallRetired(config.dataRoot).catch(() => true)) return null;
   const locale: Locale = resolveLocale(language, env, config.language), ascii = prefersAsciiGlyphs(env), labels = worklineLabels(locale, '');
-  const theme = resolveTerminalTheme(terminal.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: true, argv: process.argv }), env['COLORFGBG']);
+  const theme = { setting: terminal.theme ?? TERMINAL_THEME_SETTINGS[0], capability: colorCapability({ env, isTTY: true, argv: process.argv }), colorfgbg: env['COLORFGBG'] };
   const startup: WorklineStartup = { clear: true, banner: terminal.banner ?? STARTUP_BANNERS[0], ...terminalStartupLabels(locale,
     { version: PACKAGE_VERSION, project: basename(root), path: shortenHomePath(root, env['HOME'] ?? env['USERPROFILE']), model: t('terminal.shell.modelPending', {}, locale) }, ascii) };
-  return openTerminalShell({ palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, clearScreen: true, attention: terminal.notify !== 'off', startup,
+  return openTerminalShell({ palette: terminalPalette(theme.setting, theme.capability, theme.colorfgbg), theme, ascii, clearScreen: true, attention: terminal.notify !== 'off', startup,
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}), ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.signal ? { signal: context.signal } : {}),
     labels: { composer: labels.composer, prompt: labels.prompt, banner: labels.banner, hint: labels.hint, status: `${scopeId} · ${t('terminal.shell.preparing', {}, locale)}`,
       queued: t('terminal.shell.queued', {}, locale), dropped: t('terminal.shell.dropped', {}, locale) } });
