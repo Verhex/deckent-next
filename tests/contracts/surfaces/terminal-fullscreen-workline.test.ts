@@ -217,6 +217,11 @@ describe('mouse reports', () => {
     await settle(10);
     expect(text).toBe('akaşi ğüİ'); expect(text).not.toContain('\ufffd'); expect(wheel).toEqual([1]);
     mouse.close();
+    // Sequential CLI cards reopen the same real input after the previous filter paused it.
+    const reopened = mouseFilteredInput(real); let next = '';
+    reopened.input.setEncoding('utf8'); reopened.input.on('data', (chunk: string) => { next += chunk; });
+    try { real.write(Buffer.from('next-card')); await settle(10); expect(next).toBe('next-card'); }
+    finally { reopened.close(); }
   });
   it('N1: bytes another view reads while the terminal is handed over never reach the composer stream', async () => {
     const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;

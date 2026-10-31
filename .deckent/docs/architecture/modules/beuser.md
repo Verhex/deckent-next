@@ -148,6 +148,32 @@ only when all its profiles are BeUser profiles. `beuser-controller-2` records th
 same admission; human output separates walker diagnostics from each judge verdict, preserving unknown results. The output ends with the walked revision and `cd <controller> && deckent beuser
 report`. The `--scope` form is unchanged and also defaults `--candidate` to this package's build.
 
+### BS part 2b author slice (alpha.60 candidate)
+
+An omitted `--journey` opens a list of the packaged journey files on the person's terminal,
+with the package's recommendation marked; AI and pipe callers cannot answer it. Esc cancels.
+Sequential cards resume the input stream paused by the previous card; decision arming and
+text/key filtering remain unchanged.
+The existing exclusive write-lock custody protects a walk across processes and is checked again
+before setup publication: a second invocation refuses with `BEUSER_WALK_RUNNING` and points to
+`/beuser`, without another Run. Unsupported controller config versions retain their typed
+`CONFIG_VERSION_UNSUPPORTED` refusal instead of becoming a missing-model suggestion.
+
+For an existing pool resize, installation-wide `set-capacity` authorization is checked before
+any config publication. A denial preserves the authored config bytes. The capacity owner checks
+authority again when applying; a failure after config publication returns `applied-unverified`,
+and the CLI states the partial effect. This is not an atomic config/pool transaction.
+
+The terminal-beuser component and read-only producer show the recorded Run/journey, walker and
+judge models, branch results, elapsed time, registry ceilings and early-stop reasons. Run state
+and an observation's age do not prove process liveness; `r` refreshes the snapshot and Esc closes
+only the window. The `/beuser` workline/launch connection and shared unit/dependency registration
+remain the lead's integration step (the author card reserves those files to TH-A INT). They are
+not a shipped command in this author worktree. Config narrowing and the in-monitor person card
+remain blocked on a versioned profile decision that pins the exact narrowed limits through
+Attempt execution and recovery; current profiles pin only `limitsRevision`. Author fixtures
+and checks do not establish assembled BeUser, native-platform or independent acceptance.
+
 ### Walker and evaluator models (owner 2026-10-31)
 
 The `beuser-walker` and `beuser-evaluator` roles declare `admits: "connected"` in the model role registry

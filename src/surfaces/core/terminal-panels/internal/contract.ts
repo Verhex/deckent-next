@@ -342,6 +342,7 @@ export interface PanelLabels {
   readonly workspace?: Readonly<{ entry: string; title: string; confirm: string; empty: string; note: string; hints: string }>;
 }
 export interface PanelPorts {
+  readonly beuser?: PanelPorts['hub'];
   readonly theme?: ThemePanelPort;
   readonly hub?: { render(input: { readonly labels: PanelLabels; readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void }): import('react').ReactNode };
   readonly policy?: PolicyPanelPort;

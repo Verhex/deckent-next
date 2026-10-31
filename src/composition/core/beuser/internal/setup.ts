@@ -7,7 +7,7 @@ import calibration from '../../../../../assets/beuser/calibration/manifest.json'
 import controllerData from '../../../../../assets/beuser/controller.json' with { type: 'json' };
 import { executionRegistrySchema, modelInvocationProfileSchema } from '#domain/index.js';
 import { readInstallationProfileFile, readBeuserCandidate, readMeasuredBeuserRecord, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
-import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest } from '#engine/index.js';
+import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest, PoolControlPolicyAuthorization, assertPoolControlAllowed } from '#engine/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { CONFIG_FIELDS, ErrorRegistry, globalStateRoot, loadConfig, sha256, type ConfigLoadOptions } from '#platform/index.js';
 import { configPersonWitness, createConfiguredConfigApplication, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -15,6 +15,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity } from '#composition/core/runs/index.js';
 import { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
+import { withConfiguredBeuserWalkCustody } from './custody.js';
 
 /** This package's own build: the default candidate of `deckent beuser walk` (owner S9). A source checkout has no staged manifest and is refused. */
 export const BEUSER_PACKAGE_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -46,10 +47,11 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
   const journey = await readFile(join(BEUSER_PACKAGE_ROOT, 'assets', 'beuser', 'journeys', `${input.journey}.json`), 'utf8').then(text => JSON.parse(text) as Journey, () => { throw invalid(); });
   const state = globalStateRoot(options.env ?? process.env); if (!state) throw invalid();
   const root = join(state, controllerData.folder); await mkdir(root, { recursive: true, mode: 0o700 });
-  const configured = (await loadConfig(root, { ...options, heal: false }).catch(() => null) as { terminal?: { scopeId?: unknown } } | null)?.terminal?.scopeId;
+  const configured = (await loadConfig(root, { ...options, heal: false }) as { terminal?: { scopeId?: unknown } }).terminal?.scopeId;
   const scopeId = input.scopeId ?? (typeof configured === 'string' ? configured : null), controller = { root, scopeId };
   if (!scopeId) return { status: 'model-required', controller, models: [] };
   const c = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'write');
+  await withConfiguredBeuserWalkCustody(root, scopeId, options, async () => undefined);
   const models = await modelSources(c, async sources => {
     const rows = (await inspectRoleModelsInScope(sources, 'beuser-walker', scopeId, Date.now())).models;
     const profiles = ((c.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
@@ -124,6 +126,7 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   const c = await loadConfiguredScopeContext(root, input.scopeId, { ...options, heal: false }, 'write');
   const admission = CONFIG_FIELDS.admission.schema.safeParse(await document(c));
   if (!admission.success || !admission.data) throw invalid();
+  const admitted = admission.data;
   const parsed = executionRegistrySchema.safeParse(admission.data.registry);
   if (!parsed.success || !parsed.data.profiles.length) throw invalid();
   const registry = parsed.data;
@@ -158,6 +161,12 @@ async function install(root: string, input: { readonly scopeId: string; readonly
   const result = { schemaVersion: 1 as const, status: same ? 'current' : 'preview', digest, admission: admission.data, poolBefore: heldPool?.capacity ?? null };
   if (!input.apply) return result;
   if (input.expect !== digest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+  return withConfiguredBeuserWalkCustody(root, input.scopeId, options, async () => {
+  const capacity = { executionSlots: admitted.executionSlots, inFlightSlots: admitted.inFlightSlots };
+  if (replace && heldPool && !isDeepStrictEqual(heldPool.capacity, capacity, { skipPrototype: true })) {
+    assertPoolControlAllowed(await new PoolControlPolicyAuthorization({ load: async () => c.document })
+      .decide('set-capacity', admitted.poolId, input.scopeId, c.principal));
+  }
   let status = 'current';
   if (!same) {
     const app = createConfiguredConfigApplication(root, options, current => {
@@ -168,16 +177,21 @@ async function install(root: string, input: { readonly scopeId: string; readonly
     if (written.status !== 'applied') return { ...result, status: 'approval-pending', approval: written };
     status = 'applied';
   }
+  try {
   const pool = await installConfiguredExecutionPool(root, input.scopeId, true, options);
   // Installer policy is immutable; the existing capacity owner records an effective override separately.
   if (replace && heldPool && (pool.status === 'current' || pool.status === 'conflict' && pool.reason === 'pool-policy')) {
-    const capacity = { executionSlots: admission.data.executionSlots, inFlightSlots: admission.data.inFlightSlots };
+    const capacity = { executionSlots: admitted.executionSlots, inFlightSlots: admitted.inFlightSlots };
     if (!isDeepStrictEqual(heldPool.capacity, capacity, { skipPrototype: true })) {
       await applyConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId: input.scopeId, commandId: `beuser-pool-${digest}`, capacity }, options);
     }
     const effective = await inspectConfiguredPoolCapacity(root, { schemaVersion: 1, scopeId: input.scopeId }, options);
-    return { ...result, status: isDeepStrictEqual(effective.capacity, capacity, { skipPrototype: true }) ? status : 'pool-unavailable', pool, effective };
+    return { ...result, status: isDeepStrictEqual(effective.capacity, capacity, { skipPrototype: true }) ? status : status === 'applied' ? 'applied-unverified' : 'pool-unavailable', pool, effective };
   }
-  return { ...result, status: pool.status === 'created' || pool.status === 'current' ? status : 'pool-unavailable', pool };
-
+  return { ...result, status: pool.status === 'created' || pool.status === 'current' ? status : status === 'applied' ? 'applied-unverified' : 'pool-unavailable', pool };
+  } catch (error) {
+    if (status !== 'applied') throw error;
+    return { ...result, status: 'applied-unverified', errorCode: error instanceof Error && 'code' in error ? String(error.code) : 'BEUSER_INPUT_INVALID' };
+  }
+  });
 }

@@ -13,12 +13,21 @@ import { evaluateConfiguredBeuserTask } from './evaluate.js';
 import { validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
 import { beuserJourneyProfileSchema, executeConfiguredBeuserAttempt } from './application.js';
 import { BEUSER_PACKAGE_ROOT } from './setup.js';
+import { withConfiguredBeuserWalkCustody } from './custody.js';
+import { beuserMonitorName } from './monitor.js';
 
 /** The CLI selects installed registry data. It supplies no profile, principal, Attempt id, probe or launch command. */
 export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal): Promise<BeuserReport> {
+  return withConfiguredBeuserWalkCustody(root, input.scopeId, options, () => walk(root, input, options, signal));
+}
+async function walk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
+  options: ConfigLoadOptions, signal: AbortSignal): Promise<BeuserReport> {
   const started = performance.now();
   const { c, selected, runId, principal, profiles, definitions, candidateRoot } = await admitConfiguredBeuserWalk(root, input, options, signal);
+  await beuserPrivateRecord(await prepareProductDirectory(c.layout, 'crashes'), beuserMonitorName(input.scopeId, c.principal), c.config.artifacts.maxBytes)
+    .write({ schemaVersion: 1, runId, journey: input.journey, startedAt: Date.now(), walkers: selected.map(({ profile, data }) => ({ id: profile.id,
+      walker: data.choices['beuser-walker'], judge: data.choices['beuser-evaluator'], limitsRevision: data.limitsRevision })) });
   const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile });
   const segments: BeuserReport['segments'] = [], unknown: BeuserReport['unknown'] = [], findings: NonNullable<BeuserReport['findings']> = [];
   const cleanup: NonNullable<BeuserReport['cleanup']> = [];

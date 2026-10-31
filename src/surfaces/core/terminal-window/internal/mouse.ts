@@ -77,6 +77,7 @@ export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: N
   const colors = createAnswerFilter(deliver, reply => { out.emit('data', reply); });
   const onData = (chunk: Buffer | string) => colors.push(typeof chunk === 'string' ? chunk : decoder.write(chunk));
   real.on('data', onData);
+  real.resume(); // A previous card's close paused this same input.
   const input = Object.assign(out, {
     isTTY: true as const,
     setRawMode(mode: boolean) { real.setRawMode(mode); return input; },
