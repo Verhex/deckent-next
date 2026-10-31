@@ -3,10 +3,10 @@ import { beuserBindingSchema } from '#domain/index.js';
 import { BeuserController, BeuserWalkStopped, beuserSettledScreen } from './controller.js';
 import { correctBeuserModelOutput, type BeuserWalkerDecode } from './models.js';
 
-/** The stops that are the persona's own (RED findings with the last screen): stuck in a loop, only observing, or out of wait patience. */
-export type BeuserStopReason = 'loop' | 'observing' | 'patience';
+/** Retained early stops: persona patience/stuck findings and the admitted execution bound. */
+export type BeuserStopReason = 'loop' | 'observing' | 'patience' | 'bound';
 const personaStop = (error: unknown): error is BeuserWalkStopped & { reason: BeuserStopReason } =>
-  error instanceof BeuserWalkStopped && (error.reason === 'loop' || error.reason === 'observing' || error.reason === 'patience');
+  error instanceof BeuserWalkStopped && (error.reason === 'loop' || error.reason === 'observing' || error.reason === 'patience' || error.reason === 'bound');
 
 /** Only native model output is decoded; a model-authored verdict is never a completion signal. */
 export async function walkBeuser(controller: BeuserController, ports: {
@@ -19,7 +19,8 @@ export async function walkBeuser(controller: BeuserController, ports: {
 }): Promise<void> {
   let screen = await controller.call('beuser-sandbox', 'create', context => ports.initialCommand
     ? ports.surface.argv(context, ports.initialCommand) : ports.surface.look(context));
-  while (true) {
+  let proposed: BeuserSurfaceCommand['action'] = { kind: 'look' };
+  try { while (true) {
     controller.screen(screen);
     await controller.call('beuser-transcript', 'inspect', () => ports.record(screen));
     if (await controller.call('attempt', 'evaluate', () => ports.finished(screen))) return;
@@ -39,22 +40,20 @@ export async function walkBeuser(controller: BeuserController, ports: {
       const parsed = beuserSurfaceCommandSchema.safeParse(decoded);
       if (!parsed.success) throw new BeuserWalkStopped('drift');
       const { context } = controller, action = parsed.data.action;
+      proposed = action;
       assertBeuserAccess(context, parsed.data.binding, context.principal, { kind: 'beuser-sandbox', id: parsed.data.binding.realmId }, 'create');
       // Walk19R: a stop verdict, and (walk20) a key or text, first read the screen once more. A product that redrew after the screen the
       // persona decided on is decided again: no stop, and no input lands on a card the persona never saw. Unchanged, the read is retained.
       // A stop compares digit-masked screens (the loop equality); input compares the exact screen, since a digit can carry the choice
       // (`1: Deny; 2: Allow` swapped to `2: Deny; 1: Allow`).
-      const retain = async (fresh: BeuserScreen) => { controller.screen(fresh); await controller.call('beuser-transcript', 'inspect', () => ports.record(fresh)); };
+      const retain = async (fresh: BeuserScreen) => { screen = fresh; controller.screen(fresh); await controller.call('beuser-transcript', 'inspect', () => ports.record(fresh)); };
       const reread = async (same: (fresh: BeuserScreen) => boolean) => {
         const fresh = await controller.call('beuser-sandbox', 'create', ctx => ports.surface.look(ctx));
         const changed = !same(fresh);
         if (!changed) await retain(fresh);
         return { fresh, changed };
       };
-      const stop = async (screen: BeuserScreen, error: BeuserWalkStopped & { reason: BeuserStopReason }): Promise<never> => {
-        if (ports.stopped) await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(screen, action, error.reason));
-        throw error;
-      };
+      const stop = (fresh: BeuserScreen, error: BeuserWalkStopped): never => { screen = fresh; throw error; };
       try { controller.action(shown, action); }
       catch (error) {
         if (error instanceof BeuserContractError && error.code === 'BEUSER_ACTION_INVALID') { controller.acted(shown, action, error.code); throw error; }
@@ -76,5 +75,8 @@ export async function walkBeuser(controller: BeuserController, ports: {
         throw error;
       }
     });
+  } } catch (error) {
+    if (personaStop(error) && ports.stopped) await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(screen, proposed, error.reason));
+    throw error;
   }
 }

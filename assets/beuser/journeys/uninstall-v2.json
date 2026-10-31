@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "revision": "b1-uninstall-v2-1",
   "journeyId": "uninstall-v2",
-  "limitsProfile": "b1-dogfood-provisional-2",
+  "limitsProfile": "b1-dogfood-provisional-3",
   "branches": [
     {
       "id": "U-B1",
@@ -247,12 +247,12 @@
     "schemaVersion": 1,
     "journeyId": "uninstall-v2",
     "version": 1,
-    "digest": "b8273eccd5ec6ce8d7ce393ec6a5bcf40851faa088d89eac9f51d82fbf81c127",
+    "digest": "cf63d873bcc001e4003103951ea457d94f0a5cd93074175f5726ed41ee57b492",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
       "personDecisions": "synthetic-person-decision",
-      "limitsProfile": "b1-dogfood-provisional-2",
+      "limitsProfile": "b1-dogfood-provisional-3",
       "branches": [
         {
           "id": "U-B1",

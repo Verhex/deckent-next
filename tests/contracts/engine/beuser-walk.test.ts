@@ -4,9 +4,9 @@ import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, encodeCommandProj
 import { sha256, createHmacIntegrity, EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
 import { BeuserContractError, BEUSER_ARRANGE_REGISTRY, BEUSER_WALK_RULES, pinBeuserLimits, pinBeuserWalkerSummary, type BeuserContext, type BeuserScreen, type BeuserArrangeStep } from '#engine/core/beuser-contract/index.js';
-import { createBeuserTranscript } from '#engine/core/beuser-evidence/index.js';
+import { createBeuserTranscript, createBeuserEvidencePort } from '#engine/core/beuser-evidence/index.js';
 import { BeuserApplication, BeuserController, beuserWalkSandboxResult, BeuserExecutionSupervisor, BeuserDispatch, pinBeuserCampaign, admitBeuserAttempt, recordBeuserRefusal, beuserRefusalEvent, readBeuserControllerAudit,
-  correctBeuserModelOutput, type BeuserWalkPorts, type BeuserArrangement } from '#engine/core/beuser/index.js';
+  correctBeuserModelOutput, BeuserExecutionBudget, BeuserWalkStopped, type BeuserWalkPorts, type BeuserArrangement } from '#engine/core/beuser/index.js';
 import { BeuserRealmApplication, type BeuserRealmLease } from '#engine/index.js';
 import { sealApproval, verifyApproval } from '#engine/core/approval/index.js';
 import { AuditApplication } from '#engine/core/audit/index.js';
@@ -113,6 +113,7 @@ it('prompt-injected extra tools or verdict fields make the walk invalid instead 
   expect(await h.app.walk(context(), summary)).toMatchObject({ state: 'invalid', reason: 'drift' });
   expect(h.ports.surface.press).not.toHaveBeenCalled();
   expect(h.ports.surface.argv).not.toHaveBeenCalled();
+  expect(h.ports.evidence.readback).not.toHaveBeenCalled();
 });
 
 it('stops a same-screen/action loop and enforces persona wait and step patience before the next effect', async () => {
@@ -123,9 +124,32 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
   const now = vi.spyOn(performance, 'now').mockImplementation(() => clock); onTestFinished(() => { now.mockRestore(); });
   const press = { kind: 'press', key: 'Enter' }, look = { kind: 'look' };
   const deciding = (action: object, ms = BEUSER_WALK_RULES.settleMs) => () => { clock += ms; return { schemaVersion: 1, binding, action }; };
+  const judged = (h: ReturnType<typeof harness>, ctx = context()) => {
+    const recorder = createBeuserTranscript(ctx, EMPTY_KNOWN_SECRETS), stopped = h.ports.stopped;
+    h.ports.record = async screen => { recorder.append(ctx, { binding, atMs: clock, kind: 'screen', evidenceRef: `screen-${screen.sequence}`, text: screen.text }); };
+    h.ports.stopped = vi.fn(async (screen, action, reason) => {
+      recorder.append(ctx, { binding, atMs: clock, kind: 'friction', evidenceRef: `stop-${reason}`, text: JSON.stringify({ screen: screen.text, action, reason }) });
+      await stopped?.(screen, action, reason);
+    });
+    const evidence = createBeuserEvidencePort(ctx, recorder, async readContext => {
+      const sealed = recorder.finalize(readContext);
+      await h.ports.models.evaluate(readContext, sealed.transcriptDigest);
+      return { ...green, transcriptDigest: sealed.transcriptDigest, outcome: 'FRICTION', experience: 'friction', evidenceRefs: sealed.evidenceRefs };
+    });
+    h.ports.evidence = { ...evidence, finalize: vi.fn(evidence.finalize), readback: vi.fn(evidence.readback) };
+    return { recorder, checked: async (reason: string) => {
+      expect(h.ports.evidence.finalize).toHaveBeenCalledOnce(); expect(h.ports.models.evaluate).toHaveBeenCalledOnce();
+      expect(h.ports.evidence.readback).toHaveBeenCalledOnce(); expect(h.ports.stopped).toHaveBeenCalledOnce();
+      expect(recorder.inspect(ctx).at(-1)?.entry).toMatchObject({ kind: 'friction', evidenceRef: `stop-${reason}` });
+      expect(vi.mocked(h.ports.realm.destroy).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(h.ports.models.evaluate).mock.invocationCallOrder[0]!);
+    } };
+  };
+  const roomy = { ...context(), limits: pinBeuserLimits({ ...limits, maxWallMs: 60_000 }) };
   const stuck = harness(), looped = vi.fn(async () => {});
   stuck.ports.surface.press = stuck.ports.surface.look; stuck.ports.stopped = looped; stuck.ports.decode = deciding(press);
-  expect(await stuck.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'loop' });
+  const stuckEvidence = judged(stuck, roomy);
+  expect(await stuck.app.walk(roomy, summary)).toMatchObject({ state: 'completed', reason: 'loop', verdict: { outcome: 'FRICTION' } });
+  await stuckEvidence.checked('loop');
   // Each press is preceded by its walk20 guard read: 1 first look + 2 × (read + press) + the stop's read.
   expect(stuck.ports.surface.look).toHaveBeenCalledTimes(6); expect(looped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sequence: 6 }), press, 'loop');
   expect(vi.mocked(stuck.ports.models.walker).mock.calls.map(call => call[3])).toEqual([{ recentActions: [], screenUnchanged: false, remainingSteps: 4, remainingWaitMs: 100 },
@@ -133,11 +157,12 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
   // Walk18: only observing an unchanged screen is stuck too (RED `observing`, threshold from the limits registry), never a silent patience end.
   const loop = harness(), observed = vi.fn(async () => {});
   loop.ports.decode = deciding(look); loop.ports.stopped = observed;
-  expect(await loop.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'observing' });
+  clock = 0; const observedEvidence = judged(loop, roomy);
+  expect(await loop.app.walk(roomy, summary)).toMatchObject({ state: 'completed', reason: 'observing', verdict: { outcome: 'FRICTION' } });
+  await observedEvidence.checked('observing');
   expect(loop.ports.surface.look).toHaveBeenCalledTimes(BEUSER_WALK_RULES.observeStop + 1); expect(observed).toHaveBeenCalledExactlyOnceWith(expect.anything(), look, 'observing');
   // Walk19R: a 1 s walker repeating Enter while the product applies for 3.5 s, a blank startup screen for 8 s, and a redraw the stop's own
   // read finds are never stuck.
-  const roomy = { ...context(), limits: pinBeuserLimits({ ...limits, maxWallMs: 60_000 }) };
   const product = (action: object, ms: number, text: (reads: number) => string) => { const h = harness(); let reads = 0; clock = 0; h.ports.decode = deciding(action, ms);
     h.ports.surface.look = h.ports.surface.press = vi.fn(async () => { const shown = text(++reads); return { binding, sequence: reads, text: shown, digest: sha256(shown) }; }); return h; };
   for (const h of [product(press, 1000, () => clock >= 3500 ? 'completed' : 'approval card'), product(look, 2000, () => clock >= 8000 ? 'completed' : ''),
@@ -150,12 +175,16 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
     h.ports.decode = vi.fn(() => ({ schemaVersion: 1, binding, action: { kind: 'wait', ms: requests[vi.mocked(h.ports.decode).mock.calls.length - 1]! } }));
     h.ports.stopped = stopped; h.ports.surface.wait = vi.fn(async (ctx: BeuserContext) => { clock += durations.shift()!; return look(ctx); }); return { h, stopped }; };
   const over = timed([60, 90, 30, 30], [20, 50, 40]);
-  expect(await over.h.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'patience' });
+  const overEvidence = judged(over.h);
+  expect(await over.h.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: 'patience', verdict: { outcome: 'FRICTION' } });
+  await overEvidence.checked('patience');
   expect(vi.mocked(over.h.ports.models.walker).mock.calls.map(call => [call[3].remainingWaitMs, call[4]])).toEqual([[100, undefined], [80, undefined], [80, 'BEUSER_ACTION_INVALID'], [30, undefined]]);
   expect(vi.mocked(over.h.ports.surface.wait).mock.calls.map(call => call[1])).toEqual([60, 30, 30]);
   expect(over.stopped).toHaveBeenCalledExactlyOnceWith(await vi.mocked(over.h.ports.surface.wait).mock.results.at(-1)!.value, { kind: 'wait', ms: 30 }, 'patience');
   const spent = timed([100, 1], [100]);
-  expect(await spent.h.app.walk(context(), summary)).toMatchObject({ state: 'unknown' as const, reason: 'patience' });
+  const spentEvidence = judged(spent.h);
+  expect(await spent.h.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: 'patience', verdict: { outcome: 'FRICTION' } });
+  await spentEvidence.checked('patience');
   expect(spent.h.ports.surface.wait).toHaveBeenCalledOnce();
   expect(spent.stopped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: 'approval card' }), { kind: 'wait', ms: 1 }, 'patience');
   // Walk18 SELF: a budget cycle whose screens differ only by a revision number is a loop; a stepper changing one number per press is not.
@@ -166,6 +195,18 @@ it('stops a same-screen/action loop and enforces persona wait and step patience 
   expect(walk(['Providers: budget 5 USD (revision 1)', 'Set 5 USD? (revision 1)', 'Providers: budget 5 USD (revision 2)', 'Set 5 USD? (revision 2)',
     'Providers: budget 5 USD (revision 3)'], { kind: 'press', key: 'Enter' })).toBe('loop');
   expect(walk(['1', '2', '3', '4', '5', '6'].map(usd => `Budget ${usd} USD`), { kind: 'press', key: 'ArrowRight' })).toBeNull();
+  // A changing screen avoids stuck rules: exhausted persona decisions are patience; admitted steps/calls are bound.
+  for (const [maxSteps, maxCalls, reason] of [[5, 8, 'patience'], [2, 8, 'bound'], [5, 2, 'bound']] as const) {
+    clock = 0; const h = harness(), ctx = { ...roomy, limits: pinBeuserLimits({ ...roomy.limits, maxSteps, maxCalls }) }; let sequence = 0;
+    h.ports.surface.look = vi.fn(async () => ({ binding, sequence: ++sequence, text: `screen ${sequence}`, digest: sha256(String(sequence)) }));
+    h.ports.decode = deciding(look, 1); const evidence = judged(h, ctx);
+    expect(await h.app.walk(ctx, summary)).toMatchObject({ state: 'completed', reason, verdict: { outcome: 'FRICTION' } });
+    await evidence.checked(reason);
+    expect(h.ports.models.walker).toHaveBeenCalledTimes(reason === 'patience' ? 4 : 2);
+  }
+  const unknown = harness(); unknown.ports.models.walker = vi.fn(async () => { throw new BeuserWalkStopped('unknown'); });
+  expect(await unknown.app.walk(context(), summary)).toMatchObject({ state: 'unknown', reason: 'unknown', verdict: null });
+  expect(unknown.ports.evidence.finalize).not.toHaveBeenCalled(); expect(unknown.ports.evidence.readback).not.toHaveBeenCalled();
 });
 
 it('cancellation reaches an in-flight model; destruction without absence proof quarantines and cannot retain GREEN', async () => {
@@ -175,6 +216,10 @@ it('cancellation reaches an in-flight model; destruction without absence proof q
   expect(await h.app.walk(context(abort.signal), summary)).toMatchObject({ state: 'unknown' as const, cleanup: 'quarantined' });
   expect(h.ports.realm.quarantine).toHaveBeenCalledOnce();
   expect(h.ports.surface.press).not.toHaveBeenCalled();
+  expect(h.ports.evidence.readback).not.toHaveBeenCalled();
+  const leak = harness(); leak.ports.models.walker = vi.fn(async () => { throw new BeuserWalkStopped('leak'); });
+  expect(await leak.app.walk(context(), summary)).toMatchObject({ state: 'invalid', reason: 'leak', verdict: null });
+  expect(leak.ports.evidence.finalize).not.toHaveBeenCalled(); expect(leak.ports.evidence.readback).not.toHaveBeenCalled();
 });
 
 it('rejects foreign harness readback and unbound persona before allowing acceptance or starting a realm', async () => {
@@ -378,6 +423,7 @@ it('reads controller A after the walk, invalidates an attributed authority row a
   expect(rows.some(row => row.event.subject.kind === 'recovery-detection')).toBe(true);
   const missing = harness(); missing.ports.controllerAudit = async () => 'unknown';
   expect(await missing.app.walk(context(), summary)).toMatchObject({ state: 'unknown' });
+  expect(h.ports.evidence.readback).not.toHaveBeenCalled(); expect(missing.ports.evidence.readback).not.toHaveBeenCalled();
   expect(await readBeuserControllerAudit(context(), { audit: { list() { throw new Error('AUDIT_INTEGRITY'); } }, approvals: () => [] })).toBe('unknown');
 });
 
@@ -429,6 +475,17 @@ it('distinguishes a real wall deadline from person cancellation at the terminal 
   const stopped = await cancelled.app.walk(context(abort.signal), summary);
   expect(stopped.reason).toBe('cancelled');
   expect(beuserWalkSandboxResult('fixture-handle', stopped)).toMatchObject({ interrupted: true, interruptCause: 'cancel' });
+  expect(h.ports.evidence.readback).not.toHaveBeenCalled(); expect(cancelled.ports.evidence.readback).not.toHaveBeenCalled();
+  // Cleanup consumed the wall budget after a sealed normal/early stop: neither can start a judge.
+  for (const early of [false, true]) {
+    const expired = harness(), budget = new BeuserExecutionBudget(limits);
+    if (early) expired.ports.models.walker = vi.fn(async () => { throw new BeuserWalkStopped('bound'); });
+    const destroy = expired.ports.realm.destroy;
+    expired.ports.realm.destroy = async ctx => { budget.close(); return destroy(ctx); };
+    const result = await new BeuserApplication(expired.ports, budget).walk(context(), summary);
+    expect(result).toMatchObject({ verdict: null, state: 'unknown' });
+    expect(result.transcriptDigest).not.toBeNull(); expect(expired.ports.evidence.readback).not.toHaveBeenCalled();
+  }
 });
 
 it('corrects an invalid walker answer with typed feedback before executing the real approval-card action', async () => {

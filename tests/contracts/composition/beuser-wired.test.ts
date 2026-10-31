@@ -221,8 +221,11 @@ it.skipIf(process.platform !== 'linux')('setup and admission refuse a controller
   } finally { await f.dispose(); }
 });
 
-it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted action artifacts and a named RED finding with proven or unknown cleanup', async () => {
-  for (const cleanupProven of [false, true]) {
+it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted action artifacts and a named RED finding with proven or unknown cleanup; its judge is the one readback phase', async () => {
+  // Astra 2872 R1: the early-stop judge runs the existing readback, so a malformed or foreign-reference answer gets only the existing bounded
+  // format correction (min of admitted calls, admitted steps and persona step patience), in the same envelope; a refused reservation ends it.
+  const correctionBound = Math.min(BEUSER_LIMITS_REGISTRY.profiles[0]!.maxCalls, BEUSER_LIMITS_REGISTRY.profiles[0]!.maxSteps, 4);
+  for (const [cleanupProven, judge] of [[false, []], [true, ['valid']], [true, ['foreign', 'valid']], [true, ['prose']], [true, ['prose', 'limits']]] as const) {
     // Profile v3: the installed start state is arranged through the production arrange adapter (substituted Docker transport) before the first look.
     const f = await reportFixture('pty', { schemaVersion: 2, catalogRevision: engine.BEUSER_ARRANGE_REGISTRY.revision, states: ['T1', 'cancel'] });
     try {
@@ -251,21 +254,39 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
           return { input: sink, output, cancel: async () => {} };
         } }));
       // External model I/O only: real decode/controller/realm custody/dispatch/report below. Each walker decision takes `settleMs` (walk19R).
-      const clock = performance.now.bind(performance); let skew = 0;
+      const clock = performance.now.bind(performance); let skew = 0, judged = 0;
       vi.spyOn(performance, 'now').mockImplementation(() => clock() + skew);
       const model = vi.spyOn(engine, 'createBeuserModelPort').mockReturnValue({
         walker: vi.fn(async () => { skew += engine.BEUSER_WALK_RULES.settleMs; return { state: 'invoked', receipt: { role: 'beuser-walker', maker: 'fixture-walker', invocation: {
           receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: '{"kind":"type","text":"fixture-private"}' } }] } },
-        } } }; }), evaluate: vi.fn(), cancel: vi.fn(),
+        } } }; }), evaluate: vi.fn(async (ctx: engine.BeuserContext) => {
+          // Past the listed answers the evaluator keeps answering prose; `limits` is what the real port's reservation throws before any send.
+          const kind = (judge as readonly string[])[judged++] ?? 'prose';
+          if (kind === 'limits') throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+          const content = kind === 'prose' ? 'The persona is stuck on the card.'
+            : JSON.stringify({ verdict: 'friction', evidenceRefs: [kind === 'valid' ? `${ctx.binding.transcriptId}:loop` : 'foreign:loop'] });
+          return { state: 'invoked', receipt: { role: 'beuser-evaluator', maker: 'fixture-evaluator', invocation: {
+            receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content } }] } } } } };
+        }), cancel: vi.fn(),
       } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
       const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
       // Walk17 S2: the second identical repeat on an unchanged screen stops before a third effect, after (walk19R) one more read of that screen.
       expect(keys).toEqual(['fixture-private', 'fixture-private']);
       expect(model).toHaveBeenCalled();
+      // A judge that fails every correction ends the readback with its typed code, no verdict and no evidence file, beside the kept stop finding.
+      const judgeFailed = cleanupProven && judge.at(-1) !== 'valid';
       expect(report).toMatchObject({ counts: { walked: 1 }, findings: [{ branch: 'persona', persona: 'person', code: 'persona-stuck', outcome: 'RED', reason: 'loop' }],
-        unknown: cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }], reliability: { completed: 0, attempted: 1 } });
+        reliability: { completed: 0, attempted: 1 } });
+      expect(report.unknown).toEqual(judgeFailed ? [{ branch: 'persona', reason: 'BEUSER_MODEL_OUTPUT_INVALID' }] : cleanupProven ? [] : [{ branch: 'persona', reason: 'BEUSER_CLEANUP_UNPROVEN' }]);
       const { terminal } = await f.records();
-      expect(terminal).toMatchObject({ reason: 'loop', cleanup: cleanupProven ? 'destroyed' : 'unknown', evidence: null });
+      const evaluate = model.mock.results[0]!.value.evaluate;
+      // Only the first answer is uncorrected; every later call carries the typed correction. Prose until the bound; `limits` ends at that call.
+      const calls = !cleanupProven ? 0 : judge[0] === 'prose' && judge.length === 1 ? correctionBound : judge.length;
+      expect(evaluate.mock.calls.map((args: unknown[]) => args[2])).toEqual(Array.from({ length: calls }, (_, index) => index ? 'BEUSER_MODEL_OUTPUT_INVALID' : undefined));
+      expect(terminal).toMatchObject({ reason: 'loop', judgeFailure: judgeFailed ? 'BEUSER_MODEL_OUTPUT_INVALID' : null, cleanup: cleanupProven ? 'destroyed' : 'unknown',
+        evidence: cleanupProven && !judgeFailed ? { validity: 'valid', experience: { verdict: 'friction' } } : null });
+      if (judgeFailed) expect(report.segments[0]?.verdict).toBeNull();
+      else if (cleanupProven) expect(report.segments[0]?.verdict).toMatchObject({ outcome: 'unknown', experience: 'friction', authorization: 'unknown', safety: 'unknown' });
       // First look, then per typed text its walk20 guard read and the input, then the stop's read.
       expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', ...Array(6).fill(['action', 'screen']).flat(), 'friction']);
       expect(arrangeCalls.map(args => args.includes('--workdir'))).toEqual([true, false]);
@@ -299,7 +320,8 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
         const record = (await storage.store.readDispatch(request))!;
         const manager = recordedExecutionSupervisor(record, { config, layout: config.productLayout, store: storage.store, artifacts });
         expect(await manager.observe(request)).toMatchObject({ result: cleanupProven ? { kind: 'exited', exitCode: 1 } : { kind: 'unknown' } });
-        if (cleanupProven) expect(await manager.collectOutputFiles!(request)).toEqual([]);
+        // PAKET-2 BH: an early stop now seals the transcript, so the terminal record carries exactly the sealed evidence file.
+        if (cleanupProven) expect((await manager.collectOutputFiles!(request)).map(file => file.name)).toEqual(judgeFailed ? [] : ['beuser-evidence']);
         else await expect(manager.collectOutputFiles!(request)).rejects.toThrow('SUPERVISOR_NOT_TERMINAL');
         expect(keys).toEqual(['fixture-private', 'fixture-private']);
       } finally { storage.store.close(); }

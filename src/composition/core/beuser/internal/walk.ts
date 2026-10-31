@@ -54,6 +54,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
           const finding = dispatch.diagnostic?.finding;
           if (finding) findings.push(finding);
           if (dispatch.reason && !finding) unknown.push({ branch: identity.taskId, reason: dispatch.reason });
+          if (dispatch.judgeFailure) unknown.push({ branch: identity.taskId, reason: dispatch.judgeFailure });
           if (dispatch.kind !== 'terminal') { unknown.push({ branch: identity.taskId, reason: 'BEUSER_CLEANUP_UNPROVEN' }); continue; }
           await evaluateConfiguredBeuserTask(root, { binding: data.binding, principal, limits, signal: new AbortController().signal }, randomUUID(), options);
           const record = await store.readDispatch(request);

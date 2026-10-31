@@ -44,8 +44,8 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit alone is not destru
 
 The limits registry contains the `b1-dogfood-provisional-1` profile and, from `beuser-limits-5` (owner
 2026-10-31: generous development ceilings so a walk is not cut by its budget; optimisation later),
-`b1-dogfood-provisional-2`, which the packaged journeys, personas and calibration use: 256 calls,
-16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged. Their finite ceilings are provisional
+`b1-dogfood-provisional-2` (256 calls,
+16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged), and from `beuser-limits-6` `b1-dogfood-provisional-3`, which the packaged journeys, personas and calibration use: the same ceilings with a 45 s wait bound so the owner's persona wait patience (Ayşe 45 s, Mert 30 s, 2026-10-31) applies in full. Their finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
 and replacement. Each model call reserves its prompt size plus the requested completion cap: the
 invocation adapter's measured prompt count (including the served template) where the transport has a
@@ -337,6 +337,35 @@ verdict. Cleanup uncertainty remains separately unknown; the diagnostic grants n
 calibration, safety pass or independent acceptance. Only retained screen observations count as
 walked; missing verdict coverage remains explicitly unknown.
 
+
+## Early-stop evaluation (alpha.60 source candidate)
+
+The controller seals the transcript after `patience`, `loop`, `observing` or an admitted
+`bound`, including one `stopped` friction row with the last screen and proposed action
+(typed text withheld). Persona decision exhaustion is `patience`; the admitted execution
+budget remains `bound`. The existing readback invokes the experience evaluator after
+proven destruction and a valid controller audit. An unknown, cancelled,
+deadline, drift or leak stop, uncertain cleanup, unavailable audit or exhausted wall
+budget cannot start that evaluator. Its calls, tokens and cost use the existing shared
+reservation envelope; no evaluator capacity is added.
+
+The judge, after a normal finish or an early stop, is one readback phase. A malformed,
+schema-invalid or foreign-reference answer gets the same bounded format correction as the
+walker (`correctBeuserModelOutput`): each later call carries `BEUSER_MODEL_OUTPUT_INVALID`
+as feedback, at most the smallest of the admitted calls, the admitted steps and the persona
+step patience, every call reserved from the same envelope. There is no evaluator-specific
+retry or second phase. A refused reservation ends the phase; repeated invalid output ends
+it with `BEUSER_MODEL_OUTPUT_INVALID`, no verdict and no evidence file. A failed judge never
+erases an early stop: the walk keeps its stop reason and RED persona finding, and the terminal
+record carries the judge failure separately (`judgeFailure`), reported as its own unknown row.
+
+This retains the existing acceptance gates: experience advice cannot replace missing
+business readback, authorization/safety probes or calibration. Such a walk can now retain
+a non-null verdict with unknown outcome; its persona diagnostic remains separate from
+acceptance. Guaranteed RED/FRICTION on every early stop requires a separate decision about
+that contract. Owner S8 (2026-10-31) changes registry `b1-personas-2`: Ayşe waits up to
+45 seconds and Mert up to 30 seconds. New admission pins these updated summaries; existing
+sealed profiles keep their original summaries and require regeneration to adopt the change.
 
 ## Realm destruction assurance (owner amendment A, 2026-10-29)
 
