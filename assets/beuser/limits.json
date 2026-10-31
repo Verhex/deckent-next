@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "beuser-limits-4",
+  "revision": "beuser-limits-5",
   "walk": { "loopStop": 3, "observeStop": 4, "settleMs": 10000 },
   "profiles": [
     {
@@ -14,6 +14,24 @@
       "maxCalls": 128,
       "maxTokens": 131072,
       "maxCost": 1,
+      "currency": "USD",
+      "maxReruns": 2,
+      "maxTranscriptBytes": 8388608,
+      "maxArtifactBytes": 16777216,
+      "cleanupDeadlineMs": 15000,
+      "criticalRepetitions": 2
+    },
+    {
+      "schemaVersion": 1,
+      "revision": "b1-dogfood-provisional-2",
+      "source": "owner-2026-10-31-generous-dev-budget",
+      "provisional": true,
+      "maxSteps": 242,
+      "maxWallMs": 3600000,
+      "maxWaitMs": 30000,
+      "maxCalls": 256,
+      "maxTokens": 16777216,
+      "maxCost": 3,
       "currency": "USD",
       "maxReruns": 2,
       "maxTranscriptBytes": 8388608,

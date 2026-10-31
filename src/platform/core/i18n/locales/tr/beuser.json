@@ -33,6 +33,7 @@
   "beuser.report.counts": "Tanımlı {defined}; seçilen {selected}; yürünmüş {walked}; eşzamanlı {concurrent}.",
   "beuser.report.calibration": "Kalibrasyon {revision}: kusur yakalama {trapHits}/{trapTotal}, yanlış RED {falseRed}/{goodTotal}; asgari yakalama oranı {minimumHitRate}, azami yanlış RED oranı {maximumFalseRedRate}; k {k}, tekrar {retries}.",
   "beuser.report.reliability": "Güvenilirlik: {completed}/{attempted} tamamlandı.",
+  "beuser.report.reservation": "Token ayırmaları: {providerCount} sağlayıcı sayımıyla, {estimated} tahminle (gönderilen bayt ve kanalın çerçeve payı; CLI yanıt sınırını uygulamaz).",
   "beuser.report.cost": "Maliyet: {cost} {currency}; süre: {elapsedMs} ms.",
   "beuser.report.segment": "Kesit {segment}: sonuç {outcome}; yetki {authorization}; güvenlik {safety}; deneyim {experience}; geçerlilik {validity}; bağımsızlık {independence}.",
   "beuser.report.stuck": "Tanı bulgusu — {outcome}: {persona} kişisi {branch} dalında ilerleyemedi (tekrarlanan ekran/eylem). Ekran {screenRef}: {screen}. Kanıt: {refs}.",

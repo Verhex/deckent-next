@@ -1,9 +1,14 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { CORE_MODEL_ROLES, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type ModelInvocationCommand, type ModelInvocationProfile } from '#domain/index.js';
+import { beuserEvaluatorPrincipalRef, encodeCommandProjection, verifiedPrincipalSchema, type ModelInvocationCommand, type ModelInvocationProfile } from '#domain/index.js';
 import { BeuserCallBudget, providerSpendEvidenceDigest, type BeuserContext } from '#engine/index.js';
 import type { ModelInvocationResult, ModelInvocationSpending } from '#engine/core/model-invocation/index.js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { sha256 } from '#platform/index.js';
+import { assistantLine, initLine, rateLimitLine, resultLine, uiLine, writeFakeCli } from '../../fixtures/native-headless/stream.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { createServer } from 'node:http';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
@@ -18,7 +23,8 @@ vi.mock('#adapters/index.js', async original => ({ ...await original<typeof impo
   openSqliteModelActivationReader: async (...args: Parameters<typeof import('#adapters/index.js').openSqliteModelActivationReader>) => args[0] === '/fixture.sqlite'
     ? { loadRecord: mocks.activation, close() {} } : (await original<typeof import('#adapters/index.js')>()).openSqliteModelActivationReader(...args) }));
 
-const target = CORE_MODEL_ROLES.models.find(row => row.roles.includes('beuser-walker'))!;
+// A local model with no tier/role row: BeUser roles take any catalog model the scope has active (owner 2026-10-31).
+const target = { channelId: 'local-vllm', modelId: 'qwen-fixture' };
 const reference = { providerId: target.channelId, providerVersion: 1, modelId: 'catalog-model', modelVersion: 1 };
 const limits = { schemaVersion: 1 as const, revision: 'fixture', source: 'test-only', provisional: true, maxSteps: 10, maxWallMs: 1000, maxWaitMs: 100,
   maxCalls: 10, maxTokens: 131072, maxCost: 1, currency: 'USD', maxReruns: 1, maxTranscriptBytes: 10000, maxArtifactBytes: 10000, cleanupDeadlineMs: 100, criticalRepetitions: 1 };
@@ -193,8 +199,7 @@ it('production local preflight detects a typed counter, reserves prompt plus com
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('fixture address');
   const f = await brainProviderFixture({ noCharge: true, budget: null, contextWindow: 2000, maxOutputTokens: 32, jsonOutput: true,
-    modelRoles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'beuser-fixture', roles: [], exceptions: [], models: [
-      { channelId: 'test-operator', modelId: 'vendor/model', version: 1, tier: 'frontier', roles: ['beuser-walker', 'beuser-evaluator'] }] }] } });
+    modelRoles: null });
   try {
     const scoped = await vi.importActual<typeof import('#composition/core/scoped-request/index.js')>('#composition/core/scoped-request/index.js');
     const invocation = await vi.importActual<typeof import('#composition/core/model-invocation/index.js')>('#composition/core/model-invocation/index.js');
@@ -245,6 +250,73 @@ it('production local preflight detects a typed counter, reserves prompt plus com
   } finally {
     await f.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
   }
+});
+
+// S3-5: every headless CLI spawn runs in the bubblewrap realm; a host without one is covered by the real-sandbox guard, not silently here.
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
+it.skipIf(process.platform !== 'linux' || !sandbox)('production subscription CLI (owner 2026-10-31, option B): a consented target reaches send for both roles on an estimated reservation; no consent, a small window and an overrun stop typed', async () => {
+  // Config, policy, activation, delegation consent, headless port, realm and the CLI process are real; the CLI is a scripted fake (HEADLESS-0 line shapes).
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-beuser-headless-'))), MODEL = 'vendor/model';
+  const bin = join(root, 'bin'), configDir = join(root, 'login'), logPath = join(configDir, '.claude.json');
+  await mkdir(bin); await mkdir(configDir, { mode: 0o700 });
+  const reply = (over: Record<string, unknown> = {}) => [uiLine(), initLine({ model: MODEL }), assistantLine('{}', MODEL), rateLimitLine(), resultLine('{}', over, MODEL)].map(line => ({ line }));
+  const executable = await writeFakeCli(bin, { logPath, initCwd: 'actual', stepsByCall: [reply(), reply(),
+    reply({ usage: { input_tokens: 400_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 9 } }), reply({ usage: {} })] });
+  const f = await brainProviderFixture({ noCharge: true, budget: null, modelRoles: null, headless: { executable, configDir, stateDir: join(root, 'state') } });
+  const spawns = async () => existsSync(logPath) ? (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string }) : [];
+  const calls = async () => (await spawns()).filter(entry => entry.mode === 'call').length;
+  try {
+    const scoped = await vi.importActual<typeof import('#composition/core/scoped-request/index.js')>('#composition/core/scoped-request/index.js');
+    const invocation = await vi.importActual<typeof import('#composition/core/model-invocation/index.js')>('#composition/core/model-invocation/index.js');
+    const terminal = await vi.importActual<typeof import('#composition/core/terminal-chat/index.js')>('#composition/core/terminal-chat/index.js');
+    mocks.scope.mockImplementation(scoped.loadConfiguredScopeContext);
+    mocks.prepare.mockImplementation(invocation.prepareConfiguredModelAs);
+    mocks.invoke.mockImplementation(invocation.invokeConfiguredModelAs);
+    mocks.command.mockImplementation(terminal.prepareTerminalChatCommand);
+    // The profile names no window: the scope catalog row's declared window is the one used.
+    const catalog = (window: number) => ({ schemaVersion: 1, scopeId: 's', channels: [{ channelId: f.reference.providerId, access: 'allowed',
+      models: [{ modelId: MODEL, model: { vendorId: 'anthropic', contextWindow: window } }] }] });
+    mocks.catalog.mockResolvedValue(catalog(1_000_000));
+    const persona = { schemaVersion: 1, personaId: 'persona', journeyId: 'journey', language: 'tr', role: 'buyer', goals: ['purchase'], knowledgeBoundary: [],
+      accessibility: [], initialKnowledge: [], goal: 'request goods', competency: { computer: 1, domain: 4, product: 0 }, preferences: [], riskAttitude: 'cautious',
+      surface: 'terminal', organizationContext: {}, patience: { maxSteps: 4, maxWaitMs: 100 }, attentionMs: 1000 };
+    const binding = { ...context.binding, identity: { ...context.binding.identity, scopeId: 's' }, personaDigest: sha256(encodeCommandProjection('beuser-persona:1', persona)) };
+    const ctx: BeuserContext = { ...context, binding, principal: { ...context.principal, scopeIds: ['s'] },
+      limits: { ...limits, maxTokens: 200_000, maxWallMs: 20_000, maxArtifactBytes: 100_000 } };
+    const configPath = join(f.project, '.deckent/config.json'), { clearConfigCache } = await import('#platform/index.js');
+    const policyPath = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    policy.grants.push({ id: 'beuser-invoke', effect: 'allow', scopes: ['s'], principals: [{ issuer: ctx.principal.issuer, subject: ctx.principal.subject }],
+      actions: ['invoke'], resource: { kind: 'model-invocation', ids: 'all' } });
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    const consent = async (delegatedUse: unknown) => { f.config.provider_invocation_profiles.profiles[0]!.adapter.definition.delegatedUse = delegatedUse as never;
+      await writeFile(configPath, JSON.stringify(f.config)); clearConfigCache(); };
+    const choice = { channelId: f.reference.providerId, modelId: MODEL }, budget = new BeuserCallBudget(ctx.limits);
+    const model = configuredBeuserModels(f.project, f.options, ctx, { 'beuser-walker': choice, 'beuser-evaluator': choice }, [{ vendorId: 'fixture-contributor' }], budget, 10,
+      () => ({ template: 'fixture-evidence' }));
+    const walk = () => model.models.walker(ctx, persona, { binding, text: 'Welcome' } as never, { recentActions: [], screenUnchanged: 0, remainingSteps: 3, remainingWaitMs: 100 } as never);
+    // No delegated-use consent for the system class: refused by the invocation application before any process starts.
+    await expect(model.models.evaluate(ctx, 'f'.repeat(64))).rejects.toMatchObject({ code: 'HEADLESS_DELEGATION_REFUSED' });
+    expect(await spawns()).toEqual([]);
+    await consent({ consentedBy: { issuer: 'host', subject: 'person' }, atMs: 1, classes: ['system'] });
+    // Both roles send once each; each reservation is settled to the CLI's reported usage (586 prompt + 9 completion).
+    await expect(model.models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { role: 'beuser-evaluator', invocation: { receipt: { outcome: { state: 'responded' } } } } });
+    await expect(walk()).resolves.toMatchObject({ state: 'invoked', receipt: { role: 'beuser-walker', invocation: { receipt: { outcome: { state: 'responded' } } } } });
+    expect(await calls()).toBe(2);
+    expect(budget.remaining()).toEqual({ calls: 8, tokens: 200_000 - 2 * 595, cost: 1, currency: 'USD' });
+    expect(model.reservations()).toEqual({ providerCount: 0, estimated: 2 });
+    // A declared window the estimate does not fit: refused before send, nothing reserved.
+    mocks.catalog.mockResolvedValueOnce(catalog(100));
+    await expect(model.models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+    expect(await calls()).toBe(2); expect(budget.remaining().calls).toBe(8);
+    // The CLI cannot be told the cap: a reported usage beyond the reservation is the existing typed stop, and the whole reservation stays charged.
+    const before = budget.remaining().tokens;
+    await expect(model.models.evaluate(ctx, 'f'.repeat(64))).rejects.toThrow('BEUSER_LIMITS_UNAVAILABLE');
+    expect(await calls()).toBe(3); expect(budget.remaining().calls).toBe(7); expect(budget.remaining().tokens).toBeLessThan(before);
+    // Astra 2848 R2: a result without counters is a typed rejection, never a zero, so the whole reservation stays charged.
+    const kept = budget.remaining().tokens;
+    await expect(model.models.evaluate(ctx, 'f'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { invocation: { receipt: { outcome: { state: 'rejected' } } } } });
+    expect(await calls()).toBe(4); expect(budget.remaining().calls).toBe(6); expect(budget.remaining().tokens).toBeLessThan(kept);
+  } finally { await f.close(); await rm(root, { recursive: true, force: true }); }
 });
 
 function modelAnswer(content: string | null, finish_reason = 'stop', reasoning = ''): ModelInvocationResult {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import asset from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
-import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
+import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, promptFramingAllowanceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
 
 const argument = z.string().min(1).refine(value => !value.includes('\0'));
 const flag = z.string().regex(/^--[a-z][a-z-]*$/);
@@ -34,25 +34,38 @@ const positive = z.number().int().positive().safe(), names = z.array(z.string().
 const proxyNames = z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/)).readonly();
 /** S3 headless model step (HEADLESS-0, 2026-10-23): one tool-less, MCP-less turn of the unmodified CLI. Argv, environment, guard expectations and
  * bounds are data; a forbidden flag (fallback model, bare mode, permission bypass, extra config) can never be part of the argv. */
+/** How the CLI's own login status is read: `json` fields on stdout (allowlisted), or `status`: the exit code plus one exact line of its output. */
+const authSchema = z.union([z.object({ authMethods: words, apiProviders: words, configDirectoryMatch: z.boolean() }).strict().readonly(),
+  z.object({ kind: z.literal('status'), stream: z.enum(['stdout', 'stderr']), loggedIn: z.array(z.object({ line: argument, authMethod: argument }).strict().readonly()).min(1).readonly(),
+    source: argument }).strict().readonly()]);
+/** Line guards by event stream: Claude's init/result fields, or Codex's allowed item types and error-text patterns (quota patterns stay in providers.json). */
+const guardsSchema = z.union([z.object({ apiKeySources: words, permissionMode: argument, plugins: z.array(z.object({ name: argument, path: argument }).strict().readonly()).readonly(),
+  lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).strict().readonly(),
+  z.object({ allowedItems: words, loginPatterns: words, source: argument }).strict().readonly()]);
 export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
+  /** The profile's protocol family when it is not the event-stream name (a catalog family named before the headless step existed). */
+  protocolFamily: argument.optional(),
   args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive,
+  /** `stream`: the CLI has no turn flag; one turn is enforced by the line guard (the call refuses a second turn). Absent: the capability's flag. */
+  turnBound: z.literal('stream').optional(),
   /** S3-3 connect: the bounded PATH search for the executable; s3c (owner 2026-10-24): the default login dir is the Brain's own (layout data, not here).
    * `login`: the CLI's own sign-in the person runs in their terminal (argv, SSO switch, bound, inherited and fixed names; never a deny name). */
   connect: z.object({ configDirSource: argument, pathSearchDirectories: positive, pathSearchTimeoutMs: positive,
-    maxInFlight: positive, maxInFlightSource: argument }).strict().readonly(), login: z.object({ args: argumentsSchema, ssoFlag: flag, timeoutMs: positive,
+    maxInFlight: positive, maxInFlightSource: argument }).strict().readonly(), login: z.object({ args: argumentsSchema, ssoFlag: flag.nullable(), timeoutMs: positive,
     env: z.object({ inherit: names, fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly() }).strict().readonly(),
     source: argument }).strict().readonly(), systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
-  forbiddenFlags: z.array(flag).min(1).readonly(),
+  /** The prompt-file argv when it is not `<systemPromptFlag> <file>` (`{file}` = the run dir's prompt file; the flag stays the one help must list). */
+  systemPromptArgs: argumentsSchema.refine(value => value.some(arg => arg.includes('{file}'))).optional(),
+  forbiddenFlags: z.array(flag).min(1).readonly(), promptFramingAllowance: promptFramingAllowanceSchema,
   /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
    * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */
   preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema, hiddenFlagsSource: argument,
     hiddenFlags: z.array(z.object({ flag, probe: z.union([z.literal('max-turns-capability'), z.object({ args: argumentsSchema, refusal: z.array(argument).min(1).readonly() }).strict().readonly()]) })
       .strict().readonly()).max(8).readonly() }).strict().readonly(),
-  auth: z.object({ authMethods: words, apiProviders: words, configDirectoryMatch: z.boolean() }).strict().readonly(),
+  auth: authSchema,
   env: z.object({ fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly(), runDir: names,
     configDir: z.string().regex(/^[A-Z][A-Z0-9_]*$/), deny: names.refine(value => value.length > 0) }).strict().readonly(),
-  guards: z.object({ apiKeySources: words, permissionMode: argument, plugins: z.array(z.object({ name: argument, path: argument }).strict().readonly()).readonly(),
-    lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).strict().readonly(),
+  guards: guardsSchema,
   limits: z.object({ stdinMaxBytes: positive, maxLineBytes: positive, stderrMaxBytes: positive, preflightTimeoutMs: positive, preflightOutputBytes: positive,
     killGraceMs: positive, responseFramingBytes: positive }).strict().readonly(),
   /** S3-5: the realm every spawn runs in (bubblewrap): the POSIX shell that sets the process limits, the gateway socket's path inside the realm,
@@ -62,7 +75,7 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
     configVisible: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/).refine(value => value !== '.' && value !== '..')).readonly(), configVisibleSource: argument,
     configMaxEntries: positive,
     /** f5: the CLI's own refresh-lock names in the login dir (a subset of `configVisible`) and Deckent's per-login-dir serialization bounds. */
-    refreshLock: z.object({ names: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).min(1).readonly(), waitMs: positive, pollMs: positive, staleMs: positive, source: argument }).strict().readonly(),
+    refreshLock: z.object({ names: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).readonly(), waitMs: positive, pollMs: positive, staleMs: positive, source: argument }).strict().readonly(),
     limits: z.object({ tmpfsBytes: positive, fileSizeBlocks: positive, fileSizeBlocksSource: argument, openFiles: positive,
       /** f5: per-process CPU (soft; hard = soft + grace) and data bounds, the realm's task bound, set by `limiter` (absolute, util-linux prlimit) inside the
        * realm; the relay samples every `sampleMs` and names a bound that stopped the CLI by its reserved exit code (`attributionPermille` of a bound). */
@@ -84,6 +97,8 @@ const commandSchema = z.object({ executable: argument, args: argumentsSchema, mo
   /** U9-6: the CLI's app-server subcommand that runs embedded in the isolated worker (one source for worker commands; transport data stays with the relay). */
   appServer: z.object({ args: argumentsSchema.refine(value => value.length > 0), source: z.string().url(), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
     support: z.literal('experimental') }).strict().readonly().optional() }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
+    // A headless step is one bounded turn: by the CLI's turn flag, or (no such flag) by its line guard.
+    && (!value.headless || value.headless.turnBound === 'stream' || value.capabilities.maxTurns !== null)
     && (value.capabilities.discovery === null || (value.disabledArgs!.length === 0) === (value.capabilities.discovery.checkout !== null))).readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly(), instructionSurface: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly() }).strict().readonly();
@@ -108,10 +123,10 @@ export function nativeCliAppServer() {
   if (found.length !== 1) throw new NativeCliRegistryError();
   return Object.freeze({ id: found[0]![0], executable: found[0]![1].executable, ...found[0]![1].appServer! });
 }
-/** The CLI whose event stream is `protocolFamily` and that declares a headless model step; selected by data, never by a CLI name. `id` is its
+/** The CLI whose profile family (its headless `protocolFamily`, else its event stream) is `protocolFamily` and that declares a headless model step; selected by data, never by a CLI name. `id` is its
  * registry key (S3-5: the native provider whose gateway destinations its isolated network may reach). */
 export function nativeCliHeadless(protocolFamily: string) {
-  const found = Object.entries(registry.adapters).filter(([, command]) => command.headless && command.capabilities.eventStream === protocolFamily);
+  const found = Object.entries(registry.adapters).filter(([, command]) => command.headless && (command.headless.protocolFamily ?? command.capabilities.eventStream) === protocolFamily);
   return found.length === 1 ? { id: found[0]![0], command: found[0]![1], headless: found[0]![1].headless! } : null;
 }
 /** Generic registry interpolation only; the compiler and binding guard share the exact argv segment. */

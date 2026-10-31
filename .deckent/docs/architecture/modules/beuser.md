@@ -42,12 +42,16 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit alone is not destru
 
 ## Limits and remaining proof
 
-The limits registry contains one `b1-dogfood-provisional-1` profile. Its finite ceilings are provisional
+The limits registry contains the `b1-dogfood-provisional-1` profile and, from `beuser-limits-5` (owner
+2026-10-31: generous development ceilings so a walk is not cut by its budget; optimisation later),
+`b1-dogfood-provisional-2`, which the packaged journeys, personas and calibration use: 256 calls,
+16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged. Their finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
-and replacement. Each model call reserves the invocation adapter's measured prompt count, including
-the served template, plus the requested completion cap. A missing, unsupported or failed counter
-refuses the call as `BEUSER_LIMITS_UNAVAILABLE` before inference; a byte-based estimate cannot admit
-a strict token reservation. The preview, count and send retain the same profile pin. An envelope that
+and replacement. Each model call reserves its prompt size plus the requested completion cap: the
+invocation adapter's measured prompt count (including the served template) where the transport has a
+counter, otherwise the registry-declared estimate described under token reservations below (CLI
+headless steps and the ChatGPT sign-in). A failed counter, or a transport with neither, refuses the
+call as `BEUSER_LIMITS_UNAVAILABLE` before inference; an estimate is never a count. The preview, count and send retain the same profile pin. An envelope that
 exceeds the configured or provider-reported window or remaining budget is refused before invocation. Valid final provider usage can reduce
 only that call's token reservation once; missing or uncertain usage retains it, and an overrun refuses
 without widening the bound. Call counts and monetary reservations remain consumed. A typed local
@@ -121,6 +125,51 @@ pool owner provisions the matching pool separately; a failed pool step is return
 can be reconciled by repeating setup. An equal registry is not rewritten; a different existing
 registry or pool is refused for governed reconciliation. `beuser.*` remains a protected root;
 execution profiles continue to live in the general execution registry.
+
+### Walker and evaluator models (owner 2026-10-31)
+
+The `beuser-walker` and `beuser-evaluator` roles declare `admits: "connected"` in the model role registry
+(`assets/model-roles/model-roles.json`, revision `model-roles-2026-10-31`): every model of the scope's declared
+provider catalog that the scope has active serves them, whether it is a subscription CLI channel, a local server
+(for example vLLM) or an API-key channel. They have no tier floor and need no model row; eligibility is the catalog
+plus the scope's activation, decided per call (basis `connected`), and no model id appears in code. A row an
+installation overlay already wrote for a BeUser role stays valid at any tier and grants nothing more. The other roles
+(`brain`, `worker`, `recovery-decision`, `memory-evaluator`) keep their tier and rows. An overlay cannot redefine a
+Core role; an Enterprise overlay may declare `admits: "connected"` only on a role it adds.
+
+Evaluator maker independence is information, not a gate. The composition runs the model port in `reduced` mode:
+an evaluator whose maker is unknown or shared with a contributor or walker is still called, and the verdict labels
+it `independent`, `reduced` or `unknown`. The label never changes the outcome or acceptance, and in this mode
+reliability reruns only for calibration, never for independence. The engine keeps a `required` mode (refuse
+`maker-unknown` and `independence`) that BeUser does not use. Memory-evaluator independence is a separate mechanism
+and unchanged. A subscription channel still serves BeUser only within the person's own delegated-use consent for
+that channel; this rule neither skips nor widens it.
+
+Several walkers run at once through the existing pool: each journey profile carries its own walker and evaluator
+choice, and a walk reserves a wave of pending tasks under the admission's `executionSlots` and `inFlightSlots`
+and runs it in parallel. One admission can therefore list three profiles whose walkers are, for example, a Claude
+subscription model, a Codex model through the ChatGPT sign-in or the Codex CLI headless step and a
+local vLLM model, with `executionSlots: 3`. The bounds stay
+the existing ones: each profile's limits revision (steps, wall time, calls, tokens and cost per walk), the pool
+slots, each invocation profile's `maxInFlight` and context window (a local server's window and concurrency), and
+the subscription's own quota (a quota refusal is a typed rejection of that call, never a model substitution).
+
+Token reservations (owner 2026-10-31, option B). A call reserves its prompt size plus the profile's
+`completionTokens`. The prompt size is the provider's own count when the transport has one (`provider-count`, for
+example a local server's `/tokenize`). A transport without a counter, the Claude and Codex CLI headless steps and the ChatGPT
+sign-in (SIWC) responses port, gives an `estimated` size instead: the UTF-8 bytes it sends (the CLI's system and user
+text; the SIWC request body) plus a registry-declared `promptFramingAllowance` for what the transport adds around them
+(`{tokens, basis: measured|unmeasured, source}`, schema in the provider catalog domain). The Claude headless entry
+(`assets/native-coding/commands.json`) declares 2048, `measured`: HEADLESS-0 (2026-10-23, CLI 2.1.309) saw 586 prompt
+tokens for a near-empty one-turn probe, so 2048 is a stated margin over it and is re-measured per CLI version. The Codex
+headless entry declares 24576, `unmeasured` (unsourced, conservative): above the 21320 input tokens of a retained tooled worker turn. The SIWC
+entry (`provider-siwc/internal/registry.json`) declares 1024, `unmeasured`: no retained usage figure exists for that
+endpoint. An estimate is never a count or a proven bound; the Brain and the agent turn ignore it and keep their own
+tagged estimate. The CLI cannot be told the completion cap and hidden thinking is not bounded by response bytes, so
+each call is settled to the usage the transport reports: a reported total above the reservation stops the walk with
+`BEUSER_LIMITS_UNAVAILABLE` and the whole reservation stays charged. The context window is the profile's, a local
+counter's, or last the scope catalog row's declared window (Claude CLI rows: 1M, Haiku 4.5 200K, sources fetched
+2026-10-31 in the row provenance). The walk report counts the calls reserved on each basis (`reservation`).
 
 Missing walk profiles return `BEUSER_PROFILE_REQUIRED` with the setup next step. A missing report
 directory or record returns `BEUSER_REPORT_NOT_FOUND` with the walk next step. Corrupt records,

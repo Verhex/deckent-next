@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { nativeCliHeadless, parseNativeCliRegistry } from '#adapters/core/native-cli-registry/index.js';
 import { parseClaudeStreamLine, nativeQuotaPolicy } from '#adapters/core/native-connection/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
+import { CODEX_FAMILY } from '../../fixtures/native-headless/codex.js';
 import { FAMILY, PINNED, assistantLine, happyLines, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
 
 describe('S3-1 headless registry data', () => {
@@ -15,8 +16,18 @@ describe('S3-1 headless registry data', () => {
     expect(headless.forbiddenFlags).toEqual(expect.arrayContaining(['--fallback-model', '--bare', '--dangerously-skip-permissions', '--mcp-config', '--json-schema']));
     for (const flag of headless.forbiddenFlags) expect(headless.args.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
     expect(headless.maxTurns).toBe(1);
-    expect(nativeCliHeadless('codex-exec-json')).toBeNull();
     expect(nativeCliHeadless('unknown-family')).toBeNull();
+    // Codex: found by its catalog family (not its event-stream name), every tool switch off, read-only, one turn bounded by the line guard.
+    expect(nativeCliHeadless('codex-exec-json')).toBeNull();
+    const codex = nativeCliHeadless(CODEX_FAMILY)!;
+    expect(codex.command.capabilities.eventStream).toBe('codex-exec-json');
+    expect(codex.headless.args).toEqual(expect.arrayContaining(['--sandbox', 'read-only', '--ephemeral', '--ignore-user-config', '--ignore-rules', 'approval_policy="never"',
+      'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'tools.view_image=false', 'features.apps=false', 'features.multi_agent=false']));
+    for (const flag of codex.headless.forbiddenFlags) expect(codex.headless.args.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
+    expect([codex.command.capabilities.maxTurns, codex.headless.turnBound]).toEqual([null, 'stream']);
+    const unbounded = structuredClone(registry) as unknown as { adapters: { codex: { headless: Record<string, unknown> } } };
+    delete unbounded.adapters.codex.headless.turnBound;
+    expect(() => parseNativeCliRegistry(unbounded)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
   });
   it('builds the environment from named data only: retries 0, no updater, and every credential override is a deny name', () => {
     const { env } = nativeCliHeadless(FAMILY)!.headless;

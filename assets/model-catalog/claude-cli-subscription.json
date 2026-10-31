@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "claude-cli-subscription-2026-10-08",
+  "revision": "claude-cli-subscription-2026-10-31",
   "providers": [
     {
       "id": "claude-cli-subscription",
@@ -77,7 +77,7 @@
             "input": [],
             "output": []
           },
-          "contextWindow": null,
+          "contextWindow": 1000000,
           "maxOutputTokens": null,
           "reasoning": {
             "supportedEfforts": [
@@ -108,7 +108,7 @@
           "minClientVersion": "2.1.257",
           "provenance": {
             "sourceUrl": "https://code.claude.com/docs/en/model-config",
-            "fetchedOn": "2026-10-02"
+            "fetchedOn": "2026-10-31"
           }
         },
         {
@@ -149,7 +149,7 @@
             "input": [],
             "output": []
           },
-          "contextWindow": null,
+          "contextWindow": 1000000,
           "maxOutputTokens": null,
           "reasoning": {
             "supportedEfforts": [
@@ -180,7 +180,7 @@
           "minClientVersion": "2.1.280",
           "provenance": {
             "sourceUrl": "https://code.claude.com/docs/en/model-config",
-            "fetchedOn": "2026-10-02"
+            "fetchedOn": "2026-10-31"
           }
         },
         {
@@ -221,7 +221,7 @@
             "input": [],
             "output": []
           },
-          "contextWindow": null,
+          "contextWindow": 1000000,
           "maxOutputTokens": null,
           "reasoning": {
             "supportedEfforts": [
@@ -252,7 +252,7 @@
           "minClientVersion": "2.1.284",
           "provenance": {
             "sourceUrl": "https://code.claude.com/docs/en/model-config",
-            "fetchedOn": "2026-10-02"
+            "fetchedOn": "2026-10-31"
           }
         },
         {
@@ -293,7 +293,7 @@
             "input": [],
             "output": []
           },
-          "contextWindow": null,
+          "contextWindow": 1000000,
           "maxOutputTokens": null,
           "reasoning": {
             "supportedEfforts": [
@@ -324,7 +324,7 @@
           "minClientVersion": "2.1.293",
           "provenance": {
             "sourceUrl": "https://code.claude.com/docs/en/model-config",
-            "fetchedOn": "2026-10-08"
+            "fetchedOn": "2026-10-31"
           }
         },
         {
@@ -361,7 +361,7 @@
             "input": [],
             "output": []
           },
-          "contextWindow": null,
+          "contextWindow": 200000,
           "maxOutputTokens": null,
           "reasoning": {
             "supportedEfforts": [],
@@ -385,8 +385,8 @@
           },
           "minClientVersion": null,
           "provenance": {
-            "sourceUrl": "https://code.claude.com/docs/en/model-config",
-            "fetchedOn": "2026-10-02"
+            "sourceUrl": "https://platform.claude.com/docs/en/models/haiku-4-5/overview",
+            "fetchedOn": "2026-10-31"
           }
         }
       ]

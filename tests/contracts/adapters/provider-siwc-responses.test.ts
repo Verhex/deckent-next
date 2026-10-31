@@ -66,9 +66,12 @@ it('is a subscription-only, single-send host lease port; only completed settles 
   expect(f.port.billingAxis).toBe('subscription');
   const prepared = await f.port.prepare(f.profile, f.definition, { ...f.request, max_completion_tokens: 1 } as never);
   expect(f.lease).not.toHaveBeenCalled(); expect(f.port.responseBytesUpperBound!(prepared)).toBeGreaterThan(0n);
+  // No counter: the estimate is exactly the body bytes sent plus the registry's labelled allowance (owner 2026-10-31), computed before any lease.
+  expect(SIWC_INFERENCE.promptFramingAllowance).toMatchObject({ basis: 'unmeasured' });
+  expect(f.port.estimatePrompt!(prepared)).toBe(Buffer.byteLength((prepared as { body: string }).body, 'utf8') + SIWC_INFERENCE.promptFramingAllowance.tokens);
   const result = await f.port.send(prepared);
   expect('kind' in result).toBe(false); expect(JSON.stringify(result)).not.toContain(TOKEN); expect(f.lease).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(sent.mock.calls[0]![0].body)).not.toHaveProperty('max_output_tokens');
+  expect(sent.mock.calls[0]![0].body).toBe((prepared as { body: string }).body); expect(JSON.parse(sent.mock.calls[0]![0].body)).not.toHaveProperty('max_output_tokens');
   await expect(f.port.send(prepared)).rejects.toThrow();
   await expect(f.port.prepare({ ...f.profile, billingAxis: 'metered' }, f.definition, f.request as never)).rejects.toThrow();
   await expect(f.port.prepare(f.profile, f.definition, { ...f.request, model: 'different' } as never)).rejects.toThrow();

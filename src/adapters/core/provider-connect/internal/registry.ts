@@ -51,6 +51,9 @@ const kindSchema = z.object({
     /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
      * adapter connects only where its isolation realm is usable, on every installation alike. */
     catalogOnly: z.boolean().default(false), protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
+    /** Codex headless (owner 2026-10-31): a worker CLI kind that also writes a headless invocation profile per connected model (its CLI registry entry
+     * declares the headless step for `protocolFamily`); the worker image gate and worker activation stay as they are. */
+    headless: z.boolean().default(false),
     rawUse: z.literal('person').optional(), preview: z.boolean().default(false),
     pull: z.enum(['available', 'pick']).default('available'),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
@@ -81,6 +84,7 @@ const kindSchema = z.object({
         && connect.personOnly && connect.rawUse === 'person' && connect.preview === true && connect.seed === null
         : connect.chatPath !== null && connect.protocolFamily === undefined)
     .refine(connect => connect.catalogOnly === (connect.adapter === 'native-cli-worker'))
+    .refine(connect => !connect.headless || (connect.catalogOnly && connect.personOnly && connect.protocolFamily !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
     .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),

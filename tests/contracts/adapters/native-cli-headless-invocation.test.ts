@@ -52,7 +52,7 @@ it.skipIf(!sandbox)('records a subscription receipt without money, replays it wi
     expect(JSON.stringify(usage)).not.toMatch(/cost|usd/iu);
   } finally { db.close(); }
 });
-it.skipIf(!sandbox)('records an in-run guard refusal as a rejected receipt with the typed body, and a preflight refusal before any claim', async () => {
+it.skipIf(!sandbox)('records an in-run guard refusal as a rejected receipt with the typed body, and a preflight refusal before any claim; unreported per-model counters stay absent', async () => {
   const guarded = await fixture([{ line: initLine({ apiKeySource: 'ANTHROPIC_API_KEY' }) }, { line: resultLine('x') }]);
   const rejected = await guarded.app.invoke(guarded.command);
   expect(rejected).toMatchObject({ receipt: { outcome: { state: 'rejected', evidence: { reason: 'invalid-response' } } } });
@@ -60,6 +60,16 @@ it.skipIf(!sandbox)('records an in-run guard refusal as a rejected receipt with 
   await expect(refused.app.invoke(refused.command)).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
   const db = new DatabaseSync(refused.path, { readOnly: true });
   try { expect(db.prepare('SELECT COUNT(*) AS n FROM model_invocations').get()).toMatchObject({ n: 0 }); } finally { db.close(); }
+  // Astra 2850 R4: valid top counters with empty or invalid per-model counters answer, but no per-model zero is reported or persisted.
+  for (const counters of [{}, { inputTokens: 2, outputTokens: '9', cacheReadInputTokens: 584, cacheCreationInputTokens: 0 }]) {
+    const { app, path, command } = await fixture([uiLine(), initLine(), assistantLine('x'), rateLimitLine(), resultLine('x', { modelUsage: { [definition.model.nativeId]: counters } })].map(line => ({ line })));
+    expect(await app.invoke(command)).toMatchObject({ receipt: { outcome: { state: 'responded' } }, response: { usage: { prompt_tokens: 586, modelUsage: { [definition.model.nativeId]: {} } } } });
+    const ledger = new DatabaseSync(path, { readOnly: true });
+    try {
+      const usage = JSON.parse(String(ledger.prepare('SELECT record FROM model_invocation_plan_usage').get()?.record));
+      expect(usage).toMatchObject({ source: 'provider-reported', counters: { prompt_tokens: 586, completion_tokens: 9 } }); expect(usage.counters).not.toHaveProperty('modelUsage');
+    } finally { ledger.close(); }
+  }
 });
 it.skipIf(!sandbox)('N22: only this exact adapter id and version select the headless branch; any other version stays unavailable, as alpha.54 resolves this id', () => {
   expect(isNativeCliHeadlessAdapter(NATIVE_CLI_HEADLESS_ADAPTER)).toBe(true);

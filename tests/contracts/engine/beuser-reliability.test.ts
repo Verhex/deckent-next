@@ -1,10 +1,10 @@
 import { expect, it, vi } from 'vitest';
-import { CORE_MODEL_ROLES, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type ModelActivationRecord } from '#domain/index.js';
+import { beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, type ModelActivationRecord } from '#domain/index.js';
 import { beuserBindingSchema, beuserVerdictSchema } from '#domain/core/beuser/index.js';
 import { pinBeuserLimits, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { BeuserCallBudget, BeuserExecutionBudget, beuserIndependentRows, assessBeuserReliability, runBeuserReliability, createBeuserModelPort, type BeuserModelComposition, type BeuserReliabilitySample } from '#engine/core/beuser/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
-import type { ModelCatalogInspection } from '#engine/core/model-activation/index.js';
+import { inspectRoleModelsInScope, type ModelCatalogInspection } from '#engine/core/model-activation/index.js';
 
 const limits = pinBeuserLimits({ schemaVersion: 1, revision: 'test-limits', source: 'fixture', provisional: true, maxSteps: 4, maxWallMs: 1000, maxWaitMs: 100,
   maxCalls: 2, maxTokens: 100, maxCost: 1, currency: 'USD', maxReruns: 1, maxTranscriptBytes: 10000, maxArtifactBytes: 10000, cleanupDeadlineMs: 100, criticalRepetitions: 1 });
@@ -57,6 +57,9 @@ it('bounded changed-model reruns preserve the blind set/rubric and RED even if t
 it('exhausted independence reports reduced without an owner step; uncertain effect or unproved cleanup never reruns', async () => {
   const rerun = vi.fn();
   expect(await runBeuserReliability({ budget: new BeuserExecutionBudget(limits), limits, policy, first: sample({ independent: false }), alternatives: [], rerun })).toMatchObject({ independence: 'reduced', reruns: 0 });
+  // Reduced mode (BeUser): the label is information; a calibrated reduced walk keeps its outcome and never reruns for independence.
+  expect(await runBeuserReliability({ budget: new BeuserExecutionBudget(limits), limits, policy, independence: 'reduced', first: sample({ independent: false }),
+    alternatives: [{ modelKey: 'other', personaDigest: binding.personaDigest }], rerun })).toMatchObject({ outcome: 'GREEN', acceptanceEvidence: true, independence: 'reduced', reruns: 0 });
   for (const first of [sample({ independent: false, unresolvedEffects: true }), sample({ independent: false, cleanupProven: false })]) {
     expect(await runBeuserReliability({ budget: new BeuserExecutionBudget(limits), limits, policy, first, alternatives: [{ modelKey: 'other', personaDigest: binding.personaDigest }], rerun })).toMatchObject({ outcome: 'unknown', reruns: 0 });
   }
@@ -103,14 +106,14 @@ it('reruns receive the original execution envelope and cannot reset steps or an 
   expect(budget.signal.aborted).toBe(true);
 });
 
-function modelHarness() {
-  const target = CORE_MODEL_ROLES.models.find(row => row.roles.includes('beuser-walker'))!;
+function modelHarness(maker: object = { vendorId: 'zhipu' }) {
+  const target = { channelId: 'local-vllm', modelId: 'qwen-fixture' }; // no tier/role row: the connected BeUser roles take it
   const reference = { providerId: target.channelId, providerVersion: 1, modelId: 'catalog-model', modelVersion: 1 };
   const principal = verifiedPrincipalSchema.parse({ id: 'evaluator', ...beuserEvaluatorPrincipalRef({ issuer: 'host', subject: 'person' }), assurance: 'workload-verified', scopeIds: ['scope'] });
   const ctx: BeuserContext = { binding, principal, limits, signal: new AbortController().signal };
   let active = true;
   const inspection: ModelCatalogInspection = { schemaVersion: 1, scopeId: 'scope', channels: [{ channelId: target.channelId, access: 'allowed', revision: 1, providerVersion: 1, catalogRevision: 'c1', channel: {} as never, activation: null,
-    models: [{ modelId: target.modelId, revision: 1, model: { vendorId: 'zhipu' } as never, activation: null }] }] };
+    models: [{ modelId: target.modelId, revision: 1, model: maker as never, activation: null }] }] };
   const invoke = vi.fn(async () => ({ receipt: { claim: { invocationId: 'invocation' } } }) as unknown as ModelInvocationResult);
   const ports: BeuserModelComposition = { choices: { 'beuser-walker': target, 'beuser-evaluator': target }, contributorModels: [{ vendorId: 'zai' }], walkerModels: [{ vendorId: 'walker-maker' }], independence: 'required',
     invocation: { invoke }, credential: 'trusted-workload-fixture', now: () => Date.UTC(2026, 9, 29),
@@ -123,16 +126,23 @@ function modelHarness() {
   return { ctx, ports, invoke, deactivate: () => { active = false; } };
 }
 
-it('a currently active role/profile invokes through ModelInvocationApplication; alias independence and inactive rows refuse before prepare/send', async () => {
-  const h = modelHarness(), models = createBeuserModelPort(h.ports, new BeuserCallBudget(limits));
+it('an active connected model without a role row invokes; required independence refuses alias and unknown makers, reduced calls them and labels', async () => {
+  const h = modelHarness(), models = createBeuserModelPort(h.ports, new BeuserCallBudget(limits)), roles = (await h.ports.sources(h.ctx)).roles;
+  const listed = async () => (await inspectRoleModelsInScope(roles, 'beuser-walker', 'scope', h.ports.now())).models; // the setup check's read
+  expect(await listed()).toEqual([{ channelId: 'local-vllm', modelId: 'qwen-fixture', tier: null, basis: 'connected', active: true }]);
   await expect(models.evaluate(h.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'unavailable', reason: 'independence' });
   expect(h.ports.prepare).not.toHaveBeenCalled();
   expect(h.invoke).not.toHaveBeenCalled();
   h.deactivate();
+  expect(await listed()).toMatchObject([{ basis: 'connected', active: false }]);
   await expect(models.evaluate(h.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'unavailable', reason: 'not-active' });
   expect(h.invoke).not.toHaveBeenCalled();
   const reduced = modelHarness();
   const fallback = createBeuserModelPort({ ...reduced.ports, independence: 'reduced' }, new BeuserCallBudget(limits));
   await expect(fallback.evaluate(reduced.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'invoked', receipt: { maker: 'zai', role: 'beuser-evaluator' } });
   expect(reduced.invoke).toHaveBeenCalledOnce();
+  const unknown = modelHarness({});
+  await expect(createBeuserModelPort(unknown.ports, new BeuserCallBudget(limits)).evaluate(unknown.ctx, 'a'.repeat(64))).resolves.toMatchObject({ state: 'unavailable', reason: 'maker-unknown' });
+  await expect(createBeuserModelPort({ ...unknown.ports, independence: 'reduced' }, new BeuserCallBudget(limits)).evaluate(unknown.ctx, 'a'.repeat(64)))
+    .resolves.toMatchObject({ state: 'invoked', receipt: { maker: null, role: 'beuser-evaluator' } });
 });

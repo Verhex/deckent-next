@@ -30,7 +30,7 @@ export type ModelRoleEntry = Readonly<{ channelId: string; modelId: string; cata
   state: 'assigned' | 'exception' | 'pending'; tier: ModelTier | null; roles: readonly string[]; version: number | null; measured: boolean;
   exceptions: readonly string[] }>;
 export type ModelRoleInspection = Readonly<{ schemaVersion: 1; scopeId: string; revision: string; digest: string | null;
-  roles: readonly Readonly<{ id: string; minimumTier: ModelTier }>[]; models: readonly ModelRoleEntry[]; pending: number }>;
+  roles: readonly ModelRolePolicy['roles'][number][]; models: readonly ModelRoleEntry[]; pending: number }>;
 export type ModelRoleRow = ModelRoleRegistry['models'][number];
 export type ModelRoleAssignResult = Readonly<{ status: 'applied'; row: ModelRoleRow; revision: string; approvalId: string | null }>
   | Readonly<{ status: 'approval-pending'; row: ModelRoleRow; approvalId: string; expiresAt: number; summary: string; commandId: string }>
@@ -116,7 +116,7 @@ export class ModelRoleAdmissionApplication {
       && (query.modelId === undefined || row.modelId === query.modelId));
     const models = modelRoleCoverage(policy, facts);
     return Object.freeze({ schemaVersion: 1, scopeId: query.scopeId, revision: policy.revision, digest: current.digest,
-      roles: Object.freeze(policy.roles.map(role => Object.freeze({ id: role.id, minimumTier: role.minimumTier }))), models, pending: models.filter(row => row.state === 'pending').length });
+      roles: Object.freeze(policy.roles.map(role => Object.freeze({ ...role }))), models, pending: models.filter(row => row.state === 'pending').length });
   }
   async assign(input: unknown): Promise<ModelRoleAssignResult> {
     const command = parse(modelRoleAssignCommandSchema, input), current = await this.ports.section();

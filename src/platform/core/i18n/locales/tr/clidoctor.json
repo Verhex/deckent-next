@@ -205,7 +205,7 @@
   "doctor.firstJob.next": "{step}: deckent'i açın, ilk açılışta ayarlanır (terminalde: /setup)",
   "doctor.check.pool.missing": "İşçi havuzu yapılandırılmış ama henüz kurulmamış: işler işçi başlatamaz",
   "doctor.poolReadiness.status.missing": "yapılandırılmış, henüz kurulmamış",
-  "doctor.check.roles.pending": "Yeni model: rol bekliyor — {model} ({channel}); bir kişi rol verene kadar hiçbir rol onu kullanamaz",
+  "doctor.check.roles.pending": "Yeni model: rol bekliyor — {model} ({channel}); bir kişi rol verene kadar kademeli hiçbir rol onu kullanamaz",
   "doctor.check.roles.more": "Yeni model: rol bekliyor — {count} katalog modeli daha; deckent models roles ile bakın",
   "doctor.check.workerImage.ok": "İşçi imajı {image} bu Docker'da var",
   "doctor.check.workerImage.missing": "Ayarlı işçi imajı {image} bu Docker'da yok: işler işçi başlatamaz",

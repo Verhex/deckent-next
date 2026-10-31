@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "revision": "b1-beuser-self-1",
   "journeyId": "beuser-self",
-  "limitsProfile": "b1-dogfood-provisional-1",
+  "limitsProfile": "b1-dogfood-provisional-2",
   "branches": [
     {
       "id": "SELF-B1",
@@ -29,12 +29,12 @@
     "schemaVersion": 1,
     "journeyId": "beuser-self",
     "version": 1,
-    "digest": "bc8fb130a30f3fc277ee9670e87d6c6e8d8c02dc3be777cc3e385934c2bd54a7",
+    "digest": "9060345a61c60e2430272e0c84b344f323ae7e07130768ee9536c2ebe7ce2fb1",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
       "personDecisions": "synthetic-person-decision",
-      "limitsProfile": "b1-dogfood-provisional-1",
+      "limitsProfile": "b1-dogfood-provisional-2",
       "branches": [
         {
           "id": "SELF-B1",

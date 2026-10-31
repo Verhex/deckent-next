@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "revision": "b1-onboarding-1",
   "journeyId": "onboarding",
-  "limitsProfile": "b1-dogfood-provisional-1",
+  "limitsProfile": "b1-dogfood-provisional-2",
   "branches": [
     {
       "id": "O-B1",
@@ -241,12 +241,12 @@
     "schemaVersion": 1,
     "journeyId": "onboarding",
     "version": 1,
-    "digest": "adcf7242c082b1985fc9a1aefb0f76b5d59f5e75ceedc1713e2e03a3f87fbeb8",
+    "digest": "5c316370906605583000a79ddf9d75a3f2cc85555ffff5f09a911734598d0754",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
       "personDecisions": "synthetic-person-decision",
-      "limitsProfile": "b1-dogfood-provisional-1",
+      "limitsProfile": "b1-dogfood-provisional-2",
       "branches": [
         {
           "id": "O-B1",

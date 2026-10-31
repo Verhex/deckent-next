@@ -75,7 +75,7 @@
     },
     "source": "https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference",
     "observedOn": "2026-10-25",
-    "modelFieldMaxChars": 1024
+    "modelFieldMaxChars": 1024, "promptFramingAllowance": {"tokens": 1024, "basis": "unmeasured", "source": "No retained measurement of this endpoint's prompt count (checked 2026-10-31: proof/SIWC-CORE-2026-10-14 and ANALIZ-SIWC-N0-2026-10-14 hold no usage figures). The request body bytes already include every message's JSON framing; 1024 is a stated conservative margin for message framing and any hidden server context. Replace with a measured value."}
   },
   "requestRules": {
     "source": "https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations",

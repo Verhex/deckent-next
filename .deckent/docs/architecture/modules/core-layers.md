@@ -57,10 +57,11 @@ instead of an exact id; it expands through the model role registry when reached,
 `worker` role.
 
 Tier and role live in one versioned registry, `assets/model-roles/model-roles.json` (roles `brain`, `worker`, `recovery-decision`,
-`memory-evaluator`; tiers `worker` and `frontier`). Tier is eligibility and the scope's activation is permission; the Brain needs both,
+`memory-evaluator`; tiers `worker` and `frontier`; the BeUser walker and evaluator roles declare `admits: "connected"` instead of a
+tier, so every catalog model the scope has active serves them, see [BeUser](beuser.md)). Tier is eligibility and the scope's activation is permission; the Brain needs both,
 and a worker-tier, unknown or role-less Brain model is refused with `BRAIN_TIER_REFUSED` before any budget read or model call. A model
 the catalog lists without a role row is shown as pending ("new model: role pending") in `deckent doctor`, the monitor and the terminal
-`/roles` window, and every role refuses it until a person runs `deckent models roles set` on their own terminal card; the write is one
+`/roles` window, and every tiered role refuses it until a person runs `deckent models roles set` on their own terminal card; the write is one
 compare-and-set row in the global `model_roles` overlay, audited like other governed config writes. API-channel models connect from a
 registered catalog row (`connect.tariff`, `connect.route`): a model the release does not list needs no source change, and a row
 without usable terms is refused, never priced by guess. A model-family word in a source string literal fails the architecture check
@@ -170,6 +171,25 @@ realm binds that directory itself, so file exclusion is shared with the person's
 across PID namespaces wrongly, and Deckent cannot serialize sessions it does not start. Deckent therefore starts no spawn while such a name
 exists and serializes its own spawns per login directory with a 0600 lock in the global headless root; past the registry wait it refuses
 with `HEADLESS_LOGIN_BUSY`. The S3-3 switch `models.headless.preview` is retired: the key still parses and is no longer offered.
+
+The Codex CLI has the same headless step (owner 2026-10-31). Its connect kind `codex-cli-subscription` stays a worker kind (the admitted
+worker image comes first, and connect still activates the worker model) and, with `connect.headless`, also writes the declaration, a
+`native-cli-headless` profile in the catalog family `codex-jsonl` (registry `headless.protocolFamily`) and the chat activation; `deckent
+models login --connection codex-cli-subscription` signs the Brain's own `headless/logins/codex` in with `codex login` (ChatGPT, file
+credential store). The call is one `codex exec --json` turn with the read-only sandbox, approvals never, no persisted session, user config
+and execpolicy rules ignored, every documented tool switch off and the system prompt as `model_instructions_file`; the message is on stdin
+and `CODEX_HOME` is the login directory. Codex has no turn flag and no tool-disable flag for `apply_patch`, so the line guard enforces one
+thread and one turn and stops the process on any item other than the answer and its reasoning (a tool item is `guard`, field
+`item.<type>`); an error line is `quota` (the worker's `providers.json` patterns), `login-required` (registry patterns) or `invalid-output`.
+The guard acts on an event the CLI reports, so it is not a pre-effect block: the read-only sandbox and the realm bound what could already
+have run, and the realm still leaves its private memory and the login directory's state writable. The completed turn is final (any later
+non-blank line, parsed or not, is `guard`, field `after-turn`), and its usage must carry valid input and output counters, with cache counts within the input total;
+a missing, empty or malformed record is `guard`, field `usage` (the Claude result's four counters likewise), so an unknown consumption
+never settles a reservation as zero; per-model counters that are missing or invalid stay absent, never a provider-reported zero.
+The preflight reads `codex login status` (exit 0 and `Logged in using ChatGPT` on stderr; an API key is `HEADLESS_LOGIN_REQUIRED`). The
+stream names no model, so the answer is attributed to the argv-pinned id (`modelEvidence: argv`), weaker than the Claude guard; the
+worker's rollout reader does not apply because the call keeps no session file. The flags are sourced from `codex exec --help` 0.166.0 and
+learn.chatgpt.com; the realm bounds are the Claude ones and the step is unmeasured against a real Codex turn.
 
 When a subscription quota is exhausted, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command

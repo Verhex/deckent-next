@@ -19,6 +19,10 @@ it('preserves a locale-free JSON document and null measurements while human repo
   expect(human).toContain('Simüle'); expect(human).toContain('kalibre edilmemiş'); expect(human).toContain('bilinmiyor');
   expect(human).toContain('systemd'); expect(human).toContain('uninstall-backup'); expect(human).toContain('BACKUP_REALM_SEALED');
   expect(human).not.toBe(formatBeuserReport(value, { json: false, locale: 'en' }));
+  // The token reservation basis is shown when recorded (owner 2026-10-31); an older report without it renders unchanged.
+  const reserved = { ...value, reservation: { providerCount: 1, estimated: 2 } };
+  expect(formatBeuserReport(reserved, { json: false, locale: 'en' })).toContain('1 counted by the provider, 2 estimated');
+  expect(formatBeuserReport(reserved, { json: false, locale: 'tr' })).toContain('2 tahminle'); expect(human).not.toContain('tahminle');
 });
 
 it('rejects fabricated acceptance labels, impossible counts and control sequences in report identities', () => {
