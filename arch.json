@@ -4831,7 +4831,7 @@
       "domain": 11000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 40000,
+      "adapters": 40500,
       "surfaces": 45000,
       "composition": 12250
     },

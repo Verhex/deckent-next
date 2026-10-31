@@ -164,6 +164,11 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
     expect(plan(['T3', 'S10a']).steps).toEqual(['git:git-repository', 'cli:installed', 'file:team-notes', 'git:team-notes-tracked', 'git:team-notes-committed', 'file:project-data']);
     expect(plan(['sealed-owner-like-fixture', 'S2', 'S4']).unarranged).toEqual([{ state: 'S2', reason: 'realm-external' }, { state: 'S4', reason: 'realm-external' }]);
     expect(plan(['fresh-home', 'cancel'])).toEqual({ steps: ['check:installation-absent', 'check:global-home-absent'], unarranged: [{ state: 'cancel', reason: 'persona' }] });
+    expect(plan(['fresh-own-installation', 'model-connected']).steps).toEqual(['cli:installed', 'cli:model-connected']);
+    expect(onboarding.rubric.parameters.branches.find(row => row.id === 'O-B1')!.initialStates).toEqual(['fresh-home', 'fresh-session', 'no-prefilled-model-or-consent']);
+    expect(onboarding.rubric.parameters.branches.find(row => row.id === 'O-B1-CONNECTED')!.initialStates).toEqual(['model-connected']);
+    expect(self.rubric.parameters.branches.find(row => row.id === 'SELF-B1')!.initialStates).toContain('model-connected');
+    expect(self.rubric.parameters.branches.find(row => row.id === 'SELF-B2')!.initialStates).not.toContain('model-connected');
     expect(plan(['T1', 'S17']).unarranged).toEqual([{ state: 'S17', reason: 'driver-limit' }]);
     // Catalog invariants live in code: exact structured CLI tuples, realm-confined fixture paths, a fixed Git subcommand set and resolvable states.
     expect(beuserArrangeRegistrySchema.safeParse(arrange).success).toBe(true);
@@ -210,7 +215,8 @@ it('pins calibration bytes and verifies synthetic oracle outcomes without claimi
     const bytes = readFileSync(new URL(`../../../assets/beuser/calibration/${file.fileName}`, import.meta.url));
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256);
   }
-  for (const asset of manifest.assetPins) expect(createHash('sha256').update(readFileSync(new URL(`../../../${asset.path}`, import.meta.url))).digest('hex')).toBe(asset.sha256);
+  for (const file of manifest.assetDigests) expect(createHash('sha256').update(readFileSync(new URL(`../../../assets/beuser/${file.fileName}`, import.meta.url))).digest('hex')).toBe(file.sha256);
+  expect(manifest.assetSetDigest).toBe(beuserDigest(manifest.assetDigests));
   expect(manifest.blindSetDigest).toBe(beuserDigest(manifest.files.map(row => ({ fileName: row.fileName, sha256: row.sha256 }))));
   expect(manifest).toMatchObject({ phase: 'preparation-only', calibrationClaim: 'uncalibrated',
     calibration: { trapHits: 0, trapTotal: 0, falseRed: 0, goodTotal: 0, retries: 0 },
