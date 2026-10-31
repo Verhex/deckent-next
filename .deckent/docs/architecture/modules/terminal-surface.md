@@ -28,6 +28,24 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   entries, compacted when doubled), visible line only — entries that carried pasted content are never stored and secret
   shapes are redacted; `terminal.persistHistory: false` disables it.
 - **Kimlik admission’ı (batch 36 R6):** interaktif açılış runtime/session yazımından önce kimliği ensure eder. `POLICY_UNAVAILABLE`, `POLICY_DENIED`, `SCOPE_UNKNOWN`, `ATTEMPT_STORE_VERSION` retleri `ADMISSION_DEFERRED` kümesidir: terminal açılır, eksik kimlik yaratılmaz; varsa doğrulanmış kimlik okunur, yoksa panel custody’sinde yalnız bellek-içi `unadmitted` kullanılır (saklanmaz, kullanıcıya gösterilmez, yetki değildir). Her yönetilen komut kendi kapısından geçer; invalid/relocated/locked/unsupported kimlik retleri ölümcül kalır. Tipli açılış bilgi notu ve follow `not-initialized` yüzeyi kabul edilmiş **IDENTITY-UX hedefidir**, henüz teslim iddiası değildir.
+- **Opening order (alpha.60 B, P3 draw first; owner 2026-10-31):** before the first frame the launch keeps only config and scope, the
+  retired-folder check, identity admission (an integrity refusal keeps its text and exit 78, with no service, session, history or model
+  effect), the chat plan for the banner and `--full-access` (MODES-3: that flag alone waits for the service and the grant before the frame).
+  Everything else settles after the frame (`terminalCommand`, `cli-terminal`): one single-flight runtime start serves the opening and a
+  turn's later start (BeUser M-09), bounded by the autostart's own `LifecycleDeadline`; its notices (started/connected, build skew,
+  stale config) and the saved-conversation notice arrive as the Workline's `opening.notices`; sessions, composer history and project
+  instructions are ports opened on first use (session presence follows `terminal.persistHistory`); the service watch is armed and the `@`
+  index warmed when the start answers. **Send gate** (`openingGate`, `terminal-kit`): until the start answered and the first mode read
+  settled, a sent line waits behind one notice (`terminal.opening.wait`), in order (the controller runs one line at a time); Ctrl+C on it
+  sends nothing; a failed start (deadline included) gives the waiting line its typed error and puts it back as the draft; `/exit`
+  and `/quit` never wait. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
+  notice on the grant, error notice and standart without it) before any turn. **Setup after the frame:** onboarding is prepared once
+  (`prepareOnboardingSession`: person check, one observation, settle) after the start settled; its waiting card opens by itself only
+  while the person has typed nothing since the frame, otherwise one line says `terminal.opening.setupWaiting` ("Setup: N steps waiting —
+  /setup", owner rule b) and typed keys stay the draft; a setup that could not be read leaves the view without `/setup`, as before. While
+  a card holds the terminal, rows pushed meanwhile are held and drawn after it. When the view returns, the opening's setup observation is
+  aborted (`OnboardingPort.observe` signal down to the setup probes): its probes are killed, no further step or settle write starts and that
+  open simply has no setup outcome, so `/exit` right after the frame ends the process at once.
 - **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed

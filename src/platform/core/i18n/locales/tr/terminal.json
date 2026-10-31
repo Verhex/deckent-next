@@ -441,6 +441,8 @@
   "terminal.session.folders.all": "Tüm klasörler",
   "terminal.session.folders.current": "Bu klasör",
   "terminal.session.previous": "Bu klasörde kayıtlı bir konuşmanız var. Devam etmek için /resume açın.",
+  "terminal.opening.wait": "Göndermeden önce runtime servisi bekleniyor; servis yanıt verince iletiniz gider. Ctrl+C iptal eder.",
+  "terminal.opening.setupWaiting": "Kurulum: {count} adım bekliyor — /setup",
   "terminal.info.doctor.poolSetup": "İşçi havuzu kurulmadan iş başlayamaz. Eksik işçi ve havuz adımlarını tamamlamak için /setup açın; terminal dışında deckent doctor adımları listeler.",
   "terminal.info.doctor.sandbox.selection": "Bu, her komutta yeniden kontrol edilen güncel seçimdir. Çalışma hizmeti başlarken paketli bubblewrap hazırlanabilir; hazır olduğunda Landlock yerine öncelikle o kullanılır."
 }

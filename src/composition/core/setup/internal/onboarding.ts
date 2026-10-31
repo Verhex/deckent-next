@@ -30,9 +30,11 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     const fresh = await loadConfiguredScopeContext(root, scopeId, options, 'write');
     if (JSON.stringify([fresh.principal.issuer, fresh.principal.subject]) !== principal) throw ErrorRegistry.createError('RUN_PROPOSAL_ACTOR_MISMATCH');
   };
-  const observe = async (answers: Readonly<Record<string, unknown>>) => {
+  // alpha.60 B: `signal` ends an observation nobody waits for any more (the terminal closed): no further step starts; this observe writes nothing.
+  const observe = async (answers: Readonly<Record<string, unknown>>, signal?: AbortSignal) => {
     const before = await snapshotConfiguredConfig(root, options);
-    const observed = await setup.observeSetup(root, { ...options, person: true, answers });
+    const observed = await setup.observeSetup(root, { ...options, person: true, answers, ...(signal ? { signal } : {}) });
+    signal?.throwIfAborted();
     const config = await loadConfig(root, { ...options, force: true, heal: false });
     const after = await snapshotConfiguredConfig(root, options);
     if (before.digest !== after.digest || JSON.stringify(before.global) !== JSON.stringify(after.global)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
@@ -54,11 +56,11 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; budgetReason = typeof code === 'string' && ErrorRegistry.has(code) ? code : 'INVENTORY_UNAVAILABLE'; return null; }) : null;
     const currentUsd = budgetReason ? null : account?.checkpoint ? account.checkpoint.account.budget.limitMinorUnits / SCOPE_BUDGET_CHOICES.minorUnitsPerUsd : 0;
     // Billing comes from the connected model's registry/profile, not a provider-name list.
-    const chat = await terminal.describeTerminalChatPlan?.(root, options);
+    signal?.throwIfAborted(); const chat = await terminal.describeTerminalChatPlan?.(root, options);
     // İ-2 is about a usable model (the same read as the /model window), not only the worker catalog; an unreadable answer counts as none.
     const modelUsable = (await terminal.inspectInvocableModels?.(root, scopeId, options).catch(() => null))?.models.some(row => row.availability.invocable) ?? false;
     const binding = terminal.providerConnect?.kinds.find(row => row.catalogProviderId === chat?.reference?.providerId);
-    const pending: RunIntentRecord[] = [];
+    signal?.throwIfAborted(); const pending: RunIntentRecord[] = [];
     const reader = await openSqliteRunProposalReader(await context.path(), config.storage.sqlite);
     try {
       const auth = new RunPolicyAuthorization(createLayoutPolicySource(context.layout, userInfo().uid, config.inspection.policyMaxBytes));

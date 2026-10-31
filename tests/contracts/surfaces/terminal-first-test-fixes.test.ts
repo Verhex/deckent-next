@@ -1,8 +1,10 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { PassThrough, Writable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
-import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION } from '#platform/index.js';
+import { afterEach, expect, it, vi } from 'vitest';
+import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION, t } from '#platform/index.js';
+import { main } from '#surfaces/index.js';
 import { registerProviderConfig, terminalConfigSchema } from '#adapters/index.js';
 import { createProviderSpendCheckpoint, runAgentTurn, agentTurnAdmission, agentCompactionExpected } from '#engine/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
@@ -22,7 +24,7 @@ async function project() {
   return root;
 }
 
-it('opens /usage with the current ledger account before the stale config choices, in the actual Ink window', async () => {
+it('opens /usage with the current ledger account before the stale config choices, in the actual Ink window; a failed read never promotes config', async () => {
   registerProviderConfig();
   const root = await project(), queries: unknown[] = [];
   const checkpoint = createProviderSpendCheckpoint({ schemaVersion: 2,
@@ -45,14 +47,11 @@ it('opens /usage with the current ledger account before the stale config choices
   await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('/usage\r');
   await until(() => view.stdout.frame.includes('Canlı harcama hesabı'), 'live account visible without selecting a budget');
   expect(view.stdout.frame).toContain('live-budget'); expect(view.stdout.frame).toContain('Bütçe revizyonu'); expect(view.stdout.frame).not.toContain('\u001b[');
-});
-
-it('shows a failed live account read instead of promoting a config value to a ledger amount', async () => {
-  const root = await project();
-  const admin = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale: 'en', context: {
+  // A failed live account read is shown as failed; a config value is never promoted to a ledger amount.
+  const failed = terminalAdminPorts({ root, scopeId: 's', options: { env: homeEnv(join(root, 'h')) }, locale: 'en', context: {
     async inspectProviderSpendAccount() { throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE'); } }, status: async () => '', doctor: async () => undefined });
-  const model = (await admin.info.ports.usage!({ usage: EMPTY_SESSION_USAGE })).model;
-  expect(model.sections[0]!.chip?.state).toBe('fail'); expect(model.sections[0]!.rows).toBeUndefined();
+  const refused = (await failed.info.ports.usage!({ usage: EMPTY_SESSION_USAGE })).model;
+  expect(refused.sections[0]!.chip?.state).toBe('fail'); expect(refused.sections[0]!.rows).toBeUndefined();
 });
 
 // Batch A (Jev 280abf6b, owner decision open): the streamed agent path keeps the whole history for runtime compaction (Astra 2091 R1);
@@ -171,8 +170,46 @@ it('BeUser D-05: the open terminal says once per absence that the runtime servic
   const watch = serviceAbsenceWatch(describe, true, () => 'STOPPED'), stop = watch.subscribe(text => heard.push(text));
   answers.push(false, false, true, false); for (let beat = 0; beat < 4; beat++) await watch.tick();
   expect(heard).toEqual(['STOPPED', 'STOPPED']); stop(); answers.push(true, false); await watch.tick(); await watch.tick(); expect(heard).toHaveLength(2);
+  // alpha.60 B: the opening's start answers after the frame; the watch made before it is armed then, and only then hears an absence.
+  const later = serviceAbsenceWatch(describe, false, () => 'STOPPED'); later.subscribe(text => heard.push(`later ${text}`));
+  answers.push(false); await later.tick(); expect(heard).toHaveLength(2); later.arm(); answers.push(false); await later.tick(); expect(heard.at(-1)).toBe('later STOPPED');
   // The workline shows the line in the error tone when the host's watch reports it.
   let report: ((text: string) => void) | undefined;
   const view = mountWorkline({ serviceLost: (listener: (text: string) => void) => { report = listener; return () => { report = undefined; }; } } as never); views.push(view);
   await settle(40); report!('SERVICE STOPPED UNDER YOU'); await until(() => view.stdout.text.includes('SERVICE STOPPED UNDER YOU'), 'service lost line');
+});
+
+// alpha.60 B (P3 draw-first): the launch draws before the runtime service answers. One start (single flight); a line sent meanwhile waits behind one
+// notice and goes once after the first mode read; Ctrl+C sends nothing; a failed start gives the line its typed error and back as the draft; a stored
+// full-access start mode is applied by that first read, before any turn.
+it.each(['ready', 'cancel', 'failed', 'stored'] as const)('alpha.60 B: frame before the service, one start, a line sent meanwhile waits and goes once (%s)', async scenario => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-opening-')); roots.push(root);
+  await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ terminal: { layout: 'inline', notify: 'off' } }));
+  let output = '', answer!: (value: unknown) => void, refuse!: (error: unknown) => void;
+  const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true, columns: 160, rows: 40 });
+  const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return input; }, ref() { return input; }, unref() { return input; } });
+  const order: string[] = [], stop = new AbortController(), wait = t('terminal.opening.wait', {}, 'en');
+  const ensure = vi.fn(() => new Promise((resolve, reject) => { answer = resolve; refuse = reject; }));
+  const view = (mode: string) => ({ schemaVersion: 1, scopeId: 's', supported: true, mode, askEdits: false, revision: 'r1', eligible: true, fullAccess: true });
+  const stream = vi.fn(async function* (_root: string, request: { fullAccess?: true }) { order.push(request.fullAccess ? 'turn full-access' : 'turn');
+    yield { kind: 'text' as const, text: 'ANSWERED' }; yield { kind: 'done' as const, finish: 'stop' as const }; });
+  const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'], { root, env: homeEnv(join(root, 'h')), initialize() {}, signal: stop.signal,
+    stdout: screen as unknown as NodeJS.WriteStream, stderr: screen as unknown as NodeJS.WriteStream, stdin: input as unknown as NodeJS.ReadStream,
+    async ensureTerminalIdentity() { return { installationId: 'installation', projectId: 'project' }; }, completeTerminalChat: vi.fn(), streamTerminalChat: stream as never,
+    ensureRuntimeService: ensure as never, inspectPermissionMode: (async () => { order.push('mode'); return view(scenario === 'stored' ? 'full-access' : 'standart'); }) as never,
+    setPermissionMode: vi.fn() as never });
+  try {
+    await until(() => output.includes('Ask anything'), 'the frame before the service answers');
+    expect(ensure).toHaveBeenCalledOnce(); expect(order).toEqual([]);
+    input.write('hello'); await settle(20); input.write('\r'); await until(() => output.includes(wait), 'the wait notice');
+    if (scenario === 'cancel') { input.write('\u0003'); await settle(80); answer({ mode: 'connected', instanceId: 'i', pid: null, logPath: null, shutdownAvailable: true, build: null }); await settle(150); }
+    else if (scenario === 'failed') {
+      refuse(ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: '/state/runtime-service.log' } }));
+      await until(() => output.includes('RUNTIME_AUTOSTART_FAILED'), 'the typed error on the waiting line');
+      await until(() => /│ ?hello/u.test(output.slice(output.lastIndexOf('RUNTIME_AUTOSTART_FAILED'))), 'the line back as the draft');
+    } else { answer({ mode: 'connected', instanceId: 'i', pid: null, logPath: null, shutdownAvailable: true, build: null }); await until(() => output.includes('ANSWERED'), 'delivered'); }
+    expect(order.slice(0, 2)).toEqual({ ready: ['mode', 'turn'], cancel: ['mode'], failed: [], stored: ['mode', 'turn full-access'] }[scenario]); // a turn then refreshes the mode
+    expect(output.split(wait)).toHaveLength(2); expect(ensure).toHaveBeenCalledOnce();
+    if (scenario === 'stored') expect(output).toContain(t('terminal.fullAccess.banner', {}, 'en').slice(0, 40));
+  } finally { stop.abort(); await run; input.destroy(); }
 });

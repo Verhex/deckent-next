@@ -34,8 +34,8 @@ export async function workingTreeChanges(root: string, env: DetectEnvironment, o
  * The coding/git family's facts (I-S2): Git on PATH, a repository with commits, this build's own source checkout, configured work-target clones,
  * and the coding CLIs installed and holding a sign-in file ("found, not verified"). Read-only, bounded; no network, write or credential read.
  */
-export async function detectCodingFacts(input: Readonly<{ root: string; env: DetectEnvironment; workTargets?: readonly string[]; ports?: Partial<CodingDetectPorts> }>): Promise<CodingFacts> {
-  const ports = { ...HOST_CODING_PORTS, ...input.ports }, { git, limits } = registry, signal = AbortSignal.timeout(limits.totalTimeoutMs), root = resolve(input.root);
+export async function detectCodingFacts(input: Readonly<{ root: string; env: DetectEnvironment; workTargets?: readonly string[]; ports?: Partial<CodingDetectPorts>; signal?: AbortSignal }>): Promise<CodingFacts> {
+  const ports = { ...HOST_CODING_PORTS, ...input.ports }, { git, limits } = registry, signal = AbortSignal.any([AbortSignal.timeout(limits.totalTimeoutMs), ...(input.signal ? [input.signal] : [])]), root = resolve(input.root);
   const gitPath = await ports.find(git.executable, input.env, limits.pathDirectories, signal);
   const run = (path: string, args: readonly string[]) => ports.run(path, [...git.prefix, ...args], { env: git.env, cwd: root, timeoutMs: limits.commandTimeoutMs, outputBytes: limits.outputBytes, signal });
   const top = gitPath ? await run(gitPath, git.topLevelArgs) : null, head = gitPath && top?.code === 0 ? await run(gitPath, git.headArgs) : null;

@@ -42,8 +42,8 @@ export interface WorklineModeLabels {
    * `cycledFullAccess` is the step into full access, which also says what that means. Neutral catalog ids meanwhile. */
   readonly stops?: Readonly<Record<PermissionModeStop, string>>;
   readonly cycled?: string; readonly cycledFullAccess?: string;
-  /** T3 L4 (owner 2026-10-07): the one standing line above the composer while the session holds full access (what it means, how to leave). PRE-9 (b): `fullAutoRevoked` says a stored full-auto is not granted here now. */
-  readonly fullAccessLine?: string; readonly fullAutoRevoked?: string;
+  /** T3 L4 (owner 2026-10-07): the one standing line above the composer while the session holds full access (what it means, how to leave). PRE-9 (b): `fullAutoRevoked` says a stored full-auto is not granted here now. alpha.60 B: `startFullAccess` / `startDenied` say, at the first read, that a stored full-access start mode opened on the grant or runs as standart without it. */
+  readonly fullAccessLine?: string; readonly fullAutoRevoked?: string; readonly startFullAccess?: string; readonly startDenied?: string;
 }
 // Until the catalog carries these templates the notices stay language-neutral: the command, the catalog mode and the policy field.
 const NEUTRAL: WorklineModeLabels = { current: '/mode · {mode}', changed: '/mode · {previous} → {mode}', inert: ' · modeEligible: 0',
@@ -163,18 +163,21 @@ async function stepPermissionMode(port: WorklinePermissionModePort, base: Permis
   return { entries: [systemSummaryEntry(fillTemplate(template, { previous: word(current), mode: word(next) }), next === 'full-access' ? 'warning' : 'info')], view, fullAccess: next === 'full-access' };
 }
 /** The status row's mode stop (null: unknown or unsupported — no segment; full access always shown), `/mode` and the Shift+Tab step. A failure
- * refreshes the view. `launchedFullAccess`: the session was launched in full access (the launch already checked the company grant). */
-export function useWorklineMode(port: WorklinePermissionModePort | undefined, push: (entries: readonly WorkLedgerEntry[]) => void,
-  errorText: (error: unknown) => string, unavailable: string, labels?: WorklineModeLabels, launchedFullAccess = false, sessionId: () => string | null = () => null) {
+ * refreshes the view. `launchedFullAccess`: the session was launched in full access (the launch already checked the company grant). alpha.60 B: the
+ * first read waits for `opening` (the service) and applies a stored full-access start mode with the launch's rule (MODES-3); `read` settles after it. */
+export function useWorklineMode(port: WorklinePermissionModePort | undefined, push: (entries: readonly WorkLedgerEntry[]) => void, errorText: (error: unknown) => string,
+  unavailable: string, labels?: WorklineModeLabels, launchedFullAccess = false, sessionId: () => string | null = () => null, opening: Promise<unknown> = Promise.resolve()) {
   const [view, setView] = useState<PermissionModeView | null>(null), [fullAccess, setFullAccess] = useState(launchedFullAccess);
   // Read by the turn when it starts (a `/mode` queued before a message holds for it although no render ran between them).
   const current = useRef(launchedFullAccess);
   // One step at a time: a Shift+Tab pressed while a set is in flight is not queued behind a revision it would conflict with.
-  const stepping = useRef(false), revokedSaid = useRef(false); // PRE-9 (b): a withdrawn full-auto is said once (at start or a turn's refresh)
-  const refresh = useCallback(async () => {
+  const stepping = useRef(false), revokedSaid = useRef(false), first = useRef<() => Promise<void>>(async () => undefined), [read] = useState(() => opening.then(() => first.current(), () => undefined)); // PRE-9 (b): a withdrawn full-auto is said once (at start or a turn's refresh)
+  const refresh = useCallback(async (start = false) => {
     if (!port) return;
-    try { const next = await port.inspect(), revoked = fullAutoNotInEffect(next); setView(next); if (revoked && !revokedSaid.current && labels) push(revokedNotice(next, labels)); revokedSaid.current = revoked; } catch { setView(null); }
-  }, [labels, port, push]);
+    try { const next = await port.inspect(), revoked = fullAutoNotInEffect(next), stored = start && !launchedFullAccess && next.mode === 'full-access';
+      if (stored && next.fullAccess) { current.current = true; setFullAccess(true); } if (stored && labels?.startFullAccess && labels.startDenied) push([notice(next.fullAccess ? 'warning' : 'error', next.fullAccess ? labels.startFullAccess : labels.startDenied)]);
+      setView(next); if (revoked && !revokedSaid.current && labels) push(revokedNotice(next, labels)); revokedSaid.current = revoked; } catch { setView(null); }
+  }, [labels, port, push, launchedFullAccess]); first.current = () => refresh(true);
   const apply = useCallback(async (work: () => ReturnType<typeof runModeCommand>) => {
     try {
       const result = await work();
@@ -200,7 +203,7 @@ export function useWorklineMode(port: WorklinePermissionModePort | undefined, pu
     try { await apply(() => selectPermissionModeStop(port, stop, labels, current.current, { sessionId: sessionId() })); } finally { stepping.current = false; }
   }, [apply, labels, port, push, sessionId, unavailable]);
   const stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : undefined;
-  return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle, select };
+  return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle, select, read };
 }
 /**
  * T2 T-MODE-CYCLE + TS-WINDOW: Shift+Tab (Alt+M where the console cannot report Shift+Tab) steps the mode only while the base layer owns the

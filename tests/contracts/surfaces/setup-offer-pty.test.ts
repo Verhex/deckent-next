@@ -249,7 +249,8 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     expect(run.output).toContain('Authority pending. Open deckent terminal'); expect(run.output.indexOf('Permission settings')).toBeGreaterThan(run.output.indexOf('Step 1/'));
     expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
     expect(run.output.indexOf('Step 1/')).toBeGreaterThan(run.output.indexOf('Permissions: applied'));
-    expect(run.output.indexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Ready!'));
+    // alpha.60 B (draw first): the Workline frame comes first, the waiting setup card opens on it and the Workline returns after the last card.
+    expect(run.output.indexOf('Deckent workline')).toBeLessThan(run.output.indexOf('Step 1/')); expect(run.output.lastIndexOf('Deckent workline')).toBeGreaterThan(run.output.indexOf('Ready!'));
     expect(run.output.slice(run.output.indexOf('Permissions: applied'))).not.toContain(CARD);
     expect(run.output).not.toMatch(/CLI_INSTALLATION_MISSING|TERMINAL_SCOPE_REQUIRED/u);
     expect((await readdir(f.root)).sort()).toEqual(['.deckent', '.git']);

@@ -18,7 +18,8 @@ export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; 
   pending: readonly RunIntentRecord[];
   rights?: Readonly<{ state: 'needed' | 'current' | 'unavailable'; digest?: string; rules: number }> }>; // BeUser ZEY-02/D-04: the founder card, previewed
 export interface OnboardingPort {
-  observe(answers: Readonly<Record<string, unknown>>): Promise<OnboardingSnapshot>;
+  /** `signal` (alpha.60 B): the opening's observation ends when the terminal closes; an aborted observe yields no outcome. */
+  observe(answers: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<OnboardingSnapshot>;
   assertPerson(): Promise<void>;
   defer(stageId: string, planDigest: string): Promise<void>;
   /** R18: forgets this person's deferrals of steps that are no longer open (settled elsewhere); absent → only the notice skips them. */
