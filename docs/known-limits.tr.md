@@ -9,7 +9,7 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.58 main'e indi (PR #123) ve canlıda. Alpha.59 sürüm adayıdır, yayımlanmadı; alpha.59 işaretli maddeler bu adayı anlatır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.59 main'e indi (PR #124) ve canlıda. Alpha.60 sürüm adayıdır, yayımlanmadı; alpha.60 işaretli maddeler bu adayı anlatır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
@@ -19,6 +19,20 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 - **BeUser yalnız tanıksız ulaşabildiği başlangıç durumlarını hazırlar (alpha.58).** v3 yolculuk profili dalının katalogdaki başlangıç durumlarını adlandırır. Persona ilk ekrana bakmadan önce Deckent bunları realm içinde terminalsiz bir exec ile (stdin kapalı, kullanıcı ve dil açık) hazırlar, personanın terminalinden asla geçirmez ve her birini geri okur. Katalog şunları hazırlar: `deckent init --yes --scope beuser-realm --json` ile kurulu Deckent, `.deckent/` altında Git'in izlediği bir dosya olan Git projesi, `.deckent/` altında bilinmeyen bir dosya, durmuş servis, ikinci kurulum, okunamayan kayıt defteri, güvensiz yetki dosyası, elle yazılmış başlatıcı, kanıtlanamayan kurulum yöntemi, boş önbellek, taze ev klasörü, Docker soketi olmaması, kişinin kendi dosyalarının olduğu klasör ve montajlı aday. Personanın dili ve erişilebilirlik ihtiyacı profilinden gelir; `cancel` personanın kendi eylemidir. Şunlar unknown kalır ve rapor her birini nedeniyle adlandırır: kişinin tanıklığını isteyenler (yönetilen politika ve onaylar `T2`/`S14`/`S14b`, genel ya da taşınmış veri `S10b`/`S25`, anahtarlar `S11`, uygulanmış ya da yarım kalmış kaldırma `S15`/`S16`, değiştirilmiş köprü `S21`, model, fiyat, rol ya da bütçe kurulumu), mühürlü realm'in dışında kalanlar (servis yöneticileri ve çalışan servisler `S2`/`S4`/`S4b`/`K4`, etkin iş ve belirsiz etkiler `S5`/`S8`, çalışan imajları `S12`, başka platform `S18`, imaj hazırlama, çalışan soruları, kullanılamayan realm ya da ağ), tanıksız üreticisi olmayanlar (`S3`, park edilmiş iş `S6`, bekleyen onay `S7`, kuyruktaki teslim `S9`, dağıtım geçmişi `S23`), sürücü sınırları (boru hattı, CI ve MCP `S17`, satır kipi) ve Enterprise şirket kapsamı. Bunlardan birini adlandıran dal herhangi bir adımdan önce `BEUSER_START_STATE_UNREACHABLE` ile durur ve persona başlamaz; başarısız olan ya da geri okunamayan adım dalı `BEUSER_START_STATE_UNMET` ile durdurur. İkisi de unknown'dır, asla kırmızı değildir. Tanığı atlatan yol yoktur. *Etki:* bu dallar yürünmez; kaldırmanın 23 dalından 18'i ve onboarding'in 21 dalından 12'si bunlara girer. *Yol:* raporun hazırlanmamış durumlar listesini saklayın; v2 profil eski boş realm'de başlamayı sürdürür.
 - **BeUser takılan personayı ararken ekranları sayıları maskelenmiş olarak karşılaştırır (alpha.58).** Başka ekranlardan geçip geri dönen ve yalnız sayıları (revizyon, sayaç, saat) farklı olan bir ekranda aynı tuş ya da metin üçüncü kez gelirse yürüyüş `loop` ile, böyle bir ekranda üst üste dördüncü bakma ya da bekleme gelirse `observing` ile biter; ikisi de kırmızı `persona-stuck` bulgusudur. *Etki:* yalnız değişen sayıları gösteren bir ekrandan geçerek aynı eylemi meşru olarak üç kez tekrarlayan bir yolculuk (örneğin yalnız sayı gösteren bir listeye üç öğe eklemek) ya da dört bakma veya bekleme boyunca aynı ekranda kalan bir ürün takılmış olarak raporlanır. *Yol:* bulguyu ürün hatası saymadan önce ekranını ve kanıtını okuyun; eşikler `assets/beuser/limits.json` içinde registry verisidir.
 - **BeUser yürüyüşleri host'un Docker'ını ister.** Yürüyüş realm konteynerini host Docker daemon'ı üzerinden başlatır (root olmayan uid, ağ yok, salt okunur kök, kendi mount/pid/ipc/uts/cgroup namespace'leri); böyle bir konteyner başlatamayan ortam yürüyüş yapamaz. *Yol:* profili herhangi bir yerde hazırlayın, `deckent beuser walk` komutunu Docker'lı bir host'ta çalıştırın.
+
+- **BeUser'ın gezgini ve değerlendiricisi bağlı, etkin her model olabilir (alpha.60).** Artık yalnız frontier katmanıyla sınırlı değiller:
+  kapsamın bağlayıp etkinleştirdiği her model onlara hizmet eder; abonelik CLI modeli, ChatGPT girişi modeli, API modeli ya da yerel model.
+  Değerlendiricinin üreticisinin gezginden ve katkıda bulunanlardan farklı olması yalnız kararın üzerinde bir etikettir (`independent`,
+  `reduced` ya da `unknown`); sonucu asla değiştirmez. Abonelik modeli bir yürüyüşe yalnız o bağlantı için verdiğiniz devredilmiş kullanım
+  onayı içinde hizmet eder (`deckent models connect --connection <tür> … --delegate …`). *Etki:* zayıf ya da aynı üreticiden bir
+  değerlendirici yine çağrılır; kararı güvenmeden önce etiketi okuyun. *Yol:* istediğiniz modeli bağlayıp etkinleştirin ve yolculuk
+  profili başına seçin.
+- **BeUser, abonelik CLI'sinin ya da ChatGPT girişinin token'larını tahminle ayırır (alpha.60).** Bu taşıyıcıların token sayacı yoktur;
+  bu yüzden bir çağrı istek baytlarını ve taşıyıcının eklediği çerçeve için registry payını ayırır (Claude CLI 2048, ChatGPT girişi 1024,
+  Codex CLI 24576; yalnız Claude değeri ölçüldü). Bilinmeyen kullanım asla sıfır sayılmaz: rezervasyon yüklü kalır. Geçici yürüyüş profili
+  (`b1-dogfood-provisional-2`, `beuser-limits-5`) yürüyüş başına 256 çağrı, 16 777 216 token, bir saat ve fiyatlı modeller için 3 USD
+  verir. *Etki:* bu tavanlar planlama sınırıdır; ölçülmüş kapasite, harcama izni ya da kota sözü değildir ve yürüyüş tahmin yüzünden erken
+  durabilir. *Yol:* henüz yok; ölçüm tahminlerin yerini sonra alır.
 
 ## Platformlar: denenenler ve denenmeyenler
 
@@ -38,6 +52,15 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**
   *Etki:* giriş çubuğu, pencereler ve renkler orada bozulabilir. *Yol:* düz bir Linux ya da WSL2 terminali kullanın.
+- **Terminal, Deckent her şeyi denetlemeden ilk karesini çizer (alpha.60).** Tam pencere düzeni ve bir kapsamla kare yaklaşık saniyenin
+  üçte birinde görünür (0,34 sn sıcak, 0,35 sn soğuk; önceden 2,24 ve 3,21 sn; WSL2'de Node 26.13.0 ile bir Linux sözde-terminali, her
+  biri beş koşu) ve giriş alanı sıcakta 0,88 sn, soğukta 1,76 sn sonra göndermeye hazırdır. Kimlik, kapsam ve emekli klasör denetimleri
+  yine kareden önce çalışır ve her zamanki metin ve çıkış kodu 78 ile reddeder; çalışma zamanı servisi, oturum ve kurulum kareden sonra
+  gelir. Servis yanıtlamadan gönderilen satır tek bir notun ("Göndermeden önce runtime servisi bekleniyor…") arkasında bekler, servis
+  yanıtlar yanıtlamaz gider ve üzerinde Ctrl+C hiçbir şey göndermez; başarısız bir başlatma satıra kendi hatasını verir ve taslak olarak
+  tutar. Kurulum yalnız hiçbir şey yazmadıysanız kendiliğinden açılır; yazdıysanız tek satır "Kurulum: N adım bekliyor — /setup" der.
+  Satır içi düzen, `--full-access`, kapsamsız açılış, emekli klasör, `TERM=dumb` ve borular önceki açılış yolunu izler ve ölçülmedi;
+  sayılar tek makineden gelir, başka yerde söz değildir. *Yol:* gerekmez; `/setup` adımları her an açar.
 - **Fareyle kopyalama, kart kopyalama (Ctrl+Y ya da kart üzerinde sürükleme, alpha.59) ve `/copy [n]` terminalinizin pano dizisini
   (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı (katlanmış araç çağrısı satırına tıklama, alpha.59, yalnız
   süreç içi bir terminal testinde); fiziksel Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller
@@ -206,6 +229,18 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
 
 ## Sağlayıcılar ve abonelikler
 
+- **Codex CLI aboneliği (alpha.60):** Brain, yalıtılmış `codex-cli-subscription` bağlantısıyla kendi Codex CLI'nizle (ChatGPT planı)
+  da planlayabilir; her seferinde tek `codex exec` turu. Giriş: `deckent models login --connection codex-cli-subscription` (`codex login`'i
+  Deckent'e ait kendi dizinine, `headless/logins/codex`, çalıştırır; `--config-dir` ve `--executable` başka bir giriş dizini ya da ikili
+  dosya seçer; `--sso` yoktur). Sonra `deckent models connect --connection codex-cli-subscription --executable <yol> --config-dir <dizin>
+  --delegate system` bağlar: `--executable` yoksa PATH'teki ilk `codex`, `--config-dir` yoksa Brain'in kendi girişi kullanılır;
+  `--delegate none|ai|system|ai,system` sizden başka kimin girişi kullanabileceğini belirtir (verilmezse önceki seçiminiz kalır). Bağlamak
+  işçi imajı istemez: kabul edilmiş imaj yoksa yalnız sohbeti ve tek seferlik çağrıları bağlar, hiçbir işçi modelini etkinleştirmez ve bunu
+  söyler ("bu CLI sürümünü kabul eden bir işçi imajı henüz yok"); işçilerde de kullanmak için imajı `/setup`'ta kurup yeniden bağlayın. Claude
+  bağlantısıyla aynı bubblewrap, kota ve onay kuralları geçerlidir (aşağıda). *Etki:* Codex çıktısı yanıttan fazlasını gösterdiğinde
+  Deckent süreci durdurur, ama CLI'nin bildirdiği olaylara tepki verir; bu etkiden önce bir engel değildir: salt okunur korumalı alan ve
+  Deckent'in realm'i zaten çalışmış olabilecekleri sınırlar. Model adı Codex'in bildirdiği değil, Deckent'in verdiği addır ve adım gerçek
+  bir Codex turuna karşı ölçülmedi. Başarılı girişi Codex işçisinin kullanılabilir olduğunun kanıtı saymayın.
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. alpha.55'ten beri Brain (`/do`'nun arkasındaki planlayıcı)
   da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir. Brain kendi, Deckent'e ait giriş
   dizinine (`headless/logins/claude`, yedeğe girmez) `deckent models login --connection claude-cli-subscription` ile giriş yapar,
@@ -620,7 +655,7 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Hafıza 3. ve 4. aşamaları yalnız ölçümden sonra açılır.** Bağlamı ya da doğrulamayı tam açmak, mühürlü kayıtlar ölçütleri karşılayana
   kadar (örneğin 20 gölge kabul ya da 20 kör kararda en az %90 değerlendirici uyumu) `MEMORY_ROLLOUT_CRITERIA_UNMET` ile reddedilir.
   *Yol:* `deckent memory rollout` her ölçütü sayılarıyla ve sıradaki komutu gösterir.
-- **Abonelik Brain'i bubblewrap ister ve kotanızı paylaşır.** `claude-cli-subscription` bağlantısı yalnız Deckent'in bubblewrap korumalı
+- **Abonelik Brain'i bubblewrap ister ve kotanızı paylaşır.** `claude-cli-subscription` ve `codex-cli-subscription` bağlantıları yalnız Deckent'in bubblewrap korumalı
   alanı içinde çalışır; o yoksa bağlantı reddedilir (`HEADLESS_ISOLATION_UNAVAILABLE`), bu yüzden native Windows ve macOS kullanamaz.
   Bağlantı başına aynı anda tek çağrıya izin verir ve kendi Claude oturumlarınızla aynı abonelik kotasını ve giriş yenilemesini kullanır.
   Deckent kredi satın almaz ve CLI kredi gerektiğini söylediğinde durur; ama hesabınızda ek kullanım açıksa CLI onu çekebilir ve Deckent
@@ -715,6 +750,11 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   kullanılabilir. Bilinmeyen adım bilinmiyor kalır. Kurtarma konumu size özel olmalı ve kaldırmanın değiştirdiği her klasörün
   dışında bulunmalıdır; aksi halde hiçbir şey başlamaz.
   *Yol:* veriyi koruyan kaldırmayı seçin ya da bildirilen engeli çözün; tahmin edilen yolları silmeyin.
+- **Derleme önbelleğini silmek, başlayan bir süreçle yarışabilir (alpha.60).** Daha hızlı başlangıç, geleneksel genel kökün altındaki
+  (`state/compile-cache`) bir önbelleği doldurur; kaldırma onu yalnız kayıtlı her yazıcı bittikten sonra siler. Silmenin son taramasından
+  hemen sonra kendini kaydeden bir süreç o klasörü boş olmayan bırakabilir; böylece bir kaldırma önbellek kısmen silinmiş halde
+  `EFFECT_TARGET_UNKNOWN` ile biter. Önbellek dışında hiçbir şeye dokunulmaz ve tamamlandı denmez. *Yol:* kaldırmayı yeniden çalıştırın;
+  tamamlanır. Varsayılan olmayan genel kök önbelleksiz çalışır.
 
 ## Masaüstü ve diğer yüzeyler
 

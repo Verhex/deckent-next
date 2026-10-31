@@ -75,8 +75,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 - **Komut satırından:** `deckent models connect --scope <id> --connection <tür> --command-id <id> (--model <id> |
   --reference <ref>)` modeli türün paketli kataloğundan bildirir, kapsamın çağrı profilini anahtar adıyla yazar ve
   etkinleştirir. Türler `anthropic-api`, `openai-api`, `deepseek-api`, `zai-api`, `zai-cn-api`, `openrouter`,
-  `openai-compatible` ve `local-openai`'dır; bunlara ek olarak `claude-cli-subscription` (Brain planlaması için kendi Claude
-  girişiniz; yalnız kişi bağlar, bubblewrap alanı ve önce `deckent models login` gerekir, bkz.
+  `openai-compatible` ve `local-openai`'dır; bunlara ek olarak `claude-cli-subscription` ve `codex-cli-subscription` (Brain planlaması için
+  kendi Claude ya da Codex CLI girişiniz; yalnız kişi bağlar, bubblewrap alanı ve önce `deckent models login` gerekir, bkz.
   [Çekirdek katmanlar](#çekirdek-katmanlar-hafıza-ajanlar-model-rolleri-kurtarma)). `--command-id` sizin seçtiğiniz benzersiz bir
   addır; onu yinelemek asla iki kez bağlamaz. Kişinin terminalinde uzun bayrakları olmadan `models connect`, `models
   activate|deactivate` ve `models catalog activate|deactivate` kapsamı, sağlayıcıyı ya da kanalı ve tam model kimliğini (takma ad
@@ -117,7 +117,11 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 
 - **Başlamadan önce:** kurulumunuzda güncel ilk kurulum policy'si olmalıdır; eski bir kurulum önce yükseltilir (bkz.
   [Başlangıç kurulumu](#başlangıç-kurulumu)).
-- **Onboarding:** ilk etkileşimli terminal açılışı Workline'dan önce sıralı kurulum ekranları gösterir; `/setup` onlara geri döner.
+- **Onboarding:** ilk etkileşimli terminal açılışı Workline'ın önünde sıralı kurulum ekranları gösterir; `/setup` onlara geri döner.
+  alpha.60'tan beri pencere ve giriş alanı önce çizilir (ölçülen tam pencere durumunda ilk kare yaklaşık 0,34 sn, gönderime hazır sıcakta
+  0,88 sn, soğukta 1,76 sn) ve kurulum runtime servisi yanıtladıktan sonra gelir: kartı yalnız hiçbir şey yazmadıysanız kendiliğinden açılır,
+  yazdıysanız tek satır "Kurulum: N adım bekliyor — /setup" der ve yazdığınız taslak kalır. Servis yanıtlamadan gönderdiğiniz satır tek bir
+  notun arkasında bekler ve servis yanıtlar yanıtlamaz gider; üzerinde Ctrl+C hiçbir şey göndermez; `/exit` hiç beklemez.
   Model kartındaki Esc · Later (alpha.59) kullanılabilir model yokken kalıcıdır: sonraki açılışlarda kart gelmez, durum satırı
   "Model bağlı değil — /setup" der ve `/setup` kartı yeniden sunar. Model yokken gönderdiğiniz mesaj gönderilmez: taslak olarak girişte
   kalır ve model kartı açılır.
@@ -590,6 +594,11 @@ gider, çağrı harcanır). Yeni kimlikler haklarını politika şablonu v15'ten
   `deckent doctor` her bağlantı için bir Brain girişi satırı gösterir. CLI'nin kendi yenileme kilidi varken ya da başka bir Brain çağrısı
   girişi tutarken çağrı registry sınırı kadar bekler, sonra `HEADLESS_LOGIN_BUSY` ile reddedilir; çöken bir Claude oturumundan geride
   kalan kilit, siz kaldırana kadar reddettirir.
+  Codex CLI aynı şekilde çalışır (alpha.60): `deckent models login --connection codex-cli-subscription [--config-dir <mutlak dizin>]
+  [--executable <mutlak yol>]` `codex login`'i (ChatGPT; `--sso` yok) Brain'in kendi `headless/logins/codex` dizinine çalıştırır, sonra `deckent
+  models connect --connection codex-cli-subscription --executable <mutlak yol> --config-dir <mutlak dizin> --delegate system` onu bağlar
+  (her bayrak yukarıdaki gibi). Kabul edilmiş işçi imajı yoksa bağlantı yine de sohbet ve tek seferlik çağrılar (BeUser) için başarılı olur
+  ve hiçbir işçi modelinin etkinleştirilmediğini söyler.
 - **Kota sorusu.** Kota beklemesi biten bir işçi Run'ı size sorar: `deckent run resume --quota wait` beklemeyi sürdürür,
   `deckent run resume --quota next-candidate` WorkClass listesindeki sıradaki adayı kullanır; Run'ı kapatmak ayrı bir seçimdir.
   Beklemeyi sürdürme en çok `runRuntime.quotaRecovery.maxRewaits` (3) kez sunulur, sonra `RUN_QUOTA_WAIT_LIMIT`.

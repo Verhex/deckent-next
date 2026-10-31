@@ -9,7 +9,7 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.58 has landed (PR #123) and is live. Alpha.59 is a release candidate, not released; items marked alpha.59 describe that candidate. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.59 has landed (PR #124) and is live. Alpha.60 is a release candidate, not released; items marked alpha.60 describe that candidate. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 ## BeUser B1 journey walks (alpha.57)
@@ -19,6 +19,20 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 - **BeUser arranges only the start states it can reach without a witness (alpha.58).** A v3 journey profile names its branch's catalogued start states. Before the persona's first look, Deckent arranges them in the realm over an exec without a terminal (closed stdin, explicit user and locale), never through the persona's terminal, and reads each one back. The catalog arranges an installed Deckent (through `deckent init --yes --scope beuser-realm --json`), a Git project with a tracked file under `.deckent/`, an unknown file under `.deckent/`, a stopped service, a second installation, an unreadable ledger, an unsafe authority file, a hand-made launcher, an unproven install method, an empty cache, a fresh home, no Docker socket, a folder with the person's own files and the assembled candidate. The persona's language and accessibility needs come from its profile; `cancel` is the persona's own act. These stay unknown, and the report names each one with its reason: states that need a person's witness (managed policy and approvals `T2`/`S14`/`S14b`, global or relocated data `S10b`/`S25`, keys `S11`, an applied or interrupted uninstall `S15`/`S16`, a modified bridge `S21`, and model, price, role or budget setup), states outside the sealed realm (service managers and running services `S2`/`S4`/`S4b`/`K4`, active work and uncertain effects `S5`/`S8`, worker images `S12`, another platform `S18`, image preparation, worker questions, an unavailable realm or network), states with no witness-free producer (`S3`, parked work `S6`, pending approval `S7`, queued delivery `S9`, dispatch history `S23`), driver limits (pipe, CI and MCP `S17`, line mode) and Enterprise company scope. A branch that names any of them stops as `BEUSER_START_STATE_UNREACHABLE` before any step, and the persona does not start; a step that fails or does not read back stops it as `BEUSER_START_STATE_UNMET`. Both are unknown, never red. Nothing bypasses the witness. *Impact:* those branches are not walked, which is 18 of the 23 uninstall branches and 12 of the 21 onboarding branches. *Workaround:* keep the report's list of unarranged states; a v2 profile keeps the earlier empty realm.
 - **BeUser compares screens with their numbers masked when it looks for a stuck persona (alpha.58).** The same key or text a third time on a screen that came back through other screens and differs only in numbers (a revision, a counter, a clock) ends the walk as a `loop`, and a fourth look or wait in a row on such a screen ends it as `observing`; both are red `persona-stuck` findings. *Impact:* a journey that legitimately repeats one action three times through a screen that shows only changing numbers (for example adding three items to a list that shows just a count), or a product that stays on one screen through four looks or waits, is reported stuck. *Workaround:* read the finding's screen and evidence before treating it as a product defect; the thresholds are registry data in `assets/beuser/limits.json`.
 - **BeUser walks need the host's Docker.** A walk starts a realm container through the host Docker daemon (non-root uid, no network, read-only root, its own mount/pid/ipc/uts/cgroup namespaces); an environment that cannot start such a container cannot walk. *Workaround:* prepare the profile anywhere, run `deckent beuser walk` on a host with Docker.
+
+- **BeUser's walker and evaluator can be any connected, active model (alpha.60).** They are no longer limited to frontier-tier models:
+  every model the scope has connected and active serves them, a subscription CLI model, a ChatGPT-sign-in model, an API model or a local
+  one. Whether the evaluator's maker differs from the walker's and the contributors' is only a label on the verdict (`independent`,
+  `reduced` or `unknown`); it never changes the outcome. A subscription model serves a walk only inside your delegated-use consent for
+  its connection (`deckent models connect --connection <kind> … --delegate …`). *Impact:* a weak or same-maker evaluator is still
+  called, so read the label before trusting a verdict. *Workaround:* connect and activate the model you want, and choose per journey
+  profile.
+- **BeUser reserves a subscription CLI's or the ChatGPT sign-in's tokens by estimate (alpha.60).** These transports have no token
+  counter, so a call reserves the request bytes plus a registry allowance for the framing the transport adds (Claude CLI 2048, ChatGPT
+  sign-in 1024, Codex CLI 24576; only the Claude figure was measured). Unknown usage is never settled as zero: the reservation stays
+  charged. The provisional walk profile (`b1-dogfood-provisional-2`, limits `beuser-limits-5`) allows 256 calls, 16 777 216 tokens, one
+  hour and 3 USD for priced models per walk. *Impact:* these ceilings are planning bounds, not measured capacity, spend permission or a
+  quota promise, and a walk can stop early on an estimate. *Workaround:* none yet; measurement replaces the estimates later.
 
 ## Platforms: tried and not tried
 
@@ -38,6 +52,15 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
+- **The terminal draws its first frame before Deckent has checked everything (alpha.60).** With the full-window layout and a scope,
+  the frame appears in about a third of a second (0.34 s warm, 0.35 s cold, against 2.24 s and 3.21 s before; one Linux pseudo-terminal
+  on WSL2 with Node 26.13.0, five runs each) and the composer is ready to send after 0.88 s warm and 1.76 s cold. Identity, scope and
+  retired-folder checks still run before the frame and refuse with their usual text and exit code 78; the runtime service, the session
+  and setup follow it. A line sent before the service answers waits behind one notice ("Waiting for the runtime service before
+  sending…"), goes as soon as it answers, and Ctrl+C on it sends nothing; a failed start gives it its error and keeps it as the draft.
+  Setup opens by itself only while you have typed nothing; otherwise one line says "Setup: N steps waiting — /setup". Inline layout,
+  `--full-access`, no scope, a retired folder, `TERM=dumb` and pipes take the earlier launch path and were not measured; the numbers
+  come from one machine and are not a promise elsewhere. *Workaround:* none needed; `/setup` opens the steps at any time.
 - **Copying with the mouse, card copy (Ctrl+Y or a drag over a card, alpha.59) and `/copy [n]` use your terminal's clipboard sequence
   (OSC 52)** and were proven only on a Linux pseudo-terminal (a click on a collapsed tool-call line, alpha.59, only in an in-process
   terminal test), not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until
@@ -204,6 +227,18 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
 
 ## Providers and subscriptions
 
+- **Codex CLI subscription (alpha.60):** the Brain can also plan with your own Codex CLI (ChatGPT plan) through the isolated
+  `codex-cli-subscription` connection, one `codex exec` turn at a time. Sign in with `deckent models login --connection
+  codex-cli-subscription` (it runs `codex login` into its own Deckent-owned directory, `headless/logins/codex`; `--config-dir` and
+  `--executable` name another login directory or binary; there is no `--sso`). Then `deckent models connect --connection
+  codex-cli-subscription --executable <path> --config-dir <dir> --delegate system` connects it: without `--executable` the first `codex`
+  on the PATH is used, without `--config-dir` the Brain's own login, and `--delegate none|ai|system|ai,system` states who besides you may
+  use the login (absent keeps your earlier choice). Connecting does not need a worker image: without an admitted one it connects chat and
+  one-shot calls only, activates no worker model and says so ("no worker image admits this CLI version yet"); build the image in `/setup`
+  and connect again to use it for workers too. The same bubblewrap, quota and consent rules as the Claude connection apply (below). *Impact:*
+  Deckent stops the Codex process when its output line shows more than the answer, but it acts on events the CLI reports, so this is
+  not a block before the effect: the read-only sandbox and Deckent's realm bound what could already have run. The model name is the one
+  Deckent passed, not one Codex reported, and the step has not been measured against a real Codex turn. Do not read a successful sign-in as proof that a Codex worker is available.
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. Since alpha.55 the Brain (the planner behind `/do`)
   can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection. It signs in to its own
   Deckent-owned login directory (`headless/logins/claude`, never backed up) with `deckent models login --connection
@@ -616,7 +651,7 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Memory phases 3 and 4 open only after measurement.** Turning context or verification fully on is refused with
   `MEMORY_ROLLOUT_CRITERIA_UNMET` until the sealed records meet the criteria (for example 20 shadow admissions, or evaluator agreement of
   at least 90 % over 20 blind decisions). *Workaround:* `deckent memory rollout` shows each criterion with its numbers and the next command.
-- **The subscription Brain needs bubblewrap and shares your quota.** The `claude-cli-subscription` connection runs only inside Deckent's
+- **The subscription Brain needs bubblewrap and shares your quota.** The `claude-cli-subscription` and `codex-cli-subscription` connections run only inside Deckent's
   bubblewrap sandbox; without it the connection is refused (`HEADLESS_ISOLATION_UNAVAILABLE`), so native Windows and macOS cannot use it.
   It allows one call at a time per connection, and it uses the same subscription quota and login refresh as your own Claude sessions.
   Deckent buys no credit and stops when the CLI reports that credits are required, but if extra usage is enabled on your account the CLI
@@ -713,6 +748,11 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   managed backup restore remains available. An unknown step stays unknown. The recovery location must be private and lie outside
   every folder the removal changes; otherwise nothing starts.
   *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
+- **Removing the compile cache can race a starting process (alpha.60).** The faster start fills a cache under the conventional global
+  root (`state/compile-cache`); uninstall removes it only after every recorded writer has ended. A process that records itself just
+  after the removal's final scan can leave that folder non-empty, so one uninstall ends `EFFECT_TARGET_UNKNOWN` with the cache partly
+  removed. Nothing outside the cache is touched and no completion is claimed. *Workaround:* run the uninstall again; it completes. A
+  non-default global root runs without the cache.
 
 ## Desktop and other surfaces
 

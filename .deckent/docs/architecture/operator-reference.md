@@ -73,8 +73,8 @@ one section; other sections link to it.
 - **From the command line:** `deckent models connect --scope <id> --connection <kind> --command-id <id> (--model <id> |
   --reference <ref>)` declares a model from the kind's packaged catalog, writes the scope's invocation profile with the key name
   and activates it. The kinds are `anthropic-api`, `openai-api`, `deepseek-api`, `zai-api`, `zai-cn-api`, `openrouter`,
-  `openai-compatible` and `local-openai`, plus `claude-cli-subscription` (your own Claude login for Brain planning; only a person
-  connects it, and it needs the bubblewrap sandbox and `deckent models login` first, see
+  `openai-compatible` and `local-openai`, plus `claude-cli-subscription` and `codex-cli-subscription` (your own Claude or Codex CLI login
+  for Brain planning; only a person connects it, and it needs the bubblewrap sandbox and `deckent models login` first, see
   [Core layers](#core-layers-memory-agents-model-roles-recovery)). `--command-id` is any unique name you choose; repeating it
   never connects twice. On a person's terminal, `models connect`, `models activate|deactivate` and `models catalog
   activate|deactivate` without their long flags ask for the scope, provider or channel and the exact model id (never an alias),
@@ -114,7 +114,11 @@ one section; other sections link to it.
 
 - **Before you start:** your installation needs the current first-run policy; an older one upgrades first (see
   [First-run setup](#first-run-setup)).
-- **Onboarding:** the first interactive terminal open shows sequential setup screens before the Workline. `/setup` revisits them.
+- **Onboarding:** the first interactive terminal open shows sequential setup screens in front of the Workline. `/setup` revisits them.
+  Since alpha.60 the window and composer are drawn first (first frame about 0.34 s in the measured full-window case, ready to send after
+  0.88 s warm and 1.76 s cold) and setup follows once the runtime service has answered: its card opens by itself only while you have
+  typed nothing, otherwise one line says "Setup: N steps waiting — /setup" and what you typed stays the draft. A line you send before
+  the service answers waits behind one notice and goes as soon as it does; Ctrl+C on it sends nothing; `/exit` never waits.
   Escape defers only the current screen for this person and launch folder. On relaunch, each operation is observed again; a closed screen
   never proves that its operation completed. AI, MCP, pipes and CI do not answer person-only screens. Esc · Later on the model card
   (alpha.59) holds while no model is usable: later opens skip the card, the status row says "Model not connected — /setup" and `/setup`
@@ -581,6 +585,10 @@ upgrades with `deckent policy upgrade --template current --scope <id> --preview`
   `deckent doctor` shows a Brain login row per connection. While the CLI's own refresh lock exists or another Brain call holds the
   login, a call waits up to the registry bound and is then refused with `HEADLESS_LOGIN_BUSY`; a leftover lock from a crashed Claude
   session keeps refusing until you remove it.
+  The Codex CLI works the same way (alpha.60): `deckent models login --connection codex-cli-subscription [--config-dir <abs dir>]
+  [--executable <abs path>]` runs `codex login` (ChatGPT; no `--sso`) into the Brain's own `headless/logins/codex`, then `deckent models
+  connect --connection codex-cli-subscription --executable <abs path> --config-dir <abs dir> --delegate system` connects it (each flag as above).
+  Without an admitted worker image the connect still succeeds for chat and one-shot calls (BeUser) and says that no worker model was activated.
 - **Quota question.** A worker Run whose quota wait ended asks you: `deckent run resume --quota wait` keeps waiting,
   `deckent run resume --quota next-candidate` uses the next candidate of the WorkClass list; closing the Run stays a separate choice.
   Keeping the wait is offered at most `runRuntime.quotaRecovery.maxRewaits` (3) times, then `RUN_QUOTA_WAIT_LIMIT`.
