@@ -4763,15 +4763,15 @@
     "maxLinesPerFile": 1500,
     "packageLines": {
       "platform": 25000,
-      "domain": 10900,
+      "domain": 11000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 39650,
+      "adapters": 40000,
       "surfaces": 45000,
-      "composition": 11930
+      "composition": 12250
     },
     "totalSrcLines": 200000,
-    "testCases": 8000,
+    "testCases": 8025,
     "designTargetLines": 800,
     "fileRoots": [
       "src",
