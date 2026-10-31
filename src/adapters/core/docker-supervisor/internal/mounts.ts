@@ -33,11 +33,13 @@ export async function assertReadOnlyMountSource(source: string, guarded: readonl
   if (guarded.some(path => inside(path, source) || inside(source, path))) throw invalid;
 }
 /** Resolves profile binds against the trusted project root before any dispatch (B06-2c). `excluded` names product data (layout root and
- * resources): a bind can expose neither the ledger, keys and approvals nor other attempts' workspaces to a task. */
+ * resources): a bind can expose neither the ledger, keys and approvals nor other attempts' workspaces to a task. Each excluded path is absolute
+ * (Astra 2867: a relative one resolved against the process directory and refused a project's own `bin/` once `bin` became a resource). */
 export async function resolveDockerReadOnlyMounts(projectRoot: string, mounts: readonly DockerReadOnlyMount[], excluded: readonly string[]) {
   const parsed = dockerReadOnlyMountsSchema.safeParse(mounts);
   if (!parsed.success) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
   let root: string; try { root = await realpath(projectRoot); } catch { throw new SupervisorError('SUPERVISOR_REQUEST_INVALID'); }
+  if (excluded.some(path => !isAbsolute(path))) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
   const guarded = await Promise.all(excluded.map(path => realpath(path).catch(() => resolve(path))));
   const resolved = [];
   for (const mount of parsed.data) {

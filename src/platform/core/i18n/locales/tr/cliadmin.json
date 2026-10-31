@@ -353,6 +353,7 @@
   "cli.audit.list.command": "deckent audit {action} komutu",
   "cli.uninstall.group.identity": "kurulum kimliği",
   "cli.uninstall.group.service": "servis dosyaları",
+  "cli.uninstall.group.sandbox": "komut korumalı alanı programı",
   "cli.uninstall.group.images": "işçi imajları",
   "cli.uninstall.blocker.work-unverified": "iş kayıtları tam okunamadı",
   "cli.uninstall.force.offer": "İptal et ve devam et",

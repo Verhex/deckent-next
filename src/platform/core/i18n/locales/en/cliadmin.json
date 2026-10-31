@@ -353,6 +353,7 @@
   "cli.audit.list.command": "deckent audit {action}",
   "cli.uninstall.group.identity": "installation identity",
   "cli.uninstall.group.service": "service files",
+  "cli.uninstall.group.sandbox": "command sandbox program",
   "cli.uninstall.group.images": "worker images",
   "cli.uninstall.blocker.work-unverified": "the work records could not be fully read",
   "cli.uninstall.force.offer": "Cancel and continue",
