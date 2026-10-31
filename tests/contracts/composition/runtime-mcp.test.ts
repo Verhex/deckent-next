@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
 import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
-import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
+import { renderMcpStartNotice, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
@@ -103,9 +103,9 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(systemOf(f.state.requests.at(-1)!)).toContain('mcp:my-fx/echo');
   }, 60_000);
 
-  // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, in the turn note;
-  // `/mcp` keeps saying it (en and tr) until the owner re-approves.
-  it('K3: a drifted pinned tool is not offered and the owner sees it once in the turn note and on /mcp', async () => {
+  // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, by a typed notice of
+  // the turn (v30: never in `note`); `/mcp` keeps saying it (en and tr) until the owner re-approves.
+  it('K3: a drifted pinned tool is not offered and the owner sees it once as a typed turn notice and on /mcp', async () => {
     const m = mcpFixture();
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
     registry(f.project, { fx: m.entry() }); await approve(f.project, f.env);
@@ -113,9 +113,10 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     f.state.script = [{ content: 'First.' }];
     const first = await answered(f, 'turn-drift-1', 'allow');
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(['mcp__fx__slow']);
-    expect(first.result.note).toContain(t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'en'));
+    expect(first.result.notices).toEqual([{ kind: 'tools-changed', name: 'fx', count: 1 }]); expect(first.result.note).toBeNull();
+    expect(renderMcpStartNotice(first.result.notices[0]!, 'en')).toBe(t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'en'));
     f.state.script = [{ content: 'Second.' }];
-    expect((await answered(f, 'turn-drift-2', 'allow')).result.note ?? '').not.toContain('went missing');
+    expect((await answered(f, 'turn-drift-2', 'allow')).result.notices).toEqual([]);
     const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'tr');
     expect(lines).toContainEqual(`    ${t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'tr')}`);
     expect(lines.find(line => line.startsWith('  fx '))).toContain(t('terminal.mcp.toolsChanged', {}, 'tr'));
@@ -388,7 +389,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
 });
 
 // MCP-SANDBOX-PATHS follow-up (lead 2026-09-29): no MCP failure is silent. A server the default realm (prefer-sandbox, the shipped bubblewrap)
-// cannot start is named in the turn's result note (protocol v17's existing `note`, no wire change) with its display-safe diagnosis; the failure
+// cannot start is named by a typed notice of the turn's result (protocol v30; `note` carries no MCP text) with its display-safe diagnosis; the failure
 // is recorded for that exact definition, so its first-use card is not asked again every turn; `/mcp` shows it; `/mcp approve` retries.
 const RAW_SERVER = `import { createInterface } from 'node:readline';
 const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');
@@ -402,22 +403,27 @@ const sandboxReady = capabilities.bubblewrap.status === 'available';
 describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silent (MCP-SANDBOX-PATHS, real bubblewrap)', () => {
   const elsewhere = () => { const dir = mkdtempSync(join(tmpdir(), 'deckent-mcp-elsewhere-')); roots.push(dir); writeFileSync(join(dir, 'server.mjs'), RAW_SERVER); return dir; };
   const slash = async (f: Harness, locale: Locale = 'en') => mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, locale);
-  it('first use: the yes cannot start it → one note naming the hidden path; the next turn asks no card; /mcp shows it; /mcp approve asks again', async () => {
+  it('first use: the yes cannot start it → one typed notice naming the hidden path; the next turn asks no card; /mcp shows it; /mcp approve asks again', async () => {
     const dir = elsewhere(), script = join(dir, 'server.mjs');
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
     registry(f.project, { fx: { command: process.execPath, args: [script] } });
     f.state.script = [{ content: 'First.' }];
     const first = await answered(f, 'turn-hidden-1', 'allow');
     expect(requested(first.events).map(event => event.kind === 'approval.requested' ? event.summary : '')).toEqual(['mcp_trust · mcp:fx · launch']);
-    expect(first.result.note).toContain(`MCP server fx did not start: the argument ${script} exists on this machine but not in its bubblewrap sandbox view`);
-    expect(first.result.note).toContain('/mcp approve fx');
-    // The note is the catalog's sentence pair (`mcp.start.failed.pathHidden` + `mcp.start.next.launch`) in the service's locale (en here).
-    expect(first.result.note).toContain(`${t('mcp.start.failed.pathHidden', { name: 'fx', role: t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, 'en'), path: script,
+    // Once, as data: the start failure with its diagnosis; `note` carries no MCP text (the surface renders the notice from its catalog).
+    expect(first.result.notices).toEqual([{ kind: 'start-failed', name: 'fx', failure: expect.objectContaining({ phase: 'launch',
+      diagnosis: expect.objectContaining({ kind: 'path-hidden', role: 'argument', path: script }) }) }]);
+    expect(first.result.note).toBeNull();
+    const shown = renderMcpStartNotice(first.result.notices[0]!, 'en');
+    expect(shown).toContain(`MCP server fx did not start: the argument ${script} exists on this machine but not in its bubblewrap sandbox view`);
+    expect(shown).toContain('/mcp approve fx');
+    // The rendering is the catalog's sentence pair (`mcp.start.failed.pathHidden` + `mcp.start.next.launch`) in the surface's locale (en here).
+    expect(shown).toBe(`${t('mcp.start.failed.pathHidden', { name: 'fx', role: t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, 'en'), path: script,
       targetSuffix: '' }, 'en')} ${t('mcp.start.next.launch', { name: 'fx' }, 'en')}`);
     f.state.script = [{ content: 'Second.' }];
     const second = await answered(f, 'turn-hidden-2', 'allow');
     expect(requested(second.events)).toEqual([]);
-    expect(second.result.note).toContain(`MCP server fx did not start: the argument ${script}`);
+    expect(second.result.notices.map(notice => renderMcpStartNotice(notice, 'en'))).toEqual([expect.stringContaining(`MCP server fx did not start: the argument ${script}`)]);
     expect(await slash(f)).toContainEqual(expect.stringContaining(`    MCP server fx did not start: the argument ${script}`));
     // `/mcp` renders the same record in the terminal's own locale.
     expect(await slash(f, 'tr')).toContainEqual(`    MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
@@ -428,7 +434,7 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     f.state.script = [{ content: 'Third.' }];
     expect(requested((await answered(f, 'turn-hidden-3', 'deny')).events)).toHaveLength(1);
   }, 90_000);
-  it('a trusted server that no longer starts: every turn says so in the service\'s locale (tr); /mcp in its own; a `${VAR}` path is never expanded', async () => {
+  it('a trusted server that no longer starts: every turn says so by a typed notice (rendered tr); /mcp in its own; a `${VAR}` path is never expanded', async () => {
     const dir = elsewhere(), f = await runtime({ extraGrants: mcpGrants() });
     (f.env as Record<string, string>)['MCP_TOOLS_DIR'] = join(f.project, 'tools');
     (f.env as Record<string, string>)['DECKENT_LANGUAGE'] = 'tr';
@@ -445,9 +451,11 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
       f.state.script = [{ content: 'No tools.' }];
       const { result, events } = await answered(f, turnId, 'allow');
       expect(requested(events)).toEqual([]);
-      expect(result.note).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
-      expect(result.note).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
-      expect(result.note).not.toContain(dir); expect(result.note).not.toContain(join(f.project, 'tools'));
+      expect(result.notices).toHaveLength(1); expect(result.note).toBeNull();
+      const shown = renderMcpStartNotice(result.notices[0]!, 'tr');
+      expect(shown).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
+      expect(shown).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
+      expect(JSON.stringify(result.notices)).not.toContain(dir); expect(JSON.stringify(result.notices)).not.toContain(join(f.project, 'tools'));
     }
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     const lines = await slash(f);
@@ -455,16 +463,6 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     expect(lines.join('\n')).not.toContain(dir);
     expect(await slash(f, 'tr')).toContainEqual(expect.stringContaining('    MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs'));
   }, 90_000);
-});
-
-describe('the MCP notices in the turn note (pure)', () => {
-  it('come first, keep the engine note whole and fit the result bound (4096) by shortening only the MCP part', () => {
-    expect(withMcpNotices([], 'engine')).toBe('engine');
-    expect(withMcpNotices(['a.', 'b.'], null)).toBe('a. b.');
-    expect(withMcpNotices(['a.'], 'engine')).toBe('a. engine');
-    const long = withMcpNotices(['x'.repeat(5_000)], 'engine note');
-    expect(long!.length).toBe(4_096); expect(long!.endsWith('… engine note')).toBe(true);
-  });
 });
 
 describe('the MCP start notices and the sandbox refusal come from the catalog (pure, en and tr)', () => {

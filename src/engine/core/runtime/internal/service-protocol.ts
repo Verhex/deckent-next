@@ -1,12 +1,12 @@
 import { queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema } from '#engine/core/effect/index.js';
 import { z } from 'zod';
-import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
+import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseChatTurnSteer, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseProviderSpendManagementCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 29 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 30 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -21,7 +21,7 @@ export function runtimeServiceErrorParams(params: Readonly<Record<string, unknow
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'proposeRun', 'inspectRunProposal', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount', 'manageProviderSpend',
-  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
+  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'steerChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
   'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore', 'enqueueTargetQueueRollback', 'enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue', 'challengeTargetQueue', 'answerTargetQueue', 'executeTargetQueue']);
 /** v29: source-free queue commands; batch consent is a separately witnessed terminal operation. */
 export function isRuntimeServiceQueueOperation(operation: RuntimeServiceOperation): boolean {
@@ -34,7 +34,7 @@ const invocationOperation = (operation: RuntimeServiceOperation): boolean => ope
 /** Operations whose request carries a `delivery` result bound (the server requires it; the client always sends one). */
 export const isRuntimeServiceBoundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
-  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'manageProviderSpend' || operation === 'chatTurn' || operation === 'cancelChatTurn'
+  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'manageProviderSpend' || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'steerChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
   || isRuntimeServiceQueueOperation(operation) || operation === 'clearSessionStanding' || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
@@ -113,6 +113,7 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'cancelModelInvocation') parseModelInvocationCancellationCommand(value.input);
       else if (value.operation === 'chatTurn') parseChatTurnCommand(value.input);
       else if (value.operation === 'cancelChatTurn') parseChatTurnCancellation(value.input);
+      else if (value.operation === 'steerChatTurn') parseChatTurnSteer(value.input);
       else if (value.operation === 'findWorkspaceFiles') parseWorkspaceFileQuery(value.input);
       else if (value.operation === 'attachWorkspaceFile') parseWorkspaceAttachmentRequest(value.input);
       else if (value.operation === 'executeOperation' || value.operation === 'compensateOperation') effectCommandSchema.parse(value.input);
@@ -153,6 +154,8 @@ export function isRuntimeServiceStreamingOperation(operation: RuntimeServiceOper
 /** Largest number of turn events one event frame carries. */
 export const RUNTIME_SERVICE_EVENT_FRAME_EVENTS = 256;
 /**
+ * v30 (tema L6 + owner S5, one bump): the `chatTurn` result carries typed MCP `notices` (no MCP text in `note`) and `steer`; `steerChatTurn` queues
+ * a person line for the caller's own running turn, joined only at the engine's model-call boundary. Both current-only; window [30, 29].
  * `chatTurn` (v12; v13 adds `context` and `compacted`; v14 adds `approval.requested`, `approval.settled` and `tool.output`; v15
  * adds `tool.finished`'s optional `cleanup`, host shell calls only, added within v15 without a further version bump — CLEANUP-MARK)
  * answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
@@ -179,11 +182,12 @@ export class RuntimeServiceProtocolError extends Error {
  * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) kept [20, 19]; v21 (T2) kept [21, 20]; v22 (T3) kept
  * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
  * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) kept [25, 24]; v26 (MCP actor) kept [26, 25];
- * v27 (Run-create approval subject) kept [27, 26]; v28 (RunProposal) kept [28, 27]; v29 (target queue) keeps [29, 28]: v27 is outside.
+ * v27 (Run-create approval subject) kept [27, 26]; v28 (RunProposal) kept [28, 27]; v29 (target queue) kept [29, 28]; v30 (typed notices, steer)
+ * keeps [30, 29]: v28 is outside, and a v29 terminal's `chatTurn` is closed unanswered (reopen the terminal after the switch).
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 28] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 29] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(28)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(29)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, channel: z.literal('mcp').optional(),
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

@@ -55,7 +55,15 @@ delivery, `replayed`, `recorded`). Event frames are required data, not presentat
 for the peer to drain before each round and tool call, and at most `4 × responseMaxBytes` may wait unread before the turn is
 cancelled; an event that cannot fit one frame cancels the turn instead of being dropped. A peer that disconnects cancels the turn
 at the next write (a Unix peer that closed after its request is not visible earlier); `cancelChatTurn` of the same principal
-cancels at once (another principal's turn, or an unknown one, is `not-running`); service stop cancels running turns. Stores:
+cancels at once (another principal's turn, or an unknown one, is `not-running`); service stop cancels running turns.
+**Protocol v30 (tema L6, owner S5).** `ChatTurnResult` carries typed MCP start `notices` (the adapter's structure, at most
+`CHAT_TURN_RESULT_NOTICES`; the surface renders them from its own catalog) and `note` no longer carries MCP text. `steerChatTurn` queues one
+person line for the same principal's running turn (`queued`, `not-running` for another principal, unknown, cancelled or finished turns,
+`full` past `CHAT_TURN_STEER_LINES` lines per turn; a repeated `steerId` is the same line). The loop takes waiting lines only at the
+model-call boundary — after every tool result of the round, before the next round is measured and sent — so a line never enters an
+approval or witness wait and never answers a card; each joins once as the person's `user` message (`message` event with its `steerId`),
+none joins after a cancel, and the result's `steer.returned` names the lines that did not join. A v29 terminal's `chatTurn` is closed
+unanswered (`LOCAL_RUNTIME_TRANSPORT`); the lifecycle window is `[30, 29]`. Stores:
 `agent_turns`/`agent_turn_tool_calls` (T-L3b2). Errors: `AGENT_TURN_IN_PROGRESS | CONFLICT | CORRUPT | INVALID | UNAVAILABLE`.
 Reading tools needs an explicit policy grant (`agent-tool`, ids `read_file`, `list_dir`, `grep`, `glob`, action `invoke`);
 without it every call is `denied`.

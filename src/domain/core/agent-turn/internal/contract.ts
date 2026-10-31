@@ -31,8 +31,9 @@ export type AgentTurnEvent =
   | { readonly kind: 'tool.finished'; readonly callId: string; readonly name: string; readonly status: AgentToolCallStatus; readonly ms: number; readonly bytes: number;
     readonly cleanup?: AgentToolCleanup }
   | { readonly kind: 'usage'; readonly round: number; readonly promptTokens: number; readonly completionTokens: number }
-  /** Each message the turn appends (assistant, tool, or the engine's `[deckent]` user note), in order, in order: the client's history continues from exactly these. */
-  | { readonly kind: 'message'; readonly message: AgentTurnMessage }
+  /** Each message the turn appends (assistant, tool, or the engine's `[deckent]` user note), in order, in order: the client's history continues from exactly these.
+   * v30: `steerId` marks the person's steered line (`steerChatTurn`) at the one moment it joined the turn. */
+  | { readonly kind: 'message'; readonly message: AgentTurnMessage; readonly steerId?: string }
   /** The prompt of a round as measured before it was sent (T-L5): the provider's count, or a tagged upper bound. */
   | { readonly kind: 'context'; readonly round: number; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }
   /** The history was compacted (T-L5b): `messages` replaces every non-system message the client holds; its system prompt stays. */
@@ -75,7 +76,7 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count,
     cleanup: agentToolCleanupSchema.optional() }).strict(),
   z.object({ kind: z.literal('usage'), round: z.number().int().positive().safe(), promptTokens: count, completionTokens: count }).strict(),
-  z.object({ kind: z.literal('message'), message: agentTurnMessageSchema }).strict(),
+  z.object({ kind: z.literal('message'), message: agentTurnMessageSchema, steerId: identitySchema.optional() }).strict(),
   z.object({ kind: z.literal('context'), round: z.number().int().positive().safe(), promptTokens: count, windowTokens: z.number().int().positive().safe().nullable(),
     quality: z.enum(['provider-count', 'upper-bound']) }).strict(),
   z.object({ kind: z.literal('compacted'), messages: z.array(agentTurnMessageSchema).min(1).readonly(), replacedMessages: count }).strict(),
@@ -111,11 +112,49 @@ export const chatTurnCommandSchema = z.object({ schemaVersion: z.literal(1), sco
 export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
 export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);
 
-/** The bounded result of a turn: the final answer when it fits the replay bound, never the tool results (they came as events). */
+/** v30 wire bounds (protocol invariants, versioned with the protocol like the frame bounds): MCP start notices one result carries, and the
+ * steered lines one turn accepts. */
+export const CHAT_TURN_RESULT_NOTICES = 32;
+export const CHAT_TURN_STEER_LINES = 16;
+const noticeText = (max: number) => z.string().min(1).max(max);
+/**
+ * v30 (tema L6): an MCP server this turn could not decide or start, as data (the adapter's `McpStartNotice`, never prose); the surface
+ * renders it from its own catalog. `note` no longer carries MCP text.
+ */
+export const mcpStartNoticeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('start-failed'), name: noticeText(64), failure: z.object({ code: noticeText(64), phase: z.enum(['launch', 'trusted', 'tools']),
+    detail: z.string().max(200).optional(), diagnosis: z.union([
+      z.object({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: z.number().int().min(-1).max(1_024), path: z.string().max(4_096),
+        target: z.string().max(4_096).optional() }).strict(),
+      z.object({ kind: z.enum(['package-runner', 'container-daemon']), runner: z.string().max(64) }).strict()]).optional() }).strict() }).strict(),
+  z.object({ kind: z.literal('tools-changed'), name: noticeText(64), count }).strict(),
+  z.object({ kind: z.literal('not-recorded'), name: noticeText(64) }).strict(),
+  z.object({ kind: z.literal('not-decided'), name: noticeText(64), code: noticeText(64) }).strict(),
+  z.object({ kind: z.literal('grant-refused'), name: noticeText(64), reason: noticeText(64) }).strict(),
+  z.object({ kind: z.literal('secret-refused'), name: noticeText(64), key: noticeText(256), scope: noticeText(256), code: noticeText(64) }).strict(),
+]);
+export type ChatTurnNotice = z.infer<typeof mcpStartNoticeSchema>;
+/** The bounded result of a turn: the final answer when it fits the replay bound, never the tool results (they came as events). v30: `notices`
+ * (typed, see above) and `steer` — the steered lines that joined the turn and those it returns unsent (the person's to send again). */
 export const chatTurnResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema, finish: finishSchema,
   note: z.string().max(4096).nullable(), rounds: count, toolCalls: count, answer: z.string().nullable(), answerBytes: count,
-  replayed: z.boolean(), recorded: z.boolean() }).strict().readonly();
+  replayed: z.boolean(), recorded: z.boolean(), notices: z.array(mcpStartNoticeSchema).max(CHAT_TURN_RESULT_NOTICES).readonly(),
+  steer: z.object({ joined: z.array(identitySchema).max(CHAT_TURN_STEER_LINES).readonly(), returned: z.array(identitySchema).max(CHAT_TURN_STEER_LINES).readonly() }).strict() }).strict().readonly();
 export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
+
+/**
+ * v30 steer (owner S5): one person line for the caller's own running turn. It joins the turn only at the next model-call boundary, after
+ * every tool result of the round; never into an approval or witness wait, never as an answer to a card, never after a cancel. `queued`
+ * lines either join (a `message` event with this `steerId`) or come back in the result's `steer.returned`; `not-running` and `full` mean
+ * the service kept nothing. A repeated `steerId` is the same line (never added twice).
+ */
+export const chatTurnSteerSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema, steerId: identitySchema,
+  content: z.string().min(1) }).strict().readonly();
+export type ChatTurnSteer = z.infer<typeof chatTurnSteerSchema>;
+export const parseChatTurnSteer = (value: unknown): ChatTurnSteer => chatTurnSteerSchema.parse(value);
+export const chatTurnSteerResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema, steerId: identitySchema,
+  state: z.enum(['queued', 'not-running', 'full']) }).strict().readonly();
+export type ChatTurnSteerResult = z.infer<typeof chatTurnSteerResultSchema>;
 
 /** Cancels the caller's own running turn at once (the same principal that started it); a disconnect cancels at the next write. */
 export const chatTurnCancellationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema }).strict().readonly();

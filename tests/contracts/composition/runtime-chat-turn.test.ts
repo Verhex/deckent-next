@@ -161,7 +161,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const events: AgentTurnStreamEvent[] = [];
     const result = await f.client().chatTurn(ask('turn-1'), event => events.push(event));
     expect(result).toEqual({ schemaVersion: 1, turnId: 'turn-1', finish: 'stop', note: null, rounds: 2, toolCalls: 1, answer: 'It exports a.',
-      answerBytes: 13, replayed: false, recorded: true });
+      answerBytes: 13, replayed: false, recorded: true, notices: [], steer: { joined: [], returned: [] } });
     expect(events.filter(event => event.kind.startsWith('tool.'))).toEqual([{ kind: 'tool.started', callId: 'call_1', name: 'read_file', target: 'src/a.ts' },
       expect.objectContaining({ kind: 'tool.finished', callId: 'call_1', name: 'read_file', status: 'ok' })]);
     const history = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
@@ -506,9 +506,10 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
 
   it('waits for the owner on an approval-gated call: allow runs it once, deny never runs it, expiry and cancel close the request (T-L4, C12)', async () => {
     const f = await runtime({ toolGrant: 'approval' }); await f.start();
-    const client = f.client();
+    const client = f.client(), steered: unknown[] = [];
     const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => {
       if (event.kind !== 'approval.requested') return;
+      if (decision === 'allow') steered.push(await client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-allow', steerId: 'line-1', content: 'and name its type' }));
       await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: `${decision}-${event.approvalId}`,
         expectedRevision: event.revision, decision, reason: 'Reviewed' });
     };
@@ -525,10 +526,13 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       preview: expect.stringContaining('"path": "src/a.ts"') });
     expect(allowed.events.find(event => event.kind === 'approval.settled')).toMatchObject({ approvalId: requested.approvalId, outcome: 'allow' });
     expect(allowed.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
-    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1, notices: [], steer: { joined: ['line-1'], returned: [] } }); expect(steered).toEqual([expect.objectContaining({ steerId: 'line-1', state: 'queued' })]);
+    // v30 steer, sent while the card waited: it never answered the card (the record below is the person's decision); it joined after the tool result.
+    const sent = (f.state.requests[1]!['messages'] as { role: string; content: string }[]).slice(-2);
+    expect(sent).toEqual([expect.objectContaining({ role: 'tool' }), { role: 'user', content: 'and name its type' }]); expect(allowed.events.filter(event => event.kind === 'message' && event.steerId === 'line-1')).toHaveLength(1);
     const record = JSON.parse((f.rows(`SELECT snapshot FROM approvals WHERE approval_id='${requested.approvalId}'`)[0] as { snapshot: string }).snapshot);
     expect(record).toMatchObject({ status: 'decided', request: { schemaVersion: 3, subject: { kind: 'agent-tool-call', turnId: 'turn-allow', round: 1, index: 0,
-      tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } });
+      tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } }); expect(JSON.stringify(record)).not.toContain('and name its type');
 
     const denied = await run('turn-deny', decide('deny'));
     expect(denied.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
@@ -1190,9 +1194,12 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const until = performance.now() + 5_000;
     while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
     expect(seen).toBe(true);
+    // v30 cancel/steer race: a line queued before the cancel never joins and comes back in the result; one after it is refused.
+    const steer = (steerId: string) => client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel', steerId, content: 'and b.ts' }); expect(await steer('before')).toMatchObject({ state: 'queued' });
     const cancelledAt = performance.now();
     expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toEqual({ schemaVersion: 1, turnId: 'turn-cancel', state: 'cancelling' });
-    expect(await running).toMatchObject({ finish: 'cancelled', replayed: false });
+    expect(await steer('after')).toMatchObject({ state: 'not-running' });
+    expect(await running).toMatchObject({ finish: 'cancelled', replayed: false, steer: { joined: [], returned: ['before'] } });
     // At once: the held provider stream is aborted, not waited out.
     expect(performance.now() - cancelledAt).toBeLessThan(1_000);
     expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toMatchObject({ state: 'not-running' });

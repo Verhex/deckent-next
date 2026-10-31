@@ -35,6 +35,9 @@ function ports(rounds: (AgentRoundOutcome | ((messages: readonly AgentTurnMessag
   };
   return { value, invoked, executed, authorized };
 }
+/** v30 steer: the person's waiting lines, taken by the loop exactly once (as the composition's running-turn record does). */
+const steering = (pending: { steerId: string; content: string }[], joined: string[] = []): NonNullable<AgentTurnPorts['steer']> => ({ pending: () => [...pending],
+  join: steerId => { const at = pending.findIndex(line => line.steerId === steerId); if (at < 0) return false; pending.splice(at, 1); joined.push(steerId); return true; } });
 async function run(p: ReturnType<typeof ports>, signal = new AbortController().signal) {
   const events: AgentTurnEvent[] = [];
   const result = await runAgentTurn({ messages: user, tools, signal, emit: event => events.push(event) }, p.value);
@@ -94,11 +97,16 @@ it('closes deterministically when reasoning spent the output budget or a round h
   expect(second.events.at(-1)).toMatchObject({ kind: 'done', finish: 'error' });
 });
 
-it('stops on cancel with a closure and never starts another round', async () => {
-  const controller = new AbortController();
+it('stops on cancel with a closure and never starts another round; a steered line waiting at the cancel never joins (v30 race)', async () => {
+  const controller = new AbortController(), waiting: { steerId: string; content: string }[] = [], joined: string[] = [];
   const p = ports([answer('', [call('c1', 'read_file', { path: 'a' }), call('c2', 'read_file', { path: 'b' })]), answer('never')], { controller });
-  const { result } = await run(p, controller.signal);
+  // The line arrives while c1 runs; the cancel lands in the same call, so the boundary after the round sees an aborted turn.
+  const execute = p.value.execute.bind(p.value); p.value.execute = async (...args) => { waiting.push({ steerId: 'late', content: 'also b' }); return execute(...args); };
+  const events: AgentTurnEvent[] = [];
+  const result = await runAgentTurn({ messages: user, tools, signal: controller.signal, emit: event => events.push(event) }, { ...p.value, steer: steering(waiting, joined) });
   expect(result).toMatchObject({ finish: 'cancelled' }); expect(p.invoked).toEqual([1]); expect(p.executed).toEqual(['read_file:{"path":"a"}']);
+  expect(joined).toEqual([]); expect(waiting.map(line => line.steerId)).toEqual(['late']);
+  expect(events.some(event => event.kind === 'message' && (event.steerId !== undefined || event.message.content === 'also b'))).toBe(false);
 });
 
 it('runs 25 policy-allowed reads without a single approval prompt (legacy owner case: 25 approvals)', async () => {
@@ -202,17 +210,23 @@ it('runs an approval-gated call only on an explicit allow, and gives every other
   const gated: AgentTurnPorts['authorize'] = async () => 'require-approval';
   const statuses: string[] = [];
   for (const owner of ['allow', 'deny', 'expired', 'cancelled', 'throws'] as const) {
-    const p = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), answer('done')], { decision: gated });
-    const asked: unknown[] = [];
+    // v30 steer (owner S5): a line steered while the card waits never answers it and never enters the wait; it joins once, after the call's
+    // result, as the person's own message in the next model call (whatever the card's answer was).
+    let next: readonly AgentTurnMessage[] = [];
+    const p = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), messages => { next = [...messages]; return answer('done'); }], { decision: gated });
+    const asked: unknown[] = [], waiting: { steerId: string; content: string }[] = [], joined: string[] = [];
     const { events } = await (async () => {
       const events: AgentTurnEvent[] = [];
-      await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: event => events.push(event) }, { ...p.value,
-        requestApproval: async input => { asked.push(input); if (owner === 'throws') throw new Error('store down'); return owner; } });
+      await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: event => events.push(event) }, { ...p.value, steer: steering(waiting, joined),
+        requestApproval: async input => { asked.push(input); waiting.push({ steerId: 'line-1', content: 'yes, and check b too' }); if (owner === 'throws') throw new Error('store down'); return owner; } });
       return { events };
     })();
     expect(asked).toEqual([expect.objectContaining({ round: 1, index: 0, target: 'a', argsDigest: expect.stringMatching(/^[0-9a-f]{64}$/) })]);
     expect(p.executed).toEqual(owner === 'allow' ? ['read_file:{"path":"a"}'] : []);
     statuses.push((events.find(event => event.kind === 'tool.finished') as { status: string }).status);
+    expect(next.slice(-2).map(message => message.role)).toEqual(['tool', 'user']); expect(next.at(-1)).toEqual({ role: 'user', content: 'yes, and check b too' });
+    const kinds = events.flatMap(event => event.kind === 'message' ? [event.steerId ?? event.message.role] : event.kind === 'tool.finished' ? ['finished'] : []);
+    expect(kinds).toEqual(['assistant', 'tool', 'finished', 'line-1', 'assistant']); expect(joined).toEqual(['line-1']); expect(waiting).toEqual([]);
   }
   expect(statuses).toEqual(['ok', 'denied', 'approval-expired', 'cancelled', 'approval-required']);
   // Without an approval port the call stays blocked (no bypass).

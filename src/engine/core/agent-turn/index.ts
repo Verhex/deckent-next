@@ -17,7 +17,7 @@ export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admissio
 export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, boundApprovalPreviewFacts, agentToolApprovalSummary, type ApprovalPreviewCut } from './internal/approval-preview.js';
 export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurnReplyLanguageRule, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt, type AgentTurnReplyLanguage,
   type AgentTurnShellPosture } from './internal/system-prompt.js';
-export { canonicalTurnRequest, withMcpNotices, chatTurnRoundFailureState, classifyProviderRejection, PROVIDER_REJECTION_KINDS } from './internal/metadata.js';
+export { canonicalTurnRequest, TURN_NOTE_MAX_CHARS, chatTurnRoundFailureState, classifyProviderRejection, PROVIDER_REJECTION_KINDS } from './internal/metadata.js';
 export type { ProviderRejectionKind } from './internal/metadata.js';
 export { agentCompactionExpected, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './internal/pressure.js';
 export { AGENT_SESSION_CONTEXT_VERSION, AGENT_SESSION_RULES, AGENT_SESSION_SURFACES, SESSION_STATE_TOOL_SPEC, agentSessionCells, agentSessionSnapshot, agentSessionStateText,

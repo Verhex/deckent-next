@@ -75,6 +75,9 @@ export interface AgentTurnPorts {
     readonly diagnostic?: AgentToolDiagnostic }): Promise<void>;
   /** Sealed digests of a marked field. A failure withholds the field; the decoded payload is not an argument. */
   recordIngress?(notice: ModelIngressProjection): Promise<void>;
+  /** v30 steer (owner S5): the person's lines waiting for this turn (a snapshot, in order) and `join`, which takes one exactly once (false: it
+   * no longer waits). The loop reads them only at the model-call boundary. */
+  readonly steer?: { pending(): readonly { readonly steerId: string; readonly content: string }[]; join(steerId: string): boolean };
 }
 
 /**
@@ -251,9 +254,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const limitTokens = input.admission?.completionLimitTokens ?? null;
   // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
   const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
-  const push = (message: AgentTurnMessage) => {
+  const push = (message: AgentTurnMessage, steerId?: string) => {
     messages.push(message); appendedHash.update(`${appendedCount++ ? ',' : ''}${JSON.stringify(message)}`); last = message;
-    emit({ kind: 'message', message });
+    emit({ kind: 'message', message, ...(steerId ? { steerId } : {}) });
     return message;
   };
   const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
@@ -277,6 +280,14 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const cancelled = () => t('agent.turn.outcome.cancelled', { summary: summary() }, input.language);
 
   for (;;) {
+    // v30 steer — the model-call boundary: after every tool result of the previous round (approval and witness waits exist only inside its
+    // calls, so a line never reaches a card), before this round is measured and sent. Each line joins once, as the person's own message;
+    // none joins after a cancel (an unjoined line stays the person's: the result returns it).
+    for (const line of signal.aborted ? [] : ports.steer?.pending() ?? []) {
+      const content = await presentModelIngress(line.content, null, input, ports, rounds);
+      if (signal.aborted || !ports.steer!.join(line.steerId)) break;
+      push({ role: 'user', content }, line.steerId);
+    }
     if (signal.aborted) return finish('cancelled', cancelled());
     rounds++;
     // One measurement per round (when a counter port exists) drives the context line, compaction and admission.

@@ -13,7 +13,7 @@ import { projectCredentialResolver } from '#composition/core/secrets/index.js'; 
 import { configuredMcpToolGrants } from '#composition/core/approvals/index.js';
 /**
  * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
- * the catalog (`mcp.start.*`), for the turn's note (the service's locale) and `lastStart.text` of `mcp list|get` and `/mcp` (the caller's).
+ * the catalog (`mcp.start.*`), for `lastStart.text` of `mcp list|get` and `/mcp` and a turn's typed `notices` (v30), in the caller's locale.
  */
 export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): string {
   const { name } = notice;
@@ -43,20 +43,20 @@ export function mcpGrantReasonText(reason: string, locale: Locale): string {
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
   readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof openTurnMcp>[0]['emit']; readonly sandboxes: McpLaunchContext['sandboxes']; readonly cwd: string;
-  /** MCP-SANDBOX-PATHS: what could not be decided or started this turn (display-safe), for the turn's result note — never silent. */
-  readonly onNotices?: (notices: readonly string[]) => void }) {
+  /** MCP-SANDBOX-PATHS: what could not be decided or started this turn, typed (v30: the result's `notices`, rendered by the surface) — never silent. */
+  readonly onNotices?: (notices: readonly McpStartNotice[]) => void }) {
   // Security (MCP pool scope isolation): this turn reaches the service's servers only through the view of its scope and project.
   const { context, scopeId, turnId } = input, pool = input.pool.scoped({ scopeId, cwd: input.cwd }), environment = input.options.env ?? process.env, config = context.config;
-  // The note is a string on the wire: rendered here, in the service's locale (its environment, then the configured language).
-  const locale = resolveLocale(undefined, environment, config.language);
+  // v30: the notices travel as data; the pool's renderer is only where they are collected (its strings stay unused here).
+  const locale = resolveLocale(undefined, environment, config.language), notices: McpStartNotice[] = [];
   const credentials = projectCredentialResolver(context, scopeId, input.options), resolveSecret = (name: string) => credentials.resolve(name); // SECRET-K1 + KER-17: `$DECK:` via the PRE-8 decision (grant)
   // K1: a trust card's yes also writes the answering person's grant for the pinned tools (their own authority; the governed policy chain).
   const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
     grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
-  signal: input.signal, emit: input.emit, locale, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
-  if (opened.notices.length) input.onNotices?.(opened.notices);
+  signal: input.signal, emit: input.emit, locale, describeNotice: notice => { notices.push(notice); return ''; }, ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
+  if (notices.length) input.onNotices?.(notices);
   if (!opened.settings) return null;
   // MCP-REVOKE: every call re-reads the current registry and trust at its send (the same registry context the turn opened with).
   const { offered } = opened, settings = opened.settings, tools = mcpTurnTools(offered), authority = mcpSendAuthority(registry);
