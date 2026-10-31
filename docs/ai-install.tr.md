@@ -4,7 +4,7 @@
 
 Bir kişi Deckent kurmanızı istediğinde bu rehberi kullanın. Hedef klasörünü ve doğrulanmış paket dosyasını öğrenin.
 Deckent kişinin altyapısında çalışır; kurulum kişinin iş operasyonlarını yürütme izni vermez.
-Bu rehber alpha.58 adayının (`f6b119d4f`; 2026-10-29'da `0ba89deab` olarak yayımlandı) CLI yardımı ve kaynağıyla yeniden kontrol edildi; alpha.59 adayı kullandığı hiçbir CLI komutunu değiştirmez. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
+Bu rehber alpha.58 adayının (`f6b119d4f`; 2026-10-29'da `0ba89deab` olarak yayımlandı) CLI yardımı ve kaynağıyla yeniden kontrol edildi; alpha.59 (2026-10-30'da `4d12d6fa8` olarak yayımlandı) ve alpha.60 adayı kullandığı hiçbir CLI komutunu değiştirmez. npm paketinin ya da sitenin yayımlandığı iddiası değildir.
 Son yayımlanan sürümün kaynaktan kurulum yolu README'dedir.
 
 ## Hazırlık ve kurulum

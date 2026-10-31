@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.59`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.60`**, the current release candidate; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
@@ -542,14 +542,16 @@ Dates are not promised; the order is. Alpha.57 includes the core layers, recover
 management, plus guided first use, ChatGPT chat sign-in, safe uninstall and the first BeUser journey walks, whose
 acceptance is still open. Alpha.58 adds one answer-key rule for every card ((y)/(n) on yes/no questions, the shown number on
 single choices), prepared start states for BeUser walks, a person's witness for install profiles wider than the first-run
-template, and MCP/SDK refusals to stop a service systemd runs. The alpha.59 candidate opens the terminal faster, lets you put
-off connecting a model, makes card text copyable and folds consecutive file reads into one line. The protected layer switches still start off;
+template, and MCP/SDK refusals to stop a service systemd runs. Alpha.59 opens the terminal faster, lets you put
+off connecting a model, makes card text copyable and folds consecutive file reads into one line. The alpha.60 candidate draws the
+terminal's first frame in about a third of a second (bare `deckent`, measured on one Linux machine; a message sent before the service answers waits behind a visible notice), lets BeUser
+walk with any connected model and adds a Codex CLI subscription sign-in and connection. The protected layer switches still start off;
 their real-use proof and the ChatGPT-plan Codex worker activation remain gates before the beta. The beta then hardens
 these layers through real use, and Desktop app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.59<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers · recovery cards · signed packages<br/>ChatGPT chat · guided setup · uninstall"] --> C["Before the beta · real-use acceptance<br/>core layers enabled with measured rules<br/>ChatGPT-plan worker proof · Hub deployment gates<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  N["Now · alpha.60<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers · recovery cards · signed packages<br/>ChatGPT chat · guided setup · uninstall"] --> C["Before the beta · real-use acceptance<br/>core layers enabled with measured rules<br/>ChatGPT-plan worker proof · Hub deployment gates<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
   C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```

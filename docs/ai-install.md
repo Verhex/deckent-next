@@ -4,7 +4,7 @@
 
 Use this guide when a person asks you to install Deckent. Ask for their target folder and the verified package artifact.
 Deckent runs on the person's infrastructure; installation does not authorize their business operations.
-This guide was re-checked against the CLI help and source of the alpha.58 candidate (`f6b119d4f`), released on 2026-10-29 as `0ba89deab`; the alpha.59 candidate changes no CLI command it uses. It is not a claim that an npm package or the website has been released.
+This guide was re-checked against the CLI help and source of the alpha.58 candidate (`f6b119d4f`), released on 2026-10-29 as `0ba89deab`; alpha.59 (released 2026-10-30 as `4d12d6fa8`) and the alpha.60 candidate change no CLI command it uses. It is not a claim that an npm package or the website has been released.
 For the last released version's source-install path, use the README.
 
 ## Prepare and install
