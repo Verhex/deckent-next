@@ -45,7 +45,7 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit alone is not destru
 The limits registry contains the `b1-dogfood-provisional-1` profile and, from `beuser-limits-5` (owner
 2026-10-31: generous development ceilings so a walk is not cut by its budget; optimisation later),
 `b1-dogfood-provisional-2`, which the packaged journeys, personas and calibration use: 256 calls,
-16777216 tokens and one hour of wall time, other ceilings unchanged. Their finite ceilings are provisional
+16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged. Their finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
 and replacement. Each model call reserves the invocation adapter's measured prompt count, including
 the served template, plus the requested completion cap. A missing, unsupported or failed counter

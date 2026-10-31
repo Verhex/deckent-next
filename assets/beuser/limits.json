@@ -31,7 +31,7 @@
       "maxWaitMs": 30000,
       "maxCalls": 256,
       "maxTokens": 16777216,
-      "maxCost": 1,
+      "maxCost": 3,
       "currency": "USD",
       "maxReruns": 2,
       "maxTranscriptBytes": 8388608,
