@@ -1,4 +1,4 @@
-import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
 import module from 'node:module';
 import { posix, win32 } from 'node:path';
 import { PRODUCT_LAYOUT_REGISTRY as registry, hasGlobWildcard } from '#platform/core/common/index.js';
@@ -62,6 +62,9 @@ export function enableDeckentCompileCache(argv: readonly string[] = process.argv
       if (!owned(directory, 0o077)) return 'unavailable';
     }
     if (realpathSync(directory) !== directory || !readdirSync(directory).every(name => owned(api.join(directory, name), 0o077))) return 'unavailable';
+    // Astra 2862 R2: a filling process records itself before it can write (Node writes the cache at its exit), so uninstall waits for that write;
+    // records of ended processes are pruned here. Without its record the process does not fill the cache.
+    if (write && !recordWriter(api.join(directory, registry.compileCacheWritersDirectory), uid, api.join)) return 'unavailable';
     const { status } = module.enableCompileCache(write ? directory : { directory, readOnly: true } as module.EnableCompileCacheOptions);
     // ALREADY_ENABLED: the person's own NODE_COMPILE_CACHE directory is in use; it is left as it is.
     if (status === module.constants.compileCacheStatus.ALREADY_ENABLED) return 'enabled';
@@ -71,4 +74,16 @@ export function enableDeckentCompileCache(argv: readonly string[] = process.argv
     if (versioned && made?.isDirectory() && made.uid === uid && (made.mode & 0o077) !== 0) chmodSync(versioned, 0o700);
     return 'enabled';
   } catch { return 'unavailable'; }
+}
+/** The writer record (named by its pid: pid and start time) in the owner-only writers directory; ended writers' records are removed. */
+function recordWriter(directory: string, uid: number, join: (...parts: string[]) => string): boolean {
+  try { mkdirSync(directory, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return false; }
+  const info = lstatSync(directory);
+  if (!info.isDirectory() || info.uid !== uid || (info.mode & 0o077) !== 0) return false;
+  for (const name of readdirSync(directory)) {
+    const pid = /^\d+$/u.test(name) ? Number(name) : 0;
+    if (Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid) try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') try { unlinkSync(join(directory, name)); } catch { /* pruned by another start */ } }
+  }
+  writeFileSync(join(directory, String(process.pid)), JSON.stringify({ schemaVersion: 1, pid: process.pid, startedAtMs: Math.floor(performance.timeOrigin) }), { mode: 0o600 });
+  return true;
 }

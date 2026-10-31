@@ -83,13 +83,18 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     run([], { DECKENT_DISABLE_COMPILE_CACHE: '1' });
     expect(await readdir(join(home, '.deckent'))).toEqual([]);   // the registered off switch
     run([]);   // the bare terminal fills the cache
-    const [versioned] = await readdir(cache), filled = await listing();
+    const versioned = (await readdir(cache)).find(name => !name.startsWith('writers')), filled = await listing();
+    // Astra 2862 R2: a filling process records itself (pid, start time) before it can write; the next filling call prunes the ended one's record.
+    const [record] = await readdir(join(cache, 'writers')), recorded = JSON.parse(await readFile(join(cache, 'writers', record!), 'utf8')) as { pid: number; startedAtMs: number };
+    expect(recorded.pid).toBe(Number(record)); expect(Number.isFinite(recorded.startedAtMs)).toBe(true);
     expect(versioned).toMatch(/^v\d+\.\d+\.\d+-/u);
     expect([(await stat(cache)).mode & 0o777, (await stat(join(cache, versioned!))).mode & 0o777]).toEqual([0o700, 0o700]);
     expect(filled.length).toBeGreaterThan(1);
     // Any other command only reads it (or runs without it before Node 26.8): `--help --all` loads modules the bare call did not, and writes none.
     expect(run(['--help', '--all']).status).toBe(0);
     expect(await listing()).toEqual(filled);
+    run([]); const [next] = await readdir(join(cache, 'writers')); expect(next).not.toBe(record); expect(await readdir(join(cache, 'writers'))).toHaveLength(1);
+    const refilled = await listing(); filled.splice(0, filled.length, ...refilled);
     // A non-default global root (DECKENT_GLOBAL_HOME elsewhere) is not sealed by every agent floor: no cache is read or written there or here.
     const other = join(home, 'other-root'); await mkdir(join(other, 'state/compile-cache'), { recursive: true, mode: 0o700 });
     run([], { DECKENT_GLOBAL_HOME: other }); run(['--help'], { DECKENT_GLOBAL_HOME: other });
@@ -108,7 +113,7 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     // A cache directory others may write is never used.
     await chmod(cache, 0o755); await rm(join(cache, versioned!), { recursive: true });
     run([]);
-    expect(await readdir(cache)).toEqual([]);
+    expect(await readdir(cache)).toEqual(['writers']); expect(await readdir(join(cache, 'writers'))).toEqual([next]);   // nothing written, no new writer record
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 

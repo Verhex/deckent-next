@@ -253,7 +253,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
   // alpha.60 B (P3 draw-first): nothing below waits before the frame. One single-flight start serves the opening and a turn's restart (M-09); its
   // own LifecycleDeadline bounds it. Sessions, history, instructions and setup open on first use or after the frame.
-  const lazy = <T>(open: () => Promise<T>) => { let made: Promise<T> | undefined; return () => made ??= open(); }, closing = new AbortController(); // closing: the view returned
+  const lazy = <T>(open: () => Promise<T>) => { let made: Promise<T> | undefined; return () => made ??= open(); }, closing = new AbortController(); // closing: the view returned or its shell closed
+  if (context.terminalShell) void context.terminalShell.host.wait().then(() => closing.abort(), () => closing.abort()); // Astra 2862 R1: a later shell exit ends the launch's preparation too
   let starting: Promise<Awaited<ReturnType<NonNullable<typeof context.ensureRuntimeService>>>> | null = null;
   const ensure = () => starting ??= context.ensureRuntimeService!(root, options).finally(() => { starting = null; });
   const service = context.ensureRuntimeService && autostart && tty.stdin && tty.stdout ? ensure() : null, settled = service ? service.then(() => true, () => false) : Promise.resolve(false);

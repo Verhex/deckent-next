@@ -61,8 +61,11 @@ byte-identical on disk. It is used only as a chain of real directories of this u
 `DECKENT_DISABLE_COMPILE_CACHE` turns it off. Agent shells: global roots are hidden (outside the project) or sealed (inside it; the hard floor
 counts every global root's registry resources as product paths, and the agent edit/read deny lists name the same in-project paths from the
 same global-root derivation). Uninstall removes Node's per-version directory as a cache member when the
-installation's root is the global root, only after the stopped runtime service's process has ended (Node writes the cache at exit, after the
-ledger is released; the wait shares the stop budget and refuses with nothing removed at its end); a project installation keeps the shared global root. Enterprise executables can call the same function
+installation's root is the global root, only after every recorded cache writer has ended: each filling process (runtime service, bare
+terminal) records itself (`writers/<pid>`: pid and start time; ended writers' records are pruned by the next filling start) before Node can write
+the cache at its exit, and the removal target waits for those records' processes (registry `cacheWriterWitness` bound; an unreadable record or a
+writer still running at the bound refuses with nothing removed; the records are a member, removed with the cache). Uninstall also waits for
+the stopped service's own process within its stop budget; a project installation keeps the shared global root. Enterprise executables can call the same function
 from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
 
 The shared-ledger `model-invocation-process` contract test (whose temporary 45 s bound this slice removed to the 30 s default) exceeded

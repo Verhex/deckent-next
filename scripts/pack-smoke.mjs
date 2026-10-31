@@ -180,8 +180,10 @@ async function terminalCheck() {
   const flat = text => text.replace(/\s+/gu, ' ');
   const expect = (text, wanted, unwanted = []) => ({ missing: wanted.filter(item => !flat(text).includes(flat(item))), unexpected: unwanted.filter(item => flat(text).includes(flat(item))) });
 
-  const workline = await pty(bin('deckent'), project, [{ wait: en['terminal.workline.placeholder'], send: '\u0003', delayMs: 300 },
-    { wait: en['terminal.workline.placeholder'], send: '\u0003', delayMs: 900 }]);
+  // alpha.60 C: the launch shell draws the composer before the Workline; Ctrl+C twice is sent once the Workline's own `Ready` is drawn (pressed in
+  // the shell they would quit before the Workline opens, so its status could never show).
+  const workline = await pty(bin('deckent'), project, [{ wait: en['terminal.workline.statusReady'], send: '\u0003', delayMs: 300 },
+    { wait: en['terminal.workline.statusReady'], send: '\u0003', delayMs: 900 }]);
   const w = expect(workline.text, [en['terminal.workline.banner'], en['terminal.workline.statusReady'], en['terminal.workline.placeholder']], [en['terminal.session.prompt'].trim()]);
   verdict('worklineTty', workline.status === 0 && !workline.timedOut && !w.missing.length && !w.unexpected.length,
     { status: workline.status, timedOut: workline.timedOut, ...w, sample: workline.text.replace(/\s+/gu, ' ').slice(0, 300) });

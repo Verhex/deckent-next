@@ -22,7 +22,7 @@ export async function prepareOnboardingSession(port: OnboardingPort, revisit = f
   // One observation per open: settling writes (forgotten deferrals, reconciled intents) and the settled snapshot is the one shown and shared.
   // A closed terminal (`signal`) ends the observation and starts no settle write.
   const observed = await port.observe({}, signal); signal?.throwIfAborted();
-  const session = createOnboardingSession(port, observed, revisit, focus), model = await session.settle();
+  const session = createOnboardingSession(port, observed, revisit, focus, signal), model = await session.settle();
   return { total: model.steps.length ? model.total : 0, snapshot: model.snapshot,
     show: (ui: OnboardingUi, io: CliCardIo, conversationNotice?: string) => showOnboardingSession(session, port, ui, io, conversationNotice) };
 }

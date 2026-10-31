@@ -225,6 +225,17 @@ it.each(['ready', 'cancel', 'failed', 'stored', 'shell'] as const)('alpha.60 B/C
       await until(() => closedOut.includes(t('terminal.shell.preparing', {}, 'en')), 'the shell to close'); closedKeys.write('\u0004');
       await until(() => closedOut.includes('\u001b[?1049l'), 'the shell closed'); hostLater();
       expect(await closing).toBe(0); await settle(50); expect(effects).toEqual([]); closedKeys.destroy();
+      // Astra 2862 R1: a LATER shell exit (the host loaded, a pre-mount read still pending) ends the launch's preparation too: when the service then
+      // answers, setup is neither observed nor settled (no deferral or run-intent write); the service already started is kept.
+      let lateOut = '', selfSourceDone!: (value: boolean) => void, serviceDone!: (value: unknown) => void; const lateKeys = keys(), touched: string[] = [];
+      const late = main(['--scope', 's', '--lang', 'en'], { ...context, stdout: tty(text => { lateOut += text; }) as unknown as NodeJS.WriteStream, stderr: tty(() => undefined) as unknown as NodeJS.WriteStream,
+        stdin: lateKeys as unknown as NodeJS.ReadStream, ensureRuntimeService: (() => { touched.push('service'); return new Promise(resolve => { serviceDone = resolve; }); }) as never,
+        selfSourceProject: () => new Promise<boolean>(resolve => { selfSourceDone = resolve; }),
+        openOnboarding: (async () => { touched.push('setup-port'); return { assertPerson: async () => { touched.push('assert'); }, observe: async () => { touched.push('observe'); throw new Error('observed'); },
+          settle: async () => { touched.push('settle'); }, reconcile: async () => { touched.push('reconcile'); } }; }) as never });
+      await until(() => touched.includes('service') && Boolean(selfSourceDone), 'the launch waiting on a later read'); lateKeys.write('\u0004');
+      await until(() => lateOut.includes('\u001b[?1049l'), 'the shell closed'); serviceDone(readiness); await settle(100); selfSourceDone(false);
+      expect(await late).toBe(0); await settle(100); expect(touched).toEqual(['service']); lateKeys.destroy();
       let alone = ''; const lone = keys(); // `deckent --full-access` keeps the old path: no shell, no full window before its own refusal here
       expect(await main(['--full-access', '--lang', 'en'], { ...context, stdout: tty(text => { alone += text; }) as unknown as NodeJS.WriteStream, stderr: tty(text => { alone += text; }) as unknown as NodeJS.WriteStream, stdin: lone as unknown as NodeJS.ReadStream })).not.toBe(0);
       expect(alone).not.toContain(t('terminal.shell.preparing', {}, 'en')); expect(alone).not.toContain('\u001b[?1049h'); lone.destroy();

@@ -89,6 +89,9 @@ it('applies the confirmed real temp cache through the production broker and gene
     const compiled = join(data, `state/compile-cache/v26.13.0-x64-0123abcd-${process.getuid!()}`);
     await mkdir(compiled, { recursive: true, mode: 0o700 }); await writeFile(join(compiled, '89abcdef'), 'CODE', { mode: 0o600 });
     await writeFile(join(data, 'state/compile-cache/stray'), 'KEEP', { mode: 0o600 });
+    // Astra 2862 R2: a writer record (here of an ended process) is a member too: checked before the removal, then removed with the cache.
+    const ended = execFileSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }), writers = join(data, 'state/compile-cache/writers');
+    await mkdir(writers, { mode: 0o700 }); await writeFile(join(writers, ended), JSON.stringify({ schemaVersion: 1, pid: Number(ended), startedAtMs: Date.now() }), { mode: 0o600 });
     const actor = readLocalOsIdentity();
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval'].map(kind => ({
       id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' },
@@ -119,10 +122,11 @@ it('applies the confirmed real temp cache through the production broker and gene
     const result = await applyConfiguredUninstall(project, command, { confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; } }, options);
     expect(plan.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'remove', members: [join(data, AREA)] });
     expect(plan.items.find(item => item.locator === join(data, 'state/scratch/customer-record'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
-    expect(plan.items.find(item => item.resourceId === 'compileCache')).toMatchObject({ action: 'remove', members: [compiled] });
+    expect(plan.items.find(item => item.resourceId === 'compileCache')).toMatchObject({ action: 'remove', members: [compiled, writers] });
     expect(result.status).toBe('completed'); expect(cards).toBe(1);
     await expect(lstat(join(data, 'state/scratch', 'a'.repeat(32)))).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(lstat(compiled)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(join(data, 'state/compile-cache/stray'), 'utf8')).toBe('KEEP');
+    await expect(lstat(compiled)).rejects.toMatchObject({ code: 'ENOENT' }); await expect(lstat(writers)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(data, 'state/compile-cache/stray'), 'utf8')).toBe('KEEP');
     expect(await readFile(join(data, 'state/scratch/customer-record'), 'utf8')).toBe('KEEP');
     expect(await readFile(join(project, '.deckent/keep'), 'utf8')).toBe('PROJECT');
     expect(await lstat(ledger)).toBeTruthy(); expect(await lstat(join(data, 'approvals', keyFile))).toBeTruthy();

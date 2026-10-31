@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "recoveryDirectory": ".deckent-uninstall",
   "recoveryRoot": {
     "linux": {
@@ -35,6 +35,12 @@
       "directory": "backup-operations",
       "proof": "sealed-audit-record"
     }
+  },
+  "cacheWriterWitness": {
+    "$comment": "Astra 2862 R2: a compile-cache removal waits up to budgetMs (polling every pollMs) for every recorded writer process to end.",
+    "resourceId": "compileCache",
+    "budgetMs": 20000,
+    "pollMs": 100
   },
   "cacheMembers": {
     "scratch": [
