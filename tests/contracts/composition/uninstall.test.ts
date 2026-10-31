@@ -122,7 +122,7 @@ it('applies the confirmed real temp cache through the production broker and gene
     const result = await applyConfiguredUninstall(project, command, { confirm: async shown => { cards++; expect(shown).toEqual(plan); return true; } }, options);
     expect(plan.items.find(item => item.resourceId === 'scratch')).toMatchObject({ action: 'remove', members: [join(data, AREA)] });
     expect(plan.items.find(item => item.locator === join(data, 'state/scratch/customer-record'))).toMatchObject({ action: 'keep', ownership: 'unknown' });
-    expect(plan.items.find(item => item.resourceId === 'compileCache')).toMatchObject({ action: 'remove', members: [compiled, writers] });
+    expect(plan.items.find(item => item.resourceId === 'compileCache')).toMatchObject({ action: 'remove', members: [compiled] });   // the records are removed with it, never a member
     expect(result.status).toBe('completed'); expect(cards).toBe(1);
     await expect(lstat(join(data, 'state/scratch', 'a'.repeat(32)))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(compiled)).rejects.toMatchObject({ code: 'ENOENT' }); await expect(lstat(writers)).rejects.toMatchObject({ code: 'ENOENT' });

@@ -8,8 +8,10 @@ export interface CacheRemovalResource { readonly resourceId: string; readonly pa
 export interface CacheRemovalBounds { readonly maxEntries: number; readonly maxDepth: number }
 /** Astra 2862/2864/2867 R2: writers of a resource written at process exit (Node's compile cache) record themselves (`<directory>/<pid>-…`); the removal `fence`
  * (exclusive, first; kept until the members are gone) stops new ones, then `<directory>` is renamed to `<directory>.<id>` (the linearization point);
- * removal waits for every record's process in every records directory — unreadable or outliving `budgetMs` refuses. The records are no part of the
- * members' version (the rename and a withdrawn record never move it), and a `<directory>` that reappears during the removal is a late writer's, left to it. */
+ * removal waits for every record's process in every records directory — unreadable or outliving `budgetMs` refuses. The records are coordination,
+ * never a member: removed with the cache but no part of the members or their version (the rename and a withdrawn record never move it; Astra 2876 R1:
+ * a removed cache with an ended writer's leftover record observes as absent, so lookup proves `applied`), and a `<directory>` that reappears during
+ * the removal is a late writer's, left to it. */
 export type CacheWriterWitness = Readonly<{ resourceId: string; directory: string; fence: string; budgetMs: number; pollMs: number }>;
 const rejected = (): never => { throw new EffectTargetError('EFFECT_TARGET_REJECTED'); };
 /** The live records directory or one a removal renamed (`<directory>.<16 hex>`). */
@@ -63,13 +65,14 @@ export class InstallationCacheRemovalTarget implements EffectTarget {
       for await (const child of await opendir(directory)) {
         const file = join(directory, child.name);
         if (!depth && witness && (child.name === witness.fence || removing && child.name === witness.directory)) continue; else if (!new RegExp(resource.members[depth]!, 'u').test(child.name)) { if (entries.length + unlisted.length >= this.bounds.maxEntries) rejected(); unlisted.push(file); }
-        else if (depth === resource.members.length - 1) { members.push(file); await visit(file, depth + 1, !depth && !!witness && recordsDirectory(witness, child.name)); }
+        else if (depth === resource.members.length - 1) { const record = !depth && !!witness && recordsDirectory(witness, child.name); if (!record) members.push(file); await visit(file, depth + 1, record); }
         else await level(file, depth + 1);
       }
     };
     await level(path, 0);
     entries.sort((a, b) => a.path.localeCompare(b.path, 'en')); members.sort(); unlisted.sort();
-    return { entries, members, unlisted, parents: [...parents, path], version: entries.length ? createHash('sha256').update(JSON.stringify(entries.filter(entry => !records.has(entry.path)))).digest('hex') : null };
+    const content = entries.filter(entry => !records.has(entry.path));
+    return { entries, members, unlisted, parents: [...parents, path], version: content.length ? createHash('sha256').update(JSON.stringify(content)).digest('hex') : null };
   }
   /** Owner-named members, the unlisted entries a removal keeps, and the members' exact version (null when no member remains). */
   async inspect(target: { kind: string; id: string }) { const { members, unlisted, version } = await this.scan(this.resource(target)); return { members, unlisted, version }; }

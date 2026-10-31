@@ -167,6 +167,8 @@ it('the CLI bootstrap reaches only the state-root and common units, the CLI and 
     await mkdir(dirname(crashed), { mode: 0o700 }); await writeFile(crashed, JSON.stringify({ schemaVersion: 1, pid: Number(ended), startedAtMs: 1 }), { mode: 0o600 });
     await stalled.release(); await stalled.ended; expect(stalled.said()).toBe('held unavailable');
     expect(await removal).toBe('removed'); expect([await readdir(cache), await readdir(dirname(crashed))]).toEqual([['writers'], [`${ended}-1-late`]]);
+    // Astra 2876 R1: that leftover is coordination, never a member: the removed cache observes as absent, so a resumed effect proves `applied`.
+    expect([await target.inspect(at), await target.lookup(at, 'compile')]).toEqual([{ members: [], unlisted: [], version: null }, { status: 'applied', version: null }]);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 

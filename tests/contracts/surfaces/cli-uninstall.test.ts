@@ -52,7 +52,8 @@ it('offers the tiers in one card, checks before the single confirmation, preview
   card.requests.length = 0; card.answers.push('keep-data', 'apply');
   expect(await uninstallCommand(['uninstall'], context)).toBe(0);
   expect(card.requests[1]!.body).toEqual(uninstallPlanLines(plan, 'en')); expect(card.requests[1]!.body![0]).toMatch(/^Will be removed: cache/u);
-  expect(card.requests[1]!.body!.join('\n')).toContain('Not present: 1 items'); expect(card.requests[1]!.body!.join('\n')).toMatch(/^Kept: .*command sandbox program/mu);   // Astra 2867: `bin` by its label expect(card.requests[1]!.options.map(option => option.role)).toEqual(['yes', 'no']);
+  expect(card.requests[1]!.body!.join('\n')).toContain('Not present: 1 items'); expect(card.requests[1]!.body!.join('\n')).toMatch(/^Kept: .*command sandbox program/mu);   // Astra 2867: `bin` by its label
+  expect(card.requests[1]!.options.map(option => option.role)).toEqual(['yes', 'no']);
   // --yes skips only the final card; the plan body is still printed.
   card.requests.length = 0; output = '';
   expect(await uninstallCommand(['uninstall', '--keep-data', '--yes'], context)).toBe(0);
