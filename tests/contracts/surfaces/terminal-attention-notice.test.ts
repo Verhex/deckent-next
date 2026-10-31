@@ -1,6 +1,6 @@
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BACKGROUND_QUERY, createFocusTracker, mouseFilteredInput, takeColorReports, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
+import { BACKGROUND_QUERY, createFocusTracker, mouseFilteredInput, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, WORKLINE_TEST_LABELS, settle, until } from '../support/workline-harness.js';
 
@@ -18,7 +18,7 @@ describe('focus reports', () => {
     tracker.report('out'); expect(tracker.source.state()).toBe('unfocused');
     tracker.report('in'); expect(tracker.source.state()).toBe('focused'); expect(heard).toEqual(['out', 'in']);
   });
-  it('the filtered input never hands a focus report or a terminal colour answer to Ink; only an answer inside an open probe is used', async () => {
+  it('the filtered input never hands a focus report or a terminal colour answer to Ink, cut at any byte; held bytes are bounded and Ctrl+C always passes', async () => {
     const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
     const filtered = mouseFilteredInput(real), seen: string[] = [], queries: string[] = [], wheel: number[] = [];
     filtered.input.on('data', chunk => seen.push(String(chunk)));
@@ -40,8 +40,26 @@ describe('focus reports', () => {
     read('\u001b]11;rgb:ff'); read('/ff/ff\u0007d'); read('\u001b['); read('?62c'); read('\u001b['); read('<65;1;1M'); read('\u001b[?997;2ne');
     await settle(20);
     expect(seen.join('')).toBe('xyabc\u0003de'); expect(wheel).toEqual([1]); expect(notices).toBe(1);
-    expect(takeColorReports('\u001b')).toEqual({ text: '\u001b', reports: [], carry: '' });
-    filtered.close();
+    // Astra 2882 R1: every split of each answer (two reads at each position, then byte by byte) stays out, a lone ESC included, and is used.
+    const light = '\u001b]11;rgb:f0/ec/e5\u0007\u001b[?62;22c', lightSt = '\u001b]11;rgb:f0f0/ecec/e5e5\u001b\\\u001b[?62;22c';
+    for (const reply of [light, lightSt]) for (let at = 1; at <= reply.length; at++) {
+      probe = ask(1_000); const parts = at === reply.length ? [...reply] : [reply.slice(0, at), reply.slice(at)];
+      for (const part of parts) read(part);
+      expect(await probe, JSON.stringify(parts)).toBe('#F0ECE5');
+    }
+    for (let at = 1; at < 11; at++) { read('\u001b[?997;1n'.slice(0, at)); read('\u001b[?997;1n'.slice(at)); }
+    await settle(20);
+    expect(seen.join('')).toBe('xyabc\u0003de'); expect(notices).toBe(11);
+    // A lone ESC is the Escape key, held at most `answerHoldMs` (50) with or without a probe; a following key in time joins it (Alt+key, as terminals do).
+    seen.length = 0; read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(60); expect(seen.join('')).toBe('\u001b');
+    seen.length = 0; probe = ask(1_000); read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(60); expect(seen.join('')).toBe('\u001b');
+    // Astra 2882 R2: an unterminated answer never keeps keys — a byte outside the answer grammar (Enter, Ctrl+C) releases it as input at once,
+    // Ctrl+C (also kitty's CSI 99;5u) still ends the probe, and what stays inside the grammar is released after the window or past `answerMaxBytes`.
+    seen.length = 0; read('\u001b]11;rgb:ff'); read('ab\r'); read('\u001b]11;rgb:f'); read('\u0003'); expect(await probe).toBeNull();
+    probe = ask(1_000); read('\u001b['); read('99;5u'); expect(await probe).toBeNull();
+    read('\u001b]11;rgb:ff/'); await settle(80); read('z'); read(`\u001b]11;rgb:${'f'.repeat(70)}`); await settle(10);
+    expect(seen.join('')).toBe(`\u001b]11;rgb:ffab\r\u001b]11;rgb:f\u0003\u001b[99;5u\u001b]11;rgb:ff/z\u001b]11;rgb:${'f'.repeat(70)}`);
+    read('\u001b[?62c'); filtered.close();
   });
 });
 

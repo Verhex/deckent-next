@@ -431,7 +431,7 @@ yellow and no bright `9x` on text; `ansiOnly` themes carry no hex. The contrast 
 process, Codex `terminal_probe.rs`), then `COLORFGBG`; unknown draws `neutral-ansi` (foreground + attributes, colour only on status marks).
 The host probes before the first frame when given a theme request (`TerminalHostOptions.theme`, not at colour tier none), re-asks on DEC 2031
 notices and exposes `context.theme` (`background`, `apply`); the one stdin filter takes every OSC 10/11, DA1 and 2031 answer out of the input
-for the whole session (late answers are not applied) and Ctrl+C ends a probe. On a reported background a role below its minimum keeps only
+for the whole session (late answers are not applied); an answer cut at a read end (a lone ESC included: escape-time rule) is held within the answer grammar, at most `answerMaxBytes` 64 and `answerHoldMs` 50 (`terminal-window/internal/answer-limits.json`), then passed on as input; Ctrl+C (0x03 or kitty `CSI 99;5u`) always passes and ends a probe. On a reported background a role below its minimum keeps only
 its attributes. Consumers move to `terminalPalette`/the theme request in L3. Proof is kept with the lead's package record (alpha.60 package 2, lane TH-A).
 
 **Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
