@@ -166,13 +166,13 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
   // KER-17 (owner GO 2026-10-28, LAW-AUDIT-KER17): a personal-file `$DECK:` key resolves under the project's grant. A trusted server whose key loses
   // the grant (RED) is retired before its next call, offers nothing and says which key and command; granted again (GREEN) it starts.
   it('NEGATIVE: a revoked $DECK grant retires the running server before its next call and names the key; a grant brings it back', async () => {
-    const server = await fixture(), w = await workspace(); let granted: boolean | 'missing' = true, pending = false;
-    const context: McpCommandContext = { ...w.context, secret: async name => { if (granted === 'missing') return undefined; if (!granted) throw Object.assign(new Error('refused'), { code: 'SECRET_GRANT_REQUIRED' }); return name === 'GH' ? SECRET : undefined; } };
-    await runMcpCommand({ verb: 'add', scope: 'local', name: 'web-docs', entry: { type: 'http', url: server.url, headers: { Authorization: 'Bearer $DECK:GH' } } }, context);
+    const server = await fixture(), w = await workspace(); let granted: boolean | 'missing' = true, pending = false, missingKey = 'GH';
+    const context: McpCommandContext = { ...w.context, secret: async name => { if (granted === 'missing' && name === missingKey) return undefined; if (!granted) throw Object.assign(new Error('refused'), { code: 'SECRET_GRANT_REQUIRED' }); return name === 'GH' ? SECRET : 'auxiliary-fixture'; } };
+    await runMcpCommand({ verb: 'add', scope: 'local', name: 'web-docs', entry: { type: 'http', url: server.url, headers: { Authorization: 'Bearer $DECK:GH', 'X-Aux': '$DECK:AUX' } } }, context);
     const pool = new McpClientPool(new AbortController().signal); closers.push(() => pool.close());
     const view = pool.scoped({ scopeId: 'scope', cwd: w.project }), signal = new AbortController().signal;
     const open = () => openTurnMcp({ registry: context, pool: view, cwd: w.project, sandboxes: [], principal: { id: 'p', issuer: 'test', subject: 'owner' }, sqlite: {} as never, keyFile: '',
-      requestTtlMs: 1_000, inputMaxBytes: 65_536, resultMaxBytes: 65_536, scopeId: 'scope', turnId: 'turn', signal, emit: () => undefined, ledgerPath: async () => '',
+      requestTtlMs: 1_000, inputMaxBytes: 65_536, resultMaxBytes: 65_536, scopeId: 'scope', turnId: 'turn', sessionId: 'http-notice-session', signal, emit: () => undefined, ledgerPath: async () => '',
       requestPolicy: async () => { if (pending) return { revision: 'p', trustFacts: agentToolApprovalFacts(null, 'scope', null) }; throw new Error('no card expected'); }, describeNotice: notice => notice.kind === 'not-decided' ? renderMcpStartNotice(notice, 'en') : JSON.stringify(notice) });
     const before = await open(), whoami = [...before.offered.values()].find(entry => entry.tool === 'whoami')!;
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'answered' });
@@ -188,6 +188,12 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     const missing = await open(); expect(missing.offered.size).toBe(0); expect(missing.notices.join('')).toContain('deckent secret set GH --main');
     expect((await runMcpCommand({ verb: 'get', name: 'web-docs' }, { ...context, describeNotice: notice => renderMcpStartNotice(notice, 'en') }) as { server: { lastStart: { text: string } } }).server.lastStart.text).toContain('deckent secret set GH --main');
     expect((await open()).notices).toEqual([]);
+    // Same server definition and code: changing only the unresolved key (detail) must notify, including a change back.
+    for (const key of ['AUX', 'GH']) {
+      missingKey = key;
+      expect((await open()).notices).toEqual([renderMcpStartNotice({ kind: 'not-decided', name: 'web-docs', code: 'secret-unresolved', detail: key }, 'en')]);
+      expect((await open()).notices).toEqual([]);
+    }
     const path = join(productResourcePath(w.layout, 'integrations'), 'mcp-start-failures.json'), stored = JSON.parse(readFileSync(path, 'utf8'));
     expect(stored.failures[0].clientIdentity).toBe(MCP_CLIENT_IDENTITY);
     stored.failures[0].clientIdentity = '0'.repeat(64); writeFileSync(path, JSON.stringify(stored), { mode: 0o600 });

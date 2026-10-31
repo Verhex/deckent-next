@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ErrorRegistry, getConfigFieldDefault, mapBounded, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
@@ -16,6 +16,7 @@ import { expandMcpEntry, isMcpHttpEntry, mcpScopedDigest, mcpEntryDisplay, mcpLa
 import { findMcpTrust, MCP_TRUST_FILE, mcpProjectTrustDirectory, readMcpTrust, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 import type { AgentToolApprovalFacts } from '#engine/index.js';
+import noticeLimits from './notice-limits.json' with { type: 'json' };
 
 /** What the registry needs from its host: the project, its layout (the alpha.47 trust location, start failures and server homes are in its data
  * root), the environment and secret resolver of the launch, and the company policy (none in Core yet). */
@@ -306,6 +307,11 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   return { schemaVersion: 1, approved: decided.decision === 'trusted', name: server.name, scope: server.scope, pinnedTools: decided.pinned, ...(decided.grant ? { grant: decided.grant } : {}) };
 }
 
+/** Advisory delivery memory, separate from durable diagnosis: bounded sessions and keys from the shipped resource registry.
+ * Eviction or a process restart may repeat a notice; it never clears a diagnosis or grants authority. */
+const mcpSessionNotices = new Map<string, Map<string, string>>();
+const noticeDigest = (parts: readonly unknown[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+
 /**
  * One turn's MCP servers (MCP-CLIENT): servers nobody decided on (pending or changed) get their first-use trust cards on the turn's approval
  * path (owner 2026-09-28), started in the service's pool only after the launch card's yes; then the trusted servers' pinned, matching tools.
@@ -316,6 +322,8 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
 export async function openTurnMcp(input: { readonly registry: McpRegistryContext; readonly pool: McpPoolView; readonly cwd: string; readonly sandboxes: McpLaunchContext['sandboxes'];
   readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite'];
   readonly keyFile: string; readonly requestTtlMs: number; readonly inputMaxBytes: number; readonly resultMaxBytes: number; readonly scopeId: string; readonly turnId: string;
+  /** The service-validated conversation, never model text; absent, this turn is its own session. */
+  readonly sessionId?: string;
   readonly locale?: Locale;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof mcpTrustApprovalAsker>[0]['emit']; readonly ledgerPath: () => Promise<string>;
   /** One request-time policy snapshot (B1, Sol 2237 R2b): its revision and the trust cards' facts (Core minimum raised by the snapshot's rules). */
@@ -327,12 +335,23 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   readonly notices: readonly string[] }> {
   const { registry, pool, principal, scopeId } = input, now = input.now ?? Date.now;
   const notices: McpStartNotice[] = [], failuresDirectory = productResourcePath(registry.layout, 'integrations');
+  const session = noticeDigest([failuresDirectory, scopeId, principal.issuer, principal.subject, input.sessionId ?? input.turnId]);
+  const notified = mcpSessionNotices.get(session) ?? new Map<string, string>();
+  mcpSessionNotices.delete(session); mcpSessionNotices.set(session, notified);
+  for (const oldest of mcpSessionNotices.keys()) { if (mcpSessionNotices.size <= noticeLimits.maxSessions) break; mcpSessionNotices.delete(oldest); }
   let failures = await readMcpStartFailures(failuresDirectory);
   /** Records (or clears) one server's start failure; a record that cannot be written is said, never hidden. */
   const remember = async (server: McpServerView, failure: McpStartFailure | null, notice?: McpStartNotice) => {
     const known = findMcpStartFailure(failures, server, MCP_CLIENT_IDENTITY);
+    const key = noticeDigest([server.scope, server.name, server.definitionDigest, MCP_CLIENT_IDENTITY]);
+    if (!failure) notified.delete(key);
+    else if (notice) {
+      const signature = noticeDigest([failure.code, failure.detail ?? null]);
+      if (!known || notified.get(key) !== signature) notices.push(notice);
+      notified.delete(key); notified.set(key, signature);
+      for (const oldest of notified.keys()) { if (notified.size <= noticeLimits.maxKeysPerSession) break; notified.delete(oldest); }
+    }
     if (failure && known?.code === failure.code && known.detail === failure.detail) return;
-    if (notice) notices.push(notice);
     const record = failure ? { ...failure, clientIdentity: MCP_CLIENT_IDENTITY } : null;
     try { await updateMcpStartFailure(await prepareProductDirectory(registry.layout, 'integrations'), server, record);
       failures = [...failures.filter(entry => entry.scope !== server.scope || entry.name !== server.name), ...(record ? [record] : [])]; }
@@ -352,7 +371,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
       ttlMs: input.requestTtlMs, signal: input.signal, emit: input.emit, ...(input.locale ? { locale: input.locale } : {}) });
     for (const server of undecided) {
       const known = findMcpStartFailure(failures, server, MCP_CLIENT_IDENTITY);
-      if (known?.phase === 'launch') continue;
+      if (known?.phase === 'launch') { await remember(server, known, mcpStartFailedNotice(server.name, known)); continue; }
       try {
         const decided = await decideMcpTrust(server, trust, ask, { pool, moved: server.reason === 'trust-moved' });
         if (decided.grant?.status === 'refused') notices.push({ kind: 'grant-refused', name: server.name, reason: decided.grant.reason });
@@ -385,13 +404,12 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     if (state.ok) {
       // MCP-VISIBILITY K3: pinned tools that are withheld (drifted, missing, unmappable) are said once per count and stay on `/mcp` until fixed.
       const withheld = mcpWithheldTools(state.tools);
-      if (withheld && !(known?.phase === 'tools' && known.detail === String(withheld))) { notices.push({ kind: 'tools-changed', name: server.name, count: withheld });
-        await remember(server, mcpToolsChangedRecord(server, withheld, now())); }
+      if (withheld) await remember(server, mcpToolsChangedRecord(server, withheld, now()), { kind: 'tools-changed', name: server.name, count: withheld });
       else if (!withheld && known) await remember(server, null);
       continue;
     }
     // A server over its restart bound keeps the diagnosis of its last real start failure.
-    if (state.reason === 'restart-limit' && known && known.phase !== 'tools') continue;
+    if (state.reason === 'restart-limit' && known && known.phase !== 'tools') { await remember(server, known, mcpStartFailedNotice(server.name, known)); continue; }
     const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'trusted', atMs: now(),
       code: state.reason, ...(state.detail ? { detail: modelTextPrefix(state.detail, 200) } : {}),
       ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, mcpEntryDisplay(server.entry)) } : {}) };
