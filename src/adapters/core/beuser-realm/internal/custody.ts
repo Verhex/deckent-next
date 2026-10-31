@@ -15,6 +15,7 @@ import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuser
 import { jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { createBeuserRemovalReadback } from './removal.js';
 import { retainBeuserJson } from './records.js';
+import fixture from '../../../../../assets/beuser/model-fixture.json' with { type: 'json' };
 import type { ArtifactStore } from '#capabilities/index.js';
 
 const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)), filesystemProof: beuserFilesystemProofSchema.optional() }).strict();
@@ -138,6 +139,9 @@ if (readback.kind === 'installation') {
   const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js'), { resolveProductLayout, getConfigFieldDefault } = await platform();
   const read = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: inRealm(readback.root) }), getConfigFieldDefault('installation').writeLockTimeoutMs).read();
   value = read.status === 'available' ? 'installed' : read.status === 'unavailable' && read.reason === 'not-created' ? 'absent' : 'unknown';
+} else if (readback.kind === 'path' && readback.path === ${JSON.stringify(join(recipe.workTarget, fixture.receiptPath))}) {
+  const { observeModelFixture } = await import(target + '/assets/beuser/model-fixture.mjs');
+  value = observeModelFixture(${JSON.stringify(cli)}, work, ${fixture.requestTimeoutMs}, ${fixture.maxRequestBytes});
 } else if (readback.kind === 'path') {
   const info = stat(readback.path);
   value = !info ? { state: 'absent' } : { state: info.isFile() ? 'file' : info.isDirectory() ? 'directory' : info.isSocket() ? 'socket' : 'other',
@@ -168,7 +172,7 @@ export async function readBeuserInstallationSummary(context: BeuserContext, hand
 // and Git stay under the work target (no symlink is followed for the file itself). Exit codes are data.
 const arrangeScript = `const { spawnSync } = await import('node:child_process'), { createHash } = await import('node:crypto'), { resolve, dirname } = await import('node:path');
 const { mkdirSync, realpathSync, openSync, writeSync, closeSync, lstatSync, chmodSync, constants } = await import('node:fs');
-const [step, maxBuffer] = JSON.parse(process.argv[1]); ${inRealm}
+const [step, maxBuffer, maxWallMs] = JSON.parse(process.argv[1]); ${inRealm}
 // Creates a missing directory one level at a time below the work target, never through a symlink: no effect lands outside it (Astra 2830).
 const safeDir = dir => { let at = work;
   for (const part of dir.slice(work.length).split('/').filter(Boolean)) { at += '/' + part; let info;
@@ -176,7 +180,11 @@ const safeDir = dir => { let at = work;
     if (info.isSymbolicLink() || !info.isDirectory()) throw new Error('outside'); }
   return dir; };
 let run;
-if (step.kind === 'file') {
+if (step.kind === 'cli' && step.id === ${JSON.stringify(fixture.stepId)}) {
+  const { arrangeModelFixture } = await import(${JSON.stringify(recipe.packageTarget + '/assets/beuser/model-fixture.mjs')});
+  try { const stdout = await arrangeModelFixture(${JSON.stringify(cli)}, work, step, maxBuffer, maxWallMs);
+    run = { status: 0, stdout: Buffer.from(stdout) }; } catch { run = { status: 1 }; }
+} else if (step.kind === 'file') {
   try { const path = inRealm(step.path); safeDir(dirname(path));
     if (realpathSync(dirname(path)) !== dirname(path)) throw new Error('outside');
     if (step.content !== undefined) { const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
@@ -201,7 +209,7 @@ export function createBeuserArrange(input: { readonly realm: BeuserRealmApplicat
   return {
     run: async (ctx, step) => JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, '--workdir', recipe.workTarget,
       ...[`LANG=${language}`, `LC_ALL=${language}`, `HOME=${recipe.home}`, `DECKENT_GLOBAL_HOME=${recipe.home}/.deckent`].flatMap(env => ['--env', env]),
-      (await admitted(ctx)).containerId, recipe.nodeExecutable, '--input-type=module', '--eval', arrangeScript, JSON.stringify([step, ctx.limits.maxArtifactBytes])], ctx)) as unknown,
+      (await admitted(ctx)).containerId, recipe.nodeExecutable, '--input-type=module', '--eval', arrangeScript, JSON.stringify([step, ctx.limits.maxArtifactBytes, ctx.limits.maxWallMs])], ctx)) as unknown,
     observe: async (ctx, readback) => observe(ctx, await admitted(ctx), options, command, readback),
   };
 }

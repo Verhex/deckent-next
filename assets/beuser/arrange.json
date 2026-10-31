@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "beuser-arrange-2",
+  "revision": "beuser-arrange-3",
   "steps": [
     { "kind": "cli", "id": "installed", "version": 1, "args": ["init", "--yes", "--scope", "beuser-realm", "--json"], "timeoutMs": 25000, "readback": { "kind": "installation", "expected": "installed" } },
     { "kind": "git", "id": "git-repository", "version": 1, "args": ["init", "--quiet"], "timeoutMs": 10000, "readback": { "kind": "path", "path": "/realm/.git", "expected": { "state": "directory" } } },
@@ -22,8 +22,10 @@
     { "kind": "check", "id": "global-home-absent", "version": 1, "readback": { "kind": "path", "path": "/realm/home/.deckent", "expected": { "state": "absent" } } },
     { "kind": "check", "id": "docker-socket-absent", "version": 1, "readback": { "kind": "path", "path": "/var/run/docker.sock", "expected": { "state": "absent" } } },
     { "kind": "check", "id": "candidate-manifest", "version": 1, "readback": { "kind": "path", "path": "/package/manifest.json", "expected": { "state": "file" } } }
+    ,{"kind":"cli","id":"model-connected","version":1,"args":["models","connect","--scope","beuser-realm","--connection","local-openai","--endpoint","http://127.0.0.1:18765","--model","beuser-fixture-v1","--json"],"timeoutMs":25000,"readback":{"kind":"path","path":"/realm/model-connected.json","expected":{"state":"file","mode":"0600","sha256":"a98ddd75d435b0d795ebbb48b29357b042a3af8021c78cc841c0585ff6de9ef0"}}}
   ],
   "states": [
+    { "id": "model-connected", "steps": [{ "id": "installed", "version": 1 }, { "id": "model-connected", "version": 1 }] },
     { "id": "T1", "steps": [{ "id": "installed", "version": 1 }] },
     { "id": "fresh-own-installation", "steps": [{ "id": "installed", "version": 1 }] },
     { "id": "missing-model-or-realm-or-binding", "steps": [{ "id": "installed", "version": 1 }] },

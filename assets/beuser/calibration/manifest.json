@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-calibration-1",
+  "revision": "b1-calibration-2",
   "phase": "preparation-only",
   "calibrationClaim": "uncalibrated",
   "files": [
@@ -24,7 +24,7 @@
     "presentationOrder": "controller-pinned-mixed-order"
   },
   "calibration": {
-    "revision": "b1-calibration-1",
+    "revision": "b1-calibration-2",
     "cohort": "b1-preparation-unwalked",
     "trapHits": 0,
     "trapTotal": 0,
@@ -57,5 +57,32 @@
     "changedEligibleModelOrPersona": true,
     "lowCalibrationGreenIsEvidence": false,
     "differentCohortsAreIndependentSamples": false
-  }
+  },
+  "assetDigests": [
+    {
+      "fileName": "arrange.json",
+      "sha256": "e176bf474e05237f45a178b46cfb6a730eb170acf422734b7eeec6481b308708"
+    },
+    {
+      "fileName": "journeys/onboarding.json",
+      "sha256": "4ef37f1ec2dc019bbb3f1030b83674717794e548b30be415ff9ec0a6e6713a6d"
+    },
+    {
+      "fileName": "journeys/beuser-self.json",
+      "sha256": "1b23cbfe5bac60a4060868a7394176cd79915aab117cd8ba3d88fbc8e0ddfdc9"
+    },
+    {
+      "fileName": "journeys/uninstall-v2.json",
+      "sha256": "eb5eb49403c8fa707b4e7473b708af7d290a3e0cdf66d84f26c20baa65d15796"
+    },
+    {
+      "fileName": "model-fixture.json",
+      "sha256": "8014b002a8ca3487326fb2e5f331619ce0a7c473733186e1ece3b692860818de"
+    },
+    {
+      "fileName": "model-fixture.mjs",
+      "sha256": "853468ce33f22b2390c2c7c2c46b1e41e93c2e9de181867c0a4b8e41dd8f1cb5"
+    }
+  ],
+  "assetSetDigest": "73fae8f307fc7042c2d50363663ef843d125290ea9514699aa28eccbb16dc697"
 }
