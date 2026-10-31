@@ -3,7 +3,7 @@ export type { BeuserWalkPorts, BeuserWalkResult } from './internal/application.j
 export { beuserEvaluatorFor, beuserPersonaDigest, pinBeuserCampaign, admitBeuserCampaign, admitBeuserAttempt, assertBeuserRequestIdentity, reserveBeuserAttempts } from './internal/admission.js';
 export type { BeuserCampaign, BeuserExecutionProfile } from './internal/admission.js';
 export { BeuserController, BeuserWalkStopped, BeuserExecutionBudget } from './internal/controller.js';
-export { walkBeuser } from './internal/walker.js';
+export { walkBeuser, type BeuserStopReason } from './internal/walker.js';
 export type { BeuserArrangement, BeuserArrangeReceipt } from './internal/arrange.js';
 export { beuserSourceMakers, createBeuserModelPort, correctBeuserModelOutput, BeuserCallBudget, beuserIndependentRows } from './internal/models.js';
 export type { BeuserModelComposition, BeuserWalkerDecode } from './internal/models.js';

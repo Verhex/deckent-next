@@ -146,17 +146,23 @@ if (readback.kind === 'installation') {
 } else if (readback.kind === 'git') {
   value = spawnSync('git', ['ls-files', '--error-unmatch', '--', readback.path], { cwd: work, env: ${gitEnv}, stdio: 'ignore', timeout: 10000 }).status === 0 ? 'tracked' : 'untracked';
 } else if (readback.kind === 'runtime-socket') {
-  const { runtimeSocketLocation } = await import(target + '/dist/adapters/core/local-runtime-socket/index.js'), { resolveProductLayout } = await platform();
-  value = stat(runtimeSocketLocation(resolveProductLayout({ projectRoot: work }))) ? 'present' : 'absent';
+  // The socket adapter's own safe read (parent lstat/realpath/uid/mode): an unsafe or unreadable path is unknown, never a confident absence.
+  const { observeRuntimeSocket } = await import(target + '/dist/adapters/core/local-runtime-socket/index.js'), { resolveProductLayout } = await platform();
+  value = await observeRuntimeSocket(resolveProductLayout({ projectRoot: work }));
 } else if (readback.kind === 'install-method') value = (await platform()).packageRemovalCommand() === null ? 'unproven' : 'package-manager';
 console.log(JSON.stringify(value));`;
 const observe = async (context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, command: BeuserRealmCommand, readback: BeuserArrangeStep['readback']) =>
   JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, handle.containerId, recipe.nodeExecutable, '--input-type=module', '--eval', observeScript,
     JSON.stringify(readback)], context)) as unknown;
-/** Read through the target's own guarded, read-only identity adapter; return allowlisted values only. */
+/** Read through the target's own guarded, read-only identity and socket adapters; return allowlisted values only. Walk20: lifecycle is read
+ * (a safe runtime socket absence: `stopped` when installed, `absent` when not; an unsafe path, or a socket file alone, which does not prove a
+ * running service, is `unknown`).
+ * preservedData, card, receiptLocation and forbiddenEffect have no in-realm reader yet and stay `unknown`, so their dimensions stay unknown. */
 export async function readBeuserInstallationSummary(context: BeuserContext, handle: BeuserRealmHandle, options: BeuserRealmOptions, command = dockerRealmCommand(options)): Promise<unknown> {
-  return { installation: await observe(context, handle, options, command, { kind: 'installation', expected: 'installed' }),
-    preservedData: 'unknown', card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'unknown' };
+  const installation = await observe(context, handle, options, command, { kind: 'installation', expected: 'installed' });
+  const socket = await observe(context, handle, options, command, { kind: 'runtime-socket', expected: 'absent' });
+  const lifecycle = socket !== 'absent' ? 'unknown' : installation === 'installed' ? 'stopped' : installation === 'absent' ? 'absent' : 'unknown';
+  return { installation, preservedData: 'unknown', card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle };
 }
 // In-realm effect wrapper: every child gets /dev/null stdin and pipes only, so the product's own witness check sees no terminal. Fixture files
 // and Git stay under the work target (no symlink is followed for the file itself). Exit codes are data.

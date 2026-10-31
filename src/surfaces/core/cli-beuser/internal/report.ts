@@ -19,7 +19,8 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
   for (const finding of report.findings ?? []) {
     const values = { branch: safe(finding.branch), persona: safe(finding.persona), outcome: finding.outcome,
       screenRef: safe(finding.screenRef), screen: safe(finding.screen), refs: finding.evidenceRefs.map(safe).join(', ') };
-    rows.push(finding.reason === 'observing' ? t('beuser.report.observing', values, locale) : t('beuser.report.stuck', values, locale));
+    rows.push(finding.reason === 'patience' ? t('beuser.report.patience', values, locale)
+      : finding.reason === 'observing' ? t('beuser.report.observing', values, locale) : t('beuser.report.stuck', values, locale));
   }
   for (const segment of report.segments) {
     const verdict = segment.verdict;

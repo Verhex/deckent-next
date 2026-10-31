@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, prepareRuntimeSocket, requestLocalRuntime, runtimeSocketLocation, startLocalRuntimeSocketServer,
+import { LocalRuntimeSocketError, acquireLocalRuntimeSocketGuard, createLocalPeerSession, observeRuntimeSocket, prepareRuntimeSocket, requestLocalRuntime, runtimeSocketLocation, startLocalRuntimeSocketServer,
   type LocalRuntimeSocketOptions } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import { encodeServiceFrame, ServiceFrameError } from '../../../src/adapters/core/local-runtime-socket/index.js';
@@ -228,6 +228,8 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket peer identit
     await expect(lstat(parent)).rejects.toMatchObject({ code: 'ENOENT' });
     // A reader (client, doctor) sees a stopped service, not an unsafe endpoint.
     await expect(prepareRuntimeSocket(layout, false)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNAVAILABLE' });
+    const elsewhere = await mkdtemp(join(tmpdir(), 'dk-elsewhere-')); owned.push(elsewhere); await symlink(elsewhere, parent); expect(await observeRuntimeSocket(layout)).toBe('unknown'); // BeUser lifecycle (Astra 2842 R3): a linked parent is never a safe absence; no parent or an own empty one is.
+    await rm(parent); expect(await observeRuntimeSocket(layout)).toBe('absent'); await prepareRuntimeSocket(layout); expect(await observeRuntimeSocket(layout)).toBe('absent');
     // J3 (full suite 1d30f87a): a client racing the stop after `prepareRuntimeSocket` also reads a stopped service, not an unsafe endpoint.
     await expect(requestLocalRuntime({ ...options, endpoint }, { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation: 'inspectRun', input: {} }))
       .rejects.toSatisfy(error => { expectCode(error, 'LOCAL_RUNTIME_UNAVAILABLE'); return true; });

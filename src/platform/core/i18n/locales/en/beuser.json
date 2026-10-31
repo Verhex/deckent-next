@@ -37,6 +37,7 @@
   "beuser.report.segment": "Segment {segment}: outcome {outcome}; authorization {authorization}; safety {safety}; experience {experience}; validity {validity}; independence {independence}.",
   "beuser.report.stuck": "Diagnostic finding — {outcome}: persona {persona} is stuck in branch {branch} (repeated screen/action). Screen {screenRef}: {screen}. Evidence: {refs}.",
   "beuser.report.observing": "Diagnostic finding — {outcome}: persona {persona} is stuck in branch {branch} (only looked or waited while the screen stayed the same). Screen {screenRef}: {screen}. Evidence: {refs}.",
+  "beuser.report.patience": "Diagnostic finding — {outcome}: persona {persona} ran out of waiting patience in branch {branch} (the waits it would accept are used up). Screen {screenRef}: {screen}. Evidence: {refs}.",
   "beuser.report.findings": "Broken: {broken}; friction: {friction}; delight: {delight}.",
   "beuser.report.evidence": "Evidence: {refs}; next owner: {owner}.",
   "beuser.report.coverage": "Critical {criterion}: walked {walked}, valid {valid}, invalid {invalid}, unknown {unknown}.",

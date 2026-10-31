@@ -36,7 +36,8 @@ it('loads all seven assets through frozen C1/C5 parsers and resolves every perso
   expect(new Set(personas.personas.map(row => row.personaId)).size).toBe(personas.personas.length);
   for (const input of personas.personas) {
     const summary = pinBeuserWalkerSummary(input);
-    expect(summary.patience.maxSteps).toBeLessThanOrEqual(profile!.maxSteps);
+    // Walk20: each decision may cost a guard read plus its action; the first look and a stop's read come on top.
+    expect(2 * summary.patience.maxSteps + 2).toBeLessThanOrEqual(profile!.maxSteps);
     expect(summary.patience.maxWaitMs).toBeLessThanOrEqual(profile!.maxWaitMs);
     expect(summary.organizationContext).toMatchObject({ installationRole: 'synthetic-person', scope: 'own-disposable-installation' });
   }

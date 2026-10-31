@@ -113,7 +113,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
       async record(screen: { readonly sequence: number }) { // By the surface's own reference: arrange rows shift the recorder sequence.
         const row = recorder.inspect(context).find(item => item.entry.evidenceRef === `${context.binding.transcriptId}:${screen.sequence}`);
         if (!row) throw new BeuserContractError('BEUSER_INPUT_INVALID'); await evidencePort.append(context, row.entry); },
-      async stopped(screen: import('#engine/index.js').BeuserScreen, action: import('#engine/index.js').BeuserSurfaceCommand['action'], reason: 'loop' | 'observing') {
+      async stopped(screen: import('#engine/index.js').BeuserScreen, action: import('#engine/index.js').BeuserSurfaceCommand['action'], reason: import('#engine/index.js').BeuserStopReason) {
         const row = recorder.append(context, { binding: context.binding, kind: 'friction', evidenceRef: `${context.binding.transcriptId}:${reason}`,
           atMs: Math.floor(performance.now() - started), text: JSON.stringify({ reason, screenRef: `${context.binding.transcriptId}:${screen.sequence}`,
             proposedAction: action.kind === 'type' ? { kind: 'type' } : action }) });
@@ -129,8 +129,9 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     const result = await new BeuserApplication(ports, budget).walk(context, pinBeuserWalkerSummary(data.summary));
     if (capturedSurface && !context.signal.aborted) await capturedSurface.close(context);
     const diagnostic = beuserDiagnosticSchema.parse({ schemaVersion: 1, trace,
-      finding: (result.reason === 'loop' || result.reason === 'observing') && lastScreen ? { schemaVersion: 1, binding: context.binding, branch: context.binding.identity.taskId,
-        persona: data.summary.personaId, code: 'persona-stuck', reason: result.reason, outcome: 'RED', controllerValidity,
+      finding: (result.reason === 'loop' || result.reason === 'observing' || result.reason === 'patience') && lastScreen ? { schemaVersion: 1, binding: context.binding,
+        branch: context.binding.identity.taskId, persona: data.summary.personaId, code: result.reason === 'patience' ? 'persona-patience' : 'persona-stuck',
+        reason: result.reason, outcome: 'RED', controllerValidity,
         screen: lastScreen.text, screenRef: `${context.binding.transcriptId}:${lastScreen.sequence}`, screenDigest: lastScreen.digest,
         evidenceRefs: trace.filter(row => row.kind !== 'arrange').map(row => row.artifactRef) } : null }); // Arrange rows are setup, never RED evidence.
     return { result, evidence, diagnostic };

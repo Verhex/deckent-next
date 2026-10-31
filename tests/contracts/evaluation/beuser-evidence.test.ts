@@ -193,6 +193,9 @@ it('diagnostic references stay unique, bound to their branch and backed by a cap
   const diagnostic = { schemaVersion: 1, trace, finding };
   expect(beuserDiagnosticSchema.parse(diagnostic).finding).toEqual(finding);
   expect(beuserDiagnosticSchema.parse({ ...diagnostic, finding: { ...finding, reason: 'observing' } }).finding?.reason).toBe('observing'); // Walk18.
+  // Walk20: running out of wait patience is its own named finding; the code and reason never disagree.
+  expect(beuserDiagnosticSchema.parse({ ...diagnostic, finding: { ...finding, code: 'persona-patience', reason: 'patience' } }).finding?.code).toBe('persona-patience');
+  expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, reason: 'patience' } }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, trace: [...trace, ...trace] }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, branch: 'foreign-task' } }).success).toBe(false);
   expect(beuserDiagnosticSchema.safeParse({ ...diagnostic, finding: { ...finding, screenRef: 'not-captured' } }).success).toBe(false);
