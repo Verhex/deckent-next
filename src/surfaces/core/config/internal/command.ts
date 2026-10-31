@@ -183,7 +183,7 @@ async function openPanel(context: ConfigCommandContext, root: string, options: C
   const port = { ...base, write: async (request: Parameters<typeof base.write>[0]) => keep(await base.write(request)),
     records: { ...records, commit: async (token: string) => keep(await records.commit(token)) } };
   const pushed = await context.openConfigPanel!(keyPath ? narrowConfigPanel(port, keyPath) : port, { stdin: (context.stdin ?? process.stdin) as NodeJS.ReadStream,
-    stdout: (context.stdout ?? process.stdout) as NodeJS.WriteStream, env: context.env ?? process.env, locale, ...(context.signal ? { signal: context.signal } : {}) });
+    stdout: (context.stdout ?? process.stdout) as NodeJS.WriteStream, env: context.env ?? process.env, locale, root, ...(context.signal ? { signal: context.signal } : {}) });
   const lines = written.length ? written : pushed;
   if (lines.length) emit(lines.join('\n'), { ...sinks, json: false });
 }

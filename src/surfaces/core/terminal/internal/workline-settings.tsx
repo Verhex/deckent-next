@@ -2,21 +2,22 @@ import { useCallback, useMemo, useRef } from 'react';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { systemSummaryEntry, type LocalExecution, type WorklinePanel } from '#surfaces/core/terminal-work/index.js';
 import type { PanelSnapshot, TerminalLocalContext } from '#surfaces/core/terminal-kit/index.js';
-import { type ModelPanelChoice, type ModelPanelReference, type ModelPanelSource, type PanelKind, type PanelLabels, type PanelPorts } from '#surfaces/core/terminal-panels/index.js';
+import { type ModelPanelChoice, type ModelPanelReference, type ModelPanelSource, type PanelKind, type PanelLabels, type PanelPorts, type ThemePanelPort } from '#surfaces/core/terminal-panels/index.js';
 import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
+import type { TerminalHostContext } from '#surfaces/core/terminal-host/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import type { WorklinePermissionModePort } from './workline-mode.js';
 
 /** T3 L4: the `/config` and `/mcp` window ports and every panel's words; `/mode`'s port is the workline's own mode hook. T4: `/model`'s source
  * (the session pin is the workline's own) and the `/provider` port. */
-export type WorklinePanels = Readonly<{ ports: Omit<PanelPorts, 'mode' | 'model'> & { readonly model?: ModelPanelSource }; labels: PanelLabels }>;
+export type WorklinePanels = Readonly<{ ports: Omit<PanelPorts, 'mode' | 'model' | 'theme'> & { readonly model?: ModelPanelSource; readonly theme?: ThemePanelPort | ((control: TerminalHostContext['theme']) => ThemePanelPort) }; labels: PanelLabels }>;
 /** T4 MODEL-SWITCH: the session's pinned model, read when a turn starts (the next turn carries it). */
 export type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference | null; pin: (choice: ModelPanelChoice, fresh?: boolean) => void;
   /** CACHE-SLICE1: the conversation's measured context at or above the registry threshold, else null. */
   largeContext?: () => number | null; reasoning?: () => 'off' | undefined }>;
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;
 
-const PANEL_COMMANDS: readonly PanelKind[] = ['hub', 'mode', 'config', 'mcp', 'model', 'provider', 'policy'];
+const PANEL_COMMANDS: readonly PanelKind[] = ['hub', 'mode', 'config', 'theme', 'mcp', 'model', 'provider', 'policy'];
 /**
  * The settings window a `/mode`, `/config`, `/mcp`, `/model` or `/provider` opens, when its port is here. The rich workline already runs a
  * typed slash command bare (I-1, with its one-time note); CS-1: `/config` opens its panel even with a typed argument (never a typed write),
@@ -38,15 +39,20 @@ function settingsPanelOf(command: string, args: string, ports: PanelPorts | null
 export function useWorklineSettings(input: { readonly panels: WorklinePanels | undefined; readonly permissionMode: WorklinePermissionModePort | undefined; readonly mode: Mode;
   readonly panel: WorklinePanel; readonly state: PanelSnapshot<TerminalLocalContext>; readonly openApprovals: (approvalId: string, execution: LocalExecution) => Promise<void>;
   readonly push: (entries: readonly WorkLedgerEntry[]) => void; readonly errorText: (error: unknown) => string; readonly blocked: boolean;
-  readonly sessionModel?: WorklineSessionModel }) {
+  readonly sessionModel?: WorklineSessionModel; readonly themeControl?: TerminalHostContext['theme'] }) {
   const { panels, permissionMode, panel, state, push, errorText } = input;
   const modeNow = useRef(input.mode); modeNow.current = input.mode;
   const sessionModel = useRef(input.sessionModel); sessionModel.current = input.sessionModel;
   const pinnable = Boolean(input.sessionModel);
+  const boundTheme = useRef<{ source: WorklinePanels['ports']['theme']; control: TerminalHostContext['theme']; port: ThemePanelPort } | null>(null);
   const ports = useMemo<PanelPorts | null>(() => {
     if (!panels) return null;
-    const { model, ...rest } = panels.ports;
-    return { ...rest, ...(permissionMode ? { mode: {
+    const { model, theme, ...rest } = panels.ports;
+    if (typeof theme === 'function' && input.themeControl && (boundTheme.current?.source !== theme || boundTheme.current.control !== input.themeControl)) {
+      boundTheme.current = { source: theme, control: input.themeControl, port: theme(input.themeControl) };
+    }
+    const themePort = typeof theme === 'function' ? input.themeControl ? boundTheme.current?.port : undefined : theme;
+    return { ...rest, ...(themePort ? { theme: themePort } : {}), ...(permissionMode ? { mode: {
       canOpen: Boolean(permissionMode.open), inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
     // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
@@ -58,7 +64,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
       largeContext: () => sessionModel.current?.largeContext?.() ?? null,
       ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice, fresh?: boolean) => sessionModel.current?.pin(choice, fresh) } } : {}) };
-  }, [panels, permissionMode, pinnable]);
+  }, [panels, permissionMode, pinnable, input.themeControl]);
   const approvalAfter = useRef<string | null>(null), openApprovals = useRef(input.openApprovals); openApprovals.current = input.openApprovals;
   const open = useCallback(async (command: string, args: string, execution: LocalExecution): Promise<boolean> => {
     const kind = settingsPanelOf(command, args, ports);
