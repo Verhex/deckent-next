@@ -58,6 +58,9 @@ export interface ComposerProps {
   readonly mentionDelayMs?: number;
   /** 'marker' draws `|` before the caret for terminals where inverse video is suppressed (no colour tier). */
   readonly caret?: 'inverse' | 'marker';
+  /** alpha.60 C: the draft as it now stands, after each change, and the time of an armed exit (a first idle Ctrl+C, else null): the launch shell
+   *  hands both to the Workline's composer (`armedAt`), so Ctrl+C twice across the hand-over still quits. */
+  readonly onDraft?: (entry: ComposerHistoryEntry) => void; readonly onArm?: (armedAt: number | null) => void; readonly armedAt?: number | null;
   readonly now?: () => number;
   readonly policy?: PastePolicy;
 }
@@ -100,8 +103,9 @@ export function Composer(props: ComposerProps): ReactNode {
   const palette = useWorklinePalette();
   const { columns } = useWindowSize();
   // The state lives in a ref as well: several keys in one input chunk must each see the previous key's result.
-  const current = useRef(EMPTY_COMPOSER);
-  const [state, setState] = useState(EMPTY_COMPOSER);
+  const [initial] = useState(() => props.armedAt ? { ...EMPTY_COMPOSER, armedAt: props.armedAt } : EMPTY_COMPOSER);
+  const current = useRef(initial);
+  const [state, setState] = useState(initial);
   const latest = useRef(props);
   latest.current = props;
   const lookup = useRef<AbortController | null>(null);
@@ -123,8 +127,11 @@ export function Composer(props: ComposerProps): ReactNode {
       if (text !== intent.entry.text) remembered.set(intent.entry, { text, pastes: intent.entry.pastes.filter(paste => text.includes(paste.chip)) });
     }
     const next = remembered.size ? { ...result.state, history: result.state.history.map(entry => remembered.get(entry) ?? entry) } : result.state;
+    const before = current.current;
     current.current = next;
     setState(next);
+    if (next.text !== before.text || next.pastes !== before.pastes) latest.current.onDraft?.({ text: next.text, pastes: next.pastes });
+    if (next.armedAt !== before.armedAt) latest.current.onArm?.(next.armedAt);
     for (const intent of result.intents) {
       if (intent.type === 'cancel') onCancel();
       else if (intent.type === 'withdraw') { const entry = onWithdraw?.(); if (entry) dispatch({ type: 'restore', entry }); }

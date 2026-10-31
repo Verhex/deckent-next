@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { terminalScreen } from '../../fixtures/terminal-screen.js';
+import { terminalBuffers, terminalScreen } from '../../fixtures/terminal-screen.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, prepareRuntimeSocket, readLocalOsIdentity, runtimeSocketLocation } from '#adapters/index.js';
@@ -141,9 +141,10 @@ async function governedChat() {
   roots.push(root);
   const projectRoot = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(projectRoot, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  const tls = await createPricedProviderTls(root);
+  const tls = await createPricedProviderTls(root); let requests = 0;
   const server = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
     if (request.url !== '/chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
+    requests++;
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
@@ -199,7 +200,7 @@ async function governedChat() {
   ] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
-  return { projectRoot, env };
+  return { projectRoot, env, requests: () => requests };
 }
 
 describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo-terminal', () => {
@@ -325,7 +326,8 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       principals: policy.grants[0]!.principals, resource: { kind: 'service', ids: ['local'] } }] }), { mode: 0o600 });
     const ledgerPath = join(config.layout.root, 'state/ledger.db');
     const ledger = new DatabaseSync(ledgerPath); ledger.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); ledger.close();
-    const first = await inPty(f.projectRoot, f.env, [], [['started in the background', 'hello\r'], ['pty-ok', '/exit\r']]);
+    // alpha.60 B (draw first): the line is sent as soon as the frame is drawn, before the cold start answers; it waits and is delivered once.
+    const first = await inPty(f.projectRoot, f.env, [], [['Ask anything', 'hello\r'], ['pty-ok', '/exit\r']]);
     // Register the background service for cleanup before any assertion can fail.
     const pid = Number(/\(pid (\d+)\)/.exec(first.output)?.[1]);
     if (Number.isSafeInteger(pid) && pid > 0) daemons.push(pid);
@@ -347,6 +349,15 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(log).toContain(`Ledger upgraded from schema ${PREVIOUS_LEDGER_VERSION} to ${CURRENT_LEDGER_VERSION}`);
     expect(first.status, first.output).toBe(0);
     expect(Number.isSafeInteger(pid) && pid > 0, first.output).toBe(true);
+    expect(first.output.indexOf('Ask anything')).toBeLessThan(first.output.indexOf('started in the background'));
+    expect(first.output).toContain('Waiting for the runtime service before sending'); expect(f.requests()).toBe(1);
+    expect(log.split('Runtime service ready').length - 1, log).toBe(1); // one `runtime serve` for the opening and the waiting line
+    // alpha.60 C: the launch shell drew the full window before the host loaded; the Workline took the same host and the bar row did not move.
+    const shown = (text: string) => { const at = first.output.indexOf('\u001b[?2026l', first.output.indexOf(text)); const upTo = first.output.slice(0, at < 0 ? undefined : at + 8);
+      return terminalBuffers(['\u001b[?1000h', '\u001b[?1002h', '\u001b[?1006h', '\u001b[?1006l', '\u001b[?1002l', '\u001b[?1000l'].reduce((rest, mode) => rest.replaceAll(mode, ''), upTo), 120, 40).text.split('\n')
+        .findLastIndex(row => row.startsWith('╭')); };
+    expect(first.output.indexOf('Preparing…')).toBeGreaterThan(-1); expect(first.output.indexOf('Preparing…')).toBeLessThan(first.output.indexOf('started in the background'));
+    expect(shown('Preparing…')).toBeGreaterThan(10); expect(shown('started in the background')).toBe(shown('Preparing…'));
     // The service outlives the terminal and answers other commands.
     const described = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
     expect(JSON.parse(described.stdout)).toMatchObject({ instanceId: expect.any(String) });

@@ -247,6 +247,11 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   // OPEN-SANDBOX: the open view seals the hard floor structurally; asked of a layout that does not name it, it is refused (fail closed).
   const openView = write.open === true && !overlay && write.projectReadOnly !== true;
   if (write.open && !openView) return { ok: false, reason: 'the open view is only for a writable project' };
+  // The typed HOME refusal comes first: the conventional global state root (P5a) lies under HOME, so sealing it cannot be prepared for a HOME
+  // that is not a directory, which would otherwise surface as an untyped preparation failure before the HOME check.
+  const homeAt = environment['HOME'];
+  if (openView && !(homeAt && isAbsolute(homeAt) && await realpath(homeAt).then(path => lstat(path)).then(info => info.isDirectory(), () => false))) return { ok: false, code: HOME_CREDENTIAL_REFUSAL,
+    reason: t('shell.homeCredentialsRefused', { detail: 'HOME is missing or cannot be resolved', entries: BUBBLEWRAP_HOME_WALK_MAX_ENTRIES }, resolveLocale(undefined, environment)) };
   const seal = layout.hardFloor ? await sealedRoots(layout.project.root, layout.hardFloor.roots, environment['HOME']) : openView ? { ok: false as const, reason: 'the hard floor is not known to this open view' } : null;
   if (seal && !seal.ok) return seal;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees are bound read-only (a mount point:

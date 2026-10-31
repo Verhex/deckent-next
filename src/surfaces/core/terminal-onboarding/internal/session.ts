@@ -52,7 +52,7 @@ const awaitedImage = (snapshot: OnboardingSnapshot, steps: readonly OnboardingSt
   && !steps.some(row => row.id === 'execution:worker') && snapshot.plan.stages.some(row => row.id === 'execution:worker' && row.reason.code === 'setup.execution.noWorkKind'));
 export const firstSignedInHost = (snapshot: OnboardingSnapshot): string | null => snapshot.hosts.find(row => row.cli === 'found' && row.login === 'found')?.id ?? null;
 /** One answer/apply at a time. Reobserve changes applicability, while the answered prefix remains counted. */
-export function createOnboardingSession(port: OnboardingPort, initial: OnboardingSnapshot, revisit = false, focus?: OnboardingFocus) {
+export function createOnboardingSession(port: OnboardingPort, initial: OnboardingSnapshot, revisit = false, focus?: OnboardingFocus, signal?: AbortSignal) {
   let snapshot = initial, answers = { ...initial.answers }, completed: string[] = [];
   const deferred = new Set<string>();
   const model = (): OnboardingPresentation => {
@@ -64,9 +64,10 @@ export function createOnboardingSession(port: OnboardingPort, initial: Onboardin
   // Settling forgets settled deferrals and reconciles parked intents on the current snapshot (no second observation at open).
   const settle = async () => {
     const open = openDeferrals(snapshot), settled = snapshot.deferred.filter(id => !open.includes(id));
-    if (settled.length && port.settle) { await port.settle(settled); snapshot = { ...snapshot, deferred: snapshot.deferred.filter(id => !settled.includes(id)) }; }
+    // Astra 2862 R1: a launch that ended (`signal`, e.g. its shell closed) starts no settle write.
+    if (settled.length && port.settle) { signal?.throwIfAborted(); await port.settle(settled); snapshot = { ...snapshot, deferred: snapshot.deferred.filter(id => !settled.includes(id)) }; }
     const pending = [];
-    for (const intent of snapshot.pending) pending.push(['parked', 'released'].includes(intent.status) ? await port.reconcile(intent) : intent);
+    for (const intent of snapshot.pending) { if (['parked', 'released'].includes(intent.status)) signal?.throwIfAborted(); pending.push(['parked', 'released'].includes(intent.status) ? await port.reconcile(intent) : intent); }
     snapshot = { ...snapshot, pending }; answers = { ...snapshot.answers, ...answers }; return model();
   };
   const refresh = async () => { snapshot = await port.observe(answers); return settle(); };

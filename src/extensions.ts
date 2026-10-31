@@ -19,6 +19,9 @@ export type { AdapterModuleRegistration, TargetAdapterFactory, TargetAdapterOpti
   ProjectVaultAnchor } from '#engine/index.js';
 export type { EffectConfirmation, EffectConfirmationView } from '#engine/index.js';
 export type { StandardSchemaV1 } from '#platform/index.js';
+/** P5a: Node's compile cache in Deckent's own place (an existing private global state root; the same off switches and checks as the `deckent` bin). A
+ * distribution's executable calls it first; it caches what loads after the call (`runCli`'s CLI and terminal), not this entry's static imports. */
+export { enableDeckentCompileCache } from '#platform/index.js';
 
 /** Runs the Core command line in this process after the caller's registrations, so a distribution's own executable (Core plus its
  * modules) serves `deckent <command>` with the same commands, policy and ledger. Loaded lazily: registering never loads the terminal UI.

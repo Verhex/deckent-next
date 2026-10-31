@@ -49,7 +49,7 @@ describe('opening frame (T2 T-STARTUP)', () => {
     expect(/[^ -~]/u.test(ascii.split('\n').slice(0, 4).map(line => line.slice(0, 5)).join(''))).toBe(false);
   });
 
-  it('is one line below 60 columns or when compact, and nothing but the clear when off', () => {
+  it('is one line below 60 columns or when compact, nothing but the clear when off, and nothing at all to a pipe or redirect', () => {
     const narrow = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 59, 30));
     // One row, cut at the window width so the facts that matter (version and project) stay first.
     expect(narrow.trimEnd().split('\n')).toEqual(['Deckent 1.0.0-alpha.9 · deckent-next · /help · ? shortcuts']);
@@ -57,9 +57,7 @@ describe('opening frame (T2 T-STARTUP)', () => {
       .toBe('Deckent 1.0.0-alpha.9 · deckent-next · /help · ? kısayollar');
     expect(startupFrame(startup('en', { banner: 'off' }), plain, 100, 3)).toBe(`\n\n\n${CLEAR_VISIBLE_SCREEN}`);
     expect(startupFrame(startup('en', { banner: 'off', clear: false }), plain, 100, 3)).toBe('');
-  });
-
-  it('writes nothing to a pipe or redirect (no clear sequence, no banner)', () => {
+    // A pipe or redirect gets nothing at all (no clear sequence, no banner).
     const written: string[] = [];
     const sink = (isTTY: boolean) => ({ isTTY, columns: 100, rows: 30, write: (chunk: string) => { written.push(chunk); return true; } });
     writeStartup(sink(false) as never, startup('en'), plain);

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { loadConfig, clearConfigCache, resolveGlobalScopePaths, resolveGlobalConfigPaths } from '#platform/index.js';
+import { loadConfig, clearConfigCache, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalStateRoot, PRODUCT_LAYOUT_REGISTRY } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 it('isolates global config without merging legacy fields or redirecting project data, including cache hits', async () => {
@@ -26,4 +26,12 @@ it('resolves an explicit global root across platforms without HOME, while reject
   expect(resolveGlobalScopePaths('darwin', { HOME: '/Users/u', USERPROFILE: '/Users/u', DECKENT_GLOBAL_HOME: '/next/global', DECKENT_HOME: '/project/data' }).stateDir).toBe('/next/global');
   expect(resolveGlobalConfigPaths({ DECKENT_GLOBAL_HOME: 'D:\\Next\\global' }, 'win32').platformPath).toBe('D:\\Next\\global\\config.json');
   expect(() => resolveGlobalScopePaths('linux', { HOME: '/h', USERPROFILE: '/h', DECKENT_GLOBAL_HOME: 'relative' })).toThrow('LAYOUT_ROOT_INVALID');
+  // P5a: the CLI bootstrap's node:-only resolver names the same root (its env key from the registry JSON) or refuses where the host unit throws.
+  const key = PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey;
+  for (const [platform, env] of [['linux', { HOME: '/h' }], ['darwin', { HOME: '/Users/u', DECKENT_HOME: '/project/data' }], ['win32', { USERPROFILE: 'C:\\u', [key]: 'D:\\g\\..\\global' }],
+    ['win32', { HOMEDRIVE: 'C:', HOMEPATH: '\\u' }], ['linux', { [key]: '/g/./x/' }], ['linux', { HOME: '/h', [key]: 'relative' }], ['linux', { HOME: '/h*' }], ['linux', {}], ['linux', { HOME: 'h', [key]: '/g' }]] as const) {
+    let host: string | null; try { host = resolveGlobalScopePaths(platform, env).stateDir; } catch { host = null; }
+    const found = resolveGlobalStateRoot(env, platform);
+    expect({ platform, env, root: found.ok ? found.root : null }).toEqual({ platform, env, root: host });
+  }
 });

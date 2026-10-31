@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 import { z } from 'zod';
 import { modelReferenceSchema, type ModelReference } from '#domain/index.js';
-import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection } from '#platform/index.js';
+import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
 import responseStyleData from './terminal-response-styles.json' with { type: 'json' };
 
@@ -18,7 +18,7 @@ const DEFAULT_RESPONSE_STYLE = responseStyleData.default;
  * catalog revision and binding are read fresh per turn and enforced by the model invocation service. */
 export const terminalConfigSchema = z.object({
   /** Scope the interactive terminal (`deckent` with no arguments) works in; `--scope` overrides it. */
-  scopeId: z.string().min(1).max(128).optional(),
+  scopeId: TERMINAL_SCOPE_ID_SCHEMA.optional(),
   /** Keep the composer's visible input history across sessions in this project (private file; pastes never stored). */
   persistHistory: z.boolean().default(true),
   /** Session-local /do completion records; mutable resource policy from the terminal registry defaults. */

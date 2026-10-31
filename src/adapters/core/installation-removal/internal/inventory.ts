@@ -14,7 +14,7 @@ import { GitWorkspaceBroker, resolveGitWorkTarget } from '#adapters/core/git-wor
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
 export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
-export const removalRegistry = z.object({ schemaVersion: z.literal(5), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
+export const removalRegistry = z.object({ schemaVersion: z.literal(6), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
   recoveryRoot: z.record(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.object({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) }).strict()),
   systemctl: z.array(z.string().refine(isAbsolute)).min(1), busctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
   archive: z.object({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.object({ pattern: z.string(), lease: z.string() }).strict(), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
@@ -22,6 +22,7 @@ export const removalRegistry = z.object({ schemaVersion: z.literal(5), initialBa
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
   treeMembers: z.record(z.object({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }).strict())
     .refine(value => Object.keys(value).every(name => restorable.includes(name))),
+  cacheWriterWitness: z.object({ $comment: z.string().optional(), resourceId: z.string().min(1), budgetMs: z.number().int().positive(), pollMs: z.number().int().positive() }).strict(),
   cacheMembers: z.record(z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
 const registry = removalRegistry;
 export function assertNativeUninstallSupport(platform: string) { if (platform !== 'linux') throw ErrorRegistry.createError('UNINSTALL_NATIVE_UNSUPPORTED', { params: { platform } }); }

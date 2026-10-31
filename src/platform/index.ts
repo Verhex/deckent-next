@@ -1,4 +1,5 @@
 export { PACKAGE_NAME, PACKAGE_VERSION, displayAddress } from '#platform/core/common/index.js';
+export { enableDeckentCompileCache, resolveGlobalStateRoot } from '#platform/core/state-root/index.js';
 export { resolveLocale, t, currencyAmountText, clockText } from '#platform/core/i18n/index.js';
 export type { Locale, MessageKey } from '#platform/core/i18n/index.js';
 export { PRODUCT_LAYOUT_REGISTRY, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -43,7 +44,7 @@ export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSc
 export { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern, type StepBudget } from '#platform/core/validate/index.js';
 export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
-export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
+export { CORE_SCHEMA, TERMINAL_SCOPE_ID_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
 export { createDefaultConfig, mergeConfigLayers } from '#platform/core/config/index.js';
 export { ConfigValidationError, configIssue } from '#platform/core/config/index.js';
@@ -53,7 +54,7 @@ export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
-export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from '#platform/core/config/index.js';
+export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, loadConfigTerminalLaunch, clearConfigCache, restoreHoldPath, uninstallHoldPath, assertNoUninstallHold, uninstallRetired, assertNotRetired, retireInstallation, reopenInstallation } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';

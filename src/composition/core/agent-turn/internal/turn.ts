@@ -102,7 +102,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (command.reasoning === 'off' && !thinkingSwitch) throw ErrorRegistry.createError('AGENT_TURN_REASONING_UNSUPPORTED');
   const roundThinking = command.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {};
   // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
-  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout, fullAccess), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
+  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout, fullAccess, options.env), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
   // A call the owner did not approve sees the write floor read-only in a sandbox; in full access only the configuration file stays so.
   const selfSource = await isSelfSourceProject(projectRoot), authority = agentAuthorityPaths(projectRoot, context.layout), writeFloor = agentTurnWriteFloor(authority, fullAccess, selfSource);
   // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area. The area is held from before it is opened until the turn ends (Astra 2149): every exit below releases it in `finally`.
@@ -139,7 +139,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const sandboxLayout = workspace && agentShellSandboxLayout(projectRoot, context.layout, workspace.scope, writeFloor, fullAccess, scratch?.dir ?? null, options.env ?? process.env);
     const shell = workspace && sandboxLayout ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel, language,
-      config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess, authority, selfSource: selfSource && !fullAccess, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
+      config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout, options.env), fullAccess, authority, selfSource: selfSource && !fullAccess, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
       sandboxes: host.shellSandboxes(sandboxLayout), sealed: sealedRootEntryRefused(projectRoot, sandboxLayout.hardFloor) }) : null;
     const principalKey = principalKeyOf(context.principal);
     // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.

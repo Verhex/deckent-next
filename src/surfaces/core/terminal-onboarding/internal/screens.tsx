@@ -13,10 +13,20 @@ import { firstCommitScreen } from './first-commit.js';
 /** The same session drives first open and /setup; no Workline/composer is mounted in this loop. */
 export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false, focus?: OnboardingFocus, conversationNotice?: string): Promise<FirstTaskIntent | null> {
   if (io.signal?.aborted) return null;
+  return (await prepareOnboardingSession(port, revisit, focus)).show(ui, io, conversationNotice);
+}
+/** alpha.60 B: the half of an open that draws nothing — the person check, the one observation and its settle — so the opening runs it after the
+ * first frame and knows how many steps wait (`total`, 0: none) before a card takes the terminal; `show` runs the cards of that same session. */
+export async function prepareOnboardingSession(port: OnboardingPort, revisit = false, focus?: OnboardingFocus, signal?: AbortSignal) {
   await port.assertPerson();
   // One observation per open: settling writes (forgotten deferrals, reconciled intents) and the settled snapshot is the one shown and shared.
-  const session = createOnboardingSession(port, await port.observe({}), revisit, focus);
-  await session.settle();
+  // A closed terminal (`signal`) ends the observation and starts no settle write.
+  const observed = await port.observe({}, signal); signal?.throwIfAborted();
+  const session = createOnboardingSession(port, observed, revisit, focus, signal), model = await session.settle();
+  return { total: model.steps.length ? model.total : 0, snapshot: model.snapshot,
+    show: (ui: OnboardingUi, io: CliCardIo, conversationNotice?: string) => showOnboardingSession(session, port, ui, io, conversationNotice) };
+}
+async function showOnboardingSession(session: ReturnType<typeof createOnboardingSession>, port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, conversationNotice?: string): Promise<FirstTaskIntent | null> {
   let shown = false;
   while (!io.signal?.aborted) {
     const model = session.model(), step = model.steps[0], locale = io.locale;

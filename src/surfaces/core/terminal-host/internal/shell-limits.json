@@ -1,0 +1,5 @@
+{
+  "$comment": "alpha.60 C: the launch shell keeps at most queuedLines sent lines while the host loads; later lines are dropped with one visible note.",
+  "schemaVersion": 1,
+  "queuedLines": 8
+}

@@ -20,16 +20,17 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   const installationId = identity.value.installationId, globalRoot = dirname(await resolveGlobalConfigReadPath(options.env, options.platform));
   const projectData = join(config.projectRoot, DECKENT_DIR), bounds = config.installation.packageMeasurement;
   const rooted = layout.root === globalRoot || layout.root === projectData, env = options.env ?? process.env;
-  const candidates = (['scratch', 'treeScanCache'] as const).filter(resource => rooted
+  const candidates = (['scratch', 'treeScanCache', 'compileCache'] as const).filter(resource => rooted
     && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && inside(layout.root, productResourcePath(layout, resource)));
   const tracked = await configuredTracking(config);
   const protectedPaths = [...new Set([...(layout.root === projectData ? [] : [projectData]), layout.bootstrapConfigPath, ...Object.keys(layout.resources)
     .filter(resource => !candidates.includes(resource as typeof candidates[number])).map(resource => productResourcePath(layout, resource as ProductResource))])];
   // Ownership evidence names the resource owner's membership rule; the fresh scan's member version is what a removal may delete.
-  const owned = candidates.map(resourceId => { const members = removalRegistry.cacheMembers[resourceId] ?? [];
+  const witness = { ...removalRegistry.cacheWriterWitness, directory: PRODUCT_LAYOUT_REGISTRY.compileCacheWritersDirectory, fence: PRODUCT_LAYOUT_REGISTRY.compileCacheRemovalFence }, writersMember = witness.directory.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'); // Astra 2862 R2: the writer records are a compile-cache member, removed after every recorded writer ended (the target waits)
+  const owned = candidates.map(resourceId => { const named = removalRegistry.cacheMembers[resourceId] ?? [], members = resourceId === witness.resourceId && named.length === 1 ? [`^(?:${named[0]!.slice(1, -1)}|${writersMember})$`] : named;
     return { resourceId, path: productResourcePath(layout, resourceId), ownershipDigest: hash([installationId, layout.revision, resourceId, members]), members }; });
   const target = new InstallationCacheRemovalTarget(hash([installationId, layout.root]), owned, protectedPaths,
-    { maxEntries: bounds.maxFiles, maxDepth: bounds.maxDepth }, work => work());
+    { maxEntries: bounds.maxFiles, maxDepth: bounds.maxDepth }, work => work(), undefined, witness);
   const resources: UninstallResource[] = [];
   for (const resource of Object.keys(layout.resources) as ProductResource[]) {
     const locator = productResourcePath(layout, resource), disposable = owned.find(item => item.resourceId === resource);

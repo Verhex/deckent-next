@@ -302,8 +302,8 @@ for (const file of [...srcFiles, ...appFiles]) {
     if (!allowed.includes(to)) fail('direction', `${rel(file)}:${imp.line}`, `${from} → ${to} is not allowed (allowed: ${allowed.join(', ') || 'none'})`);
     if (arch.imports?.enforce && !imp.aliased && !from.startsWith('apps/')) fail('import-style', `${rel(file)}:${imp.line}`, `cross-package import must use the ${arch.imports.aliasPrefix}<pkg>/index.js alias (got ${imp.spec})`);
     const isIndex = /^src\/[^/]+\/index\.ts$/.test(targetRel) || /^src\/[^/]+\/index$/.test(targetRel);
-    // The extension entry may lazily reach the listed unit indexes (the CLI runner), which the SDK entry must never load.
-    const extensionUnit = rel(file) === arch.guards?.publicExtensions?.entry && (arch.guards.publicExtensions.unitImports ?? []).some(unit => targetRel === `${unit}/index.ts`);
+    // The extension entry may lazily reach the listed unit indexes (the CLI runner), which the SDK entry must never load; the CLI bootstrap (P5a) its listed unit.
+    const extensionUnit = [arch.guards?.publicExtensions, arch.guards?.cliBootstrap].some(guard => rel(file) === guard?.entry && (guard.unitImports ?? []).some(unit => targetRel === `${unit}/index.ts`));
     if (!isIndex && !extensionUnit) fail('public-api', `${rel(file)}:${imp.line}`, `cross-package import must target src/${to}/index.ts (got ${imp.spec})`);
     if (targetRel.includes('/internal/')) fail('internal', `${rel(file)}:${imp.line}`, `internal/ module imported from another package`);
     const importedBy = arch.packages[to]?.importedBy;

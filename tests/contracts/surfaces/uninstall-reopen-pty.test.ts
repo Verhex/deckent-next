@@ -50,10 +50,17 @@ describe.skipIf(process.platform !== 'linux' || !existsSync(cli))('uninstall kee
       // The card listens once its key hint is drawn; the moved choice is confirmed only once it is shown.
       const notNow = await pty(['--lang', 'en'], [['↑↓ choose', '\x1b[B'], ['› 2. Not now', '\r', 'fresh']], true);
       expect(notNow.status, notNow.output).toBe(0); expect(await lstat(marker)).toBeTruthy(); expect(await service()).toContain('LOCAL_RUNTIME_UNAVAILABLE');
+      expect(notNow.output).not.toContain('Preparing…'); // alpha.60 C: a retired folder keeps the old path (no launch shell)
       // Continue: the marker is cleared and the terminal starts the service before onboarding opens (the view is stopped there; the service keeps running).
       const reopened = await pty(['--lang', 'en'], [['↑↓ choose', '\r'], ['Permission settings', '', 'fresh']], false);
       await expect(lstat(marker), reopened.output).rejects.toMatchObject({ code: 'ENOENT' });
       expect(await service()).toBe('running');
-    } finally { await run(['runtime', 'shutdown', '--reason', 'test teardown', '--json']).catch(() => undefined); }
+    } finally {
+      // Teardown waits for the started service to end, not only for its accepted shutdown: a process still exiting writes its own state
+      // (the compile cache flush at exit, alpha.60 A), which raced the folder removal under load.
+      const pid = await run(['runtime', 'describe', '--json']).then(result => (JSON.parse(result.stdout) as { processId?: number }).processId, () => undefined);
+      await run(['runtime', 'shutdown', '--reason', 'test teardown', '--json']).catch(() => undefined);
+      for (const until = Date.now() + 20_000; pid && Date.now() < until;) { try { process.kill(pid, 0); } catch { break; } await new Promise(done => setTimeout(done, 100)); }
+    }
   }, 300_000);
 });

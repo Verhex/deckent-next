@@ -83,7 +83,7 @@ export interface UninstallApplicationPorts {
   /** The runtime service: its describe answer, the user unit whose main process it is (K4 checks), governed shutdown and `disable --now`. */
   readonly service?: { withStoppedCustody?<T>(confirmed: UninstallPlan['service'], work: () => Promise<T>): Promise<T>; readonly budgetMs: number; describe(signal: AbortSignal): Promise<RuntimeServiceDescriptor>;
     unit(processId: number): Promise<{ readonly unit: string; readonly unitDisable: 'eligible' | 'command-only'; readonly command: string; readonly links?: readonly string[]; readonly unitFile?: string | null } | null>;
-    shutdown(): Promise<unknown>; /** `disable --now` of the confirmed unit; its owner re-reads unit file and links right before (R3). */ disable(confirmed: UninstallPlan['service']): Promise<NonNullable<UninstallResult['unit']>> };
+    shutdown(): Promise<unknown>; /** `disable --now` of the confirmed unit; its owner re-reads unit file and links right before (R3). */ disable(confirmed: UninstallPlan['service']): Promise<NonNullable<UninstallResult['unit']>>; /** Astra 2860 R2: the stopped process has ended. */ exited?(processId: number): Promise<boolean> };
 }
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const queries = UNINSTALL_TIERS.flatMap(tier => [false, true].flatMap(force => [false, true].map(disableUnit => ({ schemaVersion: 2 as const, tier, force, disableUnit }))));
@@ -109,7 +109,9 @@ export class UninstallApplication {
     const gone = async (instance: string | null) => { for (let now = await answer(); now && now.instanceId === (instance ?? now.instanceId); now = await answer()) {
       if (deadline.expired()) throw refused();
       await settle.wait(this.registry.waitPollMs); } };
-    if (first) { await service.shutdown(); await gone(first.instanceId); }
+    // Astra 2860 R2: endpoint gone ≠ process gone (Node writes the compile cache at exit, after the ledger is released): wait for the process too, same budget.
+    const ended = async (pid: number | undefined) => { if (pid === undefined || !service.exited) return; while (!await service.exited(pid)) { if (deadline.expired()) throw refused(); await settle.wait(this.registry.waitPollMs); } };
+    if (first) { await service.shutdown(); await gone(first.instanceId); await ended(first.processId); }
     const stopped = async () => {
       // R4 (lead 2026-10-28): a new instance after the shutdown may have accepted work: no `--now`, the person gets the command (K4 absence rule).
       if (await answer()) throw refused();

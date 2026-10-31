@@ -46,6 +46,18 @@
       "targetKind": "installation-cache"
     },
     {
+      "id": "compileCache",
+      "owner": "installation",
+      "kind": "path",
+      "removeFrom": "keep-data",
+      "operation": "installation.remove-cache",
+      "after": [
+        "service",
+        "worker-image"
+      ],
+      "targetKind": "installation-cache"
+    },
+    {
       "id": "bwrap-realm",
       "owner": "installation",
       "kind": "path",
@@ -80,6 +92,7 @@
         "worker-image",
         "scratch",
         "treeScanCache",
+        "compileCache",
         "bwrap-realm",
         "build-cache",
         "conversation"
@@ -97,6 +110,7 @@
         "worker-image",
         "scratch",
         "treeScanCache",
+        "compileCache",
         "bwrap-realm",
         "build-cache"
       ],

@@ -1,14 +1,14 @@
 import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
-import { serviceAbsenceWatch, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+import { lazySessionStore, serviceAbsenceWatch, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigMetadata, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, clockText, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead, type ProjectInstructionPort } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { slashWindowLabels, worklineLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -192,11 +192,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.help) { emit(t('cli.help.terminal', {}, locale), sinks); return; }
   const tty = ttyState(context);
   const options: ConfigLoadOptions = { env };
-  let config = await loadConfig(root, options) as Record<string, unknown> & { cli: { invocationInputMaxBytes: number }; language?: string; inspection: { workers: { heartbeatMs: number } };
+  const config = await loadConfig(root, options) as Record<string, unknown> & { cli: { invocationInputMaxBytes: number }; language?: string; inspection: { workers: { heartbeatMs: number } };
     approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
-  let chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
   if (parsed.action === 'chat-plan') {
     if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
     emit(chat, { ...sinks, json: true, render: value => formatValue(value) });
@@ -227,6 +227,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
   const accessNotices: { level: 'info' | 'warning' | 'error'; text: string }[] = [];
+  // Astra 2860 R1: a launch shell the person closed ends the launch before each effect (identity admission, service start, setup, sessions).
+  const left = () => context.terminalShell !== undefined && !context.terminalShell.host.open();
+  if (left()) return;
   if (tty.stdin && tty.stdout) {
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
@@ -246,64 +249,67 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
-  if (!await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options)) return;
+  if (left() || !await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options) || left()) return;
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
-  let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null, configLine: string | null = null;
-  if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {
-    try {
-      const service = await context.ensureRuntimeService(root, options);
-      const stop = service.shutdownAvailable ? t('terminal.service.stopHint', {}, locale) : t('terminal.service.stopUnavailable', {}, locale);
-      serviceLine = service.mode === 'started'
-        ? t('terminal.service.started', { pid: service.pid ?? '-', log: service.logPath ?? '-', stop }, locale)
-        : t('terminal.service.connected', { instance: service.instanceId, stop }, locale);
-      // A service started from another build answers with that build's code; say so instead of failing later (Jev 8bb2a0c7).
-      const skew = runtimeBuildSkew(readBuildIdentity(), service.build);
-      // A restart-apply section changed since the service started (measured against the service's own fingerprint, never assumed).
-      if (runtimeConfigFreshness(service.configDigest, config) === 'stale') configLine = t('terminal.service.configStale', {}, locale);
-      if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
-    } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
-  }
-  const sessionStore = parsed.action === 'workline' && context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
-  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
-  const previousConversation = sessions && (await sessions.list().catch(() => [])).some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined;
-  if (previousConversation) accessNotices.push({ level: 'info', text: previousConversation });
+  // alpha.60 B (P3 draw-first): nothing below waits before the frame. One single-flight start serves the opening and a turn's restart (M-09); its
+  // own LifecycleDeadline bounds it. Sessions, history, instructions and setup open on first use or after the frame.
+  const lazy = <T>(open: () => Promise<T>) => { let made: Promise<T> | undefined; return () => made ??= open(); }, closing = new AbortController(); // closing: the view returned or its shell closed
+  if (context.terminalShell) void context.terminalShell.host.wait().then(() => closing.abort(), () => closing.abort()); // Astra 2862 R1: a later shell exit ends the launch's preparation too
+  let starting: Promise<Awaited<ReturnType<NonNullable<typeof context.ensureRuntimeService>>>> | null = null;
+  const ensure = () => starting ??= context.ensureRuntimeService!(root, options).finally(() => { starting = null; });
+  const service = context.ensureRuntimeService && autostart && tty.stdin && tty.stdout ? ensure() : null, settled = service ? service.then(() => true, () => false) : Promise.resolve(false);
+  const serviceNotices = service ? service.then(started => {
+    const stop = started.shutdownAvailable ? t('terminal.service.stopHint', {}, locale) : t('terminal.service.stopUnavailable', {}, locale);
+    // A service started from another build answers with that build's code; say so instead of failing later (Jev 8bb2a0c7).
+    const skew = runtimeBuildSkew(readBuildIdentity(), started.build);
+    // A restart-apply section changed since the service started (measured against the service's own fingerprint, never assumed).
+    return [{ level: 'info' as const, text: started.mode === 'started' ? t('terminal.service.started', { pid: started.pid ?? '-', log: started.logPath ?? '-', stop }, locale) : t('terminal.service.connected', { instance: started.instanceId, stop }, locale) },
+      ...(skew ? [{ level: 'warning' as const, text: t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale) }] : []),
+      ...(runtimeConfigFreshness(started.configDigest, config) === 'stale' ? [{ level: 'warning' as const, text: t('terminal.service.configStale', {}, locale) }] : [])];
+  }, (error: unknown) => [{ level: 'error' as const, text: errorText(error, locale) }]) : Promise.resolve([]);
+  // Presence follows the switch the store reads (`terminal.persistHistory`); the store opens on its first use.
+  const sessionStore = parsed.action === 'workline' && context.openTerminalSessions && (config['terminal'] as { persistHistory?: unknown } | undefined)?.persistHistory !== false
+    ? lazySessionStore(() => settled.then(() => context.openTerminalSessions!(root, options, context.rootResolution?.folder ?? ''))) : null, sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null; // Astra 2858 B-R3: identity → service attempt → session store
+  const previous = lazy(() => sessions ? sessions.list().then(list => list.some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined, () => undefined) : Promise.resolve(undefined));
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
-    const surface = await import('#surfaces/core/terminal-onboarding/index.js');
+    const surface = await import('#surfaces/core/terminal-onboarding/index.js'), openOnboarding = context.openOnboarding;
+    const port = lazy(() => openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options));
+    // Astra 2834 R1: onboarding cards copy through the record projection, which also masks this config's known secrets.
+    const io = { locale, env, stdin: process.stdin, stdout: process.stdout, known: getConfigKnownSecrets(config), ...(context.signal ? { signal: context.signal } : {}) };
+    const ui = (): import('#surfaces/core/terminal-onboarding/index.js').OnboardingUi => {
+      const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
+      return { locale, provider: async () => {
+        if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+        await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
+          context.providerConnect?.kinds.filter(row => row.billing === 'subscription').map(row => row.id) ?? [], io);
+      },
+      instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
+      foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' } };
+    };
     // Onboarding is presentation: an unreadable observation never keeps the Workline closed; every action there keeps its own owner's checks.
-    try {
-      const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
-      // Astra 2834 R1: onboarding cards copy through the record projection, which also masks this config's known secrets.
-      const io = { locale, env, stdin: process.stdin, stdout: process.stdout, known: getConfigKnownSecrets(config), ...(context.signal ? { signal: context.signal } : {}) };
-      let opened: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot | undefined;
-      const run = async (revisit: boolean, signal?: AbortSignal, focus?: import('#surfaces/core/terminal-onboarding/index.js').OnboardingFocus) => {
-        const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
-        return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale, observed: snapshot => { opened = snapshot; },
-          provider: async () => {
-            if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-            await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
-              context.providerConnect?.kinds.filter(row => row.billing === 'subscription').map(row => row.id) ?? [], io);
-          },
-          instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
-          foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
-        }, { ...io, ...(signal ? { signal } : {}) }, revisit, focus, previousConversation);
-      };
-      onboarding = { initial: await run(false), open: (signal, focus) => run(true, signal, focus), modelDraft: t('onboarding.model.draft', {}, locale) };
-      // P2: the settled opening snapshot when no step was shown; after a person's answer or action the state is observed again.
-      const deferred = surface.deferredOnboardingNotice(opened ?? await port.observe({}), locale);
-      if (deferred) accessNotices.push({ level: 'info', text: deferred });
-    } catch (error) {
+    const unavailable = (error: unknown) => {
       if (context.signal?.aborted) throw error;
       const { code: raw, params: p } = (error ?? {}) as { code?: unknown; params?: Readonly<Record<string, unknown>> }, code = typeof raw === 'string' ? raw : '-', family = p?.['family'], field = p?.['field']; // a refused fact names its family and field
-      accessNotices.push({ level: 'warning', text: typeof family === 'string' && typeof field === 'string' ? t('onboarding.session.unavailableField', { code, family, field }, locale) : t('onboarding.session.unavailable', { code }, locale) });
-    }
-    config = await loadConfig(root, { ...options, force: true }) as typeof config;
-    chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+      return { level: 'warning' as const, text: typeof family === 'string' && typeof field === 'string' ? t('onboarding.session.unavailableField', { code, family, field }, locale) : t('onboarding.session.unavailable', { code }, locale) };
+    };
+    // P2: the settled opening snapshot when no step is shown; after a person's answer or action the state is observed again.
+    const deferred = (snapshot: import('#surfaces/core/terminal-onboarding/index.js').OnboardingSnapshot) => { const text = surface.deferredOnboardingNotice(snapshot, locale); return text ? { level: 'info' as const, text } : null; };
+    const opening = settled.then(async () => {
+      closing.signal.throwIfAborted(); const prepared = await (await surface.loadOnboardingScreens()).prepareOnboardingSession(await port(), false, undefined, closing.signal);
+      return { total: prepared.total, notice: prepared.total ? null : deferred(prepared.snapshot), show: async (signal: AbortSignal) => {
+        try { return { intent: await prepared.show(ui(), { ...io, signal }, await previous()), notice: deferred(await (await port()).observe({})) }; } catch (error) { return { intent: null, notice: unavailable(error) }; }
+      } };
+    }).catch((error: unknown) => ({ total: 0, notice: unavailable(error), unavailable: true as const, show: async () => ({ intent: null, notice: null }) }));
+    onboarding = { opening, modelDraft: t('onboarding.model.draft', {}, locale), waiting: count => t('terminal.opening.setupWaiting', { count }, locale), pending: () => io.stdin.readableLength > 0,
+      open: async (signal, focus) => (await surface.loadOnboardingScreens()).runOnboardingSession(await port(), ui(), { ...io, signal }, true, focus, await previous()) };
   }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
   const modelName = chat?.status === 'ready' && chat.reference && context.inspectModelBinding ? await context.inspectModelBinding(root, chat.reference, options).then(binding => binding.status === 'declared' ? binding.definition.model.nativeId : null, () => null) : null;
   const chatName = modelName && chat?.reference ? `${modelName} · ${providerDisplayName(chat.reference.providerId, context.providerConnect, locale)}` : chatTarget(chat, locale); // FIX9: names as `deckent models` shows them; the exact reference stays in /model details
-  const instructionPort = context.openProjectInstructions ? await context.openProjectInstructions(root, options) : undefined;
+  const instructions = context.openProjectInstructions ? lazy(() => context.openProjectInstructions!(root, options)) : null;
+  const instructionPort: ProjectInstructionPort | undefined = instructions ? { inspect: async () => (await instructions()).inspect(), trust: async digest => (await instructions()).trust(digest), decline: async digest => (await instructions()).decline?.(digest),
+    declined: async digest => await (await instructions()).declined?.(digest) ?? false, preview: async (bridges, skeleton) => (await instructions()).preview(bridges, skeleton), initialize: async preview => (await instructions()).initialize(preview) } : undefined;
   const instructionLabels = projectInstructionLabels(locale);
   let lineSources: readonly string[] = [];
   const withInstructions = async <T extends { readonly role: string }>(messages: readonly T[]) => {
@@ -318,8 +324,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const turn = async (messages: readonly ChatTurnMessage[], signal?: AbortSignal) =>
     completeTerminalChat(root, { scopeId, messages: parsed.action === 'session' ? await withInstructions(messages) : messages }, options, signal);
   if (parsed.action === 'session') {
+    const serviceLine = service ? (await serviceNotices)[0]?.text ?? null : null;
     for (const notice of accessNotices) emit(notice.text, sinks);
-    if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
+    if (serviceLine) emit(serviceLine, sinks);
     const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) =>
       (async function* () { yield* context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages) }, options, signal); })() : undefined;
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
@@ -338,17 +345,19 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // it again on every turn and call). A closed explicit mode offers the host PRE-9 card; a stored mode without its grant starts standart.
   let fullAccess = false;
   if (parsed.fullAccess && !modePort) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
-  let view = modePort ? await (parsed.fullAccess ? modePort.inspect(context.signal) : modePort.inspect(context.signal).catch(() => null)) : null;
-  if (parsed.fullAccess && !view?.fullAccess) {
-    if (!modePort?.open) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
-    if (!await modePort.open('full-access')) return;
-    view = await modePort.inspect(context.signal);
-    if (!view.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  // alpha.60 B: only `--full-access` is decided before the frame (it waits for the service); a stored start mode is read after it (`useWorklineMode`).
+  if (parsed.fullAccess && modePort) {
+    await settled;
+    let view = await modePort.inspect(context.signal);
+    if (!view.fullAccess) {
+      if (!modePort.open) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+      if (!await modePort.open('full-access')) return;
+      view = await modePort.inspect(context.signal);
+      if (!view.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+    }
+    // A mode, stated calmly (owner 2026-10-18): the warning tone, not the error tone; the facts are unchanged.
+    fullAccess = true; accessNotices.push({ level: 'warning', text: t('terminal.fullAccess.banner', {}, locale) });
   }
-  if (parsed.fullAccess || (view?.mode === 'full-access' && view.fullAccess)) fullAccess = true;
-  else if (view?.mode === 'full-access') accessNotices.push({ level: 'error', text: t('terminal.fullAccess.startDenied', {}, locale) });
-  // A mode, stated calmly (owner 2026-10-18): the warning tone, not the error tone; the facts are unchanged.
-  if (fullAccess) accessNotices.push({ level: 'warning', text: t('terminal.fullAccess.banner', {}, locale) });
   const ledger = createWorklineLedgerPorts({ root, scopeId, options, locale, workerHeartbeatMs: config.inspection.workers.heartbeatMs, renderRunCancellation: ports.renderRunCancellation,
     approvalPageSize: config.approvals.pageSize,
     ...(context.inspectWorkers ? { inspectWorkers: context.inspectWorkers } : {}),
@@ -379,19 +388,20 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatName }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
-  const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
-  // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
-  // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
-  if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
+  const history = context.openTerminalHistory ? lazy(() => context.openTerminalHistory!(root, options).catch(() => null)) : null;
+  const inputHistory = history ? { load: async () => await (await history())?.load() ?? [], append: async (entry: Parameters<NonNullable<Awaited<ReturnType<typeof history>>>['append']>[0]) => { await (await history())?.append(entry); } } : null;
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   // K6 = A: a service that stops itself when idle counts this open terminal as a client only through this beat (clients connect per request). BeUser D-05: the beat also tells the person, once per absence, that the service stopped under this terminal.
-  const serviceWatch = serviceAbsenceWatch(() => context.describeRuntimeService!(root, options), !!serviceLine && !serviceFailed, () => t('terminal.service.lost', {}, locale)), beat = context.describeRuntimeService && tty.stdin && tty.stdout ? setInterval(() => { void serviceWatch.tick(); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
+  const serviceWatch = serviceAbsenceWatch(() => context.describeRuntimeService!(root, options), false, () => t('terminal.service.lost', {}, locale)), beat = context.describeRuntimeService && tty.stdin && tty.stdout ? setInterval(() => { void serviceWatch.tick(); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
+  // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
+  // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`. The watch is armed by the same answer.
+  void settled.then(reached => { if (reached) { serviceWatch.arm(); if (context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined); } });
   try { await runTerminalWorkline({
     context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
-    labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatName }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
+    labels: { ...worklineLabels(locale, t('terminal.status.chat', { target: chatName }, locale)),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale), delivery: deliveryWindowLabels(locale) }) },
     ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     // Owner 2026-10-30: in a person's terminal (setup cards at hand) the status row says a missing model is set up with /setup.
@@ -455,9 +465,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
         palette: resolveWorklinePalette(theme.tier, theme.theme), errorText: error => surface.monitorFailureText(error, locale),
         ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}) });
     } } : {}),
-    ...(serviceLine || accessNotices.length || chat?.skippedDefault ? { openingNotices: [...accessNotices, ...(chat?.skippedDefault ? [{ level: 'warning' as const, text: t('terminal.model.defaultNotHere', {}, locale) }] : []), ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
-      ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'warning' as const, text: configLine }] : [])] } : {}),
-    serviceLost: serviceWatch.subscribe, ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await context.ensureRuntimeService!(root, options)).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
+    ...(accessNotices.length || chat?.skippedDefault ? { openingNotices: [...accessNotices, ...(chat?.skippedDefault ? [{ level: 'warning' as const, text: t('terminal.model.defaultNotHere', {}, locale) }] : [])] } : {}),
+    opening: { ready: service ?? Promise.resolve(), wait: t('terminal.opening.wait', {}, locale), notices: () => Promise.all([previous(), serviceNotices]).then(([text, notices]) => [...(text ? [{ level: 'info' as const, text }] : []), ...notices]) },
+    serviceLost: serviceWatch.subscribe, ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await ensure()).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
       const building = await context.runningImageBuild?.(root, options).catch(() => false) === true, restarted = await context.restartRuntimeService!(root, options);
       return [t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale), ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n');
     }, restartNotes: async () => await context.runningImageBuild?.(root, options).catch(() => false) === true ? [t('cli.runtime.card.imageBuild', {}, locale)] : [] } : {}),
@@ -465,7 +475,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(ledger ? { ledger } : {}), ...(deliveryPort && !pickerNeedsTextFallback(env, true) ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
-    ...(context.signal ? { signal: context.signal } : {}),
-  }); } finally { if (beat) clearInterval(beat); }
+    ...(context.signal ? { signal: context.signal } : {}), ...(context.terminalShell ? { shell: context.terminalShell } : {}),
+  }); } finally { if (beat) clearInterval(beat); closing.abort(); await sessionStore?.idle(); } // a setup observation still running ends now; a session write in flight settles first
 }
 import { brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';

@@ -49,6 +49,31 @@ MCP client" for the stdio MCP entry. Measured by the lane: `deckent --version` 4
 `adapters/index.js` barrel on process entries (remaining cost is ESM compile/resolve); a compile cache is a separate decision.
 (Done differently by PB-COLDSTART, alpha.50: the host and adapter families load lazily; see the decision log, 2026-10-20.)
 
+**Compile cache (P5a, owner 2026-10-31).** The `deckent` bin and the runtime service entry (`composition/core/cli/internal/entry.ts`, unchanged
+path for `bin` and runtime-autostart) are a bootstrap that loads only node: built-ins and the `platform/core/state-root` unit (with the dependency-free `common`
+unit's registry; arch `guards.cliBootstrap`; its own unit so node-free units such as the i18n renderer never reach node: through `common`), calls `enableDeckentCompileCache()` and then imports the CLI (`cli-main.ts`). The cache is the registered layout resource
+`compileCache` (`state/compile-cache`) under the global state root, resolved by the state-root unit's `resolveGlobalStateRoot`, which the host unit's
+`globalStateRoot`/`resolveGlobalScopePaths` also use. It is used only at the conventional global root (the one without
+`DECKENT_GLOBAL_HOME`/`DECKENT_HOME`; a non-default root runs without it, since no agent floor seals every such root), and every agent floor
+seals that conventional root even before it exists (the open view creates it 0700, so nothing can be planted for a later CLI; doctor creates nothing,
+so its fixed self-test leaves an absent conventional root other than the configured one out of its view instead of not running). Only the runtime service and the bare terminal fill it, and only below an existing global root of this user; every other command reads it (`readOnly`, Node ≥ 26.8; on Node 24 it runs without it), so read-only commands stay
+byte-identical on disk. It is used only as a chain of real directories of this user (root without group/other write; `state`, the cache and its per-version directories owner-only; no link; the cache's real path is its own path); `NODE_DISABLE_COMPILE_CACHE` or the registry's
+`DECKENT_DISABLE_COMPILE_CACHE` turns it off. Agent shells: global roots are hidden (outside the project) or sealed (inside it; the hard floor
+counts every global root's registry resources as product paths, and the agent edit/read deny lists name the same in-project paths from the
+same global-root derivation). Uninstall removes Node's per-version directory as a cache member when the
+installation's root is the global root, only after every recorded cache writer has ended: each filling process (runtime service, bare
+terminal) records itself as a new exclusive leaf (`writers/<pid>-<start>-<random>`, created `wx` 0600 — an existing name, link or not, is never
+opened; ended writers' plain single-link records are unlinked by the next filling start) before Node can write the cache at its exit, and only then
+looks for the removal fence (`removing`); the removal creates that fence exclusively first, then waits for the recorded processes (registry
+`cacheWriterWitness` bound) — Dekker order: the remover sees the record or the writer sees the fence, withdraws its record and runs without the
+cache. An unreadable record or a writer still running at the bound refuses with nothing removed and the fence kept (a rerun continues); the
+records are a member removed with the cache, the fence last. Known limit (owner 2026-10-31, Astra 2867 R2-b): a writer that passes its first
+check and creates its record after the remover's final scan can leave the records directory non-empty, so that one removal ends
+`EFFECT_TARGET_UNKNOWN` with the cache partly removed (no data outside the cache, no false completion; a rerun completes); an atomic
+rename fence of the records directory is a follow-up card. Uninstall also waits for
+the stopped service's own process within its stop budget; a project installation keeps the shared global root. Enterprise executables can call the same function
+from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
+
 The shared-ledger `model-invocation-process` contract test (whose temporary 45 s bound this slice removed to the 30 s default) exceeded
 that default on a GitHub runner roughly 2× slower than local; `DECKENT_TEST_STARTUP_COST=1` records each phase (SDK import/client, CLI
 client, runtime ready/stop, invoke-to-provider, durable settlement, MCP ready/call/close, cleanup) opt-in. The measured root cause was 64

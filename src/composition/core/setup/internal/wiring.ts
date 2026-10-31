@@ -15,7 +15,7 @@ import { executionRegistrySchema } from '#domain/index.js';
 import { installExecutionEnvironment } from './install.js';
 import { observeSetupPermissions, applySetupPermissions } from './permissions.js';
 
-type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }> }>;
+type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }>; signal?: AbortSignal }>; // signal (alpha.60 B): terminal closed → probes killed, no further step, no write
 const reachableDocker = (facts: ExecutionFacts) => facts.runtimes.find(row => row.support === 'supported' && row.daemon === 'reachable')?.path ?? null;
 const toolchainsHome = (config: Awaited<ReturnType<typeof loadConfig>>) => join(productResourcePath(config.productLayout, 'workspaces'), 'toolchains');
 /** Second-provider profile add: the CLI host supplies the registry owner, so setup never reaches the coding template composition itself. */
@@ -37,8 +37,8 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
   const observeSetup = async (root: string, options: Options) => {
     const env = options.env ?? process.env, config = await loadConfig(root, { env, heal: false }).catch(() => null);
     const credential = (id: string) => { try { return nativeProviderSpec(id as Parameters<typeof nativeProviderSpec>[0]); } catch { return null; } };
-    const [execution, coding] = await Promise.all([detectExecutionFacts({ env }),
-      detectCodingFacts({ root, env, workTargets: config?.execution?.workTargets?.targets.map(target => target.path) ?? [], ports: { credential } })]);
+    const signal = options.signal, [execution, coding] = await Promise.all([detectExecutionFacts({ env, ...(signal ? { signal } : {}) }),
+      detectCodingFacts({ root, env, workTargets: config?.execution?.workTargets?.targets.map(target => target.path) ?? [], ports: { credential }, ...(signal ? { signal } : {}) })]); signal?.throwIfAborted();
     // BR1: the worker image (configured, else this installation's newest receipt; a read-only `image inspect`) and the Git the settings would name.
     const worker = config && await observeWorkerImage({ home: toolchainsHome(config), executable: config.execution?.docker?.executable ?? reachableDocker(execution), configured: config.execution?.docker?.imageId ?? null, git: coding.gitPath });
     const acquisition = config ? await inspectConfiguredWorkerImage(root, { env }) : null;
@@ -49,7 +49,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
     const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
       hasWorkerKind(context) ? stage.evaluate(context) : { state: 'skipped' as const, reason: { code: 'setup.execution.noWorkKind', params: {} } } })) };
-    const recovery = coding.repository === 'present' ? await observeFirstCommitRecovery(root, env).catch(() => ({ state: 'unknown' as const })) : null;
+    const recovery = coding.repository === 'present' ? await observeFirstCommitRecovery(root, env).catch(() => ({ state: 'unknown' as const })) : null; signal?.throwIfAborted();
     const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily(), SETUP_PERMISSIONS_FAMILY], facts: { permissions: null, execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider, providerPending: !pins.some(pin => pin.provider === provider) } : {}), acquisition } } : {}) },
       coding: { ...coding, firstCommitRecovery: recovery?.state === 'prepared' ? 'none' : recovery?.state ?? 'none' } } });
     const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, execution: observed.firstJob.execution && worker?.image !== 'missing' };
