@@ -1,4 +1,4 @@
-import { chmodSync, lstatSync, mkdirSync, statSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
 import module from 'node:module';
 import { posix, win32 } from 'node:path';
 import { PRODUCT_LAYOUT_REGISTRY as registry } from './constants.js';
@@ -38,7 +38,8 @@ const [major = 0, minor = 0] = process.versions.node.split('.').map(Number), rea
  * P5a (owner 2026-10-31): Node's compile cache for this process in the registered `compileCache` resource under the global state root — never
  * a user cache directory: in a full-access agent shell that root is hidden or sealed read-only (agentShellHardFloor), and uninstall removes it.
  * Only at the conventional global root (a non-default DECKENT_GLOBAL_HOME/DECKENT_HOME runs without it: no floor seals every such root). Only
- * a filling call (`fills`) creates it, and only below an existing global root of this user (a call before any installation writes nothing in HOME). Used only when it is a real directory of this user with no group/other permission; otherwise, on `NODE_DISABLE_COMPILE_CACHE`
+ * a filling call (`fills`) creates it, and only below an existing global root of this user (a call before any installation writes nothing in HOME). Used only when root, `state`, the cache and its per-version directories are real directories of this user (no link; root without
+ * group/other write, the rest owner-only) and the cache's real path is its own; otherwise, on `NODE_DISABLE_COMPILE_CACHE`
  * or the registry's off switch, or without POSIX ownership (Windows), the process runs without it. Never throws. Enterprise distributions call
  * it first in their own executable with the same argv (`deckent/extensions`); modules loaded before the call are not cached.
  */
@@ -50,15 +51,18 @@ export function enableDeckentCompileCache(argv: readonly string[] = process.argv
   const conventional = resolveGlobalStateRoot({ HOME: env['HOME'], USERPROFILE: env['USERPROFILE'], HOMEDRIVE: env['HOMEDRIVE'], HOMEPATH: env['HOMEPATH'] }, platform);
   if (uid === undefined || !found.ok || !conventional.ok || found.root !== conventional.root || !write && !readOnlyCache) return 'unavailable';
   try {
-    const rootInfo = statSync(found.root);
-    if (!rootInfo.isDirectory() || rootInfo.uid !== uid) return 'unavailable';
+    // Astra A-R1: the whole chain is checked with lstat (a link anywhere refuses): the root without group/other write, `state`, the cache and each
+    // per-version directory owner-only, and the cache's real path is its own path; a missing part is made 0700 and then checked like an existing one.
+    const owned = (path: string, mask: number) => { const info = lstatSync(path); return info.isDirectory() && info.uid === uid && (info.mode & mask) === 0; };
+    if (!owned(found.root, 0o022)) return 'unavailable';
+    const api = platform === 'win32' ? win32 : posix;
     let directory = found.root;
     for (const segment of registry.resources.compileCache.split('/')) {
-      directory = (platform === 'win32' ? win32 : posix).join(directory, segment);
+      directory = api.join(directory, segment);
       if (write) try { mkdirSync(directory, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return 'unavailable'; }
+      if (!owned(directory, 0o077)) return 'unavailable';
     }
-    const info = lstatSync(directory);
-    if (!info.isDirectory() || info.uid !== uid || (info.mode & 0o077) !== 0) return 'unavailable';
+    if (realpathSync(directory) !== directory || !readdirSync(directory).every(name => owned(api.join(directory, name), 0o077))) return 'unavailable';
     const { status } = module.enableCompileCache(write ? directory : { directory, readOnly: true } as module.EnableCompileCacheOptions);
     // ALREADY_ENABLED: the person's own NODE_COMPILE_CACHE directory is in use; it is left as it is.
     if (status === module.constants.compileCacheStatus.ALREADY_ENABLED) return 'enabled';

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -90,6 +90,17 @@ it('the CLI bootstrap reaches only the common unit and the CLI none of the host 
     const other = join(home, 'other-root'); await mkdir(join(other, 'state/compile-cache'), { recursive: true, mode: 0o700 });
     run([], { DECKENT_GLOBAL_HOME: other }); run(['--help'], { DECKENT_GLOBAL_HOME: other });
     expect(await readdir(join(other, 'state/compile-cache'))).toEqual([]); expect(await listing()).toEqual(filled);
+    // Astra A-R1: every directory from the root to the cache is checked, not only the last one. A `state` link to an ordinary folder (with or without
+    // a private `compile-cache` there) and a linked root leave the cache off and the link target untouched.
+    for (const [name, leaf] of [['state-link', true], ['state-link-absent', false], ['root-link', false]] as const) {
+      const other = join(home, name), target = join(other, 'target');
+      await mkdir(target, { recursive: true, mode: 0o700 }); if (leaf) await mkdir(join(target, 'compile-cache'), { mode: 0o700 });
+      if (name === 'root-link') await symlink(target, join(other, '.deckent'));
+      else { await mkdir(join(other, '.deckent'), { mode: 0o700 }); await symlink(target, join(other, '.deckent/state')); }
+      const before = (await readdir(target, { recursive: true })).sort();
+      run([], { HOME: other }); run(['--help'], { HOME: other });
+      expect({ name, target: (await readdir(target, { recursive: true })).sort() }).toEqual({ name, target: before });
+    }
     // A cache directory others may write is never used.
     await chmod(cache, 0o755); await rm(join(cache, versioned!), { recursive: true });
     run([]);
