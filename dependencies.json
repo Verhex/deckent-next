@@ -38,7 +38,7 @@
   "dependencies": {
     "@modelcontextprotocol/client": {
       "kind": "runtime",
-      "reviewedVersion": "2.3.1",
+      "reviewedVersion": "2.4.0",
       "owners": [
         "src/adapters/core/mcp-client",
         "src/adapters/core/hub-http"
@@ -79,7 +79,7 @@
         },
         {
           "name": "fast-uri",
-          "version": "3.1.0",
+          "version": "3.1.8",
           "license": "BSD-3-Clause"
         },
         {
@@ -108,19 +108,20 @@
           "note": "Server framework layered on the official SDK; not an independent client implementation."
         }
       ],
-      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface \u2014 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
+      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface — 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
       "watch": [
         "FASTURI-OUT (owner 2026-09-29): the published package does not contain the embedded ajv/ajv-formats/fast-uri/json-schema-traverse; scripts/build-dist.mjs loads _shims and validators/ajv with their ajvProvider import replaced by a stub that throws DeckentRemovedValidatorError (MCP_DEFAULT_VALIDATOR_REMOVED), and fails the build if the metafile, shipped packages or sourcemap-embedded components name them. They remain in the installed dev/test tree (embedded[] below mirrors the installed sourcemaps).",
         "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.",
         "MCP-SCHEMA-VALIDATOR (owner 2026-09-29): the SDK's embedded @cfworker/json-schema@4.1.1 (last release 2025-01-31; cfworker#335/#337 fail-closed, #150 $dynamicRef fail-open; ReDoS through pattern) is no longer used or shipped; build-dist refuses cfWorkerProvider/@cfworker/json-schema like ajv. It remains in the installed dev/test tree (embedded[] mirrors the installed sourcemaps).",
-        "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint."
+        "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint.",
+        "2026-10-31 review (proof/ALPHA60/PAKET-2/DEPREVIEW/REPORT.md): 2.4.0 (2026-10-23) carries no security fix; seven SDK advisories 2026-09-30..10-15 were fixed at or before 2.3.0. Behaviour changes: a tool whose x-mcp-header parameter is a number is no longer listed (spec 2026-07-28), an outputSchema .meta({id}) is no longer wrapped in {result}, an invalid URI scheme in $id/$ref no longer compiles. Its nested zod copies are pinned to 4.6.7 by package.json overrides (GHSA-mrhx-c7xc-m3w5, <4.6.6)."
       ],
-      "lastReview": "2026-10-15",
-      "nextReview": "2026-10-29"
+      "lastReview": "2026-10-31",
+      "nextReview": "2026-11-14"
     },
     "@modelcontextprotocol/server": {
       "kind": "runtime",
-      "reviewedVersion": "2.3.1",
+      "reviewedVersion": "2.4.0",
       "owners": [
         "src/adapters/core/mcp-transport",
         "src/surfaces/core/mcp",
@@ -162,7 +163,7 @@
         },
         {
           "name": "fast-uri",
-          "version": "3.1.0",
+          "version": "3.1.8",
           "license": "BSD-3-Clause"
         },
         {
@@ -189,10 +190,11 @@
       "ownSolution": "We parse tool input with our own zod schemas and use only the low-level Server; an own stdio JSON-RPC server would drop ajv/zod4/eventsource/jose from the tree but take on spec tracking. The ajv default validator is out of the published package (build-dist stub, FASTURI-OUT) and the Server gets Deckent's own validator through the SDK's jsonSchemaValidator interface (MCP-SCHEMA-VALIDATOR).",
       "watch": [
         "Server dist loads the embedded ajvProvider unconditionally (shimsNode) in the installed dev/test tree; the published package loads a stub instead (FASTURI-OUT) and the Server gets Deckent's own validator explicitly (MCP-SCHEMA-VALIDATOR; the SDK's cf-worker provider is neither used nor shipped).",
-        "Three nested zod copies under the SDK packages (client and server 4.6.5, core 4.6.7 since SDK 2.3.1) until our zod 4 migration dedupes them."
+        "Three nested zod copies under the SDK packages (client and server 4.6.5, core 4.6.7 since SDK 2.3.1) until our zod 4 migration dedupes them.",
+        "2026-10-31 review (proof/ALPHA60/PAKET-2/DEPREVIEW/REPORT.md): 2.4.0 (2026-10-23) carries no security fix; seven SDK advisories 2026-09-30..10-15 were fixed at or before 2.3.0. Behaviour changes: a tool whose x-mcp-header parameter is a number is no longer listed (spec 2026-07-28), an outputSchema .meta({id}) is no longer wrapped in {result}, an invalid URI scheme in $id/$ref no longer compiles. Its nested zod copies are pinned to 4.6.7 by package.json overrides (GHSA-mrhx-c7xc-m3w5, <4.6.6)."
       ],
-      "lastReview": "2026-10-15",
-      "nextReview": "2026-10-29"
+      "lastReview": "2026-10-31",
+      "nextReview": "2026-11-14"
     },
     "ink": {
       "kind": "runtime",
@@ -324,9 +326,9 @@
         {
           "name": "zod 4",
           "package": "zod",
-          "version": "4.6.5",
-          "date": "2026-09-13",
-          "note": "Planned migration (owner 2026-09-29): config equivalence tests first (17 .default({}) -> .prefault), +27 ms CLI cold start, dedupes the SDK's zod 4 copies."
+          "version": "4.6.7",
+          "date": "2026-10-12",
+          "note": "Planned migration (owner 2026-09-29): config equivalence tests first (17 .default({}) -> .prefault), +27 ms CLI cold start, dedupes the SDK's zod 4 copies. Floor >=4.6.6 (GHSA-mrhx-c7xc-m3w5); 4.6.7 preferred (its notes record the 2026-09-21 compromised-identity commits, reverted and never published)."
         },
         {
           "name": "valibot",
@@ -353,10 +355,11 @@
       "ownSolution": "Public contracts move to the Standard Schema interface (vendored types, DEPS-SCHEMA) so Enterprise/ERP adapters do not bind to a zod major; internals keep zod.",
       "watch": [
         "3.x line receives no releases; 131 published .d.ts import zod until DEPS-SCHEMA.",
-        "Owners are package-wide for the contract layers; narrow after the zod 4 migration."
+        "Owners are package-wide for the contract layers; narrow after the zod 4 migration.",
+        "GHSA-mrhx-c7xc-m3w5 / CVE-2023-54404 (high, 2026-10-01): oversized constrained collections exhaust memory, range <4.6.6 (formally covers 3.25.76; the fix is v4 code and no 3.x release exists). Mitigation until Z2 (zod 4.6.7, alpha.60): Z1 bounded JSON gates (bytes, nodes, depth) run before zod on every external input path; the SDK nested copies are overridden to 4.6.7."
       ],
-      "lastReview": "2026-09-29",
-      "nextReview": "2026-10-29"
+      "lastReview": "2026-10-31",
+      "nextReview": "2026-11-14"
     },
     "zod-to-json-schema": {
       "kind": "runtime",
@@ -478,7 +481,7 @@
         "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)",
         "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)",
         "plugin onResolve + build.resolve + onLoad replacing the MCP SDK's ajvProvider import in _shims/validators/ajv with a throwing stub (FASTURI-OUT)",
-        "package.json imports (#\u2026) resolution inside dependencies"
+        "package.json imports (#…) resolution inside dependencies"
       ],
       "criticality": "P1",
       "alternatives": [
@@ -487,7 +490,7 @@
           "package": "rolldown",
           "version": "1.2.11",
           "date": "2026-09-24",
-          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) \u2014 matters for build identity and provenance."
+          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) — matters for build identity and provenance."
         },
         {
           "name": "tsdown",
@@ -739,10 +742,11 @@
       ],
       "ownSolution": "None; Node is the platform.",
       "watch": [
-        "Node 24 enters maintenance 2026-10-20 (EOL 2028-04-30); Node 26 LTS 2026-10-28 (EOL 2029-04-30)."
+        "Node 24 enters maintenance 2026-10-20 (EOL 2028-04-30); Node 26 LTS 2026-10-28 (EOL 2029-04-30).",
+        "2026-10-31: Node 26 LTS since 2026-10-28 (26.13.0, metadata only); 24.22.2 latest 24.x (not a security release); last security release 2026-10-21 (26.12.1/24.22.1, 10 CVEs) = the engines floor; Node 27 alpha 2026-10-29."
       ],
-      "lastReview": "2026-09-29",
-      "nextReview": "2026-10-29"
+      "lastReview": "2026-10-31",
+      "nextReview": "2026-11-30"
     },
     "sqlite": {
       "requirement": "node:sqlite with process.versions.sqlite >= 3.51.3 (assertSqliteEngineSupported before every node:sqlite open: 10 sites: the ledger connection, seven read-only readers, the scope-registry reader and the VACUUM INTO backup; ATTEMPT_STORE_SQLITE_UNSUPPORTED; DEPS-P0 applied 2026-09-29)",
@@ -767,8 +771,11 @@
         }
       ],
       "ownSolution": "None; node:sqlite keeps the product free of native database addons.",
-      "lastReview": "2026-09-29",
-      "nextReview": "2026-10-29"
+      "lastReview": "2026-10-31",
+      "nextReview": "2026-11-30",
+      "watch": [
+        "2026-10-31: Node 26.13.0 bundles SQLite 3.54.0, Node 24.22.2 bundles 3.53.4 (both above the 3.51.3 floor); upstream 3.54.1 (2026-10-16) fixes a 32-bit-only heap overflow."
+      ]
     },
     "bubblewrap": {
       "requirement": "system bwrap >= 0.12.0 at /usr/bin, /usr/local/bin or /bin (root-owned file and directories; PATH never read), else the bundled, sha256-verified build run from a 0700 copy under the global state root (owner S1/S2 2026-09-29)",
@@ -805,10 +812,11 @@
       "watch": [
         "Upstream 0.12.0 fixed symlink escape (GHSA-pxhw-h44j-8pfx / CVE-2026-87766, high, < 0.12.0); deps-watch reads the repository's GitHub security advisories against the bundled version and the minimum system version.",
         "Ubuntu 24.04 ships 0.9.0 (below the minimum: not used); on AppArmor-restricted hosts the bundled copy needs a root-installed profile (typed restricted fallback to Landlock).",
-        "aarch64 builds reproducibly but ships only after a real arm64 realm test (lock shipNote)."
+        "aarch64 builds reproducibly but ships only after a real arm64 realm test (lock shipNote).",
+        "2026-10-31: 0.13.1 (2026-10-14) is a bug-fix release, no security advisory since 2026-09-29 (last GHSA-pxhw-h44j-8pfx 2026-08-26, <0.12.0); bundled 0.13.0 kept."
       ],
-      "lastReview": "2026-09-29",
-      "nextReview": "2026-10-29"
+      "lastReview": "2026-10-31",
+      "nextReview": "2026-11-30"
     },
     "git": {
       "requirement": "git CLI; no version gate yet (proposal: >= 2.45 for --no-lazy-fetch; protocol.allow=never on every path)",
@@ -858,27 +866,22 @@
   },
   "acceptedRisks": [
     {
-      "id": "fast-uri-3.1.0-in-mcp-sdk-2.3.1",
+      "id": "fast-uri-3.1.8-in-mcp-sdk-2.4.0",
       "package": "fast-uri",
-      "version": "3.1.0",
+      "version": "3.1.8",
       "carriers": [
-        "@modelcontextprotocol/client@2.3.1",
-        "@modelcontextprotocol/server@2.3.1"
+        "@modelcontextprotocol/client@2.4.0",
+        "@modelcontextprotocol/server@2.4.0"
       ],
       "shipped": false,
       "advisories": [
-        "GHSA-4c8g-83qw-93j6",
-        "GHSA-7p8r-x3mc-p8w7",
-        "GHSA-f65p-4m7j-42xc",
-        "GHSA-hrr3-gc8f-f4qj",
-        "GHSA-jqff-g426-hqxp",
-        "GHSA-q3j6-qgpj-74h6",
-        "GHSA-qw65-cvwx-89v3",
-        "GHSA-v2hh-gcrm-f6hx",
-        "GHSA-v39h-62p7-jpjc"
+        "GHSA-333x-w4r6-6crp",
+        "GHSA-w74x-v6f9-j3xg",
+        "GHSA-wjr9-j795-jxcr",
+        "GHSA-xhq7-xmqj-769h"
       ],
-      "severity": "HIGH",
-      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036). 2026-10-15: SDK 2.3.1 still embeds fast-uri 3.1.0 (tarball grep); GHSA-hrr3-gc8f-f4qj (MEDIUM, host case normalization of scheme-relative references) is the same host-confusion class and is covered by the same not-shipped + own-validator mitigation. 2026-10-22: no SDK release since 2.3.1 (2026-10-05); owner extended the acceptance 30 days on the same not-shipped + own-validator conditions.",
+      "severity": "MEDIUM",
+      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036). 2026-10-15: SDK 2.3.1 still embeds fast-uri 3.1.0 (tarball grep); GHSA-hrr3-gc8f-f4qj (MEDIUM, host case normalization of scheme-relative references) is the same host-confusion class and is covered by the same not-shipped + own-validator mitigation. 2026-10-22: no SDK release since 2.3.1 (2026-10-05); owner extended the acceptance 30 days on the same not-shipped + own-validator conditions. 2026-10-31: SDK 2.4.0 embeds fast-uri 3.1.8 (the nine 3.1.0 advisories are fixed); four new advisories of 2026-10-23 (2 MEDIUM, 2 LOW; fix 3.1.9) are the same URI/host-confusion class under the same not-shipped + own-validator mitigation; expiry kept at the owner window.",
       "evidence": [
         "proof/FASTURI-OUT-2026-09-29/review.md (tarball grep, SBOM, pack-smoke Node 24.21/26.10, guard mutation)",
         "tests/contracts/surfaces/mcp-json-schema-validator.test.ts",
@@ -889,7 +892,7 @@
         "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/astra-2180-adaptation.md (Astra 2180 R2: $dynamicRef refused before send; red on 0a69a70, green on the merge)",
         "merged 5330cb7e (lane/mcp-schema-validator f00b6f77) + tests/contracts/platform/json-schema-validator.test.ts"
       ],
-      "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29; carriers moved to SDK 2.3.1 and GHSA-hrr3 added after owner chose the 2.3.1 upgrade, 2026-10-15; owner extended 30 days on 2026-10-22: SDK still 2.3.1, last release 2026-10-05)",
+      "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29; carriers moved to SDK 2.3.1 and GHSA-hrr3 added after owner chose the 2.3.1 upgrade, 2026-10-15; owner extended 30 days on 2026-10-22: SDK still 2.3.1, last release 2026-10-05); carriers moved to SDK 2.4.0 with the owner-decided 2.4.0 upgrade (lead, 2026-10-31; owner window unchanged)",
       "decided": "2026-10-22",
       "expires": "2026-11-21"
     }
