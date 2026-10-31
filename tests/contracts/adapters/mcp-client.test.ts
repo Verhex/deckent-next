@@ -163,6 +163,9 @@ describe('MCP client: calls, bounds and failures', () => {
     const broken = { ...f.server([]), args: [join(f.root, 'missing.mjs')] };
     const failed = await p.open(broken, settings([broken], { connectTimeoutMs: 3_000 }), context(f.root));
     expect(failed).toMatchObject({ ok: false });
+    const absent = { ...f.server([]), command: 'no-such-mcp-server-command' };
+    expect(await p.open(absent, settings([absent], { connectTimeoutMs: 3_000 }), context(f.root)))
+      .toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
     const caged = { ...f.server([pinOf(echo)]), realm: 'require-sandbox' as const };
     expect(await p.open(caged, settings([caged]), context(f.root))).toMatchObject({ ok: false, reason: 'sandbox-unavailable' });
     expect(f.events()).toEqual([]);
@@ -452,7 +455,8 @@ describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start
   }, 60_000);
   it('a command that exists nowhere is "not found", not a sandbox problem; a package runner that fails in the view is named as one', async () => {
     const f = setup();
-    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'command not found' });
+    expect(await open(f, 'no-such-mcp-server-command', [], 'host')).toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
+    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
     expect(await open(f, 'npx', ['-y', 'some-mcp-server'])).toMatchObject({ ok: false, reason: 'sandbox-unreachable', diagnosis: { kind: 'package-runner', runner: 'npx' } });
   }, 60_000);
 });

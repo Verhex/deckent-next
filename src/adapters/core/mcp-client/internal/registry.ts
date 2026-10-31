@@ -157,6 +157,8 @@ export type McpExpandedEntry = { readonly ok: true; readonly command: string; re
   readonly secrets: readonly string[] }
   | { readonly ok: true; readonly url: string; readonly headers: Readonly<Record<string, string>>; readonly secrets: readonly string[] }
   | { readonly ok: false; readonly reason: string };
+/** Only an unresolved key gets a store command; a denied grant keeps its own authority remedy. */
+export const mcpMissingSecretCommand = (reason: string) => /^secret-unresolved:[A-Z_][A-Z0-9_]*$/u.test(reason) ? `deckent secret set ${reason.slice(18)} --main` : null;
 /**
  * The launch values of one entry: `${VAR}` / `${VAR:-default}` in `command`, `args`, `env` values, `url` and header values from the service
  * environment. A project file (someone else's commit) reads only the allowlisted non-secret variables (SEC-2, F30: any other name reads as its written default or empty; an allowlisted value carrying a credential refuses the entry) and may not use a Deckent secret reference; a

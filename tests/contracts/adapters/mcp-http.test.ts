@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { describeMcpApproval, describeMcpResult, describeMcpTrustCard, expandMcpEntry, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpEndpointRefusal, mcpTurnTools,
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describeMcpApproval, describeMcpResult, describeMcpTrustCard, expandMcpEntry, loadMcpRegistry, mcpClientSettings, MCP_CLIENT_IDENTITY, McpClientPool, mcpEndpointRefusal, mcpTurnTools,
   openMcpAgentTools, openTurnMcp, resolveMcpRegistry, runMcpCommand, type McpCommandContext, type McpCommandRequest, type McpTrustCard } from '#adapters/index.js';
-import { clearConfigCache, loadConfig } from '#platform/index.js';
+import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
+import { agentToolApprovalFacts } from '#engine/index.js';
 import { mcpCommand, type CommandContext } from '#surfaces/core/cli/index.js';
 // @ts-expect-error -- a plain ESM test fixture (no declaration file)
 import { startMcpHttpFixture } from '../../fixtures/mcp-http-server.mjs';
@@ -80,7 +82,7 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect(listed).toMatchObject({ servers: [{ name: 'web-docs', transport: 'http', realm: null, status: 'trusted', health: 'connected', headerNames: ['Authorization'] }] });
     expect(got).toMatchObject({ server: { entry: { type: 'http', headers: { Authorization: 'Bearer $DECK:GH' } } } });
     // The model's view: the offered tools and their result. A server that echoes its credential hands the model a redaction, never the value.
-    const view = await loadMcpRegistry(w.context), settings = mcpClientSettings(view, {})!, pool = new McpClientPool(new AbortController().signal); closers.push(() => pool.close());
+    const view = await loadMcpRegistry(w.context), settings = mcpClientSettings(view, { inputMaxBytes: 65_536 })!, pool = new McpClientPool(new AbortController().signal); closers.push(() => pool.close());
     const offered = await openMcpAgentTools(pool, settings, { cwd: w.project, environment: w.env, sandboxes: [] });
     const whoami = [...offered.values()].find(entry => entry.tool === 'whoami')!;
     const answer = await pool.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal });
@@ -89,6 +91,38 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect(model.text).toContain('called with: Bearer '); expect(model.text).not.toContain(SECRET);
     const preview = mcpTurnTools(offered).preview(whoami.spec.name, {});
     expect(preview).toContain(server.url);
+    const echo = [...offered.values()].find(entry => entry.tool === 'echo')!, sentBefore = server.requests.length;
+    expect(await pool.call(echo.server, 'echo', echo.digest, { payload: 'x'.repeat(100_000) }, { timeoutMs: 10_000, signal: new AbortController().signal }))
+      .toMatchObject({ outcome: 'unknown', reason: 'failed' });
+    expect(server.requests.length - sentBefore).toBe(1); // An oversized answer can follow an effect; never replay it.
+    await w.run({ verb: 'add', scope: 'local', name: 'web-two', entry: { type: 'http', url: server.url } });
+    let active = 0, peak = 0;
+    const probe = vi.spyOn(McpClientPool.prototype, 'open').mockImplementation(async () => {
+      peak = Math.max(peak, ++active); await new Promise(resolve => setImmediate(resolve)); active--;
+      return { ok: false, reason: 'start-failed', detail: 'probe' };
+    });
+    try {
+      const listed = await runMcpCommand({ verb: 'list' }, { ...w.context, limits: { maxServers: 1 } }) as { servers: { name: string }[] };
+      expect(listed.servers.map(item => item.name)).toEqual(['web-docs', 'web-two']); expect(peak).toBe(1); expect(probe).toHaveBeenCalledTimes(2);
+      const controller = new AbortController(); probe.mockClear().mockImplementation(async () => { controller.abort(); return { ok: false, reason: 'start-failed' }; });
+      await expect(runMcpCommand({ verb: 'list' }, { ...w.context, signal: controller.signal, limits: { maxServers: 1 } })).rejects.toMatchObject({ name: 'AbortError' });
+      expect(probe).toHaveBeenCalledTimes(1);
+      probe.mockClear();
+      await expect(runMcpCommand({ verb: 'list' }, { ...w.context, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' }); expect(probe).not.toHaveBeenCalled();
+    } finally { probe.mockRestore(); }
+    const cancelled = new AbortController(); let requests = 0;
+    const slowHttp = createServer(() => { requests++; cancelled.abort(); });
+    await new Promise<void>(resolve => slowHttp.listen(0, '127.0.0.1', resolve));
+    const abortPool = new McpClientPool(cancelled.signal); closers.push(() => abortPool.close());
+    try {
+      const address = slowHttp.address() as { port: number }, stalled = { ...settings.servers[0]!, url: `http://127.0.0.1:${address.port}/mcp` };
+      const opened = abortPool.open(stalled, settings, { cwd: w.project, environment: w.env, sandboxes: [] });
+      const deadline = AbortSignal.timeout(3_000);
+      expect(await Promise.race([opened, new Promise(resolve => deadline.addEventListener('abort', () => resolve('cancellation did not stop the HTTP probe'), { once: true }))]))
+        .toMatchObject({ ok: false, reason: 'start-failed', detail: 'cancelled' });
+      expect(requests).toBe(1);
+    } finally { slowHttp.closeAllConnections(); await new Promise<void>(resolve => slowHttp.close(() => resolve())); }
+
     for (const shown of [JSON.stringify(listed), JSON.stringify(got), JSON.stringify(w.audits), w.cards.map(card => describeMcpTrustCard(card)).join('\n'), preview!, model.text,
       describeMcpApproval({ ...whoami, args: {} })]) expect(shown).not.toContain(SECRET);
     // The registry file holds the reference, never the value.
@@ -99,14 +133,14 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
   // KER-17 (owner GO 2026-10-28, LAW-AUDIT-KER17): a personal-file `$DECK:` key resolves under the project's grant. A trusted server whose key loses
   // the grant (RED) is retired before its next call, offers nothing and says which key and command; granted again (GREEN) it starts.
   it('NEGATIVE: a revoked $DECK grant retires the running server before its next call and names the key; a grant brings it back', async () => {
-    const server = await fixture(), w = await workspace(); let granted = true;
-    const context: McpCommandContext = { ...w.context, secret: async name => { if (!granted) throw Object.assign(new Error('refused'), { code: 'SECRET_GRANT_REQUIRED' }); return name === 'GH' ? SECRET : undefined; } };
+    const server = await fixture(), w = await workspace(); let granted: boolean | 'missing' = true, pending = false;
+    const context: McpCommandContext = { ...w.context, secret: async name => { if (granted === 'missing') return undefined; if (!granted) throw Object.assign(new Error('refused'), { code: 'SECRET_GRANT_REQUIRED' }); return name === 'GH' ? SECRET : undefined; } };
     await runMcpCommand({ verb: 'add', scope: 'local', name: 'web-docs', entry: { type: 'http', url: server.url, headers: { Authorization: 'Bearer $DECK:GH' } } }, context);
     const pool = new McpClientPool(new AbortController().signal); closers.push(() => pool.close());
     const view = pool.scoped({ scopeId: 'scope', cwd: w.project }), signal = new AbortController().signal;
     const open = () => openTurnMcp({ registry: context, pool: view, cwd: w.project, sandboxes: [], principal: { id: 'p', issuer: 'test', subject: 'owner' }, sqlite: {} as never, keyFile: '',
       requestTtlMs: 1_000, inputMaxBytes: 65_536, resultMaxBytes: 65_536, scopeId: 'scope', turnId: 'turn', signal, emit: () => undefined, ledgerPath: async () => '',
-      requestPolicy: async () => { throw new Error('no card expected'); }, describeNotice: notice => JSON.stringify(notice) });
+      requestPolicy: async () => { if (pending) return { revision: 'p', trustFacts: agentToolApprovalFacts(null, 'scope', null) }; throw new Error('no card expected'); }, describeNotice: notice => JSON.stringify(notice) });
     const before = await open(), whoami = [...before.offered.values()].find(entry => entry.tool === 'whoami')!;
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'answered' });
     granted = false;
@@ -114,8 +148,24 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect(after.offered.size).toBe(0); expect(after.notices).toEqual([JSON.stringify({ kind: 'secret-refused', name: 'web-docs', code: 'SECRET_GRANT_REQUIRED', key: 'GH', scope: 'scope' })]);
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'refused', reason: 'not-connected' });
     expect(await runMcpCommand({ verb: 'list' }, context)).toMatchObject({ servers: [{ name: 'web-docs', status: 'invalid-launch', reason: 'secret-refused:SECRET_GRANT_REQUIRED:GH' }] });
+    expect((await open()).notices).toEqual([]); // Same refusal, even in a later turn, says nothing twice.
     granted = true;
     expect((await open()).offered.size).toBe(2);
+    granted = 'missing';
+    const missing = await open(); expect(missing.offered.size).toBe(0); expect(missing.notices.join('')).toContain('deckent secret set GH --main');
+    expect((await runMcpCommand({ verb: 'get', name: 'web-docs' }, context) as { server: { reason: string } }).server.reason).toContain('deckent secret set GH --main');
+    expect((await open()).notices).toEqual([]);
+    const path = join(productResourcePath(w.layout, 'integrations'), 'mcp-start-failures.json'), stored = JSON.parse(readFileSync(path, 'utf8'));
+    expect(stored.failures[0].clientIdentity).toBe(MCP_CLIENT_IDENTITY);
+    stored.failures[0].clientIdentity = '0'.repeat(64); writeFileSync(path, JSON.stringify(stored), { mode: 0o600 });
+    expect((await open()).notices).toHaveLength(1); expect((await open()).notices).toEqual([]);
+    granted = true; expect((await open()).offered.size).toBe(2);
+    pending = true;
+    writeFileSync(join(w.project, '.deckent', 'mcp.json'), JSON.stringify({ mcpServers: { invalid: { command: '${MISSING_COMMAND}' } } }));
+    const undecided = await open(); expect(undecided.notices.join('')).toContain('MCP_SERVER_ENTRY_INVALID');
+    expect((await open()).notices).toEqual([]);
+    const failures = JSON.parse(readFileSync(path, 'utf8')).failures;
+    expect(failures).toContainEqual(expect.objectContaining({ name: 'invalid', phase: 'decision', code: 'MCP_SERVER_ENTRY_INVALID' }));
   }, 60_000);
 
   it('a project file cannot carry a secret reference to an HTTP server; plain http to a remote host is refused at add; a literal header value is masked in get', async () => {

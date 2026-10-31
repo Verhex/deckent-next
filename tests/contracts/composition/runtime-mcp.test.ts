@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
-import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, productResourcePath, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
 import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
@@ -254,6 +254,19 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     // Every decision is a sealed audit event of the project's ledger.
     const audits = f.rows('SELECT record FROM audit_events ORDER BY rowid') /* insertion order: sequences are per scope, and D1 inventory events shift one scope's numbers */.map(row => (JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } }).event.subject);
     expect(audits.filter(subject => subject['kind'] === 'mcp-trust').map(subject => subject['action'])).toEqual(['decline', 'reset', 'trust', 'decline']);
+    registry(f.project, { fx: { command: 'no-such-mcp-server-command', realm: 'host' } });
+    const failTurn = async (id: string) => { f.state.script = [{ content: 'No tools.' }]; return answered(f, id, 'allow'); };
+    const failed = await failTurn('turn-failed-start');
+    expect(requested(failed.events)).toHaveLength(1); expect(failed.result.note).toContain('ENOENT (PATH)');
+    const quiet = await failTurn('turn-same-client');
+    expect(requested(quiet.events)).toEqual([]); expect(quiet.result.note ?? '').not.toContain('MCP server fx did not start');
+    const failurePath = join(productResourcePath(resolveProductLayout({ projectRoot: f.project, root: f.data }), 'integrations'), 'mcp-start-failures.json');
+    const stored = JSON.parse(readFileSync(failurePath, 'utf8')); delete stored.failures[0].clientIdentity;
+    writeFileSync(failurePath, JSON.stringify(stored), { mode: 0o600 });
+    const refreshed = await failTurn('turn-new-client');
+    expect(requested(refreshed.events)).toHaveLength(1); expect(refreshed.result.note).toContain('ENOENT (PATH)');
+    const sameClient = await failTurn('turn-new-client-quiet');
+    expect(requested(sameClient.events)).toEqual([]); expect(sameClient.result.note ?? '').not.toContain('MCP server fx did not start');
   }, 90_000);
 
   it('a denied card sends nothing; a company deny answers denied-by-policy without a card and sends nothing', async () => {
@@ -417,7 +430,7 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     f.state.script = [{ content: 'Second.' }];
     const second = await answered(f, 'turn-hidden-2', 'allow');
     expect(requested(second.events)).toEqual([]);
-    expect(second.result.note).toContain(`MCP server fx did not start: the argument ${script}`);
+    expect(second.result.note ?? '').not.toContain('MCP server fx did not start');
     expect(await slash(f)).toContainEqual(expect.stringContaining(`    MCP server fx did not start: the argument ${script}`));
     // `/mcp` renders the same record in the terminal's own locale.
     expect(await slash(f, 'tr')).toContainEqual(`    MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
@@ -428,7 +441,7 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     f.state.script = [{ content: 'Third.' }];
     expect(requested((await answered(f, 'turn-hidden-3', 'deny')).events)).toHaveLength(1);
   }, 90_000);
-  it('a trusted server that no longer starts: every turn says so in the service\'s locale (tr); /mcp in its own; a `${VAR}` path is never expanded', async () => {
+  it('a trusted server that no longer starts: only a changed failure is said in the service\'s locale (tr); /mcp in its own; a `${VAR}` path is never expanded', async () => {
     const dir = elsewhere(), f = await runtime({ extraGrants: mcpGrants() });
     (f.env as Record<string, string>)['MCP_TOOLS_DIR'] = join(f.project, 'tools');
     (f.env as Record<string, string>)['DECKENT_LANGUAGE'] = 'tr';
@@ -445,9 +458,11 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
       f.state.script = [{ content: 'No tools.' }];
       const { result, events } = await answered(f, turnId, 'allow');
       expect(requested(events)).toEqual([]);
-      expect(result.note).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
-      expect(result.note).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
-      expect(result.note).not.toContain(dir); expect(result.note).not.toContain(join(f.project, 'tools'));
+      if (turnId === 'turn-trusted-1') {
+        expect(result.note).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
+        expect(result.note).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
+        expect(result.note).not.toContain(dir); expect(result.note).not.toContain(join(f.project, 'tools'));
+      } else expect(result.note ?? '').not.toContain('MCP sunucusu fx başlamadı');
     }
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     const lines = await slash(f);

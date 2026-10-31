@@ -99,7 +99,7 @@ async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: '
 /** `deckent mcp …` and `/mcp`: the scoped registry files, the trust records (audited, over this project's ledger) and, for `list`/trust decisions, the
  * server started in its realm. `ask` shows a trust card and answers the owner's decision; `locale` is the calling surface's (default: this
  * process's environment, then the configured language). */
-export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
+export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale, signal?: AbortSignal) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), environment = options.env ?? process.env, principal = readLocalOsIdentity();
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout, false, environment) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
@@ -108,10 +108,10 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   // `--yes` included, and before any start, audit or write; the MCP actor never decides. In-turn cards are already witnessed by `decideApproval`.
   const peer = localPrincipalPeer(), channel = localPrincipalChannel(), witnessed: McpCommandContext['ask'] = async card => {
     await assertAuthorityWitness('mcpTrust', channel, { attest: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) }); return ask(card); };
-  const context: McpCommandContext = { projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
+  const context: McpCommandContext = { ...(signal ? { signal } : {}), projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
     grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
-    secret: async name => projectCredentialResolver(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, options).resolve(name), limits: { inputMaxBytes: config.mcp.inputMaxBytes }, // KER-17: as a turn
+    secret: async name => projectCredentialResolver(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, options).resolve(name), limits: { inputMaxBytes: config.mcp.inputMaxBytes, maxServers: config.mcp.maxServers }, // KER-17: as a turn
     audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) };
   // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
   // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.
