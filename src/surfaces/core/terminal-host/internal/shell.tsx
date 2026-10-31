@@ -24,7 +24,7 @@ export interface TerminalShell { readonly host: TerminalHostHandle; take(): Read
  */
 export async function openTerminalShell(options: TerminalShellOptions): Promise<TerminalShell> {
   const kept: { draft: ComposerHistoryEntry | null; queued: ShellLine[]; armedAt: number | null } = { draft: null, queued: [], armedAt: null };
-  const host = openTerminalHost({ ...options, fullscreen: true, view: () => createElement(ShellView, { options, kept, exit: () => { void host.close(); } }) });
+  const host = await openTerminalHost({ ...options, fullscreen: true, view: () => createElement(ShellView, { options, kept, exit: () => { void host.close(); } }) });
   await host.flushed();
   return { host, take: () => ({ draft: kept.draft, queued: [...kept.queued], armedAt: kept.armedAt }) };
 }

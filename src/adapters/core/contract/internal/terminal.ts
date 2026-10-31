@@ -6,7 +6,7 @@ import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
 import responseStyleData from './terminal-response-styles.json' with { type: 'json' };
 
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
-export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
+export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi', 'dark-high-contrast', 'light-high-contrast', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
 /** T2 attention notices (first entry = default): the terminal bell while the window is unfocused, or nothing. */
 export const TERMINAL_NOTIFY = ['bell', 'off'] as const;
@@ -27,8 +27,8 @@ export const terminalConfigSchema = z.object({
   autostartService: z.boolean().default(true),
   /** Deadline for an automatically started runtime service to answer on its endpoint. */
   serviceStartTimeoutMs: z.number().int().min(1_000).max(120_000).default(20_000),
-  /** T2 (T-READABLE): the workline's colour theme. `auto` follows a background the terminal reports (COLORFGBG) and otherwise keeps the
-   * terminal's own 16 colours; `ansi` always does; the daltonized themes keep success and failure on the blue/orange axis. */
+  /** The terminal's colour theme (TEMA-OKUNURLUK): `auto` follows the background the terminal reports (OSC 11, else COLORFGBG; unknown: its own
+   * foreground with attributes); the daltonized themes keep success and failure apart without red/green; `*-ansi` draw with the terminal's 16 colours, `ansi` = that of the background. */
   theme: z.enum(TERMINAL_THEMES).default(TERMINAL_THEMES[0]),
   /** T2 (T-STARTUP): the opening banner — the Deckent mark with version, project, model, mode and a hint (`full`), one line (`compact`), or none. */
   banner: z.enum(TERMINAL_BANNERS).default(TERMINAL_BANNERS[0]),

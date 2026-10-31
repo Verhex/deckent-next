@@ -422,6 +422,18 @@ The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08);
 ED 3 at the time; the Workline output adapter now removes ED 3 from Ink's overflow clear (see above). Proof:
 `/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
 
+**Theme set and background detection (TEMA-OKUNURLUK L1–L2, alpha.60; owner S2/S6/S8 A 2026-10-30).** `terminal.theme` takes the Claude
+Code set `auto|dark|light|dark-daltonized|light-daltonized|dark-ansi|light-ansi` plus `dark-high-contrast|light-high-contrast` (7:1) and
+the earlier `ansi` as an alias (the reported background's 16-colour theme). The token map adds `stateConnected`/`stateDisconnected`
+(`novaOrange`), the light reference backgrounds `#FAFAFA`, `#F6F2EA` and the owner's `#F0ECE5`, dark `#0C0C0C`; light 16-colour sets use no
+yellow and no bright `9x` on text; `ansiOnly` themes carry no hex. The contrast test holds text 4.5:1 (high contrast 7:1) in truecolor and
+256 colours. `auto` reads the terminal's OSC 11 answer (query + DA1 end marker, `backgroundProbeMs` 250 in `host-limits.json`, once per
+process, Codex `terminal_probe.rs`), then `COLORFGBG`; unknown draws `neutral-ansi` (foreground + attributes, colour only on status marks).
+The host probes before the first frame when given a theme request (`TerminalHostOptions.theme`, not at colour tier none), re-asks on DEC 2031
+notices and exposes `context.theme` (`background`, `apply`); the one stdin filter takes every OSC 10/11, DA1 and 2031 answer out of the input
+for the whole session (late answers are not applied) and Ctrl+C ends a probe. On a reported background a role below its minimum keeps only
+its attributes. Consumers move to `terminalPalette`/the theme request in L3. Proof is kept with the lead's package record (alpha.60 package 2, lane TH-A).
+
 **Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
 details heading. `/status`: one sentence (running or not read, version, model) then the host report and the service descriptor
 (instance, pid, build) as details. `/scope`: you, project (name and short id), company, mode, rule version, surface access in words,

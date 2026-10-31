@@ -1,6 +1,6 @@
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFocusTracker, mouseFilteredInput, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
+import { BACKGROUND_QUERY, createFocusTracker, mouseFilteredInput, takeColorReports, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, WORKLINE_TEST_LABELS, settle, until } from '../support/workline-harness.js';
 
@@ -18,13 +18,29 @@ describe('focus reports', () => {
     tracker.report('out'); expect(tracker.source.state()).toBe('unfocused');
     tracker.report('in'); expect(tracker.source.state()).toBe('focused'); expect(heard).toEqual(['out', 'in']);
   });
-  it('the filtered input never hands a focus report to Ink and tracks the state', async () => {
+  it('the filtered input never hands a focus report or a terminal colour answer to Ink; only an answer inside an open probe is used', async () => {
     const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
-    const filtered = mouseFilteredInput(real), seen: string[] = [];
+    const filtered = mouseFilteredInput(real), seen: string[] = [], queries: string[] = [], wheel: number[] = [];
     filtered.input.on('data', chunk => seen.push(String(chunk)));
+    filtered.wheel.subscribe(step => wheel.push(step));
     (real as unknown as PassThrough).write('x\u001b[Oy');
     await settle(20);
     expect(seen.join('')).toBe('xy'); expect(filtered.focus.state()).toBe('unfocused');
+    const read = (bytes: string) => real.emit('data', Buffer.from(bytes)), ask = (limitMs: number) => filtered.background.ask(query => queries.push(query), limitMs);
+    // TEMA-OKUNURLUK §3.2: OSC 11 then DA1; keys typed before and after the answer reach Ink in order; the DA1 answer ends the probe.
+    let probe = ask(1_000);
+    read('a\u001b]11;rgb:f0f0/ecec/e5e5\u001b\\b'); read('\u001b[?62;22c');
+    expect(await probe).toBe('#F0ECE5'); expect(queries).toEqual([BACKGROUND_QUERY]);
+    probe = ask(1_000); read('\u001b[?1;2c'); expect(await probe).toBeNull();
+    // A late answer (after the limit; slow SSH) is taken out and not used; Ctrl+C ends a probe and still reaches Ink.
+    expect(await ask(10)).toBeNull(); read('\u001b]11;rgb:0000/0000/0000\u0007c\u001b]10;rgb:ff/ff/ff\u0007');
+    probe = ask(1_000); read('\u0003'); expect(await probe).toBeNull();
+    // Answers cut at a read boundary stay out; a cut `ESC [` still reaches the mouse filter whole; DEC 2031 notices are heard.
+    let notices = 0; filtered.background.onPaletteNotice(() => { notices++; });
+    read('\u001b]11;rgb:ff'); read('/ff/ff\u0007d'); read('\u001b['); read('?62c'); read('\u001b['); read('<65;1;1M'); read('\u001b[?997;2ne');
+    await settle(20);
+    expect(seen.join('')).toBe('xyabc\u0003de'); expect(wheel).toEqual([1]); expect(notices).toBe(1);
+    expect(takeColorReports('\u001b')).toEqual({ text: '\u001b', reports: [], carry: '' });
     filtered.close();
   });
 });
