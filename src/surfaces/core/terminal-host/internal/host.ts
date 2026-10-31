@@ -51,7 +51,16 @@ export interface TerminalHostOptions {
  * It knows no conversation; the view comes from the caller.
  * Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view.
  */
-export async function runTerminalHost(options: TerminalHostOptions): Promise<void> {
+export async function runTerminalHost(options: TerminalHostOptions): Promise<void> { await openTerminalHost(options).wait(); }
+/** alpha.60 C: one open host whose view can be replaced (the launch shell, then the Workline) under the same input owner, alternate screen,
+ * mouse and focus reports and terminal restore. `close` leaves the alternate screen and restores the terminal (idempotent, as `wait`). */
+export interface TerminalHostHandle {
+  readonly context: TerminalHostContext; readonly palette: WorklineInkPalette;
+  setView(view: TerminalHostOptions['view'], palette?: WorklineInkPalette): void;
+  /** Resolves when the frame drawn so far has been written to the terminal. */ flushed(): Promise<void>;
+  wait(): Promise<void>; close(): Promise<void>; readonly open: () => boolean;
+}
+export function openTerminalHost(options: TerminalHostOptions): TerminalHostHandle {
   const { palette, stdin, stdout, signal, ascii } = options;
   const out = stdout ?? process.stdout;
   // TERMINAL-SABIT-DUZEN: a TTY that takes escape sequences gets the full-window layout unless the person chose `inline` (`fullscreen: false`).
@@ -67,13 +76,14 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const reportingOn = () => { try { out.write(`${fullscreen ? MOUSE_REPORTING_ON : ''}${attention ? FOCUS_REPORTING_ON : ''}`); } catch { /* the terminal is gone */ } };
   // T4: Ink's own suspension hands back raw mode, bracketed paste and the alternate screen; mouse and focus reports are the host's to switch off and on.
   const handover: TerminalHandover | undefined = mouse ? { release: () => { reportingOff(); mouse.hold(true); }, reclaim: () => { mouse.hold(false); reportingOn(); } } : undefined;
-  const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    options.view({ fullscreen, transcriptExit, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
-      ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),
-      ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) }));
+  const context: TerminalHostContext = { fullscreen, transcriptExit, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
+    ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),
+    ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) };
+  const tree = (view: TerminalHostOptions['view'], colors: WorklineInkPalette) => createElement(WorklinePaletteProvider, { palette: colors,
+    children: createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, view(context)) });
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
-  const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
+  const instance: Instance = render(tree(options.view, palette),
     { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
       ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
       stdout: options.clearScreen === false ? out : mainScreenOutput(out) });
@@ -85,8 +95,9 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const warningListeners = process.listeners('warning'), held: Error[] = [];
   const hold = (warning: Error) => { if (held.length < LIMITS.heldWarningsMax) held.push(warning); };
   process.removeAllListeners('warning'); process.on('warning', hold);
-  try { await instance.waitUntilExit(); }
-  finally {
+  let open = true;
+  const done = (async () => { try { await instance.waitUntilExit(); }
+  finally { open = false;
     process.off('warning', hold); for (const listener of warningListeners) process.on('warning', listener);
     for (const warning of held) process.emitWarning(warning);
     signal?.removeEventListener('abort', stop);
@@ -96,5 +107,7 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
     const input = stdin ?? process.stdin;
     try { if (input.isTTY && input.isRaw) input.setRawMode(false); } catch { /* already restored */ }
     input.unref?.();
-  }
+  } })();
+  return { context, palette, open: () => open, flushed: () => instance.waitUntilRenderFlush(), wait: () => done,
+    setView: (view, colors = palette) => { if (open) instance.rerender(tree(view, colors)); }, close: () => { if (open) instance.unmount(); return done; } };
 }

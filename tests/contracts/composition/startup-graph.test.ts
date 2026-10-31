@@ -59,9 +59,13 @@ it('the inlined server-info meta key equals the SDK constant it replaces', async
 // ~1000 modules, ~0.33 s of a ~0.45 s start), nor the CLI host that binds every composition unit; a command loads them on its first call.
 const HOST_GRAPH = ['adapters/index.js', 'engine/index.js', 'composition/core/root/index.js', 'composition/core/cli/internal/host.js', 'surfaces/core/cli-observe/index.js'];
 
-it('the CLI entry statically reaches none of the host graph (adapters, engine, composition root, CLI host)', async () => {
+it('the CLI entry statically reaches none of the host graph (adapters, engine, composition root, CLI host); nor does the launch shell or the Workline', async () => {
   const { files } = await staticReach(resolve(dist, 'composition/core/cli/internal/entry.js'));
   expect(HOST_GRAPH.filter(path => files.has(resolve(dist, path)))).toEqual([]);
+  // alpha.60 C: the first frame (the launch shell, a lazy edge of the CLI entry) is drawn before the host graph and the Workline load.
+  const shell = await staticReach(resolve(dist, 'surfaces/core/cli/internal/launch-shell.js'));
+  expect([...HOST_GRAPH, 'surfaces/core/terminal/index.js', 'surfaces/core/terminal/internal/workline.js', 'surfaces/core/cli-terminal/index.js'].filter(path => shell.files.has(resolve(dist, path)))).toEqual([]);
+  expect([...shell.files].map(file => relative(dist, file)).filter(path => /^(engine|adapters|composition)[/\\]/u.test(path))).toEqual([]);
 });
 
 it.each([['--version'], ['--help'], ['operation', '--help'], ['--help', '--all', '--lang', 'tr'], ['no-such-command']].map(argv => [argv.join(' '), argv] as const))('`deckent %s` loads none of the host graph at run time', async (_label, argv) => {

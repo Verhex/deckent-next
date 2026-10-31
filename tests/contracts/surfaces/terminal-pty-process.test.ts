@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { terminalScreen } from '../../fixtures/terminal-screen.js';
+import { terminalBuffers, terminalScreen } from '../../fixtures/terminal-screen.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, prepareRuntimeSocket, readLocalOsIdentity, runtimeSocketLocation } from '#adapters/index.js';
@@ -352,6 +352,12 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(first.output.indexOf('Ask anything')).toBeLessThan(first.output.indexOf('started in the background'));
     expect(first.output).toContain('Waiting for the runtime service before sending'); expect(f.requests()).toBe(1);
     expect(log.split('Runtime service ready').length - 1, log).toBe(1); // one `runtime serve` for the opening and the waiting line
+    // alpha.60 C: the launch shell drew the full window before the host loaded; the Workline took the same host and the bar row did not move.
+    const shown = (text: string) => { const at = first.output.indexOf('\u001b[?2026l', first.output.indexOf(text)); const upTo = first.output.slice(0, at < 0 ? undefined : at + 8);
+      return terminalBuffers(['\u001b[?1000h', '\u001b[?1002h', '\u001b[?1006h', '\u001b[?1006l', '\u001b[?1002l', '\u001b[?1000l'].reduce((rest, mode) => rest.replaceAll(mode, ''), upTo), 120, 40).text.split('\n')
+        .findLastIndex(row => row.startsWith('╭')); };
+    expect(first.output.indexOf('Preparing…')).toBeGreaterThan(-1); expect(first.output.indexOf('Preparing…')).toBeLessThan(first.output.indexOf('started in the background'));
+    expect(shown('Preparing…')).toBeGreaterThan(10); expect(shown('started in the background')).toBe(shown('Preparing…'));
     // The service outlives the terminal and answers other commands.
     const described = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
     expect(JSON.parse(described.stdout)).toMatchObject({ instanceId: expect.any(String) });

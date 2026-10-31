@@ -98,6 +98,16 @@ export async function loadConfigAgentEnvironment(projectRoot = process.cwd(), op
   const value = pick(project) ?? pick(global);
   return value === undefined ? undefined : CORE_SCHEMA.shape.cli.parse({ agentEnvironment: value }).agentEnvironment;
 }
+/** alpha.60 C, presentation only like the language: the `terminal` section (project keys over installation keys), the configured language and
+ * the data root, for the launch shell's decision to draw before the host loads. No registration, secrets, healing or locks: never execution
+ * config (the terminal itself still loads and validates the whole configuration). */
+export async function loadConfigTerminalLaunch(projectRoot = process.cwd(), options: Pick<ConfigLoadOptions, 'env' | 'platform'> = {}) {
+  const { global, project } = await presentationLayers(projectRoot, options, 'terminal'), pick = (key: string) => Object.hasOwn(project, key) ? project[key] : global?.[key];
+  const section = (layer: JsonRecord | null) => isRecord(layer?.['terminal']) ? layer['terminal'] : {}, layout = pick('layout');
+  const root = isRecord(layout) && typeof layout['root'] === 'string' ? layout['root'] : undefined, language = pick('language');
+  return { terminal: { ...section(global), ...section(project) } as JsonRecord, language: typeof language === 'string' ? language : undefined,
+    dataRoot: resolveProductLayout({ projectRoot: resolve(projectRoot), ...(root ? { root } : {}), platform: (options.platform ?? process.platform) === 'win32' ? 'win32' : 'posix' }).root };
+}
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
   const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };
   const platform = options.platform ?? process.platform;

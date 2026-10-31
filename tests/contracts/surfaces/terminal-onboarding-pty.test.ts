@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { promisify } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { openConfiguredTerminalSessions } from '#composition/core/cli/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
@@ -26,7 +26,7 @@ def read_once():
         if not data: return False
         out += data
     return True
-since = 0
+since = 0; sent = time.monotonic()
 for wanted, key in steps:
     end = time.monotonic() + 30
     while wanted.encode() not in out[since:]:
@@ -48,7 +48,7 @@ while time.monotonic()<end:
         print(json.dumps({'code':os.waitstatus_to_exitcode(status),'output':out.decode('utf8','replace'),'exitMs':round((time.monotonic()-sent)*1000),'left':left})); sys.exit(0)
 os.kill(pid,9); raise RuntimeError('child did not exit')
 `;
-it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s: sequential screens open on the Workline frame, Esc defers and /setup restores focus without policy/budget writes; /exit at the frame ends at once', async locale => {
+it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s: sequential screens open on the Workline frame, Esc defers and /setup restores focus without policy/budget writes; /exit at the frame ends at once; a moved copy is refused after the frame unchanged', async locale => {
   const base = await mkdtemp(join(tmpdir(), 'onboarding-pty-')); roots.push(base);
   const root = join(base, 'customer'), home = join(base, 'home'); await mkdir(root); await mkdir(home);
   const env = { PATH: process.env['PATH'], HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), TERM: 'xterm-256color', LANG: 'tr_TR.UTF-8', NO_COLOR: '1' };
@@ -77,6 +77,20 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   // alive about 1.3 s) and leaves no probe running in its session.
   const quick = JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify([[hint, '/exit\r']]), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; exitMs: number; left: string[] };
   expect(quick.code).toBe(0); expect(quick.exitMs).toBeLessThan(700); expect(quick.left).toEqual([]);
+  // alpha.60 C: a moved copy is refused after the launch shell's frame: the full window is left (1049l) before the same refusal text as the old
+  // path (`deckent terminal`), exit 78, and the copy stays exactly as it was (no service, session or history).
+  const moved = join(base, 'moved'); await cp(root, moved, { recursive: true });
+  const movedConfig = JSON.parse(await readFile(join(moved, '.deckent/config.json'), 'utf8')); delete movedConfig.terminal.layout; // the full window: the shell's path
+  await writeFile(join(moved, '.deckent/config.json'), JSON.stringify(movedConfig));
+  const listing = async () => JSON.stringify(await Promise.all((await readdir(moved, { recursive: true })).sort().map(async name =>
+    [name, (await lstat(join(moved, name))).isFile() ? (await readFile(join(moved, name))).toString('base64') : 'dir'])));
+  const copied = await listing(), launch = async (args: readonly string[]) => JSON.parse((await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), '[]', moved],
+    { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout) as { code: number; output: string };
+  const refused = await launch([]), old = await launch(['terminal']), words = (text: string) => stripVTControlCharacters(text).split(/\s+/u).filter(Boolean).join(' ');
+  const left = refused.output.lastIndexOf('\u001b[?1049l'), at = refused.output.indexOf('INSTALLATION_IDENTITY_RELOCATED');
+  expect([refused.code, old.code]).toEqual([78, 78]); expect(refused.output).toContain('\u001b[?1049h'); expect(left).toBeGreaterThan(-1); expect(left).toBeLessThan(at);
+  expect(words(refused.output.slice(left))).toContain(words(old.output)); expect(words(old.output)).toContain(locale === 'tr' ? 'Asıl kurulum hâlâ kullanılıyorsa' : 'same installation');
+  expect(await listing()).toBe(copied);
 }, 180_000);
 it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window opened from the Workline never reach the composer; Enter afterwards sends nothing', async () => {
   const base = await mkdtemp(join(tmpdir(), 'onboarding-pty-')); roots.push(base);

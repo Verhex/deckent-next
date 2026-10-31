@@ -471,7 +471,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(ledger ? { ledger } : {}), ...(deliveryPort && !pickerNeedsTextFallback(env, true) ? { delivery: { port: deliveryPort, confirmTimeoutMs: config.approvals.sessionTtlMs } } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
-    ...(context.signal ? { signal: context.signal } : {}),
+    ...(context.signal ? { signal: context.signal } : {}), ...(context.terminalShell ? { shell: context.terminalShell } : {}),
   }); } finally { if (beat) clearInterval(beat); closing.abort(); } // a setup observation still running after the view closed ends now
 }
 import { brainProposalLines, type PlanningPoolHold } from '#surfaces/core/run-planning/index.js';

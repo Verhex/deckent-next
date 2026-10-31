@@ -73,7 +73,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   const words = argv.at(-2) === '--lang' ? argv.slice(0, -2) : argv;
   // L-KIT: the host resolved the call's locale once (config language included), so an error before a command reports its own locale
   // renders in the same language as its heading.
-  let locale = context.locale ?? resolveLocale(undefined, context.env);
+  let locale = context.locale ?? resolveLocale(undefined, context.env), shell: import('#surfaces/core/terminal-host/index.js').TerminalShell | null = null;
   try {
     assertErrorRegistry();
     const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams);
@@ -86,6 +86,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     const interactive = terminalFlags || (words.length === 0 && interactiveTerminal(context)) || (words.length === 1 && words[0] === '--full-access');
     // `--version`, an unknown command and piped bare `deckent` need no host (COLDSTART): the host's operations load only for a command or the terminal.
     if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(words, locale, context);
+    // alpha.60 C (P4): where the Workline will open in the full window, its frame is drawn before the host graph loads (`launch-shell`).
+    // A shell that cannot be drawn is no refusal: the launch goes on the earlier path.
+    if (interactive && interactiveTerminal(context)) shell = await (await import('./launch-shell.js')).openLaunchShell(words, argv.at(-2) === '--lang' ? argv.at(-1) : undefined, context).catch(() => null);
+    if (shell) context = { ...context, terminalShell: shell };
     if (context.loadHost) context = { ...context, ...(await context.loadHost()) };
     context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
@@ -105,6 +109,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
         if (argv.length !== 0 || (error as { code?: unknown } | null)?.code !== 'TERMINAL_SCOPE_REQUIRED') throw error;
         await (await import('./setup-offer.js')).offerSetup(error, context, locale, launch);
       });
+      await shell?.host.close(); // the Workline did not take the shell (it closed or the launch returned early)
       return 0;
     }
     // Installation on a Node.js below the supported floor is allowed to proceed, but never silently (a known heap overrun in older 24.x).
@@ -120,6 +125,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     }
     return emitDispatch(words, locale, context);
   } catch (error) {
+    // A refusal after the shell's frame (the relocation stop, identity admission) leaves the full window first: the same text, the same exit code.
+    await shell?.host.close();
     // Echo only registered command words, never an invalid argument or its potentially sensitive value.
     const path = CLI_COMMANDS.filter(item => item.path.every((part, index) => argv[index] === part)).sort((a, b) => b.path.length - a.path.length)[0]?.path;
     const diagnostic = error instanceof DeckentError && error.code === 'CLI_USAGE' && !error.params?.['command'] && path

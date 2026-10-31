@@ -46,6 +46,17 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   a card holds the terminal, rows pushed meanwhile are held and drawn after it. When the view returns, the opening's setup observation is
   aborted (`OnboardingPort.observe` signal down to the setup probes): its probes are killed, no further step or settle write starts and that
   open simply has no setup outcome, so `/exit` right after the frame ends the process at once.
+- **Launch shell (alpha.60 C, P4 shell before the host graph; owner 2026-10-31):** for bare `deckent` or `deckent --scope <id>` on a TTY
+  (not `TERM=dumb`) whose presentation layers (`loadConfigTerminalLaunch`: the `terminal` section, language and data root, no registration,
+  secrets or locks) name a scope, keep the full-window layout and `clearOnStart`, and whose data root is not uninstall-retired, the CLI
+  entry draws the full window before it loads the host graph (`launch-shell` in `cli` → `openTerminalShell` in `terminal-host`; its static
+  graph reaches no engine, adapters, composition or Workline, pinned by `startup-graph`). The shell shows the banner (the model is a
+  placeholder until the Workline reads the chat plan), the real composer and a "Preparing…" status row in the Workline's own frame; typed
+  keys stay the draft and sent lines wait (at most `shell-limits.json` `queuedLines`, later ones dropped with one note). The Workline then
+  takes the same open host (`openTerminalHost`: `setView`, one input owner, alternate screen, mouse/focus reports and restore), restores
+  the draft and sends the kept lines in order through the send gate; the bar row does not move. A refusal after the frame (the relocation
+  stop, identity admission) first closes the shell (1049l), then prints the same text with the same exit code (78). Inline layout,
+  `--full-access`, no scope, a retired folder, `TERM=dumb`/pipes and `deckent terminal …` keep the earlier path.
 - **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed

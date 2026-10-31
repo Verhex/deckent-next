@@ -16,8 +16,8 @@ export type OnboardingHandoff = Readonly<{ initial?: FirstTaskIntent | null; ope
  * itself only while the person has typed nothing since the frame; after any key or paste the line is said instead, so typed-ahead keys never answer
  * a card that opened by itself. `opened` follows every open (the status row re-reads the configured model). */
 export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff | undefined; submit(id: string, line: string): boolean;
-  release?(): void; reclaim?(): void; hold?(): () => void; say?(level: 'info' | 'warning', text: string): void; opened?(): void }>) {
-  const { suspendTerminal } = useApp(), latest = useRef(input), queued = useRef(new Map<string, FirstTaskIntent>()), typed = useRef(false);
+  release?(): void; reclaim?(): void; hold?(): () => void; /** Keys already typed before this view (the launch shell's draft or sent lines). */ typed?: boolean; say?(level: 'info' | 'warning', text: string): void; opened?(): void }>) {
+  const { suspendTerminal } = useApp(), latest = useRef(input), queued = useRef(new Map<string, FirstTaskIntent>()), typed = useRef(input.typed === true);
   latest.current = input;
   useInput(() => { typed.current = true; }); usePaste(() => { typed.current = true; });
   const enqueue = (intent: FirstTaskIntent | null) => {

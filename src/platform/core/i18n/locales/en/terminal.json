@@ -443,6 +443,10 @@
   "terminal.session.previous": "A saved conversation is available in this folder. Open /resume to continue it.",
   "terminal.opening.wait": "Waiting for the runtime service before sending; your message goes as soon as it answers. Ctrl+C cancels it.",
   "terminal.opening.setupWaiting": "Setup: {count} steps waiting — /setup",
+  "terminal.shell.preparing": "Preparing…",
+  "terminal.shell.modelPending": "reading…",
+  "terminal.shell.queued": "{count} waiting to send",
+  "terminal.shell.dropped": "While Deckent prepares, only the first {count} sent lines are kept; later ones were not taken.",
   "terminal.info.doctor.poolSetup": "Work cannot start until the worker pool is set up. Open /setup to complete the missing worker and pool steps; deckent doctor lists them outside the terminal.",
   "terminal.info.doctor.sandbox.selection": "This is the current selection, checked again for each command. Starting the runtime can prepare bundled bubblewrap, which then takes precedence over Landlock."
 }

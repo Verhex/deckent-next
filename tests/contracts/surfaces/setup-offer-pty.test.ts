@@ -301,7 +301,7 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     const file = join(f.root, '.deckent/config.json'), config = JSON.parse(await readFile(file, 'utf8')) as { terminal?: Record<string, unknown> };
     delete config.terminal?.['scopeId']; await writeFile(file, JSON.stringify(config)); clearConfigCache();
     const run = await f.pty('negative-installation-no-scope', []);
-    expect(run.output).not.toContain(CARD);
+    expect(run.output).not.toContain(CARD); expect(run.output).not.toContain('Preparing…'); // alpha.60 C: no scope keeps the old path (no launch shell)
     expect(run.output).toContain(SCOPE_REQUIRED);
     expect(run.status, run.output).toBe(2);
   }, 120_000);
