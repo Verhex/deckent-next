@@ -148,7 +148,7 @@ describe('runtime service protocol', () => {
     // v30 steer: the caller's own line for its running turn, current-only (a v29 terminal reaches neither it nor a v30 chat turn); no actor field.
     const steer = { ...cancel, operation: 'steerChatTurn', input: { ...cancel.input, steerId: 'line-1', content: 'also check b.ts' } };
     expect(runtimeServiceRequestSchema.parse(steer)).toEqual(steer);
-    for (const input of [{ ...steer.input, content: '' }, { ...steer.input, steerId: undefined }, { ...steer.input, principal: 'someone' }, { ...steer.input, approvalId: 'a1' }]) {
+    for (const input of [{ ...steer.input, content: '' }, { ...steer.input, steerId: undefined }, { ...steer.input, steerId: 'x'.repeat(65) }, { ...steer.input, steerId: 'a b' }, { ...steer.input, principal: 'someone' }, { ...steer.input, approvalId: 'a1' }]) {
       expect(runtimeServiceRequestSchema.safeParse({ ...steer, input }).success).toBe(false);
     }
     for (const request of [steer, turn]) expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 29 }).success).toBe(false);

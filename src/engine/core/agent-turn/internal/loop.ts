@@ -8,7 +8,7 @@ import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-not
 import { createInlineReasoningRouter, splitInlineReasoning } from './inline-reasoning.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
-  AgentTurnMessage, AgentMessageContinuation, AgentProviderStop } from '#domain/index.js';
+  AgentTurnMessage, AgentMessageContinuation, AgentProviderStop, ChatTurnSteerOutcome } from '#domain/index.js';
 
 const providerStopWords = (language: Locale | undefined) => ({ 'content-filter': t('agent.turn.outcome.contentFilter', {}, language), 'context-window': t('agent.turn.outcome.providerContext', {}, language),
   'network-error': t('agent.turn.outcome.providerNetwork', {}, language), 'resource-exhausted': t('agent.turn.outcome.providerResource', {}, language), 'aborted': t('agent.turn.outcome.providerAborted', {}, language) });
@@ -76,8 +76,10 @@ export interface AgentTurnPorts {
   /** Sealed digests of a marked field. A failure withholds the field; the decoded payload is not an argument. */
   recordIngress?(notice: ModelIngressProjection): Promise<void>;
   /** v30 steer (owner S5): the person's lines waiting for this turn (a snapshot, in order) and `join`, which takes one exactly once (false: it
-   * no longer waits). The loop reads them only at the model-call boundary. */
-  readonly steer?: { pending(): readonly { readonly steerId: string; readonly content: string }[]; join(steerId: string): boolean };
+   * no longer waits). The loop reads them only at the model-call boundary; `close` (the durable turn, once the loop ended) refuses later lines
+   * and names every accepted one as joined or returned. */
+  readonly steer?: { pending(): readonly { readonly steerId: string; readonly content: string }[]; join(steerId: string): boolean;
+    close(): ChatTurnSteerOutcome };
 }
 
 /**

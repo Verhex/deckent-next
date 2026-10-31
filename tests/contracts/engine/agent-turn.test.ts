@@ -37,7 +37,8 @@ function ports(rounds: (AgentRoundOutcome | ((messages: readonly AgentTurnMessag
 }
 /** v30 steer: the person's waiting lines, taken by the loop exactly once (as the composition's running-turn record does). */
 const steering = (pending: { steerId: string; content: string }[], joined: string[] = []): NonNullable<AgentTurnPorts['steer']> => ({ pending: () => [...pending],
-  join: steerId => { const at = pending.findIndex(line => line.steerId === steerId); if (at < 0) return false; pending.splice(at, 1); joined.push(steerId); return true; } });
+  join: steerId => { const at = pending.findIndex(line => line.steerId === steerId); if (at < 0) return false; pending.splice(at, 1); joined.push(steerId); return true; },
+  close: () => ({ joined: [...joined], returned: pending.map(line => line.steerId) }) });
 async function run(p: ReturnType<typeof ports>, signal = new AbortController().signal) {
   const events: AgentTurnEvent[] = [];
   const result = await runAgentTurn({ messages: user, tools, signal, emit: event => events.push(event) }, p.value);

@@ -59,7 +59,9 @@ cancels at once (another principal's turn, or an unknown one, is `not-running`);
 **Protocol v30 (tema L6, owner S5).** `ChatTurnResult` carries typed MCP start `notices` (the adapter's structure, at most
 `CHAT_TURN_RESULT_NOTICES`; the surface renders them from its own catalog) and `note` no longer carries MCP text. `steerChatTurn` queues one
 person line for the same principal's running turn (`queued`, `not-running` for another principal, unknown, cancelled or finished turns,
-`full` past `CHAT_TURN_STEER_LINES` lines per turn; a repeated `steerId` is the same line). The loop takes waiting lines only at the
+`full` past `CHAT_TURN_STEER_LINES` lines per turn or when one more id would not fit the turn's result bound whole; a repeated `steerId`
+is the same line; ids are identifier-shaped, at most 64 characters). The joined and returned ids are stored with the durable turn, so a
+replay answers the same. The loop takes waiting lines only at the
 model-call boundary — after every tool result of the round, before the next round is measured and sent — so a line never enters an
 approval or witness wait and never answers a card; each joins once as the person's `user` message (`message` event with its `steerId`),
 none joins after a cancel, and the result's `steer.returned` names the lines that did not join. A v29 terminal's `chatTurn` is closed

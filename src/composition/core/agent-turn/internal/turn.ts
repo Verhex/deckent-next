@@ -48,8 +48,14 @@ export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, sig
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
   return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
-/** v30: a running turn's steered lines; `closed` once the turn has its result, so a later line is `not-running` (never accepted and lost). */
-interface TurnSteer { readonly pending: { readonly steerId: string; readonly content: string }[]; readonly joined: string[]; readonly seen: Set<string>; closed: boolean }
+/** v30: a running turn's steered lines; `closed` once the loop ended, so a later line is `not-running` (never accepted and lost). `room`: the
+ * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */
+interface TurnSteer { readonly pending: { readonly steerId: string; readonly content: string }[]; readonly joined: string[]; readonly seen: Set<string>; closed: boolean;
+  readonly room: number }
+/** Bytes a turn result keeps for its fixed fields and note, beside the answer, notices and steer ids (the reserve the answer bound has always used). */
+const TURN_RESULT_RESERVE = 1024;
+/** Serialized size of the steer ids as the result carries them; one array is the largest split of the same ids. */
+const steerBytes = (ids: readonly string[]) => Buffer.byteLength(JSON.stringify({ joined: [], returned: ids }), 'utf8');
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
@@ -201,7 +207,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
     registered = !host.running.has(key);
-    const steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false };
+    // v30 (tema L6): MCP notices as data, at the protocol's bound; `note` keeps only the turn's own note (and a failed policy record).
+    const notices = mcpNotices.flatMap(notice => { const parsed = mcpStartNoticeSchema.safeParse(notice); return parsed.success ? [parsed.data] : []; }).slice(0, CHAT_TURN_RESULT_NOTICES);
+    const noticeBytes = Buffer.byteLength(JSON.stringify(notices), 'utf8');
+    const steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - TURN_RESULT_RESERVE - noticeBytes };
     if (registered) host.running.set(key, { principalKey, controller: cancel, steer });
     const ports: AgentTurnPorts = {
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
@@ -367,28 +376,24 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       },
       // v30 steer: the engine takes a line only at its model-call boundary; taking is synchronous, so a line joins once or stays pending.
       steer: { pending: () => [...steer.pending], join: steerId => { const at = steer.pending.findIndex(line => line.steerId === steerId);
-        if (steer.closed || at < 0) return false; steer.pending.splice(at, 1); steer.joined.push(steerId); return true; } },
+        if (steer.closed || at < 0) return false; steer.pending.splice(at, 1); steer.joined.push(steerId); return true; },
+        close: () => { steer.closed = true; return { joined: [...steer.joined], returned: steer.pending.map(line => line.steerId) }; } },
       now: () => clock.sample().wallMs, recordIngress: async notice => { if (notice.disposition === 'unchanged') return; const loaded = await context.policy.load() as { revision?: unknown }; const policyRevision = typeof loaded.revision === 'string' ? loaded.revision : 'unknown'; const atMs = clock.sample().wallMs; await withAgentAudit(context, audit => audit.record({ schemaVersion: 1, eventId: sha256(`model-ingress:1\0${command.scopeId}\0${command.turnId}\0${notice.fieldDigest}\0${notice.codePoints}\0${atMs}`), scopeId: command.scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision, atMs, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest, decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } })); },
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
       admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes, chat.compactionThresholdTokens), fullAccess,
       approverNoteMaxChars: context.config.approvals.approverNoteMaxChars }, store, ports);
-    // Closed in the same tick the loop ended: every line accepted so far either joined or is returned now.
-    steer.closed = true;
-    const steered = { joined: [...steer.joined], returned: steer.pending.map(line => line.steerId) };
+    steer.closed = true; // a replayed turn never ran the loop: its stored ids answer, nothing is accepted now
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
-    // v30 (tema L6): MCP notices as data, at the protocol's bound; `note` keeps only the turn's own note (and a failed policy record).
-    const notices = mcpNotices.flatMap(notice => { const parsed = mcpStartNoticeSchema.safeParse(notice); return parsed.success ? [parsed.data] : []; }).slice(0, CHAT_TURN_RESULT_NOTICES);
-    // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery (beside the notices).
-    const noticeBytes = Buffer.byteLength(JSON.stringify(notices), 'utf8');
-    const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, delivery.maxResultBytes - 1024 - noticeBytes)) ? answer : null;
+    // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery (beside notices and steer ids).
+    const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, steer.room - steerBytes([...result.steer.joined, ...result.steer.returned]))) ? answer : null;
     const policyRecorded = await flushPolicy?.(); flushPolicy = null;
     const note = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), result.note].filter(Boolean).join(' ').slice(0, TURN_NOTE_MAX_CHARS) : result.note;
     return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note, rounds: result.rounds,
-      toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded, notices, steer: steered });
+      toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded, notices, steer: result.steer });
   } finally {
     /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();
     if (registered) host.running.delete(key);
@@ -416,6 +421,7 @@ export async function steerPeerConfiguredChatTurn(projectRoot: string, input: un
   const { turnId, steerId, content } = parsed.data, context = await loadPeerInvocationContext(projectRoot, parsed.data.scopeId, options, peer, 'write');
   const running = host.running.get(runningKey(parsed.data.scopeId, turnId)), steer = running?.steer;
   const state = !running || !steer || running.principalKey !== principalKeyOf(context.principal) || steer.closed || running.controller.signal.aborted ? 'not-running'
-    : steer.seen.has(steerId) ? 'queued' : steer.seen.size >= CHAT_TURN_STEER_LINES ? 'full' : (steer.seen.add(steerId), steer.pending.push({ steerId, content }), 'queued');
+    : steer.seen.has(steerId) ? 'queued' : steer.seen.size >= CHAT_TURN_STEER_LINES || steerBytes([...steer.seen, steerId]) > steer.room ? 'full'
+    : (steer.seen.add(steerId), steer.pending.push({ steerId, content }), 'queued');
   return Object.freeze({ schemaVersion: 1, turnId, steerId, state });
 }

@@ -5070,6 +5070,14 @@
     ],
     "invariants": [
       {
+        "file": "src/composition/core/agent-turn/internal/turn.ts",
+        "symbol": "TURN_RESULT_RESERVE",
+        "values": [
+          "1024"
+        ],
+        "reason": "Bytes of the turn result frame reserved for the envelope and note before the answer and steered ids are fitted (the same reserve the answer bound always used, named in alpha.60 TP); a frame-layout invariant, not policy."
+      },
+      {
         "file": "src/domain/core/agent-turn/internal/contract.ts",
         "symbol": "CHAT_TURN_RESULT_NOTICES/CHAT_TURN_STEER_LINES",
         "values": [

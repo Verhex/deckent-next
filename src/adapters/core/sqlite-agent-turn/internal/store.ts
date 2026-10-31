@@ -1,12 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { agentToolDiagnosticSchema } from '#domain/index.js';
-import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
+import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, agentTurnSteerRecordSchema, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
 const id = z.string().min(1).max(256), count = z.number().int().nonnegative().safe(), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const outcomeSchema = z.object({ finish: z.enum(['stop', 'length', 'cancelled', 'error']), note: z.string().max(4096).nullable(), rounds: count, toolCalls: count,
-  answer: z.string().nullable(), answerBytes: count, appendedDigest: digest.nullable() }).strict()
+  // v30 (additive, optional): a turn that accepted steered lines keeps their ids; rows without it stay byte-identical.
+  answer: z.string().nullable(), answerBytes: count, appendedDigest: digest.nullable(), steer: agentTurnSteerRecordSchema.optional() }).strict()
   .refine(outcome => outcome.answer === null ? outcome.answerBytes === 0 || outcome.answerBytes > AGENT_TURN_ANSWER_MAX_BYTES
     : Buffer.byteLength(outcome.answer, 'utf8') === outcome.answerBytes && outcome.answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES);
 const turnSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: id, principalKey: id, requestDigest: digest, claimedAtMs: count,

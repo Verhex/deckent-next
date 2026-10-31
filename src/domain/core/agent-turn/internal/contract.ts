@@ -6,6 +6,9 @@ import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, approvalPreviewCutSchema, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo,
   type ApprovalPreviewCutFacts } from './card-facts.js';
 
+/** v30 steer line id: identifier-shaped and short (a UUID fits), so every accepted id fits the turn's bounded result whole (Astra 2882). */
+export const chatTurnSteerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
 /**
  * Provider-neutral conversation of one agent turn (T-L3). Messages that come from the client — history, earlier tool results,
  * project documents — are untrusted context: they never grant authority. Native provider details stay in adapters.
@@ -76,7 +79,7 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count,
     cleanup: agentToolCleanupSchema.optional() }).strict(),
   z.object({ kind: z.literal('usage'), round: z.number().int().positive().safe(), promptTokens: count, completionTokens: count }).strict(),
-  z.object({ kind: z.literal('message'), message: agentTurnMessageSchema, steerId: identitySchema.optional() }).strict(),
+  z.object({ kind: z.literal('message'), message: agentTurnMessageSchema, steerId: chatTurnSteerIdSchema.optional() }).strict(),
   z.object({ kind: z.literal('context'), round: z.number().int().positive().safe(), promptTokens: count, windowTokens: z.number().int().positive().safe().nullable(),
     quality: z.enum(['provider-count', 'upper-bound']) }).strict(),
   z.object({ kind: z.literal('compacted'), messages: z.array(agentTurnMessageSchema).min(1).readonly(), replacedMessages: count }).strict(),
@@ -134,25 +137,30 @@ export const mcpStartNoticeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('secret-refused'), name: noticeText(64), key: noticeText(256), scope: noticeText(256), code: noticeText(64) }).strict(),
 ]);
 export type ChatTurnNotice = z.infer<typeof mcpStartNoticeSchema>;
+/** The steered lines of one turn: those that joined and those returned unsent; kept with the durable turn so a replay answers the same. */
+export const chatTurnSteerOutcomeSchema = z.object({ joined: z.array(chatTurnSteerIdSchema).max(CHAT_TURN_STEER_LINES).readonly(),
+  returned: z.array(chatTurnSteerIdSchema).max(CHAT_TURN_STEER_LINES).readonly() }).strict();
+export type ChatTurnSteerOutcome = z.infer<typeof chatTurnSteerOutcomeSchema>;
 /** The bounded result of a turn: the final answer when it fits the replay bound, never the tool results (they came as events). v30: `notices`
  * (typed, see above) and `steer` — the steered lines that joined the turn and those it returns unsent (the person's to send again). */
 export const chatTurnResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema, finish: finishSchema,
   note: z.string().max(4096).nullable(), rounds: count, toolCalls: count, answer: z.string().nullable(), answerBytes: count,
   replayed: z.boolean(), recorded: z.boolean(), notices: z.array(mcpStartNoticeSchema).max(CHAT_TURN_RESULT_NOTICES).readonly(),
-  steer: z.object({ joined: z.array(identitySchema).max(CHAT_TURN_STEER_LINES).readonly(), returned: z.array(identitySchema).max(CHAT_TURN_STEER_LINES).readonly() }).strict() }).strict().readonly();
+  steer: chatTurnSteerOutcomeSchema }).strict().readonly();
 export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
 
 /**
  * v30 steer (owner S5): one person line for the caller's own running turn. It joins the turn only at the next model-call boundary, after
  * every tool result of the round; never into an approval or witness wait, never as an answer to a card, never after a cancel. `queued`
  * lines either join (a `message` event with this `steerId`) or come back in the result's `steer.returned`; `not-running` and `full` mean
- * the service kept nothing. A repeated `steerId` is the same line (never added twice).
+ * the service kept nothing. A repeated `steerId` is the same line (never added twice). `full` also when one more id could not be returned
+ * whole within the turn's result bound.
  */
-export const chatTurnSteerSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema, steerId: identitySchema,
+export const chatTurnSteerSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema, steerId: chatTurnSteerIdSchema,
   content: z.string().min(1) }).strict().readonly();
 export type ChatTurnSteer = z.infer<typeof chatTurnSteerSchema>;
 export const parseChatTurnSteer = (value: unknown): ChatTurnSteer => chatTurnSteerSchema.parse(value);
-export const chatTurnSteerResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema, steerId: identitySchema,
+export const chatTurnSteerResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema, steerId: chatTurnSteerIdSchema,
   state: z.enum(['queued', 'not-running', 'full']) }).strict().readonly();
 export type ChatTurnSteerResult = z.infer<typeof chatTurnSteerResultSchema>;
 

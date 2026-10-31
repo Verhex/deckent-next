@@ -27,8 +27,7 @@ import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 // S9: the real host measurement gates the bubblewrap turn; other shell tests pin the realm to `host` or inject `() => []`.
-const measured = await measureTestShellHost();
-const sandboxReady = measured.bubblewrap.status === 'available';
+const measured = await measureTestShellHost(), sandboxReady = measured.bubblewrap.status === 'available';
 const kernelLandlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
 /** S11 through the port: only the Landlock provider, judged against an injected measurement (the kernel's ABI, or one it does not have). */
 const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
@@ -49,7 +48,7 @@ const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: Str
 const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
 type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
-async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
+async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number; responseMaxBytes?: number;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
   thinkingSwitch?: boolean; dataInside?: boolean; shellRealm?: 'host' | 'prefer-sandbox' | 'require-sandbox' | 'absent';
@@ -114,7 +113,7 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     ...(options.approvalTtlMs ? { approvals: { requestTtlMs: options.approvalTtlMs } } : {}),
-    service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
+    service: { inputMaxBytes: 262144, responseMaxBytes: options.responseMaxBytes ?? 65536, maxConnections: 8, maxConcurrentRequests: 4,
       maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
@@ -1186,27 +1185,29 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   }, 30_000);
 
   it('cancels a running turn at once for the same principal, and reports an unknown turn as not running', async () => {
-    const f = await runtime(); await f.start();
-    f.state.script = [{ hold: true }];
-    const client = f.client(); let seen = false;
-    // Wait for the provider's stream (the first event is now the pre-send `context` measurement).
-    const running = client.chatTurn(ask('turn-cancel'), event => { if (event.kind === 'text') seen = true; });
-    const until = performance.now() + 5_000;
-    while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
-    expect(seen).toBe(true);
-    // v30 cancel/steer race: a line queued before the cancel never joins and comes back in the result; one after it is refused.
-    const steer = (steerId: string) => client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel', steerId, content: 'and b.ts' }); expect(await steer('before')).toMatchObject({ state: 'queued' });
-    const cancelledAt = performance.now();
-    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toEqual({ schemaVersion: 1, turnId: 'turn-cancel', state: 'cancelling' });
-    expect(await steer('after')).toMatchObject({ state: 'not-running' });
-    expect(await running).toMatchObject({ finish: 'cancelled', replayed: false, steer: { joined: [], returned: ['before'] } });
-    // At once: the held provider stream is aborted, not waited out.
-    expect(performance.now() - cancelledAt).toBeLessThan(1_000);
-    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toMatchObject({ state: 'not-running' });
-    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: randomUUID() })).toMatchObject({ state: 'not-running' });
-    while (f.state.closed === 0 && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
-    expect(f.state.closed).toBe(1);
-  }, 30_000);
+    // v30 cancel/steer race (Astra 2882) at a 4096- and a 2048-byte response bound: a line is accepted only while every id fits the result whole
+    // (16 longest ids at 4096, fewer at 2048, then `full`); the cancel returns each accepted id in the final frame, a later line is refused, and
+    // a replay after a restart answers the same ids.
+    for (const bound of [4096, 2048]) {
+      const f = await runtime({ responseMaxBytes: bound }), live = await f.start(), client = f.client(); let seen = false; f.state.script = [{ hold: true }];
+      // Wait for the provider's stream (the first event is now the pre-send `context` measurement).
+      const running = client.chatTurn(ask('turn-cancel'), event => { if (event.kind === 'text') seen = true; });
+      const until = performance.now() + 5_000;
+      while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+      expect(seen).toBe(true); const steer = (steerId: string) => client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel', steerId, content: 'and b.ts' });
+      const ids = Array.from({ length: 17 }, (_, n) => String(n).padStart(64, 'x')), states: string[] = []; for (const id of ids) states.push((await steer(id)).state);
+      const accepted = ids.slice(0, states.indexOf('full')); expect(states).toEqual(ids.map((_, n) => n < accepted.length ? 'queued' : 'full')); expect(bound === 4096 ? accepted.length === 16 : accepted.length > 0 && accepted.length < 16).toBe(true);
+      const cancelledAt = performance.now();
+      expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toEqual({ schemaVersion: 1, turnId: 'turn-cancel', state: 'cancelling' });
+      expect(await steer('after')).toMatchObject({ state: 'not-running' });
+      expect(await running).toMatchObject({ finish: 'cancelled', replayed: false, steer: { joined: [], returned: accepted } });
+      expect(performance.now() - cancelledAt).toBeLessThan(1_000); // At once: the held provider stream is aborted, not waited out.
+      for (const turnId of ['turn-cancel', randomUUID()]) expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId })).toMatchObject({ state: 'not-running' });
+      while (f.state.closed === 0 && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10)); expect(f.state.closed).toBe(1);
+      await live.stop(); await live.done.catch(() => undefined); services.splice(services.indexOf(live), 1); await f.start();
+      expect(await f.client().chatTurn(ask('turn-cancel'), () => undefined)).toMatchObject({ finish: 'cancelled', replayed: true, steer: { joined: [], returned: accepted } });
+    }
+  }, 60_000);
 
   it('cancels the turn on the service when the client disconnects mid-stream', async () => {
     const f = await runtime(); await f.start();
