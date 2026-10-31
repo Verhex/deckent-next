@@ -10,28 +10,17 @@ import { projectInstructionLabels, projectSkeleton, type ProjectInstructionLabel
 
 export function InstructionInitWindow(props: { readonly port: ProjectInstructionPort; readonly initial: InstructionInitPreview; readonly labels: ProjectInstructionLabels;
   readonly skeleton: (name: string, commands: readonly string[]) => string; readonly finish: (result: unknown, error?: unknown) => void }) {
-  const [preview, setPreview] = useState(props.initial), [step, setStep] = useState<'bridges' | 'hosts' | 'preview' | 'applying'>('bridges');
-  const [selected, setSelected] = useState<string[]>([]), { exit } = useApp();
+  const [applying, setApplying] = useState(false), { exit } = useApp();
   const done = (result: unknown, error?: unknown) => { props.finish(result, error); exit(); };
-  const bridges = step === 'hosts' ? preview.bridges : preview.bridges.filter(row => row.detected || selected.includes(row.id));
-  const choices = step === 'preview' ? [props.labels.cancel, props.labels.confirm] : [props.labels.continue,
-    ...bridges.map(row => `${selected.includes(row.id) ? '[x]' : '[ ]'} ${row.id} · ${row.path}`), ...(step === 'bridges' ? [props.labels.chooseHost] : [])];
   const onChoice = async (index: number | null) => {
-    if (step === 'applying') return;
-    if (index === null || (step === 'preview' && index === 0)) { done(null); return; }
-    if (step === 'preview') {
-      setStep('applying');
-      try { done(await props.port.initialize(preview)); } catch (error) { done(null, error); }
-      return;
-    }
-    if (index === 0) { try { setPreview(await props.port.preview(selected, props.skeleton)); setStep('preview'); } catch (error) { done(null, error); } return; }
-    if (step === 'bridges' && index === choices.length - 1) { setStep('hosts'); return; }
-    const bridge = bridges[index - 1];
-    if (bridge) setSelected(current => current.includes(bridge.id) ? current.filter(id => id !== bridge.id) : [...current, bridge.id]);
+    if (applying) return;
+    if (index !== 1) { done(null); return; }
+    setApplying(true);
+    try { done(await props.port.initialize(props.initial)); } catch (error) { done(null, error); }
   };
-  const body = step === 'preview' ? preview.changes.flatMap(change => [change.path, ...humanRecordText(change.append).split('\n')]) : [];
-  return <WindowStackProvider><InstructionChoiceWindow key={`${step}:${selected.join(',')}`} title={step === 'preview' ? props.labels.initTitle : props.labels.bridgesTitle}
-    labels={props.labels} choices={step === 'applying' ? [] : choices} body={body} onChoice={index => { void onChoice(index); }} /></WindowStackProvider>;
+  const body = props.initial.changes.flatMap(change => [change.path, ...humanRecordText(change.append).split('\n')]);
+  return <WindowStackProvider><InstructionChoiceWindow title={props.labels.initTitle}
+    labels={props.labels} choices={applying ? [] : [props.labels.cancel, props.labels.confirm]} body={body} onChoice={index => { void onChoice(index); }} /></WindowStackProvider>;
 }
 
 export async function instructionInitCommand(argv: readonly string[], context: { readonly root?: string; readonly env?: NodeJS.ProcessEnv; readonly stdout?: OutputSink;

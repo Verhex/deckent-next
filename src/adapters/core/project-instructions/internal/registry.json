@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "files": ["DECKENT.md", "AGENTS.md"],
+  "terminalFiles": ["AGENTS.md", "CLAUDE.md", "DECKENT.md"],
+  "maxImportDepth": 5,
   "maxBytes": 32768,
   "projectFactsMaxBytes": 65536,
   "legacyTrust": { "file": "legacy-folder-trust.v1", "maxEntries": 4096 },

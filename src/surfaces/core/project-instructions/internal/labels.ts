@@ -3,7 +3,7 @@ import { humanRecordText } from '#surfaces/core/terminal-render/index.js';
 export interface ProjectInstructionLabels {
   readonly trustTitle: string; readonly trustBody: string; readonly skip: string; readonly trust: string;
   readonly source: string; readonly blocked: string; readonly hints: string; readonly position: string;
-  readonly initTitle: string; readonly bridgesTitle: string; readonly continue: string; readonly chooseHost: string;
+  readonly initTitle: string; readonly external: string;
   readonly confirm: string; readonly cancel: string; readonly done: string;
   readonly lineTrustRequired: string;
 }
@@ -18,9 +18,7 @@ export function projectInstructionLabels(locale: Locale): ProjectInstructionLabe
     hints: t('instructions.hints', {}, locale),
     position: t('instructions.position', {}, locale),
     initTitle: t('instructions.initTitle', {}, locale),
-    bridgesTitle: t('instructions.bridgesTitle', {}, locale),
-    continue: t('instructions.continue', {}, locale),
-    chooseHost: t('instructions.chooseHost', {}, locale),
+    external: t('setup.instructions.external', {}, locale),
     confirm: t('instructions.confirm', {}, locale),
     cancel: t('instructions.cancel', {}, locale),
     done: t('instructions.done', {}, locale),

@@ -32,12 +32,12 @@ export function useInstructionContext(port: ProjectInstructionPort | undefined, 
   };
   return { prepare, open: pending !== null, sourceLines: () => source.current && labels ? [instructionSourceLine(source.current, labels)] : [],
     window: pending && labels ? <InstructionChoiceWindow title={labels.trustTitle} labels={labels}
-      body={[labels.trustBody, instructionSourceLine(pending, labels), ...pending.content.split('\n')]}
+      body={[labels.trustBody, ...(pending.external ? [labels.external] : []), instructionSourceLine(pending, labels), ...(pending.imports ?? []), ...pending.content.split('\n')]}
       choices={[labels.skip, labels.trust]} onChoice={index => finish(index === 1)} /> : null };
 }
 /** Line mode never infers consent from a pipe, full-access, identity or a workspace-local record. */
 export async function lineInstructionContext(port: ProjectInstructionPort | undefined, digest?: string): Promise<ProjectInstructionView> {
   if (!port) return { status: 'absent' };
   const view = await port.inspect();
-  return view.status === 'trust-required' && digest === view.source.digest ? port.trust(digest) : view;
+  return view.status === 'trust-required' && !view.source.external && digest === view.source.digest ? port.trust(digest) : view;
 }

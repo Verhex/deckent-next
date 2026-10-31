@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, parse, relative, resolve, sep } from 'node:path';
 import { redactForRecord, withConfigWriteLock, openPinnedParent, writePinnedFile, type KnownSecretSnapshot } from '#platform/index.js';
 import type { CommittedInstructionSource, ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
+import { expandInstructionImports } from '#engine/index.js';
 import REGISTRY from './registry.json' with { type: 'json' };
 
 export const PROJECT_INSTRUCTION_REGISTRY = REGISTRY;
@@ -144,13 +145,13 @@ export async function forgetFolderLegacyTrust(rootInput: string, trustDirectory:
 /** The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
 export type ExpectedInstructionFile = Readonly<{ path: string; dev: number | null; ino: number | null }>;
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
-/** `files` narrows the candidates (a worker selection reads exactly one file); the default keeps the terminal's DECKENT.md → AGENTS.md order.
+/** `files` narrows the candidates (a worker selection reads exactly one file); only the default terminal reader expands imports.
  * `committed` (alpha.54 R1: a work target's base ref) reads each file from that ref's commit instead of the working tree.
  * Trust records (REVISE 2738 R1, owner Q5): a working-tree read keys consent by this folder + content digest, as alpha.53 did. A committed read
  * keys a NEW grant by folder + ref + digest in its own tagged form, so another ref or the working tree with the same bytes is not trusted by it.
  * Legacy rule: a committed read also honours a folder + digest record, but only one sealed in the legacy snapshot (it existed before this release
  * first opened the store); it never writes that form. Its revoke removes its ref record and the legacy entry, never the folder's own record. */
-export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files: readonly string[] = REGISTRY.files,
+export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files?: readonly string[],
   committed?: CommittedInstructionSource) {
   const root = await realpath(rootInput), identity = await stat(root);
   const rootDigest = instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`);
@@ -172,17 +173,30 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     try {
       const currentRoot = await stat(root);
       if (currentRoot.dev !== identity.dev || currentRoot.ino !== identity.ino) throw new Error('unsafe');
-      for (const name of files) {
+      for (const name of files ?? (committed ? REGISTRY.files : REGISTRY.terminalFiles)) {
         const read = committed ? await committed.read(name, REGISTRY.maxBytes) : await readIdentifiedFile(root, name, REGISTRY.maxBytes);
         if (read === null) continue;
         const { bytes } = read;
         const source: ProjectInstructionSource = { path: committed ? `${committed.ref}:${name}` : join(root, name), bytes: bytes.length, digest: instructionDigest(bytes),
           content: redactForRecord(bytes.toString('utf8'), known),
           identity: 'commit' in read ? { kind: 'ref', ref: committed!.ref, commit: read.commit, blobOid: read.blobOid } : { kind: 'file', dev: read.dev, ino: read.ino } };
+        if (!files && source.identity.kind === 'file') {
+          const cache = new Map<string, NonNullable<Awaited<ReturnType<typeof readIdentifiedFile>>>>();
+          const expanded = await expandInstructionImports({ path: source.path, text: bytes.toString('utf8'), bytes: bytes.length, binding: `${source.identity.dev}:${source.identity.ino}`, external: false },
+            { maxDepth: REGISTRY.maxImportDepth, maxBytes: REGISTRY.maxBytes }, async (from, name, remaining) => {
+              const path = resolve(dirname(from), name), base = parse(path).root, rel = relative(root, path);
+              const imported = cache.get(path) ?? await readIdentifiedFile(base, relative(base, path).split(sep).join('/'), remaining);
+              if (imported) cache.set(path, imported);
+              return imported && { path, text: imported.bytes.toString('utf8'), bytes: imported.bytes.length, binding: `${imported.dev}:${imported.ino}`,
+                external: rel === '..' || rel.startsWith(`..${sep}`) };
+            });
+          Object.assign(source, { content: redactForRecord(expanded.content, known), bytes: expanded.bytes,
+            ...(expanded.files.length > 1 ? { digest: instructionDigest(expanded.binding), imports: expanded.files.slice(1).map(file => file.path), external: expanded.external } : {}) });
+        }
         if (Buffer.byteLength(source.content) > REGISTRY.maxBytes) return { status: 'blocked', reason: 'size' };
         // Only an owner-private, no-follow record counts; an absent/invalid cache asks again.
         let trusted = sessionTrusted.has(grant(source.digest).name);
-        if (!trusted && trustDirectory) trusted = await consented(source.digest); // fail closed: cached consent is a convenience
+        if (!trusted && trustDirectory && !source.imports) trusted = await consented(source.digest); // terminal imports never unlock worker trust
         const endRoot = await stat(root);
         if (endRoot.dev !== identity.dev || endRoot.ino !== identity.ino) throw new Error('unsafe');
         return { status: trusted ? 'ready' : 'trust-required', source };
@@ -214,7 +228,7 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     if (!sameFile(current.source, expected)) throw new Error('changed');
     if (current.source.digest !== digest) return { status: 'trust-required', source: current.source };
     const { name, body } = grant(digest);
-    if (trustDirectory) {
+    if (trustDirectory && !current.source.imports) {
       try {
         const handle = await open(join(trustDirectory, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
         try { await handle.writeFile(body); await handle.sync(); } finally { await handle.close(); }

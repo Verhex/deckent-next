@@ -183,14 +183,17 @@ const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', 
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     const root = await project();
+    let legacy = true;
     const run = async (args: string[]) => { const out: string[] = [];
-      await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
+      await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, inspectLegacyProjectInstructions: async () => legacy, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
         .catch((error: unknown) => out.push(`[${(error as { code?: string }).code}]`));
       return out.join(''); };
     const grouped = await run([]);
     expect(grouped.split('\n')[0]).toMatch(/^Status: /);
     expect(grouped).toContain('\nInstallation\n');
     expect(grouped).not.toContain('Details (--verbose):');
+    expect(grouped).toContain('Legacy DECKENT.md'); legacy = false;
+    expect(await run([])).not.toContain('Legacy DECKENT.md');
     const verbose = await run(['--verbose']);
     expect(verbose).toContain('Details (--verbose):');
     expect(verbose).toContain('Platform: ');

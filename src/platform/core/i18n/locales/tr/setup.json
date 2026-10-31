@@ -104,9 +104,9 @@
   "error.SETUP_OBSERVATION_INVALID.field": "Kurulum gözlemi geçersiz: {family} bilgileri {field} alanını kabul etmiyor.",
   "error.SETUP_ANSWER_INVALID": "Bir kurulum yanıtı geçersiz veya bilinmeyen bir aşamayı adlandırıyor.",
   "setup.instructions.title": "Proje yönergeleri",
-  "setup.instructions.present": "DECKENT.md var ({bridges} ana makine köprüsü bulundu); köprü satırlarını deckent init --preview gösterir.",
-  "setup.instructions.missing": "Henüz DECKENT.md yok; bu projeyi yapay zekâ araçlarına anlatır ({bridges} ana makine köprüsü bulundu).",
-  "setup.instructions.question": "DECKENT.md yazılsın ve ana makine köprüleri seçilsin mi?",
+  "setup.instructions.present": "AGENTS.md veya CLAUDE.md mevcut; var olan talimat dosyaları korunur.",
+  "setup.instructions.missing": "AGENTS.md ve CLAUDE.md yok; bulunan proje bilgileriyle AGENTS.md önizlemesi hazırlanır.",
+  "setup.instructions.question": "AGENTS.md önizlemesi hazırlansın ve oluşturulsun mu?",
   "setup.instructions.waits": "İzinleri bekliyor: proje dosyaları izinler üzerinden yazılır.",
   "setup.instructions.declined": "İsteğiniz üzerine atlandı.",
   "setup.instructions.unavailable": "Proje yönergeleri burada okunamadı.",
@@ -327,5 +327,8 @@
   "setup.workerImage.progress.probe": "Gerekli CLI bayrakları ağ erişimi olmadan denetleniyor.",
   "setup.workerImage.progress.elapsed": "Geçen süre: {elapsed}. Son kalıcı ilerleme: {at}.",
   "setup.workerImage.progress.unmeasured": "Burada önceki derleme süresi henüz ölçülmedi.",
-  "setup.workerImage.progress.previous": "Önceki ölçülmüş hazırlama: {elapsed}; bu bir bitiş tahmini değildir."
+  "setup.workerImage.progress.previous": "Önceki ölçülmüş hazırlama: {elapsed}; bu bir bitiş tahmini değildir.",
+  "setup.instructions.external": "Bu projenin dışından alınan dosyalar aşağıda listelenir. Güven yalnız bu oturum içindir; bu talimatlar yetki vermez.",
+  "setup.instructions.legacy": "AGENTS.md ve CLAUDE.md olmadığı için eski DECKENT.md okunuyor. Talimatlarınızı AGENTS.md dosyasına taşıyın; Deckent DECKENT.md üretmez.",
+  "setup.instructions.legacyNext": "Talimatları AGENTS.md dosyasına taşıyın, ardından deckent doctor komutunu yeniden çalıştırın."
 }
