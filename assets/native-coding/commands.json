@@ -199,15 +199,29 @@
           "source": "Codex headless lane 2026-10-31 from learn.chatgpt.com/docs/developer-commands (read 2026-10-31): `codex login` signs in with ChatGPT in the browser (--device-auth = device code, --with-api-key reads a key: neither is used). The file credential store is named so the realm can read the login without a keyring (config-reference cli_auth_credentials_store). Runs in the person's terminal with inherited stdio, outside the realm, as for the Claude CLI; no SSO switch. Unmeasured against a real sign-in."
         },
         "stderrAllow": {
-          "patterns": [
-            "^Error loading config\\.toml: unknown configuration field `[A-Za-z0-9_.-]{1,128}` in -c/--config override$",
-            "^error: unexpected argument '-{1,2}[A-Za-z0-9-]{1,64}' found$",
-            "^error: invalid value '[A-Za-z0-9._:/=-]{0,64}' for '-{1,2}[A-Za-z0-9-]{1,64}(?: <[A-Z_]{1,32}>)?'$",
-            "^error: a value is required for '-{1,2}[A-Za-z0-9-]{1,64}(?: <[A-Z_]{1,32}>)?' but none was supplied$",
-            "^\\[possible values: [a-z0-9, -]{1,256}\\]$",
-            "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,20}Z ERROR codex_api::endpoint::responses_websocket: failed to connect to Responses WebSocket stage=[A-Za-z]{1,32}$"
+          "rules": [
+            {
+              "pattern": "^Error loading config\\.toml: unknown configuration field `(?<field>[A-Za-z0-9_.-]{1,128})` in -c/--config override$",
+              "keep": "Error loading config.toml: unknown configuration field `$<field>` in -c/--config override"
+            },
+            {
+              "pattern": "^error: unexpected argument '(?<flag>-{1,2}[A-Za-z0-9-]{1,64})' found$",
+              "keep": "error: unexpected argument '$<flag>' found"
+            },
+            {
+              "pattern": "^error: invalid value '[^']{0,256}' for '(?<flag>-{1,2}[A-Za-z0-9-]{1,64})(?: <[A-Z_]{1,32}>)?'$",
+              "keep": "error: invalid value '…' for '$<flag>'"
+            },
+            {
+              "pattern": "^error: a value is required for '(?<flag>-{1,2}[A-Za-z0-9-]{1,64})(?: <[A-Z_]{1,32}>)?' but none was supplied$",
+              "keep": "error: a value is required for '$<flag>' but none was supplied"
+            },
+            {
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,20}Z ERROR codex_api::endpoint::responses_websocket: failed to connect to Responses WebSocket stage=(?<stage>[A-Za-z]{1,32})$",
+              "keep": "ERROR codex_api::endpoint::responses_websocket: failed to connect to Responses WebSocket stage=$<stage>"
+            }
           ],
-          "source": "HL lane 2026-10-31 (Astra 2875 R1, lead: allowlist): only these whole stderr lines (trimmed) enter the stderr summary of an incomplete turn; every other line is withheld and counted. Shapes from the owner S12 probe captures of codex-cli 0.166.0 (empty CODEX_HOME, no network, no login): proof/ALPHA60/PAKET-2/HL/probe/1-registry-argv-r1.stderr.txt (config field), 6-cli-usage-errors.txt (argument errors, possible values), 2-without-tools-view-image.stderr.txt (WebSocket connect failure). Value-echoing shapes keep a short fixed charset; names only, never a config value."
+          "source": "HL lane 2026-10-31 (Astra 2875 R1, lead: allowlist): only these whole stderr lines (trimmed) enter the stderr summary of an incomplete turn; every other line is withheld and counted. Shapes from the owner S12 probe captures of codex-cli 0.166.0 (empty CODEX_HOME, no network, no login): proof/ALPHA60/PAKET-2/HL/probe/1-registry-argv-r1.stderr.txt (config field), 6-cli-usage-errors.txt (argument errors, possible values), 2-without-tools-view-image.stderr.txt (WebSocket connect failure). A matching line is stored only as its fixed `keep` text with identifier-shaped captures (Astra 2878 R1): a quoted value is never kept."
         },
         "systemPromptFlag": "--config",
         "systemPromptArgs": [
@@ -472,11 +486,17 @@
             "fixed": { "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" } },
           "source": "s3c lane 2026-10-24 from CLI 2.1.309 `auth login --help` (empty config dir, no login run): --claudeai = Claude subscription (the default, named so a Console login is never chosen), --sso forces the SSO flow. The CLI's own sign-in runs in the person's terminal with inherited stdio, outside the realm (its browser OAuth needs the person's browser and the sign-in hosts, which the realm's API-only gateway does not reach); Deckent captures none of its bytes. Inherited names: the browser opener and terminal of the person (unmeasured against a real sign-in until the lead's run); every deny name stays out. timeoutMs stays below refreshLock.staleMs: the login holds the login dir's lock." },
         "stderrAllow": {
-          "patterns": [
-            "^error: unknown option '--[a-z0-9-]{1,64}'$",
-            "^error: option '--[a-z0-9-]{1,64}(?: <[a-z-]{1,32}>)?' argument missing$"
+          "rules": [
+            {
+              "pattern": "^error: unknown option '(?<flag>--[a-z0-9-]{1,64})'$",
+              "keep": "error: unknown option '$<flag>'"
+            },
+            {
+              "pattern": "^error: option '(?<flag>--[a-z0-9-]{1,64})(?: <[a-z-]{1,32}>)?' argument missing$",
+              "keep": "error: option '$<flag>' argument missing"
+            }
           ],
-          "source": "HL lane 2026-10-31 (Astra 2875 R1, lead: allowlist): only these whole stderr lines (trimmed) enter the stderr summary of an incomplete turn; every other line is withheld and counted. Commander parser errors: tj/commander.js v14.0.0 lib/command.js (`error: unknown option '${flag}'`, `error: option '${option.flags}' argument missing`), the latter also seen by the lead real-CLI preflight 2026-10-23 (CLI 2.1.309, hiddenFlags refusal). No Claude stderr was captured for this lane."
+          "source": "HL lane 2026-10-31 (Astra 2875 R1, lead: allowlist): only these whole stderr lines (trimmed) enter the stderr summary of an incomplete turn; every other line is withheld and counted. Commander parser errors: tj/commander.js v14.0.0 lib/command.js (`error: unknown option '${flag}'`, `error: option '${option.flags}' argument missing`), the latter also seen by the lead real-CLI preflight 2026-10-23 (CLI 2.1.309, hiddenFlags refusal). No Claude stderr was captured for this lane. A matching line is stored only as its fixed `keep` text with identifier-shaped captures (Astra 2878 R1): a quoted value is never kept."
         },
         "systemPromptFlag": "--system-prompt-file",
         "systemPromptFile": "system.txt",

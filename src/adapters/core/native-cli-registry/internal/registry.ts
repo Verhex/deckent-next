@@ -58,8 +58,9 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
   /** The prompt-file argv when it is not `<systemPromptFlag> <file>` (`{file}` = the run dir's prompt file; the flag stays the one help must list). */
   systemPromptArgs: argumentsSchema.refine(value => value.some(arg => arg.includes('{file}'))).optional(),
   forbiddenFlags: z.array(flag).min(1).readonly(), promptFramingAllowance: promptFramingAllowanceSchema,
-  /** Astra 2875 R1: the only stderr lines (whole, trimmed) an incomplete turn's summary may keep; every other line is withheld and counted. */
-  stderrAllow: z.object({ patterns: words, source: argument }).strict().readonly(),
+  /** Astra 2875/2878 R1: the only stderr lines (whole, trimmed) an incomplete turn's summary may keep, each stored as its fixed `keep` text with the
+   * pattern's named captures (`$<name>`) only; every other line is withheld and counted. */
+  stderrAllow: z.object({ rules: z.array(z.object({ pattern: argument, keep: argument }).strict().readonly()).readonly(), source: argument }).strict().readonly(),
   /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
    * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */
   preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema, hiddenFlagsSource: argument,

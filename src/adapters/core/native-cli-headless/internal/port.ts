@@ -96,20 +96,24 @@ function claudeTurn(prepared: Prepared, preflight: HeadlessPreflight, runDir: st
   };
 }
 const withheldLine = (count: number) => `[${count} stderr lines withheld]`;
+/** A capture kept in a summary line: identifier-shaped (a flag or field name), never a quoted value. */
+const IDENTIFIER = /^[A-Za-z0-9._-]+$/u;
 /**
- * 1b, Astra 2875 R1: the stderr summary of a CLI that ended before a complete turn is an allowlist. Only whole (trimmed) lines matching the
- * registry's `stderrAllow` patterns are kept, each still redacted (patterns, the call's known secrets, incomplete known-secret suffixes as
- * takeQueryErrorRecord withholds them); the newest kept lines that fit the registry bound stay. Every other non-blank line may hold a secret
- * no pattern knows, so it is withheld and only counted.
+ * 1b, Astra 2875/2878 R1: the stderr summary of a CLI that ended before a complete turn is an allowlist. A whole (trimmed) line matching one of
+ * the registry's `stderrAllow` rules is stored only as that rule's fixed `keep` text with its identifier-shaped named captures (no original
+ * value text), still redacted (patterns, the call's known secrets, incomplete known-secret suffixes as takeQueryErrorRecord withholds them);
+ * the newest kept lines that fit the registry bound stay. Every other non-blank line may hold a secret no pattern knows: withheld, only counted.
  */
-function stderrSummary(base64: string, allow: readonly string[], bound: number, known: KnownSecretSnapshot): string {
-  const patterns = allow.map(pattern => new RegExp(pattern, 'u')), kept: string[] = [];
+function stderrSummary(base64: string, rules: HeadlessEntry['headless']['stderrAllow']['rules'], bound: number, known: KnownSecretSnapshot): string {
+  const compiled = rules.map(rule => ({ pattern: new RegExp(rule.pattern, 'u'), keep: rule.keep })), kept: string[] = [];
   const lines = Buffer.from(base64, 'base64').toString('utf8').split(/\r?\n/u).map(line => line.trim()).filter(line => line !== '');
   // The counter line is reserved at its widest (every line withheld).
   let size = Buffer.byteLength(withheldLine(lines.length), 'utf8');
   for (const line of [...lines].reverse()) {
-    if (!patterns.some(pattern => pattern.test(line))) continue;
-    const safe = redactForRecord(previewRecordStream({ held: redactForRecord(line, known), withheld: false }, known), known);
+    const hit = compiled.map(rule => ({ keep: rule.keep, match: rule.pattern.exec(line) })).find(rule => rule.match), groups = hit?.match?.groups ?? {};
+    if (!hit || Object.values(groups).some(value => value !== undefined && !IDENTIFIER.test(value))) continue;
+    const fixed = hit.keep.replace(/\$<([A-Za-z][A-Za-z0-9]*)>/gu, (_, name: string) => groups[name] ?? '');
+    const safe = redactForRecord(previewRecordStream({ held: redactForRecord(fixed, known), withheld: false }, known), known);
     if ((size += Buffer.byteLength(safe, 'utf8') + 1) > bound) break;
     kept.unshift(safe);
   }
@@ -188,7 +192,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       if (ended && 'refusal' in ended) return settle(ended.refusal);
       if (!ended) {
         if (evidence.reason !== 'exit' && evidence.reason !== 'signal') throw new Error('HEADLESS_OUTCOME_UNKNOWN');
-        const exited: HeadlessRejectionBody = { schemaVersion: 4, refusal: 'process-exit', exitCode: evidence.exitCode, signal: evidence.signal, stderrSummary: stderrSummary(evidence.stderrBase64, headless.stderrAllow.patterns, headless.limits.stderrSummaryBytes, options.knownSecrets ?? EMPTY_KNOWN_SECRETS), egress };
+        const exited: HeadlessRejectionBody = { schemaVersion: 4, refusal: 'process-exit', exitCode: evidence.exitCode, signal: evidence.signal, stderrSummary: stderrSummary(evidence.stderrBase64, headless.stderrAllow.rules, headless.limits.stderrSummaryBytes, options.knownSecrets ?? EMPTY_KNOWN_SECRETS), egress };
         return Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, 'interrupted', null, Buffer.from(JSON.stringify(exited), 'utf8'), false) });
       }
       const response = ended.response;

@@ -276,7 +276,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       const line = 'Error loading config.toml: unknown configuration field `tools.view_image` in -c/--config override', bound = codexHeadless.limits.stderrSummaryBytes;
       const secrets = ['{"refresh_token":"opaque-refresh-value-1234567890"}', 'password="fictional-value-123456"', 'w12OpaqueTokenLine0123456789abcdef', 'Authorization: Bearer w12Fictional0123456789'];
       let exited: Awaited<ReturnType<typeof call>> | undefined;
-      for (const [stderr, summary] of [[`${secrets.slice(0, 3).join('\n')}\n${line}\n${secrets[3]}\n`, `${line}\n[4 stderr lines withheld]`],
+      // Astra 2878 R1: an allowlisted line keeps only its fixed text and the flag name, never the value it echoed.
+      const invalid = "error: invalid value 'opaque-refresh-value-1234567890' for '--color <COLOR>'";
+      for (const [stderr, summary] of [[`${secrets.slice(0, 3).join('\n')}\n${line}\n${invalid}\n${secrets[3]}\n`, `${line}\nerror: invalid value '…' for '--color'\n[4 stderr lines withheld]`],
         [`sk-w12Fictional0123456789ABCDEFGH\n${`${line}\n`.repeat(40)}`, null]] as const) {
         await write({ steps: [{ stderr }, { exit: 2 }] });
         exited = await call();
