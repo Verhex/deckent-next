@@ -89,7 +89,7 @@ export function createBeuserRealm(input: { readonly context: BeuserContext; read
 }
 /** Private pipes to the packaged driver inside the exact, re-admitted container. No public executable/socket path. */
 export function createBeuserChannel(input: { readonly context: BeuserContext; readonly realm: BeuserRealmApplication; readonly custody: BeuserRealmCustody;
-  readonly options: BeuserRealmOptions; readonly boot: Pick<BeuserDriverBoot, 'mode' | 'entry' | 'commands'> & { readonly maxBootBytes: number; readonly language: string } }): BeuserRealmChannel {
+  readonly options: BeuserRealmOptions; readonly boot: Pick<BeuserDriverBoot, 'mode' | 'entry' | 'commands' | 'terminalFixture'> & { readonly maxBootBytes: number; readonly language: string } }): BeuserRealmChannel {
   const { context, realm, custody, options, boot } = input, command = dockerRealmCommand(options);
   const verify = async (ctx: BeuserContext) => {
     assertBeuserAccess(ctx, context.binding, context.principal, { kind: 'beuser-sandbox', id: context.binding.realmId }, 'create');
@@ -98,6 +98,7 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
   return { binding: context.binding, verify, async open(ctx, size, bounds): Promise<RealmDriverIO> {
     await verify(ctx); const handle = (await custody.load(ctx))?.handle; if (!handle?.containerId) return refuse();
     const wire = JSON.stringify(pinBeuserDriverBoot({ schemaVersion: 1, nonce: ctx.binding.nonce, mode: boot.mode, entry: boot.entry, commands: boot.commands,
+      ...(boot.terminalFixture ? { terminalFixture: boot.terminalFixture } : {}),
       secretFds: {}, columns: size.columns, rows: size.rows, maxArtifactBytes: ctx.limits.maxArtifactBytes,
       env: { TERM: 'xterm-256color', LANG: boot.language, LC_ALL: boot.language, HOME: BEUSER_REALM_RECIPE.home, DECKENT_GLOBAL_HOME: `${BEUSER_REALM_RECIPE.home}/.deckent` },
       limits: { maxSteps: ctx.limits.maxSteps, maxWallMs: ctx.limits.maxWallMs, maxWaitMs: ctx.limits.maxWaitMs,

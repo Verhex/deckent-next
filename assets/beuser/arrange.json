@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "beuser-arrange-2",
+  "revision": "beuser-arrange-3",
   "steps": [
     { "kind": "cli", "id": "installed", "version": 1, "args": ["init", "--yes", "--scope", "beuser-realm", "--json"], "timeoutMs": 25000, "readback": { "kind": "installation", "expected": "installed" } },
     { "kind": "git", "id": "git-repository", "version": 1, "args": ["init", "--quiet"], "timeoutMs": 10000, "readback": { "kind": "path", "path": "/realm/.git", "expected": { "state": "directory" } } },
@@ -84,6 +84,16 @@
     { "id": "realm-unavailable", "unknown": "realm-external" },
     { "id": "network-interrupted", "unknown": "realm-external" },
     { "id": "other-company-scope", "unknown": "enterprise-only" },
-    { "id": "line-mode", "unknown": "driver-limit" }
+    { "id": "line-mode", "unknown": "driver-limit" },
+    {"id": "TL-A", "steps": [{"id": "installed", "version": 1}]},
+    {"id": "TL-B", "steps": [{"id": "installed", "version": 1}]},
+    {"id": "TL-C", "steps": [{"id": "installed", "version": 1}]},
+    {"id": "TL-D", "steps": [{"id": "installed", "version": 1}]},
+    {"id": "TL-E", "steps": [{"id": "installed", "version": 1}]},
+    {"id": "TL-G", "steps": [{"id": "installed", "version": 1}]},
+    {"id": "TL-F", "unknown": "no-producer"},
+    {"id": "TL-H", "unknown": "no-producer"},
+    {"id": "TL-model-connected", "unknown": "no-producer"},
+    {"id": "TL-invalid-theme", "unknown": "no-producer"}
   ]
 }

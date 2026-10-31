@@ -1,4 +1,5 @@
 import headless, { type Terminal } from '@xterm/headless';
+import { measureCell, beuserTerminalFixtureSchema, type BeuserTerminalFixture, type CellRun } from './measurement.js';
 import unicode11 from '@xterm/addon-unicode11';
 import { BeuserSurfaceError, positive } from './input.js';
 /* eslint-disable no-control-regex -- The streaming VT recognizer must match actual protocol control bytes. */
@@ -8,6 +9,7 @@ const UTF8_SCALAR_BYTES = Buffer.byteLength('\u{10ffff}', 'utf8');
 export interface ScreenSize { readonly columns: number; readonly rows: number; readonly scrollback: number }
 export interface RenderedScreen {
   readonly text: string; readonly main: string; readonly scrollback: string; readonly alternate: boolean;
+  readonly cells?: readonly CellRun[];
   readonly caret: { readonly x: number; readonly y: number }; readonly columns: number; readonly rows: number;
 }
 /** A strict streaming recognizer rejects unsupported VT instead of letting xterm silently ignore it. */
@@ -47,17 +49,19 @@ class VtGuard {
             || erase || /^[su]$/u.test(final) && parameters === '');
           const color = final === 'm' && numeric && this.colors(numbers);
           const mode = /^[hl]$/u.test(final) && (parameters === '4' || parameters.startsWith('?')
-            && parameters.slice(1).split(';').every(value => /^(?:1|6|7|12|25|47|1047|1048|1049|1000|1002|1004|1006|2004|2026)$/u.test(value)));
+            && parameters.slice(1).split(';').every(value => /^(?:1|6|7|12|25|47|1047|1048|1049|1000|1002|1004|1006|2004|2026|2031)$/u.test(value)));
           // Ink's keyboard-protocol negotiation is presentation metadata, never input authority.
+          const deviceQuery = final === 'c' && (parameters === '' || parameters === '0');
           const keyboard = final === 'u' && /^[><=?][\d;]*$/u.test(parameters);
-          if (!regular && !color && !mode && !keyboard) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
+          if (!regular && !color && !mode && !keyboard && !deviceQuery) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
           i += match[0].length;
         } else if (rest[1] === ']') {
-          const match = /^\x1b\](0|1|2|8);[^\x00-\x06\x08-\x1f]*(?:\x07|\x1b\\)/u.exec(rest);
+          const match = /^\x1b\](0|1|2|8|11);[^\x00-\x06\x08-\x1f]*(?:\x07|\x1b\\)/u.exec(rest);
           if (!match) {
             if (!/[\x07]/u.test(rest) && !rest.includes('\x1b\\')) { this.pending = rest; break; }
             throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
           }
+          if (match[1] === '11' && !/^\x1b\]11;\?(?:\x07|\x1b\\)$/u.test(match[0])) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
           i += match[0].length;
         } else if (/^[78DEM=>c]$/u.test(rest[1]!)) i += 2;
         else throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
@@ -91,7 +95,8 @@ export class BeuserScreenRenderer {
   private readonly guard = new VtGuard();
   private invalid = false;
   private busy = false;
-  constructor(size: ScreenSize, private readonly maxBytes: number) {
+  constructor(size: ScreenSize, private readonly maxBytes: number, private readonly fixture?: BeuserTerminalFixture) {
+    if (fixture) this.fixture = beuserTerminalFixtureSchema.parse(fixture);
     positive(maxBytes); positive(size.columns); positive(size.rows);
     if (!Number.isSafeInteger(size.scrollback) || size.scrollback < 0 || (size.rows + size.scrollback) * size.columns * UTF8_SCALAR_BYTES > maxBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
     this.terminal = new headless.Terminal({ cols: size.columns, rows: size.rows, scrollback: size.scrollback, allowProposedApi: true,
@@ -121,8 +126,27 @@ export class BeuserScreenRenderer {
       (_, offset) => buffer.getLine(start + offset)?.translateToString(true) ?? '').join('\n').trimEnd();
     const result = { text: lines(active, active.baseY, active.baseY + this.terminal.rows), main: lines(normal, 0, normal.length),
       scrollback: lines(normal, 0, normal.baseY), alternate: active.type === 'alternate',
+      ...(this.fixture ? { cells: this.cells() } : {}),
       caret: { x: active.cursorX, y: active.cursorY }, columns: this.terminal.cols, rows: this.terminal.rows };
     if (Buffer.byteLength(JSON.stringify(result)) > this.maxBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
+    return result;
+  }
+  private cells(): CellRun[] {
+    const buffer = this.terminal.buffer.active, result: CellRun[] = [];
+    let bytes = 2;
+    for (let y = 0; y < this.terminal.rows; y++) for (let x = 0; x < this.terminal.cols; x++) {
+      const cell = buffer.getLine(buffer.baseY + y)?.getCell(x);
+      if (!cell || !cell.getWidth() || !cell.getChars() && cell.isBgDefault() && !cell.isInverse()) continue;
+      const run = measureCell(cell, this.fixture!, x, y), previous = result.at(-1);
+      if (previous && previous.y === y && previous.x + previous.width === x
+        && previous.foreground === run.foreground && previous.background === run.background && previous.dim === run.dim
+        && previous.contrast === run.contrast && previous.invisible === run.invisible && previous.bold === run.bold && previous.inverse === run.inverse) {
+        bytes -= Buffer.byteLength(JSON.stringify(previous));
+        previous.text += run.text; previous.width += run.width;
+        bytes += Buffer.byteLength(JSON.stringify(previous));
+      } else { result.push(run); bytes += Buffer.byteLength(JSON.stringify(run)) + 1; }
+      if (bytes > this.maxBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
+    }
     return result;
   }
   resize(columns: number, rows: number): void {

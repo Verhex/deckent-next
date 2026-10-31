@@ -6,7 +6,7 @@ import personas from '../../../../../assets/beuser/personas.json' with { type: '
 import calibration from '../../../../../assets/beuser/calibration/manifest.json' with { type: 'json' };
 import controllerData from '../../../../../assets/beuser/controller.json' with { type: 'json' };
 import { executionRegistrySchema, modelInvocationProfileSchema } from '#domain/index.js';
-import { readInstallationProfileFile, readBeuserCandidate, readMeasuredBeuserRecord, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
+import { inspectPackagedBeuserJourney, readInstallationProfileFile, readBeuserCandidate, readMeasuredBeuserRecord, openSqliteModelActivationReader, canonicalRealmPath, measureInstalledPackage, BEUSER_REALM_RECIPE } from '#adapters/index.js';
 import { inspectRoleModelsInScope, roleModelInvocationReference, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserPersonaDigest, PoolControlPolicyAuthorization, assertPoolControlAllowed } from '#engine/index.js';
 import { beuserDigest } from '#capabilities/index.js';
 import { CONFIG_FIELDS, ErrorRegistry, globalStateRoot, loadConfig, sha256, type ConfigLoadOptions } from '#platform/index.js';
@@ -45,11 +45,12 @@ async function modelSources<T>(c: Scope, work: (sources: Parameters<typeof inspe
 async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions) {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/u.test(input.journey)) throw invalid();
   const journey = await readFile(join(BEUSER_PACKAGE_ROOT, 'assets', 'beuser', 'journeys', `${input.journey}.json`), 'utf8').then(text => JSON.parse(text) as Journey, () => { throw invalid(); });
+  const assetInspection = await inspectPackagedBeuserJourney(journey);
   const state = globalStateRoot(options.env ?? process.env); if (!state) throw invalid();
   const root = join(state, controllerData.folder); await mkdir(root, { recursive: true, mode: 0o700 });
   const configured = (await loadConfig(root, { ...options, heal: false }) as { terminal?: { scopeId?: unknown } }).terminal?.scopeId;
   const scopeId = input.scopeId ?? (typeof configured === 'string' ? configured : null), controller = { root, scopeId };
-  if (!scopeId) return { status: 'model-required', controller, models: [] };
+  if (!scopeId) return { status: 'model-required', controller, models: [], assetInspection };
   const c = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'write');
   await withConfiguredBeuserWalkCustody(root, scopeId, options, async () => undefined);
   const models = await modelSources(c, async sources => {
@@ -73,7 +74,7 @@ async function walkSetup(input: BeuserWalkSetupInput, options: ConfigLoadOptions
   });
   const ceiling = Math.min(controllerData.pool.executionSlots, controllerData.pool.inFlightSlots);
   const walkers = input.walkers, evaluator = input.evaluator;
-  if (!models.length || !walkers || !evaluator) return { status: models.length ? 'choose-model' : 'model-required', controller, models, ceiling };
+  if (!models.length || !walkers || !evaluator) return { status: models.length ? 'choose-model' : 'model-required', controller, models, ceiling, assetInspection };
   if (!walkers.length || walkers.length > ceiling || new Set(walkers.map(row => JSON.stringify([row.channelId, row.modelId]))).size !== walkers.length) throw invalid();
   if ([...walkers, evaluator].some(choice => !models.some(row => row.channelId === choice.channelId && row.modelId === choice.modelId))) throw ErrorRegistry.createError('BEUSER_MODEL_UNAVAILABLE');
   const candidateRoot = await canonicalRealmPath(resolve(input.candidate ?? BEUSER_PACKAGE_ROOT), 'directory');

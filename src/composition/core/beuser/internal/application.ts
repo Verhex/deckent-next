@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { beuserBindingSchema } from '#domain/index.js';
 import { evaluateBeuserEvidence, beuserDigest, beuserEvidenceSchema,
   type BeuserReadback, type ArtifactStore } from '#capabilities/index.js';
-import { FileArtifactStore, createBeuserSurface, BeuserSurfaceError,
+import { FileArtifactStore, createBeuserSurface, beuserTerminalFixture, BeuserSurfaceError,
   openSqliteApprovalStore, openLocalIntegrityAuthority, beuserPrivateRecord, readBeuserInstallationSummary, createBeuserArrange, type HarnessEvent, type SqliteAttemptStore } from '#adapters/index.js';
 import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, BeuserContractError, beuserSourceMakers, recordBeuserRefusal, NervousApplication, NERVOUS_RULES_SEED, sandboxResultSchema, BeuserExecutionBudget, BeuserCallBudget, BeuserExecutionSupervisor, BeuserDispatch,
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
@@ -30,9 +30,9 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
   store: SqliteAttemptStore, artifacts: ArtifactStore, owner: string, options: ConfigLoadOptions = {}, created?: (id: string) => Promise<void>) {
   const c = await loadConfiguredScopeContext(root, context.binding.identity.scopeId, options, 'write'), config = c.config;
   const { data, custody, runtimeOptions, removal, realm } = await openConfiguredBeuserRealmOwner(c, context, request, profile, store, artifacts, owner, created);
-  const launch = beuserJourneyLaunch(data);
+  const launch = beuserJourneyLaunch(data), terminalFixture = beuserTerminalFixture(data.rubric.parameters, data.startState?.states ?? []);
   const channel = createBeuserChannel({ context, realm, custody, options: runtimeOptions, boot: { mode: data.entry.mode,
-    entry: launch.entry, commands: launch.commands, maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
+    entry: launch.entry, commands: launch.commands, ...(terminalFixture ? { terminalFixture } : {}), maxBootBytes: context.limits.maxArtifactBytes, language: data.summary.language } });
   const known = getConfigKnownSecrets(config), recorder = createBeuserTranscript(context, known), readbacks: BeuserReadback[] = [];
   let lastEvent: HarnessEvent | null = null, lastScreen: import('#engine/index.js').BeuserScreen | null = null;
   const trace: BeuserDiagnostic['trace'] = [];
@@ -46,7 +46,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef }); lastEvent = event;
   };
   let capturedSurface: ReturnType<typeof createBeuserSurface> | undefined;
-  const getSurface = () => capturedSurface ??= createBeuserSurface({ context, realm: channel, size: data.size, bounds: data.bounds, catalog: launch.catalog, sink });
+  const getSurface = () => capturedSurface ??= createBeuserSurface({ context, realm: channel, ...(terminalFixture ? { terminalFixture } : {}), size: data.size, bounds: data.bounds, catalog: launch.catalog, sink });
   const safeScreen = async (work: () => Promise<import('#engine/index.js').BeuserScreen>) => {
     try { const value = await work(); const text = redactForRecord(value.text, known);
       lastScreen = { ...value, text, digest: sha256(text) }; return lastScreen; }

@@ -1,0 +1,646 @@
+{
+  "schemaVersion": 1,
+  "revision": "b1-theme-light-1",
+  "journeyId": "theme-light",
+  "limitsProfile": "b1-dogfood-provisional-3",
+  "branches": [
+    {
+      "id": "TL-B1",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "İlk yanıtı açık zeminde oku; /theme önizlemesini gez, Esc ile vazgeç, Enter ile seç, yeniden açıp kalıcılığı kontrol et; /mcp durumlarını sözcük ve simgelerle ayırt et.",
+        "en": "Read the first answer on a light background; explore /theme preview, cancel with Esc, apply with Enter and reopen to check persistence; distinguish /mcp states by word and glyph."
+      }
+    },
+    {
+      "id": "TL-B2",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "/theme içindeki dokuz seçimi ve canlı önizlemeyi incele; Esc ile geri dön, Enter ile uygula ve yeniden başlatınca seçimi bul.",
+        "en": "Inspect nine /theme choices and live preview; cancel with Esc, apply with Enter and find the choice after restart."
+      }
+    },
+    {
+      "id": "TL-B3",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Proje temasının kurulum ayarını gölgelediğini gör; yazılacak katmanı ve ret durumunda sonraki adımı bul.",
+        "en": "See project theme shadowing installation settings; identify the written layer and next step on refusal."
+      }
+    },
+    {
+      "id": "TL-B4",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "Yanıtsız terminalde başlangıcın sınırlı sürede bittiğini, metnin okunur kaldığını gör; /theme ve /mcp aç.",
+        "en": "With no terminal reply, see bounded startup and readable text; open /theme and /mcp."
+      }
+    },
+    {
+      "id": "TL-B5",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "Geç terminal cevabının yazı alanına düşmediğini, önceki tuşların sırasını ve Ctrl+C davranışını kontrol et.",
+        "en": "Check that a late terminal reply never enters the composer; preserve earlier key order and normal Ctrl+C."
+      }
+    },
+    {
+      "id": "TL-B6",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "OSC cevabı yokken COLORFGBG ile okunur temayı gör; /theme kaynağını incele.",
+        "en": "Without OSC, see a readable theme selected from COLORFGBG and inspect the source in /theme."
+      }
+    },
+    {
+      "id": "TL-B7",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "/mcp aç; yoklanmış bağlı sunucu ile başlamamış, başarısız ve onay bekleyen durumları simge ve sözcüklerle ayırt et; pencereyi kapat.",
+        "en": "Open /mcp; distinguish probed connected, not-started, failed and approval-pending states by glyph and word; close the window."
+      }
+    },
+    {
+      "id": "TL-B8",
+      "personaIds": [
+        "screen-reader",
+        "narrow-terminal"
+      ],
+      "goal": {
+        "tr": "Renksiz dar terminalde /theme seçimini yap; /mcp durumlarını renksiz sözcük ve simgelerle ayırt et.",
+        "en": "Use /theme without colour in a narrow terminal; distinguish /mcp states by glyph and word."
+      }
+    },
+    {
+      "id": "TL-B9",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "Yanıtta paragraf, başlık, liste ve kod arasındaki boşluğu oku; yinelenen MCP bildirimlerini kontrol et.",
+        "en": "Read spacing between paragraphs, headings, lists and code; check repeated MCP notices."
+      }
+    },
+    {
+      "id": "TL-B10",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "Tema değişince eski terminal geçmişinin renkleri koruduğunu açıklayan satırı bul.",
+        "en": "Find the explanation that previously printed scrollback keeps its colours after a theme change."
+      }
+    },
+    {
+      "id": "TL-B11",
+      "personaIds": [
+        "mert"
+      ],
+      "goal": {
+        "tr": "Koyu zeminde yanıt, /theme ve /mcp okunurluğunu kontrol et.",
+        "en": "Check answer, /theme and /mcp readability on a dark background."
+      }
+    },
+    {
+      "id": "TL-B12",
+      "personaIds": [
+        "zeynep"
+      ],
+      "goal": {
+        "tr": "Kurulum kartları, /config, init, talimat kurulumu ve CLI kartlarını açık temada oku.",
+        "en": "Read installation cards, /config, init, instruction setup and CLI cards in a light theme."
+      }
+    }
+  ],
+  "rubric": {
+    "schemaVersion": 1,
+    "journeyId": "theme-light",
+    "version": 1,
+    "digest": "20539dbf528eb5055f628c4704e6f6708ef14f40adf9afcde6d51f92dbb7e804",
+    "parameters": {
+      "phase": "preparation-only",
+      "ownerSteps": 0,
+      "personDecisions": "synthetic-person-decision",
+      "limitsProfile": "b1-dogfood-provisional-3",
+      "branches": [
+        {
+          "id": "TL-B1",
+          "initialStates": [
+            "TL-A",
+            "assembled-candidate",
+            "TL-model-connected",
+            "TL-H"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "first-answer-text-contrast-at-least-4.5",
+            "boundaries-at-least-3",
+            "theme-preview-Esc-Enter-restart",
+            "mcp-glyph-word-probed-state"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal"
+              ],
+              "reason": "connected-product-model-and-MCP-fixtures-unavailable",
+              "status": "unknown",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B2",
+          "initialStates": [
+            "TL-A",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "nine-values",
+            "preview-matches-live",
+            "Esc-no-write",
+            "Enter-ConfigApplication-submit",
+            "restart-layer-readback"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B3",
+          "initialStates": [
+            "TL-A",
+            "TL-F",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "source-layer-disclosed",
+            "shadow-disclosed",
+            "deny-no-persistent-write"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B4",
+          "initialStates": [
+            "TL-B",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "startup-probe-bounded",
+            "neutral-ansi-no-yellow-no-9x"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B5",
+          "initialStates": [
+            "TL-C",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "late-OSC-swallowed-not-applied",
+            "keys-preserve-order",
+            "Ctrl-C-cancels-and-propagates"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B6",
+          "initialStates": [
+            "TL-D",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "COLORFGBG-fallback"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B7",
+          "initialStates": [
+            "TL-A",
+            "TL-H",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "checking-before-probed-status",
+            "green-connected-orange-otherwise",
+            "glyph-word",
+            "close-cancels-probes",
+            "text-contrast-at-least-4.5"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal"
+              ],
+              "reason": "connected-product-model-and-MCP-fixtures-unavailable",
+              "status": "unknown",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B8",
+          "initialStates": [
+            "TL-E",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "NO_COLOR-no-colour-only-cues",
+            "selection-persists"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B9",
+          "initialStates": [
+            "TL-A",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "one-blank-line-between-blocks",
+            "notice-once-per-session-server-kind-code"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [
+            {
+              "variants": [
+                "terminal"
+              ],
+              "reason": "connected-product-model-and-MCP-fixtures-unavailable",
+              "status": "unknown",
+              "releaseBlocking": true
+            }
+          ],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B10",
+          "initialStates": [
+            "TL-A",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "scrollback-limit-disclosed"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B11",
+          "initialStates": [
+            "TL-G",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "dark-control-readable"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
+        {
+          "id": "TL-B12",
+          "initialStates": [
+            "TL-A",
+            "assembled-candidate"
+          ],
+          "variants": [
+            "terminal"
+          ],
+          "criteria": [
+            "five-surfaces-follow-theme"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        }
+      ],
+      "probeSets": [
+        {
+          "id": "probe-set-1",
+          "probes": [
+            {
+              "id": "outcome-installation",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "installation",
+              "expected": "installed"
+            },
+            {
+              "id": "safety-preservedData",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "preservedData",
+              "expected": "pass"
+            },
+            {
+              "id": "authorization-card",
+              "dimension": "authorization",
+              "readbackRef": "terminal-state",
+              "key": "card",
+              "expected": "not-shown"
+            },
+            {
+              "id": "safety-receiptLocation",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "receiptLocation",
+              "expected": "absent"
+            },
+            {
+              "id": "safety-forbiddenEffect",
+              "dimension": "safety",
+              "readbackRef": "terminal-state",
+              "key": "forbiddenEffect",
+              "expected": "absent"
+            },
+            {
+              "id": "outcome-lifecycle",
+              "dimension": "outcome",
+              "readbackRef": "terminal-state",
+              "key": "lifecycle",
+              "expected": "stopped"
+            }
+          ]
+        }
+      ],
+      "constraints": [
+        "own-sealed-disposable-installation-only",
+        "no-host-live-N1-owner-installation",
+        "no-ledger-key-backup-receipt-bytes-export",
+        "secret-step-capture-off-no-values-or-hashes",
+        "approve-the-actual-card-then-assert",
+        "no-safe-command-substitution",
+        "uncertain-effects-reconcile-never-blind-retry",
+        "cleanup-absence-proof-or-quarantine-unknown"
+      ],
+      "source": "ALPHA60/PAKET-2/JOURNEYS/theme-light.txt:p2-journey-1",
+      "terminalFixtures": [
+        {
+          "state": "TL-A",
+          "settings": {
+            "foreground": "#3a3530",
+            "background": "#f0ece5",
+            "ansi": [
+              "#000000",
+              "#cd0000",
+              "#00cd00",
+              "#cdcd00",
+              "#0000ee",
+              "#cd00cd",
+              "#00cdcd",
+              "#e5e5e5",
+              "#7f7f7f",
+              "#ff0000",
+              "#00ff00",
+              "#ffff00",
+              "#5c5cff",
+              "#ff00ff",
+              "#00ffff",
+              "#ffffff"
+            ],
+            "osc11": {
+              "reply": true,
+              "delayMs": 0,
+              "digits": 4
+            },
+            "colorTier": "truecolor"
+          }
+        },
+        {
+          "state": "TL-B",
+          "settings": {
+            "foreground": "#3a3530",
+            "background": "#f0ece5",
+            "ansi": [
+              "#000000",
+              "#cd0000",
+              "#00cd00",
+              "#cdcd00",
+              "#0000ee",
+              "#cd00cd",
+              "#00cdcd",
+              "#e5e5e5",
+              "#7f7f7f",
+              "#ff0000",
+              "#00ff00",
+              "#ffff00",
+              "#5c5cff",
+              "#ff00ff",
+              "#00ffff",
+              "#ffffff"
+            ],
+            "osc11": {
+              "reply": false,
+              "delayMs": 0,
+              "digits": 4
+            },
+            "colorTier": "truecolor"
+          }
+        },
+        {
+          "state": "TL-C",
+          "settings": {
+            "foreground": "#3a3530",
+            "background": "#f0ece5",
+            "ansi": [
+              "#000000",
+              "#cd0000",
+              "#00cd00",
+              "#cdcd00",
+              "#0000ee",
+              "#cd00cd",
+              "#00cdcd",
+              "#e5e5e5",
+              "#7f7f7f",
+              "#ff0000",
+              "#00ff00",
+              "#ffff00",
+              "#5c5cff",
+              "#ff00ff",
+              "#00ffff",
+              "#ffffff"
+            ],
+            "osc11": {
+              "reply": true,
+              "delayMs": 400,
+              "digits": 4
+            },
+            "colorTier": "truecolor"
+          }
+        },
+        {
+          "state": "TL-D",
+          "settings": {
+            "foreground": "#3a3530",
+            "background": "#f0ece5",
+            "ansi": [
+              "#000000",
+              "#cd0000",
+              "#00cd00",
+              "#cdcd00",
+              "#0000ee",
+              "#cd00cd",
+              "#00cdcd",
+              "#e5e5e5",
+              "#7f7f7f",
+              "#ff0000",
+              "#00ff00",
+              "#ffff00",
+              "#5c5cff",
+              "#ff00ff",
+              "#00ffff",
+              "#ffffff"
+            ],
+            "osc11": {
+              "reply": false,
+              "delayMs": 0,
+              "digits": 4
+            },
+            "colorTier": "truecolor",
+            "colorfgbg": "0;15"
+          }
+        },
+        {
+          "state": "TL-E",
+          "settings": {
+            "foreground": "#3a3530",
+            "background": "#f0ece5",
+            "ansi": [
+              "#000000",
+              "#cd0000",
+              "#00cd00",
+              "#cdcd00",
+              "#0000ee",
+              "#cd00cd",
+              "#00cdcd",
+              "#e5e5e5",
+              "#7f7f7f",
+              "#ff0000",
+              "#00ff00",
+              "#ffff00",
+              "#5c5cff",
+              "#ff00ff",
+              "#00ffff",
+              "#ffffff"
+            ],
+            "osc11": {
+              "reply": true,
+              "delayMs": 0,
+              "digits": 4
+            },
+            "colorTier": "none"
+          }
+        },
+        {
+          "state": "TL-G",
+          "settings": {
+            "foreground": "#eeeeee",
+            "background": "#0c0c0c",
+            "ansi": [
+              "#000000",
+              "#cd0000",
+              "#00cd00",
+              "#cdcd00",
+              "#0000ee",
+              "#cd00cd",
+              "#00cdcd",
+              "#e5e5e5",
+              "#7f7f7f",
+              "#ff0000",
+              "#00ff00",
+              "#ffff00",
+              "#5c5cff",
+              "#ff00ff",
+              "#00ffff",
+              "#ffffff"
+            ],
+            "osc11": {
+              "reply": true,
+              "delayMs": 0,
+              "digits": 4
+            },
+            "colorTier": "truecolor"
+          }
+        }
+      ],
+      "measurement": {
+        "source": "rendered-cell-runs-and-terminal-exchange",
+        "textMinimum": 4.5,
+        "boundaryMinimum": 3,
+        "minimumContrastRatio": 1,
+        "dimOrInvisibleContrast": "unknown",
+        "acceptance": "unwalked-assembled-release-required",
+        "unverified": [
+          "tmux",
+          "Windows-ConPTY",
+          "physical-screen-reader"
+        ]
+      }
+    }
+  }
+}
