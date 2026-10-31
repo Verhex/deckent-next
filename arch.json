@@ -4166,7 +4166,8 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/model-invocation",
         "src/engine/core/toolchain-currency",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/redaction"
       ],
       "plan": "PROVIDERS"
     },

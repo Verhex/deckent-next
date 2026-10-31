@@ -12,7 +12,7 @@ export const codexAnswer = (text: string): Line[] => [{ type: 'thread.started', 
   { type: 'turn.completed', usage: { input_tokens: 1200, cached_input_tokens: 1000, cache_write_input_tokens: 0, output_tokens: 7, reasoning_output_tokens: 3 } }];
 /** `login`: what `login status` reports (`chatgpt` | `api-key` | `none`); `authFromLogin`: ChatGPT exactly when `login` wrote auth.json. */
 export interface FakeCodexScenario { readonly logPath: string; readonly version?: string; readonly login?: 'chatgpt' | 'api-key' | 'none'; readonly authFromLogin?: boolean;
-  readonly steps?: readonly ({ line: Line | string } | { exit: number })[] }
+  readonly steps?: readonly ({ line: Line | string } | { exit: number } | { stderr: string })[] }
 /** Help naming every option the registry's call uses, the way `codex exec --help` (0.166.0) lists them. */
 export function codexHelp(): string {
   const flags = new Set([...codexHeadless.args.filter(arg => arg.startsWith('--')), codexHeadless.systemPromptFlag, registry.adapters.codex.modelFlag]);
@@ -37,6 +37,7 @@ const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); proces
   log({ mode: 'call', stdin: Buffer.concat(chunks).toString('utf8'), system: file ? fs.readFileSync(file, 'utf8') : null, entries: fs.readdirSync('.').sort() });
   for (const step of s.steps) {
     if (step.line !== undefined) process.stdout.write((typeof step.line === 'string' ? step.line : JSON.stringify(step.line)) + '\\n');
+    else if (step.stderr !== undefined) process.stderr.write(step.stderr);
     else if (step.exit !== undefined) process.exit(step.exit);
   }
 });

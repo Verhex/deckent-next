@@ -6,7 +6,7 @@ import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type Mode
 import { subscriptionActor, OAuthConnectionError, ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import { createNativeCliHeadlessPort, isNativeCliHeadlessAdapter, shellSandboxCapabilities } from '#adapters/index.js';
-import { globalStateRoot, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
+import { getConfigKnownSecrets, globalStateRoot, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
 import { createCatalogTariffLookup } from './catalog-tariff.js';
 import type { loadInvocationContext } from './context.js';
@@ -53,7 +53,8 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
           (app, caller) => app.lease(id, caller, signal), {}, context.principal) });
       }
       // S3-2: the person's own CLI login as one tool-less turn; an older release resolves this adapter id to null (MODEL_INVOCATION_UNAVAILABLE).
-      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation });
+      // 1b: the call's known secrets also redact a CLI's stderr summary (the evidence of an incomplete turn).
+      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation, knownSecrets: getConfigKnownSecrets(context.config) });
       if(profile.adapter.id===decisionHttpAdapter.id&&profile.adapter.version===decisionHttpAdapter.version){
         const definition=parseDecisionHttpDefinition(profile.adapter.definition); return createDecisionHttpNativePort({resolveCredential:scopedInvocationCredentialResolver(context,profile,definition.authentication,options)});
       }

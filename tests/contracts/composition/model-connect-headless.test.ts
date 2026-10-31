@@ -74,7 +74,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.connect('c-5', { delegate: [] })).toMatchObject({ steps: { profile: 'written' }, cli: { delegate: [] } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toBeNull();
   });
-  it('without flags: the first CLI of the registry name in PATH (by realpath) and s3c the Brain\'s own login dir (never ~/.claude); none in PATH is refused typed', async () => {
+  it('without flags: the first CLI of the registry name in PATH (S7: that path, not its realpath) and s3c the Brain\'s own login dir (never ~/.claude); none in PATH is refused typed', async () => {
     const h = await harness(true), bin = join(h.f.data, 'path-bin'), home = h.f.env.HOME;
     await mkdir(bin); await symlink(h.executable, join(bin, 'claude')); await mkdir(join(home, '.claude'), { mode: 0o700 });
     const run = (env: Record<string, string>, commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
@@ -83,7 +83,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.spawns()).toEqual([]);
     const owned = join(await realpath(home), '.deckent', 'headless', 'logins', 'claude');
     await expect(run({ PATH: bin }, 'c-1')).resolves.toMatchObject({ status: 'connected', cli: { configDir: owned, owned: true } });
-    expect((await h.profile())!.adapter.definition).toMatchObject({ executable: await realpath(h.executable), configDir: owned });
+    expect((await h.profile())!.adapter.definition).toMatchObject({ executable: join(bin, 'claude'), configDir: owned });
     expect((await lstat(owned)).mode & 0o777).toBe(0o700);
     // An explicit dir is the person's override, never the default; the doctor tells the two apart (no spawn, nothing created).
     expect(await h.connect('c-2')).toMatchObject({ cli: { configDir: h.configDir, owned: false } });

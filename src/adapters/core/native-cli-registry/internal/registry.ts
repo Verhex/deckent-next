@@ -41,7 +41,8 @@ const authSchema = z.union([z.object({ authMethods: words, apiProviders: words, 
 /** Line guards by event stream: Claude's init/result fields, or Codex's allowed item types and error-text patterns (quota patterns stay in providers.json). */
 const guardsSchema = z.union([z.object({ apiKeySources: words, permissionMode: argument, plugins: z.array(z.object({ name: argument, path: argument }).strict().readonly()).readonly(),
   lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).strict().readonly(),
-  z.object({ allowedItems: words, loginPatterns: words, source: argument }).strict().readonly()]);
+  // `reconnectPatterns`: the CLI's own counted stream-retry notices (error lines), tolerated up to `maxReconnects` per call.
+  z.object({ allowedItems: words, loginPatterns: words, reconnectPatterns: words, maxReconnects: positive, reconnectSource: argument, source: argument }).strict().readonly()]);
 export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
   /** The profile's protocol family when it is not the event-stream name (a catalog family named before the headless step existed). */
   protocolFamily: argument.optional(),
@@ -57,6 +58,9 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
   /** The prompt-file argv when it is not `<systemPromptFlag> <file>` (`{file}` = the run dir's prompt file; the flag stays the one help must list). */
   systemPromptArgs: argumentsSchema.refine(value => value.some(arg => arg.includes('{file}'))).optional(),
   forbiddenFlags: z.array(flag).min(1).readonly(), promptFramingAllowance: promptFramingAllowanceSchema,
+  /** Astra 2875/2878 R1: the only stderr lines (whole, trimmed) an incomplete turn's summary may keep, each stored as its fixed `keep` text with the
+   * pattern's named captures (`$<name>`) only; every other line is withheld and counted. */
+  stderrAllow: z.object({ rules: z.array(z.object({ pattern: argument, keep: argument }).strict().readonly()).readonly(), source: argument }).strict().readonly(),
   /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
    * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */
   preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema, hiddenFlagsSource: argument,
@@ -66,7 +70,8 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
   env: z.object({ fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly(), runDir: names,
     configDir: z.string().regex(/^[A-Z][A-Z0-9_]*$/), deny: names.refine(value => value.length > 0) }).strict().readonly(),
   guards: guardsSchema,
-  limits: z.object({ stdinMaxBytes: positive, maxLineBytes: positive, stderrMaxBytes: positive, preflightTimeoutMs: positive, preflightOutputBytes: positive,
+  /** `stderrSummaryBytes`: the redacted stderr tail kept when the CLI ends before a complete turn (an unknown outcome's evidence, inside the profile's response bound). */
+  limits: z.object({ stdinMaxBytes: positive, maxLineBytes: positive, stderrMaxBytes: positive, stderrSummaryBytes: positive, preflightTimeoutMs: positive, preflightOutputBytes: positive,
     killGraceMs: positive, responseFramingBytes: positive }).strict().readonly(),
   /** S3-5: the realm every spawn runs in (bubblewrap): the POSIX shell that sets the process limits, the gateway socket's path inside the realm,
    * the in-realm proxy the CLI is pointed at, the login-dir entries the CLI keeps seeing (every other existing one is masked) and the bounds. */

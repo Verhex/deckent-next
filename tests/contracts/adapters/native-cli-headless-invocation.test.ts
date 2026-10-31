@@ -7,7 +7,8 @@ import { ModelInvocationApplication } from '#engine/core/model-invocation/index.
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
 import { openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
 import { isNativeCliHeadlessAdapter, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
-import { binding as definition, cleanupConnections, connection, request } from '../../fixtures/native-headless/connection.js';
+import { bubblewrapObservation } from '#adapters/index.js';
+import { binding as definition, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { assistantLine, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
@@ -19,8 +20,8 @@ const expectedBinding = { encodingVersion: 1 as const, algorithm: 'sha256' as co
 const principal = { id: 'person', issuer: 'test', subject: '1', assurance: 'os-user' as const, scopeIds: ['scope'] };
 const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance }, authorization = { revision: 'policy', ruleId: 'invoke' };
 const steps = (text: string) => [uiLine(), initLine(), assistantLine(text), rateLimitLine(), resultLine(text)].map(line => ({ line }));
-async function fixture(lines = steps('{"ok":true}')) {
-  const c = await connection({ steps: lines }, {}, expectedBinding.digest), path = join(c.root, 'ledger.db');
+async function fixture(lines = steps('{"ok":true}'), isolation = testIsolation, onAdmitted = () => {}) {
+  const c = await connection({ steps: lines }, {}, expectedBinding.digest, isolation), path = join(c.root, 'ledger.db');
   const activations = await openSqliteModelActivationStore(path, sqlite);
   const admitted = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: 'catalog', expectedBinding }, actor, authorization, admittedAtMs: 1, definition }); activations.close();
@@ -29,7 +30,7 @@ async function fixture(lines = steps('{"ok":true}')) {
   const app = new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return authorization; } },
     { async inspect() { return { schemaVersion: 1, reference, status: 'declared', catalogRevision: 'catalog', definition, binding: expectedBinding, availability: 'not-observed' }; } },
     async () => ({ async loadRecord() { return admitted.receipt.record; }, close() {} }), { async resolve() { return c.profile; } },
-    { resolve() { return c.port; }, async admit(profile, signal) { await c.port.preflight(profile, signal); } },
+    { resolve() { return c.port; }, async admit(profile, signal) { await c.port.preflight(profile, signal); onAdmitted(); } },
     async () => openSqliteModelInvocationStore(path, sqlite, 'forbid'), { invocationId: () => 'invocation', ownerId: () => 'owner', now: () => 10 });
   const command = { schemaVersion: 1, commandId: 'plan-1', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding, nativeRequest: request() };
   return { c, app, path, command };
@@ -60,6 +61,15 @@ it.skipIf(!sandbox)('records an in-run guard refusal as a rejected receipt with 
   await expect(refused.app.invoke(refused.command)).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
   const db = new DatabaseSync(refused.path, { readOnly: true });
   try { expect(db.prepare('SELECT COUNT(*) AS n FROM model_invocations').get()).toMatchObject({ n: 0 }); } finally { db.close(); }
+  // 1b: a CLI that ends before a complete turn, and a typed refusal thrown after the claim (the realm gone between admit and send), are incomplete
+  // evidence on an unknown receipt: the ledger's unknown reason stays transport-error (v73), the exit or the typed code is kept, never a message.
+  const exited = await fixture([{ line: initLine() }, { exit: 2 }]);
+  expect(await exited.app.invoke(exited.command)).toMatchObject({ receipt: { outcome: { state: 'unknown', reason: 'transport-error', evidence: { reason: 'interrupted', body: { complete: false } } } } });
+  let gone = false;
+  const typed = await fixture(steps('x'), async () => gone ? bubblewrapObservation('unavailable', 'no bubblewrap launcher') : testIsolation(), () => { gone = true; });
+  expect(await typed.app.invoke(typed.command)).toMatchObject({ receipt: { outcome: { state: 'unknown', reason: 'transport-error', evidence: { adapter: { id: 'native-cli-headless' }, reason: 'interrupted' } } } });
+  const store = await openSqliteModelInvocationStore(typed.path, sqlite, 'forbid');
+  try { expect((await store.loadReceipt('scope', 'plan-1'))?.content).toMatchObject({ kind: 'response-body', data: Buffer.from(JSON.stringify({ code: 'HEADLESS_ISOLATION_UNAVAILABLE' })).toString('base64') }); } finally { store.close(); }
   // Astra 2850 R4: valid top counters with empty or invalid per-model counters answer, but no per-model zero is reported or persisted.
   for (const counters of [{}, { inputTokens: 2, outputTokens: '9', cacheReadInputTokens: 584, cacheCreationInputTokens: 0 }]) {
     const { app, path, command } = await fixture([uiLine(), initLine(), assistantLine('x'), rateLimitLine(), resultLine('x', { modelUsage: { [definition.model.nativeId]: counters } })].map(line => ({ line })));

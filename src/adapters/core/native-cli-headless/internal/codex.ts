@@ -10,7 +10,8 @@ const matches = (patterns: readonly string[], text: string) => patterns.some(pat
 
 /**
  * The `codex exec --json` turn (Codex headless, 2026-10-31): one thread, one turn, only the registry's allowed items (the answer and its reasoning).
- * Any tool item, a second thread or turn, any line after the completed turn, a usage record without valid counters, or an error line stops the process: an error's text maps to quota (providers.json patterns, the worker's
+ * Any tool item, a second thread or turn, any line after the completed turn, a usage record without valid counters, or an error line (except the
+ * CLI's own counted reconnect notices, up to the registry bound) stops the process: an error's text maps to quota (providers.json patterns, the worker's
  * own source) or login (registry patterns), otherwise invalid output. The answer is the last completed agent message (each completed message is
  * also a presentation delta). The stream names no model: the answer is attributed to the argv-pinned id (`modelEvidence: argv`).
  */
@@ -21,7 +22,7 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
   // OpenAI input totals include cache reads and writes (the worker normalizer's rule): a cache count above the input total is no valid record.
   const counters = (reported: unknown) => { const value = reportedCounters(reported, ['input_tokens', 'output_tokens'], ['cached_input_tokens', 'cache_write_input_tokens', 'reasoning_output_tokens']);
     return value && value.cached_input_tokens + value.cache_write_input_tokens <= value.input_tokens ? value : null; };
-  let thread = false, turns = 0, answer: string | null = null, usage: ReturnType<typeof counters> = null;
+  let thread = false, turns = 0, reconnects = 0, answer: string | null = null, usage: ReturnType<typeof counters> = null;
   const failure = (text: string | null, subtype: string): Refusal => text !== null && matches(quotaPatterns, text) ? reject('http-status', { refusal: 'quota', status: null, resetsAtMs: null })
     : text !== null && matches(guards.loginPatterns, text) ? reject('http-status', { refusal: 'login-required', status: null }) : reject('invalid-response', { refusal: 'invalid-output', subtype });
   return {
@@ -33,6 +34,10 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
       const { type, item } = line;
       if (type === 'thread.started') { if (thread) return reject('invalid-response', { refusal: 'guard', field: 'thread' }); thread = true; return null; }
       if (type === 'turn.started') return ++turns > prepared.entry.headless.maxTurns || !thread ? reject('invalid-response', { refusal: 'guard', field: 'turn' }) : null;
+      // The CLI's own counted stream retry is a notice up to the registry bound (lead 2026-10-31); past it, and any other error, refuses.
+      if (type === 'error' && line.errorText !== null && matches(guards.reconnectPatterns, line.errorText)) {
+        return ++reconnects > guards.maxReconnects ? reject('invalid-response', { refusal: 'invalid-output', subtype: 'reconnect-limit' }) : null;
+      }
       if (type === 'error' || type === 'turn.failed') return failure(line.errorText, type);
       if (type.startsWith('item.')) {
         const kind = typeof item?.type === 'string' ? item.type : null;
