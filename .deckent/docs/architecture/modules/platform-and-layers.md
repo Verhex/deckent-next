@@ -73,7 +73,7 @@ keeps a `writers/` it made, and runs without the cache. The records are coordina
 members or their version (the rename or a withdrawal never moves it, and a removed cache with an ended writer's leftover record observes as
 absent, so a resumed removal settles as applied — Astra 2876), and a `writers/` that reappears during the removal belongs to such a late writer and is left to it, so a late writer never leaves
 the removal half done. A writer suspended across the whole removal (its first check before the fence, its record after the fence is gone) can fill a cache directory that survived the removal (a kept stray beside it); that equals a new writer after the removal, never a half-removal. An unreadable record or a writer still running at the bound refuses with nothing removed and the fence kept (a rerun
-continues); the records are a member removed with the cache, the fence last. Uninstall also waits for
+continues); writer records are coordination, not cache members (removed with the cache, outside its member list and version), the fence last. Uninstall also waits for
 the stopped service's own process within its stop budget; a project installation keeps the shared global root. Enterprise executables can call the same function
 from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
 
