@@ -4,7 +4,7 @@ import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCom
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
+  OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_JSON_OBJECT_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelChoice, type TerminalModelSource } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -17,6 +17,7 @@ export type TerminalChatPlan = Readonly<{
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
+  tools: 'available' | 'none' | 'unknown';
   skippedDefault?: ModelReference; // BeUser M-08: the user's default that this project does not declare, so it was not used here
 }>;
 /** BeUser M-08/AYSE-13 (T4-B D1 order kept): the user's default applies only where this project declares it; with no setting in effect, the only declared model here is used. */
@@ -42,12 +43,13 @@ export interface TerminalChatTurnInput {
 const describeModel = (reference: ModelReference): string => `${reference.providerId}/${reference.modelId}@${reference.modelVersion}`;
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalChatPlan> {
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
-  if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
+  if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
   const { choice, skipped } = await terminalModelHere(projectRoot, options), reference = choice?.reference ?? chat.reference, more = skipped ? { skippedDefault: skipped } : {};
-  if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
+  if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', tools: 'unknown', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null, ...more });
   const binding = await inspectModelBinding(projectRoot, reference, options);
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
+    tools: binding.status !== 'declared' ? 'unknown' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported')) ? 'available' : binding.definition.model.protocols.some(protocol => protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'unsupported')) ? 'none' : 'unknown',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages, ...more });
 }
 /**

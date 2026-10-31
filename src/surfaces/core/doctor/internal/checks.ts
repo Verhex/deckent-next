@@ -36,8 +36,10 @@ export interface DoctorCheckFacts {
   /** S3-3: each subscription Brain connection of the scope (from its profile and last preflight record; no spawn): login kind, plan, directory,
    * channel state and consent; `state: unknown` when no check ran yet. Absent or null when not read. */
   readonly siwcConnections?: readonly import('#domain/index.js').SubscriptionConnectionInspection[] | null;
+  readonly modelConnections?: readonly Readonly<{ profile: string; tools: 'available' | 'none' | 'unknown'; stale: boolean }>[] | null;
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
+    cliUpdated?: Readonly<{ from: string; to: string }> | null;
     owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
     /** f5: the realm gateway's cumulative refusals (host names most refused first, `other` without a valid name); null: none recorded. */
     egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
@@ -204,7 +206,10 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     rows.push(row('work', 'work.chatgptConnection', connection.planUse ? 'ok' : 'warning',
       t('siwc.doctor.connection', { model: terminalSafeText(connection.reference.modelId), state }, l), scoped(`deckent models connect --connection ${connection.connection}`, f)));
   }
+  for (const connection of f.modelConnections ?? []) if (connection.stale || connection.tools !== 'available') rows.push(row('work', 'work.modelConnection', 'warning',
+    `${terminalSafeText(connection.profile)} · ${connection.stale ? ErrorRegistry.get('MODEL_INVOCATION_PROFILE_CONFLICT', l)?.message : connection.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, l) : t('terminal.admin.model.toolsUnknown', {}, l)}`, scoped('deckent models connect', f)));
   for (const login of f.headlessLogins ?? []) {
+    if (login.cliUpdated) rows.push(row('work', 'work.cliUpdated', 'ok', setupReasonText('doctor.headless.updated', { from: terminalSafeText(login.cliUpdated.from), to: terminalSafeText(login.cliUpdated.to) }, l)));
     const dir = terminalSafeText(login.configDir), consent = login.consent.length ? login.consent.join(', ') : t('doctor.headless.none', {}, l);
     // S3-5: the realm the last passing check ran in, or that the realm itself closed the channel.
     const isolated = !login.isolation ? '' : login.isolation === 'unavailable' ? t('doctor.headless.isolationUnavailable', {}, l)

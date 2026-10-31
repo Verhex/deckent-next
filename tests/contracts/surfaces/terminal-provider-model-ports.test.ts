@@ -371,10 +371,11 @@ describe('/model source', () => {
     };
     const view = await modelPanelSource(root, 'scope', host, options, 'en').inspect();
     expect(inspected).toBe(1);
+    expect(await modelPanelSource(root, 'scope', host, options, 'en').toolsDeclared!(ref('chat'))).toBeNull();
     expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual(states.models.map(entry => [entry.reference.modelId,
       entry.reference.modelId === 'chat', entry.availability.invocable ? null : modelInvocabilityText(entry.availability, 'en')]));
     // U2: each row leads with its chat on/off state, then the same shared invocability words.
-    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => `${active.has(entry.reference.modelId) ? 'On' : 'Off'} · ${modelInvocabilityText(entry.availability, 'en')}`));
+    expect(view.choices.map(choice => choice.detail)).toEqual(states.models.map(entry => `${active.has(entry.reference.modelId) ? 'On' : 'Off'} · ${modelInvocabilityText(entry.availability, 'en')} · tool support unknown`));
     expect(view.choices[0]!.exact).toBe('local-openai@1/chat@1 · native native-chat');
     expect(view.choices[1]!.command).toBe('deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> '
       + `--expected-revision 3 --binding-digest ${'d'.repeat(64)} --catalog-revision catalog-1`);

@@ -1,3 +1,4 @@
 {
-  "heldWarningsMax": 20
+  "heldWarningsMax": 20,
+  "backgroundProbeMs": 250
 }

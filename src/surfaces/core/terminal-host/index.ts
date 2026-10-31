@@ -1,4 +1,4 @@
-export { openTerminalHost, runTerminalHost, type TerminalHostContext, type TerminalHostHandle, type TerminalHostOptions } from './internal/host.js';
+export { openTerminalHost, reportedTerminalBackground, runTerminalHost, type TerminalHostContext, type TerminalHostHandle, type TerminalHostOptions, type TerminalThemeRequest } from './internal/host.js';
 export { useAttentionNotice, type AttentionSignals } from './internal/attention.js';
 export { cardCopy, clipboardRequest, createClipboardWriter, streamCardCopy, CLIPBOARD_LIMITS, type ClipboardRefusal, type ClipboardResult } from './internal/clipboard.js';
 export { copyableAnswers, runCopyCommand, type CopyLabels } from './internal/copy-command.js';

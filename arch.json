@@ -220,7 +220,8 @@
         "src/engine/core/authentication",
         "src/engine/core/runtime",
         "src/platform/core/clock",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/common"
       ],
       "plan": "EXECUTION"
     },
@@ -2141,7 +2142,8 @@
         "src/domain/core/worker-event",
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
-        "src/adapters/core/native-cli-registry"
+        "src/adapters/core/native-cli-registry",
+        "src/platform/core/common"
       ],
       "plan": "PROVIDERS"
     },
@@ -5070,6 +5072,15 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/domain/core/agent-turn/internal/contract.ts",
+        "symbol": "CHAT_TURN_RESULT_NOTICES/CHAT_TURN_STEER_LINES",
+        "values": [
+          "32",
+          "16"
+        ],
+        "reason": "Runtime protocol v30 frame bounds (alpha.60 PAKET-2 TP): at most 32 typed notices per turn result and 16 steered lines per turn; versioned wire invariants like the other frame bounds, not policy."
+      },
       {
         "file": "src/surfaces/core/hub-mcp/internal/server.ts",
         "symbol": "listParams/cursor",

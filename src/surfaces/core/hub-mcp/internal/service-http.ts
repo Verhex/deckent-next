@@ -3,6 +3,7 @@ import { HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema } fr
 import { HubServerError, type HubModeratedApplication, type HubServerContext, type HubServerPeer } from '#engine/index.js';
 import { t, type Locale } from '#platform/index.js';
 import { executeHubService } from './service-methods.js';
+import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 
 export interface HubServiceHttpOptions {
   readonly endpoint: string; readonly locale?: Locale;
@@ -68,6 +69,7 @@ export function createHubServiceHttpHandler(app: HubModeratedApplication, option
         } finally { signal.removeEventListener('abort', cancel); reader.releaseLock(); }
         if (!reader) signal.removeEventListener('abort', cancel);
         const input: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8')); signal.throwIfAborted();
+        if (!inputWithinValidationLimit(input, INPUT_VALIDATION_LIMITS.hubService)) return new Response(null, { status: 413, headers });
         if (url.pathname === '/api/login/begin') {
           const p = z.object({ providerId: z.string() }).strict().parse(input); return json(await app.accounts.begin(p.providerId, addressId));
         }

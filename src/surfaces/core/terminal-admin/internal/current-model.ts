@@ -56,5 +56,6 @@ export async function readCurrentModel(call: TerminalAdminCall): Promise<Current
       }
     } catch { /* the catalog part of /model names its own failure; here the reference stays the text */ }
   }
+  if (plan.tools) found = { ...found, text: `${found.short} · ${toolSupportText(plan.tools === 'available' ? 'supported' : plan.tools === 'none' ? 'unsupported' : 'unknown', locale)}` };
   return { status: plan.status === 'ready' ? 'ready' : 'not-declared', reference: name, ...found };
 }

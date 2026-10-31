@@ -4,14 +4,14 @@ import { dirname, join } from 'node:path';
 import { ErrorRegistry, getConfigFieldDefault, mapBounded, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
   SystemTrustedClock, type KnownSecretSnapshot, type Locale, type ProductLayout } from '#platform/index.js';
 import { displayMcpDiagnosis } from '#adapters/core/mcp-start-diagnosis/index.js';
-import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, mcpToolsChangedRecord, mcpWithheldTools, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
+import { findMcpStartFailure, mcpDecisionNotice, mcpStartFailedNotice, mcpStartFailureOf, mcpToolsChangedRecord, mcpWithheldTools, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
   type McpStartNoticeRenderer } from '#adapters/core/mcp-start-diagnosis/index.js';
 import { MCP_CLIENT_IDENTITY, MCP_SERVER_HOMES_DIR, McpClientPool, type McpLaunchContext, type McpPoolView, type McpSendRefusal, type McpServerOpen } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings, type McpTrustBinding } from './pin.js';
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpToolGrantPort, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
 import { openMcpAgentTools, type McpOfferedTool } from './agent.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
-import { expandMcpEntry, mcpMissingSecretCommand, isMcpHttpEntry, mcpScopedDigest, mcpEntryDisplay, mcpLaunchValues, mcpEndpointRefusal, mcpEntryRedacted, MCP_DEFAULT_REALM, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile,
+import { expandMcpEntry, isMcpHttpEntry, mcpScopedDigest, mcpEntryDisplay, mcpLaunchValues, mcpEndpointRefusal, mcpEntryRedacted, MCP_DEFAULT_REALM, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile,
   resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
 import { findMcpTrust, MCP_TRUST_FILE, mcpProjectTrustDirectory, readMcpTrust, type McpTrustRecord } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
@@ -195,9 +195,9 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   const failures = await readMcpStartFailures(productResourcePath(context.layout, 'integrations'));
   const lastStartOf = (server: McpServerView) => { const failure = findMcpStartFailure(failures, server, MCP_CLIENT_IDENTITY);
     return failure ? { lastStart: { phase: failure.phase, atMs: failure.atMs, code: failure.code, ...(failure.detail ? { detail: failure.detail } : {}),
-      ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(failure.phase === 'decision' ? { kind: 'not-decided', name: server.name, code: [failure.code, failure.detail].filter(Boolean).join(': ') } : failure.phase === 'tools' ? { kind: 'tools-changed', name: server.name, count: Number(failure.detail) || 0 }
+      ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(failure.phase === 'decision' ? mcpDecisionNotice(server.name, failure.code, failure.detail) : failure.phase === 'tools' ? { kind: 'tools-changed', name: server.name, count: Number(failure.detail) || 0 }
       : mcpStartFailedNotice(server.name, failure)) } } : {}; };
-  const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: [server.reason, mcpMissingSecretCommand(server.reason)].filter(Boolean).join('; ') } : {}),
+  const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
     shadows: server.shadows, realm: isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM, ...mcpEntryDisplay(server.entry),
     definitionDigest: server.definitionDigest, pinnedTools: server.trust?.decision === 'trusted' ? server.trust.tools.length : 0, ...lastStartOf(server) });
   /** `/mcp approve|reconnect|remove` and a successful approval are the owner's explicit retry: the recorded failure goes. */
@@ -362,7 +362,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
         if (!failure) { const code = modelTextPrefix(String((error as { code?: unknown })?.code ?? 'failed'), 64), reason = (error as { params?: { reason?: unknown } })?.params?.reason;
           const detail = typeof reason === 'string' ? modelTextPrefix(reason, 200) : undefined;
           await remember(server, { scope: server.scope, name: server.name, definitionDigest: server.definitionDigest, phase: 'decision', atMs: now(), code, ...(detail ? { detail } : {}) },
-            { kind: 'not-decided', name: server.name, code: [code, detail].filter(Boolean).join(': ') }); continue; }
+            mcpDecisionNotice(server.name, code, detail)); continue; }
         const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'launch',
           atMs: now(), ...failure };
         await remember(server, record, mcpStartFailedNotice(server.name, record));
@@ -372,8 +372,8 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     pool.retain(trustedIds(view));
   }
   for (const server of view.servers) if (server.reason?.startsWith('secret-')) {
-    const reason = server.reason, detail = modelTextPrefix([reason.slice(reason.indexOf(':') + 1), mcpMissingSecretCommand(reason)].filter(Boolean).join('; '), 200);
-    const notice: McpStartNotice = reason.startsWith('secret-refused:') ? { kind: 'secret-refused', name: server.name, code: reason.slice(15).split(':')[0]!, key: reason.slice(15).split(':').slice(1).join(':'), scope: scopeId } : { kind: 'not-decided', name: server.name, code: `${reason.split(':')[0]}: ${detail}` };
+    const reason = server.reason, detail = modelTextPrefix(reason.slice(reason.indexOf(':') + 1), 200);
+    const notice: McpStartNotice = reason.startsWith('secret-refused:') ? { kind: 'secret-refused', name: server.name, code: reason.slice(15).split(':')[0]!, key: reason.slice(15).split(':').slice(1).join(':'), scope: scopeId } : mcpDecisionNotice(server.name, reason.split(':')[0]!, detail);
     await remember(server, { scope: server.scope, name: server.name, definitionDigest: server.definitionDigest, phase: 'decision', atMs: now(), code: reason.split(':')[0]!, detail }, notice);
   }
   const settings = mcpClientSettings(view, { resultMaxBytes: input.resultMaxBytes, inputMaxBytes: input.inputMaxBytes });

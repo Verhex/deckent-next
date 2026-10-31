@@ -1,6 +1,7 @@
 import { agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnStore } from './store.js';
 import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnResult } from './loop.js';
 import { t } from '#platform/index.js';
+import type { ChatTurnSteerOutcome } from '#domain/index.js';
 
 /**
  * A turn with durable identity (T-L3): claim first; a finished turn of the same request replays its stored outcome (the final
@@ -10,16 +11,16 @@ import { t } from '#platform/index.js';
  * it as interrupted); a loop failure is never masked by a store failure.
  */
 export async function runDurableAgentTurn(input: AgentTurnInput & { readonly claim: AgentTurnClaim }, store: AgentTurnStore, ports: AgentTurnPorts):
-  Promise<AgentTurnResult & { readonly replayed: boolean; readonly recorded: boolean }> {
+  Promise<AgentTurnResult & { readonly replayed: boolean; readonly recorded: boolean; readonly steer: ChatTurnSteerOutcome }> {
   const { claim } = input;
   const claimed = await store.claim(claim);
   if (claimed.status === 'finished') {
-    const { answer, finish, note: storedNote, rounds, toolCalls } = claimed.outcome;
+    const { answer, finish, note: storedNote, rounds, toolCalls, steer = { joined: [], returned: [] } } = claimed.outcome;
     const note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
     if (answer) input.emit({ kind: 'text', text: answer });
     input.emit({ kind: 'done', finish, note });
     return Object.freeze({ finish, note, rounds, toolCalls, answer, appendedCount: 0,
-      appendedDigest: claimed.outcome.appendedDigest, replayed: true, recorded: true });
+      appendedDigest: claimed.outcome.appendedDigest, replayed: true, recorded: true, steer });
   }
   const failed = agentTurnOutcome({ finish: 'error', note: t('agent.turn.outcome.interrupted', {}, input.language), rounds: 0, toolCalls: 0,
     answer: null, appendedDigest: null });
@@ -33,9 +34,12 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
         ...(settled.diagnostic ? { diagnostic: settled.diagnostic } : {}) });
     } });
   } catch (error) {
-    await store.finish(claim.scopeId, claim.turnId, failed, ports.now()).catch(() => undefined);
+    const steer = ports.steer?.close();
+    await store.finish(claim.scopeId, claim.turnId, steer ? agentTurnOutcome({ ...failed, steer }) : failed, ports.now()).catch(() => undefined);
     throw error;
   }
-  const recorded = await store.finish(claim.scopeId, claim.turnId, agentTurnOutcome(result), ports.now()).then(() => true, () => false);
-  return Object.freeze({ ...result, replayed: false, recorded });
+  // v30 (Astra 2882): the steered lines' outcome is closed with the loop and stored with the turn, so a replay returns the same ids.
+  const steer = ports.steer?.close() ?? { joined: [], returned: [] };
+  const recorded = await store.finish(claim.scopeId, claim.turnId, agentTurnOutcome({ ...result, steer }), ports.now()).then(() => true, () => false);
+  return Object.freeze({ ...result, replayed: false, recorded, steer });
 }

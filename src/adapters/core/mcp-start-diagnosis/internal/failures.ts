@@ -77,11 +77,14 @@ export type McpStartNotice =
   | { readonly kind: 'start-failed'; readonly name: string; readonly failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'> }
   | { readonly kind: 'tools-changed'; readonly name: string; readonly count: number }
   | { readonly kind: 'not-recorded'; readonly name: string }
-  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string }
+  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string; readonly detail?: string }
   /** K1: trusted, but the approver's grant for its tools was not written (the reason: `delegation`, `unsupported`, …). */
   | { readonly kind: 'grant-refused'; readonly name: string; readonly reason: string } | { readonly kind: 'secret-refused'; readonly name: string; readonly key: string; readonly scope: string; readonly code: string };
 /** Renders one notice as owner-facing text (the host's catalog, in its locale). */
 export type McpStartNoticeRenderer = (notice: McpStartNotice) => string;
+/** Decision data stays identifier-shaped; prose and suggested commands belong to the surface catalog. */
+export const mcpDecisionNotice = (name: string, code: string, detail?: string): McpStartNotice =>
+  ({ kind: 'not-decided', name, code, ...(detail && /^[A-Za-z_][A-Za-z0-9_]{0,255}$/u.test(detail) ? { detail } : {}) });
 export const mcpStartFailedNotice = (name: string, failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'>): McpStartNotice =>
   ({ kind: 'start-failed', name, failure: { code: failure.code, phase: failure.phase, ...(failure.detail ? { detail: failure.detail } : {}),
     ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}) } });

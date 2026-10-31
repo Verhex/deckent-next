@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
-import { DeckentJsonSchemaValidator, getConfigFieldDefault, globalStateRoot, readBuildIdentity, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
+import type { StdioServerParameters } from '@modelcontextprotocol/client/stdio';
+import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, getConfigFieldDefault, globalStateRoot, readBuildIdentity, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
@@ -11,6 +12,7 @@ import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from '#adapters/core
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
 import { mcpEndpointRefusal } from './registry.js';
 import { modelTextPrefix } from '#domain/index.js';
+import { boundedMcpTransport } from './input.js';
 
 /** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the `initialize` era as the fallback — 2025-11-25
  * offered first, every earlier published revision accepted when a server answers with it (spec 2025-11-25 lifecycle "Version Negotiation"; YTK-40). */
@@ -180,6 +182,7 @@ interface ServerState {
   generation: number;
   starts: number;
   failed: string | null;
+  inputRefusal?: string;
   stderr: Buffer;
   listing: { readonly generation: number; readonly tools: ReadonlyMap<string, PinnedTool> } | null;
   last: Extract<McpServerOpen, { ok: true }> | null;
@@ -304,7 +307,7 @@ export class McpClientPool implements McpPoolView {
     try { tools = await listAllTools(client, settings.connectTimeoutMs, this.signal); }
     catch (error) {
       if (errorCode(error) === 'LIST_PAGINATION_EXCEEDED') return { ok: false, reason: 'too-many-tools', detail: `more than ${MCP_CLIENT_LIST_PAGES_MAX} pages` };
-      return { ok: false, reason: 'list-failed', detail: String(errorCode(error) ?? 'failed') };
+      return { ok: false, reason: 'list-failed', detail: state.inputRefusal ?? String(errorCode(error) ?? 'failed') };
     }
     if (tools.length > MCP_CLIENT_TOOLS_MAX) return { ok: false, reason: 'too-many-tools', detail: `${tools.length} > ${MCP_CLIENT_TOOLS_MAX}` };
     state.listing = { generation: state.generation, tools: pinnedTools(tools) };
@@ -316,9 +319,15 @@ export class McpClientPool implements McpPoolView {
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
     const [{ Client, StreamableHTTPClientTransport }, { StdioClientTransport }] = await loadClientSdk();
+    delete state.inputRefusal;
+    const maxBytes = Math.min(settings.inputMaxBytes, INPUT_VALIDATION_LIMITS.mcp.maxBytes);
+    const bound = <T extends import('@modelcontextprotocol/client').Transport>(value: T) => boundedMcpTransport(value, maxBytes,
+      error => { state.inputRefusal = error.code; void transport.close().catch(() => undefined); });
     // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.
-    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'manual' }, fetch: createMcpRedirectFetch(server.url!, fetch, settings.inputMaxBytes) })
-      : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
+    const transport = bound(server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'manual' }, fetch: createMcpRedirectFetch(server.url!, fetch, maxBytes) })
+      : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: maxBytes }));
+    // SDK 2.3.1 clones the exact base transport through its constructor for disposable discovery. Guard that sibling too, preserving its reaper.
+    if (transport instanceof StdioClientTransport) Object.defineProperty(transport, 'constructor', { value: function(params: StdioServerParameters) { return bound(new StdioClientTransport(params)); } });
     if (transport instanceof StdioClientTransport) transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
       state.stderr = next.length > MCP_CLIENT_STDERR_TAIL_BYTES ? next.subarray(next.length - MCP_CLIENT_STDERR_TAIL_BYTES) : next;
@@ -332,11 +341,11 @@ export class McpClientPool implements McpPoolView {
     // SDK negotiation probes precede Client's handlers; close the transport explicitly on cancellation too.
     const abortStart = () => { void transport.close().catch(() => undefined); };
     this.signal.addEventListener('abort', abortStart, { once: true });
-    try { this.signal.throwIfAborted(); await client.connect(transport, { timeout: settings.connectTimeoutMs, signal: this.signal }); }
+    try { this.signal.throwIfAborted(); await client.connect(transport, { timeout: settings.connectTimeoutMs, signal: this.signal }); if (state.inputRefusal) throw Object.assign(new Error(state.inputRefusal), { code: state.inputRefusal }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
       // A failed HTTP start may name the expanded endpoint or a header value: every resolved value is cut out before anything shows it.
-      const detail = String(errorCode(error) ?? (error as Error)?.message ?? 'failed');
+      const detail = state.inputRefusal ?? String(errorCode(error) ?? (error as Error)?.message ?? 'failed');
       const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(server.transport === 'http'
         ? redactText(detail, [server.url!, ...Object.values(server.headers ?? {}), ...(server.secrets ?? [])], 400) : detail, 200) };
       if (this.signal.aborted) return { ...failed, detail: 'cancelled' };

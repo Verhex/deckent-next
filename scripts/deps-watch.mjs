@@ -1,5 +1,6 @@
 // deps-watch (DEPS-GOV): networked dependency watch — NOT part of verify. Weekly and before every batch push (docs-delta).
-// Usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD] [--sbom <package>/sbom.cdx.json]
+// Usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD] [--sbom <package>/sbom.cdx.json] [--previous <report.json>]
+// Separate signal: --new-findings <previous.json> <current.json> (0: none, 1: new HIGH/CRITICAL, 2: comparison unavailable).
 // Inputs: package-lock.json (installed tree), dependencies.json (registry + policy), embedded components (check-embedded-deps) and, with
 // --sbom, the CycloneDX SBOM of a bundled package (scripts/build-dist.mjs): every shipped component, nested embedded ones included, is queried
 // too — a component only the SBOM names (packaging drift) is itself reported.
@@ -21,6 +22,18 @@ import { loadRegistry } from './dependencies.mjs';
 
 const OSV = 'https://api.osv.dev/v1', NPM = 'https://registry.npmjs.org', ABBREVIATED = 'application/vnd.npm.install-v1+json', GITHUB = 'https://api.github.com';
 const RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0, MITIGATED: -1 };
+const findingKey = item => JSON.stringify([item.kind, item.subject, item.severity,
+  item.kind === 'vulnerability' ? item.detail.split(/\s/u)[0] : item.detail]);
+
+/** Comparison is observation, never accepted risk. Version/carrier/shipping scope and severity changes are new findings. */
+export function newFindings(previous, current) {
+  const valid = report => report?.schemaVersion === 1 && /^\d{4}-\d{2}-\d{2}$/u.test(report.date ?? '') && Array.isArray(report.findings)
+    && report.findings.every(item => item && Object.hasOwn(RANK, item.severity) && ['kind', 'subject', 'detail'].every(key => typeof item[key] === 'string'));
+  if (!valid(previous) || !valid(current) || previous.date > current.date) return { status: 'unavailable', exitCode: 2, added: [], known: [] };
+  const before = new Set(previous.findings.map(findingKey)), added = [], known = [];
+  for (const item of current.findings.filter(item => item.severity === 'HIGH' || item.severity === 'CRITICAL')) (before.has(findingKey(item)) ? known : added).push(item);
+  return { status: 'compared', exitCode: added.length ? 1 : 0, previousDate: previous.date, added, known };
+}
 
 /** OSV record → severity. MAL- (malicious package) is CRITICAL; an unrated record counts as HIGH (fail-closed). */
 export function osvSeverity(record) {
@@ -126,7 +139,7 @@ export function sbomComponents(bom) {
 }
 
 /** Runs the watch; `fetchJson` and `signatures` are injectable so the pipeline is testable offline. Returns { report, exitCode, files }. */
-export async function runWatch({ root, outDir, today = new Date().toISOString().slice(0, 10), fetchJson = defaultFetchJson, signatures = defaultSignatures, sbom = null }) {
+export async function runWatch({ root, outDir, today = new Date().toISOString().slice(0, 10), fetchJson = defaultFetchJson, signatures = defaultSignatures, sbom = null, previous = null }) {
   const arch = JSON.parse(readFileSync(join(root, 'arch.json'), 'utf8'));
   const { registry, errors } = loadRegistry(root, arch.dependencies?.registry);
   if (!registry) throw new Error(`dependency registry invalid: ${errors.join('; ')}`);
@@ -244,6 +257,7 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
     sbom: sbom ? { components: shipped.length, nested: shipped.filter(component => component.via).length, sbomOnly: sbomOnly.length } : null,
     signatures: { invalid: signed.invalid?.length ?? null, missing: signed.missing?.length ?? null }, unprovenancedRuntime: unprovenanced.sort(),
     direct: directRows, alternatives: alternativeRows, vulnerabilities: vulnerable, findings };
+  report.newFindings = newFindings(previous, report);
   mkdirSync(outDir, { recursive: true });
   const files = [join(outDir, `deps-watch-${today}.json`), join(outDir, `deps-watch-${today}.md`)];
   writeFileSync(files[0], `${JSON.stringify(report, null, 2)}\n`);
@@ -253,12 +267,15 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
 
 const cell = value => String(value ?? '—').replaceAll('|', '\\|');
 export function renderMarkdown(report) {
+  const known = new Set((report.newFindings?.known ?? []).map(findingKey)), added = new Set((report.newFindings?.added ?? []).map(findingKey));
   const table = (head, rows) => [`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map(row => `| ${row.map(cell).join(' | ')} |`)].join('\n');
   return [`# deps-watch ${report.date}`, '',
     `Exit ${report.exitCode} (fails on ${report.failSeverities.join('/')}). Node ${report.node}. Tree: ${report.tree.packages} packages (${report.tree.runtime} runtime), ${report.tree.embedded} embedded components.`,
     ...(report.sbom ? [`Bundled package SBOM: ${report.sbom.components} components (${report.sbom.nested} nested embedded), ${report.sbom.sbomOnly} named only by the SBOM.`] : []),
     `Findings: ${Object.entries(report.counts).map(([level, count]) => `${level} ${count}`).join(', ')}. Signatures: invalid ${report.signatures.invalid ?? '?'}, missing ${report.signatures.missing ?? '?'}.`, '',
-    '## Findings', '', report.findings.length ? table(['Severity', 'Kind', 'Subject', 'Detail'], report.findings.map(item => [item.severity, item.kind, item.subject, item.detail])) : 'None.', '',
+    `New HIGH/CRITICAL signal: ${report.newFindings?.status ?? 'unavailable'}; exit ${report.newFindings?.exitCode ?? 2}. Known means observed before, not accepted risk.`, '',
+    '## Findings', '', report.findings.length ? table(['Severity', 'Kind', 'Subject', 'Detail', 'Change'], report.findings.map(item => [item.severity, item.kind, item.subject, item.detail,
+      known.has(findingKey(item)) ? 'known (not accepted)' : added.has(findingKey(item)) ? 'NEW' : '—'])) : 'None.', '',
     `MITIGATED findings come from dependencies.json acceptedRisks; they fail again on expiry or on any advisory/version/carrier change.`, '',
     '## Direct dependencies', '', table(['Package', 'Kind', 'Criticality', 'Installed', 'Latest', 'Latest date', 'Next review'],
       report.direct.map(row => [row.name, row.kind, row.criticality, row.installed, row.latest, row.latestDate, row.nextReview])), '',
@@ -296,6 +313,13 @@ export function integrityOf(outDir) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv[2] === '--new-findings') {
+    if (process.argv.length !== 5) { process.stderr.write('usage: node scripts/deps-watch.mjs --new-findings <previous.json> <current.json>\n'); process.exit(2); }
+    try {
+      const result = newFindings(...process.argv.slice(3).map(path => JSON.parse(readFileSync(resolve(path), 'utf8'))));
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`); process.exitCode = result.exitCode;
+    } catch { process.stderr.write('deps-watch new findings: comparison unavailable\n'); process.exitCode = 2; }
+  } else {
   if (process.argv[2] === '--integrity') {
     if (process.argv.length !== 4) { process.stderr.write('usage: node scripts/deps-watch.mjs --integrity <outDir>\n'); process.exit(2); }
     const problems = integrityOf(resolve(process.argv[3]));
@@ -305,9 +329,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2), dateAt = args.indexOf('--date');
   const date = dateAt > -1 ? args.splice(dateAt, 2)[1] : undefined;
   const sbomAt = args.indexOf('--sbom'), sbomFile = sbomAt > -1 ? args.splice(sbomAt, 2)[1] : undefined;
-  if (args.length !== 1 || (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/u.test(date))) { process.stderr.write('usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD]\n'); process.exit(2); }
+  const previousAt = args.indexOf('--previous'), previousFile = previousAt > -1 ? args.splice(previousAt, 2)[1] : undefined;
+  if (args.length !== 1 || previousAt > -1 && !previousFile || sbomAt > -1 && !sbomFile || dateAt > -1 && !date || (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/u.test(date))) {
+    process.stderr.write('usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD] [--sbom <package>/sbom.cdx.json] [--previous <report.json>]\n'); process.exit(2);
+  }
   const { report, exitCode, files } = await runWatch({ root: dirname(dirname(fileURLToPath(import.meta.url))), outDir: resolve(args[0]), ...(date ? { today: date } : {}),
-    ...(sbomFile ? { sbom: JSON.parse(readFileSync(resolve(sbomFile), 'utf8')) } : {}) });
+    ...(sbomFile ? { sbom: JSON.parse(readFileSync(resolve(sbomFile), 'utf8')) } : {}), ...(previousFile ? { previous: JSON.parse(readFileSync(resolve(previousFile), 'utf8')) } : {}) });
   process.stdout.write(`deps-watch ${report.date}: ${Object.entries(report.counts).map(([level, count]) => `${level} ${count}`).join(', ')}; exit ${exitCode}\n${files.join('\n')}\n`);
   process.exitCode = exitCode;
+  }
 }

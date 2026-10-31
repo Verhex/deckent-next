@@ -698,6 +698,7 @@
   "mcp.start.toolsChanged": "MCP sunucusu {name}: onayladığınızdan beri {count} sabitlenmiş araç değişti ya da kayboldu; bu yüzden modele sunulmuyor. İncelemek ve yeniden onaylamak için /mcp approve {name} çalıştırın.",
   "mcp.start.notRecorded": "MCP sunucusu {name}: bu hata kaydedilemedi; kartı yeniden sorulabilir.",
   "mcp.start.notDecided": "MCP sunucusu {name} için karar verilemedi: {code}.",
+  "mcp.start.secretMissing": "{key} anahtarı eksik. Kendi terminalinizde deckent secret set {key} --main ile kaydedin.",
   "mcp.start.grantRefused": "MCP sunucusu {name} güvenilir, ama araçlarına izin verilmedi: {reason}. Bu araçlara yapılan çağrılar policy tarafından reddedilir.",
   "mcp.start.secretRefused": "MCP sunucusu {name} başlamadı: ana kasadaki {key} anahtarı bu projeye açılmamış. Kendi terminalinizde deckent secret grant {key} --scope {scope} ile açın (AI oturumları açamaz) ya da anahtarı sunucunun kaydından çıkarın.",
   "mcp.grant.notNow": "Şimdi değil: {key} anahtarı bu projeye kapalı kalır (sonra /mcp ya da deckent secret grant {key} ile açabilirsiniz).",

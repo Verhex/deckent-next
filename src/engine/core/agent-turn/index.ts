@@ -7,7 +7,7 @@ export { agentTurnApproverNote, type AgentToolOwnerAnswer } from './internal/app
 export type { ModelIngressDisposition, ModelIngressProjection } from './internal/model-ingress-project.js';
 export type { AgentRoundOutcome, AgentTurnPorts, AgentTurnInput, AgentTurnResult } from './internal/loop.js';
 export { runDurableAgentTurn } from './internal/durable.js';
-export { AgentTurnStoreError, agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE } from './internal/store.js';
+export { AgentTurnStoreError, agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, agentTurnSteerRecordSchema } from './internal/store.js';
 export type { AgentTurnStore, AgentTurnClaim, AgentTurnOutcome, AgentTurnToolCallRecord, AgentTurnStoreErrorCode } from './internal/store.js';
 export { AGENT_COMPACTION_HIGH_WATER, agentCompactionInstruction, AGENT_COMPACTION_KEEP_MESSAGES, agentCompactionSummarySchema,
   agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction } from './internal/compaction.js';
@@ -17,7 +17,7 @@ export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admissio
 export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, boundApprovalPreviewFacts, agentToolApprovalSummary, type ApprovalPreviewCut } from './internal/approval-preview.js';
 export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurnReplyLanguageRule, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt, type AgentTurnReplyLanguage,
   type AgentTurnShellPosture } from './internal/system-prompt.js';
-export { canonicalTurnRequest, withMcpNotices, chatTurnRoundFailureState, classifyProviderRejection, PROVIDER_REJECTION_KINDS } from './internal/metadata.js';
+export { canonicalTurnRequest, TURN_NOTE_MAX_CHARS, fitChatTurnResult, chatTurnRoundFailureState, classifyProviderRejection, PROVIDER_REJECTION_KINDS } from './internal/metadata.js';
 export type { ProviderRejectionKind } from './internal/metadata.js';
 export { agentCompactionExpected, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './internal/pressure.js';
 export { AGENT_SESSION_CONTEXT_VERSION, AGENT_SESSION_RULES, AGENT_SESSION_SURFACES, SESSION_STATE_TOOL_SPEC, agentSessionCells, agentSessionSnapshot, agentSessionStateText,

@@ -43,7 +43,7 @@ export interface ModelConnectPorts {
   /** The two authored layer documents and the merged configuration, read fresh. */
   layers(): Promise<Readonly<{ global: Record<string, unknown>; project: Record<string, unknown>; effective: Record<string, unknown> }>>;
   /** The governed config writer (policy, approval, audit): applied, or the pending approval that stopped it. */
-  write(input: Readonly<{ keyPath: string; value: unknown; layer: ModelConnectLayer; commandId: string }>): Promise<null | Readonly<{ approvalId: string }>>;
+  write(input: Readonly<{ keyPath: string; value: unknown; layer: ModelConnectLayer; commandId: string }>): Promise<null | Readonly<{ approvalId: string; keyPath?: string } | { reboundProfile: ModelReference }>>;
   catalogHas(channelId: string, nativeId: string): Promise<boolean>;
   register(catalog: ProviderCatalogDocument, commandId: string): Promise<void>;
   binding(reference: ModelReference): Promise<ModelConnectBinding>;
@@ -80,8 +80,8 @@ type Target = Readonly<{ reference: ModelReference; nativeId: string; maxOutputT
   catalog: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>;
 
 const withoutCapabilities = (model: Declared) => ({ ...model, protocols: model.protocols.map(protocol => ({ ...protocol, capabilities: [] })) });
-const capabilitiesAdded = (before: Declared, after: Declared) => isDeepStrictEqual(withoutCapabilities(before), withoutCapabilities(after))
-  && before.protocols.every((protocol, index) => protocol.capabilities.every(capability => after.protocols[index]!.capabilities.some(row => isDeepStrictEqual(row, capability))));
+const capabilitiesUpdated = (before: Declared, after: Declared) => isDeepStrictEqual(withoutCapabilities(before), withoutCapabilities(after))
+  && before.protocols.every((protocol, index) => protocol.capabilities.every(capability => after.protocols[index]!.capabilities.some(row => row.id === capability.id && row.version === capability.version)));
 /** The catalog with the model declared; null when it already declares exactly this model (a different declaration is a typed conflict). */
 export function declareConnectedModel(current: ProviderCatalog | null, declare: NonNullable<Target['declare']>): ProviderCatalog | null {
   const providers = (current?.providers ?? []).map(provider => ({ ...provider, models: [...provider.models] }));
@@ -89,8 +89,8 @@ export function declareConnectedModel(current: ProviderCatalog | null, declare: 
   const existing = provider?.models.find(model => model.id === declare.model.id && model.version === declare.model.version);
   const normal = (model: Declared) => parseProviderCatalog({ schemaVersion: 1, revision: 'x', providers: [{ ...declare.provider, models: [model] }] }).providers[0]!.models[0];
   if (existing && isDeepStrictEqual(normal(existing), normal(declare.model))) return null;
-  // BeUser AYSE-16: a reconnect that only adds capabilities the server now proves (e.g. tool calls) updates the declaration; any other difference stays a conflict.
-  if (existing && !capabilitiesAdded(normal(existing)!, normal(declare.model)!)) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
+  // BeUser AYSE-16: a reconnect that only updates capabilities the server now proves (e.g. tool calls) updates the declaration; any other difference stays a conflict.
+  if (existing && !capabilitiesUpdated(normal(existing)!, normal(declare.model)!)) throw new ModelConnectError('MODEL_CONNECT_DECLARATION_CONFLICT');
   if (existing) provider!.models[provider!.models.indexOf(existing)] = declare.model; else if (provider) provider.models.push(declare.model); else providers.push({ ...declare.provider, models: [declare.model] });
   // The revision names the content (deterministic: a re-run plans the same document).
   return parseProviderCatalog({ schemaVersion: 1, revision: `connect-${createHash('sha256').update(canonical(providers)).digest('hex').slice(0, 16)}`, providers });
@@ -160,6 +160,7 @@ export class ModelConnectApplication {
     if (isAiPrincipal(principal)) for (const target of targets) await ports.preflight!(scopeId, principal, target);
     const steps: { catalog: ModelConnectStepState; declaration: ModelConnectStepState; profile: ModelConnectStepState; activation: ModelConnectStepState; carried: number } =
       { catalog: 'skipped', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 };
+    let reboundProfile: ModelReference | null = null;
     let tariff: ModelConnectResult['tariff'] = 'unmetered', cli: ModelConnectResult['cli'];
     const notCarried: { reference: ModelReference; code: string }[] = [], carriedModels: ModelReference[] = [];
     const result = (status: ModelConnectResult['status'], approval: ModelConnectResult['approval'] = null, keyStored: boolean | null = null,
@@ -168,7 +169,8 @@ export class ModelConnectApplication {
     const write = async (keyPath: string, value: unknown, layer: ModelConnectLayer, id: string) => {
       const pending = await ports.write({ keyPath, value, layer, commandId: id });
       layers = await ports.layers();
-      return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath, layer }) : null;
+      if (pending && 'reboundProfile' in pending) { reboundProfile = pending.reboundProfile; steps.profile = 'written'; return null; }
+      return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath: pending.keyPath ?? keyPath, layer }) : null;
     };
     // Validate every tariff before the first write. One catalog and declaration change for the entire connection.
     const adapters = !profiled ? [] : await Promise.all(targets.map(target => ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId,
@@ -209,6 +211,7 @@ export class ModelConnectApplication {
     const profileLayers: ModelConnectLayer[] = !profiled ? [] : authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
     const planned = new Map(profileLayers.map(layer => [layer, [...(((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [])]]));
     for (const [index, target] of (!profiled ? [] : targets).entries()) {
+    if (reboundProfile && sameReference(target.reference, reboundProfile)) continue; // The atomic capability write preserved this profile's authored limits.
     const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog, ...(command.workspaceId ? { workspaceId: command.workspaceId } : {}) };
     const adapter = adapters[index]!;
     const binding = await ports.binding(target.reference);
@@ -238,7 +241,8 @@ export class ModelConnectApplication {
       const shaped = known ? await ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
       cli = shaped.cli ?? cli;
       // Sized on the profile as this layer writes it (its kept definition, its next version), with the registry's headroom left over.
-      const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow, known), binding, ports.defaults.deliveryHeadroomBytes));
+      const responseMaxBytes = Math.min((existing?.['limits'] as { responseMaxBytes?: number } | undefined)?.responseMaxBytes ?? ports.defaults.responseMaxBytes,
+        this.deliverable(bytes => ports.delivers(build(existing ? version + 1 : 1, bytes, shaped, contextWindow, known), binding, ports.defaults.deliveryHeadroomBytes)));
       if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped, contextWindow, known))) continue;
       planned.set(layer, [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped, contextWindow, known)]);
     }

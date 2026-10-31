@@ -9,6 +9,7 @@ import { describeMcpApproval, describeMcpResult, describeMcpTrustCard, expandMcp
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
 import { agentToolApprovalFacts } from '#engine/index.js';
 import { mcpCommand, type CommandContext } from '#surfaces/core/cli/index.js';
+import { renderMcpStartNotice } from '#composition/core/agent-turn/index.js';
 // @ts-expect-error -- a plain ESM test fixture (no declaration file)
 import { startMcpHttpFixture } from '../../fixtures/mcp-http-server.mjs';
 
@@ -128,6 +129,38 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     // The registry file holds the reference, never the value.
     const personal = join(w.home, '.deckent', 'mcp.json');
     expect(existsSync(personal) && readFileSync(personal, 'utf8')).toContain('$DECK:GH'); expect(readFileSync(personal, 'utf8')).not.toContain(SECRET);
+    // Raw replies bypass the fixture server's codec: an invalid wide union must fail at the client's gate, never its result codec.
+    let rewrite: { method: string; result: unknown } | null = null;
+    const hostile = await startMcpHttpFixture(async (message: { id: number; method: string }, response: Response) => {
+      if (!rewrite || message?.method !== rewrite.method) return response;
+      await response.body?.cancel();
+      return Response.json({ jsonrpc: '2.0', id: message.id, result: { resultType: 'complete', ...rewrite.result as Record<string, unknown> } });
+    }) as HttpFixture;
+    closers.push(() => hostile.close());
+    const live = settings.servers[0]!, nested = (depth: number) => { let value: unknown = false; for (let i = 2; i < depth; i++) value = { child: value }; return value; };
+    for (const [method, result, accepted] of [
+      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(4_086).fill(false) }, true], // 9 nodes with modern resultType/cache fields + 4086 = 4095.
+      ['tools/list', { tools: [], ttlMs: 0, cacheScope: 'private', padding: Array(4_087).fill(false) }, false],
+      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(4_085).fill(false) }, true], // 10 + 4085 = 4095.
+      ['tools/call', { content: [{ type: 'text', text: 'bounded' }], padding: Array(4_086).fill(false) }, false],
+      ['tools/call', { content: Array(4_096).fill({ type: 'invalid', text: false }) }, false],
+      ['tools/call', { content: [], padding: nested(32) }, true],
+      ['tools/call', { content: [], padding: nested(33) }, false],
+      ['server/discover', { padding: Array(4_096).fill(false) }, false],
+    ] as const) {
+      rewrite = method === 'server/discover' ? { method, result } : null;
+      const guarded = new McpClientPool(new AbortController().signal); closers.push(() => guarded.close());
+      const target = { ...live, url: hostile.url }, cfg = { ...settings, servers: [target] };
+      const opened = await guarded.open(target, cfg, { cwd: w.project, environment: w.env, sandboxes: [] });
+      if (method === 'server/discover') { expect(opened).toMatchObject({ ok: false, reason: 'start-failed', detail: 'MCP_INPUT_LIMIT' }); continue; }
+      expect(opened).toMatchObject({ ok: true }); rewrite = { method, result };
+      const before = hostile.requests.length;
+      if (method === 'tools/list') expect(await guarded.open(target, cfg, { cwd: w.project, environment: w.env, sandboxes: [] }), JSON.stringify({ method, accepted }))
+        .toMatchObject(accepted ? { ok: true } : { ok: false, reason: 'list-failed', detail: 'MCP_INPUT_LIMIT' });
+      else expect(await guarded.call(target.id, 'whoami', whoami.digest, {}, { timeoutMs: 3_000, signal: new AbortController().signal }))
+        .toMatchObject(accepted ? { outcome: 'answered' } : { outcome: 'unknown' });
+      expect(hostile.requests.length - before).toBe(1); await guarded.close();
+    }
   }, 60_000);
 
   // KER-17 (owner GO 2026-10-28, LAW-AUDIT-KER17): a personal-file `$DECK:` key resolves under the project's grant. A trusted server whose key loses
@@ -140,7 +173,7 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     const view = pool.scoped({ scopeId: 'scope', cwd: w.project }), signal = new AbortController().signal;
     const open = () => openTurnMcp({ registry: context, pool: view, cwd: w.project, sandboxes: [], principal: { id: 'p', issuer: 'test', subject: 'owner' }, sqlite: {} as never, keyFile: '',
       requestTtlMs: 1_000, inputMaxBytes: 65_536, resultMaxBytes: 65_536, scopeId: 'scope', turnId: 'turn', signal, emit: () => undefined, ledgerPath: async () => '',
-      requestPolicy: async () => { if (pending) return { revision: 'p', trustFacts: agentToolApprovalFacts(null, 'scope', null) }; throw new Error('no card expected'); }, describeNotice: notice => JSON.stringify(notice) });
+      requestPolicy: async () => { if (pending) return { revision: 'p', trustFacts: agentToolApprovalFacts(null, 'scope', null) }; throw new Error('no card expected'); }, describeNotice: notice => notice.kind === 'not-decided' ? renderMcpStartNotice(notice, 'en') : JSON.stringify(notice) });
     const before = await open(), whoami = [...before.offered.values()].find(entry => entry.tool === 'whoami')!;
     expect(await view.call(whoami.server, 'whoami', whoami.digest, {}, { timeoutMs: 10_000, signal })).toMatchObject({ outcome: 'answered' });
     granted = false;
@@ -153,7 +186,7 @@ describe.skipIf(process.platform !== 'linux')('MCP HTTP servers end to end (a re
     expect((await open()).offered.size).toBe(2);
     granted = 'missing';
     const missing = await open(); expect(missing.offered.size).toBe(0); expect(missing.notices.join('')).toContain('deckent secret set GH --main');
-    expect((await runMcpCommand({ verb: 'get', name: 'web-docs' }, context) as { server: { reason: string } }).server.reason).toContain('deckent secret set GH --main');
+    expect((await runMcpCommand({ verb: 'get', name: 'web-docs' }, { ...context, describeNotice: notice => renderMcpStartNotice(notice, 'en') }) as { server: { lastStart: { text: string } } }).server.lastStart.text).toContain('deckent secret set GH --main');
     expect((await open()).notices).toEqual([]);
     const path = join(productResourcePath(w.layout, 'integrations'), 'mcp-start-failures.json'), stored = JSON.parse(readFileSync(path, 'utf8'));
     expect(stored.failures[0].clientIdentity).toBe(MCP_CLIENT_IDENTITY);

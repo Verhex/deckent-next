@@ -5,6 +5,7 @@ import { get, request } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openNativeConnection } from '../../../dist/adapters/core/native-connection/index.js';
+import { INPUT_VALIDATION_LIMITS } from '#platform/core/common/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import type { SandboxRequest } from '#engine/index.js';
 import type { WorkerEvent } from '#domain/index.js';
@@ -38,6 +39,9 @@ it('accepts worker events only after the bootstrap, validates each against the c
   const received: WorkerEvent[][] = []; const connection = await gateway(await fixture(), received); const socket = connection.descriptor.socketPath;
   expect(await call(socket, 'POST', '/events', event(1) + '\n')).toBe(403);
   expect(await call(socket, 'GET', '/bootstrap')).toBe(200);
+  const hostile = JSON.stringify({ kind: 'model.verification', schemaVersion: 2, observed: Array(INPUT_VALIDATION_LIMITS.worker.maxNodes).fill(0) });
+  expect(await call(socket, 'POST', '/events', hostile + '\n')).toBe(413);
+  expect(received).toEqual([]); expect(connection.statistics()).toMatchObject({ events: 0, rejected: 2 });
   expect(await call(socket, 'POST', '/events', [event(1), event(2)].join('\n') + '\n')).toBe(204);
   expect(await call(socket, 'POST', '/events', [event(2), '{bad json', event(3, { kind: 'forged-kind' }), event(4)].join('\n') + '\n')).toBe(204);
   expect(await call(socket, 'POST', '/events', 'x', 300_000)).toBe(413);

@@ -1,3 +1,4 @@
+import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { createHubServiceHttpHandler, type HubServiceHttpOptions } from './service-http.js';
 import { createMcpHandler, requireBearerAuth, type OAuthTokenVerifier, type AuthInfo } from '@modelcontextprotocol/server';
 import { HUB_LIMITS } from '#domain/index.js';
@@ -59,6 +60,7 @@ export function createHubHttpHandler(app: HubServerApplication, auth: HubHttpAut
       } finally { reader.releaseLock(); }
       let parsedBody: unknown;
       try { parsedBody = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return new Response(null, { status: 400 }); }
+      if (!inputWithinValidationLimit(parsedBody, INPUT_VALIDATION_LIMITS.hub)) return new Response(null, { status: 413 });
       try { return await handler.fetch(request, { authInfo: verified, parsedBody }); }
       catch { return new Response(null, { status: 403 }); }
   };

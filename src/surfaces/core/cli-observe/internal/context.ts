@@ -11,6 +11,7 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandContext, 'verifyAudit' | 'inspectToolchainCurrency' | 'inspectSecretStore' | 'inspectSecretInventory' | 'describeRuntimeService'
   | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
   inspectLegacyProjectInstructions?: (root: string) => Promise<boolean>;
+  inspectModelBinding?: import('#surfaces/core/cli-models/index.js').ModelCommandContext['inspectModelBinding'];
   inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
   /** BeUser D-05: the read-only monitor snapshot (ledger, no service), read by doctor for Runs parked after repeated failures. */
   inspectMonitor?: import('#surfaces/core/monitor/index.js').MonitorHandler;

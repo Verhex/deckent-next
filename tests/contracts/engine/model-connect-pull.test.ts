@@ -71,6 +71,8 @@ it('BeUser AYSE-16: a reconnect that only adds a proven capability updates the d
   const upgraded = declareConnectedModel(current, declare(model([tool])))!;
   expect(upgraded.providers[0]!.models).toHaveLength(1); expect(upgraded.providers[0]!.models[0]!.protocols[0]!.capabilities).toEqual([tool]);
   expect(declareConnectedModel(upgraded, declare(model([tool])))).toBeNull();
+  const unsupported = declareConnectedModel(null, declare(model([{ ...tool, state: 'unsupported' }])))!;
+  expect(declareConnectedModel(unsupported, declare(model([tool])))?.providers[0]!.models[0]!.protocols[0]!.capabilities).toEqual([tool]);
   expect(() => declareConnectedModel(upgraded, declare(model([])))).toThrow(expect.objectContaining({ code: 'MODEL_CONNECT_DECLARATION_CONFLICT' }));
   expect(() => declareConnectedModel(current, declare(model([], 'other')))).toThrow(expect.objectContaining({ code: 'MODEL_CONNECT_DECLARATION_CONFLICT' }));
 });

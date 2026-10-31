@@ -1,8 +1,9 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState, modelInvocationProfileDigest } from '#engine/index.js';
-export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
+import { canonicalTurnRequest as canonical, chatTurnRoundFailureState, fitChatTurnResult, modelInvocationProfileDigest } from '#engine/index.js';
+export { chatTurnRoundFailureState } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
-import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
+import { chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnSteerSchema, mcpStartNoticeSchema, modelInvocationProfileSchema, CHAT_TURN_RESULT_NOTICES, CHAT_TURN_STEER_LINES,
+  type ChatTurnNotice, type ChatTurnSteerResult, type AgentToolApprovalSettlement, type AgentToolClass, type AgentToolSpec, type AgentTurnMessage,
   agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { readSubscriptionRejection, SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
@@ -33,7 +34,7 @@ import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, o
 export interface RuntimeChatTurnHost {
   readonly model: RuntimeModelInvocationHost;
   readonly signal: AbortSignal;
-  readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController }>;
+  readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController; readonly steer: TurnSteer }>;
   readonly scratch: ScratchActivity;
   readonly fetchTransport: HttpFetchTransport;
   /** S9/S11: the sandbox providers a shell call may pick, in preference order (bubblewrap, then Landlock); only an in-process test passes another list. */
@@ -47,6 +48,14 @@ export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, sig
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
   return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
+/** v30: a running turn's steered lines; `closed` once the loop ended, so a later line is `not-running` (never accepted and lost). `room`: the
+ * result bytes the steer ids may take — a line is accepted only while every accepted id still fits it, returned whole (Astra 2882). */
+interface TurnSteer { readonly pending: { readonly steerId: string; readonly content: string }[]; readonly joined: string[]; readonly seen: Set<string>; closed: boolean;
+  readonly room: number }
+const resultBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+/** Serialized size of the steer ids as the result carries them; one array is the largest split of the same ids. */
+const steerBytes = (ids: readonly string[]) => resultBytes({ joined: [], returned: ids });
+
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
@@ -122,8 +131,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
-    // MCP-SANDBOX-PATHS: a server that could not be decided or started is named in the turn's note (protocol v17 unchanged: `note` exists).
-    let mcpNotices: readonly string[] = [];
+    // MCP-SANDBOX-PATHS: a server that could not be decided or started is named by a typed notice of the result (v30; never in `note`).
+    let mcpNotices: readonly ChatTurnNotice[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
       turnId: command.turnId, signal, emit: emitApproval, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor }), cwd: workspace.scope.root }) : null;
     // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
@@ -198,7 +207,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
     registered = !host.running.has(key);
-    if (registered) host.running.set(key, { principalKey, controller: cancel });
+    // v30 (tema L6): MCP notices as data, at the protocol's bound; `note` keeps only the turn's own note (and a failed policy record).
+    const notices = mcpNotices.flatMap(notice => { const parsed = mcpStartNoticeSchema.safeParse(notice); return parsed.success ? [parsed.data] : []; }).slice(0, CHAT_TURN_RESULT_NOTICES);
+    // The largest result before any steer id, answer or note (every count at its bound): what steer admission leaves room for.
+    const floor = resultBytes({ schemaVersion: 1, turnId: command.turnId, finish: 'cancelled', note: null, rounds: Number.MAX_SAFE_INTEGER, toolCalls: Number.MAX_SAFE_INTEGER,
+      answer: null, answerBytes: Number.MAX_SAFE_INTEGER, replayed: false, recorded: false, notices, steer: { joined: [], returned: [] } });
+    const steer: TurnSteer = { pending: [], joined: [], seen: new Set(), closed: false, room: delivery.maxResultBytes - floor + steerBytes([]) };
+    if (registered) host.running.set(key, { principalKey, controller: cancel, steer });
     const ports: AgentTurnPorts = {
       contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
         ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null, serviceStopping: () => host.signal.aborted && !cancel.signal.aborted, // BeUser M-10
@@ -361,21 +376,26 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (proposals?.owns(tool.name)) return proposals.apply(args);
         decisions.ranAllowed(tool, args, execution, callId); return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
+      // v30 steer: the engine takes a line only at its model-call boundary; taking is synchronous, so a line joins once or stays pending.
+      steer: { pending: () => [...steer.pending], join: steerId => { const at = steer.pending.findIndex(line => line.steerId === steerId);
+        if (steer.closed || at < 0) return false; steer.pending.splice(at, 1); steer.joined.push(steerId); return true; },
+        close: () => { steer.closed = true; return { joined: [...steer.joined], returned: steer.pending.map(line => line.steerId) }; } },
       now: () => clock.sample().wallMs, recordIngress: async notice => { if (notice.disposition === 'unchanged') return; const loaded = await context.policy.load() as { revision?: unknown }; const policyRevision = typeof loaded.revision === 'string' ? loaded.revision : 'unknown'; const atMs = clock.sample().wallMs; await withAgentAudit(context, audit => audit.record({ schemaVersion: 1, eventId: sha256(`model-ingress:1\0${command.scopeId}\0${command.turnId}\0${notice.fieldDigest}\0${notice.codePoints}\0${atMs}`), scopeId: command.scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision, atMs, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest, decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } })); },
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
       admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes, chat.compactionThresholdTokens), fullAccess,
       approverNoteMaxChars: context.config.approvals.approverNoteMaxChars }, store, ports);
+    steer.closed = true; // a replayed turn never ran the loop: its stored ids answer, nothing is accepted now
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
-    // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery.
-    const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, delivery.maxResultBytes - 1024)) ? answer : null;
     const policyRecorded = await flushPolicy?.(); flushPolicy = null;
-    const notices = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), ...mcpNotices] : mcpNotices;
-    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(notices, result.note), rounds: result.rounds,
-      toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
+    const note = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), result.note].filter(Boolean).join(' ') : result.note;
+    // The answer came as text events; the result repeats it only while the whole serialized result (JSON escaping included) fits the delivery.
+    return fitChatTurnResult(Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note, rounds: result.rounds, toolCalls: result.toolCalls,
+      answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? answer : null, answerBytes, replayed: result.replayed, recorded: result.recorded, notices, steer: result.steer }),
+    delivery.maxResultBytes);
   } finally {
     /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();
     if (registered) host.running.delete(key);
@@ -393,4 +413,17 @@ export async function cancelPeerConfiguredChatTurn(projectRoot: string, input: u
   if (!running || running.principalKey !== principalKeyOf(context.principal)) return Object.freeze({ schemaVersion: 1, turnId: parsed.data.turnId, state: 'not-running' });
   running.controller.abort();
   return Object.freeze({ schemaVersion: 1, turnId: parsed.data.turnId, state: 'cancelling' });
+}
+/** v30 steer: queues one person line for the same principal's running turn (the engine adds it at its next model-call boundary). Another
+ * principal's turn, an unknown, cancelled or finished one is `not-running`; past the per-turn bound `full`; a repeated id is the same line. */
+export async function steerPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
+  host: RuntimeChatTurnHost): Promise<ChatTurnSteerResult> {
+  const parsed = chatTurnSteerSchema.safeParse(input);
+  if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+  const { turnId, steerId, content } = parsed.data, context = await loadPeerInvocationContext(projectRoot, parsed.data.scopeId, options, peer, 'write');
+  const running = host.running.get(runningKey(parsed.data.scopeId, turnId)), steer = running?.steer;
+  const state = !running || !steer || running.principalKey !== principalKeyOf(context.principal) || steer.closed || running.controller.signal.aborted ? 'not-running'
+    : steer.seen.has(steerId) ? 'queued' : steer.seen.size >= CHAT_TURN_STEER_LINES || steerBytes([...steer.seen, steerId]) > steer.room ? 'full'
+    : (steer.seen.add(steerId), steer.pending.push({ steerId, content }), 'queued');
+  return Object.freeze({ schemaVersion: 1, turnId, steerId, state });
 }

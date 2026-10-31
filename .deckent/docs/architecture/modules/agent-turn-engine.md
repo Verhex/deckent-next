@@ -55,8 +55,26 @@ delivery, `replayed`, `recorded`). Event frames are required data, not presentat
 for the peer to drain before each round and tool call, and at most `4 × responseMaxBytes` may wait unread before the turn is
 cancelled; an event that cannot fit one frame cancels the turn instead of being dropped. A peer that disconnects cancels the turn
 at the next write (a Unix peer that closed after its request is not visible earlier); `cancelChatTurn` of the same principal
-cancels at once (another principal's turn, or an unknown one, is `not-running`); service stop cancels running turns. Stores:
+cancels at once (another principal's turn, or an unknown one, is `not-running`); service stop cancels running turns.
+**Protocol v30 (tema L6, owner S5).** `ChatTurnResult` carries typed MCP start `notices` (the adapter's structure, at most
+`CHAT_TURN_RESULT_NOTICES`; the surface renders them from its own catalog) and `note` no longer carries MCP text. `steerChatTurn` queues one
+person line for the same principal's running turn (`queued`, `not-running` for another principal, unknown, cancelled or finished turns,
+`full` past `CHAT_TURN_STEER_LINES` lines per turn or when one more id would not fit the turn's result bound whole; a repeated `steerId`
+is the same line; ids are identifier-shaped, at most 64 characters). The joined and returned ids are stored with the durable turn, so a
+replay answers the same. The result is fitted by its serialized size (`fitChatTurnResult`): the answer's repeat is left out first
+(`answerBytes` still names it), then Deckent's note is cut (`…`); notices and steer ids are never cut, because admission measures the
+largest result with no answer and no note. The loop takes waiting lines only at the
+model-call boundary — after every tool result of the round, before the next round is measured and sent — so a line never enters an
+approval or witness wait and never answers a card; each joins once as the person's `user` message (`message` event with its `steerId`),
+none joins after a cancel, and the result's `steer.returned` names the lines that did not join. A v29 terminal's `chatTurn` is closed
+unanswered (`LOCAL_RUNTIME_TRANSPORT`); the lifecycle window is `[30, 29]`. Stores:
 `agent_turns`/`agent_turn_tool_calls` (T-L3b2). Errors: `AGENT_TURN_IN_PROGRESS | CONFLICT | CORRUPT | INVALID | UNAVAILABLE`.
+MCP `not-decided` notices carry a short `code` (at most 64 characters) and an optional identifier-shaped `detail` (at most 256);
+suggested commands are rendered from the surface's EN/TR catalog. Start failure phases include `decision`. A repeated failure with
+the same client/definition identity, code and detail adds no new turn notice; `/mcp` still renders the recorded failure on each query.
+The MCP client's HTTP and stdio transports bound raw bytes and guard every delivered JSON-RPC message with the shared MCP node/depth
+limits before discovery, era codecs and tool list/result validation. The SDK's JSON-RPC envelope parser precedes this guard. Stdio's
+disposable discovery sibling uses the same guard; an over-limit reply closes the transport without forwarding or replaying the request.
 Reading tools needs an explicit policy grant (`agent-tool`, ids `read_file`, `list_dir`, `grep`, `glob`, action `invoke`);
 without it every call is `denied`.
 **Terminal agent turns (T-L3d).** The interactive terminal's turns are `chatTurn` turns (`streamTerminalAgentTurn`): a fresh turn id per

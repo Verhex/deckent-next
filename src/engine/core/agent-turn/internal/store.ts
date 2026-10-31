@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
 import { t, type Locale } from '#platform/index.js';
-import type { AgentToolCallStatus, AgentToolDiagnostic, AgentTurnFinish } from '#domain/index.js';
+import { chatTurnSteerOutcomeSchema, type AgentToolCallStatus, type AgentToolDiagnostic, type AgentTurnFinish, type ChatTurnSteerOutcome } from '#domain/index.js';
 
 export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
 export class AgentTurnStoreError extends Error {
   constructor(readonly code: AgentTurnStoreErrorCode) { super(code); this.name = 'AgentTurnStoreError'; }
 }
 
+/** The stored shape of a finished turn's steered-line ids (v30): the wire shape, so a replay returns exactly what the first answer said. */
+export const agentTurnSteerRecordSchema = chatTurnSteerOutcomeSchema;
 /** Largest final answer a finished turn keeps for replay; a larger one is recorded by size only. */
 export const AGENT_TURN_ANSWER_MAX_BYTES = 262_144;
 /**
@@ -24,6 +26,8 @@ export interface AgentTurnOutcome {
   readonly answerBytes: number;
   /** Digest of the canonical JSON of all appended messages, or null when the turn appended nothing. */
   readonly appendedDigest: string | null;
+  /** v30 (Astra 2882): the ids of the person's steered lines, joined or returned; absent when none was accepted (earlier rows stay as they were). */
+  readonly steer?: ChatTurnSteerOutcome;
 }
 export interface AgentTurnClaim {
   readonly scopeId: string;
@@ -59,10 +63,11 @@ export interface AgentTurnStore {
 
 /** Bounded outcome of a loop result: the final answer when it fits, the appended messages by digest only. */
 export function agentTurnOutcome(result: { readonly finish: AgentTurnFinish; readonly note: string | null; readonly rounds: number; readonly toolCalls: number;
-  readonly answer: string | null; readonly appendedDigest: string | null }): AgentTurnOutcome {
-  const answerBytes = result.answer === null ? 0 : Buffer.byteLength(result.answer, 'utf8');
+  readonly answer: string | null; readonly appendedDigest: string | null; readonly steer?: ChatTurnSteerOutcome }): AgentTurnOutcome {
+  const answerBytes = result.answer === null ? 0 : Buffer.byteLength(result.answer, 'utf8'), steer = result.steer;
   return Object.freeze({ finish: result.finish, note: result.note, rounds: result.rounds, toolCalls: result.toolCalls,
-    answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? result.answer : null, answerBytes, appendedDigest: result.appendedDigest });
+    answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? result.answer : null, answerBytes, appendedDigest: result.appendedDigest,
+    ...(steer && (steer.joined.length || steer.returned.length) ? { steer: { joined: [...steer.joined], returned: [...steer.returned] } } : {}) });
 }
 export const agentTurnResultDigest = (text: string) => createHash('sha256').update(`agent-tool-result:1\0${text}`).digest('hex');
 export const agentTurnInterruptedNote = (language?: Locale) => t('agent.turn.outcome.restart', {}, language);

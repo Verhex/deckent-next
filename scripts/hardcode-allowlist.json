@@ -266,7 +266,6 @@
   {"file":"src/composition/core/agent-turn/internal/sandbox-writes.ts","fingerprint":"c7c003d6d621bb8f879705bc76f3e6997acac5e897a7fb739c33e51f993bd5ad","rule":"G2"},
   {"file":"src/composition/core/agent-turn/internal/sandbox-writes.ts","fingerprint":"eec1b28499cc22f76811356e3c22049dd78fdee55acab15ef1701c9e10461a98","rule":"G2"},
   {"file":"src/composition/core/agent-turn/internal/shell.ts","fingerprint":"ef190e2396dc78ad5391d83aa4d45b9b48b0b8d7b5dcefcc3994353f0d531475","rule":"G3"},
-  {"file":"src/composition/core/agent-turn/internal/turn.ts","fingerprint":"43161816091bf3ae5b55d2df53deb602b5360ae64bb65a7aa8121de789fd2d25","rule":"G2"},
   {"file":"src/engine/core/agent-turn/internal/metadata.ts","fingerprint":"b52042046d3604f8d4851c1e59dfb4e0203ba934f95ecf725125d7e207c10049","rule":"G2","origin":"src/composition/core/agent-turn/internal/turn.ts"},
   {"file":"src/composition/core/agent-turn/internal/workspace-files.ts","fingerprint":"00a8b504089bbf70fa7b111f1aefe1db401edabdefd749d0821e522ef2838c17","rule":"G2"},
   {"file":"src/composition/core/execution/internal/task.ts","fingerprint":"a262a8e7126faddb40c31dc0dc58e068b02874100d2bbd8d7edb6ab52a43eaef","rule":"G4"},
