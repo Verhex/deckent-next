@@ -34,21 +34,25 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   Everything else settles after the frame (`terminalCommand`, `cli-terminal`): one single-flight runtime start serves the opening and a
   turn's later start (BeUser M-09), bounded by the autostart's own `LifecycleDeadline`; its notices (started/connected, build skew,
   stale config) and the saved-conversation notice arrive as the Workline's `opening.notices`; sessions, composer history and project
-  instructions are ports opened on first use (session presence follows `terminal.persistHistory`); the service watch is armed and the `@`
+  instructions are ports opened on first use (session presence follows `terminal.persistHistory`; the session store, the
+  saved-conversation read included, opens only once the view is mounted and the start attempt settled, success or failure, keeping
+  identity → service → session); the service watch is armed and the `@`
   index warmed when the start answers. **Send gate** (`openingGate`, `terminal-kit`): until the start answered and the first mode read
   settled, a sent line waits behind one notice (`terminal.opening.wait`), in order (the controller runs one line at a time); Ctrl+C on it
   sends nothing; a failed start (deadline included) gives the waiting line its typed error and puts it back as the draft; `/exit`
   and `/quit` never wait. The first mode read (`useWorklineMode`) applies a stored full-access start mode with the launch rule (warning
   notice on the grant, error notice and standart without it) before any turn. **Setup after the frame:** onboarding is prepared once
   (`prepareOnboardingSession`: person check, one observation, settle) after the start settled; its waiting card opens by itself only
-  while the person has typed nothing since the frame, otherwise one line says `terminal.opening.setupWaiting` ("Setup: N steps waiting —
+  while the person has typed nothing since the frame (checked after keys already received reached the composer, in the same step as
+  the input hand-over, and again for input already buffered on the card's stream; a draft carried from the launch shell counts), otherwise one line says `terminal.opening.setupWaiting` ("Setup: N steps waiting —
   /setup", owner rule b) and typed keys stay the draft; a setup that could not be read leaves the view without `/setup`, as before. While
   a card holds the terminal, rows pushed meanwhile are held and drawn after it. When the view returns, the opening's setup observation is
   aborted (`OnboardingPort.observe` signal down to the setup probes): its probes are killed, no further step or settle write starts and that
   open simply has no setup outcome, so `/exit` right after the frame ends the process at once.
 - **Launch shell (alpha.60 C, P4 shell before the host graph; owner 2026-10-31):** for bare `deckent` or `deckent --scope <id>` on a TTY
   (not `TERM=dumb`) whose presentation layers (`loadConfigTerminalLaunch`: the `terminal` section, language and data root, no registration,
-  secrets or locks) name a scope, keep the full-window layout and `clearOnStart`, and whose data root is not uninstall-retired, the CLI
+  secrets or locks) name a scope that passes the terminal scope rule (`TERMINAL_SCOPE_ID_SCHEMA`, shared with the registered section) and renders
+  unchanged through `terminalSafeText` (theme and banner from their vocabularies), keep the full-window layout and `clearOnStart`, and whose data root is not uninstall-retired, the CLI
   entry draws the full window before it loads the host graph (`launch-shell` in `cli` → `openTerminalShell` in `terminal-host`; its static
   graph reaches no engine, adapters, composition or Workline, pinned by `startup-graph`). The shell shows the banner (the model is a
   placeholder until the Workline reads the chat plan), the real composer and a "Preparing…" status row in the Workline's own frame; typed

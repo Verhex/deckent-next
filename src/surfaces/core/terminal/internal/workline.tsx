@@ -116,8 +116,8 @@ export interface WorklineProps {
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
   readonly restartService?: () => Promise<string>; readonly restartNotes?: () => Promise<readonly string[]>; // D-01: e.g. a running image build the restart stops
   readonly startService?: () => Promise<string>; readonly mcpGrants?: Readonly<{ keys: () => Promise<readonly Readonly<{ name: string; project: string }>[]>; given: (name: string) => string }>; readonly serviceLost?: (listener: (text: string) => void) => () => void; // BeUser M-09: starts the absent runtime service (the terminal's autostart, never a stop), returns the line; D-05: hears, once per absence, that it stopped under this terminal
-  /** Shown once at the top of the ledger when the view opens. alpha.60 B (draw first): `opening` is what the launch settles after the frame — `ready` (the runtime service answered; rejects with the typed start failure), the later `notices` (service state) and the one `wait` line of a line sent before it. */
-  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>; readonly opening?: Readonly<{ ready: Promise<unknown>; notices: Promise<NonNullable<WorklineProps['openingNotices']>>; wait: string }>;
+  /** Shown once at the top of the ledger when the view opens. alpha.60 B (draw first): `opening` is what the launch settles after the frame — `ready` (the runtime service answered; rejects with the typed start failure), the later `notices` (service state; read once the view is mounted) and the one `wait` line of a line sent before it. */
+  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>; readonly opening?: Readonly<{ ready: Promise<unknown>; notices: () => Promise<NonNullable<WorklineProps['openingNotices']>>; wait: string }>;
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
   readonly inputHistory?: ComposerHistoryPort;
   readonly mentions?: ComposerMentionPort;
@@ -346,7 +346,7 @@ export function WorklineApp(props: WorklineProps) {
   const opening = useRef(props.openingNotices), later = useRef(props.opening?.notices);
   useEffect(() => {
     const said = (notices: WorklineProps['openingNotices']) => { if (notices?.length) push(notices.map(item => notice(item.level, item.text))); };
-    said(opening.current); void later.current?.then(said, () => undefined);
+    said(opening.current); void later.current?.().then(said, () => undefined);
   }, [push]); useEffect(() => props.serviceLost?.(text => push([notice('error', text)])), [props.serviceLost, push]);
   useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));

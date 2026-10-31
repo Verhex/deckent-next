@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useApp, useInput, usePaste } from 'ink';
 import type { FirstTaskIntent, OnboardingFocus } from './contract.js';
 type OpeningNotice = Readonly<{ level: 'info' | 'warning'; text: string }>;
+const DECLINED = Symbol('declined');
 /** alpha.60 B: the opening's setup, prepared after the first frame. `total`: the steps waiting (0: none); `notice`: the line said when no card opens
  * (a deferral, an unreadable observation); `unavailable`: setup could not be read at all (the view then has no setup, as before the frame-first
  * opening); `show` runs the prepared cards and gives the chosen first task and the line said after them. */
@@ -11,7 +12,9 @@ export type OnboardingHandoff = Readonly<{ initial?: FirstTaskIntent | null; ope
   /** Said when a message waits as a draft for a model (catalog text; the raw TERMINAL_CHAT_NOT_CONFIGURED is not shown to the person). */
   modelDraft: string;
   /** Owner 2026-10-31 (rule b): the one line said instead of opening the waiting card once the person has typed ("N steps waiting — /setup"). */
-  waiting?: (count: number) => string }>;
+  waiting?: (count: number) => string;
+  /** Astra 2858 B-R2: input the card's reader would take first although the person typed it before the card (bytes already buffered on its stream). */
+  pending?: () => boolean }>;
 /** Selected intent is submitted once to the ordinary Workline input queue, preserving its /do command identity. The opening's waiting card opens by
  * itself only while the person has typed nothing since the frame; after any key or paste the line is said instead, so typed-ahead keys never answer
  * a card that opened by itself. `opened` follows every open (the status row re-reads the configured model). */
@@ -27,11 +30,15 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
   };
   // Ink draws nothing while a card holds the terminal: rows pushed just before are drawn first, rows pushed meanwhile are held and drawn after it.
   // Node stops reading the TTY one tick after the host's hold pauses it; a card that attached its reader before that tick would never be read again.
-  const suspended = async <T>(work: () => Promise<T>): Promise<T | null> => {
-    let result: T | null = null;
+  // Astra 2858 B-R2: `keep` (the card may open) is checked after keys already received reached the composer and in the same step as the input
+  // hand-over (no await between the check and the suspension, where Ink stops reading); `last` again just before the card reads. Declined: no card,
+  // the terminal is reclaimed and every buffered key goes to the composer.
+  const suspended = async <T>(work: () => Promise<T>, keep = () => true, last = () => true): Promise<T | null | typeof DECLINED> => {
+    let result: T | null | typeof DECLINED = DECLINED;
     await new Promise(resolve => setImmediate(resolve));
+    if (!keep()) return DECLINED;
     const unhold = latest.current.hold?.();
-    try { await suspendTerminal(async () => { latest.current.release?.(); try { await new Promise(resolve => process.nextTick(resolve)); result = await work(); } finally { latest.current.reclaim?.(); } }); }
+    try { await suspendTerminal(async () => { latest.current.release?.(); try { await new Promise(resolve => process.nextTick(resolve)); if (keep() && last()) result = await work(); } finally { latest.current.reclaim?.(); } }); }
     finally { unhold?.(); }
     return result;
   };
@@ -43,8 +50,8 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
       say(opening.notice);
       const waiting = latest.current.port?.waiting;
       if (!opening.total) return;
-      if (typed.current && waiting) { say({ level: 'info', text: waiting(opening.total) }); return; }
-      const shown = await suspended(() => opening.show(stop.signal));
+      const shown = await suspended(() => opening.show(stop.signal), () => !typed.current && !stop.signal.aborted, () => !latest.current.port?.pending?.());
+      if (shown === DECLINED) { if (waiting && !stop.signal.aborted) say({ level: 'info', text: waiting(opening.total) }); return; }
       say(shown?.notice ?? null); enqueue(shown?.intent ?? null); latest.current.opened?.();
     }).catch(() => undefined);
     return () => stop.abort();
@@ -56,7 +63,8 @@ export function useOnboardingHandoff(input: Readonly<{ port?: OnboardingHandoff 
     usable: async () => Boolean(latest.current.port) && await (latest.current.port?.opening ?? Promise.resolve(null)).then(opening => opening?.unavailable !== true, () => false),
     async open(signal: AbortSignal, focus?: OnboardingFocus) {
       if (!latest.current.port) return;
-      enqueue(await suspended(() => latest.current.port!.open(signal, focus)));
+      const intent = await suspended(() => latest.current.port!.open(signal, focus));
+      enqueue(intent === DECLINED ? null : intent);
       latest.current.opened?.();
     },
   };

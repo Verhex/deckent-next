@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import { loadConfigTerminalLaunch, uninstallRetired, colorCapability, resolveLocale, t, PACKAGE_VERSION, type Locale } from '#platform/index.js';
+import { loadConfigTerminalLaunch, uninstallRetired, colorCapability, resolveLocale, t, terminalSafeText, PACKAGE_VERSION, TERMINAL_SCOPE_ID_SCHEMA, type Locale } from '#platform/index.js';
 import { openTerminalShell, STARTUP_BANNERS, type TerminalShell, type WorklineStartup } from '#surfaces/core/terminal-host/index.js';
 import { resolveTerminalTheme, resolveWorklinePalette, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting } from '#surfaces/core/terminal-theme/index.js';
 import { prefersAsciiGlyphs, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
@@ -19,8 +19,11 @@ export async function openLaunchShell(words: readonly string[], language: string
   if (words.length !== 0 && !flagged) return null;
   const env = context.env ?? process.env, root = context.root ?? process.cwd();
   const config = await loadConfigTerminalLaunch(root, { env }).catch(() => null), terminal = (config?.terminal ?? {}) as TerminalSection;
-  const scopeId = flagged ?? (typeof terminal.scopeId === 'string' && terminal.scopeId ? terminal.scopeId : undefined);
-  if (!config || !scopeId || terminal.layout === 'inline' || terminal.clearOnStart === false || await uninstallRetired(config.dataRoot).catch(() => true)) return null;
+  // The shell draws before the host validates the configuration: every value it uses must pass the section's own rule (scope schema, the
+  // banner and theme vocabularies) and render unchanged through the shared control-character projection; anything else takes the old path.
+  const scopeId = TERMINAL_SCOPE_ID_SCHEMA.safeParse(flagged ?? terminal.scopeId).data, valid = (value: unknown, words: readonly string[]) => value === undefined || words.includes(value as string);
+  if (!config || !scopeId || terminalSafeText(scopeId) !== scopeId || !valid(terminal.theme, TERMINAL_THEME_SETTINGS) || !valid(terminal.banner, STARTUP_BANNERS)
+    || terminal.layout === 'inline' || terminal.clearOnStart === false || await uninstallRetired(config.dataRoot).catch(() => true)) return null;
   const locale: Locale = resolveLocale(language, env, config.language), ascii = prefersAsciiGlyphs(env), labels = worklineLabels(locale, '');
   const theme = resolveTerminalTheme(terminal.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: true, argv: process.argv }), env['COLORFGBG']);
   const startup: WorklineStartup = { clear: true, banner: terminal.banner ?? STARTUP_BANNERS[0], ...terminalStartupLabels(locale,

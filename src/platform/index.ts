@@ -43,7 +43,7 @@ export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSc
 export { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern, type StepBudget } from '#platform/core/validate/index.js';
 export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
-export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
+export { CORE_SCHEMA, TERMINAL_SCOPE_ID_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
 export { createDefaultConfig, mergeConfigLayers } from '#platform/core/config/index.js';
 export { ConfigValidationError, configIssue } from '#platform/core/config/index.js';

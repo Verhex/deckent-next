@@ -265,8 +265,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }, (error: unknown) => [{ level: 'error' as const, text: errorText(error, locale) }]) : Promise.resolve([]);
   // Presence follows the switch the store reads (`terminal.persistHistory`); the store opens on its first use.
   const sessions = parsed.action === 'workline' && context.openTerminalSessions && (config['terminal'] as { persistHistory?: unknown } | undefined)?.persistHistory !== false
-    ? bindSessionScope(lazySessionStore(() => context.openTerminalSessions!(root, options, context.rootResolution?.folder ?? '')), scopeId) : null;
-  const previous = sessions ? sessions.list().then(list => list.some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined, () => undefined) : Promise.resolve(undefined);
+    ? bindSessionScope(lazySessionStore(() => settled.then(() => context.openTerminalSessions!(root, options, context.rootResolution?.folder ?? ''))), scopeId) : null; // Astra 2858 B-R3: identity → service attempt → session store
+  const previous = lazy(() => sessions ? sessions.list().then(list => list.some(session => session.messages > 0) ? t('terminal.session.previous', {}, locale) : undefined, () => undefined) : Promise.resolve(undefined));
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
     const surface = await import('#surfaces/core/terminal-onboarding/index.js'), openOnboarding = context.openOnboarding;
@@ -294,11 +294,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     const opening = settled.then(async () => {
       closing.signal.throwIfAborted(); const prepared = await (await surface.loadOnboardingScreens()).prepareOnboardingSession(await port(), false, undefined, closing.signal);
       return { total: prepared.total, notice: prepared.total ? null : deferred(prepared.snapshot), show: async (signal: AbortSignal) => {
-        try { return { intent: await prepared.show(ui(), { ...io, signal }, await previous), notice: deferred(await (await port()).observe({})) }; } catch (error) { return { intent: null, notice: unavailable(error) }; }
+        try { return { intent: await prepared.show(ui(), { ...io, signal }, await previous()), notice: deferred(await (await port()).observe({})) }; } catch (error) { return { intent: null, notice: unavailable(error) }; }
       } };
     }).catch((error: unknown) => ({ total: 0, notice: unavailable(error), unavailable: true as const, show: async () => ({ intent: null, notice: null }) }));
-    onboarding = { opening, modelDraft: t('onboarding.model.draft', {}, locale), waiting: count => t('terminal.opening.setupWaiting', { count }, locale),
-      open: async (signal, focus) => (await surface.loadOnboardingScreens()).runOnboardingSession(await port(), ui(), { ...io, signal }, true, focus, await previous) };
+    onboarding = { opening, modelDraft: t('onboarding.model.draft', {}, locale), waiting: count => t('terminal.opening.setupWaiting', { count }, locale), pending: () => io.stdin.readableLength > 0,
+      open: async (signal, focus) => (await surface.loadOnboardingScreens()).runOnboardingSession(await port(), ui(), { ...io, signal }, true, focus, await previous()) };
   }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
   const modelName = chat?.status === 'ready' && chat.reference && context.inspectModelBinding ? await context.inspectModelBinding(root, chat.reference, options).then(binding => binding.status === 'declared' ? binding.definition.model.nativeId : null, () => null) : null;
@@ -462,7 +462,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
         ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}) });
     } } : {}),
     ...(accessNotices.length || chat?.skippedDefault ? { openingNotices: [...accessNotices, ...(chat?.skippedDefault ? [{ level: 'warning' as const, text: t('terminal.model.defaultNotHere', {}, locale) }] : [])] } : {}),
-    opening: { ready: service ?? Promise.resolve(), wait: t('terminal.opening.wait', {}, locale), notices: Promise.all([previous, serviceNotices]).then(([text, notices]) => [...(text ? [{ level: 'info' as const, text }] : []), ...notices]) },
+    opening: { ready: service ?? Promise.resolve(), wait: t('terminal.opening.wait', {}, locale), notices: () => Promise.all([previous(), serviceNotices]).then(([text, notices]) => [...(text ? [{ level: 'info' as const, text }] : []), ...notices]) },
     serviceLost: serviceWatch.subscribe, ...(context.ensureRuntimeService && autostart ? { startService: async () => t('terminal.service.startedForTurn', { pid: (await ensure()).pid ?? '-' }, locale) } : {}), ...(context.restartRuntimeService ? { restartService: async () => {
       const building = await context.runningImageBuild?.(root, options).catch(() => false) === true, restarted = await context.restartRuntimeService!(root, options);
       return [t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale), ...(building ? [t('cli.runtime.imageBuildStopped', {}, locale)] : [])].join('\n');
