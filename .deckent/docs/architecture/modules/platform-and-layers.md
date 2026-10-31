@@ -50,9 +50,9 @@ MCP client" for the stdio MCP entry. Measured by the lane: `deckent --version` 4
 (Done differently by PB-COLDSTART, alpha.50: the host and adapter families load lazily; see the decision log, 2026-10-20.)
 
 **Compile cache (P5a, owner 2026-10-31).** The `deckent` bin and the runtime service entry (`composition/core/cli/internal/entry.ts`, unchanged
-path for `bin` and runtime-autostart) are a bootstrap that loads only node: built-ins and the dependency-free `platform/core/common` unit (arch
-`guards.cliBootstrap`), calls `enableDeckentCompileCache()` and then imports the CLI (`cli-main.ts`). The cache is the registered layout resource
-`compileCache` (`state/compile-cache`) under the global state root, resolved by the common unit's `resolveGlobalStateRoot`, which the host unit's
+path for `bin` and runtime-autostart) are a bootstrap that loads only node: built-ins and the `platform/core/state-root` unit (with the dependency-free `common`
+unit's registry; arch `guards.cliBootstrap`; its own unit so node-free units such as the i18n renderer never reach node: through `common`), calls `enableDeckentCompileCache()` and then imports the CLI (`cli-main.ts`). The cache is the registered layout resource
+`compileCache` (`state/compile-cache`) under the global state root, resolved by the state-root unit's `resolveGlobalStateRoot`, which the host unit's
 `globalStateRoot`/`resolveGlobalScopePaths` also use. It is used only at the conventional global root (the one without
 `DECKENT_GLOBAL_HOME`/`DECKENT_HOME`; a non-default root runs without it, since no agent floor seals every such root), and every agent floor
 seals that conventional root even before it exists (the open view creates it 0700, so nothing can be planted for a later CLI; doctor's self-test
@@ -61,7 +61,8 @@ byte-identical on disk. It is used only as a chain of real directories of this u
 `DECKENT_DISABLE_COMPILE_CACHE` turns it off. Agent shells: global roots are hidden (outside the project) or sealed (inside it; the hard floor
 counts every global root's registry resources as product paths, and the agent edit/read deny lists name the same in-project paths from the
 same global-root derivation). Uninstall removes Node's per-version directory as a cache member when the
-installation's root is the global root; a project installation keeps the shared global root. Enterprise executables can call the same function
+installation's root is the global root, only after the stopped runtime service's process has ended (Node writes the cache at exit, after the
+ledger is released; the wait shares the stop budget and refuses with nothing removed at its end); a project installation keeps the shared global root. Enterprise executables can call the same function
 from `deckent/extensions` before `runCli`; their entry's static imports are not cached. `startup-graph` pins the bootstrap's static reach.
 
 The shared-ledger `model-invocation-process` contract test (whose temporary 45 s bound this slice removed to the 30 s default) exceeded

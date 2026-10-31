@@ -1,6 +1,7 @@
 import { posix, win32, type PlatformPath } from 'node:path';
 import { resolveProductLayout, productResourcePath, LayoutError } from './layout/resolve.js';
-import { PRODUCT_LAYOUT_REGISTRY, resolveGlobalStateRoot } from '#platform/core/common/index.js';
+import { PRODUCT_LAYOUT_REGISTRY } from '#platform/core/common/index.js';
+import { resolveGlobalStateRoot } from '#platform/core/state-root/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { envValue, type Environment } from './env.js';
 import { detectWslLinux, type KernelIdentityReader } from './wsl-detect.js';

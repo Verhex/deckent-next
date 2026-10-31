@@ -1,8 +1,7 @@
 import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
 import module from 'node:module';
 import { posix, win32 } from 'node:path';
-import { PRODUCT_LAYOUT_REGISTRY as registry } from './constants.js';
-import { hasGlobWildcard } from './glob.js';
+import { PRODUCT_LAYOUT_REGISTRY as registry, hasGlobWildcard } from '#platform/core/common/index.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
 export type GlobalStateRoot = { readonly ok: true; readonly root: string; readonly home: string | null; readonly override: string | undefined }

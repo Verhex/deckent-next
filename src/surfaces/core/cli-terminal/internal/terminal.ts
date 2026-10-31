@@ -227,6 +227,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
   const accessNotices: { level: 'info' | 'warning' | 'error'; text: string }[] = [];
+  // Astra 2860 R1: a launch shell the person closed ends the launch before each effect (identity admission, service start, setup, sessions).
+  const left = () => context.terminalShell !== undefined && !context.terminalShell.host.open();
+  if (left()) return;
   if (tty.stdin && tty.stdout) {
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
@@ -246,7 +249,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
-  if (!await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options)) return;
+  if (left() || !await (await import('#surfaces/core/cli-human/index.js')).reopenRetiredFolder(config, locale, env, context, options) || left()) return;
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
   // alpha.60 B (P3 draw-first): nothing below waits before the frame. One single-flight start serves the opening and a turn's restart (M-09); its
   // own LifecycleDeadline bounds it. Sessions, history, instructions and setup open on first use or after the frame.

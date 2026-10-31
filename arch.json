@@ -265,7 +265,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
-        "src/platform/core/common",
+        "src/platform/core/state-root",
         "src/adapters/core/local-principal",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/setup-detect-coding",
@@ -954,6 +954,12 @@
       "dependencies": [],
       "plan": "FOUNDATION"
     },
+    "src/platform/core/state-root": {
+      "dependencies": [
+        "src/platform/core/common"
+      ],
+      "plan": "FOUNDATION"
+    },
     "src/platform/core/config": {
       "dependencies": [
         "src/platform/core/bootstrap-state",
@@ -997,6 +1003,7 @@
     },
     "src/platform/core/host": {
       "dependencies": [
+        "src/platform/core/state-root",
         "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/utils"
@@ -5836,10 +5843,10 @@
       ]
     },
     "cliBootstrap": {
-      "note": "P5a (owner 2026-10-31): the deckent bin and runtime service entry enable Node's compile cache before the CLI graph loads, so it may import the dependency-free platform common unit (registry JSON, node: built-ins) instead of the platform barrel; startup-graph pins its static reach.",
+      "note": "P5a (owner 2026-10-31): the deckent bin and runtime service entry enable Node's compile cache before the CLI graph loads, so it may import the platform state-root unit (node: built-ins and the common unit's registry JSON) instead of the platform barrel; startup-graph pins its static reach.",
       "entry": "src/composition/core/cli/internal/entry.ts",
       "unitImports": [
-        "src/platform/core/common"
+        "src/platform/core/state-root"
       ]
     },
     "publicExtensions": {

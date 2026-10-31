@@ -5,7 +5,7 @@ import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority,
   uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail, observeUninstallInventory, nativeServiceExec, nativeUserUnitLinks, acquireLedgerLock, type LedgerLock, selectWorkTarget, resolveGitWorkTarget, querySystemdMainPid, installationScopes, completeUninstall } from '#adapters/index.js';
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, authorizeUninstallSteps, uninstallAffectedScopes, uninstallManagedScopes, uninstallLauncherResource, DispatchPolicyAuthorization, workTargetAttemptAuthorization, resolvePolicyScopeMembership, type UninstallInteraction } from '#engine/index.js';
-import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, prepareProductCompanionPath, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, automationMarker, productResourcePath, handMadeLaunchers, detectServiceManager, observeUserUnit, disableUserUnit, SERVICE_MANAGER_QUERY_BOUNDS, prepareProductCompanionPath, recordedProcessState, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredRuntimeClient, withQueueContext, assertQueueWorkTarget } from '#composition/core/runtime-service/index.js';
 import { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
@@ -16,7 +16,7 @@ const load = (root: string, options: ConfigLoadOptions) => loadComposedConfig(ro
 const marked = (env: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>, names: readonly string[]) => automationMarker(process.env, names) ?? automationMarker(env, names);
 /** Trusted local composition: read-only previews and witnessed application admission use the same owned inventory. */
 async function configuredUninstall(root: string, options: ConfigLoadOptions) {
-  const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env;
+  const config = await load(root, options), layout = config.productLayout, terminal = readTerminalConfig(config as Record<string, unknown>), scopeId = terminal.scopeId, env = options.env ?? process.env; let shutdownSeenMs: number | undefined;
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
   const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), client = createConfiguredRuntimeClient(root, options);
   // Lane J P1: an unsafe policy or bindings file decides no tier: a typed refusal naming it, never an untyped crash and never a repair.
@@ -77,7 +77,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
       async shutdown() { const live = await client.describeService(AbortSignal.timeout(terminal.serviceStartTimeoutMs));
         if (!live.identity) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_UNAVAILABLE');
         return client.shutdownService({ schemaVersion: 1, commandId: randomUUID(), serviceId: live.identity.serviceId, instanceId: live.instanceId, reason: 'uninstall' }, AbortSignal.timeout(terminal.serviceStartTimeoutMs)); },
-      disable: confirmed => disableUserUnit(confirmed, exec, uninstallRecoveryDirectory(config, env), links, { async assert() { if (!stoppedLock) throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED'); } }) } });
+      disable: confirmed => disableUserUnit(confirmed, exec, uninstallRecoveryDirectory(config, env), links, { async assert() { if (!stoppedLock) throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED'); } }), exited: async pid => recordedProcessState(pid, shutdownSeenMs ??= Date.now()) === 'gone' } }); // the stopped service started before its first check; a later holder is a reused pid
 }
 async function completed(root: string, options: ConfigLoadOptions, settle = false) { // R11: an already-absent tail completes through the same owner
   const config = await load(root, options), env = options.env ?? process.env, directory = uninstallRecoveryDirectory(config, env);

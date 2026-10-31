@@ -204,6 +204,18 @@ it('asks nothing when nothing would change, stops the service before custody in 
   await expect(app().apply({ schemaVersion: 2, commandId: 'c3b', planDigest: restarting.planDigest }, confirm))
     .rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING', params: { command: 'systemctl --user disable --now deckent-fixture.service' } });
   expect(calls).toEqual(['shutdown', 'startup-fence', 'release-fence']); answering = false;
+  // Astra 2860 R2: the stopped process still writes its own state while it exits (Node's compile cache, after the ledger is released): nothing is
+  // removed until the process itself has ended; one still running at the deadline refuses with nothing removed.
+  for (const lastWrite of [2, Infinity]) {
+    calls.length = 0; answering = true; instance = 'first'; let polls = 0;
+    const exiting = new UninstallApplication({ ...unitPorts, service: { ...unitPorts.service!, budgetMs: lastWrite === Infinity ? 50 : 1000, unit: async () => null,
+      shutdown: async () => { calls.push('shutdown'); answering = false; }, exited: async pid => { const done = pid === 41 && polls++ >= lastWrite; calls.push(`exited:${done}`); return done; } } });
+    const plan = await exiting.preview(query());
+    const outcome = exiting.apply({ schemaVersion: 2, commandId: `c3c-${lastWrite}`, planDigest: plan.planDigest }, confirm);
+    if (lastWrite === Infinity) { await expect(outcome).rejects.toMatchObject({ code: 'UNINSTALL_SERVICE_RUNNING' }); expect(calls.filter(call => !call.startsWith('exited:'))).toEqual(['shutdown']); }
+    else { await outcome; expect(calls).toEqual(['shutdown', 'exited:false', 'exited:false', 'exited:true', 'startup-fence', 'custody:false', 'finish:completed', 'release-fence']); }
+  }
+  answering = false;
   // K3: force cancels and rejects with the person's authority, names the unknown result and closes nothing; a NEW unknown result after cancelling stops before custody.
   calls.length = 0; answering = false;
   work = { ...idle, running: [{ scopeId: 's', id: 'run-1', revision: 2 }], approvals: [{ scopeId: 's', id: 'approval-1', revision: 0 }], deliveries: [{ scopeId: 's', id: 'ticket-1', revision: 3 }], uncertain: [effect] };

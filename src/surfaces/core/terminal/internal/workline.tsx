@@ -180,7 +180,7 @@ export interface WorklineProps {
   readonly attention?: boolean;
   /** alpha.60 C: what the launch shell kept while the host loaded — the draft as typed and the lines sent meanwhile, sent in order after mount
    *  through the opening's send gate. */
-  readonly initialDraft?: ComposerHistoryEntry | null;
+  readonly initialDraft?: ComposerHistoryEntry | null; readonly armedAt?: number | null; // a first idle Ctrl+C in the shell: the next one quits
   readonly queuedInputs?: readonly Readonly<{ text: string; mentions: readonly string[]; entry: ComposerHistoryEntry }>[];
 }
 /** The stack routes input by the window's opening cause; Ctrl+O transfers the one input owner. */
@@ -733,7 +733,7 @@ export function WorklineApp(props: WorklineProps) {
   const fullAccessNode = fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null;
   const composerNode = <StackComposer elsewhere={() => stripFocus.current || searchFocus.current} active={!stripFocused && !searchOpen} prompt={labels.prompt} labels={{ ...labels.composer,
     slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-    busy={busy} historyText={bareSlash} remember={remember} restore={draft} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
+    busy={busy} historyText={bareSlash} remember={remember} restore={draft} armedAt={props.armedAt ?? null} maxRows={pinned ? Math.max(1, Math.floor(size.rows / 3)) : undefined}
     onSubmit={(text, mentioned, entry) => void submit(text, mentioned, entry)} onWithdraw={withdraw} {...(handoffs.edit ? { onEditor: handoffs.edit } : {})} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
@@ -842,7 +842,7 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ascii, startup, shell, ...props } = options;
   const view = (context: TerminalHostContext, handed?: ReturnType<TerminalShell['take']>) => createElement(WorklineApp, { ...props, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}),
-    transcriptExit: context.transcriptExit, ...(handed ? { initialDraft: handed.draft, queuedInputs: handed.queued } : {}),
+    transcriptExit: context.transcriptExit, ...(handed ? { initialDraft: handed.draft, queuedInputs: handed.queued, armedAt: handed.armedAt } : {}),
     ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.handover ? { handover: context.handover } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}),
     ...(context.clipboard ? { clipboard: context.clipboard } : {}), ...(context.notify ? { notify: context.notify } : {}) });
   // alpha.60 C: the launch shell's host is taken as it is (closed in the shell with Ctrl+D: nothing opens); otherwise the host opens here.

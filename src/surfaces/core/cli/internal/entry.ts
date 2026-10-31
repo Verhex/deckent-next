@@ -91,6 +91,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (interactive && interactiveTerminal(context)) shell = await (await import('./launch-shell.js')).openLaunchShell(words, argv.at(-2) === '--lang' ? argv.at(-1) : undefined, context).catch(() => null);
     if (shell) context = { ...context, terminalShell: shell };
     if (context.loadHost) context = { ...context, ...(await context.loadHost()) };
+    if (shell && !shell.host.open()) return 0; // Astra 2860 R1: the person closed the shell while the host loaded: the launch stops, nothing else runs
     context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
     // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.

@@ -59,11 +59,11 @@ it('the inlined server-info meta key equals the SDK constant it replaces', async
 // ~1000 modules, ~0.33 s of a ~0.45 s start), nor the CLI host that binds every composition unit; a command loads them on its first call.
 const HOST_GRAPH = ['adapters/index.js', 'engine/index.js', 'composition/core/root/index.js', 'composition/core/cli/internal/host.js', 'surfaces/core/cli-observe/index.js'];
 
-// P5a (owner 2026-10-31): the bin is a bootstrap that loads only the platform common unit (node: built-ins, registry JSON) before Node's compile
+// P5a (owner 2026-10-31): the bin is a bootstrap that loads only the platform state-root and common units (node: built-ins, registry JSON) before Node's compile
 // cache is on; the cache lives only in an existing private global state root, so a call before any installation writes nothing in HOME.
-it('the CLI bootstrap reaches only the common unit, the CLI and the launch shell none of the host graph; the compile cache lives only in a private global root', async () => {
+it('the CLI bootstrap reaches only the state-root and common units, the CLI and the launch shell none of the host graph; the compile cache lives only in a private global root', async () => {
   const boot = await staticReach(resolve(dist, 'composition/core/cli/internal/entry.js'));
-  expect([...boot.files].map(file => relative(dist, file)).filter(file => file !== 'composition/core/cli/internal/entry.js' && !file.startsWith('platform/core/common/'))).toEqual([]);
+  expect([...boot.files].map(file => relative(dist, file)).filter(file => file !== 'composition/core/cli/internal/entry.js' && !file.startsWith('platform/core/common/') && !file.startsWith('platform/core/state-root/'))).toEqual([]);
   expect([...boot.packages.keys()]).toEqual([]);
   const { files } = await staticReach(resolve(dist, 'composition/core/cli/internal/cli-main.js'));
   expect(HOST_GRAPH.filter(path => files.has(resolve(dist, path)))).toEqual([]);

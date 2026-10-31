@@ -1,4 +1,5 @@
-export { PACKAGE_NAME, PACKAGE_VERSION, displayAddress, enableDeckentCompileCache, resolveGlobalStateRoot } from '#platform/core/common/index.js';
+export { PACKAGE_NAME, PACKAGE_VERSION, displayAddress } from '#platform/core/common/index.js';
+export { enableDeckentCompileCache, resolveGlobalStateRoot } from '#platform/core/state-root/index.js';
 export { resolveLocale, t, currencyAmountText, clockText } from '#platform/core/i18n/index.js';
 export type { Locale, MessageKey } from '#platform/core/i18n/index.js';
 export { PRODUCT_LAYOUT_REGISTRY, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';

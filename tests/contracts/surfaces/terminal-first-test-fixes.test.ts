@@ -217,6 +217,14 @@ it.each(['ready', 'cancel', 'failed', 'stored', 'shell'] as const)('alpha.60 B/C
       hostReady(); await until(() => ensure.mock.calls.length === 1, 'the launch went on'); answer(readiness);
       await until(() => asked.length === 8, 'the kept lines sent'); await settle(150);
       expect(asked).toEqual(Array.from({ length: 8 }, (_, index) => `line ${index + 1}`)); expect(terminalBuffers(output, 160, 40).text).toMatch(/│ ?draft-x/u); // the draft is the Workline's composer now
+      // Astra 2860 R1: Ctrl+D in the shell while the host still loads ends the launch: no identity admission, service start or session after it.
+      let closedOut = '', hostLater!: () => void; const closedKeys = keys(), effects: string[] = [], later = new Promise<void>(resolve => { hostLater = resolve; });
+      const closing = main(['--scope', 's', '--lang', 'en'], { ...context, stdout: tty(text => { closedOut += text; }) as unknown as NodeJS.WriteStream, stderr: tty(() => undefined) as unknown as NodeJS.WriteStream,
+        stdin: closedKeys as unknown as NodeJS.ReadStream, loadHost: async () => { await later; return {}; }, async ensureTerminalIdentity() { effects.push('identity'); return { installationId: 'i', projectId: 'p' }; },
+        ensureRuntimeService: (async () => { effects.push('service'); return readiness; }) as never, openTerminalSessions: (async () => { effects.push('sessions'); return null; }) as never });
+      await until(() => closedOut.includes(t('terminal.shell.preparing', {}, 'en')), 'the shell to close'); closedKeys.write('\u0004');
+      await until(() => closedOut.includes('\u001b[?1049l'), 'the shell closed'); hostLater();
+      expect(await closing).toBe(0); await settle(50); expect(effects).toEqual([]); closedKeys.destroy();
       let alone = ''; const lone = keys(); // `deckent --full-access` keeps the old path: no shell, no full window before its own refusal here
       expect(await main(['--full-access', '--lang', 'en'], { ...context, stdout: tty(text => { alone += text; }) as unknown as NodeJS.WriteStream, stderr: tty(text => { alone += text; }) as unknown as NodeJS.WriteStream, stdin: lone as unknown as NodeJS.ReadStream })).not.toBe(0);
       expect(alone).not.toContain(t('terminal.shell.preparing', {}, 'en')); expect(alone).not.toContain('\u001b[?1049h'); lone.destroy();
