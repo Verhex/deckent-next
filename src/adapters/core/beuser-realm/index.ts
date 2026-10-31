@@ -13,3 +13,4 @@ export { readBeuserCandidate, readMeasuredBeuserRecord } from './internal/candid
 export { verifyBeuserDistribution } from './internal/distribution.js';
 
 export { createBeuserRemovalReadback } from './internal/removal.js';
+export { inspectPackagedBeuserJourney } from './internal/journey.js';
