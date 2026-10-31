@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -20,9 +20,10 @@ import { responsesFixture } from '../support/openai-responses.js';
 import { runInTerminal, lastJson } from '../support/terminal-cli.js';
 
 it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact Attempt and persistent cancellation reopens only its BeUser realm owner', async () => {
-  const base = await mkdtemp(join(tmpdir(), 'beuser-admission-')), root = join(base, 'project'), candidate = join(base, 'candidate');
+  // Owner S9: the installation lives where the one-command walk keeps its private controller, `<global state root>/beuser-controller`.
+  const base = await mkdtemp(join(tmpdir(), 'beuser-admission-')), root = join(base, 'global', 'beuser-controller'), candidate = join(base, 'candidate');
   try {
-    await mkdir(root); await mkdir(candidate); await mkdir(join(candidate, 'dist'));
+    await mkdir(root, { recursive: true, mode: 0o700 }); await mkdir(candidate); await mkdir(join(candidate, 'dist'));
     await writeFile(join(candidate, 'package.json'), JSON.stringify({ name: 'test-candidate', version: '1.0.0', files: ['dist'] }));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'export {};\n');
     const options = { env: { HOME: join(base, 'home'), USERPROFILE: join(base, 'home'), DECKENT_GLOBAL_HOME: join(base, 'global') } };
@@ -79,6 +80,15 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     const ai = await runInTerminal(argv, root, { ...env, CLAUDECODE: '1' });
     expect(ai.code).toBe(1); expect(ai.output).toContain('AUTHORITY_WITNESS_REQUIRED');
     expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined();
+    // One command from an unrelated folder: without a connected model it names the controller's next step and stages nothing; a bad journey id is typed.
+    const elsewhere = join(base, 'elsewhere'), card = '↑↓ choose · Enter confirm · Esc cancel';
+    await mkdir(elsewhere); config.terminal = { scopeId: 'scope' }; await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+    const oneCommand = (journey: string, extra: readonly string[], answers: { when: string; send: string }[] = []) =>
+      runInTerminal([process.execPath, cli, 'beuser', 'walk', '--journey', journey, ...extra, '--lang', 'en'], elsewhere, env, answers);
+    const noModel = await oneCommand('onboarding', ['--candidate', candidate]), badJourney = await oneCommand('no-such-journey', ['--candidate', candidate]);
+    expect(noModel.code).toBe(1); expect(noModel.output).toContain('BEUSER_MODEL_UNAVAILABLE'); expect(noModel.output).toContain(`cd ${root} && deckent, then /provider`);
+    expect(badJourney.code).toBe(1); expect(badJourney.output).toContain('BEUSER_INPUT_INVALID');
+    expect(JSON.parse(await readFile(configPath, 'utf8')).admission).toBeUndefined(); expect(await readdir(elsewhere)).toEqual([]);
     const f = responsesFixture('http://127.0.0.1:1/v1/responses'), reference = { ...f.profile.reference, providerId: 'fixture-channel', modelId: 'fixture-model' };
     const modelDefinition = { ...f.definition, provider: { id: reference.providerId, version: 1 }, model: { ...f.definition.model, id: reference.modelId, nativeId: reference.modelId } };
     const catalog = { schemaVersion: 1, revision: 'fixture', providers: [{ ...modelDefinition.provider, models: [modelDefinition.model] }] };
@@ -202,10 +212,28 @@ it.skipIf(process.platform !== 'linux')('witnessed CLI setup admits the exact At
     const walked = await runInTerminal([process.execPath, cli, 'beuser', 'walk', '--scope', 'scope', '--journey', 'journey', '--candidate', candidate, '--json'], root, env);
     expect(walked.code, walked.output).toBe(0);
     expect(lastJson(walked.output)).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'persona', reason: 'EXECUTION_NOT_CONFIGURED' }] });
-    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked }, null, 2));
+    // The model card (Enter = the recommended connected model), then the setup card: Esc applies nothing; this source checkout is no staged build;
+    // 'y' swaps the controller's BeUser registry (its pool kept) and walks to a retained report.
+    const before = await readFile(configPath, 'utf8');
+    const refusedCard = await oneCommand('onboarding', ['--candidate', candidate], [{ when: card, send: '\r' }, { when: card, send: '\u001b' }]);
+    expect(refusedCard.code, refusedCard.output).toBe(0); expect(refusedCard.output).toContain('fixture-channel / fixture-model (recommended)');
+    expect(refusedCard.output).toContain('Start BeUser walk'); expect(refusedCard.output).toContain('nothing was applied'); expect(await readFile(configPath, 'utf8')).toBe(before);
+    const fromPackage = await oneCommand('onboarding', [], [{ when: card, send: '\r' }]);
+    expect(fromPackage.code).toBe(1); expect(fromPackage.output).toContain('BEUSER_CANDIDATE_MISMATCH'); expect(await readFile(configPath, 'utf8')).toBe(before);
+    const one = await oneCommand('onboarding', ['--candidate', candidate, '--json'], [{ when: card, send: '\r' }, { when: card, send: 'y' }]);
+    expect(one.code, one.output).toBe(0); expect(one.output).toContain(`${'1'.repeat(40)}); model fixture-channel`);
+    const oneReport = lastJson(one.output);
+    // The earlier walk's unresolved Attempt still holds the pool's one slot: a typed unknown in a retained report, never a second walk.
+    expect(oneReport).toMatchObject({ counts: { selected: 1, walked: 0 }, unknown: [{ branch: 'onboarding', reason: 'RUN_POOL_FULL' }] });
+    const swapped = JSON.parse(await readFile(configPath, 'utf8')).admission;
+    expect(swapped).toMatchObject({ poolId: 'pool', registry: { revision: 'beuser-controller-onboarding', profiles: [{ parameters: { candidateRoot: candidate,
+      choices: { 'beuser-walker': { channelId: 'fixture-channel', modelId: 'fixture-model' } } } }] } });
+    clearConfigCache(); expect(await readConfiguredBeuserReport(root, 'scope', undefined, options)).toEqual(oneReport);
+    if (process.env.BEUSER_SETUP_PROOF) await writeFile(join(process.env.BEUSER_SETUP_PROOF, 'cli-pty.json'), JSON.stringify({ missingProfile, refused, ai, installed, replayed, conflict, emptyReport, walked,
+      noModel, badJourney, refusedCard, fromPackage, one }, null, 2));
     await writeFile(join(candidate, 'dist', 'entry.js'), 'changed;\n');
-    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
+    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'onboarding', candidate }, options)).rejects.toMatchObject({ code: 'BEUSER_CANDIDATE_MISMATCH' });
     // A foreign candidate is refused before creating another Run, without a verify=true test adapter.
-    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'journey', candidate: root }, options)).rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
+    await expect(admitConfiguredBeuserWalk(root, { scopeId: 'scope', journey: 'onboarding', candidate: root }, options)).rejects.toMatchObject({ code: 'BEUSER_INPUT_INVALID' });
   } finally { clearConfigCache(); await rm(base, { recursive: true, force: true }); }
 });

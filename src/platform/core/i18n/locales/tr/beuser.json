@@ -45,10 +45,10 @@
   "beuser.report.unwalked": "Yürünmeyen {branch}: {reason}.",
   "beuser.report.unknownBranch": "Bilinmeyen dal {branch}: {reason}.",
   "beuser.help.summary": "İzole ürün yolculuğunu yürü veya kalıcı raporunu oku.",
-  "beuser.help.family": "deckent beuser setup --profile <path> [--scope <id>] [--apply] [--json]\ndeckent beuser walk --journey <id> --candidate <path> [--scope <id>] [--json]\ndeckent beuser report [--run <id>] [--scope <id>] [--json]\nİzole yolculuk ve kalıcı rapor.",
+  "beuser.help.family": "deckent beuser setup --profile <path> [--scope <id>] [--apply] [--json]\ndeckent beuser walk --journey <id> [--candidate <path>] [--scope <id>] [--json]\ndeckent beuser report [--run <id>] [--scope <id>] [--json]\nİzole yolculuk ve kalıcı rapor.",
   "beuser.help.walk.summary": "Sabitlenmiş yolculuğu izole alanda yürü.",
   "beuser.help.report.summary": "Kalıcı BeUser yolculuk raporunu oku.",
-  "beuser.help.walk": "deckent beuser walk --journey <id> --candidate <path> [--scope <id>] [--json] [--lang en|tr]\nİş başlamadan kayıtlı yolculuk, aday, politika ve sonlu sınırlar doğrulanır. İptalde belirsiz imha kanıtı korunur.",
+  "beuser.help.walk": "deckent beuser walk --journey <id> [--candidate <path>] [--json] [--lang en|tr]\nHer klasörden, kişinin terminalinde: özel BeUser denetleyicisini kullanır, hangi bağlı modelin yürüyüp değerlendireceğini sorar, kurulum kartını gösterir, sonra bu paketin derlemesini (ya da --candidate) yürür ve raporu yazar.\ndeckent beuser walk --journey <id> [--candidate <path>] --scope <id> [--json]\nBu klasörün kapsamında kurulu profili yürür.\nİş başlamadan kayıtlı yolculuk, aday, politika ve sonlu sınırlar doğrulanır. İptalde belirsiz imha kanıtı korunur.",
   "beuser.help.report": "deckent beuser report [--run <id>] [--scope <id>] [--json] [--lang en|tr]\nKalıcı raporu iş inceleme yetkisiyle okur. Simüle, kalibre edilmemiş; rapor benimseme yetkisi vermez.\nİş seçilmezse bu kişinin son kalıcı raporu okunur.",
   "beuser.acceptance.harnessReadback": "yalıtılmış yürüyüşün sonuç okuması",
   "beuser.installation.systemRows": "Sistem izin verisi {digest}: {status}; neden {reason}; çakışma {conflicts}; geri verilmeyen {withheld}.",
@@ -81,5 +81,13 @@
   "beuser.report.unarranged.driver-limit": "terminal sürücüsü onu aslına uygun gösteremez",
   "beuser.report.unarranged.no-producer": "tanıksız bir üretici yok",
   "beuser.report.unarranged.enterprise-only": "yalnız Enterprise",
-  "beuser.report.unarranged.persona": "persona yürüyüş sırasında kendisi oluşturur"
+  "beuser.report.unarranged.persona": "persona yürüyüş sırasında kendisi oluşturur",
+  "beuser.walk.connect": "BeUser denetleyicisine henüz bağlı model yok; hiçbir şey hazırlanmadı. Bir kez orada bağlayın: cd {controller} && deckent, sonra /provider (ya da deckent models connect).",
+  "beuser.walk.model": "Bu yürüyüşün modeli",
+  "beuser.walk.modelBody": "Seçilen model kişiyi oynar ve yürüyüşü değerlendirir. BeUser denetleyicisi {controller} içindeki bağlı modeller:",
+  "beuser.walk.recommended": "{model} (önerilen)",
+  "beuser.walk.card": "BeUser yürüyüşünü başlat",
+  "beuser.walk.cardBody": "Yolculuk {journey}, aday {version} (revizyon {revision}); model {model}. Sınırlar: {steps} adım, {minutes} dk, {calls} model çağrısı, en çok {cost} {currency}. Yürüyüş yalnız izole bir sandbox içinde iş yapar; yıkıcı işlemler bu bilgisayara ulaşmaz. Onaylanan içerik: {digest}.",
+  "beuser.walk.cancelled": "BeUser yürüyüşü iptal edildi; hiçbir şey uygulanmadı ya da yürünmedi.",
+  "beuser.walk.next": "Yürünen revizyon {revision}. Denetleyici: {controller}. Bu raporu yeniden okumak için: cd {controller} && deckent beuser report"
 }

@@ -45,10 +45,10 @@
   "beuser.report.unwalked": "Unwalked {branch}: {reason}.",
   "beuser.report.unknownBranch": "Unknown branch {branch}: {reason}.",
   "beuser.help.summary": "Walk an isolated product journey or read its retained report.",
-  "beuser.help.family": "deckent beuser setup --profile <path> [--scope <id>] [--apply] [--json]\ndeckent beuser walk --journey <id> --candidate <path> [--scope <id>] [--json]\ndeckent beuser report [--run <id>] [--scope <id>] [--json]",
+  "beuser.help.family": "deckent beuser setup --profile <path> [--scope <id>] [--apply] [--json]\ndeckent beuser walk --journey <id> [--candidate <path>] [--scope <id>] [--json]\ndeckent beuser report [--run <id>] [--scope <id>] [--json]",
   "beuser.help.walk.summary": "Walk a pinned journey in an isolated realm.",
   "beuser.help.report.summary": "Read a retained BeUser journey report.",
-  "beuser.help.walk": "deckent beuser walk --journey <id> --candidate <path> [--scope <id>] [--json] [--lang en|tr]\nThe installed journey, candidate, policy and finite limits must be verified before work begins. Cancellation retains uncertain cleanup.",
+  "beuser.help.walk": "deckent beuser walk --journey <id> [--candidate <path>] [--json] [--lang en|tr]\nFrom any folder, on the person's terminal: uses the private BeUser controller, asks which connected model walks and judges, shows the setup card, then walks this package's build (or --candidate) and prints the report.\ndeckent beuser walk --journey <id> [--candidate <path>] --scope <id> [--json]\nWalks the profile already installed in this folder's scope.\nThe installed journey, candidate, policy and finite limits must be verified before work begins. Cancellation retains uncertain cleanup.",
   "beuser.help.report": "deckent beuser report [--run <id>] [--scope <id>] [--json] [--lang en|tr]\nReads the retained report with Run inspection authority. Simulated, uncalibrated; this report does not authorize adoption.\nOmitting --run reads this person's latest retained report.",
   "beuser.acceptance.harnessReadback": "harness readback",
   "beuser.installation.systemRows": "System policy data {digest}: {status}; reason {reason}; conflicts {conflicts}; withheld {withheld}.",
@@ -81,5 +81,13 @@
   "beuser.report.unarranged.driver-limit": "the terminal driver cannot present it faithfully",
   "beuser.report.unarranged.no-producer": "no witness-free producer exists",
   "beuser.report.unarranged.enterprise-only": "Enterprise only",
-  "beuser.report.unarranged.persona": "the persona establishes it during the walk"
+  "beuser.report.unarranged.persona": "the persona establishes it during the walk",
+  "beuser.walk.connect": "No model is connected to the BeUser controller yet; nothing was staged. Connect one there once: cd {controller} && deckent, then /provider (or deckent models connect).",
+  "beuser.walk.model": "Model for this walk",
+  "beuser.walk.modelBody": "The chosen model plays the person and judges the walk. Connected models of the BeUser controller {controller}:",
+  "beuser.walk.recommended": "{model} (recommended)",
+  "beuser.walk.card": "Start BeUser walk",
+  "beuser.walk.cardBody": "Journey {journey} on candidate {version} (revision {revision}); model {model}. Limits: {steps} steps, {minutes} min, {calls} model calls, at most {cost} {currency}. The walk acts only inside an isolated sandbox; destructive actions never reach this computer. Approved content: {digest}.",
+  "beuser.walk.cancelled": "BeUser walk cancelled; nothing was applied or walked.",
+  "beuser.walk.next": "Walked revision {revision}. Controller: {controller}. To read this report again: cd {controller} && deckent beuser report"
 }

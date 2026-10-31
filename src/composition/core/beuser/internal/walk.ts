@@ -12,9 +12,10 @@ import { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { evaluateConfiguredBeuserTask } from './evaluate.js';
 import { validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
 import { beuserJourneyProfileSchema, executeConfiguredBeuserAttempt } from './application.js';
+import { BEUSER_PACKAGE_ROOT } from './setup.js';
 
 /** The CLI selects installed registry data. It supplies no profile, principal, Attempt id, probe or launch command. */
-export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate: string },
+export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal): Promise<BeuserReport> {
   const started = performance.now();
   const { c, selected, runId, principal, profiles, definitions, candidateRoot } = await admitConfiguredBeuserWalk(root, input, options, signal);
@@ -89,7 +90,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
 }
 
 /** Real admission only: seals the same Run and profiles used by walk, without starting a realm or invoking a model. */
-export async function admitConfiguredBeuserWalk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate: string },
+export async function admitConfiguredBeuserWalk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal) {
   const c = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
   if (c.config.admission === null) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');
@@ -106,7 +107,7 @@ export async function admitConfiguredBeuserWalk(root: string, input: { readonly 
   });
   if (!selected.length) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');
   if (selected.some(row => !isDeepStrictEqual(row.data.calibration, selected[0]!.data.calibration))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-  const candidateRoot = await canonicalRealmPath(resolve(input.candidate), 'directory');
+  const candidateRoot = await canonicalRealmPath(resolve(input.candidate ?? BEUSER_PACKAGE_ROOT), 'directory'); // owner S9: default = this package's build
   const runId = randomUUID(), principal = beuserEvaluatorFor(c.principal, input.scopeId);
   const profiles = new Map<string, typeof registry.profiles[number]>();
   const definitions: ReturnType<typeof beuserParametersSchema.parse>[] = [];

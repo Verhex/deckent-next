@@ -126,6 +126,30 @@ can be reconciled by repeating setup. An equal registry is not rewritten; a diff
 registry or pool is refused for governed reconciliation. `beuser.*` remains a protected root;
 execution profiles continue to live in the general execution registry.
 
+### One-command walk (owner S9, alpha.60 source candidate)
+
+`deckent beuser walk --journey <id> [--candidate <path>]` without `--scope` runs from any folder on the
+person's terminal (an AI-marked or piped terminal is refused before any step). Its controller is the
+private Deckent installation at `<global state root>/beuser-controller` (folder name and the profile's
+terminal, bounds and pool values in the versioned `assets/beuser/controller.json`); its scope is that
+installation's `terminal.scopeId`. The command creates only the folder: the person installs it and
+connects subscriptions or keys there with the existing onboarding and `/provider` (`cd <controller> &&
+deckent`); without an active connected model it prints that next step and refuses
+`BEUSER_MODEL_UNAVAILABLE` with nothing staged. Otherwise a card lists the connected models with the
+first one preselected as recommended (never chosen silently); the chosen model walks and judges.
+The profile is built in product code the way the packaged example builds it (first branch, first
+persona, its probe set, v3 start state) from this package's journey, persona and calibration assets
+and the measured candidate: by default this package's own build, which must be a staged dev-release
+(a source checkout is refused `BEUSER_CANDIDATE_MISMATCH`). The environment reference digests the realm
+recipe revision and the controller's configured image (null when absent; the walk then reports
+`EXECUTION_NOT_CONFIGURED`). Contributor receipts are recorded as unavailable. The setup card shows
+journey, candidate version and revision, model, limits, the sandbox-only effect statement and the
+content digest; Esc or Cancel applies nothing. Setup in this mode may replace an existing registry
+only when all its profiles are BeUser profiles and every pool field stays equal (the controller's
+pool is kept); any other difference is still `BEUSER_SETUP_CONFLICT`. The walk then runs under the
+same admission, and the output ends with the walked revision and `cd <controller> && deckent beuser
+report`. The `--scope` form is unchanged and also defaults `--candidate` to this package's build.
+
 ### Walker and evaluator models (owner 2026-10-31)
 
 The `beuser-walker` and `beuser-evaluator` roles declare `admits: "connected"` in the model role registry

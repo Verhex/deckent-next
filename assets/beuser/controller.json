@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "revision": "beuser-controller-1",
+  "source": "owner-S9-one-command; terminal, bounds and pool values are the packaged example's finite choices (WALK21), not measured capacity",
+  "folder": "beuser-controller",
+  "pool": { "poolId": "beuser-controller", "executionSlots": 1, "inFlightSlots": 1, "ordering": "input-order" },
+  "size": { "columns": 100, "rows": 30, "scrollback": 1000 },
+  "bounds": { "quietMs": 100, "inactivityMs": 1000, "maxInputBytes": 4096 },
+  "completionTokens": 4096
+}
