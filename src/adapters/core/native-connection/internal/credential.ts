@@ -2,26 +2,26 @@ import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { workerEffortSchema, nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape, workspaceHiddenPathsSchema } from '#domain/index.js';
+import { persistedString, workerEffortSchema, nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape, workspaceHiddenPathsSchema } from '#domain/index.js';
 import { z } from 'zod';
 import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 
-const exactModelId = z.string().min(1).max(256).refine(value => value.trim() === value && !value.startsWith('-')
+const exactModelId = persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value && !value.startsWith('-')
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 /** v2 (WORKER-CURRENCY-1): the admitted catalog reference — channel and exact model id, plus declared helper model ids. The host compares the
  * models the worker reports against it (model.verification); v1 profiles carry none and are refused for new Runs at admission. The pin may carry
  * the catalog's session-start names / provider-choice flag, stamped at admission (owner K1/K2 2026-10-22). */
 export const nativeSubscriptionSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
-  model: z.strictObject({ channelId: z.string().min(1).max(256), modelId: exactModelId, auxiliaryModelIds: z.array(exactModelId).max(8).readonly(),
+  model: z.strictObject({ channelId: persistedString(z.string().min(1).max(256)), modelId: exactModelId, auxiliaryModelIds: z.array(exactModelId).max(8).readonly(),
     ...workerModelPinEvidenceShape }).readonly().optional(),
   promptDelivery: nativePromptDeliverySchema.optional(),
   finalReport: z.strictObject({ schemaVersion: z.literal(1) }).readonly().optional(),
-  preflight: z.strictObject({ schemaVersion: z.literal(1), cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
+  preflight: z.strictObject({ schemaVersion: z.literal(1), cliVersion: persistedString(z.string().trim().min(1).max(128)).regex(/^[\w .()+-]+$/),
     discovery: z.enum(['disabled', 'repository']),
     helpArgs: z.array(z.enum(['exec', '--help'])).min(1).max(2).readonly(),
-    requiredFlags: z.array(z.string().regex(/^--[a-z][a-z-]*$/).max(64)).min(1).max(20).readonly(),
+    requiredFlags: z.array(persistedString(z.string().regex(/^--[a-z][a-z-]*$/).max(64))).min(1).max(20).readonly(),
   }).readonly().optional(),
   /** C2: `disabled` discovery realised by checkout shaping — the worker's Git checkout leaves these paths out. Frozen at compilation, so the
    * ledger-pinned profile (never a file beside the checkout) is what allocation and patch capture read. Absent = full checkout. */

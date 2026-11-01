@@ -1,4 +1,4 @@
-import { persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
+import { persistedString, persistedInteger, modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { OPENAI_RESERVATION_POLICY } from './reservation-policy.js';
 import { z } from 'zod';
 import { requestToolChoiceAccepted, responseDialect, finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
@@ -40,8 +40,8 @@ export interface OpenAiChatNativePortOptions {
 const finishReason = z.string(), usageSchema = openAiChatUsageSchema;
 const messageSchema = z.looseObject({ role: z.literal('assistant'), content: z.string().nullable(), refusal: z.string().nullable().optional() });
 const choiceSchema = z.looseObject({ index: z.literal(0), finish_reason: finishReason, message: messageSchema });
-const responseSchema = z.looseObject({ id: z.string().min(1), object: z.literal('chat.completion').optional(), created: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  model: z.string().min(1), choices: z.array(choiceSchema).length(1), usage: z.unknown().optional() });
+const responseSchema = z.looseObject({ id: persistedString(z.string().min(1)), object: z.literal('chat.completion').optional(), created: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  model: persistedString(z.string().min(1)), choices: z.array(choiceSchema).length(1), usage: z.unknown().optional() });
 /** Largest `/tokenize` answer read (the server lists every token id: ~7 bytes each, so a 131k-token prompt is about 1 MiB). */
 export const OPENAI_CHAT_TOKENIZE_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 const tokenizeSchema = z.looseObject({ count: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), max_model_len: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional() });

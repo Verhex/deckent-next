@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { operationDescriptorSchema } from '#domain/core/effect/index.js';
 import { operationKey } from './catalog.js';
@@ -10,7 +10,7 @@ export const moduleTierSchema = z.enum(['core', 'base', 'enterprise', 'custom', 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Room for signed Enterprise manifests (owner Q7). Present in v1 so the shape need not change; verification arrives with A04-3,
  * and until then a non-null signature is refused rather than accepted unverified. */
-export const manifestSignatureSchema = z.strictObject({ algorithm: z.literal('ed25519'), keyId: identitySchema, digest, value: z.string().min(1).max(4096) }).readonly();
+export const manifestSignatureSchema = z.strictObject({ algorithm: z.literal('ed25519'), keyId: identitySchema, digest, value: persistedString(z.string().min(1).max(4096)) }).readonly();
 /** Manifest v1: pure data describing one adapter module. Every level, including the `provides` collections, is frozen on parse so
  * an admitted manifest cannot be edited through a returned reference (Astra 2126 R2). `namespace: null` means the root (unprefixed ids) and is only honoured
  * for modules the Core composition passes at registry construction; overlays must own a dotted namespace. Adapter and operation

@@ -12,4 +12,4 @@ export { workspaceHiddenPathSchema, workspaceHiddenPathsSchema, workspacePathHid
 export type { WorkspaceHiddenPaths } from './internal/hidden-paths.js';
 export { rolloutCriterionMet } from './internal/rollout.js';
 export type { RolloutBounds, RolloutMeasure } from './internal/rollout.js';
-export { persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode } from './internal/persisted-schema.js';
+export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode } from './internal/persisted-schema.js';

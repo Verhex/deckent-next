@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AuditEvent } from './contract.js';
-import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** v1 pull-witness contract: no credentials, raw policy or event content. */
 export const auditCheckpointSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: identitySchema, scopeId: identitySchema,
@@ -22,7 +22,7 @@ export const auditVerificationSchema = z.strictObject({ schemaVersion: z.literal
   head: z.strictObject({ sequence: counterSchema, digest }).nullable(), checkpoint: auditWitnessSchema.nullable() }).readonly();
 /** The explicit operator re-baseline command: the scope and the person's own reason (sealed into the marker event). */
 export const auditRebaselineCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  reason: z.string().trim().min(1).max(1024) }).readonly();
+  reason: persistedString(z.string().trim().min(1).max(1024)) }).readonly();
 export type AuditCheckpoint = z.infer<typeof auditCheckpointSchema>;
 export type AuditWitness = z.infer<typeof auditWitnessSchema>;
 export type AuditVerifyQuery = z.infer<typeof auditVerifyQuerySchema>;

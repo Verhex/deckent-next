@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { authorityAdmissionSchema, counterSchema, identitySchema, brainPlanCommandSchema, runProposalSchema, runProposalBindingSchema,
+import { persistedString, authorityAdmissionSchema, counterSchema, identitySchema, brainPlanCommandSchema, runProposalSchema, runProposalBindingSchema,
   encodeCommandProjection, type RunProposal } from '#domain/index.js';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
 export const runProposalQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema, commandId: identitySchema }).readonly();
@@ -14,7 +14,7 @@ const plannedV1 = z.strictObject({ schemaVersion: z.literal(1), proposal: runPro
 export type RunProposalQuery = z.infer<typeof runProposalQuerySchema>;
 export const setupIntentFactSchema = z.strictObject({ id: identitySchema, revision: counterSchema, basis: z.string().regex(/^[a-f0-9]{64}$/),
   ready: z.boolean(), reason: z.enum(['WORKER_SETUP_PENDING', 'WORKER_IMAGE_BUILD_FAILED', 'WORKER_IMAGE_BUILD_INTERRUPTED', 'WORKER_IMAGE_DECLINED']),
-  params: z.record(z.string(), z.union([z.string().max(512), z.number().finite()])) }).readonly();
+  params: z.record(z.string(), z.union([persistedString(z.string().max(512)), z.number().finite()])) }).readonly();
 export type SetupIntentFact = z.infer<typeof setupIntentFactSchema>;
 export const runIntentRecordSchema = z.strictObject({ schemaVersion: z.literal(2), kind: z.literal('intent'),
   command: brainPlanCommandSchema, proposer: runProposalSchema.unwrap().shape.proposer, proposalId: identitySchema, runId: identitySchema,

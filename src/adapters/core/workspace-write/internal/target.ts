@@ -1,4 +1,4 @@
-import { persistedInteger } from '#platform/index.js';
+import { persistedString, persistedInteger } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
@@ -57,7 +57,7 @@ async function readUpperFile(upper: string, rel: string, maxBytes: number): Prom
   } catch { return null; } finally { await current.close().catch(() => undefined); }
 }
 /** Journal v2 (Astra 2094 R1): the attempt's own evidence. v1 files (content-equality recovery) were never live and read as unknown. */
-const journalSchema = z.strictObject({ schemaVersion: z.literal(2), rel: z.string(), expected: z.string(), next: z.string(), temporary: z.string().min(1),
+const journalSchema = z.strictObject({ schemaVersion: z.literal(2), rel: z.string(), expected: z.string(), next: z.string(), temporary: persistedString(z.string().min(1)),
   state: z.enum(['prepared', 'committed', 'aborted', 'escaped']), escapedTo: z.string().nullable() });
 type Journal = z.infer<typeof journalSchema>;
 

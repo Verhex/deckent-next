@@ -1,4 +1,4 @@
-import { persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { MODEL_INVOCATION_NATIVE_JSON_LIMITS } from './contract.js';
 export type OpenAiChatHttpErrorCode = 'OPENAI_CHAT_DEFINITION_INVALID' | 'OPENAI_CHAT_REQUEST_INVALID'
@@ -32,18 +32,18 @@ export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export const openAiReasoningEffortSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 const reasoningEffortSchema = openAiReasoningEffortSchema;
-const toolCallSchema = z.strictObject({ id: z.string().min(1).max(256), type: z.literal('function'),
+const toolCallSchema = z.strictObject({ id: persistedString(z.string().min(1).max(256)), type: z.literal('function'),
   function: z.strictObject({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME), arguments: z.string() }) });
 const messageSchema = z.union([
-  z.strictObject({ role: z.enum(['developer', 'system', 'user']), content: z.string().min(1) }),
+  z.strictObject({ role: z.enum(['developer', 'system', 'user']), content: persistedString(z.string().min(1)) }),
   z.strictObject({ role: z.literal('assistant'), content: z.string().nullable(), tool_calls: z.array(toolCallSchema).min(1).max(OPENAI_CHAT_MAX_TOOL_CALLS).optional(),
     reasoning_content: z.string().nullable().optional(), reasoning_details: z.array(createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS)).optional() })
     .refine(message => (message.content !== null && message.content.length > 0) || message.tool_calls !== undefined),
-  z.strictObject({ role: z.literal('tool'), tool_call_id: z.string().min(1).max(256), content: z.string() }),
+  z.strictObject({ role: z.literal('tool'), tool_call_id: persistedString(z.string().min(1).max(256)), content: z.string() }),
 ]);
 const toolSchema = z.strictObject({ type: z.literal('function'), function: z.strictObject({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME),
-  description: z.string().max(4096).optional(), parameters: z.record(z.string(), z.unknown().optional()) }) });
-const requestSchema = z.strictObject({ model: z.string().min(1).max(1024), messages: z.array(messageSchema).min(1).max(100_000),
+  description: persistedString(z.string().max(4096)).optional(), parameters: z.record(z.string(), z.unknown().optional()) }) });
+const requestSchema = z.strictObject({ model: persistedString(z.string().min(1).max(1024)), messages: z.array(messageSchema).min(1).max(100_000),
   max_completion_tokens: positive, stream: z.boolean().optional(),
   stream_options: z.strictObject({ include_usage: z.literal(true) }).optional(),
   n: z.literal(1).optional(), tools: z.array(toolSchema).min(1).max(OPENAI_CHAT_MAX_TOOLS).optional(),

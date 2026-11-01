@@ -1,4 +1,4 @@
-import { persistedInteger } from '#domain/index.js';
+import { persistedString, persistedInteger } from '#domain/index.js';
 import { z } from 'zod';
 import type { JsonObject } from '#domain/index.js';
 import type { NativeJsonHttpParsed } from '#adapters/core/provider-http-json/index.js';
@@ -17,14 +17,14 @@ const part = z.discriminatedUnion('type', [
   z.looseObject({ type: z.literal('refusal'), refusal: z.string() }),
 ]);
 export const responsesOutputItemSchema = z.discriminatedUnion('type', [
-  z.looseObject({ type: z.literal('message'), id: z.string().min(1), role: z.literal('assistant'), content: z.array(part),
+  z.looseObject({ type: z.literal('message'), id: persistedString(z.string().min(1)), role: z.literal('assistant'), content: z.array(part),
     status: z.enum(['completed', 'in_progress', 'incomplete']).optional() }),
-  z.looseObject({ type: z.literal('function_call'), id: z.string().min(1), call_id: z.string().min(1), name: z.string().min(1), arguments: z.string(),
+  z.looseObject({ type: z.literal('function_call'), id: persistedString(z.string().min(1)), call_id: persistedString(z.string().min(1)), name: persistedString(z.string().min(1)), arguments: z.string(),
     status: z.enum(['completed', 'in_progress', 'incomplete']).optional() }),
-  z.looseObject({ type: z.literal('reasoning'), id: z.string().min(1), encrypted_content: z.string().nullable().optional(),
+  z.looseObject({ type: z.literal('reasoning'), id: persistedString(z.string().min(1)), encrypted_content: z.string().nullable().optional(),
     summary: z.array(z.looseObject({ type: z.literal('summary_text'), text: z.string() })) }),
 ]);
-const responseSchema = z.looseObject({ id: z.string().min(1), object: z.literal('response'), created_at: count, model: z.string().min(1),
+const responseSchema = z.looseObject({ id: persistedString(z.string().min(1)), object: z.literal('response'), created_at: count, model: persistedString(z.string().min(1)),
   status: z.enum(['completed', 'incomplete', 'failed']), output: z.array(responsesOutputItemSchema),
   usage: usageSchema.nullable(), error: z.unknown().optional(), incomplete_details: z.unknown().optional(),
   service_tier: z.string().optional().nullable() });

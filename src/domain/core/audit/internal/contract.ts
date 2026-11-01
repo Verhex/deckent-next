@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, persistedUuid, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import limits from './limits.json' with { type: 'json' };
@@ -50,12 +50,12 @@ export const auditPrincipalSchema = z.strictObject({ issuer: identitySchema, sub
  * an MCP call its `mcp:<server>/<tool>` name and the argument digest (additive members, schema version 1 unchanged).
  */
 export const auditSummarySchema = z.discriminatedUnion('kind', [
-  z.strictObject({ get kind() { return z.literal('edit'); }, get path() { return z.string().min(1).max(4096); } }),
-  z.strictObject({ get kind() { return z.literal('shell'); }, get head() { return z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS); }, argsDigest: digest }),
+  z.strictObject({ get kind() { return z.literal('edit'); }, get path() { return persistedString(z.string().min(1).max(4096)); } }),
+  z.strictObject({ get kind() { return z.literal('shell'); }, get head() { return persistedString(z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS)); }, argsDigest: digest }),
   /** An MCP tool call (MCP-CLIENT): the tool as the owner names it (`mcp:<server>/<tool>`) and the argument digest, never the arguments. */
-  z.strictObject({ get kind() { return z.literal('mcp'); }, get tool() { return z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS); }, argsDigest: digest }),
+  z.strictObject({ get kind() { return z.literal('mcp'); }, get tool() { return persistedString(z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS)); }, argsDigest: digest }),
   /** A `fetch_url` call (MODES-3, full access): the host it names and the argument digest, never the URL (a query may carry secrets). */
-  z.strictObject({ get kind() { return z.literal('fetch'); }, get host() { return z.string().min(1).max(253); }, argsDigest: digest }),
+  z.strictObject({ get kind() { return z.literal('fetch'); }, get host() { return persistedString(z.string().min(1).max(253)); }, argsDigest: digest }),
 ]);
 /**
  * The person's terminal permission modes (domain policy catalog; the audit contract keeps its own copy to stay dependency-free). Sealed
@@ -176,7 +176,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * was never produced before (unreleased, no producer in SECRET-K1).
    */
   z.strictObject({ get kind() { return z.literal('secret-change'); }, get action() { return z.enum(['set', 'delete']); }, get name() { return z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/); },
-    get backend() { return z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/); },
+    get backend() { return persistedString(z.string().max(128)).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/); },
     get decision() { return z.strictObject({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }); } }),
   /**
    * SECRET-STORE-SWITCH (owner 2026-10-08, union extension only): the decision on the `secret`/`switch` cell to move every secret from the
@@ -206,8 +206,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     get phase() { return z.enum(['intent', 'succeeded', 'refused', 'failed', 'uncertain']); }, get step() { return counterSchema.nullable(); }, get exitCode() { return persistedInteger().nullable(); },
     get version() { return z.string().regex(/^[0-9A-Za-z.+:~_-]{1,64}$/).nullable(); }, get decision() { return z.strictObject({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }); } }),
   z.strictObject({ get kind() { return z.literal('secret-store-switch'); },
-    get from() { return z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/); },
-    get to() { return z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/); },
+    get from() { return persistedString(z.string().max(128)).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/); },
+    get to() { return persistedString(z.string().max(128)).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/); },
     get entries() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, get downgrade() { return z.boolean(); },
     get decision() { return z.strictObject({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }); } }),
   z.strictObject({ get kind() { return z.literal('permission-mode-change'); }, requested: permissionMode, previous: permissionMode,
@@ -245,8 +245,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * paths (edit summaries name paths the same way); the file content is never part of it.
    */
   z.strictObject({ get kind() { return z.literal('tracked-files-changed'); }, tool: toolRef, call: callRef, summary: auditSummarySchema,
-    get deleted() { return z.strictObject({ count: counterSchema, paths: z.array(z.string().min(1).max(4096)).max(AUDIT_TRACKED_PATHS_MAX) }); },
-    get overwritten() { return z.strictObject({ count: counterSchema, paths: z.array(z.string().min(1).max(4096)).max(AUDIT_TRACKED_PATHS_MAX) }); } }),
+    get deleted() { return z.strictObject({ count: counterSchema, paths: z.array(persistedString(z.string().min(1).max(4096))).max(AUDIT_TRACKED_PATHS_MAX) }); },
+    get overwritten() { return z.strictObject({ count: counterSchema, paths: z.array(persistedString(z.string().min(1).max(4096))).max(AUDIT_TRACKED_PATHS_MAX) }); } }),
   /**
    * An applied governed authority change (POLICY-ADMIN P3, `policy.administer@1`): the command and the approval it consumed, who decided
    * it (the delegation bound is that person's authority, I3), the effective revision before and after, the change's size and the digest
@@ -294,7 +294,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     get decision() { return z.strictObject({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }); },
     get capacity() { return z.strictObject({ previous: z.strictObject({ executionSlots: counterSchema, inFlightSlots: counterSchema }),
       next: z.strictObject({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }) }).nullable(); } }),
-  z.strictObject({ get kind() { return z.literal('quota-release'); }, poolId: identitySchema, get poolIds() { return z.array(identitySchema).readonly().optional(); }, get decisionPoolId() { return identitySchema.optional(); }, get channelId() { return z.string().min(1).max(256); }, commandId: identitySchema,
+  z.strictObject({ get kind() { return z.literal('quota-release'); }, poolId: identitySchema, get poolIds() { return z.array(identitySchema).readonly().optional(); }, get decisionPoolId() { return identitySchema.optional(); }, get channelId() { return persistedString(z.string().min(1).max(256)); }, commandId: identitySchema,
     get decision() { return z.strictObject({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }); }, get released() { return counterSchema.nullable(); } }),
   z.strictObject({ get kind() { return z.literal('pool-hold'); }, get action() { return z.enum(['hold', 'resume']); }, poolId: identitySchema, commandId: identitySchema,
     get decision() { return z.strictObject({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }); },
@@ -313,12 +313,12 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.strictObject({ get kind() { return z.literal('worker-tree-refused'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
     get code() { return z.enum(['WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE']); }, count: counterSchema,
-    get findings() { return z.array(z.strictObject({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600) })).max(AUDIT_TRACKED_PATHS_MAX); },
+    get findings() { return z.array(z.strictObject({ path: persistedString(z.string().min(1).max(4096)), rule: persistedString(z.string().min(1).max(600)) })).max(AUDIT_TRACKED_PATHS_MAX); },
     get limit() { return z.enum(['files', 'file-bytes', 'total-bytes', 'time']).nullable(); } }),
   /** S6 (owner 2026-10-15, 2026-10-17): hits lifted for a dispatched worker: path, rule and the exact entry that lifted it (`allowPatternPaths:<glob>` /
    * `acknowledgedDenyPaths:<path>` / `dependencyTree:<target>`, a declared dependency bind); at most `AUDIT_TRACKED_PATHS_MAX` entries, never a value. */
   z.strictObject({ get kind() { return z.literal('worker-tree-excluded'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, get count() { return counterSchema.positive(); },
-    get entries() { return z.array(z.strictObject({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600), by: z.string().min(1).max(600) })).min(1).max(AUDIT_TRACKED_PATHS_MAX); } }),
+    get entries() { return z.array(z.strictObject({ path: persistedString(z.string().min(1).max(4096)), rule: persistedString(z.string().min(1).max(600)), by: persistedString(z.string().min(1).max(600)) })).min(1).max(AUDIT_TRACKED_PATHS_MAX); } }),
   /** Crash-loop breaker (pilot1 2026-10-17): a start found this attempt's dispatch preparation left unsettled by another process instance, i.e.
    * that process died during it. `phase` is the last preparation phase it entered (null: the record was unreadable); `aborts` counts such
    * ends since the last settle or resume; at `bound` the Run is parked (`progression-failed`, DISPATCH_PREPARATION_ABORTED) instead of dispatched. */
@@ -398,11 +398,11 @@ export const auditSubjectSchema = z.union([governedAuditSubjectSchema,
    * (`restore`); the latest record per task decides whether /deliver and the monitor offer it. Patch and custody are untouched. */
   z.strictObject({ get kind() { return z.literal('delivery-dismissed'); }, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, get action() { return z.enum(['dismiss', 'restore']); } }),
   z.strictObject({ get kind() { return z.literal('run-request-refused'); }, commandId: identitySchema, requestDigest: digest,
-    get title() { return z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS); }, get code() { return z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/); } }),
+    get title() { return persistedString(z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS)); }, get code() { return z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/); } }),
   /** AUDIT-CHECKPOINT wipe marker: written in the checkpoint's own transaction just before it, so checkpoint `checkpointSequence` has this record as its head. */
   z.strictObject({ get kind() { return z.literal('audit-checkpoint'); }, get checkpointSequence() { return counterSchema.positive(); }, get previousDigest() { return digest.nullable(); },
     /** An explicit operator re-baseline (witnessed human terminal, audited reason): supersedes earlier markers from this sequence on. */
-    get rebaseline() { return z.strictObject({ reason: z.string().trim().min(1).max(1024) }).optional(); } }),
+    get rebaseline() { return z.strictObject({ reason: persistedString(z.string().trim().min(1).max(1024)) }).optional(); } }),
   z.strictObject({ get kind() { return z.literal('installation-pool'); }, get installer() { return z.strictObject({ basis: z.literal('file-owner') }); },
     poolId: identitySchema, get capacity() { return z.strictObject({ executionSlots: counterSchema, inFlightSlots: counterSchema }); } }),
   z.strictObject({ get kind() { return z.literal('authority-change'); }, get installer() { return z.strictObject({ basis: z.enum(['first-run', 'named-person']),

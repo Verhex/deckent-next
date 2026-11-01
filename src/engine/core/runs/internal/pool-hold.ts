@@ -1,4 +1,4 @@
-import { clientCommandIdSchema, AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
+import { persistedString, clientCommandIdSchema, AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { AuditStore } from '#engine/core/audit/index.js';
@@ -13,7 +13,7 @@ import { RunStoreError } from './store.js';
  * installation-wide, so the hold is too (one row per pool, ledger v44); `drained` is the typed "held and nothing left" status the
  * operator release or restart sequence waits on before it replaces the installation.
  */
-const reasonSchema = z.string().min(1).max(256).regex(/^[^\p{Cc}]+$/u);
+const reasonSchema = persistedString(z.string().min(1).max(256)).regex(/^[^\p{Cc}]+$/u);
 const actorSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 const poolStateSchema = z.enum(['held', 'open']);
 /** `poolId` defaults to the installation's configured admission pool. `reason` is the operator's short note, kept in the hold record. */

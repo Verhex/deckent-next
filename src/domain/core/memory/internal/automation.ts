@@ -1,4 +1,4 @@
-import { persistedInteger, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import automationSeed from '../../../../../assets/memory/automation.json' with { type: 'json' };
 import extractorsSeed from '../../../../../assets/memory/extractors.json' with { type: 'json' };
@@ -83,7 +83,7 @@ const extractorSchema = z.strictObject({ get schemaVersion() { return z.literal(
   kind: z.enum(['human-answer', 'failure-fix', 'worker-claim']), enabled: z.boolean() }).readonly()).min(1).max(16).readonly(); } }).readonly();
 export const MEMORY_EXTRACTORS = Object.freeze(extractorSchema.parse(extractorsSeed));
 const templatesSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get templates() { return z.array(z.strictObject({ id: identitySchema, version: positive,
-  text: z.string().min(1).max(MEMORY_LIMITS.bodyMaxBytes) }).readonly()).min(1).max(32).readonly(); } }).readonly();
+  text: persistedString(z.string().min(1).max(MEMORY_LIMITS.bodyMaxBytes)) }).readonly()).min(1).max(32).readonly(); } }).readonly();
 /** Model-facing texts (worker report sentence, context header, evaluator prompt): versioned data, never literals in code; `id@version` is sealed. */
 export const MEMORY_TEMPLATES = Object.freeze(templatesSchema.parse(templatesSeed));
 export function memoryTemplate(id: string, version: number): string {
@@ -99,7 +99,7 @@ export const memoryExtractionSourceSchema = z.strictObject({ get schemaVersion()
   get workTargetId() { return identitySchema.nullable(); }, get evaluation() { return z.strictObject({ id: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly(); },
   /** Task phase accepted and the canonical evaluation accepted. */ get accepted() { return z.boolean(); },
   /** No unresolved effect and the Task not reopened. */ get settled() { return z.boolean(); },
-  get inputAnswer() { return z.strictObject({ question: z.string().min(1), answer: z.string().min(1) }).readonly().nullable(); },
+  get inputAnswer() { return z.strictObject({ question: persistedString(z.string().min(1)), answer: persistedString(z.string().min(1)) }).readonly().nullable(); },
   get earlierFailure() { return z.strictObject({ reasonCode: identitySchema, checkIds: z.array(identitySchema).max(16).readonly() }).readonly().nullable(); },
   get lessons() { return z.array(z.unknown().optional()).max(64).readonly().nullable(); }, get reportDigest() { return z.string().regex(/^[a-f0-9]{64}$/).nullable(); } }).readonly();
 export type MemoryExtractionSource = z.infer<typeof memoryExtractionSourceSchema>;

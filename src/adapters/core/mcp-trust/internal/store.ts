@@ -1,4 +1,4 @@
-import { persistedInteger, ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
+import { persistedString, persistedInteger, ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -22,12 +22,12 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const scope = z.enum(MCP_SCOPES);
 export const mcpTrustRecordSchema = z.strictObject({
   scope, name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest,
-  tools: z.array(z.strictObject({ name: z.string().min(1).max(128), digest, alwaysAsk: z.boolean() })).max(512),
+  tools: z.array(z.strictObject({ name: persistedString(z.string().min(1).max(128)), digest, alwaysAsk: z.boolean() })).max(512),
   /** `trusted`: offered; `declined`: the owner said no for this definition (not asked again until it changes or is reset). */
   decision: z.enum(['trusted', 'declined']),
   /** Bumped by `/mcp reconnect`: the service replaces the running process on its next use. */
   reconnect: persistedInteger().nonnegative(),
-  approvedAtMs: persistedInteger().nonnegative(), principal: z.strictObject({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }),
+  approvedAtMs: persistedInteger().nonnegative(), principal: z.strictObject({ issuer: persistedString(z.string().min(1).max(256)), subject: persistedString(z.string().min(1).max(256)) }),
 });
 export type McpTrustRecord = z.infer<typeof mcpTrustRecordSchema>;
 const fileSchema = z.strictObject({ schemaVersion: z.literal(1), revision: persistedInteger().nonnegative(), servers: z.array(mcpTrustRecordSchema).max(256) });

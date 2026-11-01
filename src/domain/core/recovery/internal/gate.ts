@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
 import { effectRecordSchema, effectStateSchema, effectTargetRefSchema, operationRefSchema, type EffectRecord } from '#domain/core/effect/index.js';
 import type { RunRecoveryPolicy } from './policy.js';
@@ -22,7 +22,7 @@ export class RecoveryError extends Error {
 export const recoveryEffectGateSchema = z.strictObject({ schemaVersion: z.literal(1), result: z.enum(['clear', 'reconciled', 'open']), complete: z.boolean(),
   settled: z.enum(['none', 'task-idempotent', 'not-declared', 'over-bound']),
   intents: z.array(z.strictObject({ commandId: identitySchema, state: effectStateSchema, producer: z.enum(['attempt', 'legacy']) }).readonly()).max(1024).readonly(),
-  facts: z.array(z.strictObject({ commandId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema, version: z.string().min(1).max(256).nullable(),
+  facts: z.array(z.strictObject({ commandId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema, version: persistedString(z.string().min(1).max(256)).nullable(),
     observedAt: counterSchema }).readonly()).max(256).readonly() }).readonly();
 export type RecoveryEffectGate = z.infer<typeof recoveryEffectGateSchema>;
 const OPEN = new Set(['claimed', 'unknown']);

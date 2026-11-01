@@ -1,11 +1,11 @@
-import { persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
+import { persistedString, persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import catalogData from './catalog.json' with { type: 'json' };
 
 const version = z.string().regex(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/);
 const npmMechanism = z.strictObject({ get mechanism() { return z.literal('npm'); }, get package() { return z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/); },
-  get versionPattern() { return z.string().min(1); }, get update() { return z.string().min(1); }, get selfUpdateControl() { return z.string().min(1); } });
-const installerMechanism = z.strictObject({ get mechanism() { return z.literal('installer-script'); }, get versionPattern() { return z.string().min(1); }, get update() { return z.string().min(1); }, get note() { return z.string().min(1); } });
+  get versionPattern() { return persistedString(z.string().min(1)); }, get update() { return persistedString(z.string().min(1)); }, get selfUpdateControl() { return persistedString(z.string().min(1)); } });
+const installerMechanism = z.strictObject({ get mechanism() { return z.literal('installer-script'); }, get versionPattern() { return persistedString(z.string().min(1)); }, get update() { return persistedString(z.string().min(1)); }, get note() { return persistedString(z.string().min(1)); } });
 export const toolchainCatalogSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get note() { return z.string(); },
   get providers() { return z.record(identitySchema, z.discriminatedUnion('mechanism', [npmMechanism, installerMechanism])); } }).readonly();
 export type ToolchainCatalog = z.infer<typeof toolchainCatalogSchema>;
@@ -15,10 +15,10 @@ export const toolchainCatalog: ToolchainCatalog = toolchainCatalogSchema.parse(c
 /** One admitted worker toolchain pin: the CLI version string a prepared profile requires at preflight. */
 const profileReferenceSchema = z.strictObject({ id: identitySchema, get version() { return counterSchema.positive(); } });
 export const admittedToolchainSchema = z.strictObject({ profile: profileReferenceSchema,
-  provider: identitySchema, get cliVersion() { return z.string().min(1).max(128); } }).readonly();
+  provider: identitySchema, get cliVersion() { return persistedString(z.string().min(1).max(128)); } }).readonly();
 export type AdmittedToolchain = z.infer<typeof admittedToolchainSchema>;
 
-export const publishedVersionSchema = z.strictObject({ version, get source() { return z.string().min(1); }, get observedAt() { return persistedDateTime(); } }).readonly();
+export const publishedVersionSchema = z.strictObject({ version, get source() { return persistedString(z.string().min(1)); }, get observedAt() { return persistedDateTime(); } }).readonly();
 export type PublishedVersion = z.infer<typeof publishedVersionSchema>;
 /** Latest-version lookup outcome per provider. `unavailable` carries a bounded reason code only. */
 export type LatestLookup = Readonly<{ kind: 'published'; published: PublishedVersion } | { kind: 'unavailable'; reason: string } | { kind: 'disabled' } | { kind: 'unsupported' }>;
@@ -34,7 +34,7 @@ export const toolchainCurrencyEntrySchema = z.strictObject({
 export type ToolchainCurrencyEntry = z.infer<typeof toolchainCurrencyEntrySchema>;
 export const toolchainCurrencyReportSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get measuredAt() { return persistedDateTime(); },
   // The mode value is registry vocabulary (toolchains.currency.mode); it is carried, not redeclared, here.
-  get mode() { return z.string().min(1); }, get registryEndpoint() { return z.string().nullable(); }, get providers() { return z.array(toolchainCurrencyEntrySchema).readonly(); },
+  get mode() { return persistedString(z.string().min(1)); }, get registryEndpoint() { return z.string().nullable(); }, get providers() { return z.array(toolchainCurrencyEntrySchema).readonly(); },
   get basis() { return z.string(); } }).readonly();
 export type ToolchainCurrencyReport = z.infer<typeof toolchainCurrencyReportSchema>;
 

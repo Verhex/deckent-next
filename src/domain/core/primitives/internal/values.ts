@@ -1,8 +1,8 @@
-import { persistedInteger, persistedIssueCode } from './persisted-schema.js';
+import { persistedString, persistedInteger, persistedIssueCode } from './persisted-schema.js';
 import { z } from 'zod';
 /** Version-1 wire identifier budget, not a limit on task descriptions or customer content. */
 export const IDENTITY_MAX_LENGTH = 256;
-export const identitySchema = z.string().min(1).max(IDENTITY_MAX_LENGTH).refine(value => value.trim() === value &&
+export const identitySchema = persistedString(z.string().min(1).max(IDENTITY_MAX_LENGTH)).refine(value => value.trim() === value &&
   ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 export const counterSchema = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export type ValidationIssue = Readonly<{ path: readonly (string | number)[]; code: string }>;

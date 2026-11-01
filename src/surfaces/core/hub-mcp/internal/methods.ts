@@ -1,4 +1,4 @@
-import { persistedNumber, persistedInteger, HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema, identitySchema, requireBoundedHubJson } from '#domain/index.js';
+import { persistedString, persistedNumber, persistedInteger, HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema, identitySchema, requireBoundedHubJson } from '#domain/index.js';
 import { toInputJsonSchema, t, ErrorRegistry, type Locale, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { executeHubService } from './service-methods.js';
 import { ProtocolError, type Server, type ServerContext } from '@modelcontextprotocol/server';
@@ -14,7 +14,7 @@ export interface HubMcpOptions {
 }
 const meta = { _meta: z.record(z.string(), z.unknown().optional()).optional() };
 const query = z.strictObject({ packageId: hubPackageIdSchema, version: hubVersionSchema, ...meta });
-const search = z.strictObject({ after: z.string().max(HUB_LIMITS.packageMaxBytes).prefault(''), limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax), ...meta });
+const search = z.strictObject({ after: persistedString(z.string().max(HUB_LIMITS.packageMaxBytes)).prefault(''), limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax), ...meta });
 const publish = z.strictObject({ bundle: z.unknown().optional(), ...meta });
 const review = query.extend({ signature: z.unknown().optional() });
 const agent = query.extend({ agentId: identitySchema });

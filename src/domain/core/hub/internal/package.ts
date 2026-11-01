@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { catalogIdSchema, AGENT_CATALOG_LIMITS, skillSignatureSchema } from '#domain/core/agent-catalog/index.js';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema } from '#domain/core/primitives/index.js';
 import { HUB_LIMITS } from './registry.js';
 import { hubDigestSchema, hubFilesSchema, hubPackageIdSchema, hubSkillDescriptionSchema, hubSkillNameSchema, hubText, hubTimeSchema, hubVersionSchema } from './fields.js';
 
@@ -17,7 +17,7 @@ export const hubAgentItemSchema = z.strictObject({ kind: z.literal('agent'), age
 export const hubPackageSchema = z.strictObject({ schemaVersion: z.literal(1), packageId: hubPackageIdSchema, version: hubVersionSchema,
   kind: z.enum(['skill', 'agent', 'set']), title: hubText(AGENT_CATALOG_LIMITS.nameMaxBytes), description: hubSkillDescriptionSchema,
   // An SPDX identifier token; license-list membership is a registry concern, never guessed from a label.
-  license: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9.+-]*$/),
+  license: persistedString(z.string().min(1).max(128)).regex(/^[A-Za-z0-9][A-Za-z0-9.+-]*$/),
   items: z.array(z.union([hubSkillItemSchema, hubAgentItemSchema])).min(1).max(HUB_LIMITS.itemsMax).readonly(),
   dependencies: z.array(hubDependencySchema).max(HUB_LIMITS.dependenciesMax)
     .refine(rows => new Set(rows.map(r => `${r.hubId ?? ''}/${r.packageId}`)).size === rows.length).readonly(),

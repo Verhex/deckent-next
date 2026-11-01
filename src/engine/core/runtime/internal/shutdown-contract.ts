@@ -1,7 +1,7 @@
-import { persistedInteger, clientCommandIdSchema, counterSchema, identitySchema, isMcpPrincipal, verifiedPrincipalSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, clientCommandIdSchema, counterSchema, identitySchema, isMcpPrincipal, verifiedPrincipalSchema } from '#domain/index.js';
 import { z } from 'zod';
 
-const reasonSchema = z.string().max(1024).refine(value => value.trim().length > 0, 'SHUTDOWN_REASON_BLANK');
+const reasonSchema = persistedString(z.string().max(1024)).refine(value => value.trim().length > 0, 'SHUTDOWN_REASON_BLANK');
 const peerEvidenceSchema = z.strictObject({
   method: z.literal('os-peer'),
   pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),

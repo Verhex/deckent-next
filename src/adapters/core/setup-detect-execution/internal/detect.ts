@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { userInfo } from 'node:os';
@@ -7,8 +8,8 @@ import type { ExecutionFacts, RuntimeFacts } from './family.js';
 import registryData from './runtimes.json' with { type: 'json' };
 import limits from './limits.json' with { type: 'json' };
 
-const argv = z.array(z.string().min(1).max(256)).max(16), name = z.string().regex(/^[A-Za-z0-9._-]{1,64}$/);
-const runtimeEntry = z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), label: z.string().min(1).max(64), support: z.enum(['supported', 'unsupported']),
+const argv = z.array(persistedString(z.string().min(1).max(256))).max(16), name = z.string().regex(/^[A-Za-z0-9._-]{1,64}$/);
+const runtimeEntry = z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), label: persistedString(z.string().min(1).max(64)), support: z.enum(['supported', 'unsupported']),
   executable: name, versionArgs: argv.optional(), endpointArgs: argv.optional(), infoArgs: argv.optional(), groupArgs: argv.optional(), groupExecutable: name.optional(),
   userSocketPrefix: z.string().startsWith('/').optional(), rootless: z.strictObject({ securityOptions: z.array(z.string()).max(8) }).optional(),
   desktop: z.strictObject({ operatingSystem: z.array(z.string()).max(8), cliPrefixes: z.array(z.string().startsWith('/')).max(8) }).optional() })

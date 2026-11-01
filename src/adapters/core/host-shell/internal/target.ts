@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { AgentToolSpec } from '#domain/index.js';
@@ -27,7 +28,7 @@ export const RUN_SHELL_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: 'run_she
     + 'traverses the whole tree, or is destructive is shown to the owner first. No interactive input; long output is shortened.',
   inputSchema: { type: 'object' as const, required: ['command'], properties: { command: { type: 'string', description: 'The bash command line' } } } });
 
-const inputSchema = z.strictObject({ command: z.string().min(1).max(HOST_SHELL_COMMAND_MAX_CHARS) });
+const inputSchema = z.strictObject({ command: persistedString(z.string().min(1).max(HOST_SHELL_COMMAND_MAX_CHARS)) });
 
 /**
  * The host shell as a C11 effect target (T-L4 slice 3c). Each run is its own record (the caller derives the record id from the

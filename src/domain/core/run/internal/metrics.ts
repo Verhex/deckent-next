@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, modelUsageEvidenceSchema, workerEffortSchema } from '#domain/core/provider-catalog/index.js';
 import { assignmentEffortSourceSchema, assignmentPolicyReferenceSchema } from './assignment.js';
 /** DECKENT-METRICS is evidence metadata, never an acceptance command or a new state writer.
  * Each row is attributed to an exact scoped Attempt; a Run incomplete observation is explicitly distinguished from a Task result. */
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const measuredCostSchema = z.strictObject({ basis: z.literal('measured-tariff'),
-  amountUsdNanos: z.string().regex(/^(0|[1-9][0-9]*)$/).max(128), tariffDigest: digestSchema,
+  amountUsdNanos: persistedString(z.string().regex(/^(0|[1-9][0-9]*)$/).max(128)), tariffDigest: digestSchema,
 }).readonly();
 const common = {
   identity: z.strictObject({ scopeId: identitySchema, runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).readonly(),
@@ -30,18 +30,18 @@ const legacyMetricsSchema = z.strictObject({ schemaVersion: z.literal(1), ...com
 export const FAILURE_CAUSES = ['criteria-failed', 'worker-report-failed', 'human-rejected', 'infra', 'model', 'dependency', 'policy', 'operator', 'unattributed'] as const;
 /** What the verdict rests on (law 1): the installed evaluators' evidence kinds plus a human decision; `unknown` for an unlisted evaluator. */
 export const METRIC_EVIDENCE_KINDS = ['exit-code', 'human-decision', 'operation-record', 'harness-readback', 'unknown'] as const;
-const label = z.string().min(1).max(64);
+const label = persistedString(z.string().min(1).max(64));
 /** ATAMA-0 v2 (owner A1/A5, ASS1): effort, the worker-reported model with its evidence label (a report, never provider attestation),
  * container duration, evidence kinds, rubric score, human decisions and quota parks. One current row per (Task, Attempt, outcome kind)
  * is a ledger invariant; replay of a producer is byte-identical. */
 const currentMetricsSchema = z.strictObject({ schemaVersion: z.literal(2), ...common,
   effort: workerEffortSchema.nullable(),
-  actualModel: z.strictObject({ reported: z.string().min(1).max(256).nullable(), verdict: label, evidence: z.enum(['sealed', 'absent']),
+  actualModel: z.strictObject({ reported: persistedString(z.string().min(1).max(256)).nullable(), verdict: label, evidence: z.enum(['sealed', 'absent']),
     capability: modelUsageEvidenceSchema }).readonly().nullable(),
   outcome: z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('task'), status: z.enum(['accepted', 'failed', 'awaiting-decision']), decision: z.enum(['system', 'human']) }),
     z.strictObject({ kind: z.literal('run'), status: z.literal('incomplete') }),
-    z.strictObject({ kind: z.literal('quota-park'), channelId: z.string().min(1).max(256) }),
+    z.strictObject({ kind: z.literal('quota-park'), channelId: persistedString(z.string().min(1).max(256)) }),
   ]).readonly(),
   evidenceKinds: z.array(z.enum(METRIC_EVIDENCE_KINDS)).max(METRIC_EVIDENCE_KINDS.length).readonly(),
   acceptanceScore: z.number().finite().min(0).max(1).nullable(),

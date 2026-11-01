@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { evaluationAcceptanceSchema, inspectAcceptanceConclusion } from './acceptance.js';
 import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
-import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { runSnapshotSchema, evaluationCriterionSchema, STALL_CAUSES } from '#domain/core/run/index.js';
 import { workerModelPinSchema, workerProviderSchema, workerNeedsInputSchema, workerReportEvidenceSchema, workerReportRefusal } from '#domain/core/worker-event/index.js';
-const modelText = z.string().min(1).max(256);
+const modelText = persistedString(z.string().min(1).max(256));
 /**
  * Worker model evidence of a pinned native attempt (WORKER-CURRENCY-2, owner rule A 2026-09-30; Jev 933e43f2, 58ffe1c9). Recorded with the
  * evaluation; present exactly when the Run's frozen profile pins a model. The verdict is the host-sealed comparison of worker-reported usage

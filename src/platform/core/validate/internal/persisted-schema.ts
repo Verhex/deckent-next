@@ -1,4 +1,4 @@
-/* Zod 3.25.76 datetime / UUID / email expressions, adapted under the upstream license:
+/* Zod 3.25.76 string / datetime / UUID / email expressions, adapted under the upstream license:
 MIT License
 
 Copyright (c) 2025 Colin McDonnell
@@ -22,6 +22,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 import { z } from 'zod';
+/** Zod 3 string bounds count UTF-16 units; clone checks to preserve order and native projection. */
+export function persistedString<T extends z.ZodString>(schema: T): T {
+  const checks = (schema.def.checks ?? []).map(check => {
+    if (!['min_length', 'max_length', 'length_equals'].includes(check._zod.def.check)) return check;
+    const def = check._zod.def as z.core.$ZodCheckMinLengthDef | z.core.$ZodCheckMaxLengthDef | z.core.$ZodCheckLengthEqualsDef;
+    const exact = def.check === 'length_equals', limit = 'minimum' in def ? def.minimum : 'maximum' in def ? def.maximum : def.length;
+    const legacy = new z.core.$ZodCheck({ ...def });
+    legacy._zod.onattach = [...check._zod.onattach];
+    legacy._zod.check = payload => {
+      const size = (payload.value as string).length, small = size < limit;
+      if (def.check === 'min_length' ? !small : def.check === 'max_length' ? size <= limit : size === limit) return;
+      payload.issues.push({ origin: 'string', ...(small ? { code: 'too_small', minimum: limit } : { code: 'too_big', maximum: limit }),
+        inclusive: true, ...(exact ? { exact: true } : {}), input: payload.value, inst: legacy, continue: !def.abort,
+        ...(!def.error ? { message: `String must contain ${exact ? 'exactly' : small ? 'at least' : 'at most'} ${limit} character(s)` } : {}) });
+    };
+    return legacy;
+  });
+  return schema.clone({ ...schema.def, checks }, { parent: true });
+}
+
 // Persisted contracts retain Zod 3.25.76 acceptance (v3/types.js:368,384,406-432; MIT).
 const dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
 function timeRegexSource(args: { precision?: number | null }) {

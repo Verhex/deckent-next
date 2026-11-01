@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { agentMessageContinuationSchema } from './continuation.js';
 import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
@@ -14,10 +14,10 @@ export const chatTurnSteerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
  * project documents — are untrusted context: they never grant authority. Native provider details stay in adapters.
  */
 export const agentTurnMessageSchema = z.discriminatedUnion('role', [
-  z.strictObject({ get role() { return z.literal('system'); }, get content() { return z.string().min(1); } }),
-  z.strictObject({ get role() { return z.literal('user'); }, get content() { return z.string().min(1); } }),
+  z.strictObject({ get role() { return z.literal('system'); }, get content() { return persistedString(z.string().min(1)); } }),
+  z.strictObject({ get role() { return z.literal('user'); }, get content() { return persistedString(z.string().min(1)); } }),
   z.strictObject({ get role() { return z.literal('assistant'); }, get content() { return z.string(); }, get toolCalls() { return z.array(agentToolCallSchema).readonly(); }, get continuation() { return agentMessageContinuationSchema.optional(); } }),
-  z.strictObject({ get role() { return z.literal('tool'); }, get toolCallId() { return z.string().min(1).max(256); }, get name() { return z.string().min(1).max(64); }, get content() { return z.string(); } }),
+  z.strictObject({ get role() { return z.literal('tool'); }, get toolCallId() { return persistedString(z.string().min(1).max(256)); }, get name() { return persistedString(z.string().min(1).max(64)); }, get content() { return z.string(); } }),
 ]);
 export type AgentTurnMessage = z.infer<typeof agentTurnMessageSchema>;
 
@@ -73,25 +73,25 @@ const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', '
  * are required data (the client's history), not presentation; the transport never drops them silently.
  */
 export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ get kind() { return z.literal('text'); }, get text() { return z.string().min(1); } }),
-  z.strictObject({ get kind() { return z.literal('reasoning'); }, get text() { return z.string().min(1); } }),
-  z.strictObject({ get kind() { return z.literal('tool.started'); }, get callId() { return z.string().min(1).max(256); }, get name() { return z.string().min(1).max(64); }, get target() { return z.string().max(4096).nullable(); } }),
-  z.strictObject({ get kind() { return z.literal('tool.finished'); }, get callId() { return z.string().min(1).max(256); }, get name() { return z.string().min(1).max(64); }, status: callStatusSchema, ms: count, bytes: count,
+  z.strictObject({ get kind() { return z.literal('text'); }, get text() { return persistedString(z.string().min(1)); } }),
+  z.strictObject({ get kind() { return z.literal('reasoning'); }, get text() { return persistedString(z.string().min(1)); } }),
+  z.strictObject({ get kind() { return z.literal('tool.started'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get name() { return persistedString(z.string().min(1).max(64)); }, get target() { return persistedString(z.string().max(4096)).nullable(); } }),
+  z.strictObject({ get kind() { return z.literal('tool.finished'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get name() { return persistedString(z.string().min(1).max(64)); }, status: callStatusSchema, ms: count, bytes: count,
     get cleanup() { return agentToolCleanupSchema.optional(); } }),
   z.strictObject({ get kind() { return z.literal('usage'); }, get round() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, promptTokens: count, completionTokens: count }),
   z.strictObject({ get kind() { return z.literal('message'); }, message: agentTurnMessageSchema, get steerId() { return chatTurnSteerIdSchema.optional(); } }),
   z.strictObject({ get kind() { return z.literal('context'); }, get round() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, promptTokens: count, get windowTokens() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(); },
     get quality() { return z.enum(['provider-count', 'upper-bound']); } }),
   z.strictObject({ get kind() { return z.literal('compacted'); }, get messages() { return z.array(agentTurnMessageSchema).min(1).readonly(); }, replacedMessages: count }),
-  z.strictObject({ get kind() { return z.literal('approval.requested'); }, get callId() { return z.string().min(1).max(256); }, get approvalId() { return z.string().min(1).max(256); }, revision: count,
-    get summary() { return z.string().min(1).max(2048); }, get preview() { return z.string().max(65_536); }, expiresAt: count, get decisionCapability() { return z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(); },
-    get standing() { return z.strictObject({ scopes: z.tuple([z.literal('session')]).readonly(), pattern: z.string().min(1).max(2048) }).optional(); },
+  z.strictObject({ get kind() { return z.literal('approval.requested'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get approvalId() { return persistedString(z.string().min(1).max(256)); }, revision: count,
+    get summary() { return persistedString(z.string().min(1).max(2048)); }, get preview() { return persistedString(z.string().max(65_536)); }, expiresAt: count, get decisionCapability() { return z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(); },
+    get standing() { return z.strictObject({ scopes: z.tuple([z.literal('session')]).readonly(), pattern: persistedString(z.string().min(1).max(2048)) }).optional(); },
     get risk() { return z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).nullable().optional(); }, get requiredAssurance() { return z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).optional(); },
     get undo() { return agentToolUndoSchema.optional(); }, get posture() { return agentShellPostureSchema.optional(); }, get call() { return agentToolCardCallSchema.optional(); },
     get previewCut() { return approvalPreviewCutSchema.optional(); } }),
-  z.strictObject({ get kind() { return z.literal('approval.settled'); }, get callId() { return z.string().min(1).max(256); }, get approvalId() { return z.string().min(1).max(256); },
+  z.strictObject({ get kind() { return z.literal('approval.settled'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get approvalId() { return persistedString(z.string().min(1).max(256)); },
     get outcome() { return z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']); } }),
-  z.strictObject({ get kind() { return z.literal('tool.output'); }, get callId() { return z.string().min(1).max(256); }, get stream() { return z.enum(['stdout', 'stderr']); }, get text() { return z.string().min(1); } }),
+  z.strictObject({ get kind() { return z.literal('tool.output'); }, get callId() { return persistedString(z.string().min(1).max(256)); }, get stream() { return z.enum(['stdout', 'stderr']); }, get text() { return persistedString(z.string().min(1)); } }),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 
@@ -119,17 +119,17 @@ export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTur
  * steered lines one turn accepts. */
 export const CHAT_TURN_RESULT_NOTICES = 32;
 export const CHAT_TURN_STEER_LINES = 16;
-const noticeText = (max: number) => z.string().min(1).max(max);
+const noticeText = (max: number) => persistedString(z.string().min(1).max(max));
 /**
  * v30 (tema L6): an MCP server this turn could not decide or start, as data (the adapter's `McpStartNotice`, never prose); the surface
  * renders it from its own catalog. `note` no longer carries MCP text.
  */
 export const mcpStartNoticeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ get kind() { return z.literal('start-failed'); }, get name() { return noticeText(64); }, get failure() { return z.strictObject({ code: noticeText(64), phase: z.enum(['launch', 'trusted', 'tools', 'decision']),
-    detail: z.string().max(200).optional(), diagnosis: z.union([
-      z.strictObject({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: persistedInteger().min(-1).max(1_024), path: z.string().max(4_096),
-        target: z.string().max(4_096).optional() }),
-      z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: z.string().max(64) })]).optional() }); } }),
+    detail: persistedString(z.string().max(200)).optional(), diagnosis: z.union([
+      z.strictObject({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: persistedInteger().min(-1).max(1_024), path: persistedString(z.string().max(4_096)),
+        target: persistedString(z.string().max(4_096)).optional() }),
+      z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: persistedString(z.string().max(64)) })]).optional() }); } }),
   z.strictObject({ get kind() { return z.literal('tools-changed'); }, get name() { return noticeText(64); }, count }),
   z.strictObject({ get kind() { return z.literal('not-recorded'); }, get name() { return noticeText(64); } }),
   z.strictObject({ get kind() { return z.literal('not-decided'); }, get name() { return noticeText(64); }, get code() { return noticeText(64); }, get detail() { return z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,255}$/u).optional(); } }),
@@ -144,7 +144,7 @@ export type ChatTurnSteerOutcome = z.infer<typeof chatTurnSteerOutcomeSchema>;
 /** The bounded result of a turn: the final answer when it fits the replay bound, never the tool results (they came as events). v30: `notices`
  * (typed, see above) and `steer` — the steered lines that joined the turn and those it returns unsent (the person's to send again). */
 export const chatTurnResultSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, turnId: identitySchema, finish: finishSchema,
-  get note() { return z.string().max(4096).nullable(); }, rounds: count, toolCalls: count, get answer() { return z.string().nullable(); }, answerBytes: count,
+  get note() { return persistedString(z.string().max(4096)).nullable(); }, rounds: count, toolCalls: count, get answer() { return z.string().nullable(); }, answerBytes: count,
   get replayed() { return z.boolean(); }, get recorded() { return z.boolean(); }, get notices() { return z.array(mcpStartNoticeSchema).max(CHAT_TURN_RESULT_NOTICES).readonly(); },
   steer: chatTurnSteerOutcomeSchema }).readonly();
 export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
@@ -157,7 +157,7 @@ export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
  * whole within the turn's result bound.
  */
 export const chatTurnSteerSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, turnId: identitySchema, steerId: chatTurnSteerIdSchema,
-  get content() { return z.string().min(1); } }).readonly();
+  get content() { return persistedString(z.string().min(1)); } }).readonly();
 export type ChatTurnSteer = z.infer<typeof chatTurnSteerSchema>;
 export const parseChatTurnSteer = (value: unknown): ChatTurnSteer => chatTurnSteerSchema.parse(value);
 export const chatTurnSteerResultSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, turnId: identitySchema, steerId: chatTurnSteerIdSchema,

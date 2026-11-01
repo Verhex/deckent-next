@@ -1,13 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { immutableJsonObjectSchema } from '#domain/index.js';
+import { persistedString, immutableJsonObjectSchema } from '#domain/index.js';
 import { executionPoolSchema, type ExecutionPool } from '#engine/index.js';
 import { migrateLedger, CURRENT_LEDGER_VERSION, sqliteLedgerOptionsSchema, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteExecutionPools } from './pools.js';
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const ownershipSchema = z.strictObject({
-  schemaVersion: z.literal(1), transactionId: z.string().min(1).max(256),
+  schemaVersion: z.literal(1), transactionId: persistedString(z.string().min(1).max(256)),
   planDigest: hex, profileDigest: hex, proposalDigest: hex,
 }).readonly();
 export type InstallationLedgerOwnership = z.infer<typeof ownershipSchema>;

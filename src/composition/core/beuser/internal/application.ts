@@ -11,7 +11,7 @@ import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, B
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
-import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
+import { persistedString, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -224,7 +224,7 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
       const latest = await directory(sha256(JSON.stringify([scopeId, c.principal.issuer, c.principal.subject]))).read();
       if (latest.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
       if (latest.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-      runId = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.string().min(1) }).parse(latest.value).runId;
+      runId = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: persistedString(z.string().min(1)) }).parse(latest.value).runId;
     }
     await new RunPolicyAuthorization(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes)).authorize('inspect', { scopeId, runId }, c.principal);
     const read = await directory(sha256(JSON.stringify([scopeId, runId]))).read();

@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl } from '#platform/core/validate/index.js';
+import { persistedString, persistedInteger, persistedUrl } from '#platform/core/validate/index.js';
 import { workerImageConsentSchema } from './worker-consent.js';
 import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
@@ -22,7 +22,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.literal(CONFIG_SCHEMA_VERSION).prefault(CONFIG_SCHEMA_VERSION)),
   language: field('config.field.language', { state: 'bound', consumers: ['src/surfaces/core/cli-observe'] }, 'live', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).optional(), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
   output_mode: field('config.field.output_mode', { state: 'bound', consumers: ['src/platform/core/output'] }, 'live', z.enum(OUTPUT_MODES).prefault('standard')),
-  layout: field('config.field.layout', { state: 'bound', consumers: ['src/platform/core/config'] }, 'restart', z.strictObject({ get root() { return z.string().min(1).nullable().prefault(null); }, get resources() { return z.record(z.string(), z.string().min(1)).prefault({}); } }).prefault({}),
+  layout: field('config.field.layout', { state: 'bound', consumers: ['src/platform/core/config'] }, 'restart', z.strictObject({ get root() { return persistedString(z.string().min(1)).nullable().prefault(null); }, get resources() { return z.record(z.string(), persistedString(z.string().min(1))).prefault({}); } }).prefault({}),
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
   storage: field('config.field.storage', { state: 'bound', consumers: ['src/composition/core/storage'] }, 'restart', z.strictObject({ get driver() { return z.literal('sqlite').prefault('sqlite'); },
     /* R6: 5000 ms: with opens lock-free, 100 ms still refused 1.5–4% of writes beside 7 clients on one loaded core (alpha.47 stress). */ get sqlite() { return SQLITE_STORAGE_OPTIONS.prefault({ busyTimeoutMs: 5000, journalMode: 'wal', durability: 'full' }); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
@@ -46,12 +46,12 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
       outputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(65536) }).prefault({}); },
     // Installation binding: an operator-configured machine identity file (absolute path, e.g. a mounted secret) is preferred over the
     // platform identity; without either the binding is weak (root, device, inode). Required machine binding refuses installation-bound writes.
-    get machineIdentity() { return z.strictObject({ source: z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'MACHINE_IDENTITY_SOURCE_ABSOLUTE')
+    get machineIdentity() { return z.strictObject({ source: persistedString(z.string().min(1).max(4096)).refine(value => value.startsWith('/'), 'MACHINE_IDENTITY_SOURCE_ABSOLUTE')
       .nullable().prefault(null) }).prefault({}); },
     get requireMachineBinding() { return z.boolean().prefault(false); },
     // K7 (owner 2026-10-27): the person's uninstall recovery root (receipts, tombstone, archive and backup); null: the registry default (XDG state).
     // A protected root: only the person's terminal changes it, and every plan checks it lies outside each folder it deletes.
-    get uninstallRecoveryRoot() { return z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'UNINSTALL_RECOVERY_ROOT_ABSOLUTE').nullable().prefault(null); },
+    get uninstallRecoveryRoot() { return persistedString(z.string().min(1).max(4096)).refine(value => value.startsWith('/'), 'UNINSTALL_RECOVERY_ROOT_ABSOLUTE').nullable().prefault(null); },
     get imageProbe() { return z.strictObject({ timeoutMs: persistedInteger().positive().max(2147483647).prefault(5000),
       outputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(65536) }).prefault({}); },
     get packageMeasurement() { return z.strictObject({
@@ -90,7 +90,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     get maxServers() { return persistedInteger().positive().max(256).prefault(20); },
   }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
   service: field('config.field.service', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', z.strictObject({
-    get identity() { return z.strictObject({ scopeId: z.string().min(1), serviceId: z.string().min(1) }).nullable().prefault(null); },
+    get identity() { return z.strictObject({ scopeId: persistedString(z.string().min(1)), serviceId: persistedString(z.string().min(1)) }).nullable().prefault(null); },
     get inputMaxBytes() { return persistedInteger().positive().max(INPUT_VALIDATION_LIMITS.ipc.maxBytes).prefault(1048576); },
     get responseMaxBytes() { return persistedInteger().positive().max(4294967295).prefault(1048576); },
     get maxConnections() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(32); },
@@ -146,17 +146,17 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     get maxPreparationAborts() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(2); },
     get pageSize() { return persistedInteger().positive().max(2147483646).prefault(64); },
   }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
-  cancellationRuntime: field('config.field.cancellationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.strictObject({ get scopeIds() { return z.array(z.string().min(1)).min(1); },
+  cancellationRuntime: field('config.field.cancellationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.strictObject({ get scopeIds() { return z.array(persistedString(z.string().min(1))).min(1); },
     get pollIntervalMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(1000); }, get failureBackoffMs() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(5000); },
   }).nullable().prefault(null), [], LAYOUT_CONTRACT_SINCE),
   reconciliationRuntime: field('config.field.reconciliationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.strictObject({
-    get scopeIds() { return z.array(z.string().min(1)).min(1); },
+    get scopeIds() { return z.array(persistedString(z.string().min(1))).min(1); },
     get pollIntervalMs() { return persistedInteger().positive().max(2147483647).prefault(1000); },
     get failureBackoffMs() { return persistedInteger().positive().max(2147483647).prefault(5000); },
     get pageSize() { return persistedInteger().positive().max(2147483646).prefault(64); },
     get maxConcurrentReconciliations() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(4); },
   }).nullable().prefault(null), [], LAYOUT_CONTRACT_SINCE),
-  admission: field('config.field.admission', { state: 'bound', consumers: ['src/composition/core/runs'] }, 'restart', z.strictObject({ get registry() { return z.record(z.string(), z.unknown().optional()); }, get poolId() { return z.string().min(1); },
+  admission: field('config.field.admission', { state: 'bound', consumers: ['src/composition/core/runs'] }, 'restart', z.strictObject({ get registry() { return z.record(z.string(), z.unknown().optional()); }, get poolId() { return persistedString(z.string().min(1)); },
     get executionSlots() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, get inFlightSlots() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
     get ordering() { return z.literal('input-order'); },
     /** PARALLEL-S3: admission policy (not a wire invariant); a larger graph is refused with typed TASK_GRAPH_LIMIT before any write. */
@@ -170,7 +170,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
       staleMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(10000), maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(65536),
       maxEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(4096),
       sources: z.array(z.strictObject({ id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/).refine(value => value !== 'current'),
-        kind: z.enum(['next-project', 'legacy-tasks']), path: z.string().min(1), scopeId: z.string().min(1) })).max(16).prefault([]),
+        kind: z.enum(['next-project', 'legacy-tasks']), path: persistedString(z.string().min(1)), scopeId: persistedString(z.string().min(1)) })).max(16).prefault([]),
     }).refine(value => new Set(value.sources.map(source => source.id)).size === value.sources.length).prefault({}); },
   }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
   resourceObservation: field('config.field.resourceObservation', { state: 'bound', consumers: ['src/composition/core/resource-observation'] }, 'restart', RESOURCE_OBSERVATION_SETTINGS),
@@ -197,7 +197,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     failedContextsKept: persistedInteger().min(1).max(1000).prefault(3),
     intervalMs: persistedInteger().min(0).max(2_147_483_647).prefault(86_400_000),
   }).prefault({}); } }).prefault({}), [], LAYOUT_CONTRACT_SINCE),
-  projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', z.string().min(1).prefault('deckent-project')),
+  projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', persistedString(z.string().min(1)).prefault('deckent-project')),
   max_workers: field('config.field.max_workers', { state: 'bound', consumers: ['src/composition/core/runs', 'src/composition/core/monitor'] }, 'restart', z.union([persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), z.literal('auto')]).prefault('auto')),
   company: field('config.field.company', { state: 'bound', consumers: ['src/composition/core/scoped-request'] }, 'restart', z.strictObject({ get id() { return z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).prefault('default'); } }).prefault({})),
   enforce_principal_assurance: field('config.field.enforce_principal_assurance', { state: 'bound', consumers: ['src/surfaces/core/cli-observe'] }, 'live', z.boolean().prefault(false)),

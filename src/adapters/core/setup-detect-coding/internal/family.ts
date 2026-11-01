@@ -1,10 +1,10 @@
-import { persistedInteger } from '#platform/index.js';
+import { persistedString, persistedInteger } from '#platform/index.js';
 import { z } from 'zod';
 import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engine/index.js';
 const state = z.enum(['present', 'none', 'unknown', 'not-run']), count = persistedInteger().nonnegative().max(64), cli = z.enum(['found', 'absent', 'unknown']);
 /** The coding/git family's facts (I-S2); locale-free and secret-free: sign-ins are present or absent, never read. `gitPath` (BR1): the Git the
  * execution settings name, the first on PATH. */
-export const codingFactsSchema = z.strictObject({ schemaVersion: z.literal(1), git: cli, gitPath: z.string().min(1).max(4096).nullable().prefault(null), gitVersion: z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable(),
+export const codingFactsSchema = z.strictObject({ schemaVersion: z.literal(1), git: cli, gitPath: persistedString(z.string().min(1).max(4096)).nullable().prefault(null), gitVersion: z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable(),
   repository: state, commits: state, changes: state.optional(), productSource: z.boolean(), workTargets: z.strictObject({ configured: count, present: count }),
   firstCommitRecovery: z.enum(['pending', 'settled', 'none', 'unknown']).optional(),
   hosts: z.array(z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), cli, login: cli })).max(16) });

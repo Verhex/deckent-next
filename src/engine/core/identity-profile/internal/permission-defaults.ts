@@ -1,8 +1,9 @@
+import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
 import { identityProfileRefSchema, IdentityProfileError, type IdentityProfileRef } from '#domain/index.js';
 import data from './permission-defaults.json' with { type: 'json' };
 const entry = z.strictObject({ profile: identityProfileRefSchema, openModes: z.array(z.enum(['full-auto', 'full-access'])).max(2),
-  startMode: z.enum(['standart', 'full-auto', 'full-access']), ownerBaseline: z.strictObject({ families: z.array(z.string().min(1)).max(64) }),
+  startMode: z.enum(['standart', 'full-auto', 'full-access']), ownerBaseline: z.strictObject({ families: z.array(persistedString(z.string().min(1))).max(64) }),
   /** Owner option A K3/K6: 'closed' — this profile (a company's registered row) never offers to run a refused /do here; absent: offered behind the card. */
   localRunFallback: z.enum(['offer', 'closed']).optional() })
   .refine(row => row.startMode === 'standart' || row.openModes.includes(row.startMode));

@@ -1,4 +1,4 @@
-import { persistedInteger, agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseChatTurnSteer, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery, parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseProviderSpendManagementCommand, parseScratchQuery, parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
+import { persistedString, persistedInteger, agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseChatTurnSteer, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery, parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseProviderSpendManagementCommand, parseScratchQuery, parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { queueRollbackSchema, queueEnqueueSchema, queueQuerySchema, queueListSchema, queueChallengeSchema, queueAnswerSchema, queueExecuteSchema } from '#engine/core/effect/index.js';
 import { z } from 'zod';
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
@@ -78,9 +78,9 @@ export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
 const operationOutcomeBase = { commandId: identitySchema, scopeId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema };
 export const runtimeOperationOutcomeSchema = z.discriminatedUnion('status', [
   z.strictObject({ get schemaVersion() { return z.literal(1); }, get status() { return z.literal('settled'); }, ...operationOutcomeBase, get sequence() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
-    get version() { return z.string().min(1).max(256).nullable(); }, get compensates() { return identitySchema.nullable(); }, get evidence() { return z.enum(['idempotency-record', 'fence']); } }),
+    get version() { return persistedString(z.string().min(1).max(256)).nullable(); }, get compensates() { return identitySchema.nullable(); }, get evidence() { return z.enum(['idempotency-record', 'fence']); } }),
   z.strictObject({ get schemaVersion() { return z.literal(2); }, get status() { return z.literal('approval-pending'); }, ...operationOutcomeBase, get approval() { return z.strictObject({ approvalId: identitySchema,
-    revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), expiresAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), summary: z.string().min(1).max(2048) }); } }),
+    revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), expiresAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), summary: persistedString(z.string().min(1).max(2048)) }); } }),
 ]).readonly();
 export const runtimeOperationInspectionSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get record() { return effectRecordSchema.nullable(); } }).readonly();
 // v26 (W3-AUTHORITY): `channel: mcp` selects the distinct MCP actor; it never claims another OS user.
@@ -132,7 +132,7 @@ const success = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_
 const failure = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_SERVICE_SCHEMA_VERSION); }, requestId: identitySchema, get ok() { return z.literal(false); },
   get error() { return z.strictObject({ code: identitySchema, category: z.enum(['error', 'usage', 'config']),
     /** Message parameters of the typed error (same text the caller would see locally); bounded, never raw causes. */
-    params: z.record(z.string().max(64), z.union([z.string().max(RUNTIME_SERVICE_ERROR_PARAM_CHARS), z.number().finite()]))
+    params: z.record(persistedString(z.string().max(64)), z.union([persistedString(z.string().max(RUNTIME_SERVICE_ERROR_PARAM_CHARS)), z.number().finite()]))
       .refine(value => Object.keys(value).length <= RUNTIME_SERVICE_ERROR_PARAMS).optional() }).readonly(); },
 }).readonly();
 export const runtimeServiceResponseSchema = z.union([success, failure]).readonly();

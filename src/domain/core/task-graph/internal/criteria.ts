@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema, counterSchema, immutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema, counterSchema, immutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
 export const criterionTypeSchema = z.enum(['completion', 'correctness', 'safety', 'authorization']);
 export const coreEvidenceTypeSchema = z.enum(['retained-artifact', 'verification-result', 'operation-settlement', 'observed-readback', 'approval-receipt']);
 export const evidenceTypeSchema = z.union([coreEvidenceTypeSchema, z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)]);
@@ -14,7 +14,7 @@ export const CRITERION_TEXT_LIMITS = Object.freeze({ maxCodeUnits: 4096 });
 export const criterionDefinitionSchema = z.strictObject({
   id: identitySchema,
   version: counterSchema.positive(),
-  description: z.string().min(1).max(CRITERION_TEXT_LIMITS.maxCodeUnits).refine(value => value.trim().length > 0 &&
+  description: persistedString(z.string().min(1).max(CRITERION_TEXT_LIMITS.maxCodeUnits)).refine(value => value.trim().length > 0 &&
     ![...value].some(char => { const code = char.charCodeAt(0); return (code < 32 && ![9, 10, 13].includes(code)) || (code >= 127 && code <= 159); })),
   evaluator: z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly(),
   parameters: immutableJsonObjectSchema, acceptance: criterionAcceptanceSchema.optional(),

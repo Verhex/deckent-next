@@ -1,9 +1,9 @@
-import { persistedInteger, persistedUrl, nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, promptFramingAllowanceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, promptFramingAllowanceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
 import { z } from 'zod';
 import asset from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
 
 
-const argument = z.string().min(1).refine(value => !value.includes('\0'));
+const argument = persistedString(z.string().min(1)).refine(value => !value.includes('\0'));
 const flag = z.string().regex(/^--[a-z][a-z-]*$/);
 const argumentsSchema = z.array(argument).readonly();
 export const nativeCliCapabilitiesSchema = z.strictObject({

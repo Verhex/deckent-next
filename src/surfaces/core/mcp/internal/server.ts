@@ -1,4 +1,4 @@
-import { toInputJsonSchema, persistedInteger, INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit, PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
+import { persistedString, toInputJsonSchema, persistedInteger, INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit, PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { hubToolDefinitions } from './hub-tools.js';
 import type { HubOperationHandler } from '#engine/index.js';
 import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList, runProposalQuerySchema, type RunProposalQuery, approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection, quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView, decisionQuerySchema, type DecisionQuery, type DecisionInspection, memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus, modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
@@ -311,7 +311,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (cancelInvocation) definitions.push({ readOnly: false, destructive: true, idempotent: false, openWorld: false, name: 'cancel_model_invocation',
     description: t('mcp.tool.cancelModelInvocation', {}, locale), schema: modelInvocationCancellationCommandSchema, modelDelivery: true,
     invoke: (input, delivery) => cancelInvocation.call(applications, modelInvocationCancellationCommandSchema.parse(input), delivery) });
-  const inferenceInput = z.strictObject({ profileId: z.string().min(1).optional() });
+  const inferenceInput = z.strictObject({ profileId: persistedString(z.string().min(1)).optional() });
   const inferencePlan = applications.inferencePlan;
   if (inferencePlan) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inference_plan',
     description: t('mcp.tool.inferencePlan', {}, locale), schema: inferenceInput,

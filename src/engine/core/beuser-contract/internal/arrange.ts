@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema as id } from '#domain/index.js';
+import { persistedString, persistedInteger, identitySchema as id } from '#domain/index.js';
 import { z } from 'zod';
 import asset from '../../../../../assets/beuser/arrange.json' with { type: 'json' };
 
@@ -23,7 +23,7 @@ const common = { id, version: bound, readback };
 /** Exact product CLI tuple with structured output: no shell, prompt, free text or control characters. */
 const cliStep = z.strictObject({ kind: z.literal('cli'), ...common, cwd: realmPath.optional(), args: z.array(z.string().regex(text)).min(1).readonly(), timeoutMs: bound });
 /** Fixture file inside the realm: written when `content` is given, then set to `mode`; never through a symlink or outside the work target. */
-const fileStep = z.strictObject({ kind: z.literal('file'), ...common, path: realmPath, mode, content: z.string().max(4096).optional(),
+const fileStep = z.strictObject({ kind: z.literal('file'), ...common, path: realmPath, mode, content: persistedString(z.string().max(4096)).optional(),
   timeoutMs: bound });
 /** Git fixture: a fixed subcommand set. The wrapper owns identity and config, so no option may redirect the repository, config or helpers. */
 const gitArg = z.string().regex(text).refine(arg => !/^(-c|-C|--(git-dir|work-tree|exec-path|config-env|namespace|upload-pack|receive-pack|template|separate-git-dir))(=|$)/u.test(arg));

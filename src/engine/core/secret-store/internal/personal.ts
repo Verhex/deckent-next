@@ -1,7 +1,7 @@
-import { persistedInteger, persistedUuid } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUuid } from '#domain/index.js';
 import { z } from 'zod';
 
-const text = z.string().min(1).max(256), counter = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const text = persistedString(z.string().min(1).max(256)), counter = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const personalCustodyOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
   principal: z.strictObject({ issuer: text, subject: text }).readonly() }).readonly();
 export type PersonalCustodyOwner = z.infer<typeof personalCustodyOwnerSchema>;

@@ -1,4 +1,4 @@
-import { persistedInteger } from '#platform/index.js';
+import { persistedString, persistedInteger } from '#platform/index.js';
 import type { Readable, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
@@ -34,7 +34,7 @@ export interface SurfaceBounds {
 }
 const replySchema = z.strictObject({ id: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), data: z.string(),
   state: z.enum(['ready', 'eof', 'secret', 'unavailable', 'invalid', 'limit', 'timeout']),
-  terminalExchange: z.array(z.strictObject({ query: z.enum(['osc11', 'da1']), request: z.string().max(32), response: z.string().max(80).nullable(), atMs: persistedInteger().min(0) })).optional(),
+  terminalExchange: z.array(z.strictObject({ query: z.enum(['osc11', 'da1']), request: persistedString(z.string().max(32)), response: persistedString(z.string().max(80)).nullable(), atMs: persistedInteger().min(0) })).optional(),
   exitCode: persistedInteger().nullable(), columns: persistedInteger().positive(), rows: persistedInteger().positive() });
 type DriverReply = z.infer<typeof replySchema>;
 

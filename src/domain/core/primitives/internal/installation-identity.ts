@@ -1,14 +1,14 @@
-import { persistedDateTime, persistedUuid } from './persisted-schema.js';
+import { persistedString, persistedDateTime, persistedUuid } from './persisted-schema.js';
 import { z } from 'zod';
 /** Durable installation metadata; neither a host/path fingerprint nor an authorization grant. */
 export const installationIdSchema = persistedUuid().brand<'InstallationId'>();
 export type InstallationId = z.infer<typeof installationIdSchema>;
-const realmSealSchema = z.strictObject({ schemaVersion: z.literal(1), fixture: z.literal('realm-sealed'), realmId: z.string().min(1), nonce: persistedUuid(),
+const realmSealSchema = z.strictObject({ schemaVersion: z.literal(1), fixture: z.literal('realm-sealed'), realmId: persistedString(z.string().min(1)), nonce: persistedUuid(),
   bindingDigest: z.string().regex(/^[a-f0-9]{64}$/u) }).readonly();
 export const installationIdentitySchema = z.strictObject({ schemaVersion: z.literal(1), installationId: installationIdSchema, realmSeal: realmSealSchema.optional() }).readonly();
 export type InstallationIdentity = z.infer<typeof installationIdentitySchema>;
 
-const bindingLocation = { canonicalRoot: z.string().min(1), device: z.string().regex(/^\d+$/), inode: z.string().regex(/^[1-9]\d*$/) };
+const bindingLocation = { canonicalRoot: persistedString(z.string().min(1)), device: z.string().regex(/^\d+$/), inode: z.string().regex(/^[1-9]\d*$/) };
 const machineDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 /** Local relocation evidence, never an authorization credential. The machine value is app-specific (keyed digest, never raw). */
 const legacyInstallationBindingSchema = z.strictObject({ schemaVersion: z.literal(1), machineDigest: machineDigestSchema, ...bindingLocation }).readonly();
@@ -41,7 +41,7 @@ export const installationIdentityChoiceSchema = z.enum(['keep', 'new']);
 export type InstallationIdentityChoice = z.infer<typeof installationIdentityChoiceSchema>;
 export const installationIdentityResolutionSchema = z.strictObject({
   schemaVersion: z.literal(1), choice: installationIdentityChoiceSchema, previousInstallationId: installationIdSchema, installationId: installationIdSchema,
-  at: persistedDateTime(), principal: z.strictObject({ issuer: z.string().min(1), subject: z.string().min(1) }).readonly(),
+  at: persistedDateTime(), principal: z.strictObject({ issuer: persistedString(z.string().min(1)), subject: persistedString(z.string().min(1)) }).readonly(),
 }).readonly();
 export type InstallationIdentityResolution = z.infer<typeof installationIdentityResolutionSchema>;
 export const boundInstallationIdentitySchema = z.strictObject({ schemaVersion: z.literal(2), installationId: installationIdSchema,

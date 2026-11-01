@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUuid } from '#platform/index.js';
+import { persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
 import { lstat, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -11,7 +11,7 @@ import { retainBeuserJson } from './records.js';
 const fields = { bindingDigest: z.string(), incarnation: persistedUuid(), containerId: z.string(),
   pid: persistedInteger().positive(), start: z.string().regex(/^\d+$/u), cgroup: z.string() };
 const snapshotSchema = z.union([
-  z.strictObject({ ...fields, schemaVersion: z.literal(2), mergedRoot: z.string().nullable(), daemonId: z.string().min(1).nullable(),
+  z.strictObject({ ...fields, schemaVersion: z.literal(2), mergedRoot: z.string().nullable(), daemonId: persistedString(z.string().min(1)).nullable(),
     namespaces: z.record(z.string(), z.string()) }),
   z.strictObject({ ...fields, mergedRoot: z.string() }),
 ]);

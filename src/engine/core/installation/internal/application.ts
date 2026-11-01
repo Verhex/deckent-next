@@ -1,4 +1,4 @@
-import { persistedInteger, evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema, type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
+import { persistedString, persistedInteger, evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema, type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ExecutionPool } from '#engine/core/runs/index.js';
@@ -28,8 +28,8 @@ const neededConfigSchema = z.looseObject({
 const resolvedPathsSchema = z.strictObject({
   config: immutableJsonObjectSchema,
   layout: z.strictObject({ schemaVersion: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), revision: identitySchema,
-    root: z.string().min(1), bootstrapConfigPath: z.string().min(1) }).readonly(),
-  paths: z.record(z.string(), z.string().min(1)).readonly(),
+    root: persistedString(z.string().min(1)), bootstrapConfigPath: persistedString(z.string().min(1)) }).readonly(),
+  paths: z.record(z.string(), persistedString(z.string().min(1))).readonly(),
 }).readonly();
 
 export interface InstallationPreviewPorts {

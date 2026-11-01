@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto';
 import { dirname, isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { SupervisorError } from '#engine/index.js';
-import { identitySchema } from '#domain/index.js';
+import { persistedString, identitySchema } from '#domain/index.js';
 
-const path = z.string().min(1).refine(value => isAbsolute(value) && !value.includes(String.fromCharCode(0)) && !/[,\r\n]/u.test(value));
+const path = persistedString(z.string().min(1)).refine(value => isAbsolute(value) && !value.includes(String.fromCharCode(0)) && !/[,\r\n]/u.test(value));
 /** Ephemeral capability references only. No credential bytes in custody or task profiles. */
 export const dockerConnectionSchema = z.strictObject({ schemaVersion: z.literal(1), socketPath: path, bootstrapPath: path,
   capabilityPath: path.optional(), // absent only in historical custody; a fresh launch refuses it below

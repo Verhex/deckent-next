@@ -103,4 +103,4 @@ export { unifiedDiff } from '#platform/core/common/index.js';
 
 export { workerImageConsentSchema, type WorkerImageConsent } from '#platform/core/config-fields/index.js';
 export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/core/common/index.js';
-export { persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode, toInputJsonSchema } from '#platform/core/validate/index.js';
+export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode, toInputJsonSchema } from '#platform/core/validate/index.js';

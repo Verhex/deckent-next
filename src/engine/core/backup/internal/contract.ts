@@ -1,8 +1,9 @@
+import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
 import type { AuditEvent, VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
-const path = z.string().min(1).max(4096).refine(value => Array.from(value).every(char => char.charCodeAt(0) > 31));
-const common = { schemaVersion: z.literal(1), scopeId: z.string().min(1).max(256), set: path };
+const path = persistedString(z.string().min(1).max(4096)).refine(value => Array.from(value).every(char => char.charCodeAt(0) > 31));
+const common = { schemaVersion: z.literal(1), scopeId: persistedString(z.string().min(1).max(256)), set: path };
 /** Passphrases are a separate credential argument, never part of a command, decision, receipt or audit event. */
 export const backupCommandSchema = z.discriminatedUnion('action', [
   z.strictObject({ ...common, action: z.literal('create') }),

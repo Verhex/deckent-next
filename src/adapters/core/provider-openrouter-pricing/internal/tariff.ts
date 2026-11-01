@@ -1,4 +1,4 @@
-import { persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
+import { persistedString, persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { maxRate } from './decimal.js';
@@ -7,7 +7,7 @@ import { OpenRouterPricingError } from './error.js';
 import PRIVACY_LIMITS from './privacy-limits.json' with { type: 'json' };
 export const OPENROUTER_TARIFF_VERSION = 2 as const;
 const boundedMetadata = createImmutableJsonObjectSchema({ maxDepth: 16, maxNodes: 65_536, maxCodeUnits: 1_048_576 });
-const identity = z.string().min(1).max(1024), integer = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const identity = persistedString(z.string().min(1).max(1024)), integer = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const selectionSchema = z.strictObject({ modelId: identity, endpointTag: identity,
   fetchedAtMs: integer, expiresAtMs: integer });
 const endpointSchema = z.looseObject({ model_id: identity, tag: identity, provider_name: identity,

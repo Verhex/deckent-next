@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl } from '#domain/index.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
@@ -17,14 +17,14 @@ const secretNameSchema = z.string().regex(SECRET_NAME);
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 /** A route path stays on the connection's origin (security review M4): one leading `/`, non-empty segments of unreserved characters that never
  * start with `.` — so no `//` authority, scheme, `.`/`..` segment, percent-encoding, backslash, query or fragment can move a keyed request. */
-const routePathSchema = z.string().max(128).regex(/^(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$/u);
+const routePathSchema = persistedString(z.string().max(128)).regex(/^(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$/u);
 /** One model's Responses wire route (path under the endpoint, documented dialect, source). The registry's shipped rows and (M4) a registered
  * catalog row's `connect.route` (the model id then comes from the row) are parsed by this one schema. */
-export const providerProtocolRouteSchema = z.strictObject({ modelId: z.string().min(1), path: routePathSchema,
+export const providerProtocolRouteSchema = z.strictObject({ modelId: persistedString(z.string().min(1)), path: routePathSchema,
   dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
   source: z.strictObject({ url: persistedUrl().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }) });
 /** One metadata-priced model's verified first-party endpoint tag and token field (shipped rows and, M4, a catalog row's `connect.route`). */
-export const providerMetadataRouteSchema = z.strictObject({ modelId: z.string().min(1), endpointTag: z.string().min(1),
+export const providerMetadataRouteSchema = z.strictObject({ modelId: persistedString(z.string().min(1)), endpointTag: persistedString(z.string().min(1)),
   tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: persistedUrl().startsWith('https:'),
   observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) });
 const kindSchema = z.strictObject({
@@ -40,8 +40,8 @@ const kindSchema = z.strictObject({
     choices: z.array(z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u), labelKey: z.string().regex(/^tui\.provider\.endpoint\.choice\.[A-Za-z]+$/u),
       // Every listed address passes the same rule as a typed one (https, or plain http only to this machine).
       url: persistedUrl().refine(url => providerEndpoint(url).ok) }).readonly()).readonly().prefault([]) }),
-  probe: z.strictObject({ path: z.string().startsWith('/').max(128), auth: z.discriminatedUnion('type', [z.strictObject({ type: z.literal('bearer') }),
-    z.strictObject({ type: z.literal('header'), name: header })]), headers: z.record(header, z.string().max(128)), listsModels: z.boolean(), page: z.strictObject({ limitParam: z.string().regex(/^[a-z_]+$/u), max: positiveLimit() }).optional() }).nullable(),
+  probe: z.strictObject({ path: persistedString(z.string().startsWith('/').max(128)), auth: z.discriminatedUnion('type', [z.strictObject({ type: z.literal('bearer') }),
+    z.strictObject({ type: z.literal('header'), name: header })]), headers: z.record(header, persistedString(z.string().max(128))), listsModels: z.boolean(), page: z.strictObject({ limitParam: z.string().regex(/^[a-z_]+$/u), max: positiveLimit() }).optional() }).nullable(),
   /** The secret-store name of the key: fixed per vendor row, or (the generic row, Jev da5312fb) derived per connection from the endpoint's host. */
   key: z.strictObject({ required: z.boolean(), secretName: secretNameSchema.nullable(),
     derive: z.strictObject({ from: z.literal('endpoint-host'), prefix: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}_$/u) }).optional() })
@@ -51,7 +51,7 @@ const kindSchema = z.strictObject({
   connect: z.strictObject({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
     /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
      * adapter connects only where its isolation realm is usable, on every installation alike. */
-    catalogOnly: z.boolean().prefault(false), protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().prefault(false),
+    catalogOnly: z.boolean().prefault(false), protocolFamily: persistedString(z.string().min(1).max(64)).optional(), personOnly: z.boolean().prefault(false),
     /** Codex headless (owner 2026-10-31): a worker CLI kind that also writes a headless invocation profile per connected model (its CLI registry entry
      * declares the headless step for `protocolFamily`); the worker image gate and worker activation stay as they are. */
     headless: z.boolean().prefault(false),
@@ -70,7 +70,7 @@ const kindSchema = z.strictObject({
     dialect: openAiChatDialectSchema.optional(),
     rejectionCodes: z.record(z.string(), z.enum(['spend-limit', 'rate-limit'])).optional(),
     workspaceList: z.strictObject({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit(),
-      requiredError: z.strictObject({ type: z.string().min(1), messagePrefix: z.string().min(1) }) }).optional(),
+      requiredError: z.strictObject({ type: persistedString(z.string().min(1)), messagePrefix: persistedString(z.string().min(1)) }) }).optional(),
     /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
     protocolRoutes: z.array(providerProtocolRouteSchema)
       .min(1).refine(rows => new Set(rows.map(row => row.modelId)).size === rows.length).readonly().optional(),
@@ -95,7 +95,7 @@ const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(
 const registrySchema = z.strictObject({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).transform(() => 4 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.strictObject({ timeoutMs: positive, bodyPrefixBytes: positive,
     modelListBytes: positive.prefault(asset.limits.modelListBytes), modelListCount: positive.prefault(asset.limits.modelListCount) }),
-  toolRejection: z.strictObject({ parameters: z.array(z.string().min(1)).min(1), messagePatterns: z.array(z.string().min(1)).min(1), note: z.string(),
+  toolRejection: z.strictObject({ parameters: z.array(persistedString(z.string().min(1))).min(1), messagePatterns: z.array(persistedString(z.string().min(1))).min(1), note: z.string(),
     sources: z.array(z.strictObject({ url: persistedUrl().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) })).min(1) }).prefault(asset.toolRejection),
   /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
   legacyKeys: z.array(z.strictObject({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) })).max(16).readonly().prefault([]),

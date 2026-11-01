@@ -1,4 +1,4 @@
-import { persistedInteger, beuserWalkerSummarySchema, beuserBindingSchema, type BeuserBinding, type BeuserWalkerSummary, type BeuserTranscriptEntry, type BeuserVerdict, sameAttemptIdentity, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, type VerifiedPrincipal, aiAuthorityFloor } from '#domain/index.js';
+import { persistedString, persistedInteger, beuserWalkerSummarySchema, beuserBindingSchema, type BeuserBinding, type BeuserWalkerSummary, type BeuserTranscriptEntry, type BeuserVerdict, sameAttemptIdentity, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, type VerifiedPrincipal, aiAuthorityFloor } from '#domain/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/index.js';
 import { z } from 'zod';
 import type { AuditEvent } from '#domain/index.js';
@@ -19,7 +19,7 @@ export interface BeuserContext { readonly binding: BeuserBinding; readonly princ
 /** Wire ingress may select only an already admitted binding and action; no principal, path or verdict. */
 export const beuserSurfaceCommandSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
   action: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('look') }),
-    z.strictObject({ kind: z.literal('type'), text: z.string() }), z.strictObject({ kind: z.literal('press'), key: z.string().min(1) }),
+    z.strictObject({ kind: z.literal('type'), text: z.string() }), z.strictObject({ kind: z.literal('press'), key: persistedString(z.string().min(1)) }),
     z.strictObject({ kind: z.literal('wait'), ms: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })]),
 }).readonly();
 export type BeuserSurfaceCommand = z.infer<typeof beuserSurfaceCommandSchema>;

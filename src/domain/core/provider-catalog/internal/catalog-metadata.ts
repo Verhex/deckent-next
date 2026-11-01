@@ -1,12 +1,12 @@
-import { persistedDateTime, persistedInteger, persistedUrl, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedDateTime, persistedInteger, persistedUrl, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { exactModelIdSchema as exact, daySchema as day, cliVersionSchema as version, REASONING_EFFORTS, NATIVE_CLI_CHANNELS, CATALOG_BILLING_KINDS, CATALOG_PRICING_KINDS } from './catalog-values.js';
 
 
 // Metadata is channel evidence, never activation or an API-to-CLI capability inference. Kept independent of document parsing.
-const text = z.string().trim().min(1).max(512);
+const text = persistedString(z.string().trim().min(1).max(512));
 const effort = z.enum(REASONING_EFFORTS);
-export const catalogProvenanceSchema = z.strictObject({ sourceUrl: persistedUrl().startsWith('https://').max(512).optional(),
+export const catalogProvenanceSchema = z.strictObject({ sourceUrl: persistedString(persistedUrl().startsWith('https://').max(512)).optional(),
   localPath: text.optional(), fetchedOn: z.union([day, persistedDateTime({ offset: true })]), etag: text.optional(), clientVersion: version.optional(),
 }).refine(p => (p.sourceUrl !== undefined) !== (p.localPath !== undefined)).readonly();
 export const channelMetadataSchema = z.object({ client: z.enum(NATIVE_CLI_CHANNELS).nullable(),
@@ -15,17 +15,17 @@ export const channelMetadataSchema = z.object({ client: z.enum(NATIVE_CLI_CHANNE
 /** A model name exactly as one native CLI version reports it at session start (Cursor `system/init.model`), with where it was observed. It is
  * evidence for the `session-start-name` capability, compared byte-for-byte; it is not the UI `displayName` and never resolves an alias. */
 /** At most 128 characters: a sealed `model.verification` event records the reported name in `observed`/`unexpected` (text(128)). */
-export const reportedModelNameSchema = z.string().min(1).max(128).refine(value => value.trim() === value
+export const reportedModelNameSchema = persistedString(z.string().min(1).max(128)).refine(value => value.trim() === value
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 /** The bounded set of session-start names one channel may record (all models together); a frozen pin carries a subset of it. */
 export const channelReportedNamesSchema = z.array(reportedModelNameSchema).max(512).readonly();
-const reportedNameSchema = z.strictObject({ name: reportedModelNameSchema, cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
+const reportedNameSchema = z.strictObject({ name: reportedModelNameSchema, cliVersion: persistedString(z.string().trim().min(1).max(128)).regex(/^[\w .()+-]+$/),
   source: text, observedAt: z.union([day, persistedDateTime({ offset: true })]) }).readonly();
 const support = z.enum(['supported', 'unsupported', 'unknown']);
 const connectTermSchema = z.record(z.string(), z.unknown().optional()).refine(term => Object.keys(term).length > 0).readonly();
-const decimal = z.string().regex(/^(0|[1-9]\d*)(\.\d+)?$/).max(64);
+const decimal = persistedString(z.string().regex(/^(0|[1-9]\d*)(\.\d+)?$/).max(64));
 export const modelMetadataSchema = z.object({ channelModelId: exact, vendorId: identitySchema, canonicalModelId: exact,
-  displayName: text, description: z.string().max(4096).optional(), family: identitySchema.optional(),
+  displayName: text, description: persistedString(z.string().max(4096)).optional(), family: identitySchema.optional(),
   modalities: z.strictObject({ input: z.array(identitySchema).max(32).readonly(), output: z.array(identitySchema).max(32).readonly() }).readonly(),
   contextWindow: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), maxOutputTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
   reasoning: z.strictObject({ supportedEfforts: z.array(effort).max(REASONING_EFFORTS.length).readonly(), defaultEffort: effort.nullable() }).readonly(),
@@ -54,4 +54,4 @@ export type CatalogTariffLookup = (seal: CatalogTariffSeal, modelId: string, sco
  * sends (identity, plugin and turn framing, hidden instructions). A prompt estimate is the UTF-8 bytes sent plus `tokens`; `measured` cites a retained
  * observation in `source`, `unmeasured` states a conservative value without one. Registry data of each such transport; never a count or a proven bound. */
 export const promptFramingAllowanceSchema = z.strictObject({ tokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), basis: z.enum(['measured', 'unmeasured']),
-  source: z.string().min(1).max(1024) }).readonly();
+  source: persistedString(z.string().min(1).max(1024)) }).readonly();

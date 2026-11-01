@@ -1,4 +1,4 @@
-import { persistedUrl } from '#domain/index.js';
+import { persistedString, persistedUrl } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { z } from 'zod';
 
@@ -16,9 +16,9 @@ const installer = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('npm'), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/u) }),
   z.strictObject({ kind: z.literal('vendor-script'), url: persistedUrl(), home: z.string().regex(/^\/opt\/[a-z0-9][\w.-]{0,63}$/u), bin: z.array(z.string().regex(/^[a-z0-9][\w.-]{0,63}$/u)).nonempty() }),
 ]);
-export const layeredWorkerRecipeSchema = z.strictObject({ schemaVersion: z.literal(3), repository: z.string().min(1), baseRepository: z.string().min(1),
+export const layeredWorkerRecipeSchema = z.strictObject({ schemaVersion: z.literal(3), repository: persistedString(z.string().min(1)), baseRepository: persistedString(z.string().min(1)),
   imageVersion: version, previousVersion: version.nullable(), npmRegistry: persistedUrl(),
-  base: z.strictObject({ image: z.string().min(1), apt: z.array(z.string().regex(/^[a-z0-9][a-z0-9+.-]*$/u)).nonempty() }),
+  base: z.strictObject({ image: persistedString(z.string().min(1)), apt: z.array(z.string().regex(/^[a-z0-9][a-z0-9+.-]*$/u)).nonempty() }),
   providers: z.array(z.strictObject({ id, installer, command: z.string().regex(/^[a-z0-9][\w.-]{0,63}$/u), helpArgs: z.array(z.string()), requiredFlags: z.array(z.string()) })).nonempty(),
 });
 export type LayeredWorkerRecipe = z.infer<typeof layeredWorkerRecipeSchema>;

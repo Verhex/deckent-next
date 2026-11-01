@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import wireLimits from './catalog-wire-limits.json' with { type: 'json' };
-import { counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues,
+import { persistedString, counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues,
   type ValidationIssue } from '#domain/core/primitives/index.js';
 
 export const PROVIDER_CATALOG_SCHEMA_VERSION = 1;
@@ -11,7 +11,7 @@ export const PROVIDER_CATALOG_WIRE_LIMITS = Object.freeze({
 });
 export const NATIVE_MODEL_ID_MAX_LENGTH = 1024;
 
-const nativeIdSchema = z.string().min(1).max(NATIVE_MODEL_ID_MAX_LENGTH).refine(value => value.trim() === value &&
+const nativeIdSchema = persistedString(z.string().min(1).max(NATIVE_MODEL_ID_MAX_LENGTH)).refine(value => value.trim() === value &&
   ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 const capabilitySchema = z.strictObject({
   id: identitySchema,

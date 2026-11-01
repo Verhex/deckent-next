@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { z } from 'zod';
-import { RegistryError } from '#domain/index.js';
+import { persistedString, RegistryError } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, DeckentError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
   registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, withConfigWriteLock, writeConfig, type Environment } from '#platform/index.js';
 import { assertPublicSecretName, CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
@@ -15,7 +15,7 @@ import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecre
  * backend (the behaviour before SECRET-K1). `store` has no schema default on purpose: the section stays absent from the default config, so
  * a healed or default-filled project file can never carry a selection that would override the installation's choice.
  */
-export const secretsConfigSchema = z.strictObject({ store: z.string().max(128).regex(SECRET_STORE_ID_PATTERN) });
+export const secretsConfigSchema = z.strictObject({ store: persistedString(z.string().max(128)).regex(SECRET_STORE_ID_PATTERN) });
 export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
 
 // Core backends at construction; Enterprise/custom backends register before the section is registered (then the registry is sealed).

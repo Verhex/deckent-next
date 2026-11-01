@@ -1,10 +1,10 @@
-import { persistedInteger, persistedUrl } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl } from '#domain/index.js';
 import { z } from 'zod';
 import models from './models.json' with { type: 'json' };
 
 const https = persistedUrl().startsWith('https://');
-const level = z.string().min(1);
-const capabilitySchema = z.strictObject({ get modelId() { return z.string().min(1).max(256); },
+const level = persistedString(z.string().min(1));
+const capabilitySchema = z.strictObject({ get modelId() { return persistedString(z.string().min(1).max(256)); },
   get thinking() { return z.strictObject({ adaptive: z.boolean(), enabled: z.boolean(), off: z.enum(['disabled', 'between_tools']).nullable(), offMaxEffort: level.optional() }); },
   get effort() { return z.strictObject({ levels: z.array(level).min(1), default: level }).nullable(); },
   get maxOutputTokens() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, source: https })

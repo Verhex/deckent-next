@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl, openAiChatDialectSchema, type OpenAiChatDialect, parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest, OpenAiChatHttpError as ProtocolHttpError, wellFormedModelJson, type JsonObject } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, openAiChatDialectSchema, type OpenAiChatDialect, parseOpenAiChatProtocolRequest, openAiChatWireObjectSchema as protocolWireObjectSchema, type OpenAiChatTextRequest as ProtocolTextRequest, OpenAiChatHttpError as ProtocolHttpError, wellFormedModelJson, type JsonObject } from '#domain/index.js';
 
 export { openAiChatDialectSchema, OPENAI_CHAT_DEFAULT_DIALECT, type OpenAiChatDialect } from '#domain/index.js';
 import { nativeJsonHttpCertificateSchema as certificate } from '#adapters/core/provider-http-json/index.js';
@@ -30,7 +30,7 @@ export type OpenAiChatHttpAuthentication = Readonly<{ type: 'none' } | { type: '
 export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1 | 2; currency: string;
   inputMinorUnitsPerMillionTokens: number | string; outputMinorUnitsPerMillionTokens: number | string; cachedInputMinorUnitsPerMillionTokens?: number | string }>;
 export const openRouterEndpointTariffSchema = z.strictObject({ kind: z.literal('openrouter-endpoint'), version: z.literal(1), currency: z.literal('USD'),
-  metadataEndpoint: persistedUrl(), endpointTag: z.string().min(1).max(1024),
+  metadataEndpoint: persistedUrl(), endpointTag: persistedString(z.string().min(1).max(1024)),
   metadataLimits: z.strictObject({ maxAgeMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxResponseBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
     timeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
 export type OpenRouterEndpointTariff = z.infer<typeof openRouterEndpointTariffSchema>;
@@ -43,16 +43,16 @@ export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonOb
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const credentialReference = z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/);
 // Whole cents stay numeric; fractional cents are decimal strings, never binary floating point.
-const operatorRate = positive.or(z.literal(0)).or(z.string().max(32).regex(/^(0|[1-9]\d*)(\.\d{1,2})?$/));
+const operatorRate = positive.or(z.literal(0)).or(persistedString(z.string().max(32)).regex(/^(0|[1-9]\d*)(\.\d{1,2})?$/));
 const tariffSchema = z.union([z.strictObject({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
   inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) }),
   z.strictObject({ kind: z.literal('operator-static'), version: z.literal(2), currency: z.literal('USD'),
     inputMinorUnitsPerMillionTokens: operatorRate, outputMinorUnitsPerMillionTokens: operatorRate,
     cachedInputMinorUnitsPerMillionTokens: operatorRate }), openAiCompatiblePublishedTariffSchema, openRouterEndpointTariffSchema]);
-const definitionSchema = z.strictObject({ endpoint: z.string().min(1), maxOutputTokens: positive, dialect: openAiChatDialectSchema.optional(),
+const definitionSchema = z.strictObject({ endpoint: persistedString(z.string().min(1)), maxOutputTokens: positive, dialect: openAiChatDialectSchema.optional(),
   authentication: z.discriminatedUnion('type', [z.strictObject({ type: z.literal('none') }),
     z.strictObject({ type: z.literal('bearer'), credentialRef: credentialReference })]),
-  tls: z.strictObject({ caPem: certificate }).optional(), tariff: tariffSchema, tokenizeEndpoint: z.string().min(1).optional() });
+  tls: z.strictObject({ caPem: certificate }).optional(), tariff: tariffSchema, tokenizeEndpoint: persistedString(z.string().min(1)).optional() });
 
 export const openAiChatFinishReasonSchema = z.enum(['stop', 'length', 'content_filter', 'tool_calls']);
 export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDefinition {

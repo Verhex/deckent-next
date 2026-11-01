@@ -1,4 +1,4 @@
-import { persistedInteger } from '#domain/index.js';
+import { persistedString, persistedInteger } from '#domain/index.js';
 import { DECKENT_DIR, type KnownSecretSnapshot } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
@@ -30,17 +30,17 @@ const headerValue = (text: string) => [...text].every(char => { const code = cha
 /** A remote server over Streamable HTTP (MCP 2026-07-28; the SDK falls back to the 2025-11-25 shape): no local process, so no realm or env. */
 const httpEntryFields = z.object({
   type: z.literal('http'),
-  url: z.string().min(1).max(4_096).refine(mcpLaunchTextValid),
-  headers: z.record(z.string().regex(HEADER_NAME), z.string().max(8_192).refine(headerValue)).refine(headers => Object.keys(headers).length <= 64, 'MCP_HEADERS_TOO_MANY').optional(),
+  url: persistedString(z.string().min(1).max(4_096)).refine(mcpLaunchTextValid),
+  headers: z.record(z.string().regex(HEADER_NAME), persistedString(z.string().max(8_192)).refine(headerValue)).refine(headers => Object.keys(headers).length <= 64, 'MCP_HEADERS_TOO_MANY').optional(),
 });
 /** One server as a registry file declares it: stdio (`type` absent or `stdio`; Claude-compatible shape, `realm` and `timeoutMs` are Deckent's) or
  * Streamable HTTP (`type: http`, the same `timeoutMs`). SSE and WebSocket are not transports of this client (SSE is deprecated since 2025-03-26;
  * neither is a standard transport of 2026-07-28). */
 export const mcpServerEntrySchema = (stdio => z.union([stdio, httpEntryFields.extend({ timeoutMs: stdio.shape.timeoutMs }).strict()]))(z.strictObject({
   type: z.literal('stdio').optional(),
-  command: z.string().min(1).max(4_096).refine(mcpLaunchTextValid),
-  args: z.array(z.string().max(4_096).refine(mcpLaunchTextValid)).max(64).optional(),
-  env: z.record(z.string().regex(ENV_NAME), z.string().max(4_096)).refine(env => Object.keys(env).length <= 64, 'MCP_ENV_TOO_MANY').optional(),
+  command: persistedString(z.string().min(1).max(4_096)).refine(mcpLaunchTextValid),
+  args: z.array(persistedString(z.string().max(4_096)).refine(mcpLaunchTextValid)).max(64).optional(),
+  env: z.record(z.string().regex(ENV_NAME), persistedString(z.string().max(4_096))).refine(env => Object.keys(env).length <= 64, 'MCP_ENV_TOO_MANY').optional(),
   realm: z.enum(['sandbox-net', 'require-sandbox', 'prefer-sandbox', 'host']).optional(),
   timeoutMs: persistedInteger().min(1_000).max(3_600_000).optional(),
 }));

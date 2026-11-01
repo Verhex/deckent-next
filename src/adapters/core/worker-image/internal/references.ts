@@ -1,4 +1,4 @@
-import { persistedDateTime } from '#platform/index.js';
+import { persistedString, persistedDateTime } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, opendir, realpath } from 'node:fs/promises';
@@ -10,8 +10,8 @@ import limits from './limits.json' with { type: 'json' };
 const PRIVATE_PERMISSION_MASK = 0o077;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
-const leaseSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: z.string().min(1), imageId, kind: z.enum(['build', 'adopt']), at: persistedDateTime() });
-const participationSchema = z.strictObject({ schemaVersion: z.literal(1), daemonId: z.string().min(1), since: persistedDateTime() });
+const leaseSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: persistedString(z.string().min(1)), imageId, kind: z.enum(['build', 'adopt']), at: persistedDateTime() });
+const participationSchema = z.strictObject({ schemaVersion: z.literal(1), daemonId: persistedString(z.string().min(1)), since: persistedDateTime() });
 type Lease = z.infer<typeof leaseSchema>;
 
 /** Called only inside the daemon's builder custody (the same lock image removal holds): one lease per installation and image it built

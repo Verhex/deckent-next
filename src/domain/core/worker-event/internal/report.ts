@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import registry from './report-limits.json' with { type: 'json' };
 
@@ -7,21 +8,21 @@ export type WorkerReportLimits = typeof workerReportLimits;
 const limits = workerReportLimits;
 /** A stopped worker requests a new attempt with human input; this never accepts work. */
 export const workerNeedsInputSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('needs-input'),
-  question: z.string().trim().min(1).max(limits.handoffOpenQuestionChars) }).readonly();
-export const workerHandoffNoteSchema = z.strictObject({ toTask: z.string().min(1).max(limits.handoffTaskIdChars).optional(),
-  summary: z.string().max(limits.handoffSummaryChars),
-  artifacts: z.array(z.strictObject({ name: z.string().min(1).max(limits.handoffArtifactNameChars), digest: z.string().regex(/^[a-f0-9]{64}$/) })).max(limits.handoffArtifacts),
-  openQuestions: z.array(z.string().max(limits.handoffOpenQuestionChars)).max(limits.handoffOpenQuestions),
+  question: persistedString(z.string().trim().min(1).max(limits.handoffOpenQuestionChars)) }).readonly();
+export const workerHandoffNoteSchema = z.strictObject({ toTask: persistedString(z.string().min(1).max(limits.handoffTaskIdChars)).optional(),
+  summary: persistedString(z.string().max(limits.handoffSummaryChars)),
+  artifacts: z.array(z.strictObject({ name: persistedString(z.string().min(1).max(limits.handoffArtifactNameChars)), digest: z.string().regex(/^[a-f0-9]{64}$/) })).max(limits.handoffArtifacts),
+  openQuestions: z.array(persistedString(z.string().max(limits.handoffOpenQuestionChars))).max(limits.handoffOpenQuestions),
 });
 export type WorkerHandoffNote = z.infer<typeof workerHandoffNoteSchema>;
 
 /** R5 (owner D5a): a check claim may carry a `checkId` and a `role`. An `acceptance` check that did not pass fails the task; an
  * `exploratory` or untyped check never does. A passed check stays a claim and never grants acceptance by itself. */
-const workerReportCheckSchema = z.strictObject({ command: z.string().max(limits.checkCommandChars), outcome: z.enum(['passed', 'failed', 'not-run', 'unknown']),
-  checkId: z.string().min(1).max(limits.checkIdChars).optional(), role: z.enum(['acceptance', 'exploratory']).optional() });
+const workerReportCheckSchema = z.strictObject({ command: persistedString(z.string().max(limits.checkCommandChars)), outcome: z.enum(['passed', 'failed', 'not-run', 'unknown']),
+  checkId: persistedString(z.string().min(1).max(limits.checkIdChars)).optional(), role: z.enum(['acceptance', 'exploratory']).optional() });
 /** S4B-2 (§4.4): one durable-lesson claim of the worker. Claims only, never verified here; a `lesson` names its cause and its correction, an
  * incomplete one is refused (never coerced). Bounds come from the report registry. */
-const lessonText = (max: number) => z.string().trim().min(1).max(max);
+const lessonText = (max: number) => persistedString(z.string().trim().min(1).max(max));
 export const workerReportLessonSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('fact'), title: lessonText(limits.lessonTitleChars), body: lessonText(limits.lessonBodyChars) }),
   z.strictObject({ kind: z.literal('lesson'), title: lessonText(limits.lessonTitleChars), body: lessonText(limits.lessonBodyChars),
@@ -29,11 +30,11 @@ export const workerReportLessonSchema = z.discriminatedUnion('kind', [
 ]);
 export type WorkerReportLesson = z.infer<typeof workerReportLessonSchema>;
 /** Claims only: this report never grants task acceptance or execution authority. The enclosing dispatch artifact seals its bytes. */
-export const workerFinalReportSchema = z.strictObject({ schemaVersion: z.literal(1), summary: z.string().max(limits.summaryChars),
-  changedFiles: z.array(z.string().max(limits.changedFileChars)).max(limits.changedFiles),
+export const workerFinalReportSchema = z.strictObject({ schemaVersion: z.literal(1), summary: persistedString(z.string().max(limits.summaryChars)),
+  changedFiles: z.array(persistedString(z.string().max(limits.changedFileChars))).max(limits.changedFiles),
   checks: z.array(workerReportCheckSchema).max(limits.checks),
-  openIssues: z.array(z.string().max(limits.openIssueChars)).max(limits.openIssues),
-  handoff: workerHandoffNoteSchema.optional(), sharedNotes: z.array(z.string().max(limits.sharedNoteChars)).max(limits.sharedNotes).optional(),
+  openIssues: z.array(persistedString(z.string().max(limits.openIssueChars))).max(limits.openIssues),
+  handoff: workerHandoffNoteSchema.optional(), sharedNotes: z.array(persistedString(z.string().max(limits.sharedNoteChars))).max(limits.sharedNotes).optional(),
   exit: workerNeedsInputSchema.optional(), lessons: z.array(workerReportLessonSchema).max(limits.lessons).optional(),
 }).refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= limits.reportBytes);
 export type WorkerFinalReport = z.infer<typeof workerFinalReportSchema>;

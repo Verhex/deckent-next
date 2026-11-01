@@ -1,17 +1,17 @@
-import { persistedInteger, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const approvalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 const renewalSchema = z.strictObject({ previousApprovalId: identitySchema, commandId: identitySchema, commandDigest: digest, actor: approvalActorSchema,
-  get reason() { return z.string().min(1).max(2048); } }).readonly();
+  get reason() { return persistedString(z.string().min(1).max(2048)); } }).readonly();
 /** Task-admission approval (v1): unchanged, so every sealed v1 record keeps verifying byte for byte. */
 const taskApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, approvalId: identitySchema,
   scopeId: identitySchema, runId: identitySchema, taskId: identitySchema, requester: approvalActorSchema,
-  actionDigest: digest, policyRevision: identitySchema, get summary() { return z.string().min(1).max(2048); },
+  actionDigest: digest, policyRevision: identitySchema, get summary() { return persistedString(z.string().min(1).max(2048)); },
   createdAt: counterSchema, expiresAt: counterSchema, get renewal() { return renewalSchema.optional(); },
 }).refine(r => r.expiresAt > r.createdAt).readonly();
 /** A bounded display copy of a config value on a card: the redacted JSON text (never a secret value); the exact value is bound by `valueDigest`. */
-const configDisplay = z.string().max(256);
+const configDisplay = persistedString(z.string().max(256));
 export const CONFIG_CHANGE_DISPLAY_MAX = configDisplay.maxLength!;
 /**
  * One config write a policy `require-approval` holds (T3 L2 CONFIG-APPROVAL, Jev 9181d2be): this command, layer and key, the value before
@@ -19,7 +19,7 @@ export const CONFIG_CHANGE_DISPLAY_MAX = configDisplay.maxLength!;
  * layer file was absent), the exact value's digest (null for `unset`) and why (the policy rule that asked). Apply re-checks the digest and the policy.
  */
 const configChangeSubjectSchema = z.strictObject({ get kind() { return z.literal('config-change'); }, commandId: identitySchema, get action() { return z.enum(['set', 'unset']); },
-  get layer() { return z.enum(['project', 'global']); }, get keyPath() { return z.string().min(1).max(512); }, before: configDisplay, get after() { return configDisplay.nullable(); },
+  get layer() { return z.enum(['project', 'global']); }, get keyPath() { return persistedString(z.string().min(1).max(512)); }, before: configDisplay, get after() { return configDisplay.nullable(); },
   get expectDigest() { return digest.nullable(); }, get valueDigest() { return digest.nullable(); }, ruleId: identitySchema });
 /** The `unset` ⇔ no value invariant of a config-change subject (a discriminated union member cannot carry a refinement). */
 export const configChangeSubjectConsistent = (subject: z.infer<typeof configChangeSubjectSchema>) =>
@@ -37,11 +37,11 @@ export const approvalSubjectSchema = z.discriminatedUnion('kind', [
     inputDigest: digest, admissionDigest: digest, decisionRecordId: identitySchema }),
   z.strictObject({ get kind() { return z.literal('task'); }, runId: identitySchema, taskId: identitySchema }),
   z.strictObject({ get kind() { return z.literal('agent-tool-call'); }, turnId: identitySchema, get round() { return counterSchema.positive(); }, index: counterSchema,
-    get tool() { return z.string().regex(/^[a-z][a-z0-9_]{1,63}$/); }, get toolVersion() { return counterSchema.positive(); }, get resource() { return z.string().min(1).max(4096); },
+    get tool() { return z.string().regex(/^[a-z][a-z0-9_]{1,63}$/); }, get toolVersion() { return counterSchema.positive(); }, get resource() { return persistedString(z.string().min(1).max(4096)); },
     argsDigest: digest }),
   z.strictObject({ get kind() { return z.literal('operation'); }, get operation() { return z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }); },
-    get target() { return z.strictObject({ kind: identitySchema, id: z.string().min(1).max(512) }); }, commandId: identitySchema, inputDigest: digest,
-    targetBinding: digest, get expectedVersion() { return z.string().min(1).max(256).nullable(); }, get compensates() { return identitySchema.nullable(); } }),
+    get target() { return z.strictObject({ kind: identitySchema, id: persistedString(z.string().min(1).max(512)) }); }, commandId: identitySchema, inputDigest: digest,
+    targetBinding: digest, get expectedVersion() { return persistedString(z.string().min(1).max(256)).nullable(); }, get compensates() { return identitySchema.nullable(); } }),
   configChangeSubjectSchema,
 ]);
 /**
@@ -66,7 +66,7 @@ export const approvalFactsSchema = z.strictObject({
   get onExpiry() { return z.literal('nothing-runs'); }, requiredAssurance: approvalAssuranceSchema,
 }).readonly();
 const requestShape = { approvalId: identitySchema, scopeId: identitySchema, subject: approvalSubjectSchema, requester: approvalActorSchema, actionDigest: digest,
-  policyRevision: identitySchema, summary: z.string().min(1).max(2048), createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional() };
+  policyRevision: identitySchema, summary: persistedString(z.string().min(1).max(2048)), createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional() };
 /** Operation-keyed approval request (v2, C12): agent tool calls and catalog operation commands; task admission keeps v1. */
 const operationApprovalRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, ...requestShape }).refine(r => r.expiresAt > r.createdAt).readonly();
 /** Card-facts approval request (v3, B1/APPROVAL-SURFACE): the v2 shape plus the producer's `facts`; v1/v2 records stay readable as written. */
@@ -82,7 +82,7 @@ export function approvalSubject(request: z.infer<typeof approvalRequestSchema>):
 export const approvalFacts = (request: z.infer<typeof approvalRequestSchema>): ApprovalFacts | null => request.schemaVersion === 3 ? request.facts : null;
 const decisionShape = { commandId: identitySchema, decision: z.enum(['allow', 'deny']), actor: approvalActorSchema, sessionId: identitySchema,
   /** The surface the client declared (a registered channel id): recorded, never an input of any authorization. */
-  channel: identitySchema, reason: z.string().min(1).max(2048).refine(v => v.trim() === v), decidedAt: counterSchema,
+  channel: identitySchema, reason: persistedString(z.string().min(1).max(2048)).refine(v => v.trim() === v), decidedAt: counterSchema,
   requestDigest: digest, commandDigest: digest, idempotencyKeyHash: digest };
 /** A decision sealed before B1 (unversioned, no assurance): read as `peer-session`, never rewritten (the MAC covers it as stored). */
 const sessionDecisionSchema = z.strictObject(decisionShape).readonly();

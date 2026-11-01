@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
 
 /**
@@ -14,7 +14,7 @@ export const MEMORY_STATES = Object.freeze(['candidate', 'verified', 'retired'] 
 export const MEMORY_KINDS = Object.freeze(['fact', 'lesson'] as const);
 export const MEMORY_ORIGINS = Object.freeze(['human', 'run', 'model', 'import'] as const);
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-const text = (max: number) => z.string().min(1).refine(value => value.trim() === value && bytes(value) <= max);
+const text = (max: number) => persistedString(z.string().min(1)).refine(value => value.trim() === value && bytes(value) <= max);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 export const memoryLessonSchema = z.strictObject({ source: text(limits.lessonFieldMaxBytes), cause: text(limits.lessonFieldMaxBytes),
@@ -51,7 +51,7 @@ export const memoryEntrySchema = z.strictObject({ schemaVersion: z.union([z.lite
   provenance: z.strictObject({ author: z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).readonly(), origin: memoryOriginSchema,
     proposedAtMs: counterSchema, commandId: identitySchema }).readonly(),
   verification: verificationSchema.nullable(),
-  retirement: z.strictObject({ by: z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).readonly(), reason: z.string().min(1),
+  retirement: z.strictObject({ by: z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).readonly(), reason: persistedString(z.string().min(1)),
     supersededBy: identitySchema.nullable(), retiredAtMs: counterSchema }).readonly().nullable(),
   updatedAtMs: counterSchema,
   /** v2 only (a v1 row has no such key and is read unchanged). */

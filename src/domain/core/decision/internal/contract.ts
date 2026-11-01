@@ -1,11 +1,11 @@
-import { persistedDateTime, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedDateTime, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 export const DECISION_SCHEMA_VERSION = 1;
 export const DECISION_ABSTENTIONS = Object.freeze(['none_of_the_above', 'insufficient_information'] as const);
 export const DECISION_CASE_PREFIX = 'deckent.decision-case.v1\n';
 export const DECISION_ADVICE_PREFIX = 'deckent.decision-advice.v1\n';
-const text = z.string().min(1);
+const text = persistedString(z.string().min(1));
 const texts = z.array(text).readonly();
 const ids = z.array(identitySchema).readonly();
 const time = persistedDateTime({ offset: true });

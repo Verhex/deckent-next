@@ -1,4 +1,4 @@
-import { persistedInteger, withConfigWriteLock } from '#platform/index.js';
+import { persistedString, persistedInteger, withConfigWriteLock } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -16,7 +16,7 @@ import { modelTextPrefix } from '#domain/index.js';
  */
 export const MCP_START_FAILURES_FILE = 'mcp-start-failures.json';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const text = (max: number) => z.string().max(max);
+const text = (max: number) => persistedString(z.string().max(max));
 const diagnosisSchema = z.union([
   z.strictObject({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: persistedInteger().min(-1).max(1_024), path: text(4_096),
     target: text(4_096).optional() }),

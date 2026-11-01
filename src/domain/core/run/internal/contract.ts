@@ -3,7 +3,7 @@ import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { runProposalBindingSchema } from './proposal.js';
 import { authorityAdmissionSchema, runSafetyHoldSourceSchema } from '#domain/core/audit/index.js';
-import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { recoveryEffectGateSchema, recoveryNoteCodeSchema } from '#domain/core/recovery/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
@@ -33,16 +33,16 @@ export type SafetyHoldSource = z.infer<typeof safetyHoldSourceSchema>;
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('running') }),
   z.strictObject({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready']),
-    failureCode: identitySchema.optional(), operatorHold: z.strictObject({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars),
+    failureCode: identitySchema.optional(), operatorHold: z.strictObject({ schemaVersion: z.literal(1), note: persistedString(z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars)),
       source: safetyHoldSourceSchema.optional() }).optional(),
-    note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), holdSource: safetyHoldSourceSchema.optional(), since: counterSchema, deadline: counterSchema }),
+    note: persistedString(z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars)).optional(), holdSource: safetyHoldSourceSchema.optional(), since: counterSchema, deadline: counterSchema }),
   z.strictObject({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }),
 ]).readonly();
 export const runSnapshotSchema = z.strictObject({ schemaVersion: z.literal(4), identity: runIdentitySchema, revision: counterSchema,
   proposal: runProposalBindingSchema.optional(),
   authority: authorityAdmissionSchema.optional(),
   state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
-  quotaWaits: z.array(z.strictObject({ identity: attemptIdentitySchema, channelId: z.string().min(1).max(256), quota: quotaExhaustedSchema,
+  quotaWaits: z.array(z.strictObject({ identity: attemptIdentitySchema, channelId: persistedString(z.string().min(1).max(256)), quota: quotaExhaustedSchema,
     evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema, resetBoundExceeded: z.boolean().optional(), releasedAtMs: counterSchema.optional(),
     /* S9: how many times a person chose to keep waiting after the ask; absent on every earlier record. */ rewaits: counterSchema.optional() }).readonly()).readonly().optional(),
   previousBindings: z.array(runBindingSchema).readonly().optional(),

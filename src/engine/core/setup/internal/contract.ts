@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema, type JsonValue } from '#domain/index.js';
+import { persistedString, persistedInteger, identitySchema, type JsonValue } from '#domain/index.js';
 import { LOCALES } from '#platform/index.js';
 import { z } from 'zod';
 
@@ -41,8 +41,8 @@ export const setupAnswersSchema = z.strictObject({ get schemaVersion() { return 
 export type SetupAnswers = z.input<typeof setupAnswersSchema>;
 
 const key = z.string().regex(/^[a-z][A-Za-z0-9_.-]{0,159}$/);
-const params = z.record(z.string(), z.union([z.string().max(512), z.number().finite()])).prefault({});
-const json: z.ZodType<JsonValue> = z.lazy(() => z.union([z.null(), z.boolean(), z.number().finite(), z.string().max(4096),
+const params = z.record(z.string(), z.union([persistedString(z.string().max(512)), z.number().finite()])).prefault({});
+const json: z.ZodType<JsonValue> = z.lazy(() => z.union([z.null(), z.boolean(), z.number().finite(), persistedString(z.string().max(4096)),
   z.array(json).max(64), z.record(z.string(), json)]));
 /** One existing owner's operation and its typed input; the setup sequences owners and never applies a state change itself. */
 export const setupOperationSchema = z.strictObject({ get id() { return z.string().regex(/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/); }, get version() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
@@ -51,7 +51,7 @@ export type SetupOperation = z.output<typeof setupOperationSchema>;
 /** What a stage evaluator decides; the planner adds identity, order and eligibility. */
 export const setupDecisionSchema = z.strictObject({ get state() { return z.enum(SETUP_STAGE_STATES); }, get reason() { return z.strictObject({ code: key, params }); },
   get operation() { return setupOperationSchema.nullable().prefault(null); }, get question() { return z.strictObject({ key, params }).nullable().prefault(null); },
-  get default() { return json.nullable().prefault(null); }, get cli() { return z.array(z.string().min(1).max(512).regex(/^\S+$/)).max(32).nullable().prefault(null); } });
+  get default() { return json.nullable().prefault(null); }, get cli() { return z.array(persistedString(z.string().min(1).max(512)).regex(/^\S+$/)).max(32).nullable().prefault(null); } });
 export type SetupDecision = z.input<typeof setupDecisionSchema>;
 export type SetupStage = Readonly<{ id: string; namespace: string; title: string; phase: SetupPhase; state: SetupStageState;
   reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }>; operation: SetupOperation | null;

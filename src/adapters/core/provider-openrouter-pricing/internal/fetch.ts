@@ -1,4 +1,4 @@
-import { persistedInteger, createImmutableJsonObjectSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, createImmutableJsonObjectSchema } from '#domain/index.js';
 import { Agent, request } from 'node:https';
 import { createHash, X509Certificate } from 'node:crypto';
 import { z } from 'zod';
@@ -8,9 +8,9 @@ import PRIVACY_LIMITS from './privacy-limits.json' with { type: 'json' };
 
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const optionsSchema = createImmutableJsonObjectSchema({ maxDepth: 4, maxNodes: 64, maxCodeUnits: 131_072 }).pipe(z.strictObject({
-  endpoint: z.string().min(1).max(4096), modelId: z.string().regex(/^[A-Za-z0-9_.:-]+\/[A-Za-z0-9_.:-]+$/),
-  endpointTag: z.string().min(1).max(1024), maxAgeMs: positive, maxResponseBytes: positive.max(1_048_576),
-  timeoutMs: positive.max(2_147_483_647), caPem: z.string().min(1).max(65_536).optional(),
+  endpoint: persistedString(z.string().min(1).max(4096)), modelId: z.string().regex(/^[A-Za-z0-9_.:-]+\/[A-Za-z0-9_.:-]+$/),
+  endpointTag: persistedString(z.string().min(1).max(1024)), maxAgeMs: positive, maxResponseBytes: positive.max(1_048_576),
+  timeoutMs: positive.max(2_147_483_647), caPem: persistedString(z.string().min(1).max(65_536)).optional(),
 }));
 export type OpenRouterMetadataFetchOptions = z.infer<typeof optionsSchema>;
 export interface OpenRouterMetadataObservation {

@@ -1,12 +1,12 @@
-import { persistedInteger, decisionAdviceSchema, type DecisionCase, type DecisionAdvice } from '#domain/index.js';
+import { persistedString, persistedInteger, decisionAdviceSchema, type DecisionCase, type DecisionAdvice } from '#domain/index.js';
 import { z } from 'zod';
 import type { ModelInvocationNativeResponse } from '#domain/index.js';
 import { DecisionHttpError, decisionHttpProtocolData, decisionHttpWireObjectSchema } from './contract.js';
 
 const probability = z.number().min(0).max(1);
-const choiceSchema = z.strictObject({ type: z.literal('choice'), choice: z.string().min(1), probabilities: z.record(z.string(), probability), confidence: probability });
+const choiceSchema = z.strictObject({ type: z.literal('choice'), choice: persistedString(z.string().min(1)), probabilities: z.record(z.string(), probability), confidence: probability });
 const noulSchema = z.strictObject({ type: z.literal('noul'), noul: probability });
-const wireSchema = z.strictObject({ model: z.string().min(1).max(1024), answers: z.record(z.string(), z.union([choiceSchema, noulSchema])),
+const wireSchema = z.strictObject({ model: persistedString(z.string().min(1).max(1024)), answers: z.record(z.string(), z.union([choiceSchema, noulSchema])),
   usage: z.strictObject({ input_tokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), output_tokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
 const sameKeys = (actual: readonly string[], expected: readonly string[]) => actual.length === expected.length && expected.every(key => actual.includes(key));
 

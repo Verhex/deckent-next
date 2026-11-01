@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema, clientCommandIdSchema, createImmutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema, clientCommandIdSchema, createImmutableJsonObjectSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationBillingAxisSchema } from '#domain/core/model-invocation/index.js';
@@ -6,7 +6,7 @@ import protocol from './brain-protocol.json' with { type: 'json' };
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Human/AI intent is a proposal request, never a Run-create authority. */
 export const brainPlanCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
-  scopeId: identitySchema, intent: z.string().trim().min(1).max(protocol.intentMaxCodeUnits).refine(value => !value.includes('\0')),
+  scopeId: identitySchema, intent: persistedString(z.string().trim().min(1).max(protocol.intentMaxCodeUnits)).refine(value => !value.includes('\0')),
   reference: modelReferenceSchema.optional(),
 }).readonly();
 export type BrainPlanCommand = z.infer<typeof brainPlanCommandSchema>;
@@ -28,7 +28,7 @@ export type BrainPlanObserver = (progress: BrainPlanProgress) => void;
 export const brainQuotaWaitRecordSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema,
   attempt: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxAttempts: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), sinceMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   resetsAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), untilMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  after: z.strictObject({ commandId: z.string().min(1).max(256), invocationId: z.string().min(1).max(256) }).readonly() }).readonly();
+  after: z.strictObject({ commandId: persistedString(z.string().min(1).max(256)), invocationId: persistedString(z.string().min(1).max(256)) }).readonly() }).readonly();
 export type BrainQuotaWaitRecord = z.infer<typeof brainQuotaWaitRecordSchema>;
 /** The port the planning application keeps the record through (adapter: a host state file per wait). */
 export interface BrainQuotaWaitStore {
@@ -40,7 +40,7 @@ const contributionShape = z.strictObject({
   template: z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest }).readonly(),
   inputDigest: digest, contextDigest: digest, outputDigest: digest, requestDigest: digest,
   activationRevision: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), bindingDigest: digest,
-  inputSummary: z.string().max(protocol.summaryMaxCodeUnits), outputSummary: z.string().max(protocol.summaryMaxCodeUnits),
+  inputSummary: persistedString(z.string().max(protocol.summaryMaxCodeUnits)), outputSummary: persistedString(z.string().max(protocol.summaryMaxCodeUnits)),
   usage: z.strictObject({ inputTokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), outputTokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
     totalTokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly().nullable(),
 }).readonly();

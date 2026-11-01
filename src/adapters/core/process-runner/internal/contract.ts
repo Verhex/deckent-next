@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUuid } from '#platform/index.js';
+import { persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 // OS argv/environment cannot represent NUL or unpaired UTF-16 surrogates losslessly.
@@ -19,7 +19,7 @@ export type ProcessCommand = z.infer<typeof processCommandSchema>;
 export const processEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), requestId: persistedUuid(), started: z.boolean(),
   // `stopped`: the v2 line consumer ended the process; `line-limit`: one stdout line exceeded the command's line bound.
   reason: z.enum(['exit', 'signal', 'timeout', 'cancelled', 'output-limit', 'start-failed', 'stopped', 'line-limit']),
-  exitCode: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), signal: scalar.pipe(z.string().min(1)).nullable(),
+  exitCode: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), signal: scalar.pipe(persistedString(z.string().min(1))).nullable(),
   stdoutBase64: base64, stderrBase64: base64, stdoutTruncated: z.boolean(), stderrTruncated: z.boolean(),
   durationMs: z.number().nonnegative().finite(),
 }).superRefine((value, context) => {

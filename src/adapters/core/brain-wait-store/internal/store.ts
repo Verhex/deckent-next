@@ -1,4 +1,4 @@
-import { persistedInteger, sha256 } from '#platform/index.js';
+import { persistedString, persistedInteger, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, readdir, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -14,7 +14,7 @@ export const brainQuotaWaitStoreLimitsSchema = z.strictObject({ maxEntries: pers
 export type BrainQuotaWaitStoreLimits = z.infer<typeof brainQuotaWaitStoreLimitsSchema>;
 export const BRAIN_QUOTA_WAIT_STORE_LIMITS: BrainQuotaWaitStoreLimits = brainQuotaWaitStoreLimitsSchema.parse(limits);
 const fileSchema = z.strictObject({ schemaVersion: z.literal(1), record: z.unknown().optional(), expiresAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  writer: z.strictObject({ pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), host: z.string().min(1).max(255) }) });
+  writer: z.strictObject({ pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), host: persistedString(z.string().min(1).max(255)) }) });
 const RECORD_FILE = /^[a-f0-9]{64}\.json$/u, TEMPORARY_FILE = /^\.[a-f0-9]{64}\.json\.[0-9a-f-]{36}\.tmp$/u;
 /** What a reader sees: the live waits (oldest first) and whether the directory held more files than the bound lets it read. */
 export type BrainQuotaWaitListing = Readonly<{ records: readonly BrainQuotaWaitRecord[]; truncated: boolean }>;

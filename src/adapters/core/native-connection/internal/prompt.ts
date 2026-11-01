@@ -1,8 +1,8 @@
-import { persistedInteger } from '#domain/index.js';
+import { persistedString, persistedInteger } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
-const text = z.string().min(1).refine(value => !value.includes('\0') && Buffer.byteLength(value) <= 49152);
+const text = persistedString(z.string().min(1)).refine(value => !value.includes('\0') && Buffer.byteLength(value) <= 49152);
 export const nativePromptDeliverySchema = z.strictObject({ schemaVersion: z.literal(1),
   channel: z.enum(['claude-system-prompt', 'codex-instructions-file', 'inline']), core: text, task: text,
   segments: z.array(z.strictObject({ kind: z.enum(['core', 'persona', 'skill', 'context', 'task', 'scope', 'acceptance']),

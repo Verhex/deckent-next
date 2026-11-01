@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerRunQuotaWrite, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
@@ -12,8 +12,8 @@ import { RunStoreError, type RunReceipt, type RunStore } from './store.js';
 const base = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema });
 /** Human-only decisions. Timing, actor, evaluation and evidence never come from the caller. */
-const holdReason = z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars);
-const answer = z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars);
+const holdReason = persistedString(z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars));
+const answer = persistedString(z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars));
 /** Policy-gated Run controls, also exposed by MCP. Human input decisions are separate. */
 export const runControlCommandSchema = z.discriminatedUnion('action', [
   base.extend({ action: z.literal('hold'), holdReason }).strict(),

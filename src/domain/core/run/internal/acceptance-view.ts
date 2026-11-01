@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { runSnapshotSchema } from './contract.js';
@@ -8,7 +8,7 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Canonical criterion outcome, shared by evaluation storage and every inspection surface. */
 export const evaluationCriterionSchema = z.strictObject({ criterionId: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']),
   evidenceIds: z.array(identitySchema).readonly(),
-  evidenceTypes: z.array(z.string().min(1).max(256)).max(256).refine(value => new Set(value).size === value.length).readonly().optional(),
+  evidenceTypes: z.array(persistedString(z.string().min(1).max(256))).max(256).refine(value => new Set(value).size === value.length).readonly().optional(),
   evidenceReferences: z.array(z.strictObject({ id: identitySchema, digest }).readonly()).max(256).readonly().optional(),
   reason: z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED', 'OPERATION_EVIDENCE_UNAVAILABLE', 'OPERATION_EVIDENCE_MISSING',
     'OPERATION_EVIDENCE_INVALID', 'OPERATION_EVIDENCE_BINDING', 'OPERATION_EVIDENCE_UNSETTLED', 'OPERATION_EVIDENCE_COMPENSATED',

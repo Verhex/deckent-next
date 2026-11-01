@@ -1,4 +1,4 @@
-import { persistedDateTime, persistedInteger, identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
+import { persistedString, persistedDateTime, persistedInteger, identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
 import { z } from 'zod';
 import type { ProfileRevisionProposal } from './update.js';
 import type { ToolchainCurrencyReport } from './contract.js';
@@ -68,7 +68,7 @@ const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const toolchainRefreshStateSchema = z.strictObject({ schemaVersion: z.literal(1), phase: z.enum(['updating', 'current', 'failed', 'unverified']),
   trigger: z.enum(['startup', 'interval']), startedAt: isoTime, finishedAt: isoTime.nullable(), expiresAt: isoTime,
   imageVersion: z.string().nullable(), imageId: imageDigest.nullable(), staleProviders: z.array(identitySchema).readonly(),
-  appliedProfiles: persistedInteger().min(0).min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), reason: z.string().max(128).nullable() }).readonly();
+  appliedProfiles: persistedInteger().min(0).min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), reason: persistedString(z.string().max(128)).nullable() }).readonly();
 export type ToolchainRefreshState = z.infer<typeof toolchainRefreshStateSchema>;
 export type ToolchainRefreshStatus = 'updating' | 'current' | 'failed' | 'unknown';
 

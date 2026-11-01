@@ -1,4 +1,4 @@
-import { persistedUuid } from '#platform/index.js';
+import { persistedString, persistedUuid } from '#platform/index.js';
 import { z } from 'zod';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, delegatedUseConsentSchema, modelReferenceSchema, openAiChatDialectSchema,
   type HeadlessRejectionBody, type ModelInvocationDeltaSink } from '#domain/index.js';
@@ -11,7 +11,7 @@ import { SIWC_INFERENCE as I } from './registry.js';
 import { siwcResponsesBody, siwcRejection } from './responses.js';
 
 const definitionV1 = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(),
-  owner: z.strictObject({ issuer: z.string().min(1), subject: z.string().min(1) }), rawUse: z.literal('person'),
+  owner: z.strictObject({ issuer: persistedString(z.string().min(1)), subject: persistedString(z.string().min(1)) }), rawUse: z.literal('person'),
   delegatedUse: delegatedUseConsentSchema.nullable(), apiContinuation: z.null(), dialect: openAiChatDialectSchema.optional() }).readonly();
 export const siwcResponsesDefinitionSchema = z.union([definitionV1, definitionV1.unwrap().extend({ schemaVersion: z.literal(2),
   apiContinuation: z.strictObject({ reference: modelReferenceSchema, profileDigest: z.string().regex(/^[a-f0-9]{64}$/u) }).readonly().nullable() }).strict().readonly()]);

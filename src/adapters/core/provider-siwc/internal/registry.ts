@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl } from '#platform/index.js';
+import { persistedString, persistedInteger, persistedUrl } from '#platform/index.js';
 import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
 import type { OAuthConnectionProtocol } from '#engine/index.js';
@@ -6,16 +6,16 @@ import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js'
 import { promptFramingAllowanceSchema } from '#domain/index.js';
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), url = persistedUrl().startsWith('https://');
 const sourced = { source: url, observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) };
-const parsed = z.strictObject({ schemaVersion: z.literal(3), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
-  authorizationEndpoint: url, tokenEndpoint: url, discoveryEndpoint: url, resource: url, appName: z.string().min(1),
+const parsed = z.strictObject({ schemaVersion: z.literal(3), source: url, observedOn: z.string(), issuer: url, dynamicClientId: persistedString(z.string().min(1)),
+  authorizationEndpoint: url, tokenEndpoint: url, discoveryEndpoint: url, resource: url, appName: persistedString(z.string().min(1)),
   identityScopes: z.array(z.string()), usageScopes: z.array(z.string()), usagePermission: z.string(), callbackPath: z.string().startsWith('/'),
   hostSecretName: z.string(), connectionSecretPrefix: z.string(), encryptedStoreId: z.string(), timeoutMs: positive, maxPending: positive, maxConnections: positive,
   limits: z.strictObject({ loginWindowMs: positive, httpTimeoutMs: positive, responseMaxBytes: positive, jwtMaxBytes: positive, maxKeys: positive, callbackMaxBytes: positive, callbackMaxConnections: positive }),
   refreshMarginMs: positive, refreshLockWaitMs: positive,
   refreshPolicySource: z.strictObject({ ...sourced, kind: z.literal('deckent-policy') }),
   usageSummary: z.strictObject({ ...sourced, days: positive, maxEntries: positive, timeoutMs: positive, manageUrl: url }),
-  inference: z.strictObject({ ...sourced, adapter: z.strictObject({ id: z.string().min(1), version: positive }), endpoint: url, modelsEndpoint: url,
-    modelsMaxEntries: positive, modelsMaxBytes: positive, modelFieldMaxChars: positive, visibility: z.string().min(1), namespace: z.strictObject({ name: z.string().min(1), description: z.string() }), promptFramingAllowance: promptFramingAllowanceSchema }),
+  inference: z.strictObject({ ...sourced, adapter: z.strictObject({ id: persistedString(z.string().min(1)), version: positive }), endpoint: url, modelsEndpoint: url,
+    modelsMaxEntries: positive, modelsMaxBytes: positive, modelFieldMaxChars: positive, visibility: persistedString(z.string().min(1)), namespace: z.strictObject({ name: persistedString(z.string().min(1)), description: z.string() }), promptFramingAllowance: promptFramingAllowanceSchema }),
   requestRules: z.strictObject({ ...sourced, allowedFields: z.array(z.string()).min(1), unverifiedFields: z.array(z.string()), forbiddenFields: z.array(z.string()).min(1),
     store: z.literal(false), stream: z.literal(true) }).refine(r => [...r.allowedFields, ...r.unverifiedFields].every(f => !r.forbiddenFields.includes(f))
       && r.allowedFields.every(f => !r.unverifiedFields.includes(f))),
@@ -25,11 +25,11 @@ const parsed = z.strictObject({ schemaVersion: z.literal(3), source: url, observ
   terminalRefreshErrors: z.array(z.string()).min(1),
   /** U9-6/7: the worker-embedded app-server relay. `activation` stays `hold` until the operator's real-binary proof; bounds are required data. */
   workerRelay: z.strictObject({ ...sourced, activation: z.enum(['hold', 'open']), appServer: z.strictObject({
-    control: z.array(z.string().min(1)).min(1), controlSource: url,
-    native: z.strictObject({ note: z.string(), vendorRoots: z.record(z.string(), z.string().min(1)), fallbackVendorRoot: z.string().min(1), triples: z.record(z.string(), z.string().min(1)),
-      binary: z.string().min(1), pathDir: z.string().min(1), managedEnv: z.string().min(1) }) }), approvalPolicy: z.literal('untrusted'), sandbox: z.literal('danger-full-access'), wireApi: z.literal('responses'),
-    requestFields: z.array(z.string().min(1)).min(1), toolTypes: z.array(z.string().min(1)).min(1),
-    methods: z.strictObject({ client: z.array(z.string().min(1)).min(1), approvals: z.array(z.string().min(1)).min(1) }),
+    control: z.array(persistedString(z.string().min(1))).min(1), controlSource: url,
+    native: z.strictObject({ note: z.string(), vendorRoots: z.record(z.string(), persistedString(z.string().min(1))), fallbackVendorRoot: persistedString(z.string().min(1)), triples: z.record(z.string(), persistedString(z.string().min(1))),
+      binary: persistedString(z.string().min(1)), pathDir: persistedString(z.string().min(1)), managedEnv: persistedString(z.string().min(1)) }) }), approvalPolicy: z.literal('untrusted'), sandbox: z.literal('danger-full-access'), wireApi: z.literal('responses'),
+    requestFields: z.array(persistedString(z.string().min(1))).min(1), toolTypes: z.array(persistedString(z.string().min(1))).min(1),
+    methods: z.strictObject({ client: z.array(persistedString(z.string().min(1))).min(1), approvals: z.array(persistedString(z.string().min(1))).min(1) }),
     limits: z.strictObject({ requestMaxBytes: positive, responseMaxBytes: positive, headerBytes: positive, inFlight: positive, connections: positive, idleMs: positive,
       capabilityMaxTtlMs: positive, capabilityBytes: positive, approvalCommandBytes: positive, approvalDiffBytes: positive, approvalChanges: positive, approvalItems: positive, controlConnectMs: positive, controlPollMs: positive, helperTimeoutMs: positive, drainMs: positive, controlLineBytes: positive, controlLines: positive, auditRecords: positive }) }) }).refine(r => r.workerRelay.requestFields.every(field => !r.requestRules.forbiddenFields.includes(field))).parse(asset);
 export const SIWC_PROTOCOL: OAuthConnectionProtocol = Object.freeze({ ...parsed, identityScopes: Object.freeze(parsed.identityScopes), usageScopes: Object.freeze(parsed.usageScopes) });

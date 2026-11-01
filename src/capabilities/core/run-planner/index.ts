@@ -1,4 +1,4 @@
-import { persistedInteger, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { persistedString, persistedInteger, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { toInputJsonSchema, ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
@@ -6,7 +6,7 @@ import templates from './internal/templates.json' with { type: 'json' };
 const selected = z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 /** `modelAssignment: 'system'` (ATAMA-1, owner ASS1): the plan names tasks and WorkClasses only; the worker comes from the WorkClass candidate
  * list at admission. Absent = the earlier contract, where the plan pinned a worker model (v1/v2 rows keep their bytes and digest). */
-const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: persistedInteger().min(1).max(1024),
+const template = selected.extend({ instruction: persistedString(z.string().min(1).max(16_384)), summaryChars: persistedInteger().min(1).max(1024),
   modelAssignment: z.enum(['brain', 'system']).optional(),
   /** S4B-6: the planning context version the template is written for. Absent = 2 (v1–v3 rows keep their bytes and digest); 3 adds `memory`. */
   contextVersion: z.literal(3).optional() }).strict();

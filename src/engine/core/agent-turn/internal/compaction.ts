@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { modelTextBoundary, modelTextPrefix, type AgentTurnMessage } from '#domain/index.js';
@@ -13,11 +14,11 @@ export const AGENT_COMPACTION_KEEP_MESSAGES = 8;
 const OBJECTIVE_CHARS = 2_000;
 const LISTS = { findings: [1_000, 40], decisions: [1_000, 40], unresolved: [1_000, 40], nextActions: [1_000, 40], inspectedAreas: [500, 80] } as const;
 type ListField = keyof typeof LISTS;
-const listOf = (field: ListField) => z.array(z.string().max(LISTS[field][0])).max(LISTS[field][1]);
+const listOf = (field: ListField) => z.array(persistedString(z.string().max(LISTS[field][0]))).max(LISTS[field][1]);
 
 /** What the model is asked to write about the earlier conversation (legacy checkpoint shape, host fields excluded). */
 export const agentCompactionSummarySchema = z.object({
-  objective: z.string().max(OBJECTIVE_CHARS),
+  objective: persistedString(z.string().max(OBJECTIVE_CHARS)),
   findings: listOf('findings'), decisions: listOf('decisions'), unresolved: listOf('unresolved'), nextActions: listOf('nextActions'),
   inspectedAreas: listOf('inspectedAreas'),
 }).strip();

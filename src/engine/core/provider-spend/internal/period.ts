@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
 import { counterSchema, providerSpendPeriodSchema, PROVIDER_SPEND_PERIOD_REGISTRY, identitySchema, RegistryError } from '#domain/index.js';
 import type { ProviderSpendAccount } from './account.js';
@@ -32,7 +33,7 @@ const CALENDAR_MONTHS_PER_YEAR = 12;
 
 export const PROVIDER_SPEND_PERIOD_ACCOUNT_VERSION = 3;
 export const providerSpendPeriodStateSchema = z.strictObject({ schemaVersion: z.literal(1), kind: providerSpendPeriodSchema, calendarMonths: counterSchema.positive(),
-  startedAtMs: counterSchema, nextResetAtMs: counterSchema, timeZone: z.string().min(1).max(128),
+  startedAtMs: counterSchema, nextResetAtMs: counterSchema, timeZone: persistedString(z.string().min(1).max(128)),
   settledBaselineExactMinorUnits: z.string(), legacyTransition: z.boolean() }).readonly();
 
 /** Local midnight on the first of next month (calendar arithmetic, including DST). Never a fixed day count. */

@@ -1,4 +1,4 @@
-import { clientCommandIdSchema, attemptIdentitySchema, identitySchema } from '#domain/index.js';
+import { persistedString, clientCommandIdSchema, attemptIdentitySchema, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
 import { artifactReceiptSchema, type ArtifactStore } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -11,7 +11,7 @@ export type IntegrationCommand = z.infer<typeof integrationCommandSchema>;
 export interface IntegrationObservation { readonly digest: string; readonly source: string; readonly head: string }
 const manifestFields = { kind: z.literal('integration-candidate'),
   command: integrationCommandSchema, patch: artifactReceiptSchema, observation: z.string().regex(/^[a-f0-9]{64}$/),
-  workspace: z.string().min(1), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  workspace: persistedString(z.string().min(1)), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/),
   application: z.literal('candidate-only') };
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const integrationManifestSchema = z.discriminatedUnion('schemaVersion', [z.strictObject({ schemaVersion: z.literal(1), ...manifestFields }),

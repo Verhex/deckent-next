@@ -1,4 +1,4 @@
-import { persistedInteger, clientCommandIdSchema, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 
@@ -28,7 +28,7 @@ export const operationDescriptorSchema = z.strictObject({
   get idempotencyScope() { return z.enum(['task', 'command']).optional(); },
   /** BeUser (lead 2026-10-28): how the approval card names each top-level input field (`field → label`, the catalog author's words). Absent:
    * the field's own name. No default (byte-for-byte re-parse); presentation only, never authority. */
-  get inputLabels() { return z.record(z.string().min(1).max(128), z.string().min(1).max(128)).refine(value => Object.keys(value).length <= 64).optional(); },
+  get inputLabels() { return z.record(persistedString(z.string().min(1).max(128)), persistedString(z.string().min(1).max(128))).refine(value => Object.keys(value).length <= 64).optional(); },
 }).superRefine((value, context) => {
   if (value.effectClass === 'irreversible' && value.approval !== 'required') context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_REQUIRES_APPROVAL' });
   if (value.effectClass === 'irreversible' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_NOT_COMPENSABLE' });
@@ -37,14 +37,14 @@ export const operationDescriptorSchema = z.strictObject({
 export type OperationDescriptor = z.infer<typeof operationDescriptorSchema>;
 /** Opaque, adapter-interpreted record address (ERP entity key, Git ref, ...). Never a URL or credential, and never a host path: the one
  * path-shaped address is the Core `workspace-file` target's workspace-relative path, resolved only through its workspace scope. */
-export const effectTargetRefSchema = z.strictObject({ kind: identitySchema, get id() { return z.string().min(1).max(512)
+export const effectTargetRefSchema = z.strictObject({ kind: identitySchema, get id() { return persistedString(z.string().min(1).max(512))
   .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)); } }).readonly();
 export type EffectTargetRef = z.infer<typeof effectTargetRefSchema>;
 export const effectCommandSchema = z.strictObject({
   get schemaVersion() { return z.literal(1); }, commandId: clientCommandIdSchema, scopeId: identitySchema, operation: operationRefSchema,
   target: effectTargetRefSchema, idempotencyKey: identitySchema, get input() { return z.unknown().optional(); },
   /** The record version the caller based its decision on; required when the catalog demands a record-version precondition. */
-  get expectedVersion() { return z.string().min(1).max(256).nullable(); },
+  get expectedVersion() { return persistedString(z.string().min(1).max(256)).nullable(); },
   /** Set only by a compensation command: the settled command it compensates. */
   get compensates() { return identitySchema.optional(); },
 }).readonly();
@@ -83,7 +83,7 @@ export const effectIntentSchema = z.strictObject({
 export type EffectIntent = z.infer<typeof effectIntentSchema>;
 export type EffectIntentApproval = NonNullable<EffectIntent['approval']>;
 /** Target evidence that this intent's effect happened (idempotency record, fence). `version` is the record version after it. */
-export const effectEvidenceSchema = z.strictObject({ get kind() { return z.enum(['idempotency-record', 'fence']); }, get version() { return z.string().min(1).max(256).nullable(); },
+export const effectEvidenceSchema = z.strictObject({ get kind() { return z.enum(['idempotency-record', 'fence']); }, get version() { return persistedString(z.string().min(1).max(256)).nullable(); },
   observedAt: counterSchema }).readonly();
 export type EffectEvidence = z.infer<typeof effectEvidenceSchema>;
 export const effectRecordSchema = z.strictObject({ intent: effectIntentSchema, get sequence() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, state: effectStateSchema,

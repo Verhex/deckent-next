@@ -1,4 +1,4 @@
-import { persistedInteger, clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES, MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
+import { persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES, MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
 import { MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -10,7 +10,7 @@ export const memoryProposeCommandSchema = z.strictObject({ ...scoped, commandId:
 export const memoryVerifyCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
   basis: memoryVerificationBasisSchema });
 export const memoryRetireCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
-  reason: z.string().min(1), supersededBy: identitySchema.nullable() });
+  reason: persistedString(z.string().min(1)), supersededBy: identitySchema.nullable() });
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const attemptRefSchema = z.strictObject({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).readonly();
 /** S4B-1 (§4.3): one system candidate from one sealed source (the distiller only). Its id and support row are derived, never client-chosen. */

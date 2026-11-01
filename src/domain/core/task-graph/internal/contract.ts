@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { criterionDefinitionSchema } from './criteria.js';
 import { workInputSchema } from './work-input.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
@@ -23,7 +23,7 @@ export function blockingDependencyIds(task: { readonly dependencies: readonly Ta
   return task.dependencies.filter(edge => !isConflictEdge(edge)).map(dependencyTaskId);
 }
 /** One business record a task declares it changes (ERP/CRM kind + id; same shape as an effect target ref). Orders work only (v5). */
-export const taskResourceSchema = z.strictObject({ kind: identity, get id() { return z.string().min(1).max(512)
+export const taskResourceSchema = z.strictObject({ kind: identity, get id() { return persistedString(z.string().min(1).max(512))
   .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)); } }).readonly();
 
 export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
@@ -71,7 +71,7 @@ export const taskProgressSchema = z.strictObject({
   get notAcceptedReason() { return z.enum(TASK_NOT_ACCEPTED_REASONS).optional(); },
   get acceptedEvidence() { return z.literal('model-unverified').optional(); },
   get inputAnswer() { return z.strictObject({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
-    answer: z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars) }).readonly().optional(); },
+    answer: persistedString(z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars)) }).readonly().optional(); },
   get workerCustody() { return z.strictObject({ schemaVersion: z.literal(1), state: z.enum(['held', 'released']),
     basis: z.enum(['termination-proof', 'manual-decision']), fenceReceiptId: identity,
     proofReceiptId: identity.optional(), decisionReceiptId: identity.optional(),

@@ -1,4 +1,4 @@
-import { persistedUuid, jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
+import { persistedString, persistedUuid, jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { lstat, mkdir } from 'node:fs/promises';
@@ -18,7 +18,7 @@ import { retainBeuserJson } from './records.js';
 import fixture from '../../../../../assets/beuser/model-fixture.json' with { type: 'json' };
 import type { ArtifactStore } from '#capabilities/index.js';
 
-const observationSchema = z.strictObject({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)), filesystemProof: beuserFilesystemProofSchema.optional() });
+const observationSchema = z.strictObject({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(persistedString(z.string().min(1))), filesystemProof: beuserFilesystemProofSchema.optional() });
 const handleSchema = z.strictObject({ binding: beuserBindingSchema, incarnation: persistedUuid(), containerId: z.string(), controlDirectory: z.string(), controlIdentity: z.string() });
 const recordSchema = z.strictObject({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
   lease: z.strictObject({ handle: handleSchema.nullable(), observation: observationSchema }) });

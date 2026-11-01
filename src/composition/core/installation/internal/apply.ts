@@ -1,4 +1,4 @@
-import { persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
+import { persistedString, persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,7 @@ import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
-const choicesSchema = z.strictObject({ allowShutdown: z.boolean(), dockerExecutable: z.string().min(1).refine(isAbsolute),
+const choicesSchema = z.strictObject({ allowShutdown: z.boolean(), dockerExecutable: persistedString(z.string().min(1)).refine(isAbsolute),
   proposalDigest: z.string().regex(/^[a-f0-9]{64}$/), acceptCustom: z.literal(true) }).readonly();
 export type InstallationApplyChoices = z.infer<typeof choicesSchema>;
 function choices(input: unknown): InstallationApplyChoices {
@@ -24,7 +24,7 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
   // Structural read only: the engine cross-validates recovery against preparation and current identity before publication.
   const schema = z.looseObject({ material: z.looseObject({ authoredProfile: immutableJsonObjectSchema,
     configuration: immutableJsonObjectSchema, allowShutdown: z.boolean() }),
-    consent: z.looseObject({ id: z.string().min(1), atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
+    consent: z.looseObject({ id: persistedString(z.string().min(1)), atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }

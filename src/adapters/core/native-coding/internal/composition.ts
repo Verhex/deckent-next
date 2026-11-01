@@ -1,11 +1,11 @@
-import { persistedInteger, memoryTemplate, workerReportLimits } from '#domain/index.js';
+import { persistedString, persistedInteger, memoryTemplate, workerReportLimits } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import core from './worker-core.json' with { type: 'json' };
 import limits from './prompt-limits.json' with { type: 'json' };
 export const NATIVE_PROMPT_LIMITS /* data; the agent catalog's define-time bound (S8-1a) */ = Object.freeze({ ...limits });
 
-const text = z.string().min(1).refine(value => value.trim().length > 0 && !value.includes('\0') && Buffer.byteLength(value) <= 16384);
+const text = persistedString(z.string().min(1)).refine(value => value.trim().length > 0 && !value.includes('\0') && Buffer.byteLength(value) <= 16384);
 /** One explicitly selected, versioned prompt part (core, persona, skill or context). */
 export const promptPartSchema = z.strictObject({ id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/), version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), text }).readonly();
 export const nativePromptCompositionSchema = z.strictObject({ schemaVersion: z.literal(1), core: promptPartSchema.optional(),

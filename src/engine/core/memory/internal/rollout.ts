@@ -1,4 +1,4 @@
-import { persistedInteger, assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
+import { persistedString, persistedInteger, assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
 import { MEMORY_AUTOMATION_MODES } from '#platform/index.js';
 import { z } from 'zod';
 import rolloutSeed from '../../../../../assets/memory/rollout.json' with { type: 'json' };
@@ -36,7 +36,7 @@ export type MemoryRolloutRegistry = z.infer<typeof registrySchema>;
 export type MemoryRolloutCriterion = MemoryRolloutRegistry['criteria'][number];
 export const MEMORY_ROLLOUT: MemoryRolloutRegistry = Object.freeze(registrySchema.parse(rolloutSeed));
 const corpusSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get note() { return z.string(); }, get items() { return z.array(z.strictObject({ id: identitySchema, kind: identitySchema,
-  title: z.string().min(1), body: z.string().min(1) }).readonly()).min(1).max(256).readonly(); } }).readonly();
+  title: persistedString(z.string().min(1)), body: persistedString(z.string().min(1)) }).readonly()).min(1).max(256).readonly(); } }).readonly();
 /** N28 (§8): the versioned poisoning corpus; the phase 4 gate counts its items' shadow evaluations on the installation. */
 export const MEMORY_INJECTION_CORPUS = Object.freeze(corpusSchema.parse(corpusSeed));
 /** One corpus item as the distiller writes a worker `fact` claim (rule E3): the content whose keyed digest a shadow record names. */

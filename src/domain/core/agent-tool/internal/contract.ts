@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 /**
@@ -17,7 +18,7 @@ export const agentToolSpecSchema = z.strictObject({
   name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
   version: z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   toolClass: agentToolClassSchema,
-  description: z.string().min(1).max(2000),
+  description: persistedString(z.string().min(1).max(2000)),
   inputSchema: jsonSchemaObject,
 }).readonly();
 export type AgentToolSpec = z.infer<typeof agentToolSpecSchema>;
@@ -36,7 +37,7 @@ export type AgentToolCleanup = z.infer<typeof agentToolCleanupSchema>;
  * `stat`) and the system error code when one was raised. Short and secret-free: no path, no content. Optional everywhere it travels.
  */
 export const agentToolDiagnosticSchema = z.strictObject({
-  step: z.string().regex(/^[a-z]+(?::\d{1,3})?$/u).max(16),
+  step: persistedString(z.string().regex(/^[a-z]+(?::\d{1,3})?$/u).max(16)),
   errno: z.string().regex(/^E[A-Z0-9]{1,15}$/u).optional(),
 }).readonly();
 export type AgentToolDiagnostic = z.infer<typeof agentToolDiagnosticSchema>;
@@ -56,7 +57,7 @@ export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
  * result. Invalid JSON arguments are answered with a typed tool error; a call from an interrupted response is never executed.
  */
 export const agentToolCallSchema = z.strictObject({
-  id: z.string().min(1).max(256),
+  id: persistedString(z.string().min(1).max(256)),
   name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
   argumentsJson: z.string(),
 }).readonly();

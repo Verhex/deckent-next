@@ -1,4 +1,4 @@
-import { persistedInteger, STANDING_GRANT_KIND, evaluatePolicy, identitySchema, isStandingGrantId, policyResources, policySchema, standingGrantChange, type VerifiedPrincipal } from '#domain/index.js';
+import { persistedString, persistedInteger, STANDING_GRANT_KIND, evaluatePolicy, identitySchema, isStandingGrantId, policyResources, policySchema, standingGrantChange, type VerifiedPrincipal } from '#domain/index.js';
 import { redactForRecord } from '#platform/index.js';
 import { z } from 'zod';
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
@@ -11,7 +11,7 @@ const markOf = (key: string) => Buffer.from(key, 'utf8').toString('base64url');
 /** A page mark (`after`) is the last row's sort key (principal, then id), so a grant removed between pages never shifts the next page. */
 const markKey = (mark: string) => { const key = Buffer.from(mark, 'base64url').toString('utf8'); return markOf(key) === mark && key.split('\0').length === 3 ? key : null; };
 export const standingGrantsQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  after: z.string().min(1).max(2048).refine(mark => markKey(mark) !== null, 'STANDING_PAGE_MARK_INVALID').optional(),
+  after: persistedString(z.string().min(1).max(2048)).refine(mark => markKey(mark) !== null, 'STANDING_PAGE_MARK_INVALID').optional(),
   limit: persistedInteger().min(1).max(bounds.pageMax).optional() });
 export interface StandingGrantEntry { readonly id: string; readonly principals: readonly { readonly issuer: string; readonly subject: string }[]; readonly tool: string;
   readonly kind: 'command' | 'directory' | 'unknown'; readonly pattern: string; readonly scopes: 'all' | readonly string[]; readonly sinceMs: number | null }

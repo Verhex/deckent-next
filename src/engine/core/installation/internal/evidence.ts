@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { InstallationPreview } from './application.js';
@@ -6,11 +6,11 @@ import type { InstallationPreview } from './application.js';
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const packageSchema = z.strictObject({ name: identitySchema, version: identitySchema, measurementDigest: hex,
   fileCount: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), totalBytes: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  missingDeclarations: z.array(z.string().min(1).max(4096)).max(256).readonly(),
+  missingDeclarations: z.array(persistedString(z.string().min(1).max(4096))).max(256).readonly(),
   source: z.literal('installed-bytes'), dependencyCoverage: z.literal('excluded'),
 }).readonly();
 const imageSchema = z.strictObject({
-  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), endpoint: z.string().min(1).max(4096),
+  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), endpoint: persistedString(z.string().min(1).max(4096)),
   daemonId: identitySchema, status: z.literal('locally-available'),
 }).readonly();
 const previewEvidenceSchema = z.looseObject({ schemaVersion: z.literal(1), status: z.literal('preview'), planDigest: hex,

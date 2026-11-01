@@ -1,4 +1,4 @@
-import { persistedInteger, modelReferenceSchema, type ModelReference } from '#domain/index.js';
+import { persistedString, persistedInteger, modelReferenceSchema, type ModelReference } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import { isIP } from 'node:net';
 import { z } from 'zod';
@@ -83,7 +83,7 @@ export const terminalConfigSchema = z.strictObject({
   fetch: z.strictObject({
     schemaVersion: z.literal(1),
     egress: z.enum(['none', 'allowlist', 'approval']).prefault('none'),
-    allowedHosts: z.array(z.string().max(253).regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u)
+    allowedHosts: z.array(persistedString(z.string().max(253)).regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u)
       .refine(host => isIP(host) === 0, 'FETCH_HOST_IS_IP')).max(256).prefault([]),
     maxBytes: persistedInteger().min(1_024).max(67_108_864).prefault(4_194_304),
     timeoutMs: persistedInteger().min(1_000).max(300_000).prefault(30_000),

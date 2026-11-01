@@ -1,4 +1,4 @@
-import { persistedInteger, agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, identitySchema, signerPublicKeySchema, skillContentSchema, skillSignatureSchema, skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type ReadableSkillDefinition, type VerifiedPrincipal } from '#domain/index.js';
+import { persistedString, persistedInteger, agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, identitySchema, signerPublicKeySchema, skillContentSchema, skillSignatureSchema, skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type ReadableSkillDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { CatalogEvolutionChange, CatalogLessonRef, CatalogSuggestion, CatalogSuggestionState, StoredCatalogSuggestion } from './suggestions.js';
@@ -17,7 +17,7 @@ export const skillDefineCommandSchema = z.strictObject({ ...scoped, commandId: c
 export const skillImportCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema,
   source: z.strictObject({ ref: skillSourceRefSchema }), pin: z.string().regex(/^[a-f0-9]{64}$/).nullable(), signature: skillSignatureSchema.nullable(), signed });
 const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema });
-const signerLabel = z.string().min(1).max(AGENT_CATALOG_LIMITS.nameMaxBytes);
+const signerLabel = persistedString(z.string().min(1).max(AGENT_CATALOG_LIMITS.nameMaxBytes));
 /** S8-5 signer cards (a person's terminal act): enrol generates a host-custody action key for an AI/system principal; add registers an external public key. */
 export const signerEnrolCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, principal: principalRef, label: signerLabel });
 export const signerAddCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, purpose: z.enum(SIGNER_PURPOSES), publicKey: signerPublicKeySchema,

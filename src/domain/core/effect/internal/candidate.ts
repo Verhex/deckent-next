@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
-import { identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema } from '#domain/core/primitives/index.js';
 import { encodeCommandProjection } from '#domain/core/command/index.js';
 import { effectTargetRefSchema, operationRefSchema } from './contract.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const version = z.string().min(1).max(512);
+const version = persistedString(z.string().min(1).max(512));
 /** Physical resource identity comes from a trusted adapter, never a client path or scope. Scopes sharing a resource share its queue. */
 export const targetBindingSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: identitySchema,
   adapter: operationRefSchema, resourceBinding: digest, target: effectTargetRefSchema }).readonly();

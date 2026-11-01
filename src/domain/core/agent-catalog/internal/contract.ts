@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
 
 /**
@@ -13,7 +13,7 @@ export const AGENT_CATALOG_LIMITS = Object.freeze({ ...limits });
 /** The same identifier shape as a native prompt part (`persona`/`skill` ids), so a catalog row can become a prompt part unchanged. */
 export const catalogIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/);
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-const text = (max: number) => z.string().min(1).refine(value => value.trim() === value && !value.includes('\0') && bytes(value) <= max);
+const text = (max: number) => persistedString(z.string().min(1)).refine(value => value.trim() === value && !value.includes('\0') && bytes(value) <= max);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const unique = (values: readonly string[]) => new Set(values).size === values.length;
 const authorSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema, get ai() { return z.boolean(); } }).readonly();
@@ -36,7 +36,7 @@ export const agentDefinitionSchema = z.strictObject({ get schemaVersion() { retu
   get tier() { return z.null(); }, provenance: provenanceSchema }).refine(row => row.content.parentAgentId !== row.agentId).readonly();
 
 export const skillContentSchema = z.strictObject({ get name() { return text(limits.nameMaxBytes); }, get text() { return text(limits.skillTextMaxBytes); } }).readonly();
-const signatureValue = z.string().min(1).max(limits.signatureMaxBytes).regex(/^[A-Za-z0-9+/]+={0,2}$/);
+const signatureValue = persistedString(z.string().min(1).max(limits.signatureMaxBytes)).regex(/^[A-Za-z0-9+/]+={0,2}$/);
 export const skillSignatureSchema = z.strictObject({ get algorithm() { return z.literal('ed25519'); }, keyId: identitySchema, value: signatureValue }).readonly();
 /** Where an imported skill came from (a hub or file reference; shown to people, never fetched by Core). */
 export const skillSourceRefSchema = text(limits.sourceRefMaxBytes);

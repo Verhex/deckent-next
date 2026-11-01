@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl, persistedUuid } from '#platform/index.js';
+import { persistedString, persistedInteger, persistedUrl, persistedUuid } from '#platform/index.js';
 import type { PersonalCustodyRefusal } from '#engine/core/secret-store/index.js';
 import { z } from 'zod';
 import type { SecretChangeAudit, SecretChangeAuthorization, SecretCustody, SecretStore } from '#engine/core/secret-store/index.js';
@@ -11,15 +11,15 @@ export type OAuthConnectionCode = 'OAUTH_CONNECTION_INVALID' | 'OAUTH_CONNECTION
 export class OAuthConnectionError extends Error {
   constructor(readonly code: OAuthConnectionCode, readonly reason?: PersonalCustodyRefusal) { super(code); this.name = 'OAuthConnectionError'; }
 }
-const text = z.string().min(1).max(256), time = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const text = persistedString(z.string().min(1).max(256)), time = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export const oauthConnectionOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
   get principal() { return z.strictObject({ issuer: text, subject: text }).readonly(); } }).readonly();
 export type OAuthConnectionOwner = z.infer<typeof oauthConnectionOwnerSchema>;
 export const oauthConnectionConnectSchema = z.strictObject({ get connectionId() { return persistedUuid().optional(); }, get planUse() { return z.boolean(); },
   get enablePlanUse() { return z.boolean().optional(); } }).refine(value => !value.enablePlanUse || value.planUse);
-const identity = z.strictObject({ get issuer() { return persistedUrl(); }, subject: text, get email() { return z.string().max(256).nullable(); } }).readonly();
-export const oauthTokenSetSchema = z.strictObject({ get accessToken() { return z.string().min(1).nullable(); }, get refreshToken() { return z.string().min(1).nullable(); },
-  get idToken() { return z.string().min(1).nullable(); }, get scopes() { return z.array(text).max(64).readonly(); }, get expiresAtMs() { return time.nullable(); },
+const identity = z.strictObject({ get issuer() { return persistedUrl(); }, subject: text, get email() { return persistedString(z.string().max(256)).nullable(); } }).readonly();
+export const oauthTokenSetSchema = z.strictObject({ get accessToken() { return persistedString(z.string().min(1)).nullable(); }, get refreshToken() { return persistedString(z.string().min(1)).nullable(); },
+  get idToken() { return persistedString(z.string().min(1)).nullable(); }, get scopes() { return z.array(text).max(64).readonly(); }, get expiresAtMs() { return time.nullable(); },
   get earliestRefreshAtMs() { return time.nullable(); } }).readonly();
 export type OAuthTokenSet = z.infer<typeof oauthTokenSetSchema>;
 const legacyRecordSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get connectionId() { return persistedUuid(); }, owner: oauthConnectionOwnerSchema,

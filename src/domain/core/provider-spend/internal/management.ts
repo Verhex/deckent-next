@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { persistedString, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { identitySchema, immutableJsonObjectSchema, counterSchema } from '#domain/core/primitives/index.js';
 import { providerSpendBudgetSchema } from './contract.js';
@@ -8,7 +8,7 @@ const common = { schemaVersion: z.literal(1), scopeId: identitySchema, commandId
 /** Evidence is a retained external receipt digest, never console text, prompts or credentials. */
 export const providerSpendManagementCommandSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...common, kind: z.literal('reconcile'), invocationId: identitySchema,
-    resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: z.string().max(272),
+    resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: persistedString(z.string().max(272)),
     evidence: z.strictObject({ kind: z.enum(['provider-usage', 'console-figure', 'write-off']), digest }) }),
   z.strictObject({ ...common, kind: z.literal('budget-revision'), budget: providerSpendBudgetSchema,
     unfreeze: z.boolean(), evidenceDigest: digest }),

@@ -1,9 +1,9 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 
 const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-const path = z.string().min(1).max(4096);
+const path = persistedString(z.string().min(1).max(4096));
 /** Most files one `/scratch` view names (newest first); the rest is counted in `bytes` and flagged `truncated`. */
 export const SCRATCH_VIEW_MAX_FILES = 200;
 

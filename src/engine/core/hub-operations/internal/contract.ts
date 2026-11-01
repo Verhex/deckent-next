@@ -1,4 +1,4 @@
-import { persistedInteger, OWNER_BASELINE_FAMILY_REGISTRY, HUB_LIMITS, hubDigestSchema, hubPackageIdSchema, hubVersionSchema, hubRevocationFeedSchema, hubRevocationEntrySchema, hubFeedSignatureSchema, identitySchema, signerPublicKeySchema, HUB_TRUST_POLICIES } from '#domain/index.js';
+import { persistedString, persistedInteger, OWNER_BASELINE_FAMILY_REGISTRY, HUB_LIMITS, hubDigestSchema, hubPackageIdSchema, hubVersionSchema, hubRevocationFeedSchema, hubRevocationEntrySchema, hubFeedSignatureSchema, identitySchema, signerPublicKeySchema, HUB_TRUST_POLICIES } from '#domain/index.js';
 import { z } from 'zod';
 import { hubClientCommandSchema, type HubClientApplication, type HubSource } from '#engine/core/hub-client/index.js';
 import type { Locale, KnownSecretSnapshot } from '#platform/index.js';
@@ -8,11 +8,11 @@ const source = scoped.extend({ hubId: hubDigestSchema });
 const command = hubClientCommandSchema;
 const packageQuery = source.extend({ packageId: hubPackageIdSchema, version: hubVersionSchema.optional() });
 /** The hub's page cursor is its own `<packageId>@<version>` key (hub-mcp nextCursor); nothing else, so no free text rides it out of the scope. */
-const searchCursor = z.string().max(HUB_LIMITS.packageMaxBytes).refine(value => {
+const searchCursor = persistedString(z.string().max(HUB_LIMITS.packageMaxBytes)).refine(value => {
   const at = value.lastIndexOf('@');
   return value === '' || (hubPackageIdSchema.safeParse(value.slice(0, at)).success && hubVersionSchema.safeParse(value.slice(at + 1)).success);
 });
-const bundle = z.string().min(1).max(HUB_LIMITS.httpMaxBytes);
+const bundle = persistedString(z.string().min(1).max(HUB_LIMITS.httpMaxBytes));
 const install = command.extend({ bundles: z.array(bundle).min(1).max(HUB_LIMITS.dependenciesMax + 1), feed: hubRevocationFeedSchema,
   feeds: z.record(hubDigestSchema, hubRevocationFeedSchema).prefault({}), workClassMapping: z.record(z.string(), identitySchema).prefault({}) });
 const withdrawal = command.extend({ input: hubRevocationEntrySchema.unwrap().omit({ atMs: true, severity: true }).extend({ schemaVersion: z.literal(1), commandId: identitySchema,
@@ -21,7 +21,7 @@ const withdrawal = command.extend({ input: hubRevocationEntrySchema.unwrap().omi
 export const hubOperationSchemas = {
   'hub.sources.list': scoped,
   'hub.sources.add': command.extend({ expectedRevision: persistedInteger().positive().nullable(), publicKey: signerPublicKeySchema,
-    endpoint: z.string().min(1).max(2048), local: z.boolean().prefault(false), label: z.string().min(1).max(256),
+    endpoint: persistedString(z.string().min(1).max(2048)), local: z.boolean().prefault(false), label: persistedString(z.string().min(1).max(256)),
     trustPolicy: z.string().prefault(HUB_TRUST_POLICIES.addedSourceDefault) }),
   'hub.sources.remove': command.extend({ expectedRevision: persistedInteger().positive() }),
   'hub.search': source.extend({ after: searchCursor.prefault(''), limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax) }),

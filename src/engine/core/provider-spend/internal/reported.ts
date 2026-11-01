@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
 import { counterSchema, identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { ProviderSpendError } from './error.js';
@@ -5,12 +6,12 @@ import { canonicalProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits
   providerSpendExactFromNumericSource } from './exact.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const bounded = z.string().min(1).max(1024).refine(value => value.trim() === value);
+const bounded = persistedString(z.string().min(1).max(1024)).refine(value => value.trim() === value);
 const measurementSchema = z.strictObject({ schemaVersion: z.literal(1), basis: z.literal('provider-reported'),
   currency: z.string().regex(/^[A-Z]{3}$/), exactMinorUnits: z.string(), roundedMinorUnits: counterSchema,
   quoteDigest: digest, requestDigest: digest, profileDigest: digest, responseContentDigest: digest,
   source: z.strictObject({ id: identitySchema, version: counterSchema.positive(), field: bounded, generationId: bounded,
-    modelId: bounded, numericSource: z.string().min(1).max(1024), minorUnitsPerCurrencyUnit: counterSchema.positive(),
+    modelId: bounded, numericSource: persistedString(z.string().min(1).max(1024)), minorUnitsPerCurrencyUnit: counterSchema.positive(),
     bodyDigest: digest, responseDigest: digest, requestBodyDigest: digest, tariffDigest: digest,
     selectedEndpointTag: bounded }).readonly(),
 }).readonly();

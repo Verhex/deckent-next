@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { z } from 'zod';
 import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
@@ -10,11 +10,11 @@ import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, i
  */
 const name = z.string().regex(SECRET_NAME_PATTERN);
 export const secretSetCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name,
-  value: z.string().min(1).max(SECRET_VALUE_MAX_BYTES) }).readonly();
+  value: persistedString(z.string().min(1).max(SECRET_VALUE_MAX_BYTES)) }).readonly();
 export const secretDeleteCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name }).readonly();
 /** The answer: which backend changed; `removed` is whether a delete found the secret (null for a set). Never a value. */
 export const secretChangeResultSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name, action: z.enum(['set', 'delete']),
-  backend: z.string().min(1).max(128), removed: z.boolean().nullable() }).readonly();
+  backend: persistedString(z.string().min(1).max(128)), removed: z.boolean().nullable() }).readonly();
 export type SecretSetCommand = z.infer<typeof secretSetCommandSchema>;
 export type SecretDeleteCommand = z.infer<typeof secretDeleteCommandSchema>;
 export type SecretChangeResult = z.infer<typeof secretChangeResultSchema>;
@@ -36,7 +36,7 @@ export function acceptSecretChangeResult(operation: 'setSecret' | 'deleteSecret'
 
 /** SECRET-STORE-SWITCH (owner 2026-10-08; runtime protocol v24): move every secret into another registered store
  * and select it; no actor field. */
-const storeId = z.string().max(128).regex(SECRET_STORE_ID_PATTERN);
+const storeId = persistedString(z.string().max(128)).regex(SECRET_STORE_ID_PATTERN);
 export const secretStoreSwitchCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
   confirmDowngrade: z.boolean(), confirmEnvMissing: z.boolean().optional() }).readonly();
 /** The answer names stores and counts only: never a secret name or value. */

@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import { containerEvidenceSchema } from './container.js';
 import type { CollectedOutputFile } from './output-files.js';
-import { attemptIdentitySchema, sameAttemptIdentity, identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
+import { persistedString, attemptIdentitySchema, sameAttemptIdentity, identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
 
 export const sandboxRequestSchema = z.strictObject({
   protocolVersion: z.literal(1), identity: attemptIdentitySchema,
-  workspace: z.string().min(1), argv: z.array(z.string()).min(1).readonly(),
+  workspace: persistedString(z.string().min(1)), argv: z.array(z.string()).min(1).readonly(),
 }).readonly();
 export type SandboxRequest = z.infer<typeof sandboxRequestSchema>;
-export const workerIncarnationSchema = z.strictObject({ kind: z.literal('container'), id: z.string().regex(/^[a-f0-9]{64}$/), startedAt: z.string().min(1).max(40).refine(value => Number.isFinite(Date.parse(value)) && !value.startsWith('0001-')) }).readonly();
+export const workerIncarnationSchema = z.strictObject({ kind: z.literal('container'), id: z.string().regex(/^[a-f0-9]{64}$/), startedAt: persistedString(z.string().min(1).max(40)).refine(value => Number.isFinite(Date.parse(value)) && !value.startsWith('0001-')) }).readonly();
 const supervisorResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('exited'), ...processExitCauseShape }),
   z.strictObject({ kind: z.literal('unknown'), reasonCode: identitySchema }),

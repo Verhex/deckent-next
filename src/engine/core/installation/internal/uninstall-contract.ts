@@ -1,7 +1,7 @@
-import { persistedInteger, attemptIdentitySchema, targetQueueStateSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, attemptIdentitySchema, targetQueueStateSchema } from '#domain/index.js';
 import { z } from 'zod';
 
-const text = z.string().min(1).max(4096).refine(value => Array.from(value).every(char => char.charCodeAt(0) > 31 && char.charCodeAt(0) !== 127));
+const text = persistedString(z.string().min(1).max(4096)).refine(value => Array.from(value).every(char => char.charCodeAt(0) > 31 && char.charCodeAt(0) !== 127));
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 /** Owner 2026-10-27 (K1–K7): keep-data is the default; keep-work keeps work records; all deletes backed-up data after a verified backup. */
 export const UNINSTALL_TIERS = ['keep-data', 'keep-work', 'all'] as const;

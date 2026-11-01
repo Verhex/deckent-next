@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, identitySchema, installationIdSchema, projectIdSchema } from '#domain/index.js';
+import { persistedString, counterSchema, identitySchema, installationIdSchema, projectIdSchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import type { DeckDeclaration } from './deck.js';
 import { SECRET_NAME_PATTERN } from './port.js';
@@ -10,7 +10,7 @@ import REGISTRY from './project-vault.json' with { type: 'json' };
 export const PROJECT_VAULT = Object.freeze({ ...REGISTRY.vault });
 
 /** A directory's identity: canonical path, device and inode (the installation identity binding's location shape). */
-const locationSchema = z.strictObject({ canonicalRoot: z.string().min(1).max(4096), device: z.string().regex(/^\d+$/u),
+const locationSchema = z.strictObject({ canonicalRoot: persistedString(z.string().min(1).max(4096)), device: z.string().regex(/^\d+$/u),
   inode: z.string().regex(/^[1-9]\d*$/u) }).readonly();
 export type ProjectVaultLocation = z.infer<typeof locationSchema>;
 /**
@@ -20,7 +20,7 @@ export type ProjectVaultLocation = z.infer<typeof locationSchema>;
  * same identities but another data root location, so it is refused (`SECRET_PROJECT_VAULT_CLAIMED`) until an explicit handover.
  */
 export const projectVaultAnchorSchema = z.strictObject({ installationId: installationIdSchema, projectId: projectIdSchema, binding: locationSchema,
-  repository: locationSchema.nullable(), projectRoot: z.string().min(1).max(4096) }).readonly();
+  repository: locationSchema.nullable(), projectRoot: persistedString(z.string().min(1).max(4096)) }).readonly();
 export type ProjectVaultAnchor = z.infer<typeof projectVaultAnchorSchema>;
 /** `project.json` v1 beside the vault: who owns it (the anchor it was first opened for) and since when. Never a secret. */
 export const projectVaultRecordSchema = z.strictObject({ schemaVersion: z.literal(1), anchor: projectVaultAnchorSchema, firstSeenAtMs: counterSchema,

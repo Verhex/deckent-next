@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl, catalogTariffSealSchema, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, catalogTariffSealSchema, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
 import { OpenAiChatHttpError, parseOpenAiChatHttpLimits } from '#adapters/core/provider-openai-chat/index.js';
@@ -19,7 +19,7 @@ const rate = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d{1,4})?$/);
 const ratesSchema = z.strictObject({ input: rate, cacheWrite5m: rate, cacheWrite1h: rate, cacheRead: rate, output: rate });
 // Key order is the v1 order (kind, version, currency, modelId, usdPerMTok, source): parsed tariffs keep their serialized bytes and digests.
 const tariffFields = <V extends 1 | 2>(version: V) => ({ kind: z.literal('anthropic-published'), version: z.literal(version), currency: z.literal('USD'),
-  modelId: z.string().min(1).max(256), usdPerMTok: ratesSchema,
+  modelId: persistedString(z.string().min(1).max(256)), usdPerMTok: ratesSchema,
   // M4: `catalog` seals the registered catalog row `models connect` took the tariff from (absent on shipped `pricing.json` rows).
   source: z.strictObject({ get url() { return persistedUrl().startsWith('https://'); }, get retrievedAt() { return z.string().regex(/^\d{4}-\d{2}-\d{2}$/); },
     get catalog() { return catalogTariffSealSchema.optional(); } }) });
@@ -48,7 +48,7 @@ const thinkingSchema = z.discriminatedUnion('mode', [
   z.strictObject({ get mode() { return z.literal('enabled'); }, get budgetTokens() { return persistedInteger().min(ANTHROPIC_METERING.thinkingBudgetMinTokens).min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, get off() { return z.literal('disabled').optional(); } }),
 ]);
 export type AnthropicThinking = z.infer<typeof thinkingSchema>;
-const certificate = z.string().min(1).max(65_536).refine(value => {
+const certificate = persistedString(z.string().min(1).max(65_536)).refine(value => {
   if ((value.match(/-----BEGIN CERTIFICATE-----/g) ?? []).length !== 1
     || (value.match(/-----END CERTIFICATE-----/g) ?? []).length !== 1 || value.includes('PRIVATE KEY')) return false;
   try {
@@ -56,7 +56,7 @@ const certificate = z.string().min(1).max(65_536).refine(value => {
     return canonical(value) === canonical(parsed.toString());
   } catch { return false; }
 });
-const definitionSchema = z.strictObject({ get endpoint() { return z.string().min(1); }, get maxOutputTokens() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
+const definitionSchema = z.strictObject({ get endpoint() { return persistedString(z.string().min(1)); }, get maxOutputTokens() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
   get workspaceId() { return z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u).optional(); },
   get authentication() { return z.strictObject({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/) }); },
   get tls() { return z.strictObject({ caPem: certificate }).optional(); }, tariff: anthropicTariffSchema,
@@ -64,7 +64,7 @@ const definitionSchema = z.strictObject({ get endpoint() { return z.string().min
   get thinking() { return thinkingSchema.optional(); },
   /** `output_config.effort`; absent = the model's registry default (e.g. Opus 5.5 and Haiku 5.5: medium). Only levels the model's registry row lists. */
   get effort() { return z.enum(ANTHROPIC_EFFORT_LEVELS).optional(); }, get cache() { return z.enum(['none', '5m', '1h']).optional(); },
-  get tokenCountEndpoint() { return z.string().min(1).optional(); } });
+  get tokenCountEndpoint() { return persistedString(z.string().min(1)).optional(); } });
 export type AnthropicMessagesDefinition = Readonly<z.infer<typeof definitionSchema>>;
 const jsonSchema = createImmutableJsonObjectSchema(ANTHROPIC_MESSAGES_WIRE_LIMITS);
 /** Every credential-carrying call is https (the API key never crosses cleartext), canonical, without query, fragment or userinfo. */

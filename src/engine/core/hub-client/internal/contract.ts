@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDigestSchema, hubPackageIdSchema, hubVersionSchema,
+import { persistedString, HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDigestSchema, hubPackageIdSchema, hubVersionSchema,
   type AuditEvent, type HubRevocationFeed, type HubRevocationCursor, type VerifiedPrincipal } from '#domain/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
 import type { AgentCatalogDependencies, AgentCatalogStore, CatalogUpstream } from '#engine/core/agent-catalog/index.js';
 import type { HubPackageVerification, HubPackageFile, HubVerificationKey } from '#engine/core/hub/index.js';
 import type { HubEnvelope, HubKeyDelegation, HubPackage } from '#domain/index.js';
 
-export const hubSourceSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, hubId: hubDigestSchema, publicKey: z.string().min(1),
-  endpoint: z.string().min(1).max(2048), local: z.boolean(), label: z.string().min(1).max(256),
+export const hubSourceSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, hubId: hubDigestSchema, publicKey: persistedString(z.string().min(1)),
+  endpoint: persistedString(z.string().min(1).max(2048)), local: z.boolean(), label: persistedString(z.string().min(1).max(256)),
   trustPolicy: z.string().refine(id => HUB_TRUST_POLICIES.policies.some(p => p.id === id)), revision: counterSchema.positive(),
   state: z.enum(['active', 'removed']), addedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema }) }).readonly();
 export type HubSource = z.infer<typeof hubSourceSchema>;

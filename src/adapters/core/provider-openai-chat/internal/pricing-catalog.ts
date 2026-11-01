@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl, catalogTariffSealSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, catalogTariffSealSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import COMPATIBILITY from './request-compatibility.json' with { type: 'json' };
@@ -9,7 +9,7 @@ const vendorSchema = z.string().refine(value => (COMPATIBILITY.vendors as readon
 const rate = z.string().regex(/^(0|[1-9]\d*)(\.\d{1,4})?$/);
 const rates = z.strictObject({ input: rate, cachedInput: rate, output: rate });
 const cacheRates = rates.extend({ cacheWrite: rate }).strict();
-const common = { kind: z.literal('vendor-published'), currency: z.literal('USD'), modelId: z.string().min(1).max(256), endpoint: persistedUrl(),
+const common = { kind: z.literal('vendor-published'), currency: z.literal('USD'), modelId: persistedString(z.string().min(1).max(256)), endpoint: persistedUrl(),
   // M4: `catalog` seals the registered catalog row `models connect` took a model's tariff from (absent on the shipped rows below).
   source: z.strictObject({ url: persistedUrl().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     catalog: catalogTariffSealSchema.optional() }) };

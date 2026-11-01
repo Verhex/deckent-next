@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { acceptanceViewSchema, measuredCostSchema } from '#domain/core/run/index.js';
@@ -6,7 +6,7 @@ import { costRecommendationSchema } from './recommendation.js';
 const value = z.number().nonnegative().finite().nullable();
 export const workCostSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   profile: z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly(),
-  model: z.strictObject({ channelId: identitySchema, modelId: z.string().min(1), evidence: z.enum(['requested', 'verified', 'unknown']) }).readonly().nullable(),
+  model: z.strictObject({ channelId: identitySchema, modelId: persistedString(z.string().min(1)), evidence: z.enum(['requested', 'verified', 'unknown']) }).readonly().nullable(),
   effort: z.string().nullable(), acceptance: acceptanceViewSchema,
   axes: z.strictObject({ cpuSeconds: value, sampledPeakBytes: value, kernelPeakBytes: value, wallMs: value,
     apiMoney: measuredCostSchema.nullable(),

@@ -1,10 +1,10 @@
-import { persistedInteger, identitySchema, attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type WorkerIncarnation } from '#domain/index.js';
+import { persistedString, persistedInteger, identitySchema, attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type WorkerIncarnation } from '#domain/index.js';
 import { z } from 'zod';
 import { workerIncarnationSchema, type SandboxRequest, type ExecutionSupervisor } from '#engine/core/supervisor/index.js';
 import type { ResourceObservationSettings } from '#platform/index.js';
 const measured = z.number().finite().nonnegative();
 const incarnation = z.union([workerIncarnationSchema, z.strictObject({ kind: z.literal('process'), pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  startedAt: z.string().min(1).max(128) }).readonly()]);
+  startedAt: persistedString(z.string().min(1).max(128)) }).readonly()]);
 export const resourceGapSchema = z.enum(['starting', 'unsupported', 'denied', 'timeout', 'identity', 'invalid', 'overload', 'store-unavailable', 'queue-full', 'disabled', 'missing', 'counter-reset']);
 export type ResourceGap = z.infer<typeof resourceGapSchema>;
 export const resourceSampleSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,

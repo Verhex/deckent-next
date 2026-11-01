@@ -1,10 +1,10 @@
-import { persistedInteger, attemptIdentitySchema, sameAttemptIdentity, AUDIT_TRACKED_PATHS_MAX, type AttemptIdentity } from '#domain/index.js';
+import { persistedString, persistedInteger, attemptIdentitySchema, sameAttemptIdentity, AUDIT_TRACKED_PATHS_MAX, type AttemptIdentity } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AttemptStoreError, type AttemptStore } from '#engine/core/attempts/index.js';
 
 /** One lifted hit: the path, the rule it matched and the exact entry that lifted it (an `execution.secretGate` list entry or a declared dependency tree). */
-export const workerTreeExclusionSchema = z.strictObject({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600),
+export const workerTreeExclusionSchema = z.strictObject({ path: persistedString(z.string().min(1).max(4096)), rule: persistedString(z.string().min(1).max(600)),
   by: z.string().regex(/^(?:allowPatternPaths|acknowledgedDenyPaths|dependencyTree):.{1,512}$/su) }).readonly();
 export type WorkerTreeExclusion = z.infer<typeof workerTreeExclusionSchema>;
 /** S6 (owner 2026-10-15): the dispatched attempt's config exclusions, kept in the attempt journal so every Run card can show them. */

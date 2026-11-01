@@ -1,5 +1,6 @@
+import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
-const id = z.string().min(1).max(256), digest = z.string().regex(/^[a-f0-9]{64}$/u);
+const id = persistedString(z.string().min(1).max(256)), digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const backupCoverageResourceSchema = z.strictObject({ resourceId: id, owner: id, version: id,
   transfer: z.enum(['portable', 'protected-renewable-session', 'non-exportable', 'shared']) }).readonly();
 export const backupCoverageManifestSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: id, generation: id,

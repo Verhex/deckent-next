@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { encodeCommandProjection } from '#domain/core/command/index.js';
 import { AgentCatalogError } from './contract.js';
 import limits from './limits.json' with { type: 'json' };
@@ -18,7 +18,7 @@ export const SIGNATURE_LABELS = Object.freeze({ catalogAction: 'catalog-action:1
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const ref = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 const person = z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.literal(false) }).readonly();
-const label = z.string().min(1).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+const label = persistedString(z.string().min(1)).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
   && new TextEncoder().encode(value).length <= limits.nameMaxBytes);
 export const signerPublicKeySchema = z.string().regex(/^[A-Za-z0-9+/]{59}=$/); // 44 bytes of SPKI DER
 export const signerKeySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, keyId: digest, algorithm: z.literal('ed25519'), publicKey: signerPublicKeySchema,

@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUuid, serializeJsonDocument, writeTextAtomic } from '#platform/index.js';
+import { persistedString, persistedInteger, persistedUuid, serializeJsonDocument, writeTextAtomic } from '#platform/index.js';
 import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -26,7 +26,7 @@ export interface PersonalStoreContext {
   /** Explicit witnessed reconnect may adopt identical-owner token-free registration history; never a renewable session. */
   reconnect?: boolean;
 }
-const hash = z.string().regex(/^[a-f0-9]{64}$/u), text = z.string().min(1).max(256), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const hash = z.string().regex(/^[a-f0-9]{64}$/u), text = persistedString(z.string().min(1).max(256)), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const bindingSchema = z.strictObject({ schemaVersion: z.literal(1), bindingId: persistedUuid(), generation: count,
   uid: count, installationId: text, principal: z.strictObject({ issuer: text, subject: text }),
   locationDigest: hash, installationLocationDigest: hash, keyIdentityDigest: hash,

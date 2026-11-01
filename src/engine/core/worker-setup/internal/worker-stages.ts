@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { workerImageStateSchema } from './acquisition.js';
 import { z } from 'zod';
 import type { SetupDecision, SetupStageContext } from '#engine/core/setup/index.js';
@@ -10,7 +11,7 @@ export const workerFactsSchema = z.strictObject({ configured: imageId.nullable()
   durationMs: z.number().nonnegative().finite().optional(),
   images: z.array(z.looseObject({ imageId, providers: z.array(z.string()), tagVersion: z.string().regex(/^r[1-9][0-9]*(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u).nullable().optional() })).optional() }).nullable(),
   provider: z.string().optional(), providerPending: z.boolean().optional(), acquisition: workerImageStateSchema.nullable().optional(),
-  image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: z.string().min(1).max(4096).nullable() });
+  image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: persistedString(z.string().min(1).max(4096)).nullable() });
 type WorkerFacts = z.infer<typeof workerFactsSchema>;
 /** The part of the execution family's facts these stages read (the family validates the whole shape with its own schema). */
 type Facts = Readonly<{ runtimes: readonly Readonly<{ id: string; support: string; daemon: string; path: string | null }>[]; worker?: WorkerFacts }>;

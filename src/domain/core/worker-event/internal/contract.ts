@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { quotaExhaustedSchema } from './quota.js';
 import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
@@ -6,7 +7,7 @@ import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } 
  * worker container (untrusted evidence): they never grant authority, acceptance or terminal truth. */
 export const WORKER_EVENT_SCHEMA_VERSION = 1;
 const count = z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-const text = (max: number) => z.string().max(max);
+const text = (max: number) => persistedString(z.string().max(max));
 const MAX_MODELS = 16;
 export const workerToolClassSchema = z.enum(['read', 'edit', 'write', 'shell', 'search', 'network', 'agent', 'other']);
 export type WorkerToolClass = z.infer<typeof workerToolClassSchema>;

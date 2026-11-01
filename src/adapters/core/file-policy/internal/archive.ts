@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, opendir, rename, unlink } from 'node:fs/promises';
@@ -11,7 +12,7 @@ import { z } from 'zod';
  * It lives under the installation's registered `audit` resource (never opened to the agent tools). Not tamper-evident and without
  * retention: a sealed append-only archive (ledger) is the recorded next option.
  */
-const side = z.strictObject({ revision: z.string().min(1).max(256), policy: z.unknown().optional(), bindings: z.unknown().optional() });
+const side = z.strictObject({ revision: persistedString(z.string().min(1).max(256)), policy: z.unknown().optional(), bindings: z.unknown().optional() });
 const entrySchema = z.strictObject({ schemaVersion: z.literal(1), key: z.string().nullable(), state: z.enum(['prepared', 'committed']), before: side, after: side });
 export type AuthorityArchiveEntry = z.infer<typeof entrySchema>;
 const keySchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);

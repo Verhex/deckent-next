@@ -1,4 +1,4 @@
-import { persistedInteger, AGENT_CATALOG_LIMITS, STATS_MICRO, attributableFailure, encodeCommandProjection, identitySchema, wilsonIntervalMicro, type AgentStanding, type CatalogEvolutionRegistry, type CatalogEvolutionRule } from '#domain/index.js';
+import { persistedString, persistedInteger, AGENT_CATALOG_LIMITS, STATS_MICRO, attributableFailure, encodeCommandProjection, identitySchema, wilsonIntervalMicro, type AgentStanding, type CatalogEvolutionRegistry, type CatalogEvolutionRule } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { z } from 'zod';
 import { catalogSuggestionIdOf, catalogSuggestionKeyDigest, catalogSuggestionSchema, type CatalogLessonRef, type CatalogSuggestion, type CatalogSuggestionKey } from '#engine/core/agent-catalog/index.js';
@@ -14,7 +14,7 @@ import type { KeyStats, ModelFacts } from './contract.js';
  */
 const DAY_MS = 86_400_000;
 export const catalogDraftTemplatesSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.strictObject({ id: identitySchema, version: persistedInteger().positive(),
-  kind: z.enum(['propose-agent', 'propose-skill']), name: z.string().min(1), text: z.string().min(1), item: z.string().min(1).optional() })).min(1) }).readonly();
+  kind: z.enum(['propose-agent', 'propose-skill']), name: persistedString(z.string().min(1)), text: persistedString(z.string().min(1)), item: persistedString(z.string().min(1)).optional() })).min(1) }).readonly();
 /** The versioned draft templates (`agent-draft@1`, `skill-draft@1`): Core seed data, never literals; the latest version of a kind is the one used. */
 export const CATALOG_DRAFT_TEMPLATES = catalogDraftTemplatesSchema.parse(templatesSeed);
 export const catalogDraftTemplate = (kind: 'propose-agent' | 'propose-skill', ref?: string) => {

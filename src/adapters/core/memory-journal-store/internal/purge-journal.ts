@@ -1,4 +1,4 @@
-import { persistedInteger, encodeCommandProjection, memoryPurgeRecordSchema, type MemoryPurgeRecord } from '#domain/index.js';
+import { persistedString, persistedInteger, encodeCommandProjection, memoryPurgeRecordSchema, type MemoryPurgeRecord } from '#domain/index.js';
 import { withConfigWriteLock, type IntegrityAuthority } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { mkdir, open, type FileHandle } from 'node:fs/promises';
@@ -13,7 +13,7 @@ export const memoryPurgeJournalLimitsSchema = z.strictObject({ fileName: z.strin
   maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), lockTimeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export type MemoryPurgeJournalLimits = z.infer<typeof memoryPurgeJournalLimitsSchema>;
 export const MEMORY_PURGE_JOURNAL_LIMITS: MemoryPurgeJournalLimits = memoryPurgeJournalLimitsSchema.parse(limits);
-const lineSchema = z.strictObject({ record: z.unknown().optional(), keyId: z.string().min(1), mac: z.string().regex(/^[a-f0-9]{64}$/u) });
+const lineSchema = z.strictObject({ record: z.unknown().optional(), keyId: persistedString(z.string().min(1)), mac: z.string().regex(/^[a-f0-9]{64}$/u) });
 const unreadable = () => new MemoryJournalError('MEMORY_PURGE_REPLAY_HELD');
 
 /**

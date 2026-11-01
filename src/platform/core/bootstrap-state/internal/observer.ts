@@ -1,4 +1,4 @@
-import { persistedInteger } from '#platform/core/validate/index.js';
+import { persistedString, persistedInteger } from '#platform/core/validate/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
@@ -9,17 +9,17 @@ import { productResourcePath, resolveProductLayout } from '#platform/core/host/i
 export const BOOTSTRAP_JOURNAL_MAX_BYTES = 262_144;
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const resource = z.strictObject({
-  resource: z.string().min(1).max(256),
-  path: z.string().min(1).max(4096).refine(value => isAbsolute(value) && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)),
+  resource: persistedString(z.string().min(1).max(256)),
+  path: persistedString(z.string().min(1).max(4096)).refine(value => isAbsolute(value) && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)),
   preimageDigest: hex.nullable(),
   targetDigest: hex,
   state: z.enum(['pending', 'published']),
 }).readonly();
 const journalShape = {
-  schemaVersion: z.literal(2), transactionId: z.string().min(1).max(256), planDigest: hex, profileDigest: hex,
+  schemaVersion: z.literal(2), transactionId: persistedString(z.string().min(1).max(256)), planDigest: hex, profileDigest: hex,
   phase: z.enum(['pending', 'committed']), createdAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   updatedAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), resources: z.array(resource).min(1).max(1024).readonly(),
-  blockers: z.array(z.string().min(1).max(256)).max(1024).readonly(), recovery: z.unknown().optional().transform((input, context) => {
+  blockers: z.array(persistedString(z.string().min(1).max(256))).max(1024).readonly(), recovery: z.unknown().optional().transform((input, context) => {
     try {
       const parsed = JSON.parse(canonical(input)) as unknown;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('RECOVERY_INVALID');

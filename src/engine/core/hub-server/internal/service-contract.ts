@@ -1,10 +1,10 @@
-import { persistedInteger, persistedUrl, HUB_LIMITS, identitySchema, hubPackageSignatureSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, HUB_LIMITS, identitySchema, hubPackageSignatureSchema } from '#domain/index.js';
 import { z } from 'zod';
 import type { IntegrityAuthority } from '#platform/index.js';
 import type { HubAwaitable, HubServerContext, HubServerSigner } from './ports.js';
 
 const id = identitySchema, time = persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative(), positive = time.positive();
-const digest = z.string().regex(/^[a-f0-9]{64}$/), text = z.string().min(1).max(HUB_LIMITS.skillReadMaxBytes);
+const digest = z.string().regex(/^[a-f0-9]{64}$/), text = persistedString(z.string().min(1).max(HUB_LIMITS.skillReadMaxBytes));
 export const hubServicePolicySchema = z.strictObject({ get schemaVersion() { return z.literal(1); },
   get identityProviders() { return z.array(z.strictObject({ id, issuer: persistedUrl(), audience: text })).min(1); },
   get admins() { return z.array(id); }, get reservedHandles() { return z.array(text); }, get confusables() { return z.record(z.string(), z.string()); },
@@ -18,8 +18,8 @@ export type HubServicePolicy = z.infer<typeof hubServicePolicySchema>;
 export const hubAccountSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, id, createdAtMs: time,
   get status() { return z.enum(['active', 'suspended', 'banned', 'deleted']); }, get deleteAfterMs() { return time.nullable(); } });
 export const hubPersonalSchema = z.strictObject({ accountId: id, providerId: id, subject: text, email: text, displayName: text });
-export const hubProfileFields = z.strictObject({ get schemaVersion() { return z.literal(1); }, id, get handle() { return z.string().max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/); },
-  get kind() { return z.enum(['person', 'organisation']); }, displayName: text, get verifiedDomains() { return z.array(z.string().max(253)); },
+export const hubProfileFields = z.strictObject({ get schemaVersion() { return z.literal(1); }, id, get handle() { return persistedString(z.string().max(64)).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/); },
+  get kind() { return z.enum(['person', 'organisation']); }, displayName: text, get verifiedDomains() { return z.array(persistedString(z.string().max(253))); },
   get members() { return z.array(z.strictObject({ accountId: id, role: z.enum(['owner', 'maintainer', 'publisher']) })); },
   get keys() { return z.array(z.strictObject({ keyId: digest, publicKey: text, principalId: id, principalKind: z.enum(['person', 'ai', 'system']), memberAccountId: id.nullable(),
     addedAtMs: time, state: z.enum(['active', 'revoked']) })); }, get status() { return z.enum(['active', 'suspended', 'banned']); },

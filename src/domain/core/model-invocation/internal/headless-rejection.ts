@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema } from '#domain/core/primitives/index.js';
 
 /** f5: a refused host name as asked (DNS grammar, lower case), never a port, path or payload. One call's gateway summary: tunnels, refusals and refused
  * names with counts (`other`: no valid name or past the gateway's `refusedHostsMax`). */
@@ -28,15 +28,15 @@ export function headlessEgressReasons(value: HeadlessEgress): { reasons: Record<
  */
 const baseRejectionSchema = z.strictObject({ schemaVersion: z.literal(1),
   refusal: z.enum(['guard', 'model-mismatch', 'quota', 'credits-required', 'login-required', 'invalid-output', 'provider-error', 'response-limit', 'resource-limit']),
-  field: z.string().max(64).optional(), subtype: z.string().max(64).optional(), resetsAtMs: counterSchema.nullable().optional(), status: counterSchema.nullable().optional(),
+  field: persistedString(z.string().max(64)).optional(), subtype: persistedString(z.string().max(64)).optional(), resetsAtMs: counterSchema.nullable().optional(), status: counterSchema.nullable().optional(),
   egress: headlessEgressSchema.optional() }).readonly();
 /** v1/v2 stay byte-compatible; older readers reject v3 instead of inventing quota or a reset time. */
 export const headlessRejectionBodySchema = z.discriminatedUnion('schemaVersion', [baseRejectionSchema.unwrap(),
   baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable') }).strict(),
   z.strictObject({ schemaVersion: z.literal(3), refusal: z.enum(['usage-unavailable', 'service-unavailable']),
     code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u).optional(), status: counterSchema.max(599).min(400).nullable() }),
-  z.strictObject({ schemaVersion: z.literal(4), refusal: z.literal('process-exit'), exitCode: counterSchema.nullable(), signal: z.string().min(1).max(32).nullable(),
-    stderrSummary: z.string().max(65_536), egress: headlessEgressSchema.optional() })]).readonly();
+  z.strictObject({ schemaVersion: z.literal(4), refusal: z.literal('process-exit'), exitCode: counterSchema.nullable(), signal: persistedString(z.string().min(1).max(32)).nullable(),
+    stderrSummary: persistedString(z.string().max(65_536)), egress: headlessEgressSchema.optional() })]).readonly();
 export type HeadlessRejectionBody = z.infer<typeof headlessRejectionBodySchema>;
 /** Legacy CLI readers keep their original evidence scope; composition explicitly supplies any additional subscription adapter ids. */
 export const NATIVE_CLI_HEADLESS_ADAPTER_ID = 'native-cli-headless';

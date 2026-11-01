@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import seed from '../../../../../assets/recovery/decision.json' with { type: 'json' };
 import { RECOVERY_CAUSE_CLASSES, recoveryNoteCodeSchema } from './case.js';
 
@@ -17,8 +17,8 @@ const positive = counterSchema.positive();
  */
 export const recoveryDecisionRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
   template: z.strictObject({ id: identitySchema, version: positive }).readonly(),
-  templates: z.array(z.strictObject({ id: identitySchema, version: positive, text: z.string().min(1).max(8192) }).readonly()).min(1).max(32).readonly(),
-  noteCodes: z.array(z.strictObject({ code: recoveryNoteCodeSchema, text: z.string().min(1).max(512) }).readonly()).min(1).max(64).readonly(),
+  templates: z.array(z.strictObject({ id: identitySchema, version: positive, text: persistedString(z.string().min(1).max(8192)) }).readonly()).min(1).max(32).readonly(),
+  noteCodes: z.array(z.strictObject({ code: recoveryNoteCodeSchema, text: persistedString(z.string().min(1).max(512)) }).readonly()).min(1).max(64).readonly(),
   answer: z.strictObject({ maxBytes: positive, rationaleMaxChars: positive }).readonly(),
   call: z.strictObject({ maxCompletionTokens: positive }).readonly(),
   breaker: z.strictObject({ maxCasesPerWindow: counterSchema, windowMs: positive, scanLimit: positive }).readonly(),
@@ -60,7 +60,7 @@ export function readRecoveryDecisionAnswer(text: string, expected: Readonly<{ ca
   let value: unknown;
   try { value = JSON.parse(text.trim()); } catch { return fail('answer-invalid'); }
   const parsed = z.strictObject({ schemaVersion: z.literal(1), caseId: digest, evidenceDigest: digest, action: z.enum(RECOVERY_DECISION_ACTIONS), causeClass: z.enum(RECOVERY_CAUSE_CLASSES),
-    rationale: z.string().max(registry.answer.rationaleMaxChars), nextAttemptNote: z.string().nullable() }).safeParse(value);
+    rationale: persistedString(z.string().max(registry.answer.rationaleMaxChars)), nextAttemptNote: z.string().nullable() }).safeParse(value);
   if (!parsed.success) return fail('answer-invalid');
   const answer = parsed.data;
   if (answer.caseId !== expected.caseId || answer.evidenceDigest !== expected.evidenceDigest) return fail('echo-mismatch');

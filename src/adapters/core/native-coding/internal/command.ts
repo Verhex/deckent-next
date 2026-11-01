@@ -1,4 +1,4 @@
-import { persistedInteger, executionProfileDefinitionSchema, INSTRUCTION_SURFACE_PATHS, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
+import { persistedString, persistedInteger, executionProfileDefinitionSchema, INSTRUCTION_SURFACE_PATHS, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { z } from 'zod';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
@@ -7,17 +7,17 @@ import { assertNativeWorkerBinding } from './binding.js';
 
 // This versioned adapter supports the owner-admitted isolated, unattended coding pilot only.
 // Its CLI flags implement native protocols, not mutable permission/model selection policy.
-const argument = z.string().min(1).refine(value => !value.includes('\0'));
+const argument = persistedString(z.string().min(1)).refine(value => !value.includes('\0'));
 const modelArgument = argument.refine(value => value.length <= 256 && !value.startsWith('-') && value.trim() === value);
 /** v4 (WORKER-CURRENCY-1): the model is a catalog reference — channel id and exact API model id — plus the exact ids of helper models
  * the CLI may use on its own (declared, never passed as flags). Admission checks all of them against the ledger catalog. */
-const pinnedModelSchema = z.strictObject({ channelId: z.string().min(1).max(256).refine(value => value.trim() === value), modelId: modelArgument,
+const pinnedModelSchema = z.strictObject({ channelId: persistedString(z.string().min(1).max(256)).refine(value => value.trim() === value), modelId: modelArgument,
   auxiliaryModelIds: z.array(modelArgument).max(8).readonly() }).readonly();
 /** Field shape shared with the K3 template (`template.ts`), which omits the per-task fields. */
 export const nativeCodingInvocationFields = z.strictObject({
   effort: z.enum(REASONING_EFFORTS).optional(),
   schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), maxTurns: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(), provider: nativeCliIdSchema,
-  cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
+  cliVersion: persistedString(z.string().trim().min(1).max(128)).regex(/^[\w .()+-]+$/),
   discovery: z.strictObject({ schemaVersion: z.literal(1), mode: z.enum(['disabled', 'repository']),
     settings: z.strictObject({ disableAllHooks: z.boolean() }).readonly().optional(),
     /** C2: the project's own hidden set for a checkout-realised `disabled` (replaces the registry default; part of the template content id). */

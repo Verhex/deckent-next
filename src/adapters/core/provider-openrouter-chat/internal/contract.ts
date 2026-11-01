@@ -1,4 +1,4 @@
-import { persistedInteger, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
+import { persistedString, persistedInteger, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { z } from 'zod';
 import { parseNativeJsonHttpDefinition } from '#adapters/core/provider-http-json/index.js';
 
@@ -12,7 +12,7 @@ export class OpenRouterChatError extends Error {
 }
 export const openRouterChatJsonSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const definitionSchema = z.strictObject({ endpoint: z.string(), authentication: z.unknown().optional(), tls: z.unknown().optional(),
-  maxOutputTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), metadataEndpoint: z.string(), endpointTag: z.string().min(1),
+  maxOutputTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), metadataEndpoint: z.string(), endpointTag: persistedString(z.string().min(1)),
   metadataLimits: z.strictObject({ maxAgeMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
     maxResponseBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).max(1_048_576),
     timeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).max(2_147_483_647) }).readonly() });

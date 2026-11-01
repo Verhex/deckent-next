@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/index.js';
 import { lstat, realpath } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
@@ -9,9 +10,9 @@ const RESERVED_TARGETS = Object.freeze(['/workspace', '/tmp', '/deckent', '/run'
 const unsafe = /[,\0\r\n]/u;
 const SEGMENT = /^[A-Za-z0-9._@+-]{1,255}$/u;
 /** Project-relative source: normalized, no parent/current segment, never a Git or Deckent product directory. */
-const sourceSchema = z.string().max(512).refine(value => value.split('/').every(part => SEGMENT.test(part)
+const sourceSchema = persistedString(z.string().max(512)).refine(value => value.split('/').every(part => SEGMENT.test(part)
   && part !== '.' && part !== '..' && part !== '.git' && part !== '.deckent'));
-export const dockerMountTargetSchema = z.string().max(512).refine(value => value.startsWith('/') && value !== '/' && !unsafe.test(value)
+export const dockerMountTargetSchema = persistedString(z.string().max(512)).refine(value => value.startsWith('/') && value !== '/' && !unsafe.test(value)
   && posix.normalize(value) === value && !value.endsWith('/') && !RESERVED_TARGETS.some(reserved => value === reserved || value.startsWith(reserved + '/')));
 const uniqueTargets = (mounts: readonly { readonly target: string }[]) => new Set(mounts.map(mount => mount.target)).size === mounts.length;
 /** S6 dependency class (owner 2026-10-17): the bind is a third-party dependency tree installed from `lockfile`, a path inside the bind. */
@@ -20,7 +21,7 @@ const dependencyTree = z.strictObject({ lockfile: sourceSchema }).readonly().opt
 export const dockerReadOnlyMountsSchema = z.array(z.strictObject({ source: sourceSchema, target: dockerMountTargetSchema, dependencyTree }).readonly())
   .max(8).refine(uniqueTargets).readonly();
 /** Supervisor option: the same binds with sources resolved by trusted composition to real absolute host directories. */
-export const dockerResolvedMountsSchema = z.array(z.strictObject({ source: z.string().min(1).max(4096).refine(value => isAbsolute(value) && !unsafe.test(value)),
+export const dockerResolvedMountsSchema = z.array(z.strictObject({ source: persistedString(z.string().min(1).max(4096)).refine(value => isAbsolute(value) && !unsafe.test(value)),
   target: dockerMountTargetSchema, dependencyTree }).readonly()).max(8).refine(uniqueTargets).readonly();
 export type DockerReadOnlyMount = z.infer<typeof dockerReadOnlyMountsSchema>[number];
 

@@ -1,4 +1,4 @@
-import { persistedInteger } from '#platform/index.js';
+import { persistedString, persistedInteger } from '#platform/index.js';
 import { z } from 'zod';
 import { immutableJsonObjectSchema, beuserBindingSchema, beuserWalkerSummarySchema, beuserSealedRubricSchema, beuserCandidateManifestSchema } from '#domain/index.js';
 import { beuserParametersSchema, beuserCalibrationSchema } from '#capabilities/index.js';
@@ -8,7 +8,7 @@ import { BEUSER_REALM_RECIPE } from '#adapters/index.js';
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 /** Installed profile data, selected by id from the governed execution registry. Never accepted as CLI JSON. v4 pins budgets; v3 requires a catalogued start state; v2 keeps its unarranged realm. */
 export const beuserJourneyProfileSchema = z.strictObject({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(BEUSER_JOURNEY_PROFILE_VERSION)]), startState: beuserStartStateSchema.optional(), binding: beuserBindingSchema, summary: beuserWalkerSummarySchema,
-  limits: beuserLimitsSchema.optional(), limitsRevision: z.string().min(1), candidateRoot: z.string().min(1), packageDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  limits: beuserLimitsSchema.optional(), limitsRevision: persistedString(z.string().min(1)), candidateRoot: persistedString(z.string().min(1)), packageDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   candidateManifest: beuserCandidateManifestSchema,
   size: z.strictObject({ columns: positive, rows: positive, scrollback: positive }),
   bounds: z.strictObject({ quietMs: positive, inactivityMs: positive, maxInputBytes: positive }),

@@ -1,4 +1,4 @@
-import { persistedDateTime, persistedInteger, clientCommandIdSchema, createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema, modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
+import { persistedString, persistedDateTime, persistedInteger, clientCommandIdSchema, createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema, modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
@@ -12,9 +12,9 @@ export const decisionAskCommandSchema=ingress.pipe(z.strictObject({schemaVersion
 export const decisionQuerySchema=ingress.pipe(z.strictObject(target));
 /** Recent decisions of one scope (C-APPROVE `deckent decide`): the page bound is protocol data (`decision-list.json`), not configurable policy. */
 export const decisionListQuerySchema=z.strictObject({schemaVersion:z.literal(1),scopeId:identitySchema,limit:persistedInteger().min(1).max(listBounds.pageMax)});
-export const decisionRecordCommandSchema=ingress.pipe(z.strictObject({...target,commandId: clientCommandIdSchema,selectedOption:identitySchema,rationale:z.string().min(1)}));
+export const decisionRecordCommandSchema=ingress.pipe(z.strictObject({...target,commandId: clientCommandIdSchema,selectedOption:identitySchema,rationale:persistedString(z.string().min(1))}));
 export const decisionOutcomeCommandSchema=ingress.pipe(z.strictObject({...target,commandId: clientCommandIdSchema,
-  outcome:z.strictObject({observedAt:persistedDateTime({offset:true}),observation:z.string().min(1)})}));
+  outcome:z.strictObject({observedAt:persistedDateTime({offset:true}),observation:persistedString(z.string().min(1))})}));
 export type DecisionPrepareInput=z.infer<typeof decisionPrepareInputSchema>;
 export type DecisionAskCommand=z.infer<typeof decisionAskCommandSchema>;
 export type DecisionQuery=z.infer<typeof decisionQuerySchema>;

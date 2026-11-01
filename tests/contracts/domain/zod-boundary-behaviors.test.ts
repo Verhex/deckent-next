@@ -4,6 +4,8 @@ import * as platformScalars from '#platform/core/validate/index.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { z as v3 } from 'zod/v3';
+import { workerEventSchema } from '#domain/index.js';
 import { agentToolSpecSchema, effectCommandSchema, identitySchema, immutableJsonObjectSchema, operationDescriptorSchema, sanitizeIssues } from '#domain/index.js';
 import { ConfigApplication, parseConfigInput, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, runtimeServiceLifecycleRequestSchema } from '#engine/index.js';
 import { CORE_SCHEMA, registerConfigSection, createDefaultConfig, validateConfig } from '#platform/core/config/index.js';
@@ -167,6 +169,74 @@ describe('readonly defaults and string formats', () => {
       expect(inputs.map(input => platform.safeParse(input).success)).toEqual(expected);
       for (const input of inputs) expect(domain.safeParse(input)).toEqual(platform.safeParse(input));
     }
+    // R1: v3 UTF-16 units, including lone surrogates and transform/check ordering.
+    for (const bounds of [{ min: 2 }, { max: 2 }, { length: 2 }, { min: 1, max: 2 }, { max: 2, min: 1 }]) {
+      let legacy = v3.string(), native = z.string();
+      for (const [kind, limit] of Object.entries(bounds)) {
+        legacy = legacy[kind as 'min' | 'max' | 'length'](limit); native = native[kind as 'min' | 'max' | 'length'](limit);
+      }
+      expect(domainScalars.persistedString(native).minLength).toBe(native.minLength);
+      expect(domainScalars.persistedString(native).maxLength).toBe(native.maxLength);
+      for (const value of ['', 'a', 'aa', 'aaa', '😀', '😀a', '😀😀', '\ud83d', '\ude00', 'e\u0301', 1, null]) {
+        const old = legacy.safeParse(value);
+        for (const scalars of [domainScalars, platformScalars]) {
+          const current = scalars.persistedString(native).safeParse(value);
+          expect(current.success, `${JSON.stringify(bounds)} ${JSON.stringify(value)}`).toBe(old.success);
+          const issues = (result: typeof current | typeof old) => result.success ? [] : result.error.issues.map(issue => ({
+            code: issue.code, message: issue.message, path: issue.path,
+            ...('minimum' in issue ? { minimum: issue.minimum } : {}), ...('maximum' in issue ? { maximum: issue.maximum } : {}),
+          }));
+          if (typeof value === 'string') expect(issues(current)).toEqual(issues(old));
+        }
+      }
+      expect(platformScalars.toInputJsonSchema(domainScalars.persistedString(native))).toMatchObject({ type: 'string',
+        ...('min' in bounds ? { minLength: bounds.min } : {}), ...('max' in bounds ? { maxLength: bounds.max } : {}),
+        ...('length' in bounds ? { minLength: bounds.length, maxLength: bounds.length } : {}) });
+    }
+    expect(domainScalars.persistedString(z.string().trim().min(1).max(2)).parse(' 😀 ')).toBe('😀');
+    expect(domainScalars.persistedString(z.string().max(2)).trim().safeParse(' 😀 ').success).toBe(false);
+    const untouched = z.string().max(1);
+    expect(domainScalars.persistedString(untouched).safeParse('😀').success).toBe(false);
+    expect(untouched.safeParse('😀').success).toBe(true);
+    expect(domainScalars.persistedString(z.string().max(1, { error: 'retained-limit' })).safeParse('😀').error!.issues[0]!.message).toBe('retained-limit');
+    const keyed = z.record(domainScalars.persistedString(z.string().max(2)), z.number());
+    expect([keyed.safeParse({ '😀': 1 }).success, keyed.safeParse({ '😀a': 1 }).success]).toEqual([true, false]);
+    expect([identitySchema.safeParse('😀'.repeat(128)).success, identitySchema.safeParse('😀'.repeat(129)).success]).toEqual([true, false]);
+    // Same public config and worker-event consumers at boundary-1 / boundary / boundary+1.
+    for (const [units, expected] of [[255, true], [256, true], [257, false]] as const) {
+      const value = '😀'.repeat(Math.floor(units / 2)) + (units % 2 ? 'a' : '');
+      const verification = { kind: value, required: true, criteria: [{ evaluator: { id: value, version: 1 }, parameters: {} }] };
+      const config = CORE_SCHEMA.safeParse({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}` }, git: { gitExecutable: 'git' }, adoption: { verification } } });
+      expect(config.success, `configIdentity ${units}`).toBe(expected);
+      if (!expected) expect(config.error!.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'too_big', maximum: 256 })]));
+    }
+    for (const [units, expected] of [[4095, true], [4096, true], [4097, false]] as const) {
+      const path = '😀'.repeat(Math.floor(units / 2)) + (units % 2 ? 'a' : '');
+      const config = CORE_SCHEMA.safeParse({ execution: { docker: { executable: 'docker', imageId: `sha256:${'a'.repeat(64)}` }, git: { gitExecutable: 'git' },
+        workTargets: { schemaVersion: 1, targets: [{ id: 'target', kind: 'git', path, baseRef: 'refs/heads/main' }] } } });
+      expect(config.success, `config path ${units}`).toBe(expected);
+    }
+    const workerTextCases = [
+      { limit: 32, field: 'window', event: { kind: 'quota', window: 'w', utilization: 0, resetsAtMs: null, status: 'ok' } },
+      { limit: 64, field: 'cliVersion', event: { kind: 'session.started', provider: 'codex', model: 'm', cliVersion: 'v' } },
+      { limit: 128, field: 'model', event: { kind: 'session.started', provider: 'codex', model: 'm', cliVersion: 'v' } },
+      { limit: 96, field: 'toolId', event: { kind: 'tool.call', toolId: 't', name: 'read', toolClass: 'read', target: null, detail: null } },
+      { limit: 256, field: 'target', event: { kind: 'tool.call', toolId: 't', name: 'read', toolClass: 'read', target: null, detail: null } },
+      { limit: 240, field: 'excerpt', event: { kind: 'message', role: 'assistant', textBytes: 0, thinking: false, excerpt: '' } },
+    ];
+    for (const { limit, field, event } of workerTextCases) for (const delta of [-1, 0, 1]) {
+      const units = limit + delta, text = '😀'.repeat(Math.floor(units / 2)) + (units % 2 ? 'a' : '');
+      expect(workerEventSchema.safeParse({ schemaVersion: 1, sequence: 1, atMs: 0, ...event, [field]: text }).success, `${field} ${units}`).toBe(delta <= 0);
+    }
+    // Array bounds count elements; regex flags/reset and record string keys retain v3 behavior.
+    for (const value of [[], ['😀'], ['😀', '😀'], ['😀', '😀', '😀']]) {
+      expect(z.array(z.string()).max(2).safeParse(value).success).toBe(v3.array(v3.string()).max(2).safeParse(value).success);
+    }
+    for (const flags of ['', 'i', 'g', 'u', 'y']) {
+      const current = z.string().regex(new RegExp('^a+$', flags)), old = v3.string().regex(new RegExp('^a+$', flags));
+      for (const value of ['aa', 'aa', 'AA', 'b', '😀']) expect(current.safeParse(value).success).toBe(old.safeParse(value).success);
+    }
+    for (const value of [{}, { '😀': 1 }, { '': 1 }, { a: '1' }, []]) expect(z.record(z.string(), z.number()).safeParse(value).success).toBe(v3.record(v3.string(), v3.number()).safeParse(value).success);
     const issues = [{ code: 'invalid_format' }, { code: 'invalid_value', values: ['x'] }, { code: 'custom', params: { legacyCode: 'invalid_type' } }];
     expect(issues.map(domainScalars.persistedIssueCode)).toEqual(['invalid_string', 'invalid_literal', 'invalid_type']);
     expect(issues.map(platformScalars.persistedIssueCode)).toEqual(['invalid_string', 'invalid_literal', 'invalid_type']);

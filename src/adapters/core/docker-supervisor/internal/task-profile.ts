@@ -1,4 +1,4 @@
-import { persistedUuid, environmentRequirementsSchema, executionProfileDefinitionSchema, frozenHiddenPaths, type ExecutionProfileDefinition } from '#domain/index.js';
+import { persistedString, persistedUuid, environmentRequirementsSchema, executionProfileDefinitionSchema, frozenHiddenPaths, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
@@ -7,7 +7,7 @@ import { dockerReadOnlyMountsSchema } from './mounts.js';
 import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
 import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js';
 
-const person = z.strictObject({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }).readonly();
+const person = z.strictObject({ issuer: persistedString(z.string().min(1).max(256)), subject: persistedString(z.string().min(1).max(256)) }).readonly();
 /** U9-7 (v1): the worker's model traffic goes through the person's own Sign in with ChatGPT connection via the private host relay, never through a
  * credential in the worker. Nonsecret only: the connection and the person whose plan it is. Instruction discovery is the compiled native profile's
  * own (U9F: no relay-specific hidden set; one resolver, `frozenHiddenPaths`). */

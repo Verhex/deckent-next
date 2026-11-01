@@ -1,4 +1,4 @@
-import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import limits from './work-input-limits.json' with { type: 'json' };
 import { exactModelIdSchema, REASONING_EFFORTS } from '#domain/core/provider-catalog/index.js';
@@ -7,9 +7,9 @@ import { exactModelIdSchema, REASONING_EFFORTS } from '#domain/core/provider-cat
 export const WORK_INPUT_SCHEMA_VERSION = 1;
 export const WORK_INPUT_TEXT_MAX_BYTES = 16_384;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-const workText = z.string().min(1).refine(value => value.trim().length > 0 && !value.includes('\0') && bytes(value) <= WORK_INPUT_TEXT_MAX_BYTES);
+const workText = persistedString(z.string().min(1)).refine(value => value.trim().length > 0 && !value.includes('\0') && bytes(value) <= WORK_INPUT_TEXT_MAX_BYTES);
 /** Repository-relative POSIX path or glob; K6 enforces it later on patch preparation. No absolute, parent, empty or control segment. */
-const scopePath = z.string().min(1).max(512).refine(value => value.trim() === value && !value.startsWith('/') && !value.includes('\\')
+const scopePath = persistedString(z.string().min(1).max(512)).refine(value => value.trim() === value && !value.startsWith('/') && !value.includes('\\')
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
   && value.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..'));
 const modelSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, auxiliaryModelIds: z.array(exactModelIdSchema).max(8).readonly() }).readonly();

@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from 'node:crypto';
 import { z } from 'zod';
 import { refuse } from './files.js';
@@ -45,7 +46,7 @@ export async function encryptBackupContribution(material: Uint8Array, passphrase
 export async function decryptBackupContribution(text: string, passphrase: string, aad: string, maxBytes: number): Promise<Buffer> {
   let value;
   try {
-    value = envelope.extend({ schemaVersion: z.literal(2), ciphertext: z.string().max(maxBytes * 2).regex(/^(?:[0-9a-f]{2})*$/u) }).parse(JSON.parse(text));
+    value = envelope.extend({ schemaVersion: z.literal(2), ciphertext: persistedString(z.string().max(maxBytes * 2)).regex(/^(?:[0-9a-f]{2})*$/u) }).parse(JSON.parse(text));
   } catch { return refuse('BACKUP_SET_INVALID'); }
   const key = await derive(passphrase, Buffer.from(value.salt, 'hex'));
   try {

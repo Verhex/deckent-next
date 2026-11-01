@@ -1,4 +1,4 @@
-import { persistedInteger, AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
+import { persistedString, persistedInteger, AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
 import { ed25519KeyId, sha256, t, type Locale } from '#platform/index.js';
 import { z } from 'zod';
 import { verifyHubRevocationFeed, hubRevocationWatermark, requireHubRevocationContinuation } from '#engine/core/hub/index.js';
@@ -10,9 +10,9 @@ import { decodeHubBundle, encodeHubBundle } from './bundle.js';
 import { acceptClientFeed, clientFeedKey, localRevokedKeyIds, verifyClientBundle } from './verification.js';
 import { installClientBundles, retireClientInstall, verifyInstalledClientBundle } from './install.js';
 const sourceCommand = hubClientCommandSchema.extend({ expectedRevision: persistedInteger().positive().nullable(), publicKey: signerPublicKeySchema,
-  endpoint: z.string().min(1).max(2048), local: z.boolean().prefault(false), label: z.string().min(1).max(256),
+  endpoint: persistedString(z.string().min(1).max(2048)), local: z.boolean().prefault(false), label: persistedString(z.string().min(1).max(256)),
   trustPolicy: z.string().prefault(HUB_TRUST_POLICIES.addedSourceDefault) }).strict();
-const packageQuery = hubClientCommandSchema.omit({ commandId: true }).extend({ packageId: z.string().min(1).max(256), version: z.string().optional() }).strict();
+const packageQuery = hubClientCommandSchema.omit({ commandId: true }).extend({ packageId: persistedString(z.string().min(1).max(256)), version: z.string().optional() }).strict();
 const ref = (principal: VerifiedPrincipal) => ({ issuer: principal.issuer, subject: principal.subject });
 /** Offline client transition owner. Network fetch/serve and CLI/MCP commands are deliberately separate slices. */
 export class HubClientApplication {
@@ -215,7 +215,7 @@ export class HubClientApplication {
   installFile(input: unknown, credential?: unknown) { return this.install(input, credential, false); }
   updateFile(input: unknown, credential?: unknown) { return this.install(input, credential, true); }
   async uninstall(input: unknown, credential?: unknown) {
-    const command = hubClientCommandSchema.extend({ packageId: z.string().min(1).max(256), expectedRevision: persistedInteger().positive() }).strict().parse(input);
+    const command = hubClientCommandSchema.extend({ packageId: persistedString(z.string().min(1).max(256)), expectedRevision: persistedInteger().positive() }).strict().parse(input);
     return this.write('uninstall', command, credential, async (store, principal) => {
       const installed = await store.install(command.scopeId, command.hubId, command.packageId);
       if (!installed || installed.state !== 'installed' || installed.revision !== command.expectedRevision) throw new HubClientError('HUB_INSTALL_CONFLICT');

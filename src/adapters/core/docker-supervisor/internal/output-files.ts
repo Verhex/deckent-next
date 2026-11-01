@@ -1,11 +1,11 @@
-import { persistedInteger } from '#domain/index.js';
+import { persistedString, persistedInteger } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { open, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { outputFileNameSchema, type CollectedOutputFile } from '#engine/index.js';
 const budget = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-const pathSchema = z.string().min(1).refine(path => !path.includes('\\') && !path.includes(String.fromCharCode(0))
+const pathSchema = persistedString(z.string().min(1)).refine(path => !path.includes('\\') && !path.includes(String.fromCharCode(0))
   && !isAbsolute(path) && path.split('/').every(part => part !== '' && part !== '.' && part !== '..'));
 export const dockerOutputFilesSchema = z.strictObject({ maxBytes: budget, maxFiles: budget,
   files: z.array(z.strictObject({ name: outputFileNameSchema, path: pathSchema, maxBytes: budget })).min(1),

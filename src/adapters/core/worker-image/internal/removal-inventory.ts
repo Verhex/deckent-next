@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, opendir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ import { workerLeaseReferences } from './references.js';
 import limits from './limits.json' with { type: 'json' };
 const PRIVATE_PERMISSION_MASK = 0o077;
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
-const schema = z.looseObject({ schemaVersion: z.literal(3), imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u), daemonId: z.string().min(1), endpoint: z.string(),
+const schema = z.looseObject({ schemaVersion: z.literal(3), imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u), daemonId: persistedString(z.string().min(1)), endpoint: z.string(),
   recipeSha256: z.string(), images: z.array(z.looseObject({ imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), tag: z.string().nullable().optional() })).nonempty() });
 async function read(path: string) {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);

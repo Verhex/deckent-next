@@ -1,4 +1,4 @@
-import { persistedUrl, counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues, type ValidationIssue } from '#domain/core/primitives/index.js';
+import { persistedString, persistedUrl, counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, exactModelIdSchema, daySchema, cliVersionSchema, aliasesSchema } from './catalog-values.js';
 import { channelMetadataSchema, modelMetadataSchema, reportedModelNameSchema, channelReportedNamesSchema } from './catalog-metadata.js';
@@ -15,7 +15,7 @@ export const PROVIDER_CATALOG_DOCUMENT_SCHEMA_VERSION = 3;
 export { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, EXACT_MODEL_ID_MAX_LENGTH, exactModelIdSchema } from './catalog-values.js';
 export const modelLifecycleSchema = z.strictObject({ state: z.enum(MODEL_LIFECYCLE_STATES), deprecatedOn: daySchema.nullable(),
   retireNotBefore: daySchema.nullable(), retiredOn: daySchema.nullable(), replacementModelId: exactModelIdSchema.optional(),
-  source: z.strictObject({ url: persistedUrl().max(512).startsWith('https://'), observedOn: daySchema }).readonly().nullable(),
+  source: z.strictObject({ url: persistedString(persistedUrl().max(512)).startsWith('https://'), observedOn: daySchema }).readonly().nullable(),
 }).readonly();
 const channelV2 = z.strictObject({ kind: z.enum(CATALOG_CHANNEL_KINDS), cli: z.enum(NATIVE_CLI_CHANNELS).nullable(),
   aliases: aliasesSchema });

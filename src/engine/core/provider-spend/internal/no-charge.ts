@@ -1,4 +1,4 @@
-import { persistedInteger, persistedUrl, RegistryError, type ModelInvocationProfile, type ModelInvocationReceipt, type ProviderSpendQuote } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, RegistryError, type ModelInvocationProfile, type ModelInvocationReceipt, type ProviderSpendQuote } from '#domain/index.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
 import { z } from 'zod';
 import data from './no-charge-policy.json' with { type: 'json' };
@@ -9,7 +9,7 @@ import { providerSpendRejectionHasNoCharge } from './invocation.js';
 export const PROVIDER_SPEND_NO_CHARGE_STATUSES: readonly number[] = Object.freeze([400, 401, 402, 403, 404, 405, 406, 407, 410, 411, 412, 413, 414, 415, 416,
   417, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451]);
 const exactEndpoint = persistedUrl().refine(value => { const url = new URL(value); return url.protocol === 'https:' && url.href === value && !url.username && !url.password && !url.search && !url.hash; });
-const certificationSchema = z.strictObject({ vendor: z.string().min(1).max(128), endpoints: z.array(exactEndpoint).min(1).max(32),
+const certificationSchema = z.strictObject({ vendor: persistedString(z.string().min(1).max(128)), endpoints: z.array(exactEndpoint).min(1).max(32),
   statuses: z.array(persistedInteger().refine(status => PROVIDER_SPEND_NO_CHARGE_STATUSES.includes(status))).min(1), source: persistedUrl(),
   retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional() });
 type Certification = z.infer<typeof certificationSchema>;

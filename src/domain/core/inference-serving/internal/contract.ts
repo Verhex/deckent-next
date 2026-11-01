@@ -1,4 +1,4 @@
-import { persistedNumber, persistedInteger, persistedUrl, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedNumber, persistedInteger, persistedUrl, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 
@@ -14,11 +14,11 @@ export const inferenceServingProfileSchema = z.strictObject({
   hardware: z.strictObject({
     gpus: counterSchema.positive(),
     vramGbPerGpu: persistedNumber(z.number().positive()),
-    arch: z.string().min(1),
+    arch: persistedString(z.string().min(1)),
     topology: inferenceTopologySchema,
   }).readonly(),
   model: z.strictObject({
-    modelId: z.string().min(1),
+    modelId: persistedString(z.string().min(1)),
     weightGb: persistedNumber(z.number().positive()),
     kvBytesPerTokenBf16: persistedNumber(z.number().positive()),
     kvBytesPerTokenFp8: persistedNumber(z.number().positive()),
@@ -27,12 +27,12 @@ export const inferenceServingProfileSchema = z.strictObject({
   serving: z.strictObject({
     backend: inferenceBackendSchema,
     openaiBaseUrl: persistedUrl().optional(),
-    weightQuant: z.string().min(1),
+    weightQuant: persistedString(z.string().min(1)),
     kvDtype: inferenceKvDtypeSchema,
     gpuMemUtil: z.number().min(0.5).max(0.99),
     overheadGb: persistedNumber(z.number().nonnegative()),
-    imageRef: z.string().min(1).optional(),
-    modelPath: z.string().min(1).optional(),
+    imageRef: persistedString(z.string().min(1)).optional(),
+    modelPath: persistedString(z.string().min(1)).optional(),
   }).readonly(),
   workload: z.strictObject({
     maxCtx: counterSchema.positive(),

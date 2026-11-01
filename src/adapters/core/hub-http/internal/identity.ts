@@ -1,18 +1,18 @@
-import { persistedEmail, persistedInteger, persistedUrl, HOST_LIMITS_REGISTRY } from '#platform/index.js';
+import { persistedString, persistedEmail, persistedInteger, persistedUrl, HOST_LIMITS_REGISTRY } from '#platform/index.js';
 import { createPublicKey, verify, type JsonWebKey } from 'node:crypto';
 import { z } from 'zod';
 import { HUB_LIMITS } from '#domain/index.js';
 import { HubServerError, type HubIdentityVerifier } from '#engine/index.js';
 
-export const hubOidcProviderSchema = z.strictObject({ issuer: persistedUrl(), audience: z.string().min(1),
+export const hubOidcProviderSchema = z.strictObject({ issuer: persistedUrl(), audience: persistedString(z.string().min(1)),
   algorithms: z.array(z.enum(['RS256', 'ES256', 'EdDSA'])).min(1),
   /** The operator must configure values that certify WebAuthn + second factor at this exact issuer, never generic MFA alone. */
-  passkeyAcr: z.array(z.string().min(1)).min(1), passkeyAmr: z.array(z.string().min(1)).min(1),
+  passkeyAcr: z.array(persistedString(z.string().min(1))).min(1), passkeyAmr: z.array(persistedString(z.string().min(1))).min(1),
 }).readonly();
 export type HubOidcProvider = z.infer<typeof hubOidcProviderSchema>;
-const claimsSchema = z.object({ iss: z.string(), sub: z.string().min(1), aud: z.union([z.string(), z.array(z.string()).min(1)]),
+const claimsSchema = z.object({ iss: z.string(), sub: persistedString(z.string().min(1)), aud: z.union([z.string(), z.array(z.string()).min(1)]),
   azp: z.string().optional(), nonce: z.string(), exp: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), iat: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), nbf: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
-  email: persistedEmail(), email_verified: z.boolean(), name: z.string().min(1), acr: z.string(), amr: z.array(z.string()) });
+  email: persistedEmail(), email_verified: z.boolean(), name: persistedString(z.string().min(1)), acr: z.string(), amr: z.array(z.string()) });
 const decode = (part: string): unknown => {
   if (!/^[A-Za-z0-9_-]+$/.test(part) || Buffer.from(part, 'base64url').toString('base64url') !== part) throw new HubServerError('HUB_ACCOUNT_REFUSED');
   return JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as unknown;
@@ -28,10 +28,10 @@ export class HubOidcPasskeyVerifier implements HubIdentityVerifier {
   }
   async verify(input: unknown, expected: Parameters<HubIdentityVerifier['verify']>[1]) {
     try {
-      const { idToken } = z.strictObject({ idToken: z.string().max(HUB_LIMITS.networkInputMaxBytes) }).parse(input);
+      const { idToken } = z.strictObject({ idToken: persistedString(z.string().max(HUB_LIMITS.networkInputMaxBytes)) }).parse(input);
       const parts = idToken.split('.'); if (parts.length !== 3) throw new HubServerError('HUB_ACCOUNT_REFUSED');
       const [headerPart, bodyPart, signaturePart] = parts as [string, string, string];
-      const header = z.strictObject({ kid: z.string().min(1), alg: z.enum(['RS256', 'ES256', 'EdDSA']), typ: z.literal('JWT').optional() }).parse(decode(headerPart));
+      const header = z.strictObject({ kid: persistedString(z.string().min(1)), alg: z.enum(['RS256', 'ES256', 'EdDSA']), typ: z.literal('JWT').optional() }).parse(decode(headerPart));
       const provider = this.providers.find(p => p.issuer === expected.issuer && p.audience === expected.audience);
       if (!provider || !provider.algorithms.includes(header.alg)) throw new HubServerError('HUB_ACCOUNT_REFUSED');
       const jwk = await this.key(provider.issuer, header.kid);

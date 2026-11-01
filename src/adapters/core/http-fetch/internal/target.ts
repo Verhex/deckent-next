@@ -1,4 +1,4 @@
-import { persistedInteger } from '#platform/index.js';
+import { persistedString, persistedInteger } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
@@ -75,7 +75,7 @@ const isText = (contentType: string | null) => { const type = mediaType(contentT
 export type FetchDeposit = (rel: string, data: Uint8Array, signal?: AbortSignal) => Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
 export interface FetchRun { readonly result: HttpFetchResult; readonly stored: Awaited<ReturnType<FetchDeposit>> | null }
 
-const inputSchema = z.strictObject({ url: z.string().min(1).max(FETCH_URL_MAX_CHARS), maxBytes: persistedInteger().positive() });
+const inputSchema = z.strictObject({ url: persistedString(z.string().min(1).max(FETCH_URL_MAX_CHARS)), maxBytes: persistedInteger().positive() });
 /**
  * One fetch as a C11 effect target (FETCH S7). Each call is its own record; the request is never repeated: `lookup` is always unknown.
  * Nothing sent → refused; answered (any HTTP status, a stopped redirect included) → the effect happened; sent then timed out, cancelled or

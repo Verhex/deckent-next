@@ -1,4 +1,4 @@
-import { persistedInteger, callerEnvironment } from '#platform/index.js';
+import { persistedString, persistedInteger, callerEnvironment } from '#platform/index.js';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
@@ -6,8 +6,8 @@ import { z } from 'zod';
 import { supervisorCommandSchema, validateSupervisorReply, SupervisorError,
   type SupervisorCommand, type SupervisorReply, type SandboxRequest, type ExecutionSupervisor } from '#engine/index.js';
 const processString = z.string().refine(value => !value.includes('\0'));
-const optionsSchema = z.strictObject({ executable: processString.pipe(z.string().min(1)), args: z.array(processString).readonly(),
-  cwd: processString.pipe(z.string().min(1)), timeoutMs: persistedInteger().positive().max(2_147_483_647),
+const optionsSchema = z.strictObject({ executable: processString.pipe(persistedString(z.string().min(1))), args: z.array(processString).readonly(),
+  cwd: processString.pipe(persistedString(z.string().min(1))), timeoutMs: persistedInteger().positive().max(2_147_483_647),
   maxInputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxOutputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
 }).readonly();
 export type ProcessSupervisorOptions = z.infer<typeof optionsSchema>;

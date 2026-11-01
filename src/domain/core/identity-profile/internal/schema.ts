@@ -1,4 +1,4 @@
-import { persistedInteger, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, persistedInteger, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import limits from './limits.json' with { type: 'json' };
 import { companyIdSchema, policyRoleSchema } from '#domain/core/policy/index.js';
@@ -25,13 +25,13 @@ export type IdentityProfileDefinition = z.infer<typeof identityProfileDefinition
 export type IdentityProfileRef = z.infer<typeof identityProfileRefSchema>;
 export const identityProfilePackageSchema = identityProfileJsonSchema.pipe(z.strictObject({ get schemaVersion() { return z.literal(1); }, namespace: slug,
   source: identitySchema, get digest() { return z.string().regex(/^[a-f0-9]{64}$/); }, definition: identityProfileDefinitionSchema,
-  get labels() { return z.strictObject({ en: z.string().min(1).max(256), tr: z.string().min(1).max(256) }).readonly(); },
+  get labels() { return z.strictObject({ en: persistedString(z.string().min(1).max(256)), tr: persistedString(z.string().min(1).max(256)) }).readonly(); },
 }).readonly());
 export type IdentityProfilePackage = z.infer<typeof identityProfilePackageSchema>;
 const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
-const member = z.strictObject({ id: slug, principal: principalRef, get label() { return z.string().min(1).max(256); },
+const member = z.strictObject({ id: slug, principal: principalRef, get label() { return persistedString(z.string().min(1).max(256)); },
   get kind() { return z.enum(['human', 'machine', 'agent']); }, get organizationNodeId() { return slug.optional(); } }).readonly();
-const node = z.strictObject({ id: slug, get kind() { return z.enum(['site', 'unit']); }, companyId: companyIdSchema, get parentId() { return slug.nullable(); }, get label() { return z.string().min(1).max(256); } }).readonly();
+const node = z.strictObject({ id: slug, get kind() { return z.enum(['site', 'unit']); }, companyId: companyIdSchema, get parentId() { return slug.nullable(); }, get label() { return persistedString(z.string().min(1).max(256)); } }).readonly();
 const previewShape = z.strictObject({ get schemaVersion() { return z.literal(1); }, profile: identityProfileRefSchema,
   scopeId: identitySchema, get projectScopeIds() { return z.array(identitySchema).min(1).max(128).readonly().optional(); },
   get members() { return z.array(member).max(1024).readonly(); }, get organization() { return z.array(node).max(1024).readonly(); },

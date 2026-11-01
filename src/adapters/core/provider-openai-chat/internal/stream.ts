@@ -1,4 +1,4 @@
-import { persistedInteger } from '#domain/index.js';
+import { persistedString, persistedInteger } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
@@ -24,8 +24,8 @@ const deltaSchema = z.looseObject({ role: z.literal('assistant').optional(), con
   refusal: z.string().nullable().optional() });
 const choiceSchema = z.looseObject({ index: z.literal(0), delta: deltaSchema,
   finish_reason: z.string().nullable().optional() });
-const chunkSchema = z.looseObject({ id: z.string().min(1), object: z.literal('chat.completion.chunk').optional(),
-  created: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), model: z.string().min(1), choices: z.array(choiceSchema).max(1),
+const chunkSchema = z.looseObject({ id: persistedString(z.string().min(1)), object: z.literal('chat.completion.chunk').optional(),
+  created: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), model: persistedString(z.string().min(1)), choices: z.array(choiceSchema).max(1),
   usage: z.unknown().optional(), system_fingerprint: z.unknown().optional() });
 
 type NativeReasoning = { content: string | null; contentSeen: boolean; details: JsonObject[]; detailsSeen: boolean };
