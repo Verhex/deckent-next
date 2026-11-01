@@ -1,3 +1,8 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { expect, it, vi } from 'vitest';
 import { beuserPersonaCoverage } from '#engine/index.js';
 import { formatBeuserReport } from '#surfaces/core/cli-beuser/index.js';
@@ -70,20 +75,42 @@ it('shows EN/TR walk/report help without a host effect and refuses incomplete, d
   await expect(beuserCommand(['beuser', 'walk'], { stdout, listBeuserJourneys: list })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
   expect(list).not.toHaveBeenCalled();
   // Presentation fault injection: the person approves the actual setup card; composition reports a post-publication refusal.
+  const env = { HOME: '/nonexistent-beuser-presentation-fixture', DECKENT_GLOBAL_HOME: '/nonexistent-beuser-presentation-fixture/global' };
   const human = await import('#surfaces/core/cli-human/index.js'), approved = vi.spyOn(human, 'askCliCard').mockResolvedValue('apply');
   const partial = vi.fn().mockResolvedValueOnce({ status: 'preview', digest: 'a'.repeat(64), admission: {} })
     .mockResolvedValueOnce({ status: 'applied-unverified', digest: 'a'.repeat(64), errorCode: 'POLICY_DENIED' });
   try {
     chunks.length = 0;
     await beuserCommand(['beuser', 'setup', '--profile', 'p', '--scope', 'scope', '--apply', '--lang', 'en'], {
-      root: '/nonexistent-beuser-presentation-fixture', env: { HOME: '/nonexistent-beuser-presentation-fixture', DECKENT_GLOBAL_HOME: '/nonexistent-beuser-presentation-fixture/global' },
+      root: '/nonexistent-beuser-presentation-fixture', env,
       stdin: { isTTY: true } as never, stdout: ttyOut, setupBeuser: partial,
     });
     expect(approved).toHaveBeenCalledOnce(); expect(partial.mock.calls[1]![1]).toMatchObject({ apply: true, expect: 'a'.repeat(64) });
     expect(chunks.join('')).toContain('Applied, not verified'); expect(chunks.join('')).toContain('config was written');
     expect(chunks.join('')).toContain('POLICY_DENIED'); expect(chunks.join('')).not.toContain('nothing was applied');
+    // Every pre-admission cancellation has the same typed JSON result, including the journey picker and the final No choice.
+    for (const answers of [[null], ['continue', null], ['continue', '0', 'cancel']] as const) {
+      approved.mockReset(); for (const answer of answers) approved.mockResolvedValueOnce(answer);
+      const preview = vi.fn(async (_root: string, input: { apply: boolean }) => {
+        expect(input.apply).toBe(false);
+        return { status: 'preview', controller: { root: 'fixture', scopeId: 'fixture' }, ceiling: 1,
+          models: [{ channelId: 'fixture', modelId: 'fixture', recommended: true }],
+          candidate: { root: 'fixture', version: 'fixture', revision: 'fixture' },
+          limits: { maxSteps: 1, maxWallMs: 1, maxCalls: 1, maxTokens: 1, maxCost: 0, currency: 'USD' },
+          slots: { before: null, after: { executionSlots: 1, inFlightSlots: 1 } } };
+      }), walk = vi.fn();
+      chunks.length = 0;
+      await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json'], { stdout: ttyOut, stdin: { isTTY: true } as never,
+        env, setupBeuser: preview, walkBeuser: walk });
+      expect(JSON.parse(chunks.join(''))).toEqual({ status: 'cancelled' }); expect(walk).not.toHaveBeenCalled();
+    }
+    approved.mockReset().mockResolvedValueOnce(null); chunks.length = 0;
+    await beuserCommand(['beuser', 'walk', '--json'], { stdout: ttyOut, stdin: { isTTY: true } as never, env,
+      listBeuserJourneys: async () => [{ id: 'fixture', recommended: true }] });
+    expect(JSON.parse(chunks.join(''))).toEqual({ status: 'cancelled' });
   } finally { approved.mockRestore(); }
-});
+  if (process.platform === 'linux') await cancellationPty();
+}, 60_000);
 
 it('reports a critical persona refused before its first screen as unknown, with the safe root reason in EN/TR and JSON', () => {
   const value = { ...report(), unknown: [{ branch: 'Ayse', reason: 'BEUSER_TARGET_NOT_SANDBOX' },
@@ -109,3 +136,69 @@ it('reports daemon-attested filesystem proof separately in EN/TR and locale-free
   expect(en).toContain('daemon-attested'); expect(en).toContain('no independent filesystem proof');
   expect(() => formatBeuserReport({ ...value, cleanup: [{ ...value.cleanup[0], filesystemProof: { schemaVersion: 1, source: 'rm-exit' } }] }, { json: true, locale: 'en' })).toThrow();
 });
+
+/** F13: the compiled BeUser command and real card on a controlling PTY; callbacks cannot admit a walk or apply anything. */
+async function cancellationPty() {
+  const root = await mkdtemp(join(tmpdir(), 'beuser-card-pty-'));
+  const command = resolve('dist/surfaces/core/cli-beuser/index.js');
+  const script = `const { beuserCommand } = await import(${JSON.stringify(command)});
+const model = { channelId: 'fixture', modelId: 'fixture', recommended: true };
+let applies = 0, walks = 0;
+await beuserCommand(['beuser', 'walk', '--journey', 'fixture', '--json', '--lang', 'en'], {
+  env: process.env, setupBeuser: async (_root, input) => { if (input.apply) applies++;
+    return { status: 'preview', controller: { root: process.cwd(), scopeId: 'fixture' }, models: [model], ceiling: 1 }; },
+  walkBeuser: async () => { walks++; throw new Error('unexpected walk'); }
+});
+console.log('EFFECTS='+JSON.stringify({ applies, walks }));`;
+  const driver = String.raw`
+import os, pty, select, time, json, sys
+argv, before = json.loads(sys.argv[1]), sys.argv[2] == 'before'
+pid, fd = pty.fork()
+if pid == 0: os.execvp(argv[0], argv)
+out = b''
+def read_for(seconds):
+    global out
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if select.select([fd], [], [], .02)[0]:
+            try: data = os.read(fd, 65536)
+            except OSError: return
+            if not data: return
+            out += data
+def wait_for(text):
+    end = time.monotonic() + 15
+    while text not in out:
+        if time.monotonic() > end: raise RuntimeError('missing '+repr(text)+' '+repr(out[-2000:]))
+        read_for(.02)
+try:
+    wait_for(b'\x1b]11;?')
+    if before: os.write(fd, b'\x1b]11;rgb:f0/ec/e5\x1b\\\x1b[?62c')
+    wait_for(b'Walkers for this journey')
+    read_for(.35)
+    # H1: an OSC 11 response whose first ESC and remaining bytes are separate TTY reads, 80 ms apart.
+    os.write(fd, b'\x1b'); read_for(.08)
+    os.write(fd, b']11;rgb:f0/ec/e5\x1b\\'); read_for(.35)
+    for reply in [b'\x1b[>0;10;1c', b'\x1bP1$r0m\x1b\\', b'\x1b]4;0;rgb:ff/ff/ff\x07']:
+        os.write(fd, reply); read_for(.1)
+    automatic = b'"status":"cancelled"' in out or b'EFFECTS=' in out
+    os.write(fd, b'\x1b'); read_for(.6)
+    ended, status = os.waitpid(pid, os.WNOHANG)
+    if not ended: raise RuntimeError('did not exit '+repr(out[-2000:]))
+    print(json.dumps({'automatic': automatic, 'code': os.waitstatus_to_exitcode(status), 'output': out.decode('utf8','replace')}))
+    pid = None
+finally:
+    if pid:
+        try: os.kill(pid, 9); os.waitpid(pid, 0)
+        except ProcessLookupError: pass
+    os.close(fd)
+`;
+  try {
+    for (const moment of ['before', 'after']) {
+      const { stdout } = await promisify(execFile)('python3', ['-c', driver, JSON.stringify([process.execPath, '--input-type=module', '-e', script]), moment], {
+        cwd: root, env: { PATH: process.env['PATH'], HOME: root, DECKENT_GLOBAL_HOME: join(root, 'global'), TERM: 'xterm-256color', FORCE_COLOR: '3' }, timeout: 30_000 });
+      const run = JSON.parse(stdout) as { automatic: boolean; code: number; output: string };
+      expect(run.automatic, run.output).toBe(false); expect(run.code, run.output).toBe(0);
+      expect(run.output).toContain('{"status":"cancelled"}'); expect(run.output).toContain('EFFECTS={"applies":0,"walks":0}');
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+}
