@@ -130,7 +130,7 @@ it.skipIf(process.platform !== 'linux')('production boot starts the real PTY ent
   expect(Object.keys(f.boots[0]!).sort()).toEqual(['columns', 'commands', 'entry', 'env', 'limits', 'maxArtifactBytes', 'mode', 'nonce', 'rows', 'schemaVersion', 'secretFds', 'terminalFixture']);
   // The real packaged input filter consumes the actual delayed realm reply, preserving keys and Ctrl+C.
   const source = new URL('../../../src/surfaces/core/terminal-window/internal/color-reports.ts', import.meta.url);
-  const filterCode = ts.transpileModule(await readFile(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const filterCode = ts.transpileModule(await readFile(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   for (const interrupt of [false, true]) {
     const delayed = await producer('pty', `
       const filter = require(require('node:path').join(__dirname, '../../../../../color-reports.cjs'));
