@@ -11,6 +11,7 @@ import { policySchema, type AuditEvent } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
+import { committedConfigTarget } from './config-progress.js';
 const identityPort = (projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): FirstRunServiceIdentityPort => ({
   read: async () => { const snapshot = await snapshotConfiguredConfig(projectRoot, options); return { identity: snapshot.effective.service.identity, digest: snapshot.digest }; },
   write: async (identity, expect) => createConfiguredConfigApplication(projectRoot, options).set({ keyPath: 'service.identity', value: { ...identity }, layer: 'project', expect,
@@ -61,7 +62,8 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
       }
     },
     async verify(target) {
-      if (target.resource === 'config' || target.resource === 'ledger') await firstSession.verify(target);
+      if (target.resource === 'config' || target.resource === 'ledger') await firstSession.verify((await journal.observe()).record?.phase === 'committed'
+        ? await committedConfigTarget(target, scopeId, layout, config, maxBytes) : target);
       else if ((await inspectInstallationFile(file(target))).digest !== target.digest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     },
     now: () => clock.sample().wallMs,
