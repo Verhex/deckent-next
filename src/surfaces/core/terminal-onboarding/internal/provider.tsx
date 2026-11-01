@@ -1,7 +1,7 @@
 import { useApp } from 'ink';
-import { t, colorCapability, loadConfigTerminalLaunch } from '#platform/index.js';
+import { DeckentError, t, colorCapability, loadConfigTerminalLaunch } from '#platform/index.js';
 import { type PanelLabels, type ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
-import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
+import { ProviderPanel } from '#surfaces/core/terminal-provider/index.js';
 import { CardCopyContext, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { runTerminalHost, streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
@@ -10,9 +10,9 @@ import { cardCopyLabels, type CliCardIo } from '#surfaces/core/cli-human/index.j
 function ProviderScreen({ port, labels, finish, io }: { readonly port: ProviderPanelPort; readonly labels: PanelLabels; readonly finish: (error?: unknown) => void; readonly io: CliCardIo }) {
   const { exit } = useApp();
   const done = (error?: unknown) => { finish(error); exit(); };
-  return <WindowStackProvider><SettingsPanel kind="provider" ports={{ provider: port }} labels={labels}
+  return <WindowStackProvider><ProviderPanel port={port} labels={labels} laterLabel={t('onboarding.session.later', {}, io.locale)}
     push={rows => { for (const row of rows) ((io.stdout ?? process.stdout) as NodeJS.WriteStream).write(`${row.text}\n`); }} onClose={() => done()}
-    onError={done} errorText={error => error instanceof Error ? error.message : String(error)}
+    onError={done} errorText={error => error instanceof DeckentError ? (error.localize?.(io.locale).message ?? error.message) : error instanceof Error ? error.message : String(error)}
     openApproval={() => done(new Error(t('onboarding.provider.approval', {}, io.locale)))} /></WindowStackProvider>;
 }
 /** Reuse the existing connection, masked-key, discovery and activation owner in the current onboarding step. */

@@ -128,7 +128,11 @@ async function showOnboardingSession(session: ReturnType<typeof createOnboarding
         if (result === 'exit') return null;
         if (result === 'later') { await session.defer(step); continue; }
       }
-      else if (stage?.id === 'core:model') await ui.provider();
+      else if (stage?.id === 'core:model') {
+        await ui.provider();
+        // Leaving the provider choice without a usable model is the same persistent Later as on the model card.
+        if (!(await session.refresh()).snapshot.modelUsable) { await session.defer(step); continue; }
+      }
       else if (stage?.id === 'instructions:bridges') await ui.instructions();
       else if (step.kind === 'ready') {
         const settled = await settleOnboardingReady(port, ui, session.refresh, async preview =>

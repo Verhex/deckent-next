@@ -20,7 +20,7 @@ export function SettingsPanel({ kind, ports, labels, push, onError, errorText, o
   if (kind === 'config' && ports.config) return <ConfigPanel port={ports.config} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={onClose}
     {...(ports.theme ? { theme: { title: ports.theme.title, open: () => setTheme(true) } } : {})} />;
   if (kind === 'model' && ports.model) return <ModelPanel port={ports.model} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={onClose} />;
-  if (kind === 'provider' && ports.provider) return <ProviderPanel port={ports.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={onClose} />;
+  if (kind === 'provider' && ports.provider) return <ProviderPanel port={ports.provider} labels={labels} errorText={errorText} push={push} openApproval={openApproval} onError={onError} onClose={onClose} />;
   if (kind === 'mcp' && ports.mcp) return <McpPanel port={ports.mcp} labels={labels} push={push} onError={onError} errorText={errorText} onClose={onClose} />;
   return null;
 }
