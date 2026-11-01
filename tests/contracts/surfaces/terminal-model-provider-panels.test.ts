@@ -874,7 +874,11 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
       } }, {}, locale, () => 'POLICY_DENIED').subscription!;
     const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
     const { element, calls } = panel('provider', { provider }, locale), ui = mount(element, 180, 45);
-    await settle(80); await ui.press(`${ENTER}${ENTER}${ENTER}`, 120);
+    // Wait for each real screen (CI 41293916929 shard 15: three Enters 120 ms apart outran the login directory screen).
+    await until(() => ui.frame().includes(kind.label), 'subscription kind loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(t('tui.provider.login.action', {}, locale).replace('…', '')), 'subscription actions loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent with the config policy loaded');
     expect(ui.frame()).toContain(subscription.words.configPolicy);
     const reason = policy === 'unknown' ? t('tui.provider.login.policyUnread', {}, locale)
       : t('tui.provider.login.policyBlocked', { policy: 'company-profile-write', layer: 'project' }, locale);
