@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
  * (`<prefix>/lib/node_modules/<name>`) gives `npm uninstall -g`, with `--prefix` when that is not the running Node's own prefix. Anything else
  * (a development build, an unknown method) is null and the person gets generic guidance. Uninstall only prints it; it never runs it.
  */
-export function packageRemovalCommand(file = fileURLToPath(import.meta.url), execPath = process.execPath): string | null {
+// The manifest remains physical after bundling; this source module's original URL need not name a shipped file.
+export function packageRemovalCommand(file = fileURLToPath(new URL('../../../../../package.json', import.meta.url)), execPath = process.execPath): string | null {
   let directory: string;
   try { directory = dirname(realpathSync(file)); } catch { return null; }
   for (; dirname(directory) !== directory; directory = dirname(directory)) {

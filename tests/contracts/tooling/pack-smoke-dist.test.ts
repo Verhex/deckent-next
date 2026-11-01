@@ -1,21 +1,21 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
-import { verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
-import { sha256 } from '#platform/index.js';
+import { BEUSER_REALM_RECIPE, createBeuserArrange, verifyBeuserDistribution } from '#adapters/core/beuser-realm/index.js';
+import { isSourceCheckout, packageRemovalCommand, sha256 } from '#platform/index.js';
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { buildDist } from '../../../scripts/build-dist.mjs';
+import { buildDist, packDist } from '../../../scripts/build-dist.mjs';
 
 // PACK-SMOKE (2026-09-30): the published package is checked in every verify, not only before a release. The release-only placement let two
 // regressions rot for a batch (the terminal check still expected `deckent>` after the workline composer; a new `path` declaration leak kept
 // build-dist unpublishable). This runs build-dist on the freshly built dist into a temporary directory and pack-smoke's fast checks on the
-// staged package (--root: no npm install). The customer install path (npm --offline of the tarball, runtime service, MCP client, consumer
-// type-check) stays in `npm run smoke:dist <tarball>` before a release. Linux only: the terminal checks drive a pseudo-TTY through util-linux
+// staged package plus a global offline tarball install for provenance/uninstall. The broader customer install path (runtime service, MCP client,
+// consumer type-check) stays in `npm run smoke:dist <tarball>` before a release. Linux only: the terminal checks drive a pseudo-TTY through util-linux
 // `script`; bubblewrap staging depends on the host (build-bwrap output), so only its gaps are tolerated here.
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const FAST_CHECKS = ['version', 'mcp', 'native', 'lazy', 'imports', 'bootstrap', 'terminal', 'extensions'];
@@ -41,6 +41,49 @@ describe.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/script'))(
     const specifiers = [...readFileSync(join(summary.stage, BOOTSTRAP), 'utf8').matchAll(SPECIFIERS)].map(match => match[1] ?? match[2] ?? match[3]);
     expect(specifiers.length).toBeGreaterThan(0);
     expect(specifiers.filter(spec => !spec.startsWith('node:')), 'the mounted bootstrap must stay standalone').toEqual([]);
+
+    // R1: the real global tarball install must locate itself without the bundled-away source module existing.
+    const { tarball, sha256: tarballSha256 } = packDist(summary, out) as { tarball: string; sha256: string }, prefix = join(out, 'global prefix');
+    const env = { PATH: process.env['PATH'], HOME: join(out, 'home'), DECKENT_GLOBAL_HOME: join(out, 'global-home'), LANG: 'C.UTF-8' };
+    const installed = spawnSync('npm', ['install', '-g', tarball, '--prefix', prefix, '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--cache', join(out, 'empty-cache')],
+      { env, encoding: 'utf8', timeout: 60_000 });
+    expect(installed.status, installed.stderr).toBe(0);
+    const root = join(prefix, 'lib/node_modules/deckent'), platform = pathToFileURL(join(root, 'dist/platform/index.js')).href;
+    const probe = (code: string, args: readonly string[] = []) => {
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', code, ...args], { env, encoding: 'utf8', timeout: 20_000 });
+      expect(result.status, result.stderr).toBe(0); return JSON.parse(result.stdout) as unknown;
+    };
+    const command = `npm uninstall -g --prefix ${JSON.stringify(prefix)} deckent`;
+    expect(existsSync(join(root, 'dist/platform/core/host/internal/package-method.js'))).toBe(false);
+    expect(probe(`const p = await import(${JSON.stringify(platform)}); console.log(JSON.stringify({ command: p.packageRemovalCommand(), source: p.isSourceCheckout() }));`))
+      .toEqual({ command, source: false });
+    expect(probe(`const p = await import(${JSON.stringify(platform)}); console.log(JSON.stringify(p.packageRemovalCommand(${JSON.stringify(join(prefix, 'bin/deckent'))})));`)).toBe(command);
+    expect(probe(`const p = await import(${JSON.stringify(platform)}); console.log(JSON.stringify(p.packageRemovalCommand(undefined, ${JSON.stringify(join(prefix, 'bin/node'))})));`)).toBe('npm uninstall -g deckent');
+    expect(packageRemovalCommand()).toBeNull(); expect(isSourceCheckout()).toBe(true);
+    expect(probe(`const p = await import(${JSON.stringify(pathToFileURL(join(summary.stage, 'dist/platform/index.js')).href)}); console.log(JSON.stringify({ command: p.packageRemovalCommand(), source: p.isSourceCheckout() }));`))
+      .toEqual({ command: null, source: false });
+
+    const project = join(out, 'uninstall-project'), data = join(project, '.deckent');
+    await mkdir(data, { recursive: true, mode: 0o700 });
+    await writeFile(join(data, 'config.json'), JSON.stringify({ terminal: { scopeId: 'smoke' } }), { mode: 0o600 });
+    await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'smoke', restrictions: [], grants: [{ id: 'preview', effect: 'allow',
+      actions: ['inspect'], scopes: 'all', principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'installation', ids: 'all' } }] }), { mode: 0o600 });
+    probe(`const { FileInstallationIdentityStore } = await import(${JSON.stringify(pathToFileURL(join(root, 'dist/adapters/core/installation-files/index.js')).href)});
+const { resolveProductLayout } = await import(${JSON.stringify(platform)});
+await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: ${JSON.stringify(project)} })).loadOrCreate(); console.log('null');`);
+    const preview = spawnSync(join(prefix, 'bin/deckent'), ['uninstall', '--dry-run', '--lang', 'en'], { cwd: project, env, encoding: 'utf8', timeout: 20_000 });
+    expect(preview.status, preview.stderr).toBe(0); expect(preview.stdout).toContain(command);
+
+    // Transport/admission fixtures only; execute the real BeUser reader against the globally installed candidate bytes.
+    type ArrangeInput = Parameters<typeof createBeuserArrange>[0];
+    const arrange = createBeuserArrange({ realm: { observe: async () => ({ state: 'admitted' }) } as unknown as ArrangeInput['realm'],
+      custody: { load: async () => ({ handle: { containerId: 'fixture' } }) } as unknown as ArrangeInput['custody'],
+      options: { uid: 1000, gid: 1000 } as ArrangeInput['options'], language: 'en', command: async args => {
+        const script = args[args.indexOf('--eval') + 1]!.replace(JSON.stringify(BEUSER_REALM_RECIPE.packageTarget), JSON.stringify(root));
+        return JSON.stringify(probe(script, [args.at(-1)!]));
+      } });
+    expect(await arrange.observe({} as Parameters<typeof arrange.observe>[0], { kind: 'install-method', expected: 'unproven' })).toBe('package-manager');
+    console.info(JSON.stringify({ provenance: 'npm-global', command, source: 'source', staged: 'unknown', beuser: 'package-manager', tarballSha256, uninstallPreview: preview.stdout }));
 
     const smoke = spawnSync(process.execPath, [join(ROOT, 'scripts/pack-smoke.mjs'), '--root', summary.stage, '--only', FAST_CHECKS.join(',')],
       { cwd: ROOT, encoding: 'utf8', timeout: 150_000 });
