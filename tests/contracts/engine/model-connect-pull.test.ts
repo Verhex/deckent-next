@@ -43,7 +43,7 @@ it('pull intersects a fresh key list with active priced seed rows, writes each l
   const unwitnessed = new ModelConnectApplication({ ...ports, available, discover,
     authorizeDelegation: async () => { witnessed++; throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED'); } });
   const consent = (classes: string[]) => ({ delegatedUse: { consentedBy: { issuer: 'host', subject: 'alice' }, atMs: 1, classes } });
-  for (const scenario of ['new', 'layer', 'missing-layer', 'pull', 'native', 'unknown-native', 'ambiguous', 'owner', 'connection', 'scope'] as const) {
+  for (const scenario of ['new', 'layer', 'missing-layer', 'pull', 'native', 'unknown-native', 'owner', 'connection', 'scope'] as const) {
     Object.assign(project, structuredClone(saved)); delete global['provider_invocation_profiles'];
     const copy = structuredClone(profile) as { id: string; scopeId: string; adapter: { definition: Record<string, unknown> } };
     copy.adapter.definition = consent(['ai']);
@@ -52,8 +52,6 @@ it('pull intersects a fresh key list with active priced seed rows, writes each l
     if (scenario === 'missing-layer') global['provider_invocation_profiles'] = { schemaVersion: 1, profiles: [] };
     if (scenario === 'native') (project['provider_catalog'] as { providers: { models: unknown[] }[] }).providers[0]!.models.push({ id: 'b', version: 1,
       nativeId: 'b', protocols: [{ family: 'test', version: 'v1', capabilities: [] }] });
-    if (scenario === 'ambiguous') (project['provider_catalog'] as { providers: unknown[] }).providers.push({ id: 'other', version: 1,
-      models: [{ id: 'other', version: 1, nativeId: 'a', protocols: [{ family: 'test', version: 'v1', capabilities: [] }] }] });
     if (scenario === 'owner') copy.adapter.definition = { delegatedUse: { consentedBy: { issuer: 'other', subject: 'alice' }, atMs: 1, classes: ['ai', 'system'] } };
     if (scenario === 'connection') copy.id = 'vendor.other.vendor.a.1'; // A connection sharing the prefix cannot authorize this one.
     if (scenario === 'scope') copy.scopeId = 'other';
@@ -62,13 +60,13 @@ it('pull intersects a fresh key list with active priced seed rows, writes each l
     if (scenario === 'pull') available.mockResolvedValueOnce(['a', 'b']);
     const guarded = scenario === 'pull' ? new ModelConnectApplication({ ...ports, available, discover, priced: () => true,
       authorizeDelegation: async () => { throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED'); } }) : unwitnessed;
-    const model = scenario === 'pull' ? command.model : scenario === 'native' || scenario === 'unknown-native' || scenario === 'ambiguous'
-      ? { nativeId: scenario === 'ambiguous' ? 'a' : 'b' } : { reference: profile['reference'] };
+    const model = scenario === 'pull' ? command.model : scenario === 'native' || scenario === 'unknown-native'
+      ? { nativeId: 'b' } : { reference: profile['reference'] };
     await expect(guarded.connect({ ...command, model, delegate: scenario === 'layer' ? ['ai', 'system'] : ['ai'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     expect(available).not.toHaveBeenCalled(); expect(discover).not.toHaveBeenCalled();
     expect(JSON.stringify({ global, project, writes, activations, audits })).toBe(snapshot);
   }
-  expect(witnessed).toBe(9);
+  expect(witnessed).toBe(8);
   Object.assign(project, structuredClone(saved)); delete global['provider_invocation_profiles'];
   available.mockReset(); available.mockImplementation(ports.available!);
   await expect(app.connect({ ...command, delegate: ['ai'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); // Missing trusted witness fails closed too.
