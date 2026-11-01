@@ -9,7 +9,8 @@ const path = persistedString(z.string().min(1).max(4096)).refine(value => isAbso
 /**
  * The sealed adapter definition (written by the connect path, S3-3): the executable's realpath, the person's uid and CLI config directory,
  * this connection's private state directory (run dir `<stateDir>/run`, preflight record), the catalog row's minimum CLI version, and the
- * delegated-use consent (enforced by S3-3; recorded here so the profile digest seals it). Deckent never opens the config directory's files.
+ * delegated-use consent (enforced by S3-3; recorded here so the profile digest seals it). Deckent never reads credential/config contents;
+ * the realm may privately copy bounded non-credential state named by the registry.
  */
 export const nativeCliHeadlessDefinitionSchema = z.strictObject({ schemaVersion: z.literal(1), executable: path, configDir: path, stateDir: path,
   ownerUid: counterSchema, minCliVersion: z.string().regex(/^\d+\.\d+\.\d+$/),

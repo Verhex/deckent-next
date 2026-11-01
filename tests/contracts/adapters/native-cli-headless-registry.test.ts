@@ -20,6 +20,14 @@ describe('S3-1 headless registry data', () => {
     // Codex: found by its catalog family (not its event-stream name), every tool switch off, read-only, one turn bounded by the line guard.
     expect(nativeCliHeadless('codex-exec-json')).toBeNull();
     const codex = nativeCliHeadless(CODEX_FAMILY)!;
+    expect(codex.headless.revision).toBe('codex-headless-2026-11-01-r3');
+    expect(codex.headless.isolation.configVisible).toEqual(['auth.json', 'config.toml', 'installation_id']);
+    expect(codex.headless.isolation.configEphemeral).toEqual({ files: ['installation_id'], maxBytes: 4096 });
+    for (const configEphemeral of [{ files: ['..'], maxBytes: 4096 }, { files: ['not-visible'], maxBytes: 4096 }, { files: ['installation_id'], maxBytes: 0 }]) {
+      const invalid = structuredClone(registry);
+      invalid.adapters.codex.headless.isolation.configEphemeral = configEphemeral;
+      expect(() => parseNativeCliRegistry(invalid)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+    }
     expect(codex.command.capabilities.eventStream).toBe('codex-exec-json');
     expect(codex.headless.args).toEqual(expect.arrayContaining(['--sandbox', 'read-only', '--ephemeral', '--ignore-user-config', '--ignore-rules', 'approval_policy="never"',
       'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false', 'features.multi_agent=false']));

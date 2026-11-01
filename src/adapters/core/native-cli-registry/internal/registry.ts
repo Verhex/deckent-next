@@ -31,6 +31,7 @@ export const nativeCliCapabilitiesSchema = z.strictObject({
 }).readonly();
 export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
 const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), names = z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).readonly(), words = z.array(argument).readonly();
+const loginEntry = z.string().regex(/^[A-Za-z0-9._-]+$/).refine(value => value !== '.' && value !== '..');
 /** Proxy variables are read in both spellings (`HTTPS_PROXY`, `https_proxy`). */
 const proxyNames = z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/)).readonly();
 /** S3 headless model step (HEADLESS-0, 2026-10-23): one tool-less, MCP-less turn of the unmodified CLI. Argv, environment, guard expectations and
@@ -77,7 +78,9 @@ export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal
    * the in-realm proxy the CLI is pointed at, the login-dir entries the CLI keeps seeing (every other existing one is masked) and the bounds. */
   isolation: z.strictObject({ source: argument, shell: z.string().startsWith('/'), socketPath: z.string().regex(/^\/run\/[a-z][a-z0-9.-]*\.sock$/),
     proxy: z.strictObject({ host: z.literal('127.0.0.1'), port: persistedInteger().min(1024).max(65535), env: proxyNames.refine(value => value.length > 0), clear: proxyNames }).readonly(),
-    configVisible: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/).refine(value => value !== '.' && value !== '..')).readonly(), configVisibleSource: argument,
+    configVisible: z.array(loginEntry).readonly(), configVisibleSource: argument,
+    /** Existing non-credential state opened read/write by the CLI: bind a bounded private copy, never the host file. */
+    configEphemeral: z.strictObject({ files: z.array(loginEntry).min(1).readonly(), maxBytes: positive }).readonly().optional(),
     configMaxEntries: positive,
     /** f5: the CLI's own refresh-lock names in the login dir (a subset of `configVisible`) and Deckent's per-login-dir serialization bounds. */
     refreshLock: z.strictObject({ names: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/)).readonly(), waitMs: positive, pollMs: positive, staleMs: positive, source: argument }).readonly(),
@@ -92,6 +95,7 @@ export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal
   const built = [...Object.keys(value.env.fixed), ...value.env.runDir, value.env.configDir, ...value.isolation.proxy.env, ...value.isolation.proxy.clear];
   const login = [...value.login.env.inherit, ...Object.keys(value.login.env.fixed), value.env.configDir];
   return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name)) && value.isolation.refreshLock.names.every(name => value.isolation.configVisible.includes(name))
+    && (value.isolation.configEphemeral?.files.every(name => value.isolation.configVisible.includes(name) && !value.isolation.refreshLock.names.includes(name)) ?? true)
     && new Set(login).size === login.length && !login.some(name => value.env.deny.includes(name)) && value.login.timeoutMs < value.isolation.refreshLock.staleMs
     && !value.args.some(arg => value.forbiddenFlags.some(forbidden => arg === forbidden || arg.startsWith(forbidden + '=')));
 }).readonly();
