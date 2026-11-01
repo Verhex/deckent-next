@@ -110,7 +110,7 @@
       },
       "headless": {
         "schemaVersion": 1,
-        "revision": "codex-headless-2026-10-31-r2",
+        "revision": "codex-headless-2026-11-01-r3",
         "protocolFamily": "codex-jsonl",
         "source": "Codex headless lane 2026-10-31 from the installed `codex exec --help` (codex-cli 0.166.0) and learn.chatgpt.com docs read 2026-10-31 (docs/non-interactive-mode, docs/developer-commands, docs/config-file/config-reference; the pages carry no date): one `codex exec` turn, read-only sandbox, approvals never, no persisted session, user config and execpolicy rules ignored, every documented tool switch off (shell, unified exec, web search, view_image, apps, multi-agent, remote plugins, hooks, memories, skills), built-in instructions replaced by the system prompt file. No toggle for apply_patch is documented: the line guard refuses any tool item, the sandbox is read-only and the realm writes only the run dir and the login dir. --strict-config is documented for config.toml fields only; the -c switches reduce, the line guard enforces. No model call was made. r2 (HL lane 2026-10-31, owner S12 probe: the exact argv, an empty CODEX_HOME, bwrap --unshare-net, no login): 0.166.0 --strict-config refused `tools.view_image` ('unknown configuration field `tools.view_image` in -c/--config override', exit 1, no JSON line: the WALK21 unknown calls); openai/codex rust-v0.166.0 codex-rs/core/config.schema.json ToolsToml has no view_image and codex-rs/features/src/lib.rs names the stable feature `view_image` (the config-reference page still lists tools.view_image), so the switch is features.view_image; every other -c key here was refused only for a bad value (known field).",
         "args": [
@@ -201,6 +201,14 @@
         "stderrAllow": {
           "rules": [
             {
+              "pattern": "^Reading prompt from stdin\\.\\.\\.$",
+              "keep": "Reading prompt from stdin..."
+            },
+            {
+              "pattern": "^Error: failed to initialize in-process app-server client: .*$",
+              "keep": "Error: failed to initialize in-process app-server client: …"
+            },
+            {
               "pattern": "^Error loading config\\.toml: unknown configuration field `(?<field>[A-Za-z0-9_.-]{1,128})` in -c/--config override$",
               "keep": "Error loading config.toml: unknown configuration field `$<field>` in -c/--config override"
             },
@@ -221,7 +229,7 @@
               "keep": "ERROR codex_api::endpoint::responses_websocket: failed to connect to Responses WebSocket stage=$<stage>"
             }
           ],
-          "source": "HL lane 2026-10-31 (Astra 2875 R1, lead: allowlist): only these whole stderr lines (trimmed) enter the stderr summary of an incomplete turn; every other line is withheld and counted. Shapes from the owner S12 probe captures of codex-cli 0.166.0 (empty CODEX_HOME, no network, no login): proof/ALPHA60/PAKET-2/HL/probe/1-registry-argv-r1.stderr.txt (config field), 6-cli-usage-errors.txt (argument errors, possible values), 2-without-tools-view-image.stderr.txt (WebSocket connect failure). A matching line is stored only as its fixed `keep` text with identifier-shaped captures (Astra 2878 R1): a quoted value is never kept."
+          "source": "HL lane 2026-10-31 (Astra 2875 R1, lead: allowlist): only these whole stderr lines (trimmed) enter the stderr summary of an incomplete turn; every other line is withheld and counted. Shapes from the owner S12 probe captures of codex-cli 0.166.0 (empty CODEX_HOME, no network, no login): proof/ALPHA60/PAKET-2/HL/probe/1-registry-argv-r1.stderr.txt (config field), 6-cli-usage-errors.txt (argument errors, possible values), 2-without-tools-view-image.stderr.txt (WebSocket connect failure). A matching line is stored only as its fixed `keep` text with identifier-shaped captures (Astra 2878 R1): a quoted value is never kept. F10 2026-11-01: Reading prompt from stdin and app-server initialization failure measured with 0.166.0 in a networkless realm; the initialization suffix is discarded in full (fixed keep text, no captures)."
         },
         "systemPromptFlag": "--config",
         "systemPromptArgs": [
@@ -343,9 +351,11 @@
           },
           "configVisible": [
             "auth.json",
-            "config.toml"
+            "config.toml",
+            "installation_id"
           ],
-          "configVisibleSource": "Codex headless lane 2026-10-31 (no run): the CLI keeps its ChatGPT login in $CODEX_HOME/auth.json (learn.chatgpt.com/docs/non-interactive-mode: 'Treat ~/.codex/auth.json like a password'); config.toml stays readable so `login status` (which has no --ignore-user-config) can start in a person-named login dir; the call ignores it (--ignore-user-config) and Deckent never reads either file. Every other existing entry is masked. Unmeasured against the real CLI until the lead's run.",
+          "configEphemeral": { "files": ["installation_id"], "maxBytes": 4096 },
+          "configVisibleSource": "F10 2026-11-01, Codex 0.166.0, no credentials/model call: auth.json and config.toml keep their existing login/refresh visibility. Existing installation_id is opened read/write by the CLI even when its contents do not change: /dev/null mask fails with EACCES, a read-only bind fails with EROFS, a private writable copy reaches thread.started (proof/ALPHA60/PAKET-2/REL/FIX/F10/probe/). Only this non-credential file is copied, bounded to 4096 bytes (policy ceiling, not a vendor format guarantee); the host original is opened read-only, never bound writable. When absent, the CLI creates it in its already authorized login directory as before. Other existing entries stay masked; Deckent never reads auth/config contents.",
           "configMaxEntries": 4096,
           "refreshLock": {
             "names": [],

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -238,8 +238,10 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
     const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-codex-headless-'))), configDir = join(root, 'login'), bin = join(root, 'bin'), logPath = join(configDir, 'config.toml');
     try {
       await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
+      const installationId = '00000000-0000-4000-8000-000000000010', identityFile = join(configDir, 'installation_id');
+      await writeFile(identityFile, installationId, { mode: 0o400 });
       let bump = 0;
-      const write = async (scenario: Omit<FakeCodexScenario, 'logPath'>) => { const path = await writeFakeCodexCli(bin, { logPath, ...scenario }); await utimes(path, new Date(), new Date(Date.now() + ++bump * 9000)); return path; };
+      const write = async (scenario: Omit<FakeCodexScenario, 'logPath'>) => { const path = await writeFakeCodexCli(bin, { logPath, installationId, ...scenario }); await utimes(path, new Date(), new Date(Date.now() + ++bump * 9000)); return path; };
       const executable = await write({ steps: codexAnswer('{"ok":true}').map(line => ({ line })) });
       const codexBinding = parseModelBindingDefinition({ encodingVersion: 1, provider: { id: 'cli-subscription', version: 1 },
         model: { id: 'pinned', version: 1, nativeId: PINNED, protocols: [{ family: CODEX_FAMILY, version: 'v1', capabilities: [] }] } });
@@ -251,9 +253,13 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       const call = async () => { await port.preflight(profile); return port.send(await port.prepare(profile, codexBinding, request({ reasoning_effort: 'high' })), undefined, delta => deltas.push(delta)); };
       const log = async () => (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[]; env: Record<string, string>; stdin?: string; system?: string });
       // The answer: the argv-pinned model, the CLI's split input counters, the user message on stdin and the system prompt as the instructions file.
-      await expect(call()).resolves.toMatchObject({ native: { model: PINNED, choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', modelEvidence: 'argv' } },
+      await expect(call()).resolves.toMatchObject({ native: { model: PINNED, choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', modelEvidence: 'argv',
+        flagSetDigest: '3151a7c18f453a502c99cc42acacb3cb2f1c3ddf520ced636e7866e35403209f' } },
         usage: { prompt_tokens: 1200, completion_tokens: 7, cache_read: 1000, modelUsage: { [PINNED]: { inputTokens: 200, outputTokens: 7, cacheReadInputTokens: 1000 } } } });
       expect(deltas.map(delta => delta.text).join('')).toBe('{"ok":true}');
+      // F10: Codex opens its identity read/write; only its private copy may change, never the person's existing file.
+      expect(await readFile(identityFile, 'utf8')).toBe(installationId);
+      expect((await stat(identityFile)).mode & 0o777).toBe(0o400);
       const spawned = await log(), made = spawned.find(entry => entry.mode === 'call')!;
       expect(spawned.map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call']);
       expect(made.stdin).toBe(PROMPT); expect(made.system).toBe('You are a planner. Answer only JSON.'); expect(made.argv.join(' ')).not.toContain(PROMPT);
@@ -278,7 +284,9 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       let exited: Awaited<ReturnType<typeof call>> | undefined;
       // Astra 2878 R1: an allowlisted line keeps only its fixed text and the flag name, never the value it echoed.
       const invalid = "error: invalid value 'opaque-refresh-value-1234567890' for '--color <COLOR>'";
-      for (const [stderr, summary] of [[`${secrets.slice(0, 3).join('\n')}\n${line}\n${invalid}\n${secrets[3]}\n`, `${line}\nerror: invalid value '…' for '--color'\n[4 stderr lines withheld]`],
+      const startup = 'Error: failed to initialize in-process app-server client: ', reading = 'Reading prompt from stdin...';
+      for (const [stderr, summary] of [[`${secrets.slice(0, 3).join('\n')}\n${line}\n${invalid}\n${reading}\n${startup}Permission denied (os error 13)\n${startup}${secrets[1]}\n${secrets[3]}\n`,
+        `${line}\nerror: invalid value '…' for '--color'\n${reading}\n${startup}…\n${startup}…\n[4 stderr lines withheld]`],
         [`sk-w12Fictional0123456789ABCDEFGH\n${`${line}\n`.repeat(40)}`, null]] as const) {
         await write({ steps: [{ stderr }, { exit: 2 }] });
         exited = await call();
@@ -316,6 +324,22 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
         await expect(call()).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
         expect((await log()).filter(entry => entry.mode === 'call')).toHaveLength(before);
       }
+      // Unsafe copy sources refuse before the CLI starts, without following links or touching the original.
+      await write({ steps: codexAnswer('x').map(line => ({ line })) });
+      const outside = join(root, 'outside-id'); await writeFile(outside, 'OUTSIDE-CANARY');
+      for (const make of [() => symlink(outside, identityFile), () => link(outside, identityFile), () => mkdir(identityFile),
+        () => writeFile(identityFile, 'x'.repeat(codexHeadless.isolation.configEphemeral.maxBytes + 1))]) {
+        await rm(identityFile, { recursive: true, force: true }); await make();
+        const before = (await log()).length;
+        await expect(call()).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'config-dir' } });
+        expect(await log()).toHaveLength(before);
+        expect(await readFile(outside, 'utf8')).toBe('OUTSIDE-CANARY');
+        expect((await readdir(join(root, 'state'))).some(name => name.startsWith('login-copy-'))).toBe(false);
+      }
+      // An empty login directory still preflights and calls; only existing identity files need copying.
+      await rm(identityFile); await write({ installationId: undefined, steps: codexAnswer('empty').map(line => ({ line })) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'empty' } }] } });
+      expect((await readdir(join(root, 'state'))).some(name => name.startsWith('login-copy-'))).toBe(false);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

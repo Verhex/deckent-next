@@ -1,6 +1,6 @@
 import type { Dir } from 'node:fs';
 import { constants } from 'node:fs';
-import { access, opendir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, open, opendir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { headlessEgressSchema, headlessEgressReasons, nativeCliIdSchema, type HeadlessEgress } from '#domain/index.js';
@@ -91,19 +91,34 @@ export async function headlessIsolationSeal(isolation: HeadlessIsolation): Promi
 }
 
 /** Existing entries of the login dir outside the registry's visible list, by kind (symbolic links stay: they resolve inside the view or nowhere). */
-async function loginMasks(configDir: string, visible: readonly string[], maxEntries: number) {
+async function loginMasks(configDir: string, realm: HeadlessEntry['headless']['isolation'], scratch: string | undefined) {
   const directories: string[] = [], files: string[] = [];
+  const copies: { source: string; target: string }[] = [];
   let dir: Dir | undefined, seen = 0;
   try {
     dir = await opendir(configDir);
     for (let entry = await dir.read(); entry; entry = await dir.read()) {
-      if (++seen > maxEntries) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
-      if (visible.includes(entry.name) || entry.isSymbolicLink()) continue;
+      if (++seen > realm.configMaxEntries) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+      if (realm.configEphemeral?.files.includes(entry.name)) {
+        if (!entry.isFile() || !scratch) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+        const target = join(configDir, entry.name), source = join(scratch, entry.name);
+        const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+        try {
+          const info = await file.stat(), max = realm.configEphemeral.maxBytes;
+          if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid!() || info.size > max) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+          const buffer = Buffer.alloc(max + 1), { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+          if (bytesRead > max) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
+          await writeFile(source, buffer.subarray(0, bytesRead), { mode: 0o600, flag: 'wx' });
+          copies.push({ source, target });
+        } finally { await file.close(); }
+        continue;
+      }
+      if (realm.configVisible.includes(entry.name) || entry.isSymbolicLink()) continue;
       (entry.isDirectory() ? directories : files).push(join(configDir, entry.name));
     }
   } catch (error) { if ((error as { code?: unknown }).code === 'HEADLESS_PREFLIGHT_FAILED') throw error; refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' }); }
   finally { await dir?.close().catch(() => undefined); }
-  return Object.freeze({ directories: directories.sort(), files: files.sort() });
+  return Object.freeze({ directories: directories.sort(), files: files.sort(), copies });
 }
 
 export type HeadlessSpawn = Readonly<{ executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
@@ -151,20 +166,22 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
   const seal = await headlessIsolationSeal(isolation), realm = entry.headless.isolation, provider = nativeCliIdSchema.safeParse(entry.id);
   if (!provider.success) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
-  // The relay runs on this process's own Node.js (bound read-only at its path: a test CLI's shebang names the same path).
-  const masks = await loginMasks(spawn.configDir, realm.configVisible, realm.configMaxEntries), node = process.execPath, caps = realm.limits;
-  // f5: the limiter sets the realm's CPU, data and task bounds before the relay starts; without it the CLI never runs (no unbounded fallback).
-  const limiter = await realpath(caps.limiter).catch(() => null);
-  if (!limiter || !await access(limiter, constants.X_OK).then(() => true, () => false)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
-  const gateway = await openNativeEgressGateway({ provider: provider.data, directory: spawn.stateDir }).catch(() => refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'gateway' }));
+  let scratch: string | undefined, gateway: Awaited<ReturnType<typeof openNativeEgressGateway>> | undefined;
   try {
+    // The relay runs on this process's own Node.js (bound read-only at its path: a test CLI's shebang names the same path).
+    scratch = realm.configEphemeral ? await mkdtemp(join(spawn.stateDir, 'login-copy-')) : undefined;
+    const masks = await loginMasks(spawn.configDir, realm, scratch), node = process.execPath, caps = realm.limits;
+    // f5: the limiter sets the realm's CPU, data and task bounds before the relay starts; without it the CLI never runs (no unbounded fallback).
+    const limiter = await realpath(caps.limiter).catch(() => null);
+    if (!limiter || !await access(limiter, constants.X_OK).then(() => true, () => false)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'limits' });
+    gateway = await openNativeEgressGateway({ provider: provider.data, directory: spawn.stateDir }).catch(() => refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'gateway' }));
     const cpu = `${caps.cpuSeconds}:${caps.cpuSeconds + caps.cpuGraceSeconds}`, egress = nativeEgressLimits();
     const relay = JSON.stringify({ socket: realm.socketPath, host: realm.proxy.host, port: realm.proxy.port, connections: egress.connections, idleMs: egress.idleMs,
       cpu, processes: `${caps.processes}:${caps.processes}`, data: `${caps.dataBytes}:${caps.dataBytes}`, ticks: USER_HZ,
       sampleMs: caps.sampleMs, permille: caps.attributionPermille, exits: caps.exits });
     const command = isolatedProcessCommand({ shell: realm.shell, launcher: seal.path, fileSizeBlocks: realm.limits.fileSizeBlocks, openFiles: realm.limits.openFiles,
       view: { workDir: spawn.runDir, workFiles: spawn.promptFile ? [spawn.promptFile] : [], executables: [...new Set([spawn.executable, node, limiter])], stateDir: spawn.configDir,
-        stateMasks: masks, sockets: [{ source: gateway.socketPath, target: realm.socketPath }], tmpfsBytes: realm.limits.tmpfsBytes },
+        stateMasks: masks, stateCopies: masks.copies, sockets: [{ source: gateway.socketPath, target: realm.socketPath }], tmpfsBytes: realm.limits.tmpfsBytes },
       command: [limiter, `--cpu=${cpu}`, `--nproc=${caps.processes}`, `--data=${caps.dataBytes}`, '--', node, '-e', RELAY, relay, spawn.executable, ...spawn.args] });
     if (!command) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
     const evidence = await runNodeProcess({ schemaVersion: 2, requestId: randomUUID(), executable: command.executable, args: [...command.args], cwd: spawn.runDir, env: spawn.env,
@@ -176,5 +193,5 @@ async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spa
     if (REALM_FAILURE.test(stderr)) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'realm' });
     const limit = evidence.reason === 'exit' ? (Object.entries(caps.exits) as [HeadlessLimit, number][]).find(([, code]) => code === evidence.exitCode)?.[0] ?? null : null;
     return { ...evidence, egress: summary, limit };
-  } finally { await gateway.close(); }
+  } finally { try { await gateway?.close(); } finally { if (scratch) await rm(scratch, { recursive: true, force: true }); } }
 }

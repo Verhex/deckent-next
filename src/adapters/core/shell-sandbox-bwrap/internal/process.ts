@@ -16,6 +16,8 @@ export interface IsolatedProcessView {
   readonly stateDir: string | null;
   /** Existing entries of `stateDir` the process must not see: each directory becomes an empty sized tmpfs, each file `/dev/null` read-only. */
   readonly stateMasks: Readonly<{ directories: readonly string[]; files: readonly string[] }>;
+  /** Private writable copies of selected existing state files; mounted after masking, never exposing the originals for writing. */
+  readonly stateCopies?: readonly Readonly<{ source: string; target: string }>[];
   /** Host Unix sockets shown at a path of the realm (the gateway that is the only way out of its empty network namespace). */
   readonly sockets: readonly Readonly<{ source: string; target: string }>[];
   /** Size of every tmpfs (`/tmp`, `workDir`, each masked directory). */
@@ -39,6 +41,7 @@ export function isolatedProcessArguments(view: IsolatedProcessView): string[] | 
     args.push('--bind', view.stateDir, view.stateDir);
     for (const path of view.stateMasks.directories) args.push('--perms', '0700', '--size', size, '--tmpfs', path);
     for (const path of view.stateMasks.files) args.push('--ro-bind', '/dev/null', path);
+    for (const file of view.stateCopies ?? []) args.push('--bind', file.source, file.target);
   }
   for (const path of view.workFiles) args.push('--ro-bind', path, path);
   for (const socket of view.sockets) args.push('--ro-bind', socket.source, socket.target);
