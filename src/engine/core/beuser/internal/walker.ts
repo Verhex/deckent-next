@@ -13,7 +13,8 @@ export async function walkBeuser(controller: BeuserController, ports: {
   readonly surface: SurfacePort; readonly models: ModelPort; readonly decode: BeuserWalkerDecode;
   /** Trusted installed journey tuple; never decoded from walker output. */
   readonly initialCommand?: Parameters<SurfacePort['argv']>[1] | undefined;
-  readonly finished: (screen: BeuserScreen) => Promise<boolean>;
+  /** Capture an explicit finish and business readback, or detect the product's existing EOF. */
+  readonly finished: (screen: BeuserScreen, finish?: Extract<BeuserSurfaceCommand['action'], { kind: 'finish' }>) => Promise<boolean>;
   readonly record: (screen: BeuserScreen) => Promise<void>;
   readonly stopped?: (screen: BeuserScreen, action: BeuserSurfaceCommand['action'], reason: BeuserStopReason) => Promise<void>;
 }): Promise<void> {
@@ -26,7 +27,7 @@ export async function walkBeuser(controller: BeuserController, ports: {
     if (await controller.call('attempt', 'evaluate', () => ports.finished(screen))) return;
     const shown = screen;
     // One decision is one correction attempt: an unparseable answer or an action the surface refused before any input asks the walker again.
-    screen = await correctBeuserModelOutput(controller.context, controller.summary.patience, async outputError => {
+    const next = await correctBeuserModelOutput(controller.context, controller.summary.patience, async outputError => {
       const history = controller.history(shown);
       controller.step();
       controller.modelCall();
@@ -42,6 +43,10 @@ export async function walkBeuser(controller: BeuserController, ports: {
       const { context } = controller, action = parsed.data.action;
       proposed = action;
       assertBeuserAccess(context, parsed.data.binding, context.principal, { kind: 'beuser-sandbox', id: parsed.data.binding.realmId }, 'create');
+      if (action.kind === 'finish') {
+        if (!await controller.call('attempt', 'evaluate', () => ports.finished(shown, action))) throw new BeuserWalkStopped('unknown');
+        return null;
+      }
       // Walk19R: a stop verdict, and (walk20) a key or text, first read the screen once more. A product that redrew after the screen the
       // persona decided on is decided again: no stop, and no input lands on a card the persona never saw. Unchanged, the read is retained.
       // A stop compares digit-masked screens (the loop equality); input compares the exact screen, since a digit can carry the choice
@@ -75,6 +80,8 @@ export async function walkBeuser(controller: BeuserController, ports: {
         throw error;
       }
     });
+    if (next === null) return;
+    screen = next;
   } } catch (error) {
     if (personaStop(error) && ports.stopped) await controller.call('beuser-transcript', 'inspect', () => ports.stopped!(screen, proposed, error.reason));
     throw error;

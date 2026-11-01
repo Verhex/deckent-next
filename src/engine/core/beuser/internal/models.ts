@@ -83,7 +83,7 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
       if (sha256(encodeCommandProjection('beuser-persona:1', summary)) !== context.binding.personaDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
       assertBeuserAccess(context, screen.binding, context.principal, { kind: 'beuser-sandbox', id: screen.binding.realmId }, 'create');
       return invoke(context, 'beuser-walker', { persona: summary, goal: summary.goal, screen: screen.text, recentActions: history.recentActions, screenUnchanged: history.screenUnchanged,
-        remainingSteps: history.remainingSteps, remainingWaitMs: history.remainingWaitMs, tools: ['look', 'type', 'press', 'wait'], keys: BEUSER_KEYS, ...(outputError ? { outputError } : {}) });
+        remainingSteps: history.remainingSteps, remainingWaitMs: history.remainingWaitMs, tools: ['look', 'type', 'press', 'wait', 'finish'], keys: BEUSER_KEYS, ...(outputError ? { outputError } : {}) });
     },
     evaluate: (context, transcriptDigest, outputError) => invoke(context, 'beuser-evaluator', { transcriptDigest, ...(outputError ? { outputError } : {}) }),
     cancel: async (context, invocationId) => {

@@ -326,7 +326,7 @@ bounds, and retain the admitted deadline. There is no extra retry limit or model
 substitution. Invalid actions never reach the surface, and model assessments do
 not replace harness readback or the existing acceptance owner.
 
-The walker message (instructions revision 4; revision 3 walk18 2026-10-29) also carries
+The walker message (instructions revision 5; revision 3 walk18 2026-10-29) also carries
 `remainingSteps` (decisions left within the persona's step patience, this one
 included), `remainingWaitMs` and `keys`, the contract key names (`BEUSER_KEYS`)
 a press may use besides one printable character. The surface resolves the
@@ -394,6 +394,19 @@ verdict. Cleanup uncertainty remains separately unknown; the diagnostic grants n
 calibration, safety pass or independent acceptance. Only retained screen observations count as
 walked; missing verdict coverage remains explicitly unknown.
 
+
+## Explicit persona finish (alpha.61 source candidate)
+
+The walker action contract also accepts `finish` with `outcome: reached|gave-up` and
+an observation-based, nonempty `reason` (instructions revision 5). It ends persona
+interaction while the product can remain open. The harness retains the claim as a
+redacted action artifact with the last screen reference, captures the same business
+readback as EOF and seals the transcript. Finish never sends a key or command to the
+target and never supplies an acceptance verdict. Proven destruction, valid controller
+audit and the existing call/token/cost/wall envelope still gate the evaluator; its
+rubric and observations decide the assessment. A reached claim can be judged RED or
+unknown. EOF and the existing loop, observation, patience and admitted bounds remain
+unchanged. Author fixtures do not establish assembled-release journey acceptance.
 
 ## Early-stop evaluation (alpha.60 source candidate)
 

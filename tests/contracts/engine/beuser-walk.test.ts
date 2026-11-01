@@ -81,6 +81,30 @@ it('walks the actual approval-card Enter action and consumes harness readback, n
   expect(vi.mocked(stale.ports.models.walker).mock.calls.map(call => call[2].text)).toEqual(['1: Deny; 2: Allow', '2: Deny; 1: Allow']);
   expect(stale.ports.surface.press).toHaveBeenCalledOnce();
   expect(vi.mocked(stale.ports.surface.press).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(stale.ports.surface.look).mock.invocationCallOrder[2]!);
+  // A persona can finish while the product stays open; its claim is evidence for the judge, never a verdict.
+  for (const [outcome, judgedOutcome] of [['reached', 'GREEN'], ['reached', 'RED'], ['gave-up', 'FRICTION']] as const) {
+    const finished = harness(), action = { kind: 'finish' as const, outcome, reason: 'Visible goal result' };
+    const recorder = createBeuserTranscript(context(), EMPTY_KNOWN_SECRETS);
+    finished.ports.decode = () => ({ schemaVersion: 1, binding, action });
+    finished.ports.finished = vi.fn(async (screen, finish?: typeof action) => {
+      if (!finish) return false;
+      recorder.append(context(), { binding, kind: 'action', atMs: 0, evidenceRef: 'finish', text: JSON.stringify({ action: finish, screenRef: screen.sequence }) });
+      return true;
+    });
+    finished.ports.record = async screen => { recorder.append(context(), { binding, kind: 'screen', atMs: 0, evidenceRef: `screen-${screen.sequence}`, text: screen.text }); };
+    finished.ports.stopped = vi.fn();
+    const evidence = createBeuserEvidencePort(context(), recorder, async ctx => {
+      const sealed = recorder.finalize(ctx); await finished.ports.models.evaluate(ctx, sealed.transcriptDigest);
+      return { ...green, transcriptDigest: sealed.transcriptDigest, outcome: judgedOutcome, evidenceRefs: sealed.evidenceRefs };
+    });
+    finished.ports.evidence = evidence;
+    expect(await finished.app.walk(context(), summary)).toMatchObject({ state: 'completed', reason: null, verdict: { outcome: judgedOutcome }, cleanup: 'destroyed' });
+    expect(finished.ports.models.walker).toHaveBeenCalledOnce(); expect(finished.ports.models.evaluate).toHaveBeenCalledOnce();
+    expect(finished.ports.finished).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'approval card' }), action);
+    expect(JSON.parse(recorder.inspect(context()).at(-1)!.text)).toEqual({ action, screenRef: 1 });
+    for (const port of [finished.ports.surface.press, finished.ports.surface.type, finished.ports.surface.wait, finished.ports.stopped]) expect(port).not.toHaveBeenCalled();
+    expect(vi.mocked(finished.ports.realm.destroy).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(finished.ports.models.evaluate).mock.invocationCallOrder[0]!);
+  }
 });
 
 it('an explicit allow still refuses the same Enter action on another nonce before dispatching it; audit precedes cleanup', async () => {
@@ -95,6 +119,12 @@ it('an explicit allow still refuses the same Enter action on another nonce befor
   expect(order).toEqual(['sealed-refusal', 'destroy']);
   expect(h.ports.surface.press).not.toHaveBeenCalled();
   expect(h.ports.evidence.finalize).not.toHaveBeenCalled();
+  const finish = harness();
+  finish.ports.decode = () => ({ schemaVersion: 1, binding: { ...binding, nonce: '22345678-1234-4234-8234-123456789abc' },
+    action: { kind: 'finish', outcome: 'reached', reason: 'Goal visible' } });
+  expect(await finish.app.walk(context(), summary)).toMatchObject({ state: 'invalid', reason: 'BEUSER_TARGET_NOT_SANDBOX' });
+  expect(finish.ports.finished).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ text: 'approval card' }));
+  expect(finish.ports.evidence.finalize).not.toHaveBeenCalled(); expect(finish.ports.evidence.readback).not.toHaveBeenCalled();
 });
 
 it('failed refusal audit prevents every following effect and leaves realm custody unresolved', async () => {
