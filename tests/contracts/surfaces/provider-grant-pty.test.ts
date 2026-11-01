@@ -65,7 +65,7 @@ it('team: no card; the refusal names the admin command and nothing is recorded',
 it('solo: a key just stored from /provider is offered to this project with the same card; y records the grant before the result', async () => {
   const where = await installation(null);
   const out = words((await inPty(fixture, join(where.root, 'project'), { PRE8_E2E_ROOT: where.root, TERM: 'xterm-256color', NO_COLOR: '1', ...where.env }, 'en',
-    [['OpenRouter', '\r'], ['Replace the key', '\r', 'next'], ['API key', 'synthetic-typed-key\r', 'next'], ['Use the main key DECKENT_FIXTURE_KEY in this project?', ''],
+    [['OpenRouter', '\r'], ['Replace the key', '\r', 'next'], ['Masked; it is never shown again', 'synthetic-typed-key\r', 'next'], ['Use the main key DECKENT_FIXTURE_KEY in this project?', ''],
       ['y yes, grant', 'y', 'next'], ['Connected: OpenRouter', '\u0003', 'fresh']])).output);
   expect(out).not.toContain('synthetic-typed-key');
   expect(await grants(where.env)).toEqual([expect.objectContaining({ name: 'DECKENT_FIXTURE_KEY', source: 'card' })]);

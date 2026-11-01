@@ -837,7 +837,13 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
       } }, {}, 'en', () => 'POLICY_DENIED').subscription!;
     const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
     const ui = mount(panel('provider', { provider }).element, 120, 40);
-    await settle(80); await ui.press(`${ENTER}${ENTER}${ENTER}`, 120); // kind, login, default dir; fake login in suspended Ink
+    await until(() => ui.frame().includes('Fixture subscription'), 'subscription kind loaded');
+    await ui.press(ENTER);
+    await until(() => ui.frame().includes('Sign in'), 'subscription actions loaded');
+    await ui.press(ENTER);
+    await until(() => ui.frame().includes('Login directory'), 'login directory loaded');
+    await ui.press(ENTER); // default directory; fake login in suspended Ink
+    await until(() => ui.frame().includes('Who may use this login now:'), 'delegation loaded after login');
     expect(ui.frame()).toContain('Who may use this login now:');
     await ui.press(`${DOWN}${ENTER}`, 60); // tick/untick system
     expect(requests).toEqual([null]);
