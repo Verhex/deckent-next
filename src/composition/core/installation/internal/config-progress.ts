@@ -7,7 +7,6 @@ import { inspectProductFile, type ProductLayout, type ResolvedConfig } from '#pl
 export async function committedConfigTarget(target: PolicyTemplatePublishTarget, scopeId: string, layout: ProductLayout, config: ResolvedConfig, maxBytes: number) {
   if (target.resource !== 'config') return target;
   const current = await inspectInstallationFile({ root: dirname(target.path), path: target.path, maxBytes });
-  if (current.digest === target.digest) return target;
   if (current.digest === null) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
   const store = await openReadOnlyAuditStore(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite);
   try {
