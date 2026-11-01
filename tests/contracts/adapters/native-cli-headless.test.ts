@@ -242,7 +242,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       await writeFile(identityFile, installationId, { mode: 0o400 });
       let bump = 0;
       const write = async (scenario: Omit<FakeCodexScenario, 'logPath'>) => { const path = await writeFakeCodexCli(bin, { logPath, installationId, ...scenario }); await utimes(path, new Date(), new Date(Date.now() + ++bump * 9000)); return path; };
-      const executable = await write({ steps: codexAnswer('{"ok":true}').map(line => ({ line })) });
+      const notice = { type: 'item.completed', item: { type: 'error', message: 'Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.' } };
+      const executable = await write({ steps: [notice, ...codexAnswer('{"ok":true}')].map(line => ({ line })) });
       const codexBinding = parseModelBindingDefinition({ encodingVersion: 1, provider: { id: 'cli-subscription', version: 1 },
         model: { id: 'pinned', version: 1, nativeId: PINNED, protocols: [{ family: CODEX_FAMILY, version: 'v1', capabilities: [] }] } });
       const profile = parseModelInvocationProfile({ schemaVersion: 2, billingAxis: 'subscription', id: 'codex', version: 1, scopeId: 'scope',
@@ -255,7 +256,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       const log = async () => (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[]; env: Record<string, string>; stdin?: string; system?: string });
       // The answer: the argv-pinned model, the CLI's split input counters, the user message on stdin and the system prompt as the instructions file.
       await expect(call()).resolves.toMatchObject({ native: { model: PINNED, choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', modelEvidence: 'argv',
-        flagSetDigest: '3151a7c18f453a502c99cc42acacb3cb2f1c3ddf520ced636e7866e35403209f' } },
+        flagSetDigest: 'd2486ce12d386924b1e9fa39140d3d677d11bc4164c4cdf4c336e0689fe76704' } },
         usage: { prompt_tokens: 1200, completion_tokens: 7, cache_read: 1000, modelUsage: { [PINNED]: { inputTokens: 200, outputTokens: 7, cacheReadInputTokens: 1000 } } } });
       expect(deltas.map(delta => delta.text).join('')).toBe('{"ok":true}');
       // F10: Codex opens its identity read/write; only its private copy may change, never the person's existing file.
@@ -265,7 +266,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(spawned.map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call']);
       expect(made.stdin).toBe(PROMPT); expect(made.system).toBe('You are a planner. Answer only JSON.'); expect(made.argv.join(' ')).not.toContain(PROMPT);
       expect(made.argv.slice(0, 11)).toEqual(['exec', '--json', '--color', 'never', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--strict-config', '--sandbox', 'read-only']);
-      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false',
+      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.code_mode_host=false', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false',
         'features.multi_agent=false', 'features.hooks=false', 'model_reasoning_effort=high', '--model', PINNED]));
       expect(made.argv).not.toContain('--max-turns');
       for (const flag of codexHeadless.forbiddenFlags) expect(made.argv.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
@@ -306,7 +307,25 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'reconnect-limit' });
       await write({ steps: [...answered.slice(0, 2), { type: 'error', message: 'Reconnecting... waiting for network' }, ...answered.slice(2)].map(line => ({ line })) });
       expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'error' });
-      // F14: errors remain fatal; only the private evidence carries the bounded diagnostic. No message or secret becomes a delta.
+      // F14 R2: one startup item notice is neither an answer nor a completed turn; every other error remains fatal.
+      const beforeNotices = deltas.length;
+      const missingHost = { ...notice, item: { ...notice.item, message: notice.item.message.replace('code-mode host is disabled', 'failed to spawn code-mode host /private/host: host executable was not found') } };
+      await write({ steps: [answered[0]!, missingHost, ...answered.slice(1)].map(line => ({ line })) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'R' } }] } });
+      expect(deltas.slice(beforeNotices)).toEqual([{ kind: 'text', text: 'R' }]);
+      await write({ steps: [notice, ...answered.filter(line => line.item === undefined)].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'no-answer' });
+      await write({ steps: [notice, notice, ...answered].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'notice-limit' });
+      await write({ steps: [...answered, notice].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'after-turn' });
+      for (const event of [{ type: 'error', message: notice.item.message }, { type: 'turn.failed', error: { message: notice.item.message } },
+        ...['prefix ' + notice.item.message, notice.item.message + ' extra', notice.item.message + '\n', notice.item.message + '\r', notice.item.message.toLowerCase(), notice.item.message.replace('disabled', 'disabled\nsecret'),
+          'Code Mode is unavailable because failed to spawn host; continuing without isolation.'].map(message => ({ ...notice, item: { ...notice.item, message } }))]) {
+        await write({ steps: [event, ...answered].map(line => ({ line })) });
+        expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: event.type === 'turn.failed' ? 'turn.failed' : 'error' });
+      }
+      // F14: other errors remain fatal; only the private evidence carries the bounded diagnostic. No message or secret becomes a delta.
       const diagnostic = `network failure ${knownValue} sk-fixtureCredential1234567890 Bearer tiny-token Basic dXNlcjpwYXNz {"refresh_token":"short-refresh"} password='short-pass' https://user:pass@example.test/path?q=private-query#private-fragment person@example.test kişi@örnek.test abcdefghijklmnopqrstuvwxyz0123456789`;
       const beforeErrors = deltas.length;
       for (const event of [{ type: 'error', message: diagnostic }, { type: 'item.completed', item: { type: 'error', message: diagnostic } },

@@ -181,7 +181,7 @@ models login --connection codex-cli-subscription` signs the Brain's own `headles
 credential store). The call is one `codex exec --json` turn with the read-only sandbox, approvals never, no persisted session, user config
 and execpolicy rules ignored, every documented tool switch off and the system prompt as `model_instructions_file`; the message is on stdin
 and `CODEX_HOME` is the login directory. Codex has no turn flag and no tool-disable flag for `apply_patch`, so the line guard enforces one
-thread and one turn and stops the process on any item other than the answer and its reasoning (a tool item is `guard`, field
+thread and one turn and stops the process on any item other than the answer, its reasoning and the bounded startup notice below (a tool item is `guard`, field
 `item.<type>`); an error line is `quota` (the worker's `providers.json` patterns), `login-required` (registry patterns) or `invalid-output`.
 The guard acts on an event the CLI reports, so it is not a pre-effect block: the read-only sandbox and the realm bound what could already
 have run, and the realm still leaves its private memory and the login directory's state writable. The completed turn is final (any later
@@ -199,6 +199,11 @@ not `-c` keys, so such drift is visible only as the evidence below. The CLI's ow
 5) per call, and past that bound it is `invalid-output` (`reconnect-limit`); any other error line and `turn.failed` still refuse. Even with
 `--ephemeral` and memories and history off, the CLI writes its own state databases and `installation_id` into `CODEX_HOME`; that is the
 Brain's own separate login directory, so this is accepted (lead 2026-10-31).
+Revision `-r4` (F14 R2, 2026-11-01) also disables `features.code_mode_host`. Only an item of type `error` whose complete,
+case-sensitive text matches the registry's anchored Code Mode fail-closed `noticePatterns` may continue, up to `maxNotices` (1)
+per invocation; another is `invalid-output` (`notice-limit`). The notice emits no answer and cannot complete a turn. All other
+item errors, top-level errors (apart from counted reconnects) and `turn.failed` refuse. The empty-login, network-isolated 0.166.0
+parser probe reached `turn.started` with `--strict-config`; it proves key acceptance, not a completed model call.
 
 A CLI of either family that ends by itself before a complete turn (a crash, a missing result, a refused argv) settles as incomplete
 evidence (`interrupted`, `complete: false`), so the receipt stays `unknown` (`transport-error`, ledger v73 unchanged) and keeps an adapter
