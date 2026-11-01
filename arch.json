@@ -5072,6 +5072,7 @@
       ".deckent/docs/architecture/*.md",
       ".deckent/docs/architecture/modules/*.md",
       ".deckent/docs/plan/*.md",
+      ".deckent/docs/archive/2026-11/*.md",
       "follow-up-works/current-flow.md"
     ]
   },
@@ -5914,7 +5915,7 @@
           "reason": "Owner decision log cites external proof under the developer refactor-work root; main session rewrites to <refactor-work>/ during its document passes."
         },
         {
-          "file": ".deckent/docs/plan/owner-targets-2026-10-05.md",
+          "file": ".deckent/docs/archive/2026-11/owner-targets-2026-10-05.md",
           "count": 2,
           "reason": "Architecture/plan document cites the developer checkout or external proof root; rewrite to a neutral root and remove."
         },

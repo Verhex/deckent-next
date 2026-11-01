@@ -9,7 +9,7 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
-Alpha.59 has landed (PR #124) and is live. Alpha.60 is a release candidate, not released; items marked alpha.60 describe that candidate. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
+Alpha.61 has landed (PR #132) and is live, after alpha.60 (PR #131). The four-journey BeUser re-walk and the owner terminal test are still open and run before beta. Released mechanisms and the remaining scenario/platform acceptance are distinguished below; a release does not close every limit.
 
 
 ## BeUser B1 journey walks (alpha.57)
@@ -33,6 +33,16 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   charged. The provisional walk profile (`b1-dogfood-provisional-2`, limits `beuser-limits-5`) allows 256 calls, 16 777 216 tokens, one
   hour and 3 USD for priced models per walk. *Impact:* these ceilings are planning bounds, not measured capacity, spend permission or a
   quota promise, and a walk can stop early on an estimate. *Workaround:* none yet; measurement replaces the estimates later.
+- **A BeUser walk cannot yet observe whether an action was authorized or safe (alpha.61).** The readbacks for authorization (the card)
+  and safety (forbidden effect), and for preserved data and receipt location, have no reader inside the walk realm and are always
+  `unknown`; the onboarding journey also reports its lifecycle as `unknown` because the runtime service keeps running after the terminal
+  closes. A verdict therefore rests on the persona's walk and the evaluator's reading of the transcript, and `unknown` is never turned
+  into a pass. A Codex walker's finish after the walk can end with no verdict (`reason: unknown`, cause not yet recorded). *Impact:* a
+  walk does not prove authorization or safety. *Workaround:* check the card and receipt yourself with `run inspect` and the audit.
+- **The before-beta BeUser re-walk is still pending (alpha.61).** The four journeys (onboarding, uninstall-v2, beuser-self, theme-light)
+  have not been walked together on the assembled release, and the owner's own terminal test has not happened; both run before beta
+  (owner, 2026-11-01). The alpha.61 onboarding walk of 2026-11-02 reached the end of the journey in both branches and left findings open.
+  *Impact:* journey acceptance is not claimed for alpha.60 or alpha.61.
 
 ## Platforms: tried and not tried
 
@@ -68,6 +78,17 @@ Alpha.57 binds walk/report callbacks, real Run admission/reservation, private du
   machine (Node 26.13.0, pseudo-terminal 110x30, setup deferred, compile cache filled; "cold" means the runtime service was stopped) on the
   integration build before the merge; later commits changed teardown, uninstall and the cache records, not drawing, and were not
   re-measured. *Workaround:* none needed; `/setup` opens the steps at any time.
+- **Keys typed while the terminal opens can still be delayed (alpha.61).** The Workline load is split so early keys no longer wait behind
+  it. Against alpha.60 on the same host (responsive pseudo-terminal, 2 alternating blocks × 5 cold + 5 warm per version), the worst key
+  delay fell from a median of 120 to 46 ms cold and 119 to 61 ms warm, with a worst case of 80 ms (171 ms before); key chunks over 50 ms
+  fell from 40 of 50 to 4–7 of 50. *Impact:* a key can still wait up to about 80 ms in the worst case while the window opens (none lost,
+  order kept). The first frame is unchanged (median about 240 ms) and the warm goal of under 300 ms is still not a measured guarantee on
+  other machines. *Workaround:* none needed.
+- **A Codex CLI "Code Mode" fail-closed notice is tolerated once (alpha.60).** The headless Codex step passes `features.view_image=false`
+  and tolerates reconnect notices up to 5. A fail-closed "Code Mode" notice in the Codex event stream is tolerated one time. The guard
+  acts on reported events, is not a block before the effect, and has not been measured against a real Codex turn. *Impact:* an effect
+  that a Codex turn does not report in its events is not caught by this guard. *Workaround:* none needed; the sandbox and the worker
+  boundaries stay the real limit.
 - **Copying with the mouse, card copy (Ctrl+Y or a drag over a card, alpha.59) and `/copy [n]` use your terminal's clipboard sequence
   (OSC 52)** and were proven only on a Linux pseudo-terminal (a click on a collapsed tool-call line, alpha.59, only in an in-process
   terminal test), not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until

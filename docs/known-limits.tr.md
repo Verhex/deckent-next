@@ -9,7 +9,7 @@ Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde 
 
 Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
-Alpha.59 main'e indi (PR #124) ve canlıda. Alpha.60 sürüm adayıdır, yayımlanmadı; alpha.60 işaretli maddeler bu adayı anlatır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
+Alpha.61 main'e indi (PR #132) ve canlıda; öncesinde alpha.60 (PR #131). BeUser dört yolculuk yeniden yürüyüşü ve owner terminal testi henüz açık; betadan önce yapılır. Teslim edilen mekanizmalar ile kalan senaryo/platform kabulü aşağıda ayrıdır; sürüm geçişi her sınırı kapatmaz.
 
 
 ## BeUser B1 yolculuk yürüyüşleri (alpha.57)
@@ -33,6 +33,16 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   (`b1-dogfood-provisional-2`, `beuser-limits-5`) yürüyüş başına 256 çağrı, 16 777 216 token, bir saat ve fiyatlı modeller için 3 USD
   verir. *Etki:* bu tavanlar planlama sınırıdır; ölçülmüş kapasite, harcama izni ya da kota sözü değildir ve yürüyüş tahmin yüzünden erken
   durabilir. *Yol:* henüz yok; ölçüm tahminlerin yerini sonra alır.
+- **BeUser yürüyüşü bir eylemin yetkili ya da güvenli olup olmadığını henüz gözlemleyemez (alpha.61).** Yetki (kart) ve güvenlik (yasak
+  etki) geri okumalarının, ayrıca korunan veri ve makbuz konumunun yürüyüş realm'i içinde okuyucusu yoktur ve her zaman `unknown` olur;
+  onboarding yolculuğu yaşam döngüsünü de `unknown` bildirir, çünkü runtime servisi terminal kapanınca çalışmaya devam eder. Bu yüzden
+  hüküm persona yürüyüşüne ve değerlendiricinin transkript okumasına dayanır, `unknown` asla geçişe çevrilmez. Codex yürüyücüsünün yürüyüş
+  sonrası bitişi hükümsüz kalabilir (`reason: unknown`, neden henüz kaydedilmiyor). *Etki:* bir yürüyüş yetkiyi ya da güvenliği kanıtlamaz.
+  *Yol:* kartı ve makbuzu `run inspect` ve denetim kaydıyla kendiniz denetleyin.
+- **Betadan önceki BeUser yeniden yürüyüşü hâlâ bekliyor (alpha.61).** Dört yolculuk (onboarding, uninstall-v2, beuser-self, theme-light)
+  birleştirilmiş sürümde birlikte yürünmedi ve owner'ın kendi terminal testi yapılmadı; ikisi de betadan önce yapılır (owner, 2026-11-01).
+  2026-11-02 alpha.61 onboarding yürüyüşü iki kolda da yolculuğun sonuna ulaştı ve açık bulgular bıraktı. *Etki:* alpha.60 ya da alpha.61
+  için yolculuk kabulü ileri sürülmez.
 
 ## Platformlar: denenenler ve denenmeyenler
 
@@ -68,6 +78,16 @@ Alpha.57 walk/report host bağlarını, gerçek Run kabulü/rezervasyonu, özel 
   derleme önbelleği dolu; "soğuk" runtime servisinin durdurulmuş olması demektir) ve birleştirmeden önceki entegrasyon derlemesindedir;
   sonraki commit'ler kapatma, kaldırma ve önbellek kayıtlarını değiştirdi, çizimi değil, ve yeniden ölçülmedi. *Yol:* gerekmez; `/setup`
   adımları her an açar.
+- **Terminal açılırken yazılan tuşlar hâlâ gecikebilir (alpha.61).** Workline yükü bölündü, böylece erken tuşlar artık onun arkasında
+  beklemez. Aynı makinede alpha.60'a karşı (yanıt veren sözde-terminal, sürüm başına 2 dönüşümlü blok × 5 soğuk + 5 sıcak) en kötü tuş
+  gecikmesi medyanı soğukta 120'den 46 ms'ye, sıcakta 119'dan 61 ms'ye indi; en kötü durum 80 ms (önceden 171 ms); 50 ms'yi aşan tuş
+  parçaları 50'de 40'tan 50'de 4–7'ye düştü. *Etki:* pencere açılırken bir tuş en kötü durumda hâlâ yaklaşık 80 ms bekleyebilir (hiçbiri
+  kaybolmaz, sıra korunur). İlk kare değişmedi (medyan yaklaşık 240 ms) ve sıcakta 300 ms altı hedefi başka makineler için ölçülmüş bir
+  güvence değildir. *Yol:* gerekmez.
+- **Codex CLI'ın "Code Mode" kapalı-başarısız bildirimi bir kez hoş görülür (alpha.60).** Headless Codex adımı `features.view_image=false`
+  geçirir ve yeniden bağlanma bildirimlerini 5'e kadar hoş görür. Codex olay akışındaki "Code Mode" kapalı-başarısız bildirimi bir kez hoş
+  görülür. Koruma bildirilen olaylara göre davranır, etkiden önce bir engel değildir ve gerçek bir Codex turuna karşı ölçülmedi. *Etki:*
+  bir Codex turunun olaylarında bildirmediği etki bu korumaya takılmaz. *Yol:* gerekmez; gerçek sınır sandbox ve işçi sınırlarıdır.
 - **Fareyle kopyalama, kart kopyalama (Ctrl+Y ya da kart üzerinde sürükleme, alpha.59) ve `/copy [n]` terminalinizin pano dizisini
   (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı (katlanmış araç çağrısı satırına tıklama, alpha.59, yalnız
   süreç içi bir terminal testinde); fiziksel Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller
