@@ -326,7 +326,7 @@ bounds, and retain the admitted deadline. There is no extra retry limit or model
 substitution. Invalid actions never reach the surface, and model assessments do
 not replace harness readback or the existing acceptance owner.
 
-The walker message (instructions revision 4; revision 3 walk18 2026-10-29) also carries
+The walker message (instructions revision 5; revision 3 walk18 2026-10-29) also carries
 `remainingSteps` (decisions left within the persona's step patience, this one
 included), `remainingWaitMs` and `keys`, the contract key names (`BEUSER_KEYS`)
 a press may use besides one printable character. The surface resolves the
@@ -395,6 +395,19 @@ calibration, safety pass or independent acceptance. Only retained screen observa
 walked; missing verdict coverage remains explicitly unknown.
 
 
+## Explicit persona finish (alpha.61 source candidate)
+
+The walker action contract also accepts `finish` with `outcome: reached|gave-up` and
+an observation-based, nonempty `reason` (instructions revision 5). It ends persona
+interaction while the product can remain open. The harness retains the claim as a
+redacted action artifact with the last screen reference, captures the same business
+readback as EOF and seals the transcript. Finish never sends a key or command to the
+target and never supplies an acceptance verdict. Proven destruction, valid controller
+audit and the existing call/token/cost/wall envelope still gate the evaluator; its
+rubric and observations decide the assessment. A reached claim can be judged RED or
+unknown. EOF and the existing loop, observation, patience and admitted bounds remain
+unchanged. Author fixtures do not establish assembled-release journey acceptance.
+
 ## Early-stop evaluation (alpha.60 source candidate)
 
 The controller seals the transcript after `patience`, `loop`, `observing` or an admitted
@@ -423,6 +436,33 @@ acceptance. Guaranteed RED/FRICTION on every early stop requires a separate deci
 that contract. Owner S8 (2026-10-31) changes registry `b1-personas-2`: Ayşe waits up to
 45 seconds and Mert up to 30 seconds. New admission pins these updated summaries; existing
 sealed profiles keep their original summaries and require regeneration to adopt the change.
+
+## Bounded evaluator presentation (A61-TRIM candidate)
+
+The evaluator receives a presentation of the sealed transcript, not its full terminal cell
+arrays. `beuser-limits-7` adds registry ceilings of 262144 bytes for the serialized message
+array and eight style samples per screen. Screen text, geometry, full-cell digest, minimum
+measured contrast and unknown-contrast count remain; duplicate main/scrollback text is omitted.
+Consecutive identical captured screens share the first screen's reference and carry their
+repetition number; intervening action records remain. Full-screen digests prevent changes
+outside the style samples from being mistaken for an identical screen.
+
+If the complete messages still exceed the ceiling, only observation text loses its middle:
+`text` and `textTail` preserve head/tail excerpts, `textTruncated` marks each affected row,
+and `truncation` marks the transcript. Original entry references/digests, transcript digest,
+binding and rubric remain intact. Canonical artifacts are never rewritten. Metadata or rubric
+that cannot fit even without observation text returns `BEUSER_EVALUATOR_INPUT_TOO_LARGE`.
+A truncated observation is incomplete evidence; the evaluator must keep insufficient evidence
+unknown. These limits are presentation policy, not model capacity or acceptance guarantees.
+
+The actual measured prompt plus completion must still fit both pinned and served model
+windows: `BEUSER_EVALUATOR_INPUT_TOO_LARGE` or `BEUSER_MODEL_INPUT_TOO_LARGE`. Remaining-token
+exhaustion is `BEUSER_CALL_BUDGET_EXCEEDED`; profile timeout/response excess is
+`BEUSER_MODEL_PROFILE_LIMIT`; missing/incompatible spending evidence is
+`BEUSER_SPEND_UNAVAILABLE`. Missing or invalid counters/windows retain
+`BEUSER_LIMITS_UNAVAILABLE`. Format correction still preserves the preceding invalid-output
+failure when the next reservation cannot be admitted. Author checks do not establish an
+assembled-release BeUser walk, independent review or owner acceptance.
 
 ## Realm destruction assurance (owner amendment A, 2026-10-29)
 

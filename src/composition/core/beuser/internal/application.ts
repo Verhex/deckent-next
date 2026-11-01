@@ -19,6 +19,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createBeuserChannel, retainBeuserJson } from '#adapters/index.js';
 import { openConfiguredBeuserRealmOwner } from '#composition/core/supervisors/index.js';
 import { decodeBeuserEvaluatorOutput } from './model-contract.js';
+import { beuserEvaluatorEvidence } from './evaluator-input.js';
 import { configuredBeuserModels } from './models.js';
 import { beuserJourneyLaunch } from './launch.js';
 
@@ -57,8 +58,9 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     press: (ctx, key) => safeScreen(() => getSurface().press(ctx, key)), wait: (ctx, ms) => safeScreen(() => getSurface().wait(ctx, ms)),
     argv: (ctx, command) => safeScreen(() => getSurface().argv(ctx, command)),
   };
+  let evaluatorInputLossy = false;
   const model = configuredBeuserModels(root, options, context, data.choices, data.contributorModels, new BeuserCallBudget(context.limits), data.completionTokens,
-    () => ({ transcript: recorder.finalize(context), rubric: data.rubric }));
+    () => beuserEvaluatorEvidence(recorder.finalize(context), data.rubric), lossy => { evaluatorInputLossy = lossy; });
   const walkerMakers: (string | null)[] = [];
   const models = { ...model.models, async walker(...args: Parameters<typeof model.models.walker>) { const answer = await model.models.walker(...args);
     if (answer.state === 'invoked') walkerMakers.push(answer.receipt.maker); return answer; } };
@@ -83,7 +85,9 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
       if (answer.state !== 'invoked' || answer.receipt.role !== 'beuser-evaluator' || answer.receipt.invocation.receipt.outcome?.state !== 'responded') return null;
       return { answer, experience: decodeBeuserEvaluatorOutput(answer.receipt.invocation, transcript.transcript.filter(row => row.entry.kind !== 'arrange').map(row => row.entry.evidenceRef)) };
     }) : null;
-    const experience = evaluated?.experience ?? { verdict: 'unknown' as const, evidenceRefs: [] };
+    // Astra 2970 R1: when the bounded evaluator input lost observation text, a positive verdict is not accepted (deterministic unknown).
+    const decided = evaluated?.experience ?? { verdict: 'unknown' as const, evidenceRefs: [] };
+    const experience = evaluatorInputLossy && decided.verdict === 'pass' ? { ...decided, verdict: 'unknown' as const } : decided;
     evidence = beuserEvidenceSchema.parse({ schemaVersion: 1, binding: ctx.binding, transcript: transcript.transcript, readbacks,
       validity: controllerValidity, cleanup: { state: lease?.observation.state === 'destroyed' ? 'destroyed' : 'unknown', atMs: Math.floor(performance.now() - started),
         evidenceRef: lease?.observation.evidenceRefs.at(-1) ?? 'cleanup-unproven' },
@@ -120,8 +124,14 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
         const artifactRef = await retainBeuserJson(artifacts, context, row);
         trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef });
       },
-      async finished() {
-        if (lastEvent?.process?.state !== 'eof') return false;
+      async finished(screen: import('#engine/index.js').BeuserScreen, finish?: Extract<import('#engine/index.js').BeuserSurfaceCommand['action'], { kind: 'finish' }>) {
+        if (!finish && lastEvent?.process?.state !== 'eof') return false;
+        if (finish) {
+          const row = recorder.append(context, { binding: context.binding, kind: 'action', evidenceRef: `${context.binding.transcriptId}:finish`,
+            atMs: Math.floor(performance.now() - started), text: JSON.stringify({ action: finish, screenRef: `${context.binding.transcriptId}:${screen.sequence}` }) });
+          const artifactRef = await retainBeuserJson(artifacts, context, row);
+          trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef });
+        }
         const readback = await probe(); readbacks.push(readback);
         recorder.append(context, { binding: context.binding, kind: 'readback', evidenceRef: readback.evidenceRef, atMs: readback.atMs, text: JSON.stringify(readback.summary) });
         return true;

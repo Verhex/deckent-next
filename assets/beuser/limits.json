@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "revision": "beuser-limits-6",
+  "revision": "beuser-limits-7",
   "walk": { "loopStop": 3, "observeStop": 4, "settleMs": 10000 },
+  "evaluator": { "maxInputBytes": 262144, "maxStyleSamples": 8 },
   "profiles": [
     {
       "schemaVersion": 1,

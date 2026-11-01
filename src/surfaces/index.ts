@@ -21,6 +21,11 @@ export { openConfigWindow } from '#surfaces/core/config-window/index.js';
 export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 // I-S3: `deckent init`'s setup reader (loads the setup surface lazily, as `init` does) and doctor's own measurement for the final check.
 export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
+/** The launch shell keeps input while its package loads the Workline groups, before the CLI host also loads the adapters. */
+export async function prepareTerminalSurface(yieldToInput: () => Promise<void>): Promise<void> {
+  for (const load of [() => import('#surfaces/core/terminal-ledger/index.js'), () => import('#surfaces/core/terminal-work/index.js'),
+    () => import('#surfaces/core/terminal/index.js')]) { await load(); await yieldToInput(); }
+}
 export const doctorVerdict = lazyFunction(() => import('#surfaces/core/cli-observe/index.js'), 'doctorVerdict');
 export type { KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
 export type { HubHttpAuth, HubMcpOptions } from '#surfaces/core/hub-mcp/index.js';

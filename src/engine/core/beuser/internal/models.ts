@@ -83,7 +83,7 @@ export function createBeuserModelPort(ports: BeuserModelComposition, budget: Beu
       if (sha256(encodeCommandProjection('beuser-persona:1', summary)) !== context.binding.personaDigest) throw new BeuserContractError('BEUSER_INPUT_INVALID');
       assertBeuserAccess(context, screen.binding, context.principal, { kind: 'beuser-sandbox', id: screen.binding.realmId }, 'create');
       return invoke(context, 'beuser-walker', { persona: summary, goal: summary.goal, screen: screen.text, recentActions: history.recentActions, screenUnchanged: history.screenUnchanged,
-        remainingSteps: history.remainingSteps, remainingWaitMs: history.remainingWaitMs, tools: ['look', 'type', 'press', 'wait'], keys: BEUSER_KEYS, ...(outputError ? { outputError } : {}) });
+        remainingSteps: history.remainingSteps, remainingWaitMs: history.remainingWaitMs, tools: ['look', 'type', 'press', 'wait', 'finish'], keys: BEUSER_KEYS, ...(outputError ? { outputError } : {}) });
     },
     evaluate: (context, transcriptDigest, outputError) => invoke(context, 'beuser-evaluator', { transcriptDigest, ...(outputError ? { outputError } : {}) }),
     cancel: async (context, invocationId) => {
@@ -107,7 +107,8 @@ export async function correctBeuserModelOutput<T>(context: BeuserContext, patien
     try { return await work(invalid?.code as BeuserCorrection | undefined); }
     catch (error) {
       if (error instanceof BeuserContractError && (error.code === 'BEUSER_MODEL_OUTPUT_INVALID' || error.code === 'BEUSER_ACTION_INVALID')) invalid = error;
-      else if (invalid && (error instanceof BeuserContractError && error.code === 'BEUSER_LIMITS_UNAVAILABLE'
+      else if (invalid && (error instanceof BeuserContractError && ['BEUSER_LIMITS_UNAVAILABLE', 'BEUSER_CALL_BUDGET_EXCEEDED', 'BEUSER_EVALUATOR_INPUT_TOO_LARGE',
+        'BEUSER_MODEL_INPUT_TOO_LARGE', 'BEUSER_MODEL_PROFILE_LIMIT', 'BEUSER_SPEND_UNAVAILABLE'].includes(error.code)
         || error instanceof BeuserWalkStopped && error.reason === 'bound')) throw invalid;
       else throw error;
     }

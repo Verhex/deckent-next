@@ -62,6 +62,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the draft and sends the kept lines in order through the send gate; the bar row does not move. A refusal after the frame (the relocation
   stop, identity admission) first closes the shell (1049l), then prints the same text with the same exit code (78). Inline layout,
   `--full-access`, no scope, a retired folder, `TERM=dumb`/pipes and `deckent terminal …` keep the earlier path.
+  **alpha.61 startup candidate:** after the shell frame, `prepareTerminalSurface` loads the Workline's dependency groups through the
+  surfaces package entry, draining input and flushing its render between groups. The CLI host then loads its existing dependencies;
+  engine and adapter evaluation no longer share the same first import. This changes module loading only: identity admission, service and
+  session order, theme probing, queued lines and the send gate keep their existing owners. Author PTY evidence is separate from
+  assembled-release and native-terminal acceptance.
 - **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed

@@ -225,7 +225,8 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
   // Astra 2872 R1: the early-stop judge runs the existing readback, so a malformed or foreign-reference answer gets only the existing bounded
   // format correction (min of admitted calls, admitted steps and persona step patience), in the same envelope; a refused reservation ends it.
   const correctionBound = Math.min(BEUSER_LIMITS_REGISTRY.profiles[0]!.maxCalls, BEUSER_LIMITS_REGISTRY.profiles[0]!.maxSteps, 4);
-  for (const [cleanupProven, judge] of [[false, []], [true, ['valid']], [true, ['foreign', 'valid']], [true, ['prose']], [true, ['prose', 'limits']]] as const) {
+  for (const [cleanupProven, judge, finish] of [[false, [], null], [true, ['valid'], null], [true, ['foreign', 'valid'], null], [true, ['prose'], null],
+    [true, ['prose', 'limits'], null], [true, ['valid'], 'reached'], [true, ['valid'], 'gave-up']] as const) {
     // Profile v3: the installed start state is arranged through the production arrange adapter (substituted Docker transport) before the first look.
     const f = await reportFixture('pty', { schemaVersion: 2, catalogRevision: engine.BEUSER_ARRANGE_REGISTRY.revision, states: ['T1', 'cancel'] });
     try {
@@ -242,6 +243,8 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
         async inspect() { return { valid: true, evidenceRefs: ['fixture-containment'] }; },
         async remove() { return { processesAbsent: cleanupProven, cgroupAbsent: cleanupProven, filesystemAbsent: cleanupProven, evidenceRefs: cleanupProven ? ['fixture-absence'] : [] }; },
       }, input.custody));
+      const readback = vi.spyOn(adapters, 'readBeuserInstallationSummary').mockResolvedValue({ installation: 'installed', preservedData: 'unknown',
+        card: 'unknown', receiptLocation: 'unknown', forbiddenEffect: 'unknown', lifecycle: 'stopped' });
       const keys: string[] = [];
       vi.spyOn(adapters, 'createBeuserChannel').mockImplementation(input => ({ binding: input.context.binding,
         verify: async () => {}, cancel: async () => {}, async open() {
@@ -258,18 +261,37 @@ it.skipIf(process.platform !== 'linux')('walk14: a stuck persona keeps redacted 
       vi.spyOn(performance, 'now').mockImplementation(() => clock() + skew);
       const model = vi.spyOn(engine, 'createBeuserModelPort').mockReturnValue({
         walker: vi.fn(async () => { skew += engine.BEUSER_WALK_RULES.settleMs; return { state: 'invoked', receipt: { role: 'beuser-walker', maker: 'fixture-walker', invocation: {
-          receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: '{"kind":"type","text":"fixture-private"}' } }] } },
+          receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content: finish ? JSON.stringify({ kind: 'finish', outcome: finish, reason: 'Goal observation fixture-private' }) : '{"kind":"type","text":"fixture-private"}' } }] } },
         } } }; }), evaluate: vi.fn(async (ctx: engine.BeuserContext) => {
           // Past the listed answers the evaluator keeps answering prose; `limits` is what the real port's reservation throws before any send.
           const kind = (judge as readonly string[])[judged++] ?? 'prose';
           if (kind === 'limits') throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
           const content = kind === 'prose' ? 'The persona is stuck on the card.'
-            : JSON.stringify({ verdict: 'friction', evidenceRefs: [kind === 'valid' ? `${ctx.binding.transcriptId}:loop` : 'foreign:loop'] });
+            : JSON.stringify({ verdict: 'friction', evidenceRefs: [kind === 'valid' ? `${ctx.binding.transcriptId}:${finish ? 'finish' : 'loop'}` : 'foreign:loop'] });
           return { state: 'invoked', receipt: { role: 'beuser-evaluator', maker: 'fixture-evaluator', invocation: {
             receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ message: { content } }] } } } } };
         }), cancel: vi.fn(),
       } as unknown as ReturnType<typeof engine.createBeuserModelPort>);
       const report = await walkConfiguredBeuser(f.root, { scopeId: 'scope', journey: 'journey', candidate: f.candidate }, f.options);
+      if (finish) {
+        const { terminal } = await f.records(), evaluate = model.mock.results[0]!.value.evaluate;
+        expect(keys).toEqual([]); expect(readback).toHaveBeenCalledOnce(); expect(evaluate).toHaveBeenCalledOnce();
+        expect(terminal).toMatchObject({ reason: null, judgeFailure: null, cleanup: 'destroyed', evidence: { validity: 'valid', experience: { verdict: 'friction' } } });
+        expect(report.findings ?? []).toEqual([]);
+        expect(report.segments[0]?.verdict).toMatchObject({ outcome: 'unknown', experience: 'friction' });
+        expect(terminal.diagnostic.trace.map((row: { kind: string }) => row.kind)).toEqual(['arrange', 'action', 'screen', 'action']);
+        const finishRef = `${terminal.binding.transcriptId}:finish`;
+        const row = terminal.evidence.transcript.find((item: { entry: { evidenceRef: string } }) => item.entry.evidenceRef === finishRef);
+        expect(JSON.parse(row.text)).toMatchObject({ action: { kind: 'finish', outcome: finish }, screenRef: terminal.evidence.transcript.find((item: { entry: { kind: string } }) => item.entry.kind === 'screen').entry.evidenceRef });
+        expect(terminal.evidence.transcript.at(-1).entry.kind).toBe('readback');
+        expect(terminal.evidence.readbacks).toHaveLength(1);
+        const artifact = terminal.diagnostic.trace.at(-1).artifactRef.slice('sha256:'.length);
+        const bytes = await readFile(join(f.root, '.deckent', 'artifacts', sha256('scope'), artifact));
+        expect(sha256(bytes)).toBe(artifact); expect(JSON.parse(bytes.toString()).text).toBe(row.text);
+        expect(JSON.stringify({ report, terminal })).not.toContain('fixture-private');
+        expect(await readConfiguredBeuserReport(f.root, 'scope', undefined, f.options)).toEqual(report);
+        continue;
+      }
       // Walk17 S2: the second identical repeat on an unchanged screen stops before a third effect, after (walk19R) one more read of that screen.
       expect(keys).toEqual(['fixture-private', 'fixture-private']);
       expect(model).toHaveBeenCalled();

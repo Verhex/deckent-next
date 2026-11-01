@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-onboarding-2",
+  "revision": "b1-onboarding-3",
   "journeyId": "onboarding",
   "recommended": true,
   "limitsProfile": "b1-dogfood-provisional-3",
@@ -33,8 +33,8 @@
         "narrow-terminal"
       ],
       "goal": {
-        "tr": "Kurulumu bul, ilk küçük işini bitir, kapatıp açınca kalıcı sonucu yeniden bul.",
-        "en": "Find the installation, finish a small first task, and reopen it to find the durable result again."
+        "tr": "Kurulumu tamamla. Model yoksa Sonra ile ertele, ilk işini dene; model bağlı değil mesajını ve /provider ya da /setup adımını gör. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Complete setup. With no model connected, choose Later and try your first task; see the model-not-connected message and the /provider or /setup next step. Then exit the application or use the finish action."
       }
     },
     {
@@ -257,8 +257,8 @@
   "rubric": {
     "schemaVersion": 1,
     "journeyId": "onboarding",
-    "version": 2,
-    "digest": "1ee4910f2f5ad71864dba88e8dd021ae38073abd4c03f2997cddc7e79db21849",
+    "version": 3,
+    "digest": "37b59db5e89f63b2a2cce02c56199f1b9a676515df71c8d814bd43a66e2df926",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
@@ -295,14 +295,18 @@
           ],
           "variants": [
             "terminal",
-            "cli-twin",
-            "reopen"
+            "cli-twin"
           ],
           "criteria": [
-            "discovery-init-identity-scope-connect-budget-worker-first-task-result-cards-durable-result-reopen",
+            "setup-completed",
+            "model-connection-deferred-with-later",
+            "first-task-attempted",
+            "typed-model-unavailable",
+            "safe-next-action-provider-or-setup",
+            "application-exit-or-walker-finish",
+            "no-first-task-completion-claim-without-model",
             "no-manual-internal-JSON",
             "masked-person-only-credential",
-            "actual-worker-evidence-required",
             "same-authority-across-surfaces"
           ],
           "walkStatus": "not-walked",
