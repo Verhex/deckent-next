@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { hubClientCommandSchema, type HubClientApplication, type HubSource } from '#engine/core/hub-client/index.js';
 import type { Locale, KnownSecretSnapshot } from '#platform/index.js';
 
-const scoped = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema });
+const scoped = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema });
 const source = scoped.extend({ hubId: hubDigestSchema });
 const command = hubClientCommandSchema;
 const packageQuery = source.extend({ packageId: hubPackageIdSchema, version: hubVersionSchema.optional() });
@@ -33,14 +33,14 @@ export const hubOperationSchemas = {
   'hub.export': packageQuery,
   'hub.refresh': command.extend({ feed: hubRevocationFeedSchema }),
   'hub.cards': scoped.extend({ after: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative().prefault(0), limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax) }),
-  'hub.publish': command.extend({ input: z.strictObject({ bundle: z.unknown().optional() }) }),
+  'hub.publish': command.extend({ input: z.strictObject({ get bundle() { return z.unknown().optional(); } }) }),
   'hub.yank': withdrawal,
   'hub.revoke': withdrawal,
 } as const;
 export type HubOperationName = keyof typeof hubOperationSchemas;
 export type HubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.input<typeof hubOperationSchemas[K]> }> }[HubOperationName];
 export type ParsedHubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.output<typeof hubOperationSchemas[K]> }> }[HubOperationName];
-const hubEnvelopes = Object.entries(hubOperationSchemas).map(([operation, input]) => z.strictObject({ operation: z.literal(operation), input }));
+const hubEnvelopes = Object.entries(hubOperationSchemas).map(([operation, input]) => z.strictObject({ get operation() { return z.literal(operation); }, input }));
 export const hubOperationSchema = z.discriminatedUnion('operation', [hubEnvelopes[0]!, ...hubEnvelopes.slice(1)]);
 export function parseHubOperation(input: unknown): ParsedHubOperation { return hubOperationSchema.parse(input) as ParsedHubOperation; }
 export const hubOperationWrites = (name: HubOperationName): boolean => !['hub.sources.list', 'hub.search', 'hub.inspect', 'hub.verify', 'hub.export', 'hub.cards'].includes(name);

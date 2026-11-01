@@ -6,6 +6,7 @@ import { beuserBindingSchema, type BeuserBinding, verifiedPrincipalSchema } from
 import { BEUSER_KEY_ALIASES, assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
 import { catalogCommand, type SurfaceCommand } from './argv.js';
 import { SurfaceCapture, surfaceDigest, type HarnessAction, type HarnessProcess, type HarnessSink } from './capture.js';
+import type { BeuserTerminalFixture } from './measurement.js';
 import { atomicKey, BeuserSurfaceError, literalInput, positive } from './input.js';
 import { BeuserScreenRenderer, type ScreenSize } from './screen.js';
 
@@ -33,6 +34,7 @@ export interface SurfaceBounds {
 }
 const replySchema = z.strictObject({ id: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), data: z.string(),
   state: z.enum(['ready', 'eof', 'secret', 'unavailable', 'invalid', 'limit', 'timeout']),
+  terminalExchange: z.array(z.strictObject({ query: z.enum(['osc11', 'da1']), request: z.string().max(32), response: z.string().max(80).nullable(), atMs: persistedInteger().min(0) })).optional(),
   exitCode: persistedInteger().nullable(), columns: persistedInteger().positive(), rows: persistedInteger().positive() });
 type DriverReply = z.infer<typeof replySchema>;
 
@@ -77,6 +79,7 @@ class DriverProtocol {
 }
 
 export interface BeuserSurfaceOptions {
+  readonly terminalFixture?: BeuserTerminalFixture;
   readonly context: BeuserContext; readonly realm: BeuserRealmChannel; readonly size: ScreenSize;
   readonly bounds: SurfaceBounds; readonly catalog: readonly SurfaceCommand[]; readonly sink: HarnessSink;
 }
@@ -100,11 +103,12 @@ export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurfac
   if (bounds.quietMs > bounds.inactivityMs || bounds.inactivityMs > admitted.limits.maxWaitMs
     || bounds.maxInputBytes > admitted.limits.maxArtifactBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
   assertBeuserAccess(admitted, realm.binding, admitted.principal, { kind: 'beuser-sandbox', id: realm.binding.realmId }, 'create');
-  let renderer = new BeuserScreenRenderer(size, admitted.limits.maxArtifactBytes);
+  let renderer = new BeuserScreenRenderer(size, admitted.limits.maxArtifactBytes, options.terminalFixture);
   const capture = new SurfaceCapture(admitted, sink);
   const started = performance.now();
   let busy = false, closed = false, secret = false, steps = 0, rawBytes = 0, io: RealmDriverIO | undefined, driver: DriverProtocol | undefined;
   let currentSize = size;
+  let terminalExchange: NonNullable<DriverReply['terminalExchange']> = [];
   let lastProcess: HarnessProcess = { state: 'ready', exitCode: null };
   const elapsed = () => Math.floor(performance.now() - started);
   const access = (context: BeuserContext) => {
@@ -174,6 +178,8 @@ export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurfac
     const bytes = Buffer.from(reply.data, 'base64');
     rawBytes += bytes.length;
     if (rawBytes > admitted.limits.maxTranscriptBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
+    terminalExchange.push(...(reply.terminalExchange ?? []));
+    if (Buffer.byteLength(JSON.stringify(terminalExchange)) > admitted.limits.maxArtifactBytes) throw new BeuserSurfaceError('BEUSER_SURFACE_LIMIT');
     await renderer.write(bytes);
     if (reply.columns !== renderer.dimensions.columns || reply.rows !== renderer.dimensions.rows) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
     if (reply.state === 'eof') renderer.finish();
@@ -186,7 +192,8 @@ export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurfac
   };
   const screen = async (): Promise<BeuserScreen> => {
     capture.assertOpen();
-    const rendered = renderer.snapshot(), sequence = await capture.record('screen', elapsed(), rendered, undefined, lastProcess);
+    const rendered = { ...renderer.snapshot(), ...(terminalExchange.length ? { terminalExchange } : {}) }, sequence = await capture.record('screen', elapsed(), rendered, undefined, lastProcess);
+    terminalExchange = [];
     return { binding: admitted.binding, sequence, text: rendered.text, digest: surfaceDigest(rendered.text) };
   };
   const action = (context: BeuserContext, command: Readonly<Record<string, unknown>>, detail: HarnessAction, synthetic = false) => execute(context, async () => {
@@ -233,7 +240,7 @@ export function createBeuserSurface(options: BeuserSurfaceOptions): BeuserSurfac
         if (closed || !reset.evidenceRef || /[\p{Cc}\p{Cs}]/u.test(reset.evidenceRef) || Buffer.byteLength(reset.evidenceRef) > bounds.maxInputBytes) throw new BeuserSurfaceError('BEUSER_CAPTURE_BLOCKED');
       } catch (error) { await reset.io.cancel('invalid-reset'); throw error; }
       io = reset.io; driver = new DriverProtocol(io, admitted.limits.maxTranscriptBytes * 2, admitted.binding.nonce);
-      renderer = new BeuserScreenRenderer(currentSize, admitted.limits.maxArtifactBytes);
+      renderer = new BeuserScreenRenderer(currentSize, admitted.limits.maxArtifactBytes, options.terminalFixture);
       secret = false; capture.reopen();
       await capture.record('action', elapsed(), undefined, { kind: 'capture-reset', evidenceRef: reset.evidenceRef });
       await request({ op: 'read', ms: bounds.quietMs }); return screen();

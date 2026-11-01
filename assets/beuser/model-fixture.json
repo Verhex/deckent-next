@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "revision": "beuser-model-fixture-1",
+  "stepId": "model-connected",
+  "connection": "local-openai",
+  "endpoint": "http://127.0.0.1:18765",
+  "modelId": "beuser-fixture-v1",
+  "scopeId": "beuser-realm",
+  "receiptPath": "model-connected.json",
+  "maxLifetimeMs": 3600000,
+  "maxRequestBytes": 1048576,
+  "maxRequests": 512,
+  "requestTimeoutMs": 10000,
+  "response": {
+    "id": "beuser-fixture-completion-v1",
+    "object": "chat.completion",
+    "created": 0,
+    "model": "beuser-fixture-v1",
+    "choices": [{ "index": 0, "message": { "role": "assistant", "content": "BeUser deterministic fixture response. This is not a real model." }, "finish_reason": "stop" }],
+    "usage": { "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2 }
+  },
+  "receipt": { "schemaVersion": 1, "fixtureRevision": "beuser-model-fixture-1", "realModel": false, "connected": true, "active": true },
+  "label": { "tr": "BeUser deterministik fixture; gerçek model değildir.", "en": "BeUser deterministic fixture; not a real model." }
+}

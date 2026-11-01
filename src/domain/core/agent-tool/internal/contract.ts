@@ -1,4 +1,3 @@
-import { persistedInteger } from '#platform/core/validate/index.js';
 import { z } from 'zod';
 
 /**
@@ -16,7 +15,7 @@ const jsonSchemaObject = z.looseObject({ type: z.literal('object'), properties: 
 
 export const agentToolSpecSchema = z.strictObject({
   name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
-  version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  version: z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   toolClass: agentToolClassSchema,
   description: z.string().min(1).max(2000),
   inputSchema: jsonSchemaObject,

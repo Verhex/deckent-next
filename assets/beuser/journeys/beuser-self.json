@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-beuser-self-1",
+  "revision": "b1-beuser-self-2",
   "journeyId": "beuser-self",
   "limitsProfile": "b1-dogfood-provisional-3",
   "branches": [
@@ -28,8 +28,8 @@
   "rubric": {
     "schemaVersion": 1,
     "journeyId": "beuser-self",
-    "version": 1,
-    "digest": "70c7d2df31f07012dfa8b25f9eca7c5413f815b13ce284ba13e52b46b1698b6f",
+    "version": 2,
+    "digest": "cb31c3087b4f684410a1d38d707fbf27f46b47eb58024029ab06e8d724bd7886",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
@@ -40,7 +40,8 @@
           "id": "SELF-B1",
           "initialStates": [
             "fresh-own-installation",
-            "assembled-candidate"
+            "assembled-candidate",
+            "model-connected"
           ],
           "variants": [
             "beuser-walk",

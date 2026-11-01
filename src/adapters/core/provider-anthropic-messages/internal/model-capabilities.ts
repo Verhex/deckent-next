@@ -4,21 +4,21 @@ import models from './models.json' with { type: 'json' };
 
 const https = persistedUrl().startsWith('https://');
 const level = z.string().min(1);
-const capabilitySchema = z.strictObject({ modelId: z.string().min(1).max(256),
-  thinking: z.strictObject({ adaptive: z.boolean(), enabled: z.boolean(), off: z.enum(['disabled', 'between_tools']).nullable(), offMaxEffort: level.optional() }),
-  effort: z.strictObject({ levels: z.array(level).min(1), default: level }).nullable(),
-  maxOutputTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), source: https })
+const capabilitySchema = z.strictObject({ get modelId() { return z.string().min(1).max(256); },
+  get thinking() { return z.strictObject({ adaptive: z.boolean(), enabled: z.boolean(), off: z.enum(['disabled', 'between_tools']).nullable(), offMaxEffort: level.optional() }); },
+  get effort() { return z.strictObject({ levels: z.array(level).min(1), default: level }).nullable(); },
+  get maxOutputTokens() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, source: https })
   .refine(row => row.effort === null || row.effort.levels.includes(row.effort.default))
   .refine(row => row.thinking.offMaxEffort === undefined || (row.thinking.off !== null && row.effort !== null));
 type Capability = z.infer<typeof capabilitySchema>;
 export type AnthropicModelCapability = Readonly<Omit<Capability, 'effort'> & {
   effort: Readonly<{ levels: readonly string[]; default: string }> | null }>;
 const positiveInteger = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
-const registrySchema = z.strictObject({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  sources: z.record(z.string(), https), note: z.string(),
-  effort: z.strictObject({ levels: z.array(level).nonempty(), order: z.literal('ascending') }),
-  metering: z.strictObject({ promptOverheadTokens: positiveInteger, thinkingBudgetMinTokens: positiveInteger }),
-  models: z.array(capabilitySchema).min(1) })
+const registrySchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, get retrievedAt() { return z.string().regex(/^\d{4}-\d{2}-\d{2}$/); },
+  get sources() { return z.record(z.string(), https); }, get note() { return z.string(); },
+  get effort() { return z.strictObject({ levels: z.array(level).nonempty(), order: z.literal('ascending') }); },
+  get metering() { return z.strictObject({ promptOverheadTokens: positiveInteger, thinkingBudgetMinTokens: positiveInteger }); },
+  get models() { return z.array(capabilitySchema).min(1); } })
   .refine(registry => new Set(registry.models.map(row => row.modelId)).size === registry.models.length)
   .refine(registry => new Set(registry.effort.levels).size === registry.effort.levels.length)
   .refine(registry => registry.models.every(row => {

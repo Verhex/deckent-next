@@ -8,10 +8,10 @@ def validate(value, schema):
     # Only this version's schema vocabulary is supported. New keywords fail closed.
     if set(schema) - {'$schema', 'type', 'const', 'enum', 'properties', 'required',
                       'additionalProperties', 'items', 'minItems', 'minLength',
-                      'minimum', 'maximum', 'pattern'}:
+                      'minimum', 'maximum', 'pattern', 'maxItems'}:
         raise ValueError()
     kind = schema['type']
-    expected = {'object': dict, 'array': list, 'integer': int, 'string': str}[kind]
+    expected = {'object': dict, 'array': list, 'integer': int, 'string': str, 'boolean': bool}[kind]
     if type(value) is not expected:
         raise ValueError()
     if 'const' in schema and value != schema['const']:
@@ -28,7 +28,7 @@ def validate(value, schema):
                 raise ValueError()
             validate(member, child)
     elif kind == 'array':
-        if len(value) < schema.get('minItems', 0):
+        if len(value) < schema.get('minItems', 0) or len(value) > schema.get('maxItems', len(value)):
             raise ValueError()
         for member in value:
             validate(member, schema['items'])

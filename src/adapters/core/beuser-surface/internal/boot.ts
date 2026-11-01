@@ -1,10 +1,12 @@
 import { DeckentJsonSchemaValidator } from '#platform/index.js';
+import type { BeuserTerminalFixture } from './measurement.js';
 import schema from './boot.schema.json' with { type: 'json' };
 import { BeuserSurfaceError } from './input.js';
 
 /** Private C2 → C3 wire v1. Both Python modes consume the same packaged schema. */
 export interface BeuserDriverBoot {
   readonly schemaVersion: 1;
+  readonly terminalFixture?: BeuserTerminalFixture;
   readonly nonce: string;
   readonly mode: 'pty' | 'argv';
   readonly entry: readonly string[];

@@ -3,22 +3,22 @@ import { z } from 'zod';
 import catalogData from './catalog.json' with { type: 'json' };
 
 const version = z.string().regex(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/);
-const npmMechanism = z.strictObject({ mechanism: z.literal('npm'), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/),
-  versionPattern: z.string().min(1), update: z.string().min(1), selfUpdateControl: z.string().min(1) });
-const installerMechanism = z.strictObject({ mechanism: z.literal('installer-script'), versionPattern: z.string().min(1), update: z.string().min(1), note: z.string().min(1) });
-export const toolchainCatalogSchema = z.strictObject({ schemaVersion: z.literal(1), note: z.string(),
-  providers: z.record(identitySchema, z.discriminatedUnion('mechanism', [npmMechanism, installerMechanism])) }).readonly();
+const npmMechanism = z.strictObject({ get mechanism() { return z.literal('npm'); }, get package() { return z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/); },
+  get versionPattern() { return z.string().min(1); }, get update() { return z.string().min(1); }, get selfUpdateControl() { return z.string().min(1); } });
+const installerMechanism = z.strictObject({ get mechanism() { return z.literal('installer-script'); }, get versionPattern() { return z.string().min(1); }, get update() { return z.string().min(1); }, get note() { return z.string().min(1); } });
+export const toolchainCatalogSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get note() { return z.string(); },
+  get providers() { return z.record(identitySchema, z.discriminatedUnion('mechanism', [npmMechanism, installerMechanism])); } }).readonly();
 export type ToolchainCatalog = z.infer<typeof toolchainCatalogSchema>;
 export type ToolchainMechanism = ToolchainCatalog['providers'][string];
 export const toolchainCatalog: ToolchainCatalog = toolchainCatalogSchema.parse(catalogData);
 
 /** One admitted worker toolchain pin: the CLI version string a prepared profile requires at preflight. */
-const profileReferenceSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() });
+const profileReferenceSchema = z.strictObject({ id: identitySchema, get version() { return counterSchema.positive(); } });
 export const admittedToolchainSchema = z.strictObject({ profile: profileReferenceSchema,
-  provider: identitySchema, cliVersion: z.string().min(1).max(128) }).readonly();
+  provider: identitySchema, get cliVersion() { return z.string().min(1).max(128); } }).readonly();
 export type AdmittedToolchain = z.infer<typeof admittedToolchainSchema>;
 
-export const publishedVersionSchema = z.strictObject({ version, source: z.string().min(1), observedAt: persistedDateTime() }).readonly();
+export const publishedVersionSchema = z.strictObject({ version, get source() { return z.string().min(1); }, get observedAt() { return persistedDateTime(); } }).readonly();
 export type PublishedVersion = z.infer<typeof publishedVersionSchema>;
 /** Latest-version lookup outcome per provider. `unavailable` carries a bounded reason code only. */
 export type LatestLookup = Readonly<{ kind: 'published'; published: PublishedVersion } | { kind: 'unavailable'; reason: string } | { kind: 'disabled' } | { kind: 'unsupported' }>;
@@ -26,16 +26,16 @@ export type LatestLookup = Readonly<{ kind: 'published'; published: PublishedVer
 export const toolchainStatusSchema = z.enum(['fresh', 'stale', 'ahead', 'unparsed', 'unknown-offline', 'unsupported', 'disabled', 'not-admitted']);
 export type ToolchainStatus = z.infer<typeof toolchainStatusSchema>;
 export const toolchainCurrencyEntrySchema = z.strictObject({
-  provider: identitySchema, mechanism: z.enum(['npm', 'installer-script']), package: z.string().optional(),
-  admitted: z.array(z.strictObject({ profile: profileReferenceSchema, cliVersion: z.string(), version: version.nullable() })).readonly(),
-  latest: publishedVersionSchema.nullable(), status: toolchainStatusSchema, reason: z.string().optional(),
-  update: z.string(), selfUpdateControl: z.string().optional(),
+  provider: identitySchema, get mechanism() { return z.enum(['npm', 'installer-script']); }, get package() { return z.string().optional(); },
+  get admitted() { return z.array(z.strictObject({ profile: profileReferenceSchema, cliVersion: z.string(), version: version.nullable() })).readonly(); },
+  get latest() { return publishedVersionSchema.nullable(); }, status: toolchainStatusSchema, get reason() { return z.string().optional(); },
+  get update() { return z.string(); }, get selfUpdateControl() { return z.string().optional(); },
 }).readonly();
 export type ToolchainCurrencyEntry = z.infer<typeof toolchainCurrencyEntrySchema>;
-export const toolchainCurrencyReportSchema = z.strictObject({ schemaVersion: z.literal(1), measuredAt: persistedDateTime(),
+export const toolchainCurrencyReportSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get measuredAt() { return persistedDateTime(); },
   // The mode value is registry vocabulary (toolchains.currency.mode); it is carried, not redeclared, here.
-  mode: z.string().min(1), registryEndpoint: z.string().nullable(), providers: z.array(toolchainCurrencyEntrySchema).readonly(),
-  basis: z.string() }).readonly();
+  get mode() { return z.string().min(1); }, get registryEndpoint() { return z.string().nullable(); }, get providers() { return z.array(toolchainCurrencyEntrySchema).readonly(); },
+  get basis() { return z.string(); } }).readonly();
 export type ToolchainCurrencyReport = z.infer<typeof toolchainCurrencyReportSchema>;
 
 export class ToolchainCurrencyError extends Error {

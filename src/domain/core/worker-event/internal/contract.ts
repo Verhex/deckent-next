@@ -1,4 +1,3 @@
-import { persistedInteger } from '#platform/core/validate/index.js';
 import { z } from 'zod';
 import { quotaExhaustedSchema } from './quota.js';
 import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
@@ -6,35 +5,35 @@ import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } 
 /** Worker Event Contract. One current version; provider normalizers map native streams onto it. Events are reported by the
  * worker container (untrusted evidence): they never grant authority, acceptance or terminal truth. */
 export const WORKER_EVENT_SCHEMA_VERSION = 1;
-const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const count = z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const text = (max: number) => z.string().max(max);
 const MAX_MODELS = 16;
 export const workerToolClassSchema = z.enum(['read', 'edit', 'write', 'shell', 'search', 'network', 'agent', 'other']);
 export type WorkerToolClass = z.infer<typeof workerToolClassSchema>;
 export const workerProviderSchema = nativeCliIdSchema;
-const tokens = z.strictObject({ input: count, output: count, cacheRead: count, cacheWrite: count, thinking: count.nullable() }).readonly();
+const tokens = z.strictObject({ input: count, output: count, cacheRead: count, cacheWrite: count, get thinking() { return count.nullable(); } }).readonly();
 export type WorkerTokens = z.infer<typeof tokens>;
-const base = { schemaVersion: z.literal(WORKER_EVENT_SCHEMA_VERSION), sequence: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), atMs: count };
+const base = { schemaVersion: z.literal(WORKER_EVENT_SCHEMA_VERSION), sequence: z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), atMs: count };
 const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ ...base, kind: z.literal('session.started'), provider: workerProviderSchema, model: text(128).nullable(), cliVersion: text(64).nullable() }),
-  z.strictObject({ ...base, kind: z.literal('message'), role: z.enum(['assistant']), textBytes: count, thinking: z.boolean(), excerpt: text(240) }),
-  z.strictObject({ ...base, kind: z.literal('tool.call'), toolId: text(96), name: text(64), toolClass: workerToolClassSchema,
-    target: text(256).nullable(), detail: text(240).nullable() }),
-  z.strictObject({ ...base, kind: z.literal('tool.result'), toolId: text(96), status: z.enum(['ok', 'error']), bytes: count }),
-  z.strictObject({ ...base, kind: z.literal('usage'), tokens }),
+  z.strictObject({ ...base, get kind() { return z.literal('session.started'); }, provider: workerProviderSchema, get model() { return text(128).nullable(); }, get cliVersion() { return text(64).nullable(); } }),
+  z.strictObject({ ...base, get kind() { return z.literal('message'); }, get role() { return z.enum(['assistant']); }, textBytes: count, get thinking() { return z.boolean(); }, get excerpt() { return text(240); } }),
+  z.strictObject({ ...base, get kind() { return z.literal('tool.call'); }, get toolId() { return text(96); }, get name() { return text(64); }, toolClass: workerToolClassSchema,
+    get target() { return text(256).nullable(); }, get detail() { return text(240).nullable(); } }),
+  z.strictObject({ ...base, get kind() { return z.literal('tool.result'); }, get toolId() { return text(96); }, get status() { return z.enum(['ok', 'error']); }, bytes: count }),
+  z.strictObject({ ...base, get kind() { return z.literal('usage'); }, tokens }),
   quotaExhaustedSchema.unwrap().extend({ ...base, kind: z.literal('quota-exhausted') }).strict(),
-  z.strictObject({ ...base, kind: z.literal('quota'), window: text(32), utilization: z.number().min(0).max(1), resetsAtMs: count.nullable(), status: text(32) }),
-  z.strictObject({ ...base, kind: z.literal('limit'), limit: z.enum(['max-turns', 'budget', 'duration', 'structured-output']), detail: text(120) }),
-  z.strictObject({ ...base, kind: z.literal('session.ended'), outcome: z.enum(['success', 'error', 'limit']), turns: count, durationMs: count,
-    apiDurationMs: count.nullable(), costUsd: z.number().nonnegative().finite().nullable(), costBasis: text(32).nullable(), tokens: tokens.nullable(),
-    permissionDenials: count, models: z.array(text(128)).max(MAX_MODELS).readonly().optional() }),
-  z.strictObject({ ...base, kind: z.literal('unmapped'), nativeType: text(64), count: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }),
+  z.strictObject({ ...base, get kind() { return z.literal('quota'); }, get window() { return text(32); }, get utilization() { return z.number().min(0).max(1); }, get resetsAtMs() { return count.nullable(); }, get status() { return text(32); } }),
+  z.strictObject({ ...base, get kind() { return z.literal('limit'); }, get limit() { return z.enum(['max-turns', 'budget', 'duration', 'structured-output']); }, get detail() { return text(120); } }),
+  z.strictObject({ ...base, get kind() { return z.literal('session.ended'); }, get outcome() { return z.enum(['success', 'error', 'limit']); }, turns: count, durationMs: count,
+    get apiDurationMs() { return count.nullable(); }, get costUsd() { return z.number().nonnegative().finite().nullable(); }, get costBasis() { return text(32).nullable(); }, get tokens() { return tokens.nullable(); },
+    permissionDenials: count, get models() { return z.array(text(128)).max(MAX_MODELS).readonly().optional(); } }),
+  z.strictObject({ ...base, get kind() { return z.literal('unmapped'); }, get nativeType() { return text(64); }, get count() { return z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }),
   /** Host-generated after the gateway closed (WORKER-CURRENCY-1): the admitted exact model compared with the models the worker reported.
    * `substituted` lists every unexpected model; `unverified` means the provider reports no per-model evidence. Never accepted from a worker. */
-  z.strictObject({ ...base, kind: z.literal('model.verification'), status: z.enum(['verified', 'substituted', 'unverified']), admitted: text(256).nullable(),
-    observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly() }),
+  z.strictObject({ ...base, get kind() { return z.literal('model.verification'); }, get status() { return z.enum(['verified', 'substituted', 'unverified']); }, get admitted() { return text(256).nullable(); },
+    get observed() { return z.array(text(128)).max(MAX_MODELS + 1).readonly(); }, get unexpected() { return z.array(text(128)).max(MAX_MODELS + 1).readonly(); } }),
   /** Host-generated when caps drop events; never produced by a worker. */
-  z.strictObject({ ...base, kind: z.literal('dropped'), reason: z.enum(['event-cap', 'byte-cap', 'invalid', 'order']), count: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }),
+  z.strictObject({ ...base, get kind() { return z.literal('dropped'); }, get reason() { return z.enum(['event-cap', 'byte-cap', 'invalid', 'order']); }, get count() { return z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }),
 ]);
 /** Only the host model-verification evidence advances; worker-reported protocol events remain v1. Recorded v1 verdicts stay readable. */
 export const WORKER_MODEL_VERIFICATION_SCHEMA_VERSION = 2;
@@ -50,11 +49,11 @@ export type WorkerModelVerificationStatus = typeof LEGACY_VERIFICATION_STATUSES[
 const verificationFields = { ...base, kind: z.literal('model.verification'), evidenceCapability: modelUsageEvidenceSchema,
   admitted: text(256).nullable(), observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly() };
 export const workerEventSchema = z.union([recordedWorkerEventSchema,
-  z.strictObject({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_SCHEMA_VERSION), status: z.enum(LEGACY_VERIFICATION_STATUSES) }),
-  z.strictObject({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION),
-    evidenceCapability: z.literal('session-start-name'), status: z.enum(START_NAME_VERIFICATION_STATUSES) }),
-  z.strictObject({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_CLIENT_REPORTED_SCHEMA_VERSION),
-    evidenceCapability: z.literal('client-reported'), status: z.enum(CLIENT_REPORTED_VERIFICATION_STATUSES) })]);
+  z.strictObject({ ...verificationFields, get schemaVersion() { return z.literal(WORKER_MODEL_VERIFICATION_SCHEMA_VERSION); }, get status() { return z.enum(LEGACY_VERIFICATION_STATUSES); } }),
+  z.strictObject({ ...verificationFields, get schemaVersion() { return z.literal(WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION); },
+    get evidenceCapability() { return z.literal('session-start-name'); }, get status() { return z.enum(START_NAME_VERIFICATION_STATUSES); } }),
+  z.strictObject({ ...verificationFields, get schemaVersion() { return z.literal(WORKER_MODEL_VERIFICATION_CLIENT_REPORTED_SCHEMA_VERSION); },
+    get evidenceCapability() { return z.literal('client-reported'); }, get status() { return z.enum(CLIENT_REPORTED_VERIFICATION_STATUSES); } })]);
 export type WorkerEvent = z.infer<typeof workerEventSchema>;
 
 /** Deterministic, human-readable phase of a worker from its latest meaningful event (no model call, no scoring). */

@@ -9,9 +9,9 @@ const positive = counterSchema.positive(), criterion = (extra: z.ZodRawShape) =>
  * rule@version, the shadow cases since its last false positive; `decision`: the model-decided cases a person reviewed blind and how many agreed
  * (per mille); `scan`: the newest sealed records read per source (a bound hit leaves every criterion unmet) and the cases one review page lists. Meeting them is evidence only.
  */
-export const recoveryRolloutRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
-  rules: z.array(identitySchema).min(1).max(32).readonly(), scan: z.strictObject({ detections: positive, decisions: positive, verdicts: positive, reviewPage: positive.max(100) }).readonly(),
-  detection: criterion({}), decision: criterion({ minPerMille: persistedInteger().min(0).max(1000) }) }).readonly();
+export const recoveryRolloutRegistrySchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get status() { return z.enum(['provisional', 'measured']); },
+  get rules() { return z.array(identitySchema).min(1).max(32).readonly(); }, get scan() { return z.strictObject({ detections: positive, decisions: positive, verdicts: positive, reviewPage: positive.max(100) }).readonly(); },
+  get detection() { return criterion({}); }, get decision() { return criterion({ minPerMille: persistedInteger().min(0).max(1000) }); } }).readonly();
 export type RecoveryRolloutRegistry = z.infer<typeof recoveryRolloutRegistrySchema>;
 export const RECOVERY_ROLLOUT: RecoveryRolloutRegistry = Object.freeze(recoveryRolloutRegistrySchema.parse(seed));
 /** The sealed records one scope's view is measured from (engine reader): targeted detections, model-decided seals, blind verdicts and the cases

@@ -5,7 +5,8 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import ts from 'typescript';
-import { BeuserScreenRenderer } from '#adapters/core/beuser-surface/index.js';
+import theme from '../../../assets/beuser/journeys/theme-light.json' with { type: 'json' };
+import { BeuserScreenRenderer, beuserTerminalFixture } from '#adapters/core/beuser-surface/index.js';
 
 const bytes = (text: string) => Buffer.from(text, 'utf8');
 const renderer = (columns = 20, rows = 4) => new BeuserScreenRenderer({ columns, rows, scrollback: 8 }, 20000);
@@ -15,8 +16,12 @@ it('the emitted screen code loads in real Node ESM with the exact CommonJS depen
   const compile = async (name: string) => ts.transpileModule(await readFile(new URL(`../../../src/adapters/core/beuser-surface/internal/${name}.ts`, import.meta.url), 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
   const input = 'data:text/javascript;base64,' + Buffer.from(await compile('input')).toString('base64');
+  const measurement = (await compile('measurement')).replace("from './input.js'", `from ${JSON.stringify(input)}`)
+    .replace("from '#platform/index.js'", `from ${JSON.stringify(pathToFileURL(require.resolve('#platform/index.js')).href)}`)
+    .replace("from 'zod'", `from ${JSON.stringify(pathToFileURL(require.resolve('zod')).href)}`);
+  const measurementUrl = 'data:text/javascript;base64,' + Buffer.from(measurement).toString('base64');
   const screen = (await compile('screen')).replace(/from '(@xterm\/[^']+)'/gu, (_match, spec: string) => `from ${JSON.stringify(pathToFileURL(require.resolve(spec)).href)}`)
-    .replace("from './input.js'", `from ${JSON.stringify(input)}`);
+    .replace("from './input.js'", `from ${JSON.stringify(input)}`).replace("from './measurement.js'", `from ${JSON.stringify(measurementUrl)}`);
   const script = screen + `\nconst screen = new BeuserScreenRenderer({columns:20,rows:4,scrollback:8},20000);
     await screen.write(new TextEncoder().encode('Ready'));
     if(screen.snapshot().text !== 'Ready') throw new Error('SCREEN_MISMATCH');
@@ -37,6 +42,19 @@ it('uses the active visible viewport, preserves real duplicates and erases stale
     expect(screen.snapshot().scrollback).toBe('Ready');
     expect(screen.snapshot().main).toBe('Ready\n1\n2\n3\n4');
   } finally { screen.dispose(); }
+  const fixture = beuserTerminalFixture(theme.rubric.parameters, ['TL-A'])!;
+  const measured = new BeuserScreenRenderer({ columns: 20, rows: 4, scrollback: 8 }, 20000, fixture);
+  try {
+    await measured.write(bytes('\x1b[?2031h\x1b]11;?\x1b\\\x1b[c\x1b[38;2;58;53;48mRead'));
+    expect(measured.snapshot().cells?.[0]).toMatchObject({ text: 'Read', foreground: '#3a3530', background: '#f0ece5' });
+    expect(measured.snapshot().cells?.[0]?.contrast).toBeCloseTo(10.298163709813144, 8);
+    await measured.write(bytes('\x1b[7mI\x1b[0m\x1b[2mD'));
+    expect(measured.snapshot().cells?.[1]).toMatchObject({ text: 'I', foreground: '#f0ece5', background: '#3a3530', inverse: true });
+    expect(measured.snapshot().cells?.[2]).toMatchObject({ text: 'D', dim: true, contrast: null });
+    await measured.write(bytes('\x1b[0m\x1b[44m\x1b[K'));
+    expect(measured.snapshot().cells?.at(-1)).toMatchObject({ text: ' '.repeat(14), background: fixture.ansi[4] });
+  } finally { measured.dispose(); }
+  expect(() => beuserTerminalFixture(theme.rubric.parameters, ['TL-A', 'TL-B'])).toThrow('BEUSER_SURFACE_INVALID');
 });
 
 it('restores the main screen after alternate-buffer erasure, cursor movement and wrapping', async () => {

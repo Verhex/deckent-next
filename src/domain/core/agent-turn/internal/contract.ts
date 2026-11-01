@@ -14,10 +14,10 @@ export const chatTurnSteerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
  * project documents — are untrusted context: they never grant authority. Native provider details stay in adapters.
  */
 export const agentTurnMessageSchema = z.discriminatedUnion('role', [
-  z.strictObject({ role: z.literal('system'), content: z.string().min(1) }),
-  z.strictObject({ role: z.literal('user'), content: z.string().min(1) }),
-  z.strictObject({ role: z.literal('assistant'), content: z.string(), toolCalls: z.array(agentToolCallSchema).readonly(), continuation: agentMessageContinuationSchema.optional() }),
-  z.strictObject({ role: z.literal('tool'), toolCallId: z.string().min(1).max(256), name: z.string().min(1).max(64), content: z.string() }),
+  z.strictObject({ get role() { return z.literal('system'); }, get content() { return z.string().min(1); } }),
+  z.strictObject({ get role() { return z.literal('user'); }, get content() { return z.string().min(1); } }),
+  z.strictObject({ get role() { return z.literal('assistant'); }, get content() { return z.string(); }, get toolCalls() { return z.array(agentToolCallSchema).readonly(); }, get continuation() { return agentMessageContinuationSchema.optional(); } }),
+  z.strictObject({ get role() { return z.literal('tool'); }, get toolCallId() { return z.string().min(1).max(256); }, get name() { return z.string().min(1).max(64); }, get content() { return z.string(); } }),
 ]);
 export type AgentTurnMessage = z.infer<typeof agentTurnMessageSchema>;
 
@@ -73,25 +73,25 @@ const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', '
  * are required data (the client's history), not presentation; the transport never drops them silently.
  */
 export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('text'), text: z.string().min(1) }),
-  z.strictObject({ kind: z.literal('reasoning'), text: z.string().min(1) }),
-  z.strictObject({ kind: z.literal('tool.started'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), target: z.string().max(4096).nullable() }),
-  z.strictObject({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count,
-    cleanup: agentToolCleanupSchema.optional() }),
-  z.strictObject({ kind: z.literal('usage'), round: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), promptTokens: count, completionTokens: count }),
-  z.strictObject({ kind: z.literal('message'), message: agentTurnMessageSchema, steerId: chatTurnSteerIdSchema.optional() }),
-  z.strictObject({ kind: z.literal('context'), round: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), promptTokens: count, windowTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
-    quality: z.enum(['provider-count', 'upper-bound']) }),
-  z.strictObject({ kind: z.literal('compacted'), messages: z.array(agentTurnMessageSchema).min(1).readonly(), replacedMessages: count }),
-  z.strictObject({ kind: z.literal('approval.requested'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256), revision: count,
-    summary: z.string().min(1).max(2048), preview: z.string().max(65_536), expiresAt: count, decisionCapability: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
-    standing: z.strictObject({ scopes: z.tuple([z.literal('session')]).readonly(), pattern: z.string().min(1).max(2048) }).optional(),
-    risk: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).nullable().optional(), requiredAssurance: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).optional(),
-    undo: agentToolUndoSchema.optional(), posture: agentShellPostureSchema.optional(), call: agentToolCardCallSchema.optional(),
-    previewCut: approvalPreviewCutSchema.optional() }),
-  z.strictObject({ kind: z.literal('approval.settled'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256),
-    outcome: z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']) }),
-  z.strictObject({ kind: z.literal('tool.output'), callId: z.string().min(1).max(256), stream: z.enum(['stdout', 'stderr']), text: z.string().min(1) }),
+  z.strictObject({ get kind() { return z.literal('text'); }, get text() { return z.string().min(1); } }),
+  z.strictObject({ get kind() { return z.literal('reasoning'); }, get text() { return z.string().min(1); } }),
+  z.strictObject({ get kind() { return z.literal('tool.started'); }, get callId() { return z.string().min(1).max(256); }, get name() { return z.string().min(1).max(64); }, get target() { return z.string().max(4096).nullable(); } }),
+  z.strictObject({ get kind() { return z.literal('tool.finished'); }, get callId() { return z.string().min(1).max(256); }, get name() { return z.string().min(1).max(64); }, status: callStatusSchema, ms: count, bytes: count,
+    get cleanup() { return agentToolCleanupSchema.optional(); } }),
+  z.strictObject({ get kind() { return z.literal('usage'); }, get round() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, promptTokens: count, completionTokens: count }),
+  z.strictObject({ get kind() { return z.literal('message'); }, message: agentTurnMessageSchema, get steerId() { return chatTurnSteerIdSchema.optional(); } }),
+  z.strictObject({ get kind() { return z.literal('context'); }, get round() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }, promptTokens: count, get windowTokens() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(); },
+    get quality() { return z.enum(['provider-count', 'upper-bound']); } }),
+  z.strictObject({ get kind() { return z.literal('compacted'); }, get messages() { return z.array(agentTurnMessageSchema).min(1).readonly(); }, replacedMessages: count }),
+  z.strictObject({ get kind() { return z.literal('approval.requested'); }, get callId() { return z.string().min(1).max(256); }, get approvalId() { return z.string().min(1).max(256); }, revision: count,
+    get summary() { return z.string().min(1).max(2048); }, get preview() { return z.string().max(65_536); }, expiresAt: count, get decisionCapability() { return z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(); },
+    get standing() { return z.strictObject({ scopes: z.tuple([z.literal('session')]).readonly(), pattern: z.string().min(1).max(2048) }).optional(); },
+    get risk() { return z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).nullable().optional(); }, get requiredAssurance() { return z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).optional(); },
+    get undo() { return agentToolUndoSchema.optional(); }, get posture() { return agentShellPostureSchema.optional(); }, get call() { return agentToolCardCallSchema.optional(); },
+    get previewCut() { return approvalPreviewCutSchema.optional(); } }),
+  z.strictObject({ get kind() { return z.literal('approval.settled'); }, get callId() { return z.string().min(1).max(256); }, get approvalId() { return z.string().min(1).max(256); },
+    get outcome() { return z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']); } }),
+  z.strictObject({ get kind() { return z.literal('tool.output'); }, get callId() { return z.string().min(1).max(256); }, get stream() { return z.enum(['stdout', 'stderr']); }, get text() { return z.string().min(1); } }),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 
@@ -104,13 +104,13 @@ export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
  */
 /** Protocol vocabulary of `chatTurn.reasoning` (v16), not a configuration value. */
 export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
-export const chatTurnCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema,
-  messages: z.array(agentTurnMessageSchema).min(1), reasoning: z.enum(CHAT_TURN_REASONING).optional(), sessionId: identitySchema.optional(),
+export const chatTurnCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, turnId: identitySchema,
+  get messages() { return z.array(agentTurnMessageSchema).min(1); }, get reasoning() { return z.enum(CHAT_TURN_REASONING).optional(); }, get sessionId() { return identitySchema.optional(); },
   /** v17 (MODES-3): the turn runs in full access — only when the person launched the terminal so and a company grant allows it; never implied. */
-  fullAccess: z.literal(true).optional(),
+  get fullAccess() { return z.literal(true).optional(); },
   /** v23 (T4 MODEL-SWITCH, S19): the model this session pinned with `/model`; the service uses exactly it or refuses typed (never the configured
    * model in its place). Absent: the configured `terminal.chat.reference`. */
-  reference: modelReferenceSchema.optional() }).refine(command => command.messages.at(-1)?.role === 'user',
+  get reference() { return modelReferenceSchema.optional(); } }).refine(command => command.messages.at(-1)?.role === 'user',
   { path: ['messages'], message: 'CHAT_TURN_LAST_MESSAGE_NOT_USER' }).readonly();
 export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
 export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);
@@ -125,27 +125,27 @@ const noticeText = (max: number) => z.string().min(1).max(max);
  * renders it from its own catalog. `note` no longer carries MCP text.
  */
 export const mcpStartNoticeSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('start-failed'), name: noticeText(64), failure: z.strictObject({ code: noticeText(64), phase: z.enum(['launch', 'trusted', 'tools', 'decision']),
+  z.strictObject({ get kind() { return z.literal('start-failed'); }, get name() { return noticeText(64); }, get failure() { return z.strictObject({ code: noticeText(64), phase: z.enum(['launch', 'trusted', 'tools', 'decision']),
     detail: z.string().max(200).optional(), diagnosis: z.union([
       z.strictObject({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: persistedInteger().min(-1).max(1_024), path: z.string().max(4_096),
         target: z.string().max(4_096).optional() }),
-      z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: z.string().max(64) })]).optional() }) }),
-  z.strictObject({ kind: z.literal('tools-changed'), name: noticeText(64), count }),
-  z.strictObject({ kind: z.literal('not-recorded'), name: noticeText(64) }),
-  z.strictObject({ kind: z.literal('not-decided'), name: noticeText(64), code: noticeText(64), detail: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,255}$/u).optional() }),
-  z.strictObject({ kind: z.literal('grant-refused'), name: noticeText(64), reason: noticeText(64) }),
-  z.strictObject({ kind: z.literal('secret-refused'), name: noticeText(64), key: noticeText(256), scope: noticeText(256), code: noticeText(64) }),
+      z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: z.string().max(64) })]).optional() }); } }),
+  z.strictObject({ get kind() { return z.literal('tools-changed'); }, get name() { return noticeText(64); }, count }),
+  z.strictObject({ get kind() { return z.literal('not-recorded'); }, get name() { return noticeText(64); } }),
+  z.strictObject({ get kind() { return z.literal('not-decided'); }, get name() { return noticeText(64); }, get code() { return noticeText(64); }, get detail() { return z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,255}$/u).optional(); } }),
+  z.strictObject({ get kind() { return z.literal('grant-refused'); }, get name() { return noticeText(64); }, get reason() { return noticeText(64); } }),
+  z.strictObject({ get kind() { return z.literal('secret-refused'); }, get name() { return noticeText(64); }, get key() { return noticeText(256); }, get scope() { return noticeText(256); }, get code() { return noticeText(64); } }),
 ]);
 export type ChatTurnNotice = z.infer<typeof mcpStartNoticeSchema>;
 /** The steered lines of one turn: those that joined and those returned unsent; kept with the durable turn so a replay answers the same. */
-export const chatTurnSteerOutcomeSchema = z.strictObject({ joined: z.array(chatTurnSteerIdSchema).max(CHAT_TURN_STEER_LINES).readonly(),
-  returned: z.array(chatTurnSteerIdSchema).max(CHAT_TURN_STEER_LINES).readonly() });
+export const chatTurnSteerOutcomeSchema = z.strictObject({ get joined() { return z.array(chatTurnSteerIdSchema).max(CHAT_TURN_STEER_LINES).readonly(); },
+  get returned() { return z.array(chatTurnSteerIdSchema).max(CHAT_TURN_STEER_LINES).readonly(); } });
 export type ChatTurnSteerOutcome = z.infer<typeof chatTurnSteerOutcomeSchema>;
 /** The bounded result of a turn: the final answer when it fits the replay bound, never the tool results (they came as events). v30: `notices`
  * (typed, see above) and `steer` — the steered lines that joined the turn and those it returns unsent (the person's to send again). */
-export const chatTurnResultSchema = z.strictObject({ schemaVersion: z.literal(1), turnId: identitySchema, finish: finishSchema,
-  note: z.string().max(4096).nullable(), rounds: count, toolCalls: count, answer: z.string().nullable(), answerBytes: count,
-  replayed: z.boolean(), recorded: z.boolean(), notices: z.array(mcpStartNoticeSchema).max(CHAT_TURN_RESULT_NOTICES).readonly(),
+export const chatTurnResultSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, turnId: identitySchema, finish: finishSchema,
+  get note() { return z.string().max(4096).nullable(); }, rounds: count, toolCalls: count, get answer() { return z.string().nullable(); }, answerBytes: count,
+  get replayed() { return z.boolean(); }, get recorded() { return z.boolean(); }, get notices() { return z.array(mcpStartNoticeSchema).max(CHAT_TURN_RESULT_NOTICES).readonly(); },
   steer: chatTurnSteerOutcomeSchema }).readonly();
 export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
 
@@ -156,18 +156,18 @@ export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
  * the service kept nothing. A repeated `steerId` is the same line (never added twice). `full` also when one more id could not be returned
  * whole within the turn's result bound.
  */
-export const chatTurnSteerSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema, steerId: chatTurnSteerIdSchema,
-  content: z.string().min(1) }).readonly();
+export const chatTurnSteerSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, turnId: identitySchema, steerId: chatTurnSteerIdSchema,
+  get content() { return z.string().min(1); } }).readonly();
 export type ChatTurnSteer = z.infer<typeof chatTurnSteerSchema>;
 export const parseChatTurnSteer = (value: unknown): ChatTurnSteer => chatTurnSteerSchema.parse(value);
-export const chatTurnSteerResultSchema = z.strictObject({ schemaVersion: z.literal(1), turnId: identitySchema, steerId: chatTurnSteerIdSchema,
-  state: z.enum(['queued', 'not-running', 'full']) }).readonly();
+export const chatTurnSteerResultSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, turnId: identitySchema, steerId: chatTurnSteerIdSchema,
+  get state() { return z.enum(['queued', 'not-running', 'full']); } }).readonly();
 export type ChatTurnSteerResult = z.infer<typeof chatTurnSteerResultSchema>;
 
 /** Cancels the caller's own running turn at once (the same principal that started it); a disconnect cancels at the next write. */
-export const chatTurnCancellationSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema }).readonly();
+export const chatTurnCancellationSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, turnId: identitySchema }).readonly();
 export type ChatTurnCancellation = z.infer<typeof chatTurnCancellationSchema>;
 export const parseChatTurnCancellation = (value: unknown): ChatTurnCancellation => chatTurnCancellationSchema.parse(value);
-export const chatTurnCancellationResultSchema = z.strictObject({ schemaVersion: z.literal(1), turnId: identitySchema,
-  state: z.enum(['cancelling', 'not-running']) }).readonly();
+export const chatTurnCancellationResultSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, turnId: identitySchema,
+  get state() { return z.enum(['cancelling', 'not-running']); } }).readonly();
 export type ChatTurnCancellationResult = z.infer<typeof chatTurnCancellationResultSchema>;

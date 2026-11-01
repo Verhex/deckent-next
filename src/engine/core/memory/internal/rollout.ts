@@ -21,22 +21,22 @@ export type MemoryRolloutSection = typeof MEMORY_ROLLOUT_SECTIONS[number];
 export type MemoryRolloutModes = Readonly<Record<MemoryRolloutSection, typeof MEMORY_AUTOMATION_MODES[number]>>;
 const PER_MILLE = 1000;
 const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), perMille = persistedInteger().min(0).max(PER_MILLE);
-const criterionSchema = z.strictObject({ id: identitySchema, metric: z.enum(MEMORY_ROLLOUT_METRICS), minSample: count.optional(), minPerMille: perMille.optional(),
-  maxPerMille: perMille.optional(), maxCount: count.optional() }).readonly();
-const phaseSchema = z.strictObject({ phase: count, section: z.enum(MEMORY_ROLLOUT_SECTIONS), set: z.enum(MEMORY_AUTOMATION_MODES), reached: z.array(z.enum(MEMORY_AUTOMATION_MODES)).min(1).readonly(),
-  criteria: z.array(identitySchema).max(32).readonly() }).refine(phase => phase.reached.includes(phase.set)).readonly();
-const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
+const criterionSchema = z.strictObject({ id: identitySchema, get metric() { return z.enum(MEMORY_ROLLOUT_METRICS); }, get minSample() { return count.optional(); }, get minPerMille() { return perMille.optional(); },
+  get maxPerMille() { return perMille.optional(); }, get maxCount() { return count.optional(); } }).readonly();
+const phaseSchema = z.strictObject({ phase: count, get section() { return z.enum(MEMORY_ROLLOUT_SECTIONS); }, get set() { return z.enum(MEMORY_AUTOMATION_MODES); }, get reached() { return z.array(z.enum(MEMORY_AUTOMATION_MODES)).min(1).readonly(); },
+  get criteria() { return z.array(identitySchema).max(32).readonly(); } }).refine(phase => phase.reached.includes(phase.set)).readonly();
+const registrySchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get status() { return z.enum(['provisional', 'measured']); },
   /** The newest sealed records read per source (an audit page and the store reads are bounded; `complete` false when more exist). */
-  scan: z.strictObject({ evaluations: count.positive(), contextEvents: count.positive(), candidates: count.positive() }).readonly(),
-  phases: z.array(phaseSchema).min(1).max(16).readonly(), criteria: z.array(criterionSchema).min(1).max(32).readonly() })
+  get scan() { return z.strictObject({ evaluations: count.positive(), contextEvents: count.positive(), candidates: count.positive() }).readonly(); },
+  get phases() { return z.array(phaseSchema).min(1).max(16).readonly(); }, get criteria() { return z.array(criterionSchema).min(1).max(32).readonly(); } })
   .refine(registry => registry.phases.every((phase, index) => index === 0 || phase.phase > registry.phases[index - 1]!.phase)
     && new Set(registry.criteria.map(row => row.id)).size === registry.criteria.length
     && registry.phases.every(phase => phase.criteria.every(id => registry.criteria.some(row => row.id === id)))).readonly();
 export type MemoryRolloutRegistry = z.infer<typeof registrySchema>;
 export type MemoryRolloutCriterion = MemoryRolloutRegistry['criteria'][number];
 export const MEMORY_ROLLOUT: MemoryRolloutRegistry = Object.freeze(registrySchema.parse(rolloutSeed));
-const corpusSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, note: z.string(), items: z.array(z.strictObject({ id: identitySchema, kind: identitySchema,
-  title: z.string().min(1), body: z.string().min(1) }).readonly()).min(1).max(256).readonly() }).readonly();
+const corpusSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get note() { return z.string(); }, get items() { return z.array(z.strictObject({ id: identitySchema, kind: identitySchema,
+  title: z.string().min(1), body: z.string().min(1) }).readonly()).min(1).max(256).readonly(); } }).readonly();
 /** N28 (§8): the versioned poisoning corpus; the phase 4 gate counts its items' shadow evaluations on the installation. */
 export const MEMORY_INJECTION_CORPUS = Object.freeze(corpusSchema.parse(corpusSeed));
 /** One corpus item as the distiller writes a worker `fact` claim (rule E3): the content whose keyed digest a shadow record names. */

@@ -26,7 +26,7 @@ export function isRuntimeServiceQueueOperation(operation: RuntimeServiceOperatio
   return ['enqueueTargetQueueRollback', 'enqueueTargetQueue', 'inspectTargetQueue', 'listTargetQueue', 'challengeTargetQueue', 'answerTargetQueue', 'executeTargetQueue'].includes(operation);
 }
 export const runtimeServiceDescriptionInputSchema = z.strictObject({}).readonly();
-export const runtimeServiceDeliverySchema = z.strictObject({ maxResultBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
+export const runtimeServiceDeliverySchema = z.strictObject({ get maxResultBytes() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); } }).readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
 /** Operations whose request carries a `delivery` result bound (the server requires it; the client always sends one). */
@@ -72,22 +72,22 @@ export function isRuntimeServiceScratchOperation(operation: RuntimeServiceOperat
 export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' | 'switchSecretStore' {
   return operation === 'setSecret' || operation === 'deleteSecret' || operation === 'switchSecretStore';
 }
-export const runtimeOperationQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).readonly();
+export const runtimeOperationQuerySchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, commandId: identitySchema }).readonly();
 export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
 /** Wire shapes of the effect outcomes (settled v1 unchanged; approval-pending v2) and of an inspection; the client validates and correlates. */
 const operationOutcomeBase = { commandId: identitySchema, scopeId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema };
 export const runtimeOperationOutcomeSchema = z.discriminatedUnion('status', [
-  z.strictObject({ schemaVersion: z.literal(1), status: z.literal('settled'), ...operationOutcomeBase, sequence: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-    version: z.string().min(1).max(256).nullable(), compensates: identitySchema.nullable(), evidence: z.enum(['idempotency-record', 'fence']) }),
-  z.strictObject({ schemaVersion: z.literal(2), status: z.literal('approval-pending'), ...operationOutcomeBase, approval: z.strictObject({ approvalId: identitySchema,
-    revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), expiresAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), summary: z.string().min(1).max(2048) }) }),
+  z.strictObject({ get schemaVersion() { return z.literal(1); }, get status() { return z.literal('settled'); }, ...operationOutcomeBase, get sequence() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
+    get version() { return z.string().min(1).max(256).nullable(); }, get compensates() { return identitySchema.nullable(); }, get evidence() { return z.enum(['idempotency-record', 'fence']); } }),
+  z.strictObject({ get schemaVersion() { return z.literal(2); }, get status() { return z.literal('approval-pending'); }, ...operationOutcomeBase, get approval() { return z.strictObject({ approvalId: identitySchema,
+    revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), expiresAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), summary: z.string().min(1).max(2048) }); } }),
 ]).readonly();
-export const runtimeOperationInspectionSchema = z.strictObject({ schemaVersion: z.literal(1), record: effectRecordSchema.nullable() }).readonly();
+export const runtimeOperationInspectionSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get record() { return effectRecordSchema.nullable(); } }).readonly();
 // v26 (W3-AUTHORITY): `channel: mcp` selects the distinct MCP actor; it never claims another OS user.
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
-export const runtimeServiceRequestSchema = z.strictObject({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema, channel: z.literal('mcp').optional(),
-  operation: runtimeServiceOperationSchema, input: z.unknown().optional(), delivery: runtimeServiceDeliverySchema.optional(),
+export const runtimeServiceRequestSchema = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_SERVICE_SCHEMA_VERSION); }, requestId: identitySchema, get channel() { return z.literal('mcp').optional(); },
+  operation: runtimeServiceOperationSchema, get input() { return z.unknown().optional(); }, get delivery() { return runtimeServiceDeliverySchema.optional(); },
 }).refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).superRefine((value, context) => {
   if (isRuntimeServiceBoundedResultOperation(value.operation)) {
     if (!Object.hasOwn(value, 'delivery') || value.delivery === undefined) {
@@ -128,12 +128,12 @@ export const runtimeServiceRequestSchema = z.strictObject({ schemaVersion: z.lit
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_FORBIDDEN' });
   }
 }).readonly();
-const success = z.strictObject({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema, ok: z.literal(true), result: z.unknown().optional() }).refine(value => Object.hasOwn(value, 'result'), { path: ['result'], message: 'RUNTIME_SERVICE_RESULT_REQUIRED' }).readonly();
-const failure = z.strictObject({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema, ok: z.literal(false),
-  error: z.strictObject({ code: identitySchema, category: z.enum(['error', 'usage', 'config']),
+const success = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_SERVICE_SCHEMA_VERSION); }, requestId: identitySchema, get ok() { return z.literal(true); }, get result() { return z.unknown().optional(); } }).refine(value => Object.hasOwn(value, 'result'), { path: ['result'], message: 'RUNTIME_SERVICE_RESULT_REQUIRED' }).readonly();
+const failure = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_SERVICE_SCHEMA_VERSION); }, requestId: identitySchema, get ok() { return z.literal(false); },
+  get error() { return z.strictObject({ code: identitySchema, category: z.enum(['error', 'usage', 'config']),
     /** Message parameters of the typed error (same text the caller would see locally); bounded, never raw causes. */
     params: z.record(z.string().max(64), z.union([z.string().max(RUNTIME_SERVICE_ERROR_PARAM_CHARS), z.number().finite()]))
-      .refine(value => Object.keys(value).length <= RUNTIME_SERVICE_ERROR_PARAMS).optional() }).readonly(),
+      .refine(value => Object.keys(value).length <= RUNTIME_SERVICE_ERROR_PARAMS).optional() }).readonly(); },
 }).readonly();
 export const runtimeServiceResponseSchema = z.union([success, failure]).readonly();
 /** Largest number of deltas one stream frame carries; the producer coalesces and splits within it. */
@@ -143,9 +143,9 @@ export const RUNTIME_SERVICE_STREAM_FRAME_DELTAS = 256;
  * ordinary response frame carrying the same result as the non-streamed operation. Delta frames are presentation data;
  * a replayed command sends none. Every other operation keeps exactly one response frame.
  */
-export const runtimeServiceStreamFrameSchema = z.strictObject({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
-  kind: z.literal('delta'), sequence: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  deltas: z.array(modelInvocationDeltaSchema).min(1).max(RUNTIME_SERVICE_STREAM_FRAME_DELTAS) }).readonly();
+export const runtimeServiceStreamFrameSchema = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_SERVICE_SCHEMA_VERSION); }, requestId: identitySchema,
+  get kind() { return z.literal('delta'); }, get sequence() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
+  get deltas() { return z.array(modelInvocationDeltaSchema).min(1).max(RUNTIME_SERVICE_STREAM_FRAME_DELTAS); } }).readonly();
 export type RuntimeServiceStreamFrame = z.infer<typeof runtimeServiceStreamFrameSchema>;
 export function isRuntimeServiceStreamingOperation(operation: RuntimeServiceOperation): boolean { return operation === 'invokeModelStream'; }
 /** Largest number of turn events one event frame carries. */
@@ -160,9 +160,9 @@ export const RUNTIME_SERVICE_EVENT_FRAME_EVENTS = 256;
  * the stream as a whole is not (a turn has no budget), and the producer waits for the peer to drain instead of dropping. A peer
  * that disconnects before the response cancels the turn. A replayed turn sends at most its stored answer as a text event.
  */
-export const runtimeServiceEventFrameSchema = z.strictObject({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
-  kind: z.literal('event'), sequence: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
-  events: z.array(agentTurnStreamEventSchema).min(1).max(RUNTIME_SERVICE_EVENT_FRAME_EVENTS) }).readonly();
+export const runtimeServiceEventFrameSchema = z.strictObject({ get schemaVersion() { return z.literal(RUNTIME_SERVICE_SCHEMA_VERSION); }, requestId: identitySchema,
+  get kind() { return z.literal('event'); }, get sequence() { return persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); },
+  get events() { return z.array(agentTurnStreamEventSchema).min(1).max(RUNTIME_SERVICE_EVENT_FRAME_EVENTS); } }).readonly();
 export type RuntimeServiceEventFrame = z.infer<typeof runtimeServiceEventFrameSchema>;
 export function isRuntimeServiceTurnOperation(operation: RuntimeServiceOperation): boolean { return operation === 'chatTurn'; }
 export class RuntimeServiceProtocolError extends Error {
@@ -185,8 +185,8 @@ export class RuntimeServiceProtocolError extends Error {
 export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 29] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
 const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(29)]);
-export const runtimeServiceLifecycleRequestSchema = z.strictObject({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, channel: z.literal('mcp').optional(),
-  operation: z.enum(['describeService', 'shutdownService']), input: z.unknown().optional() })
+export const runtimeServiceLifecycleRequestSchema = z.strictObject({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, get channel() { return z.literal('mcp').optional(); },
+  get operation() { return z.enum(['describeService', 'shutdownService']); }, get input() { return z.unknown().optional(); } })
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();
 export type RuntimeServiceLifecycleRequest = z.infer<typeof runtimeServiceLifecycleRequestSchema>;
 /** Parses a lifecycle answer from a service speaking `version`; the envelope is otherwise identical across the window. */

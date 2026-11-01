@@ -156,8 +156,7 @@
         "src/domain/core/decision",
         "src/domain/core/identity-profile",
         "src/engine/core/identity-profile",
-        "src/capabilities/core/run-planner",
-        "src/platform/core/validate"
+        "src/capabilities/core/run-planner"
       ],
       "plan": "PROVIDERS"
     },
@@ -174,8 +173,7 @@
         "src/domain/core/attempt",
         "src/adapters/core/native-cli-registry",
         "src/domain/core/provider-catalog",
-        "src/platform/core/host",
-        "src/platform/core/validate"
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -245,8 +243,7 @@
     },
     "src/capabilities/core/artifacts": {
       "dependencies": [
-        "src/domain/core/primitives",
-        "src/platform/core/validate"
+        "src/domain/core/primitives"
       ],
       "plan": "EXECUTION"
     },
@@ -258,8 +255,7 @@
         "src/domain/core/primitives",
         "src/domain/core/run",
         "src/domain/core/task-evaluation",
-        "src/domain/core/task-graph",
-        "src/platform/core/validate"
+        "src/domain/core/task-graph"
       ],
       "plan": "EXECUTION"
     },
@@ -815,8 +811,7 @@
         "src/engine/core/supervisor",
         "src/engine/core/resource-observation",
         "src/platform/core/errors",
-        "src/platform/core/utils",
-        "src/platform/core/validate"
+        "src/platform/core/utils"
       ],
       "plan": "EXECUTION"
     },
@@ -877,8 +872,7 @@
         "src/engine/core/effect",
         "src/platform/core/config",
         "src/domain/core/recovery",
-        "src/engine/core/run-limits",
-        "src/platform/core/validate"
+        "src/engine/core/run-limits"
       ],
       "plan": "CONTRACT"
     },
@@ -907,24 +901,21 @@
         "src/platform/core/config",
         "src/domain/core/run",
         "src/domain/core/command",
-        "src/engine/core/run-proposal",
-        "src/platform/core/validate"
+        "src/engine/core/run-proposal"
       ],
       "plan": "EXECUTION"
     },
     "src/engine/core/scheduling": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/task-graph",
-        "src/platform/core/validate"
+        "src/domain/core/task-graph"
       ],
       "plan": "CONTRACT"
     },
     "src/engine/core/supervisor": {
       "dependencies": [
         "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/platform/core/validate"
+        "src/domain/core/primitives"
       ],
       "plan": "ISOLATION"
     },
@@ -959,8 +950,7 @@
         "src/domain/core/audit",
         "src/platform/core/errors",
         "src/engine/core/attempts",
-        "src/platform/core/config-fields",
-        "src/platform/core/validate"
+        "src/platform/core/config-fields"
       ],
       "plan": "ISOLATION"
     },
@@ -1543,8 +1533,7 @@
         "src/engine/core/approval",
         "src/domain/core/attempt",
         "src/engine/core/bootstrap-identity",
-        "src/engine/core/system-policy-rows",
-        "src/platform/core/validate"
+        "src/engine/core/system-policy-rows"
       ],
       "plan": "INSTALLATION"
     },
@@ -1720,8 +1709,7 @@
         "src/engine/core/authentication",
         "src/engine/core/provider-catalog",
         "src/domain/core/model-invocation",
-        "src/domain/core/audit",
-        "src/platform/core/validate"
+        "src/domain/core/audit"
       ],
       "plan": "PROVIDERS"
     },
@@ -1732,8 +1720,7 @@
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
         "src/engine/core/dispatch",
-        "src/engine/core/model-activation",
-        "src/platform/core/validate"
+        "src/engine/core/model-activation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1847,8 +1834,7 @@
         "src/engine/core/provider-spend",
         "src/domain/core/agent-tool",
         "src/platform/core/errors",
-        "src/platform/core/i18n",
-        "src/platform/core/validate"
+        "src/platform/core/i18n"
       ],
       "plan": "PROVIDERS"
     },
@@ -1863,8 +1849,7 @@
         "src/engine/core/provider-spend",
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
-        "src/domain/core/provider-catalog",
-        "src/platform/core/validate"
+        "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"
     },
@@ -2027,8 +2012,7 @@
     "src/adapters/core/provider-openrouter-pricing": {
       "dependencies": [
         "src/adapters/core/provider-openai-chat",
-        "src/domain/core/primitives",
-        "src/platform/core/validate"
+        "src/domain/core/primitives"
       ],
       "plan": "PROVIDERS"
     },
@@ -2050,8 +2034,7 @@
       "dependencies": [
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
-        "src/engine/core/model-invocation",
-        "src/platform/core/validate"
+        "src/engine/core/model-invocation"
       ],
       "plan": "PROVIDERS"
     },
@@ -2065,8 +2048,7 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend",
-        "src/platform/core/validate"
+        "src/engine/core/provider-spend"
       ],
       "plan": "PROVIDERS"
     },
@@ -2093,8 +2075,7 @@
         "src/domain/core/run",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
-        "src/domain/core/primitives",
-        "src/platform/core/validate"
+        "src/domain/core/primitives"
       ],
       "plan": "EXECUTION"
     },
@@ -2148,8 +2129,7 @@
         "src/adapters/core/native-cli-registry",
         "src/domain/core/provider-catalog",
         "src/domain/core/memory",
-        "src/domain/core/worker-event",
-        "src/platform/core/validate"
+        "src/domain/core/worker-event"
       ],
       "plan": "PROVIDERS"
     },
@@ -2172,8 +2152,7 @@
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry",
-        "src/platform/core/common",
-        "src/platform/core/validate"
+        "src/platform/core/common"
       ],
       "plan": "PROVIDERS"
     },
@@ -2199,8 +2178,7 @@
         "src/capabilities/core/evaluation-evidence",
         "src/engine/core/audit",
         "src/engine/core/delivery-summary",
-        "src/domain/core/provider-catalog",
-        "src/platform/core/validate"
+        "src/domain/core/provider-catalog"
       ],
       "plan": "ISOLATION"
     },
@@ -2260,8 +2238,7 @@
         "src/capabilities/core/artifacts",
         "src/domain/core/worker-event",
         "src/domain/core/principal",
-        "src/domain/core/run",
-        "src/platform/core/validate"
+        "src/domain/core/run"
       ],
       "plan": "EXECUTION"
     },
@@ -2421,8 +2398,7 @@
         "src/domain/core/audit",
         "src/platform/core/redaction",
         "src/domain/core/agent-turn",
-        "src/domain/core/adapter-registry",
-        "src/platform/core/validate"
+        "src/domain/core/adapter-registry"
       ],
       "plan": "SECURITY"
     },
@@ -2436,8 +2412,7 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/integrity",
-        "src/platform/core/managed-files",
-        "src/platform/core/validate"
+        "src/platform/core/managed-files"
       ],
       "plan": "SECURITY"
     },
@@ -2484,8 +2459,7 @@
       "dependencies": [
         "src/platform/core/errors",
         "src/domain/core/primitives",
-        "src/domain/core/run",
-        "src/platform/core/validate"
+        "src/domain/core/run"
       ],
       "plan": "PROVIDERS"
     },
@@ -2607,8 +2581,7 @@
         "src/engine/core/audit",
         "src/domain/core/attempt",
         "src/domain/core/primitives",
-        "src/engine/core/dispatch",
-        "src/platform/core/validate"
+        "src/engine/core/dispatch"
       ],
       "plan": "EXECUTION"
     },
@@ -2780,8 +2753,7 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend",
-        "src/platform/core/validate"
+        "src/engine/core/provider-spend"
       ],
       "plan": "PROVIDERS"
     },
@@ -2794,8 +2766,7 @@
         "src/domain/core/principal",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/domain/core/command",
-        "src/platform/core/validate"
+        "src/domain/core/command"
       ],
       "plan": "SECURITY"
     },
@@ -3072,8 +3043,7 @@
         "src/engine/core/authentication",
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
-        "src/platform/core/integrity",
-        "src/platform/core/validate"
+        "src/platform/core/integrity"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -3099,8 +3069,7 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend",
-        "src/platform/core/validate"
+        "src/engine/core/provider-spend"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -3136,8 +3105,7 @@
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/provider-catalog",
-        "src/platform/core/validate"
+        "src/domain/core/provider-catalog"
       ],
       "plan": "HARDCODE-P1"
     },
@@ -3463,8 +3431,7 @@
         "src/domain/core/run",
         "src/domain/core/worker-event",
         "src/domain/core/principal",
-        "src/domain/core/primitives",
-        "src/platform/core/validate"
+        "src/domain/core/primitives"
       ],
       "plan": "KAYNAK-KALITE"
     },
@@ -3765,8 +3732,7 @@
         "src/platform/core/errors",
         "src/platform/core/integrity",
         "src/domain/core/audit",
-        "src/domain/core/policy",
-        "src/platform/core/validate"
+        "src/domain/core/policy"
       ],
       "plan": "INSTALLATION"
     },
@@ -3927,8 +3893,7 @@
         "src/platform/core/output",
         "src/engine/core/dispatch",
         "src/engine/core/worker-observation",
-        "src/engine/core/runs",
-        "src/platform/core/validate"
+        "src/engine/core/runs"
       ],
       "plan": "CONTRACT"
     },
@@ -3965,8 +3930,7 @@
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
         "src/engine/core/dispatch",
-        "src/platform/core/config-fields",
-        "src/platform/core/validate"
+        "src/platform/core/config-fields"
       ],
       "plan": "MEMORY"
     },
@@ -3981,8 +3945,7 @@
         "src/platform/core/integrity",
         "src/domain/core/primitives",
         "src/adapters/core/attempt-store",
-        "src/platform/core/config",
-        "src/platform/core/validate"
+        "src/platform/core/config"
       ],
       "plan": "MEMORY"
     },
@@ -4068,8 +4031,7 @@
         "src/domain/core/principal",
         "src/engine/core/audit",
         "src/platform/core/integrity",
-        "src/domain/core/recovery",
-        "src/platform/core/validate"
+        "src/domain/core/recovery"
       ],
       "plan": "EXECUTION"
     },
@@ -4095,8 +4057,7 @@
         "src/domain/core/policy",
         "src/engine/core/policy",
         "src/domain/core/hub",
-        "src/engine/core/hub",
-        "src/platform/core/validate"
+        "src/engine/core/hub"
       ],
       "plan": "LEARNING"
     },
@@ -4181,8 +4142,7 @@
         "src/engine/core/provider-spend",
         "src/engine/core/workspace-patch",
         "src/domain/core/task-graph",
-        "src/engine/core/dispatch",
-        "src/platform/core/validate"
+        "src/engine/core/dispatch"
       ],
       "plan": "STORE"
     },
@@ -4277,8 +4237,7 @@
         "src/engine/core/authentication",
         "src/engine/core/agent-catalog",
         "src/domain/core/command",
-        "src/domain/core/memory",
-        "src/platform/core/validate"
+        "src/domain/core/memory"
       ],
       "plan": "LEARNING"
     },
@@ -4327,8 +4286,7 @@
         "src/platform/core/redaction",
         "src/capabilities/core/artifacts",
         "src/engine/core/hub",
-        "src/platform/core/errors",
-        "src/platform/core/validate"
+        "src/platform/core/errors"
       ],
       "plan": "LEARNING"
     },
@@ -4370,8 +4328,7 @@
         "src/engine/core/authentication",
         "src/engine/core/hub",
         "src/platform/core/integrity",
-        "src/platform/core/i18n",
-        "src/platform/core/validate"
+        "src/platform/core/i18n"
       ],
       "plan": "LEARNING"
     },
@@ -4482,8 +4439,7 @@
         "src/domain/core/primitives",
         "src/domain/core/agent-catalog",
         "src/platform/core/i18n",
-        "src/platform/core/redaction",
-        "src/platform/core/validate"
+        "src/platform/core/redaction"
       ],
       "plan": "LEARNING"
     },
@@ -4656,8 +4612,7 @@
         "src/domain/core/provider-catalog",
         "src/platform/core/i18n",
         "src/engine/core/model-invocation",
-        "src/engine/core/task-evaluation",
-        "src/platform/core/validate"
+        "src/engine/core/task-evaluation"
       ],
       "plan": "EXECUTION"
     },
@@ -4667,8 +4622,7 @@
         "src/domain/core/principal",
         "src/domain/core/policy",
         "src/domain/core/audit",
-        "src/engine/core/policy",
-        "src/platform/core/validate"
+        "src/engine/core/policy"
       ],
       "plan": "SECURITY"
     },
@@ -4691,8 +4645,7 @@
         "src/engine/core/supervisor",
         "src/platform/core/integrity",
         "src/domain/core/model-invocation",
-        "src/domain/core/approval",
-        "src/platform/core/validate"
+        "src/domain/core/approval"
       ],
       "plan": "EXECUTION"
     },
@@ -4917,9 +4870,9 @@
       "domain": 11000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 40000,
+      "adapters": 40500,
       "surfaces": 45000,
-      "composition": 12250
+      "composition": 12500
     },
     "totalSrcLines": 200000,
     "testCases": 8025,

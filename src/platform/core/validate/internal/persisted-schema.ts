@@ -41,12 +41,14 @@ const emailRegex = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0
 export function persistedDateTime(options: { offset?: boolean; local?: boolean; precision?: number | null } = {}) {
   return z.string().regex(datetimeRegex(options)).meta({ format: 'date-time' });
 }
-export const persistedUuid = () => z.string().regex(uuidRegex).meta({ format: 'uuid' });
-export const persistedEmail = () => z.string().regex(emailRegex).meta({ format: 'email' });
+let uuidSchema: z.ZodString | undefined, emailSchema: z.ZodString | undefined, urlSchema: z.ZodString | undefined;
+export const persistedUuid = () => uuidSchema ??= z.string().regex(uuidRegex).meta({ format: 'uuid' });
+export const persistedEmail = () => emailSchema ??= z.string().regex(emailRegex).meta({ format: 'email' });
 // URL.canParse and new URL use the same WHATWG parser, without v4 URL normalization.
-export const persistedUrl = () => z.string().refine(value => URL.canParse(value), { params: { legacyCode: 'invalid_string' } }).meta({ format: 'uri' });
+export const persistedUrl = () => urlSchema ??= z.string().refine(value => URL.canParse(value), { params: { legacyCode: 'invalid_string' } }).meta({ format: 'uri' });
 // Zod 3 int checked integrality; safe bounds were a separate check.
-export const persistedInteger = () => z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' });
+let integerSchema: z.ZodNumber | undefined;
+export const persistedInteger = () => integerSchema ??= z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' });
 export function persistedIssueCode(issue: { readonly code?: string | undefined; readonly discriminator?: string | undefined; readonly values?: readonly unknown[] | undefined; readonly params?: Readonly<Record<string, unknown>> | undefined }): string {
   if (typeof issue.params?.['legacyCode'] === 'string') return issue.params['legacyCode'];
   if (issue.code === 'invalid_union' && issue.discriminator !== undefined) return 'invalid_union_discriminator';

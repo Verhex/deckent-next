@@ -146,6 +146,12 @@ describe('readonly defaults and string formats', () => {
   });
 
   it('process command uuid: generated ids and the persisted non-RFC version nibble remain valid', () => {
+    for (const scalars of [domainScalars, platformScalars]) {
+      for (const factory of [scalars.persistedInteger, scalars.persistedUuid, scalars.persistedEmail, scalars.persistedUrl]) expect(factory()).toBe(factory());
+      const integer = scalars.persistedInteger();
+      expect(integer.positive().safeParse(0).success).toBe(false);
+      expect(integer.safeParse(0).success).toBe(true);
+    }
     expect(readFileSync(new URL('../../../src/domain/core/primitives/internal/persisted-schema.ts', import.meta.url), 'utf8'))
       .toBe(readFileSync(new URL('../../../src/platform/core/validate/internal/persisted-schema.ts', import.meta.url), 'utf8'));
     const scalarCases: readonly [z.ZodType, z.ZodType, readonly unknown[], readonly boolean[]][] = [
