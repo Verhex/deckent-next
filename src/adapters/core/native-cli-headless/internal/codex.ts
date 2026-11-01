@@ -1,3 +1,5 @@
+import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot } from '#platform/index.js';
+import { errorDiagnostic } from './error-diagnostic.js';
 import { headlessEgressReasons, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { nativeQuotaPolicy, parseCodexExecLine } from '#adapters/core/native-connection/index.js';
 import { refuse } from './contract.js';
@@ -15,7 +17,7 @@ const matches = (patterns: readonly string[], text: string) => patterns.some(pat
  * own source) or login (registry patterns), otherwise invalid output. The answer is the last completed agent message (each completed message is
  * also a presentation delta). The stream names no model: the answer is attributed to the argv-pinned id (`modelEvidence: argv`).
  */
-export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _runDir: string, onDelta?: ModelInvocationDeltaSink): HeadlessTurn {
+export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS): HeadlessTurn {
   const { guards } = prepared.entry.headless;
   if (!('allowedItems' in guards)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   const quotaPatterns = nativeQuotaPolicy().codexPatterns;
@@ -23,8 +25,10 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
   const counters = (reported: unknown) => { const value = reportedCounters(reported, ['input_tokens', 'output_tokens'], ['cached_input_tokens', 'cache_write_input_tokens', 'reasoning_output_tokens']);
     return value && value.cached_input_tokens + value.cache_write_input_tokens <= value.input_tokens ? value : null; };
   let thread = false, turns = 0, reconnects = 0, answer: string | null = null, usage: ReturnType<typeof counters> = null;
-  const failure = (text: string | null, subtype: string): Refusal => text !== null && matches(quotaPatterns, text) ? reject('http-status', { refusal: 'quota', status: null, resetsAtMs: null })
-    : text !== null && matches(guards.loginPatterns, text) ? reject('http-status', { refusal: 'login-required', status: null }) : reject('invalid-response', { refusal: 'invalid-output', subtype });
+  const diagnostic = (refusal: ReturnType<typeof reject>, text: string | null): Refusal => ({ ...refusal,
+    body: { ...refusal.body, schemaVersion: 5, ...errorDiagnostic(text, guards.errorAllow.rules, knownSecrets, guards.errorAllow.maxBytes) } });
+  const failure = (text: string | null, subtype: string): Refusal => diagnostic(text !== null && matches(quotaPatterns, text) ? reject('http-status', { refusal: 'quota', status: null, resetsAtMs: null })
+    : text !== null && matches(guards.loginPatterns, text) ? reject('http-status', { refusal: 'login-required', status: null }) : reject('invalid-response', { refusal: 'invalid-output', subtype }), text);
   return {
     line(raw) {
       const line = parseCodexExecLine(raw);
@@ -36,7 +40,7 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
       if (type === 'turn.started') return ++turns > prepared.entry.headless.maxTurns || !thread ? reject('invalid-response', { refusal: 'guard', field: 'turn' }) : null;
       // The CLI's own counted stream retry is a notice up to the registry bound (lead 2026-10-31); past it, and any other error, refuses.
       if (type === 'error' && line.errorText !== null && matches(guards.reconnectPatterns, line.errorText)) {
-        return ++reconnects > guards.maxReconnects ? reject('invalid-response', { refusal: 'invalid-output', subtype: 'reconnect-limit' }) : null;
+        return ++reconnects > guards.maxReconnects ? diagnostic(reject('invalid-response', { refusal: 'invalid-output', subtype: 'reconnect-limit' }), line.errorText) : null;
       }
       if (type === 'error' || type === 'turn.failed') return failure(line.errorText, type);
       if (type.startsWith('item.')) {

@@ -44,7 +44,7 @@ const authSchema = z.union([z.strictObject({ authMethods: words, apiProviders: w
 const guardsSchema = z.union([z.strictObject({ apiKeySources: words, permissionMode: argument, plugins: z.array(z.strictObject({ name: argument, path: argument }).readonly()).readonly(),
   lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).readonly(),
   // `reconnectPatterns`: the CLI's own counted stream-retry notices (error lines), tolerated up to `maxReconnects` per call.
-  z.strictObject({ allowedItems: words, loginPatterns: words, reconnectPatterns: words, maxReconnects: positive, reconnectSource: argument, source: argument }).readonly()]);
+  z.strictObject({ allowedItems: words, loginPatterns: words, errorAllow: z.strictObject({ maxBytes: positive, rules: z.array(z.strictObject({ pattern: argument, errorClass: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u) }).readonly()).readonly(), source: argument }).readonly(), reconnectPatterns: words, maxReconnects: positive, reconnectSource: argument, source: argument }).readonly()]);
 export const nativeCliHeadlessSchema = z.strictObject({ schemaVersion: z.literal(1), revision: argument, source: argument,
   /** The profile's protocol family when it is not the event-stream name (a catalog family named before the headless step existed). */
   protocolFamily: argument.optional(),

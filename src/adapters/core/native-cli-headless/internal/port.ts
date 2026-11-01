@@ -122,7 +122,7 @@ function stderrSummary(base64: string, rules: HeadlessEntry['headless']['stderrA
 /**
  * The headless native port (S3-2). `prepare` is pure; `preflight` (the registry's pre-claim acquisition step) spawns no model call; `send`
  * runs one bounded turn: built env, 0600 system prompt file, user message on stdin, line guards that stop the process group, typed rejected
- * evidence for every refusal (body = adapter JSON, never CLI output). Timeout and cancel are thrown: `unknown`. 1b: a CLI that ended by itself before a
+ * evidence for every refusal (body = adapter JSON, never raw CLI output). Timeout and cancel are thrown: `unknown`. 1b: a CLI that ended by itself before a
  * complete turn (crash, missing result, a refused argv) is incomplete evidence, so the outcome stays `unknown` with its exit and a redacted stderr tail.
  */
 export type NativeCliHeadlessPort = ModelInvocationNativePort & { preflight(profile: ModelInvocationProfile, signal?: AbortSignal): Promise<void> };
@@ -165,7 +165,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const prepared = input as Prepared; tokens.delete(prepared);
       const { headless } = prepared.entry, preflight = await headlessPreflight(prepared.entry, prepared.definition, options.now, options.isolation, signal);
       const runDir = await realpath(preflight.runDir), promptFile = join(preflight.runDir, headless.systemPromptFile);
-      const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta);
+      const turn = TURNS[prepared.entry.command.capabilities.eventStream]!(prepared, preflight, runDir, onDelta, options.knownSecrets ?? EMPTY_KNOWN_SECRETS);
       let refusal: Refusal | null = null;
       const onLine = (raw: string): 'stop' | void => { refusal ??= turn.line(raw); return refusal ? 'stop' : undefined; };
       let evidence;

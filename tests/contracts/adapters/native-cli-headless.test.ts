@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort } from '#adapters/core/native-cli-headless/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, snapshotKnownSecrets } from '#platform/index.js';
 import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, writeFakeCli, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { CODEX_FAMILY, codexAnswer, codexHeadless, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
@@ -249,7 +249,8 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
         reference: { providerId: 'cli-subscription', providerVersion: 1, modelId: 'pinned', modelVersion: 1 }, bindingDigest: 'a'.repeat(64), protocol: { family: CODEX_FAMILY, version: 'v1' },
         adapter: { ...NATIVE_CLI_HEADLESS_ADAPTER, definition: { schemaVersion: 1, executable, configDir, stateDir: join(root, 'state'), ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: null } },
         allocation: { id: 'allocation', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 5000 } });
-      const port = createNativeCliHeadlessPort({ now: () => 1, isolation: testIsolation }), deltas: ModelInvocationDelta[] = [];
+      const knownValue = 'short-known-value';
+      const port = createNativeCliHeadlessPort({ now: () => 1, isolation: testIsolation, knownSecrets: snapshotKnownSecrets([{ name: null, value: knownValue }]) }), deltas: ModelInvocationDelta[] = [];
       const call = async () => { await port.preflight(profile); return port.send(await port.prepare(profile, codexBinding, request({ reasoning_effort: 'high' })), undefined, delta => deltas.push(delta)); };
       const log = async () => (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[]; env: Record<string, string>; stdin?: string; system?: string });
       // The answer: the argv-pinned model, the CLI's split input counters, the user message on stdin and the system prompt as the instructions file.
@@ -297,7 +298,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       }
       expect(readHeadlessRejection((exited as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2 });
       // Lead 2026-10-31: the CLI's own counted reconnect notices (probe/2 shape) are tolerated up to the registry bound; past it, or any other error line, refuses.
-      const reconnect = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'error', message: `Reconnecting... ${i + 2}/5 (stream disconnected before completion: failed to lookup address information: Try again)` }));
+      const reconnect = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'error', message: `Reconnecting... ${i + 2}/5 (stream disconnected before completion: failed to lookup address information: Try again; usage limit reached)` }));
       const answered = codexAnswer('R');
       await write({ steps: [...answered.slice(0, 2), ...reconnect(2), ...answered.slice(2)].map(line => ({ line })) });
       await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'R' } }] } });
@@ -305,6 +306,27 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'reconnect-limit' });
       await write({ steps: [...answered.slice(0, 2), { type: 'error', message: 'Reconnecting... waiting for network' }, ...answered.slice(2)].map(line => ({ line })) });
       expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'error' });
+      // F14: errors remain fatal; only the private evidence carries the bounded diagnostic. No message or secret becomes a delta.
+      const diagnostic = `network failure ${knownValue} sk-fixtureCredential1234567890 Bearer tiny-token Basic dXNlcjpwYXNz {"refresh_token":"short-refresh"} password='short-pass' https://user:pass@example.test/path?q=private-query#private-fragment person@example.test kişi@örnek.test abcdefghijklmnopqrstuvwxyz0123456789`;
+      const beforeErrors = deltas.length;
+      for (const event of [{ type: 'error', message: diagnostic }, { type: 'item.completed', item: { type: 'error', message: diagnostic } },
+        { type: 'turn.failed', error: { message: diagnostic } }]) {
+        await write({ steps: [...answered.slice(0, 2), event, ...answered.slice(2)].map(line => ({ line })) });
+        const refused = await call(), parsed = body(refused);
+        expect(refused).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response', body: { complete: true } } });
+        expect(parsed).toMatchObject({ schemaVersion: 5, refusal: 'invalid-output', subtype: event.type === 'turn.failed' ? 'turn.failed' : 'error', errorClass: 'network', egress: { connected: 0, refused: 0 } });
+        expect(parsed.errorText).toContain('network failure');
+        for (const secret of [knownValue, 'fixtureCredential', 'tiny-token', 'dXNlcjpwYXNz', 'kişi@örnek.test', 'short-refresh', 'short-pass', 'user:pass', 'private-query', 'private-fragment', 'person@example.test', 'abcdefghijklmnopqrstuvwxyz']) expect(parsed.errorText).not.toContain(secret);
+        expect(readHeadlessRejection((refused as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 5, errorClass: 'network', errorText: parsed.errorText });
+        expect(Buffer.byteLength(parsed.errorText)).toBeLessThanOrEqual(1024);
+      }
+      await write({ steps: [{ line: { type: 'error', message: `unrecognized ${'ş '.repeat(1024)} ${'a'.repeat(65_536)} sk-fixtureCredential1234567890` } }] });
+      const bounded = body(await call());
+      expect(bounded).toMatchObject({ errorClass: 'unclassified', refusal: 'invalid-output' });
+      expect(Buffer.byteLength(bounded.errorText)).toBeLessThanOrEqual(1024);
+      expect(Buffer.byteLength(bounded.errorText)).toBeGreaterThan(1000);
+      expect(bounded.errorText).not.toContain('�');
+      expect(deltas).toHaveLength(beforeErrors);
       // Astra 2848 R2/R3: unknown counters are no zero, and nothing after the completed turn changes its answer; a reported zero stays a zero.
       const ended = (usage: unknown, after: Record<string, unknown>[] = []) => [...codexAnswer('A').slice(0, 4), { type: 'turn.completed', usage }, ...after].map(line => ({ line }));
       const valid = { input_tokens: 10, cached_input_tokens: 4, output_tokens: 2 };

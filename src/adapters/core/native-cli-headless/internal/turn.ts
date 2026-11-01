@@ -1,3 +1,4 @@
+import type { KnownSecretSnapshot } from '#platform/index.js';
 import { splitModelInvocationDelta, type HeadlessEgress, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationRejectionReason } from '#domain/index.js';
 import type { HeadlessRejectionBody, NativeCliHeadlessDefinition } from './contract.js';
 import type { HeadlessEntry } from './env.js';
@@ -6,9 +7,9 @@ import type { HeadlessPreflight } from './preflight.js';
 /** What `prepare` sealed for one call (the port's token). */
 export type Prepared = Readonly<{ profile: ModelInvocationProfile; definition: NativeCliHeadlessDefinition; entry: HeadlessEntry; model: string; system: string; user: string;
   effortArgs: readonly string[] }>;
-/** A typed rejection: the receipt's reason and status and the adapter's own body (never CLI output). */
+/** A typed rejection: the receipt's reason and status and the adapter's own body (diagnostic text is bounded and redacted). */
 export type Refusal = Readonly<{ reason: ModelInvocationRejectionReason; status: number | null; body: HeadlessRejectionBody }>;
-export const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extract<HeadlessRejectionBody, { schemaVersion: 1 }>, 'schemaVersion'>, status: number | null = null): Refusal =>
+export const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extract<HeadlessRejectionBody, { schemaVersion: 1 }>, 'schemaVersion'>, status: number | null = null) =>
   Object.freeze({ reason, status, body: { schemaVersion: 1 as const, ...body } });
 /**
  * One call's event-stream reading (selected by the registry's `eventStream`): `line` returns the first refusal (the process is stopped), `end` the
@@ -16,7 +17,7 @@ export const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extrac
  */
 export type HeadlessTurn = Readonly<{ line(raw: string): Refusal | null;
   end(exit: Readonly<{ exited: boolean; exitCode: number | null }>, egress: HeadlessEgress): Readonly<{ refusal: Refusal }> | Readonly<{ response: Exclude<ModelInvocationNativeResult, { kind: 'rejected' }> }> | null }>;
-export type HeadlessTurnFactory = (prepared: Prepared, preflight: HeadlessPreflight, runDir: string, onDelta?: ModelInvocationDeltaSink) => HeadlessTurn;
+export type HeadlessTurnFactory = (prepared: Prepared, preflight: HeadlessPreflight, runDir: string, onDelta?: ModelInvocationDeltaSink, knownSecrets?: KnownSecretSnapshot) => HeadlessTurn;
 /** Presentation only: a failing sink never changes the call. */
 export function emitDelta(onDelta: ModelInvocationDeltaSink | undefined, text: string): void {
   for (const delta of splitModelInvocationDelta('text', text)) { try { onDelta?.(delta); } catch { /* Presentation only. */ } }
