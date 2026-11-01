@@ -24,7 +24,7 @@ export function headlessEgressReasons(value: HeadlessEgress): { reasons: Record<
  * `guard` (field), `model-mismatch`, `quota` (resetsAtMs), `credits-required`, `login-required`, `invalid-output` (subtype), `provider-error`
  * (status), `response-limit`; f5: `resource-limit` (field: cpu-time, processes or memory) and `egress`, the call's gateway summary.
  * v4 `process-exit` (owner S12/HL 2026-10-31): the CLI ended before a complete turn (an unknown receipt's incomplete evidence) with its exit
- * code, signal and a redacted, bounded stderr summary, the only CLI text a body may carry.
+ * code, signal and a redacted, bounded stderr summary. v5 adds classified, redacted error-event text in private content only.
  */
 const baseRejectionSchema = z.strictObject({ schemaVersion: z.literal(1),
   refusal: z.enum(['guard', 'model-mismatch', 'quota', 'credits-required', 'login-required', 'invalid-output', 'provider-error', 'response-limit', 'resource-limit']),
@@ -32,6 +32,8 @@ const baseRejectionSchema = z.strictObject({ schemaVersion: z.literal(1),
   egress: headlessEgressSchema.optional() }).readonly();
 /** v1/v2 stay byte-compatible; older readers reject v3 instead of inventing quota or a reset time. */
 export const headlessRejectionBodySchema = z.discriminatedUnion('schemaVersion', [baseRejectionSchema.unwrap(),
+  baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(5), errorClass: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u),
+    errorText: persistedString(z.string().max(1024)).refine(value => new TextEncoder().encode(value).byteLength <= 1024) }).strict(),
   baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable') }).strict(),
   z.strictObject({ schemaVersion: z.literal(3), refusal: z.enum(['usage-unavailable', 'service-unavailable']),
     code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u).optional(), status: counterSchema.max(599).min(400).nullable() }),

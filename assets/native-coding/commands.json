@@ -314,6 +314,17 @@
             "\\bnot logged in\\b",
             "\\blog ?in again\\b"
           ],
+          "errorAllow": {
+            "maxBytes": 1024,
+            "rules": [
+              { "pattern": "^Reconnecting\\.\\.\\.", "errorClass": "reconnect" },
+              { "pattern": "^Model metadata for .+ not found", "errorClass": "model-metadata" },
+              { "pattern": "\\bdeprecated\\b", "errorClass": "deprecated" },
+              { "pattern": "\\bhook.*(?:timeout|timed out)\\b", "errorClass": "hook-timeout" },
+              { "pattern": "\\b(?:failed to (?:sync|download)|stream disconnected|failed to lookup address|network|connection|websocket)\\b", "errorClass": "network" }
+            ],
+            "source": "F14 2026-11-01: diagnostic classes only, never permission to continue; retained WALK22-AC68/CODEX-UNKNOWN.md and F10 event shapes. Quota/login refusal mapping remains providers.json/loginPatterns; unmatched text is unclassified."
+          },
           "reconnectPatterns": [
             "^Reconnecting\\.\\.\\. [0-9]{1,3}/[0-9]{1,3}(?: |$)"
           ],
