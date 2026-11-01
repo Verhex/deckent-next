@@ -437,6 +437,33 @@ that contract. Owner S8 (2026-10-31) changes registry `b1-personas-2`: Ayşe wai
 45 seconds and Mert up to 30 seconds. New admission pins these updated summaries; existing
 sealed profiles keep their original summaries and require regeneration to adopt the change.
 
+## Bounded evaluator presentation (A61-TRIM candidate)
+
+The evaluator receives a presentation of the sealed transcript, not its full terminal cell
+arrays. `beuser-limits-7` adds registry ceilings of 262144 bytes for the serialized message
+array and eight style samples per screen. Screen text, geometry, full-cell digest, minimum
+measured contrast and unknown-contrast count remain; duplicate main/scrollback text is omitted.
+Consecutive identical captured screens share the first screen's reference and carry their
+repetition number; intervening action records remain. Full-screen digests prevent changes
+outside the style samples from being mistaken for an identical screen.
+
+If the complete messages still exceed the ceiling, only observation text loses its middle:
+`text` and `textTail` preserve head/tail excerpts, `textTruncated` marks each affected row,
+and `truncation` marks the transcript. Original entry references/digests, transcript digest,
+binding and rubric remain intact. Canonical artifacts are never rewritten. Metadata or rubric
+that cannot fit even without observation text returns `BEUSER_EVALUATOR_INPUT_TOO_LARGE`.
+A truncated observation is incomplete evidence; the evaluator must keep insufficient evidence
+unknown. These limits are presentation policy, not model capacity or acceptance guarantees.
+
+The actual measured prompt plus completion must still fit both pinned and served model
+windows: `BEUSER_EVALUATOR_INPUT_TOO_LARGE` or `BEUSER_MODEL_INPUT_TOO_LARGE`. Remaining-token
+exhaustion is `BEUSER_CALL_BUDGET_EXCEEDED`; profile timeout/response excess is
+`BEUSER_MODEL_PROFILE_LIMIT`; missing/incompatible spending evidence is
+`BEUSER_SPEND_UNAVAILABLE`. Missing or invalid counters/windows retain
+`BEUSER_LIMITS_UNAVAILABLE`. Format correction still preserves the preceding invalid-output
+failure when the next reservation cannot be admitted. Author checks do not establish an
+assembled-release BeUser walk, independent review or owner acceptance.
+
 ## Realm destruction assurance (owner amendment A, 2026-10-29)
 
 Before storage inspection, the adapter writes kernel snapshot v2 with exact binding/incarnation,

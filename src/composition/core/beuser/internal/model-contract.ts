@@ -3,14 +3,16 @@ import { z } from 'zod';
 import instructions from '../../../../../assets/beuser/model-instructions.json' with { type: 'json' };
 import { BeuserContractError, beuserSurfaceCommandSchema, type BeuserContext, type BeuserModelRole } from '#engine/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength } from '#adapters/index.js';
+import { boundedBeuserEvaluatorMessages } from './evaluator-input.js';
 type ModelInvocationResult = Parameters<typeof extractOpenAiChatTextFromInvocation>[0];
 
 const registry = z.strictObject({ schemaVersion: z.literal(1), revision: persistedString(z.string().min(1)), language: persistedString(z.string().min(1)),
   walker: persistedString(z.string().min(1)), evaluator: persistedString(z.string().min(1)) }).parse(instructions);
 /** Only evaluator messages can contain sealed harness evidence. Persona and screen stay in the data message. */
 export function beuserModelMessages(role: BeuserModelRole, input: unknown, evidence?: unknown) {
-  return [{ role: 'system' as const, content: `${registry.revision}\n${role === 'beuser-walker' ? registry.walker : registry.evaluator}` },
-    { role: 'user' as const, content: JSON.stringify(role === 'beuser-evaluator' ? { input, evidence } : input) }];
+  if (role === 'beuser-evaluator') return boundedBeuserEvaluatorMessages(`${registry.revision}\n${registry.evaluator}`, input, evidence);
+  return [{ role: 'system' as const, content: `${registry.revision}\n${registry.walker}` },
+    { role: 'user' as const, content: JSON.stringify(input) }];
 }
 function modelJson(value: ModelInvocationResult): unknown {
   const text = extractOpenAiChatTextFromInvocation(value);

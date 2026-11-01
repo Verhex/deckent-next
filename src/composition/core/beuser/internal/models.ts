@@ -41,13 +41,16 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       const declared = (catalogModel as { contextWindow?: unknown } | null | undefined)?.contextWindow;
       const window = profile?.contextWindowTokens ?? measured.windowTokens ?? (typeof declared === 'number' ? declared : null);
       if (!profile || !window || !Number.isSafeInteger(window) || !Number.isSafeInteger(measured.promptTokens) || measured.promptTokens < 0
-        || !Number.isSafeInteger(tokens) || tokens > window || (measured.windowTokens !== null && tokens > measured.windowTokens)
-        || tokens > remaining.tokens || profile.limits.timeoutMs > ctx.limits.maxWallMs
-        || profile.limits.responseMaxBytes > ctx.limits.maxArtifactBytes) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+        || !Number.isSafeInteger(tokens)) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+      if (tokens > window || (measured.windowTokens !== null && tokens > measured.windowTokens))
+        throw new BeuserContractError(role === 'beuser-evaluator' ? 'BEUSER_EVALUATOR_INPUT_TOO_LARGE' : 'BEUSER_MODEL_INPUT_TOO_LARGE');
+      if (tokens > remaining.tokens) throw new BeuserContractError('BEUSER_CALL_BUDGET_EXCEEDED');
+      if (profile.limits.timeoutMs > ctx.limits.maxWallMs || profile.limits.responseMaxBytes > ctx.limits.maxArtifactBytes)
+        throw new BeuserContractError('BEUSER_MODEL_PROFILE_LIMIT');
       const local = profile.schemaVersion === 2 && profile.billingAxis === 'local' && providerSpendLocalZeroTariffProfile(profile)
         && !spending?.budget && (!spending?.quote || providerSpendLocalZeroTariff(profile, spending.quote));
       if ((!spending?.quote && !local && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription'))
-        || spending?.quote && spending.quote.currency !== remaining.currency) throw new BeuserContractError('BEUSER_LIMITS_UNAVAILABLE');
+        || spending?.quote && spending.quote.currency !== remaining.currency) throw new BeuserContractError('BEUSER_SPEND_UNAVAILABLE');
       const cost = spending?.quote ? Number(currencyAmountText(spending.quote.maxChargeMinorUnits, remaining.currency, 'en', false).replaceAll(',', '')) : 0;
       pins.set(prepared.command.commandId, pinned);
       if (measured.quality === 'estimated') reservations.estimated++; else reservations.providerCount++;
