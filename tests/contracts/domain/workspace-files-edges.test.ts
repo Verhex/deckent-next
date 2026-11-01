@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { WORKSPACE_ATTACHMENT_MAX_BYTES, WORKSPACE_FILE_FIND_MAX_RESULTS, WORKSPACE_FILE_QUERY_MAX_CHARS, parseWorkspaceAttachmentRequest,
-  parseWorkspaceFileQuery, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema } from '#domain/index.js';
+  parseWorkspaceFileQuery, sanitizeIssues, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema } from '#domain/index.js';
 
 const base = { schemaVersion: 1, scopeId: 'scope-1', query: 'src', limit: 5 };
 const issues = (value: unknown) => {
   const result = workspaceFileQuerySchema.safeParse(value);
-  return result.success ? [] : result.error.issues.map(i => `${i.path.join('.')}:${i.code}`);
+  return result.success ? [] : sanitizeIssues(result.error.issues).map(i => `${i.path.join('.')}:${i.code}`);
 };
 
 describe('workspace file query edges', () => {
@@ -16,6 +16,8 @@ describe('workspace file query edges', () => {
     expect(parseWorkspaceFileQuery({ ...base, query: '' }).query).toBe('');
     expect(parseWorkspaceFileQuery({ ...base, query: 'a'.repeat(256) }).query).toHaveLength(256);
     expect(issues({ ...base, query: 'a'.repeat(257) })).toEqual(['query:too_big']);
+    expect(parseWorkspaceFileQuery({ ...base, query: '😀'.repeat(128) }).query).toHaveLength(256);
+    expect(issues({ ...base, query: `${'😀'.repeat(128)}x` })).toEqual(['query:too_big']);
   });
   it('accepts limit 1 and 50, refuses 0 and 51', () => {
     expect(parseWorkspaceFileQuery({ ...base, limit: 1 }).limit).toBe(1);

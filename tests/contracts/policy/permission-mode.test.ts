@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bindingsFileSchema, modeEligibleApproval, policyFileSchema, principalPermissionMode, resolvePolicyBindings } from '#domain/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
+import type { z } from 'zod';
 
 // T-L4 slice 4a: the company marks a require-approval rule mode-eligible (policy v2); the person's mode lives in bindings v2; one
 // pure function decides a tool call: strict policy → floor raise → mode lowering only on an eligible require-approval of a relaxable cell.
@@ -49,8 +50,8 @@ describe('permission-mode policy data (T-L4 slice 4a)', () => {
     expect(bindingsFileSchema.safeParse({ schemaVersion: 2, revision: 'b', bindings: [], modes: [person('ask'), person('full-auto')] }).success).toBe(false);
     // No selection shorthand: a mode names explicit scopes (the field itself refuses 'all').
     const all = bindingsFileSchema.safeParse({ schemaVersion: 2, revision: 'b', bindings: [], modes: [person('auto-edit', 'all' as never)] });
-    const paths = all.success ? [] : all.error.issues.flatMap(issue => 'unionErrors' in issue ? issue.unionErrors.flatMap(error => error.issues) : [issue])
-      .map(issue => issue.path.join('.'));
+    const leaves = (issue: z.core.$ZodIssue): z.core.$ZodIssue[] => issue.code === 'invalid_union' ? issue.errors.flatMap(branch => branch.flatMap(leaves)) : [issue];
+    const paths = all.success ? [] : all.error.issues.flatMap(leaves).map(issue => issue.path.join('.'));
     expect(paths).toContain('modes.0.scopes');
   });
 

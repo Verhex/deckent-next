@@ -79,7 +79,7 @@ describe('bounded immutable JSON schema factory', () => {
 
   it('exposes a registry-compatible strict structural object schema', () => {
     expect(providerCatalogObjectSchema).toBeInstanceOf(z.ZodObject);
-    expect(providerCatalogObjectSchema._def.unknownKeys).toBe('strict');
+    expect(z.toJSONSchema(providerCatalogObjectSchema, { io: 'input' }).additionalProperties).toBe(false);
     expect(providerCatalogObjectSchema.safeParse(catalog()).success).toBe(true);
     expect(providerCatalogObjectSchema.safeParse({ ...catalog(), unknown: true }).success).toBe(false);
   });
