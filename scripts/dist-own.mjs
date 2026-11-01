@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { transform } from 'esbuild';
+import { normalizeZodImports } from './dist-zod.mjs';
 
 // Non-literal imports into a BeUser candidate, plus the storage seams used to provision the offline distribution smoke fixture.
 const RESOURCE_ENTRIES = ['platform/index.js', 'adapters/core/installation-files/index.js', 'adapters/core/local-runtime-socket/index.js',
@@ -18,8 +19,8 @@ export function ownModulePlugin(dist) {
   return { name: 'deckent-own-source-urls', setup(builder) {
     builder.onLoad({ filter: /\.js$/ }, async args => {
       if (!args.path.startsWith(dist + sep)) return undefined;
-      const code = readFileSync(args.path, 'utf8');
-      if (!code.includes('import.meta')) return undefined;
+      const original = readFileSync(args.path, 'utf8'), code = normalizeZodImports(original);
+      if (!code.includes('import.meta')) return code === original ? undefined : { contents: code, loader: 'js', resolveDir: dirname(args.path) };
       const source = relative(dist, args.path).replaceAll('\\', '/');
       const url = JSON.stringify(ORIGINAL_URL + source);
       const result = await transform(code, { loader: 'js', target: 'node24', format: 'esm',

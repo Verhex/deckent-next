@@ -10,6 +10,8 @@ import { BEUSER_REALM_RECIPE, createBeuserArrange, verifyBeuserDistribution } fr
 import { isSourceCheckout, packageRemovalCommand, sha256 } from '#platform/index.js';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { buildDist, packDist } from '../../../scripts/build-dist.mjs';
+// @ts-expect-error JavaScript build tooling has no declaration file.
+import { normalizeZodImports } from '../../../scripts/dist-zod.mjs';
 
 // PACK-SMOKE (2026-09-30): the published package is checked in every verify, not only before a release. The release-only placement let two
 // regressions rot for a batch (the terminal check still expected `deckent>` after the workline composer; a new `path` declaration leak kept
@@ -28,11 +30,31 @@ afterAll(async () => { await Promise.all(outs.map(out => rm(out, { recursive: tr
 
 describe.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/script'))('published package gate (build-dist + pack-smoke fast checks)', () => {
   it('has no publish blocker beyond host bubblewrap staging, no stale locked license text, and passes the fast surface checks', async () => {
+    const imports = [
+      ["import { z } from 'zod'; export const s = z.string();", "import * as z from 'zod'; export const s = z.string();"],
+      ['import {z as schema} from "zod"; export const s = schema.string();', 'import * as schema from "zod"; export const s = schema.string();'],
+      ["import { z, ZodError } from 'zod';", "import { z, ZodError } from 'zod';"],
+      ["import z, { z as other } from 'zod';", "import z, { z as other } from 'zod';"],
+      ["import 'zod';", "import 'zod';"], ["import * as z from 'zod';", "import * as z from 'zod';"],
+      ["import { z } from 'other';", "import { z } from 'other';"],
+      ["// import { z } from 'zod';\nconst text = `\nimport { z } from 'zod';\n`;", "// import { z } from 'zod';\nconst text = `\nimport { z } from 'zod';\n`;"],
+      ["import { z } from 'zod'; export { z };", "import { z } from 'zod'; export { z };"],
+      ["import { z } from 'zod'; export const root = z.default;", "import { z } from 'zod'; export const root = z.default;"],
+      ["import { z } from 'zod'; export const root = z.z;", "import { z } from 'zod'; export const root = z.z;"],
+    ];
+    for (const [input, output] of imports) {
+      expect(normalizeZodImports(input)).toBe(output);
+      expect(normalizeZodImports(output)).toBe(output);
+    }
     expect(existsSync(join(ROOT, 'dist/build-identity.json')), 'dist missing: run `npm run build` first').toBe(true);
     const out = await mkdtemp(join(tmpdir(), 'deckent-pack-gate-')); outs.push(out);
     const summary = await buildDist({ root: ROOT, out }) as { stage: string; publishable: { blockers: string[] }; licenseTexts: { unused: string[] } };
     expect(summary.publishable.blockers.filter(blocker => !blocker.startsWith('bubblewrap: '))).toEqual([]);
     expect(summary.licenseTexts.unused).toEqual([]);
+    const meta = JSON.parse(readFileSync(join(out, 'meta.json'), 'utf8')) as { outputs: Record<string, { inputs: Record<string, { bytesInOutput: number }> }> };
+    const unusedLocales = Object.values(meta.outputs).flatMap(output => Object.entries(output.inputs))
+      .filter(([path, input]) => /node_modules\/zod\/v4\/locales\/(?!en\.js$)/u.test(path) && input.bytesInOutput > 0);
+    expect(unusedLocales, 'unused Zod locales must be removed from the actual bundle').toEqual([]);
     const limits = { maxFiles: 20000, maxFileBytes: 64 * 1024 * 1024, maxTotalBytes: 256 * 1024 * 1024, maxDepth: 32 };
     const measured = await measureInstalledPackage(summary.stage, limits);
     expect(measured.declaredMissing).toEqual([]);
