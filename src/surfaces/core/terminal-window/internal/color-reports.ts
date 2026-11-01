@@ -31,7 +31,8 @@ export type BackgroundProbe = Readonly<{
 
 /**
  * Frames terminal input before Ink. OSC/DCS strings and CSI replies never become keys, even when split or oversized. Only a lone ESC
- * expires into the Escape key; a recognised control frame keeps draining without retaining its payload after the time/size bound.
+ * expires into the Escape key; a definite reply drains without retaining its payload after the time/size bound. A possible CSI key waits
+ * for its final byte within the size bound. ESC starts a fresh sequence inside a broken string, except for its ST terminator.
  * Enter/Ctrl+C break a malformed frame and still pass. Ordinary keys, mouse/focus reports and keyboard CSI sequences keep their order.
  */
 export function createAnswerFilter(deliver: (text: string) => void, kittyReply: (reply: string) => void = () => {}): Readonly<{ push: (chunk: string) => void; reset: () => void; probe: BackgroundProbe }> {
@@ -48,7 +49,8 @@ export function createAnswerFilter(deliver: (text: string) => void, kittyReply: 
     timer = setTimeout(() => {
       timer = undefined;
       if (mode === 'escape') { reset(); pass('\u001b'); }
-      else { held = ''; expired = true; } // A terminal response cannot turn into a key at its bound.
+      else if (mode !== 'csi' || ['?', '>', '='].includes(held[2]!)) { held = ''; expired = true; }
+      // A plain CSI may still be a key: keep it bounded by size, not by read timing.
     }, LIMITS.answerHoldMs);
   };
   const answer = () => {
@@ -77,6 +79,8 @@ export function createAnswerFilter(deliver: (text: string) => void, kittyReply: 
     const flush = () => { pass(text); text = ''; };
     for (const char of chunk) {
       if (mode === 'text') { if (char === '\u001b') begin(); else text += char; continue; }
+      // xterm's ESC cancels the old string and starts a new sequence; ST alone belongs to the old string.
+      if ((mode === 'osc' || mode === 'dcs') && stringEscape && char >= ' ' && char !== '\\') { reset(); begin(); }
       if (mode === 'escape') {
         if (char === '[' || char === ']' || char === 'P') { mode = char === '[' ? 'csi' : char === ']' ? 'osc' : 'dcs'; held += char; continue; }
         const prefix = held; reset(); text += prefix + char; continue; // Alt+key (including Alt+Enter), not a terminal reply.
