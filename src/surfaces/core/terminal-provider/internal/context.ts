@@ -1,4 +1,4 @@
-import type { ConfigLoadOptions } from '#platform/index.js';
+import type { ConfigLoadOptions, Locale } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { PanelLine, ProviderModelOutcome, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
@@ -84,4 +84,8 @@ export interface ProviderSubscriptionPort {
   /** The governed connect; `delegate` absent keeps the earlier choice. `delegate` in the outcome: who may use the login now. */
   connect(kind: string, configDir: string | null, delegate?: readonly ProviderDelegateClass[]): Promise<ProviderSubscriptionOutcome>;
 }
-export type ProviderWindowPort = ProviderPanelPort & { readonly subscription?: ProviderSubscriptionPort };
+export type ProviderWindowPort = ProviderPanelPort & { readonly subscription?: ProviderSubscriptionPort;
+  readonly locale?: Locale;
+  /** Optional read-only preflight; never delays the choices or grants connection authority. */
+  inspectCustody?(): Promise<Readonly<{ id: string; reason: string }> | null>;
+};

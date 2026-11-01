@@ -56,6 +56,12 @@ for wait, send in steps:
         os.write(fd, send.encode()); read_for(0.6)
 read_for(0.3)
 ended, status = os.waitpid(pid, os.WNOHANG)
+# PTY EOF can precede waitable process exit; wait for the child, not a fixed screen-settle interval.
+deadline = time.monotonic() + 5
+while not ended and time.monotonic() < deadline:
+    read_for(0.05)
+    time.sleep(0.01)
+    ended, status = os.waitpid(pid, os.WNOHANG)
 code = os.waitstatus_to_exitcode(status) if ended else None
 if not ended:
     os.kill(pid, 9); os.waitpid(pid, 0)
@@ -111,7 +117,7 @@ it('the built monitor keeps its status and key-hint rows fixed across tabs, help
     { cwd: project, env: { ...process.env, HOME: join(root, 'home'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1', COLUMNS: String(columns) }, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const result = JSON.parse(stdout) as { marks?: number[]; timeout?: string; output: string; code?: number | null };
   if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-4000)}`);
-  expect(result.code).toBe(0);
+  expect(result.code, result.output.slice(-4000)).toBe(0);
   // Switching to the shared theme host must preserve Ink's earlier Ctrl+C exit, including from the filter.
   const interrupted = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, 'monitor', '--lang', 'en']),
     JSON.stringify([['Tab/', '/'], ['Enter keeps', '\u0003']]), String(rows), String(columns)],
