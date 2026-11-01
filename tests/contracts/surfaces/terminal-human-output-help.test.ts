@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { slashHelpText } from '#surfaces/core/terminal-kit/index.js';
+import { slashHelpText, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { WORKLINE_TEST_LABELS, mountWorkline, settle, until } from '../support/workline-harness.js';
@@ -38,9 +38,18 @@ describe('/help grouped', () => {
   });
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
-      const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(34); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; alpha.55 f2 adds /roles; alpha.56 U4-2 adds /setup, H7 adds /hub; alpha.59 removes /watch-workers, /watch-runs, /watch-stop.
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(34);
+      const labels = terminalComposerLabels(locale).slash;
+      const rows = slashHelpText(labels).split('\n').filter(line => line.startsWith('  /'));
+      const names = rows.map(row => row.trim().split(' ')[0]!);
+      expect(names.slice().sort()).toEqual(WORKLINE_SLASH_COMMANDS.map(command => `/${command.name}`).sort());
+      expect(new Set(names).size).toBe(names.length);
+      for (const name of ['/uninstall', '/theme', '/beuser']) expect(names).toContain(name);
+      for (const command of WORKLINE_SLASH_COMMANDS) {
+        for (const key of [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]) {
+          expect(labels[key]?.trim(), `${locale} ${key}`).toBeTruthy();
+          expect(labels[key], `${locale} ${key}`).not.toMatch(/[\r\n]/u);
+        }
+      }
     }
   });
 });
