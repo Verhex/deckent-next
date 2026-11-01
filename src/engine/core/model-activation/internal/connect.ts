@@ -123,15 +123,19 @@ export class ModelConnectApplication {
 
   private async delegationDiscovery(command: ModelConnectCommand, layers: Awaited<ReturnType<ModelConnectPorts['layers']>>, principal: VerifiedPrincipal) {
     if (!command.delegate?.length) return;
-    const profiles = [layers.global, layers.project].flatMap(layer =>
-      (layer['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles ?? []);
-    const definitions = profiles.filter(item => {
-      const reference = item['reference'] as ModelReference | undefined;
-      return item['scopeId'] === command.scopeId && reference && item['id'] ===
-        [command.connection, reference.providerId, reference.modelId, String(reference.modelVersion)].join('.');
-    }).map(item => (item['adapter'] as { definition?: JsonObject } | undefined)?.definition ?? null);
-    // Discovery can authorize OAuth and write secrets; only this connection's existing owner consent can bypass the early witness.
-    await this.delegation(command, definitions.length ? definitions : [null], principal);
+    const model = command.model, catalog = layers.effective['provider_catalog'];
+    const references = 'reference' in model ? [model.reference] : 'nativeId' in model && catalog !== undefined
+      ? parseProviderCatalog(catalog).providers.flatMap(provider => provider.models.filter(item => item.nativeId === model.nativeId)
+        .map(item => ({ providerId: provider.id, providerVersion: provider.version, modelId: item.id, modelVersion: item.version }))) : [];
+    // Discovery can authorize OAuth and write secrets. Pull/unknown/ambiguous targets cannot borrow another model's consent.
+    const reference = references.length === 1 ? references[0] : undefined;
+    const authored = [layers.global, layers.project].filter(layer => layer['provider_invocation_profiles'] !== undefined);
+    await this.delegation(command, reference && authored.length ? authored.map(layer => {
+      const profiles = (layer['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] }).profiles ?? [];
+      const id = [command.connection, reference.providerId, reference.modelId, String(reference.modelVersion)].join('.');
+      const known = profiles.find(item => item['scopeId'] === command.scopeId && item['id'] === id && isDeepStrictEqual(item['reference'], reference));
+      return (known?.['adapter'] as { definition?: JsonObject } | undefined)?.definition ?? null;
+    }) : [null], principal);
   }
 
   private async delegationLayers(command: ModelConnectCommand, targets: readonly Target[], layers: Awaited<ReturnType<ModelConnectPorts['layers']>>,
