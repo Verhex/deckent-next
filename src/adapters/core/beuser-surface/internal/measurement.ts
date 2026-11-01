@@ -1,4 +1,6 @@
-import type { IBufferCell } from '@xterm/headless';
+/** The xterm buffer-cell reads this measurement uses (structural, so published declarations do not name @xterm/headless). */
+interface MeasuredCell { getFgColor(): number; getBgColor(): number; isFgRGB(): boolean; isBgRGB(): boolean; isFgPalette(): boolean; isBgPalette(): boolean;
+  isInverse(): number; isDim(): number; isInvisible(): number; isBold(): number; getChars(): string; getWidth(): number }
 import { z } from 'zod';
 import { BeuserSurfaceError } from './input.js';
 
@@ -32,7 +34,7 @@ function palette(index: number, fixture: BeuserTerminalFixture): string {
     : [cube[Math.floor(n / 36)]!, cube[Math.floor(n / 6) % 6]!, cube[n % 6]!];
   return '#' + values.map(value => value.toString(16).padStart(2, '0')).join('');
 }
-export function measureCell(cell: IBufferCell, fixture: BeuserTerminalFixture, x: number, y: number): CellRun {
+export function measureCell(cell: MeasuredCell, fixture: BeuserTerminalFixture, x: number, y: number): CellRun {
   const color = (foreground: boolean) => {
     const value = foreground ? cell.getFgColor() : cell.getBgColor();
     return (foreground ? cell.isFgRGB() : cell.isBgRGB()) ? '#' + value.toString(16).padStart(6, '0')
