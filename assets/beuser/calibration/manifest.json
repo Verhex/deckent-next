@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-calibration-2",
+  "revision": "b1-calibration-3",
   "phase": "preparation-only",
   "calibrationClaim": "uncalibrated",
   "files": [
@@ -69,7 +69,7 @@
     },
     {
       "fileName": "journeys/onboarding.json",
-      "sha256": "4ef37f1ec2dc019bbb3f1030b83674717794e548b30be415ff9ec0a6e6713a6d"
+      "sha256": "5441d07683e56919f872e6dc12178ab171fe56bb811819013dfb0aaebeb16596"
     },
     {
       "fileName": "journeys/beuser-self.json",
@@ -77,7 +77,7 @@
     },
     {
       "fileName": "journeys/uninstall-v2.json",
-      "sha256": "eb5eb49403c8fa707b4e7473b708af7d290a3e0cdf66d84f26c20baa65d15796"
+      "sha256": "f171c9e9832a1ba24cc0f4b492c1f34e45349209bd9d7368a151b05f4643b5a6"
     },
     {
       "fileName": "journeys/theme-light.json",
@@ -92,6 +92,6 @@
       "sha256": "853468ce33f22b2390c2c7c2c46b1e41e93c2e9de181867c0a4b8e41dd8f1cb5"
     }
   ],
-  "assetSetDigest": "a4a5009db8005aa1d5032d0e32cb2538bb9e74afaed4bcd5d90935ca45e6b05c",
+  "assetSetDigest": "8e55d1683691a2f17b93d06492616553ad634cb8b743427b04c45e55c73ee6c5",
   "terminalMeasurementClaim": "uncalibrated-rendered-cells-not-model-hit-rates"
 }

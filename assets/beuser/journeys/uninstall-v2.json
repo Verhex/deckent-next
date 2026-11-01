@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-uninstall-v2-1",
+  "revision": "b1-uninstall-v2-2",
   "journeyId": "uninstall-v2",
   "limitsProfile": "b1-dogfood-provisional-3",
   "branches": [
@@ -11,8 +11,8 @@
         "screen-reader"
       ],
       "goal": {
-        "tr": "Kendi kurulumunu kaldır; kişisel kayıtların kalsın.",
-        "en": "Remove your installation while keeping your personal records."
+        "tr": "Kendi kurulumunu kaldır; kişisel kayıtların kalsın. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Remove your installation while keeping your personal records. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -22,8 +22,8 @@
         "selin"
       ],
       "goal": {
-        "tr": "Açık servisi olan kendi kurulumunu kayıtlarını koruyarak kaldır.",
-        "en": "Remove your installation with its service running, keeping your records."
+        "tr": "Açık servisi olan kendi kurulumunu kayıtlarını koruyarak kaldır. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Remove your installation with its service running, keeping your records. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -42,8 +42,8 @@
         "mert"
       ],
       "goal": {
-        "tr": "İşlerin sürerken kurulumunu temizlemek iste; ekrandaki seçenekleri incele.",
-        "en": "Ask to clear your installation while work is active and inspect the offered choices."
+        "tr": "İşlerin sürerken kurulumunu temizlemek iste; ekrandaki seçenekleri incele. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Ask to clear your installation while work is active and inspect the offered choices. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -52,8 +52,8 @@
         "mert"
       ],
       "goal": {
-        "tr": "Ekranda gösterilen iptal ve devam seçeneğiyle kendi kurulumunu temizle.",
-        "en": "Use the offered cancel-and-continue choice to clear your installation."
+        "tr": "Ekranda gösterilen iptal ve devam seçeneğiyle kendi kurulumunu temizle. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Use the offered cancel-and-continue choice to clear your installation. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -83,8 +83,8 @@
         "mert"
       ],
       "goal": {
-        "tr": "Kurulumu kaldır; bekleyen işlerini sonra yeniden bulmak istiyorsun.",
-        "en": "Remove the installation while retaining pending work so you can find it later."
+        "tr": "Kurulumu kaldır; bekleyen işlerini sonra yeniden bulmak istiyorsun. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Remove the installation while retaining pending work so you can find it later. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -94,8 +94,8 @@
         "mert"
       ],
       "goal": {
-        "tr": "Kendi kullanıcı servisini yöneten kurulumu kaldırmak istiyorsun.",
-        "en": "Remove the installation managed by your own user service unit."
+        "tr": "Kendi kullanıcı servisini yöneten kurulumu kaldırmak istiyorsun. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Remove the installation managed by your own user service unit. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -165,8 +165,8 @@
         "managed-admin"
       ],
       "goal": {
-        "tr": "Saklama kuralı altındaki kendi proje kurulumunu emekliye ayır.",
-        "en": "Retire your project installation subject to its retention policy."
+        "tr": "Saklama kuralı altındaki kendi proje kurulumunu emekliye ayır. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Retire your project installation subject to its retention policy. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -228,8 +228,8 @@
         "screen-reader"
       ],
       "goal": {
-        "tr": "Küçük ekranda kendi kurulumunu kaldırma seçeneklerini oku.",
-        "en": "Read the removal choices for your installation in a small terminal."
+        "tr": "Küçük ekranda kendi kurulumunu kaldırma seçeneklerini oku. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Read the removal choices for your installation in a small terminal. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     },
     {
@@ -238,16 +238,16 @@
         "ayse"
       ],
       "goal": {
-        "tr": "Servisi bulunan kendi atılabilir kurulumunda kaldırmayı incele.",
-        "en": "Inspect removal in your own disposable installation with its service configured."
+        "tr": "Servisi bulunan kendi atılabilir kurulumunda kaldırmayı incele. /uninstall'un kabuk komutunu oku; kaldırma isteniyorsa ve kabuk varsa çalıştır. Yoksa sonraki adımı not et. Uygulamadan çık ya da bitiş eylemini kullan.",
+        "en": "Inspect removal in your own disposable installation with its service configured. Read /uninstall's shell command; run it if removal is requested and a shell is available. Otherwise note the next step. Exit the application or use finish."
       }
     }
   ],
   "rubric": {
     "schemaVersion": 1,
     "journeyId": "uninstall-v2",
-    "version": 1,
-    "digest": "cf63d873bcc001e4003103951ea457d94f0a5cd93074175f5726ed41ee57b492",
+    "version": 2,
+    "digest": "f0d04d621dc4076fce457cb9c55ea61ebf62c5564c6e988b7721a24b15ae9436",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
@@ -269,7 +269,10 @@
             "only-cache-removed",
             "retirement-marker",
             "receipt-in-recovery-root",
-            "manual-package-command"
+            "manual-package-command",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [],
@@ -288,7 +291,10 @@
           "criteria": [
             "stop-consent-card",
             "governed-shutdown",
-            "independent-service-absence"
+            "independent-service-absence",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [
@@ -338,7 +344,10 @@
           "criteria": [
             "WORK_ACTIVE-before-card",
             "cancel-and-continue-option",
-            "no-removal"
+            "no-removal",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [],
@@ -360,7 +369,10 @@
             "existing-cancel-owner",
             "D1-equals-E-D0",
             "verified-backup-before-removal",
-            "receipt"
+            "receipt",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [
@@ -440,7 +452,10 @@
           "criteria": [
             "work-records-retained",
             "Workline-reopen",
-            "backup-before-data-removal"
+            "backup-before-data-removal",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [
@@ -473,7 +488,10 @@
             "MainPID-instance-cgroup-verified",
             "disable-now-user-only",
             "unit-file-retained",
-            "previous-state-and-undo-in-receipt"
+            "previous-state-and-undo-in-receipt",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [
@@ -661,7 +679,10 @@
             "UNINSTALL_MANAGED-or-PURGE_DENIED",
             "disabled-data-removal",
             "named-rule-and-administrator",
-            "force-no-bypass"
+            "force-no-bypass",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [],
@@ -770,7 +791,10 @@
             "readable-card",
             "visible-footer-and-focus",
             "no-color-only-meaning",
-            "no-hidden-command-execution"
+            "no-hidden-command-execution",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [],
@@ -790,7 +814,10 @@
           "criteria": [
             "real-owner-installation-never-targeted",
             "same-state-only-in-sealed-fixture",
-            "no-host-authority-import"
+            "no-host-authority-import",
+            "terminal-command-run-in-shell-or-explicit-handoff-and-exit",
+            "application-exit-or-walker-finish",
+            "exit-or-finish-is-not-removal-evidence"
           ],
           "walkStatus": "not-walked",
           "unavailable": [
