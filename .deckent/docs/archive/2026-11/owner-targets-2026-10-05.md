@@ -1,6 +1,6 @@
 # Owner hedefleri — 2026-10-05 (yeni iş alanları)
 
-> **Durum notu (2026-10-23):** Bu sayfa 2026-10-05 durumunun donmuş kaydıdır; içindeki "açık", "sıradaki", "bugün" ve "güncel" ifadeleri o günü anlatır. Hedeflerin bugünkü yeri [yol haritasındaki](../../plan/roadmap-2026-10-15.md#beta-sonrasi) korunan kuyruk ve PLAN'dır. Güncel iş ve durum [PLAN](../../../PLAN.md)'da, tamamlanan iş [COMPLETED-PLAN](../../../COMPLETED-PLAN.md)'dadır.
+> **Durum notu (2026-10-23):** Bu sayfa 2026-10-05 durumunun donmuş kaydıdır; içindeki "açık", "sıradaki", "bugün" ve "güncel" ifadeleri o günü anlatır. Hedeflerin bugünkü yeri [yol haritasındaki](../../plan/roadmap-2026-10-15.md#beta-sonrasi) korunan kuyruk ve PLAN'dır. Güncel iş ve durum [PLAN](../../../../PLAN.md)'da, tamamlanan iş [COMPLETED-PLAN](../../../../COMPLETED-PLAN.md)'dadır.
 
 Owner 2026-10-05 hedefleri; hiçbiri uygulama kabulü değildir. Her biri kendi kartında Jev hazırlığı, güncel resmi kaynak doğrulaması (CLAUDE.md çalışma yöntemi) ve ayrı inceleme ister. PLAN.md tablosundaki satırların ayrıntısıdır.
 
