@@ -1,12 +1,15 @@
+import { largeMcpTools } from '../../fixtures/mcp-large-tools.js';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
+import { mcpStartNoticeSchema, type AgentTurnStreamEvent } from '#domain/index.js';
+import { attestLocalInteractiveTerminal, runMcpCommand, type McpLiveTool } from '#adapters/index.js';
 import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
-import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
+import { renderMcpStartNotice, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { changeProjectSecretGrant } from '#composition/core/secrets/index.js';
+import { terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
@@ -51,16 +54,16 @@ const mcpGrants = (tool: Effect = 'allow', operation: Effect = 'allow') => [
   { id: 'mcp-operation', effect: operation, actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['mcp.tool.call'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 const call = (name: string, args: Record<string, unknown>) => ({ toolCall: { name, arguments: JSON.stringify(args) } });
-const turn = (turnId: string) => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, sessionId: 'session-m', messages: [{ role: 'user' as const, content: 'use the tool' }] });
+const turn = (turnId: string, sessionId = 'session-m') => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, sessionId, messages: [{ role: 'user' as const, content: 'use the tool' }] });
 const toolTexts = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
 const finished = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'tool.finished' ? [[event.name, event.status]] : []);
 const requested = (events: AgentTurnStreamEvent[]) => events.filter(event => event.kind === 'approval.requested');
 const systemOf = (request: Record<string, unknown>) => (request['messages'] as { role: string; content: string }[])[0]!.content;
 const toolNames = (request: Record<string, unknown>) => ((request['tools'] ?? []) as { function: { name: string } }[]).map(tool => tool.function.name);
 type Harness = Awaited<ReturnType<typeof runtime>>;
-async function answered(f: Harness, turnId: string, decision: 'allow' | 'deny' | null) {
+async function answered(f: Harness, turnId: string, decision: 'allow' | 'deny' | null, sessionId?: string) {
   const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
-  const result = await client.chatTurn(turn(turnId), event => {
+  const result = await client.chatTurn(turn(turnId, sessionId), event => {
     events.push(event);
     if (event.kind === 'approval.requested' && decision) pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
       commandId: `decide-${event.approvalId}`, expectedRevision: event.revision, decision, reason: 'owner' }));
@@ -72,7 +75,8 @@ async function answered(f: Harness, turnId: string, decision: 'allow' | 'deny' |
 describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime service (MCP-CLIENT)', () => {
   it('an approved server\'s pinned tool asks even under a policy allow; allow sends that call once, redacted; a tool added later is not offered', async () => {
     const m = mcpFixture();
-    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    const f = await runtime({ extraGrants: [...mcpGrants(), { id: 'secret-fixture', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: me,
+      resource: { kind: 'secret', ids: ['SERVICE_API_TOKEN'] } }] }); await f.start();
     registry(f.project, { fx: m.entry() }); await approve(f.project, f.env);
     m.setTools([echo, slow, extra]);
     f.state.script = [call('mcp__fx__echo', { text: 'hi' }), { content: 'Done.' }];
@@ -91,21 +95,65 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(toolNames(f.state.requests[0]!)).not.toContain('mcp__fx__extra');
     const system = systemOf(f.state.requests[0]!);
     expect(system).toContain('mcp:fx/echo'); expect(system).toContain('untrusted');
+    // Each conversation gets its own first notice; the durable diagnosis stays visible in both.
+    const sessionA = 'mcp-notice-session-a', sessionB = 'mcp-notice-session-b';
+    const personal = join(f.env.HOME, '.deckent', 'mcp.json');
+    mkdirSync(join(f.env.HOME, '.deckent'), { recursive: true, mode: 0o700 });
+    writeFileSync(personal, JSON.stringify({ projects: { [realpathSync(f.project)]: { mcpServers: {
+      missing: { command: process.execPath, env: { TOKEN: '$DECK:SERVICE_API_TOKEN' }, realm: 'host' } } } } }), { mode: 0o600 });
+    f.state.script = [{ content: 'Missing key.' }];
+    const refused = await answered(f, 'turn-key-without-grant', 'allow', sessionA);
+    expect(refused.result.notices).toEqual([{ kind: 'secret-refused', name: 'missing', code: 'SECRET_GRANT_REQUIRED', key: 'SERVICE_API_TOKEN', scope: 'scope' }]);
+    expect(renderMcpStartNotice(refused.result.notices[0]!, 'en')).not.toContain('deckent secret set');
+    expect((await answered(f, 'turn-key-without-grant-again', 'allow', sessionA)).result.notices).toEqual([]);
+    // Grant through the real application, sealed in the ledger, witnessed by the same real PTY peer (no mocked attestation).
+    const peer = await terminalRuntimePeer(f.client());
+    expect(await changeProjectSecretGrant(f.project, 'scope', 'SERVICE_API_TOKEN', 'grant', 'admin', { env: f.env },
+      { attest: () => attestLocalInteractiveTerminal(peer.pid, peer.uid) })).toMatchObject({ granted: true });
+    const missing = await answered(f, 'turn-missing-key', 'allow', sessionA);
+    const expected = { kind: 'not-decided', name: 'missing', code: 'secret-unresolved', detail: 'SERVICE_API_TOKEN' };
+    expect(missing.result.notices).toEqual([expected]); expect(requested(missing.events)).toEqual([]);
+    expect(mcpStartNoticeSchema.parse(expected)).toEqual(expected);
+    for (const locale of ['en', 'tr'] as const) expect(renderMcpStartNotice(missing.result.notices[0]!, locale)).toContain('deckent secret set SERVICE_API_TOKEN --main');
+    const counts = [missing.result.notices.length];
+    for (const [sessionId, suffix, expectedNotices] of [[sessionA, 'a2', []], [sessionB, 'b1', [expected]], [sessionB, 'b2', []]] as const) {
+      f.state.script = [{ content: 'Same missing key.' }];
+      const next = await answered(f, `turn-missing-key-${suffix}`, 'allow', sessionId);
+      expect(next.result.notices).toEqual(expectedNotices); expect(requested(next.events)).toEqual([]);
+      counts.push(next.result.notices.length);
+      for (const locale of ['en', 'tr'] as const) {
+        const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, locale);
+        expect(lines.join('\n')).toContain('deckent secret set SERVICE_API_TOKEN --main');
+      }
+    }
+    expect(counts).toEqual([1, 0, 1, 0]);
+    // Same definition, same session: the failure code changes back after revoking the grant, so it is said again.
+    expect(await changeProjectSecretGrant(f.project, 'scope', 'SERVICE_API_TOKEN', 'revoke', 'admin', { env: f.env },
+      { attest: () => attestLocalInteractiveTerminal(peer.pid, peer.uid) })).toMatchObject({ granted: false });
+    f.state.script = [{ content: 'Grant revoked.' }];
+    expect((await answered(f, 'turn-key-grant-revoked', 'allow', sessionA)).result.notices).toEqual(refused.result.notices);
+    expect((await answered(f, 'turn-key-grant-revoked-again', 'allow', sessionA)).result.notices).toEqual([]);
   }, 60_000);
 
   it('MCP-VISIBILITY: a hyphenated server name is added, approved and offered to the model as mcp__<name with _>__<tool>', async () => {
     const m = mcpFixture();
-    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    const f = await runtime({ extraGrants: mcpGrants(), windowTokens: 262_144 }); await f.start();
     registry(f.project, { 'my-fx': m.entry() }); await approve(f.project, f.env, 'my-fx');
-    f.state.script = [{ content: 'Hyphen.' }];
-    await answered(f, 'turn-hyphen', 'allow');
+    f.state.script = [{ content: 'Hyphen.' }, { content: 'Large catalog.' }];
+    const { result } = await answered(f, 'turn-hyphen', 'allow');
+    expect(result, JSON.stringify(result)).toMatchObject({ finish: 'stop' });
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(expect.arrayContaining(['mcp__my_fx__echo']));
     expect(systemOf(f.state.requests.at(-1)!)).toContain('mcp:my-fx/echo');
+    m.setTools([echo, slow, ...largeMcpTools(10).slice(0, 104)]);
+    await approve(f.project, f.env, 'my-fx');
+    expect((await answered(f, 'turn-hyphen-large', 'allow')).result).toMatchObject({ finish: 'stop' });
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__my_fx__repository_tool_'))).toHaveLength(104);
+    expect(systemOf(f.state.requests.at(-1)!)).toContain('106 tools');
   }, 60_000);
 
-  // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, in the turn note;
-  // `/mcp` keeps saying it (en and tr) until the owner re-approves.
-  it('K3: a drifted pinned tool is not offered and the owner sees it once in the turn note and on /mcp', async () => {
+  // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, by a typed notice of
+  // the turn (v30: never in `note`); `/mcp` keeps saying it (en and tr) until the owner re-approves.
+  it('K3: a drifted pinned tool is not offered and the owner sees it once as a typed turn notice and on /mcp', async () => {
     const m = mcpFixture();
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
     registry(f.project, { fx: m.entry() }); await approve(f.project, f.env);
@@ -113,9 +161,14 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     f.state.script = [{ content: 'First.' }];
     const first = await answered(f, 'turn-drift-1', 'allow');
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(['mcp__fx__slow']);
-    expect(first.result.note).toContain(t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'en'));
+    expect(first.result.notices).toEqual([{ kind: 'tools-changed', name: 'fx', count: 1 }]); expect(first.result.note).toBeNull();
+    expect(renderMcpStartNotice(first.result.notices[0]!, 'en')).toBe(t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'en'));
     f.state.script = [{ content: 'Second.' }];
-    expect((await answered(f, 'turn-drift-2', 'allow')).result.note ?? '').not.toContain('went missing');
+    expect((await answered(f, 'turn-drift-2', 'allow')).result.notices).toEqual([]);
+    for (const [turnId, notices] of [['turn-drift-b1', first.result.notices], ['turn-drift-b2', []]] as const) {
+      const next = await answered(f, turnId, 'allow', 'mcp-drift-session-b');
+      expect(next.result.notices).toEqual(notices); expect(requested(next.events)).toEqual([]);
+    }
     const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'tr');
     expect(lines).toContainEqual(`    ${t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'tr')}`);
     expect(lines.find(line => line.startsWith('  fx '))).toContain(t('terminal.mcp.toolsChanged', {}, 'tr'));
@@ -388,7 +441,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
 });
 
 // MCP-SANDBOX-PATHS follow-up (lead 2026-09-29): no MCP failure is silent. A server the default realm (prefer-sandbox, the shipped bubblewrap)
-// cannot start is named in the turn's result note (protocol v17's existing `note`, no wire change) with its display-safe diagnosis; the failure
+// cannot start is named by a typed notice of the turn's result (protocol v30; `note` carries no MCP text) with its display-safe diagnosis; the failure
 // is recorded for that exact definition, so its first-use card is not asked again every turn; `/mcp` shows it; `/mcp approve` retries.
 const RAW_SERVER = `import { createInterface } from 'node:readline';
 const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');
@@ -402,22 +455,32 @@ const sandboxReady = capabilities.bubblewrap.status === 'available';
 describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silent (MCP-SANDBOX-PATHS, real bubblewrap)', () => {
   const elsewhere = () => { const dir = mkdtempSync(join(tmpdir(), 'deckent-mcp-elsewhere-')); roots.push(dir); writeFileSync(join(dir, 'server.mjs'), RAW_SERVER); return dir; };
   const slash = async (f: Harness, locale: Locale = 'en') => mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, locale);
-  it('first use: the yes cannot start it → one note naming the hidden path; the next turn asks no card; /mcp shows it; /mcp approve asks again', async () => {
+  it('first use: the yes cannot start it → one typed notice naming the hidden path; the next turn asks no card; /mcp shows it; /mcp approve asks again', async () => {
     const dir = elsewhere(), script = join(dir, 'server.mjs');
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
     registry(f.project, { fx: { command: process.execPath, args: [script] } });
     f.state.script = [{ content: 'First.' }];
     const first = await answered(f, 'turn-hidden-1', 'allow');
     expect(requested(first.events).map(event => event.kind === 'approval.requested' ? event.summary : '')).toEqual(['mcp_trust · mcp:fx · launch']);
-    expect(first.result.note).toContain(`MCP server fx did not start: the argument ${script} exists on this machine but not in its bubblewrap sandbox view`);
-    expect(first.result.note).toContain('/mcp approve fx');
-    // The note is the catalog's sentence pair (`mcp.start.failed.pathHidden` + `mcp.start.next.launch`) in the service's locale (en here).
-    expect(first.result.note).toContain(`${t('mcp.start.failed.pathHidden', { name: 'fx', role: t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, 'en'), path: script,
+    // Once, as data: the start failure with its diagnosis; `note` carries no MCP text (the surface renders the notice from its catalog).
+    expect(first.result.notices).toEqual([{ kind: 'start-failed', name: 'fx', failure: expect.objectContaining({ phase: 'launch',
+      diagnosis: expect.objectContaining({ kind: 'path-hidden', role: 'argument', path: script }) }) }]);
+    expect(first.result.note).toBeNull();
+    const shown = renderMcpStartNotice(first.result.notices[0]!, 'en');
+    expect(shown).toContain(`MCP server fx did not start: the argument ${script} exists on this machine but not in its bubblewrap sandbox view`);
+    expect(shown).toContain('/mcp approve fx');
+    // The rendering is the catalog's sentence pair (`mcp.start.failed.pathHidden` + `mcp.start.next.launch`) in the surface's locale (en here).
+    expect(shown).toBe(`${t('mcp.start.failed.pathHidden', { name: 'fx', role: t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, 'en'), path: script,
       targetSuffix: '' }, 'en')} ${t('mcp.start.next.launch', { name: 'fx' }, 'en')}`);
     f.state.script = [{ content: 'Second.' }];
     const second = await answered(f, 'turn-hidden-2', 'allow');
     expect(requested(second.events)).toEqual([]);
-    expect(second.result.note).toContain(`MCP server fx did not start: the argument ${script}`);
+    expect(second.result.notices).toEqual([]);
+    // A new conversation receives the retained launch diagnosis without another first-use card or launch.
+    for (const [turnId, notices] of [['turn-hidden-b1', first.result.notices], ['turn-hidden-b2', []]] as const) {
+      const next = await answered(f, turnId, 'allow', 'mcp-hidden-session-b');
+      expect(next.result.notices).toEqual(notices); expect(requested(next.events)).toEqual([]);
+    }
     expect(await slash(f)).toContainEqual(expect.stringContaining(`    MCP server fx did not start: the argument ${script}`));
     // `/mcp` renders the same record in the terminal's own locale.
     expect(await slash(f, 'tr')).toContainEqual(`    MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
@@ -428,7 +491,7 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     f.state.script = [{ content: 'Third.' }];
     expect(requested((await answered(f, 'turn-hidden-3', 'deny')).events)).toHaveLength(1);
   }, 90_000);
-  it('a trusted server that no longer starts: every turn says so in the service\'s locale (tr); /mcp in its own; a `${VAR}` path is never expanded', async () => {
+  it('a trusted server that no longer starts: one typed notice (rendered tr), then silent repeats; /mcp in its own; a `${VAR}` path is never expanded', async () => {
     const dir = elsewhere(), f = await runtime({ extraGrants: mcpGrants() });
     (f.env as Record<string, string>)['MCP_TOOLS_DIR'] = join(f.project, 'tools');
     (f.env as Record<string, string>)['DECKENT_LANGUAGE'] = 'tr';
@@ -445,9 +508,12 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
       f.state.script = [{ content: 'No tools.' }];
       const { result, events } = await answered(f, turnId, 'allow');
       expect(requested(events)).toEqual([]);
-      expect(result.note).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
-      expect(result.note).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
-      expect(result.note).not.toContain(dir); expect(result.note).not.toContain(join(f.project, 'tools'));
+      if (turnId === 'turn-trusted-2') { expect(result.notices).toEqual([]); expect(result.note).toBeNull(); continue; }
+      expect(result.notices).toHaveLength(1); expect(result.note).toBeNull();
+      const shown = renderMcpStartNotice(result.notices[0]!, 'tr');
+      expect(shown).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
+      expect(shown).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
+      expect(JSON.stringify(result.notices)).not.toContain(dir); expect(JSON.stringify(result.notices)).not.toContain(join(f.project, 'tools'));
     }
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     const lines = await slash(f);
@@ -455,16 +521,6 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     expect(lines.join('\n')).not.toContain(dir);
     expect(await slash(f, 'tr')).toContainEqual(expect.stringContaining('    MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs'));
   }, 90_000);
-});
-
-describe('the MCP notices in the turn note (pure)', () => {
-  it('come first, keep the engine note whole and fit the result bound (4096) by shortening only the MCP part', () => {
-    expect(withMcpNotices([], 'engine')).toBe('engine');
-    expect(withMcpNotices(['a.', 'b.'], null)).toBe('a. b.');
-    expect(withMcpNotices(['a.'], 'engine')).toBe('a. engine');
-    const long = withMcpNotices(['x'.repeat(5_000)], 'engine note');
-    expect(long!.length).toBe(4_096); expect(long!.endsWith('… engine note')).toBe(true);
-  });
 });
 
 describe('the MCP start notices and the sandbox refusal come from the catalog (pure, en and tr)', () => {
@@ -503,6 +559,14 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(renderMcpStartNotice(notice(null, 'launch', { code: 'start-failed' }), 'tr')).toBe('MCP sunucusu fx başlamadı: start-failed. İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
     expect(renderMcpStartNotice({ kind: 'not-recorded', name: 'fx' }, 'tr')).toBe('MCP sunucusu fx: bu hata kaydedilemedi; kartı yeniden sorulabilir.');
     expect(renderMcpStartNotice({ kind: 'not-decided', name: 'fx', code: 'MCP_TRUST_STORE_UNAVAILABLE' }, 'en')).toBe('MCP server fx was not decided: MCP_TRUST_STORE_UNAVAILABLE.');
+    const missing = { kind: 'not-decided' as const, name: 'fx', code: 'secret-unresolved', detail: 'SERVICE_API_TOKEN' };
+    expect(mcpStartNoticeSchema.parse(missing)).toEqual(missing);
+    expect(mcpStartNoticeSchema.safeParse({ ...missing, detail: 'SERVICE_API_TOKEN; injected command' }).success).toBe(false);
+    expect(mcpStartNoticeSchema.safeParse({ ...missing, detail: 'A'.repeat(257) }).success).toBe(false);
+    expect(mcpStartNoticeSchema.safeParse({ ...missing, code: 'A'.repeat(65) }).success).toBe(false);
+    expect(mcpStartNoticeSchema.safeParse({ ...missing, command: 'anything' }).success).toBe(false);
+    expect(mcpStartNoticeSchema.safeParse(notice(null, 'trusted', { phase: 'decision' })).success).toBe(true);
+    for (const locale of ['en', 'tr'] as const) expect(renderMcpStartNotice(missing, locale)).toContain('deckent secret set SERVICE_API_TOKEN --main');
   });
   it('MCP_SANDBOX_COMMAND_UNREACHABLE picks its sentence by diagnosis kind (role label and link target included)', () => {
     const message = (params: Record<string, string>, locale: Locale) => ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', locale, { name: 'fx', ...params })!.message;

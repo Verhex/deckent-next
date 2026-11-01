@@ -11,8 +11,8 @@ export interface ProviderSpendCheckpoint {
   readonly account: ProviderSpendAccount;
   readonly digest: string;
 }
-const schema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.literal(2), revision: counterSchema.positive(),
-  reservationCount: counterSchema, account: z.unknown(), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict());
+const schema = immutableJsonObjectSchema.pipe(z.strictObject({ schemaVersion: z.literal(2), revision: counterSchema.positive(),
+  reservationCount: counterSchema, account: z.unknown().optional(), digest: z.string().regex(/^[a-f0-9]{64}$/) }));
 function hash(account: ProviderSpendAccount, revision: number, reservationCount: number): string {
   return createHash('sha256').update(`deckent.provider-spend-checkpoint.v2\n${JSON.stringify({ revision, reservationCount, account })}`).digest('hex');
 }

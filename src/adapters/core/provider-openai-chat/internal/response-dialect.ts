@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { z } from 'zod';
 import COMPATIBILITY from './request-compatibility.json' with { type: 'json' };
 import { OPENAI_CHAT_DEFAULT_DIALECT, openAiChatFinishReasonSchema, type OpenAiChatDialect, type OpenAiChatHttpDefinition } from './contract.js';
@@ -20,7 +21,7 @@ export function finishReasonAccepted(reason: unknown, dialect?: OpenAiChatDialec
   return openAiChatFinishReasonSchema.safeParse(reason).success
     || (typeof reason === 'string' && (dialect?.finishReasons as readonly string[] | undefined)?.includes(reason) === true);
 }
-export const reasoningDetailsSchema = z.array(z.object({ type: z.enum(['reasoning.text', 'reasoning.summary', 'reasoning.encrypted']),
-  id: z.string().nullable().optional(), format: z.string().optional(), index: z.number().int().nonnegative().optional(),
+export const reasoningDetailsSchema = z.array(z.looseObject({ type: z.enum(['reasoning.text', 'reasoning.summary', 'reasoning.encrypted']),
+  id: z.string().nullable().optional(), format: z.string().optional(), index: persistedInteger().nonnegative().optional(),
   text: z.string().nullable().optional(), summary: z.string().nullable().optional(), data: z.string().nullable().optional(),
-  signature: z.string().nullable().optional() }).passthrough());
+  signature: z.string().nullable().optional() }));

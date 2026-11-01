@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AUDIT_EVENT_SCHEMA_VERSION, clientCommandIdSchema, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
+import { persistedString, AUDIT_EVENT_SCHEMA_VERSION, clientCommandIdSchema, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { assertPoolControlAllowed, type PoolControlAuthorization, type PoolControlDecision } from '#engine/core/policy/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 import type { PoolHoldAuditRecorder } from './pool-hold.js';
 import { RunStoreError } from './store.js';
 
-export const quotaReleaseCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  commandId: clientCommandIdSchema, poolId: identitySchema.optional(), channelId: z.string().min(1).max(256) }).strict();
+export const quotaReleaseCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  commandId: clientCommandIdSchema, poolId: identitySchema.optional(), channelId: persistedString(z.string().min(1).max(256)) });
 export const quotaReleaseReceiptSchema = quotaReleaseCommandSchema.extend({ poolId: identitySchema, poolIds: z.array(identitySchema).readonly(), released: counterSchema, atMs: counterSchema }).strict().readonly();
 export type QuotaReleaseCommand = z.infer<typeof quotaReleaseCommandSchema>;
 export type QuotaReleaseReceipt = z.infer<typeof quotaReleaseReceiptSchema>;

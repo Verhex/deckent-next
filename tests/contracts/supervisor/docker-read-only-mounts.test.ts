@@ -55,15 +55,18 @@ it('resolves sources inside the real project root and refuses links, files and p
   await mkdir(join(root, 'outside', 'deps'), { recursive: true }); await symlink(join(root, 'outside'), join(project, 'linked'));
   await mkdir(join(project, 'real')); await symlink(join(project, 'real'), join(project, 'inner-link'));
   await writeFile(join(project, 'file'), 'x');
-  const excluded = [data, join(root, 'workspaces')];
-  expect(await resolveDockerReadOnlyMounts(project, [{ source: 'node_modules', target: '/node_modules' }], excluded))
-    .toEqual([{ source: join(project, 'node_modules'), target: '/node_modules' }]);
+  // Astra 2867: the product's own `bin` (here the data root's) is guarded by its absolute path; the project's `bin/` is an ordinary bind, and a
+  // relative guarded path (once resolved against the process directory) is refused instead of guessed.
+  await mkdir(join(project, 'bin')); const excluded = [data, join(data, 'bin'), join(root, 'workspaces')];
+  expect(await resolveDockerReadOnlyMounts(project, [{ source: 'node_modules', target: '/node_modules' }, { source: 'bin', target: '/tools' }], excluded))
+    .toEqual([{ source: join(project, 'node_modules'), target: '/node_modules' }, { source: join(project, 'bin'), target: '/tools' }]);
+  await expect(resolveDockerReadOnlyMounts(project, [{ source: 'node_modules', target: '/node_modules' }], ['bin'])).rejects.toThrow('SUPERVISOR_REQUEST_INVALID');
   // The dependency class survives resolution unchanged (the gate reads it); an undeclared bind never gains it.
   expect(await resolveDockerReadOnlyMounts(project, [{ source: 'node_modules', target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }], excluded))
     .toEqual([{ source: join(project, 'node_modules'), target: '/node_modules', dependencyTree: { lockfile: '.package-lock.json' } }]);
   // `linked/deps` is a real directory reached through a linked parent: only the real-path comparison refuses it.
-  for (const source of ['linked', 'linked/deps', 'inner-link', 'file', 'missing', 'state', 'state/data', 'state/data/x']) {
-    if (source === 'state/data/x') await mkdir(join(data, 'x'));
+  for (const source of ['linked', 'linked/deps', 'inner-link', 'file', 'missing', 'state', 'state/data', 'state/data/x', 'state/data/bin']) {
+    if (source === 'state/data/x' || source === 'state/data/bin') await mkdir(join(data, source.slice('state/data/'.length)));
     await expect(resolveDockerReadOnlyMounts(project, [{ source, target: '/deps' }], excluded), source).rejects.toThrow('SUPERVISOR_REQUEST_INVALID');
   }
 });

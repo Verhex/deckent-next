@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "revision": "beuser-controller-2",
+  "source": "lead 2026-10-31: ceiling 4 from PAKET-2 PLAN §3 measured lane capacity; owner wide-allowance decision",
+  "folder": "beuser-controller",
+  "pool": { "poolId": "beuser-controller", "executionSlots": 4, "inFlightSlots": 4, "ordering": "input-order" },
+  "size": { "columns": 100, "rows": 30, "scrollback": 1000 },
+  "bounds": { "quietMs": 100, "inactivityMs": 1000, "maxInputBytes": 4096 },
+  "completionTokens": 4096
+}

@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, utimes } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseModelBindingDefinition, parseModelInvocationProfile, type ModelInvocationDelta } from '#domain/index.js';
+import { parseModelBindingDefinition, parseModelInvocationProfile, readHeadlessRejection, type ModelInvocationDelta } from '#domain/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, createNativeCliHeadlessPort } from '#adapters/core/native-cli-headless/index.js';
-import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
+import { ErrorRegistry, snapshotKnownSecrets } from '#platform/index.js';
+import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, writeFakeCli, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { CODEX_FAMILY, codexAnswer, codexHeadless, writeFakeCodexCli, type FakeCodexScenario } from '../../fixtures/native-headless/codex.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
@@ -64,6 +65,25 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native 
     await utimes(c.executable, new Date(), new Date(Date.now() + 9000));
     await expect(c.call()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
     expect(JSON.parse(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0' });
+    // S7 (owner 2026-10-31): the person's path is kept and resolved per call. A self-update moves the symlink A → B and deletes A: one new check, then the
+    // call runs B (doctor: "CLI updated"); a path that leads nowhere is the typed "CLI missing — reconnect" refusal, before any spawn.
+    const linked = await connection({ steps: happy() }), link = join(linked.root, 'codex'), binB = join(linked.root, 'release-b');
+    await symlink(linked.executable, link); await mkdir(binB);
+    const pinned = parseModelInvocationProfile({ ...linked.profile, adapter: { ...linked.profile.adapter, definition: { ...linked.profile.adapter.definition as object, executable: link } } });
+    const run = async () => { await linked.port.preflight(pinned); return linked.port.send(await linked.port.prepare(pinned, binding, request())); };
+    await expect(run()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.1.0' } } });
+    const b = await writeFakeCli(binB, { initCwd: 'actual', logPath: linked.logPath, version: '9.3.0',
+      steps: happy().map(step => 'line' in step && typeof step.line === 'object' && step.line.subtype === 'init' ? { line: initLine({ claude_code_version: '9.3.0' }) } : step) });
+    await rm(link); await symlink(b, link); await rm(linked.executable);
+    await expect(run()).resolves.toMatchObject({ native: { headless: { cliVersion: '9.3.0' } } });
+    expect((await linked.log()).map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call', 'version', 'help', 'auth', 'call']);
+    expect(JSON.parse(await readFile(join(linked.root, 'state', 'preflight.json'), 'utf8'))).toMatchObject({ state: 'open', version: '9.3.0', updatedFrom: '9.1.0', executable: b });
+    await rm(b);
+    const missing = await linked.port.preflight(pinned).catch((error: unknown) => error);
+    expect(missing).toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
+    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'en')?.message).toContain('Reconnect: deckent models connect --connection <connection>');
+    expect(ErrorRegistry.get('HEADLESS_CLI_UNAVAILABLE', 'tr')?.message).toContain('Yeniden bağlanın: deckent models connect --connection <bağlantı>');
+    expect((await linked.log()).filter(entry => entry.mode === 'version')).toHaveLength(2);
   });
   it.each([
     ['N7 vanished executable', { executable: '/nonexistent/headless-cli' }, 'HEADLESS_CLI_UNAVAILABLE', undefined],
@@ -156,9 +176,10 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards 
   it.each([
     ['a missing result', [{ line: initLine() }, { exit: 0 }]],
     ['a crash after a success line', [{ line: initLine() }, { line: resultLine('x') }, { exit: 3 }]],
-  ])('throws for %s so the receipt is unknown, with no retry', async (_label, steps) => {
-    const c = await connection();
-    await expect(c.call(steps as FakeStep[])).rejects.toThrow();
+  ])('settles %s as incomplete evidence (the receipt stays unknown) with its exit code, with no retry', async (_label, steps) => {
+    const c = await connection(), result = await c.call(steps as FakeStep[]);
+    expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
+    expect(body(result)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: (steps.at(-1) as { exit: number }).exit, signal: null });
     expect((await c.log()).filter(entry => entry.mode === 'call')).toHaveLength(1);
   });
   it('N10/N11 interrupts on timeout and on cancel (SIGINT first), then reports an unknown outcome', async () => {
@@ -217,27 +238,35 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
     const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-codex-headless-'))), configDir = join(root, 'login'), bin = join(root, 'bin'), logPath = join(configDir, 'config.toml');
     try {
       await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
+      const installationId = '00000000-0000-4000-8000-000000000010', identityFile = join(configDir, 'installation_id');
+      await writeFile(identityFile, installationId, { mode: 0o400 });
       let bump = 0;
-      const write = async (scenario: Omit<FakeCodexScenario, 'logPath'>) => { const path = await writeFakeCodexCli(bin, { logPath, ...scenario }); await utimes(path, new Date(), new Date(Date.now() + ++bump * 9000)); return path; };
-      const executable = await write({ steps: codexAnswer('{"ok":true}').map(line => ({ line })) });
+      const write = async (scenario: Omit<FakeCodexScenario, 'logPath'>) => { const path = await writeFakeCodexCli(bin, { logPath, installationId, ...scenario }); await utimes(path, new Date(), new Date(Date.now() + ++bump * 9000)); return path; };
+      const notice = { type: 'item.completed', item: { type: 'error', message: 'Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.' } };
+      const executable = await write({ steps: [notice, ...codexAnswer('{"ok":true}')].map(line => ({ line })) });
       const codexBinding = parseModelBindingDefinition({ encodingVersion: 1, provider: { id: 'cli-subscription', version: 1 },
         model: { id: 'pinned', version: 1, nativeId: PINNED, protocols: [{ family: CODEX_FAMILY, version: 'v1', capabilities: [] }] } });
       const profile = parseModelInvocationProfile({ schemaVersion: 2, billingAxis: 'subscription', id: 'codex', version: 1, scopeId: 'scope',
         reference: { providerId: 'cli-subscription', providerVersion: 1, modelId: 'pinned', modelVersion: 1 }, bindingDigest: 'a'.repeat(64), protocol: { family: CODEX_FAMILY, version: 'v1' },
         adapter: { ...NATIVE_CLI_HEADLESS_ADAPTER, definition: { schemaVersion: 1, executable, configDir, stateDir: join(root, 'state'), ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: null } },
         allocation: { id: 'allocation', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 5000 } });
-      const port = createNativeCliHeadlessPort({ now: () => 1, isolation: testIsolation }), deltas: ModelInvocationDelta[] = [];
+      const knownValue = 'short-known-value';
+      const port = createNativeCliHeadlessPort({ now: () => 1, isolation: testIsolation, knownSecrets: snapshotKnownSecrets([{ name: null, value: knownValue }]) }), deltas: ModelInvocationDelta[] = [];
       const call = async () => { await port.preflight(profile); return port.send(await port.prepare(profile, codexBinding, request({ reasoning_effort: 'high' })), undefined, delta => deltas.push(delta)); };
       const log = async () => (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { mode: string; argv: string[]; env: Record<string, string>; stdin?: string; system?: string });
       // The answer: the argv-pinned model, the CLI's split input counters, the user message on stdin and the system prompt as the instructions file.
-      await expect(call()).resolves.toMatchObject({ native: { model: PINNED, choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', modelEvidence: 'argv' } },
+      await expect(call()).resolves.toMatchObject({ native: { model: PINNED, choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], headless: { cliVersion: '9.1.0', guard: 'passed', modelEvidence: 'argv',
+        flagSetDigest: 'd2486ce12d386924b1e9fa39140d3d677d11bc4164c4cdf4c336e0689fe76704' } },
         usage: { prompt_tokens: 1200, completion_tokens: 7, cache_read: 1000, modelUsage: { [PINNED]: { inputTokens: 200, outputTokens: 7, cacheReadInputTokens: 1000 } } } });
       expect(deltas.map(delta => delta.text).join('')).toBe('{"ok":true}');
+      // F10: Codex opens its identity read/write; only its private copy may change, never the person's existing file.
+      expect(await readFile(identityFile, 'utf8')).toBe(installationId);
+      expect((await stat(identityFile)).mode & 0o777).toBe(0o400);
       const spawned = await log(), made = spawned.find(entry => entry.mode === 'call')!;
       expect(spawned.map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call']);
       expect(made.stdin).toBe(PROMPT); expect(made.system).toBe('You are a planner. Answer only JSON.'); expect(made.argv.join(' ')).not.toContain(PROMPT);
       expect(made.argv.slice(0, 11)).toEqual(['exec', '--json', '--color', 'never', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--strict-config', '--sandbox', 'read-only']);
-      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.apps=false',
+      expect(made.argv).toEqual(expect.arrayContaining(['approval_policy="never"', 'features.code_mode_host=false', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false',
         'features.multi_agent=false', 'features.hooks=false', 'model_reasoning_effort=high', '--model', PINNED]));
       expect(made.argv).not.toContain('--max-turns');
       for (const flag of codexHeadless.forbiddenFlags) expect(made.argv.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
@@ -248,6 +277,75 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
       expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'item.command_execution' });
       await write({ steps: [...codexAnswer('x').slice(0, 2), { type: 'turn.failed', error: { message: 'You have hit your usage limit reached for this plan' } }].map(line => ({ line })) });
       expect(body(await call())).toMatchObject({ refusal: 'quota' });
+      // 1b (WALK21): a CLI that ends before a complete turn (a refused argv: exit 2, plain stderr carrying a secret) is incomplete evidence, so the outcome
+      // stays unknown with its exit code and a redacted, bounded stderr tail (never a cause-less throw).
+      // Astra 2875 R1: an allowlist summary. Secret forms no redaction pattern knows (JSON refresh_token, a quoted password, an opaque token line) and
+      // the Bearer line are withheld and counted; only the registry's diagnostic line stays. Past the bound only the newest whole lines stay.
+      const line = 'Error loading config.toml: unknown configuration field `tools.view_image` in -c/--config override', bound = codexHeadless.limits.stderrSummaryBytes;
+      const secrets = ['{"refresh_token":"opaque-refresh-value-1234567890"}', 'password="fictional-value-123456"', 'w12OpaqueTokenLine0123456789abcdef', 'Authorization: Bearer w12Fictional0123456789'];
+      let exited: Awaited<ReturnType<typeof call>> | undefined;
+      // Astra 2878 R1: an allowlisted line keeps only its fixed text and the flag name, never the value it echoed.
+      const invalid = "error: invalid value 'opaque-refresh-value-1234567890' for '--color <COLOR>'";
+      const startup = 'Error: failed to initialize in-process app-server client: ', reading = 'Reading prompt from stdin...';
+      for (const [stderr, summary] of [[`${secrets.slice(0, 3).join('\n')}\n${line}\n${invalid}\n${reading}\n${startup}Permission denied (os error 13)\n${startup}${secrets[1]}\n${secrets[3]}\n`,
+        `${line}\nerror: invalid value '…' for '--color'\n${reading}\n${startup}…\n${startup}…\n[4 stderr lines withheld]`],
+        [`sk-w12Fictional0123456789ABCDEFGH\n${`${line}\n`.repeat(40)}`, null]] as const) {
+        await write({ steps: [{ stderr }, { exit: 2 }] });
+        exited = await call();
+        expect(exited).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', httpStatus: null, body: { complete: false } } });
+        expect(body(exited)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2, signal: null, stderrSummary: summary ?? expect.stringMatching(/override\n\[\d+ stderr lines withheld\]$/u) });
+        for (const fragment of ['refresh-value', 'fictional-value', 'OpaqueToken', 'w12Fictional', '0123456789', 'ABCDEFGH']) expect(JSON.stringify(body(exited))).not.toContain(fragment);
+        expect(Buffer.byteLength(body(exited).stderrSummary)).toBeLessThanOrEqual(bound);
+      }
+      expect(readHeadlessRejection((exited as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 4, refusal: 'process-exit', exitCode: 2 });
+      // Lead 2026-10-31: the CLI's own counted reconnect notices (probe/2 shape) are tolerated up to the registry bound; past it, or any other error line, refuses.
+      const reconnect = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'error', message: `Reconnecting... ${i + 2}/5 (stream disconnected before completion: failed to lookup address information: Try again; usage limit reached)` }));
+      const answered = codexAnswer('R');
+      await write({ steps: [...answered.slice(0, 2), ...reconnect(2), ...answered.slice(2)].map(line => ({ line })) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'R' } }] } });
+      await write({ steps: [...answered.slice(0, 2), ...reconnect(codexHeadless.guards.maxReconnects + 1), ...answered.slice(2)].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'reconnect-limit' });
+      await write({ steps: [...answered.slice(0, 2), { type: 'error', message: 'Reconnecting... waiting for network' }, ...answered.slice(2)].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'error' });
+      // F14 R2: one startup item notice is neither an answer nor a completed turn; every other error remains fatal.
+      const beforeNotices = deltas.length;
+      const missingHost = { ...notice, item: { ...notice.item, message: notice.item.message.replace('code-mode host is disabled', 'failed to spawn code-mode host /private/host: host executable was not found') } };
+      await write({ steps: [answered[0]!, missingHost, ...answered.slice(1)].map(line => ({ line })) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'R' } }] } });
+      expect(deltas.slice(beforeNotices)).toEqual([{ kind: 'text', text: 'R' }]);
+      await write({ steps: [notice, ...answered.filter(line => line.item === undefined)].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'no-answer' });
+      await write({ steps: [notice, notice, ...answered].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: 'notice-limit' });
+      await write({ steps: [...answered, notice].map(line => ({ line })) });
+      expect(body(await call())).toMatchObject({ refusal: 'guard', field: 'after-turn' });
+      for (const event of [{ type: 'error', message: notice.item.message }, { type: 'turn.failed', error: { message: notice.item.message } },
+        ...['prefix ' + notice.item.message, notice.item.message + ' extra', notice.item.message + '\n', notice.item.message + '\r', notice.item.message.toLowerCase(), notice.item.message.replace('disabled', 'disabled\nsecret'),
+          'Code Mode is unavailable because failed to spawn host; continuing without isolation.'].map(message => ({ ...notice, item: { ...notice.item, message } }))]) {
+        await write({ steps: [event, ...answered].map(line => ({ line })) });
+        expect(body(await call())).toMatchObject({ refusal: 'invalid-output', subtype: event.type === 'turn.failed' ? 'turn.failed' : 'error' });
+      }
+      // F14: other errors remain fatal; only the private evidence carries the bounded diagnostic. No message or secret becomes a delta.
+      const diagnostic = `network failure ${knownValue} sk-fixtureCredential1234567890 Bearer tiny-token Basic dXNlcjpwYXNz {"refresh_token":"short-refresh"} {"password":"aa\\"tailsecret"} password='short-pass' https://user:pass@example.test/path?q=private-query#private-fragment person@example.test kişi@örnek.test abcdefghijklmnopqrstuvwxyz0123456789 {"api_key":"open\\\\\\"halfsecret {"token":"lone space tailtoken\\`;
+      const beforeErrors = deltas.length;
+      for (const event of [{ type: 'error', message: diagnostic }, { type: 'item.completed', item: { type: 'error', message: diagnostic } },
+        { type: 'turn.failed', error: { message: diagnostic } }]) {
+        await write({ steps: [...answered.slice(0, 2), event, ...answered.slice(2)].map(line => ({ line })) });
+        const refused = await call(), parsed = body(refused);
+        expect(refused).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response', body: { complete: true } } });
+        expect(parsed).toMatchObject({ schemaVersion: 5, refusal: 'invalid-output', subtype: event.type === 'turn.failed' ? 'turn.failed' : 'error', errorClass: 'network', egress: { connected: 0, refused: 0 } });
+        expect(parsed.errorText).toContain('network failure');
+        for (const secret of [knownValue, 'fixtureCredential', 'tiny-token', 'dXNlcjpwYXNz', 'kişi@örnek.test', 'short-refresh', 'short-pass', 'tailsecret', 'halfsecret', 'tailtoken', 'user:pass', 'private-query', 'private-fragment', 'person@example.test', 'abcdefghijklmnopqrstuvwxyz']) expect(parsed.errorText).not.toContain(secret);
+        expect(readHeadlessRejection((refused as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence)).toMatchObject({ schemaVersion: 5, errorClass: 'network', errorText: parsed.errorText });
+        expect(Buffer.byteLength(parsed.errorText)).toBeLessThanOrEqual(1024);
+      }
+      await write({ steps: [{ line: { type: 'error', message: `unrecognized ${'ş '.repeat(1024)} ${'a'.repeat(65_536)} sk-fixtureCredential1234567890` } }] });
+      const bounded = body(await call());
+      expect(bounded).toMatchObject({ errorClass: 'unclassified', refusal: 'invalid-output' });
+      expect(Buffer.byteLength(bounded.errorText)).toBeLessThanOrEqual(1024);
+      expect(Buffer.byteLength(bounded.errorText)).toBeGreaterThan(1000);
+      expect(bounded.errorText).not.toContain('�');
+      expect(deltas).toHaveLength(beforeErrors);
       // Astra 2848 R2/R3: unknown counters are no zero, and nothing after the completed turn changes its answer; a reported zero stays a zero.
       const ended = (usage: unknown, after: Record<string, unknown>[] = []) => [...codexAnswer('A').slice(0, 4), { type: 'turn.completed', usage }, ...after].map(line => ({ line }));
       const valid = { input_tokens: 10, cached_input_tokens: 4, output_tokens: 2 };
@@ -267,6 +365,22 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('Codex headless turn (
         await expect(call()).rejects.toMatchObject({ code: 'HEADLESS_LOGIN_REQUIRED' });
         expect((await log()).filter(entry => entry.mode === 'call')).toHaveLength(before);
       }
+      // Unsafe copy sources refuse before the CLI starts, without following links or touching the original.
+      await write({ steps: codexAnswer('x').map(line => ({ line })) });
+      const outside = join(root, 'outside-id'); await writeFile(outside, 'OUTSIDE-CANARY');
+      for (const make of [() => symlink(outside, identityFile), () => link(outside, identityFile), () => mkdir(identityFile),
+        () => writeFile(identityFile, 'x'.repeat(codexHeadless.isolation.configEphemeral.maxBytes + 1))]) {
+        await rm(identityFile, { recursive: true, force: true }); await make();
+        const before = (await log()).length;
+        await expect(call()).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'config-dir' } });
+        expect(await log()).toHaveLength(before);
+        expect(await readFile(outside, 'utf8')).toBe('OUTSIDE-CANARY');
+        expect((await readdir(join(root, 'state'))).some(name => name.startsWith('login-copy-'))).toBe(false);
+      }
+      // An empty login directory still preflights and calls; only existing identity files need copying.
+      await rm(identityFile); await write({ installationId: undefined, steps: codexAnswer('empty').map(line => ({ line })) });
+      await expect(call()).resolves.toMatchObject({ native: { choices: [{ message: { content: 'empty' } }] } });
+      expect((await readdir(join(root, 'state'))).some(name => name.startsWith('login-copy-'))).toBe(false);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

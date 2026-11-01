@@ -13,6 +13,7 @@ import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V18_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate } from '#domain/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 
 // Historical fixtures before v16 exclude both later additive deltas.
 const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...FIRST_RUN_V18_RULE_IDS];
@@ -61,6 +62,35 @@ it('previews without touching disk, then a real apply journals and writes policy
   expect(await readFile(policyPath, 'utf8')).toBe(policyBytes);
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBytes);
   expect(await Promise.all(identityPaths.map(path => readFile(path, 'utf8')))).toEqual(identities);
+
+  // F7: setup's language write advances config after the first publication; replay must retain that audited progress.
+  const configPath = join(root, '.deckent/config.json'), journalPath = join(root, '.deckent/installation/journal.json');
+  const initial = await readFile(configPath, 'utf8');
+  const journalBytes = await readFile(journalPath, 'utf8');
+  const app = createConfiguredConfigApplication(root), principal = await resolveConfiguredConfigPrincipal(root, 'installation');
+  await app.set({ keyPath: 'language', value: 'en', layer: 'project', principal, scopeId: 'installation', commandId: 'f7-language-en' });
+  const earlier = await readFile(configPath, 'utf8');
+  await app.set({ keyPath: 'language', value: 'tr', layer: 'project', principal, scopeId: 'installation', commandId: 'f7-language-tr' });
+  const advanced = await readFile(configPath, 'utf8');
+  expect(await applyPolicyTemplateInstallation(root, 'installation')).toMatchObject({ status: 'replayed' });
+  expect(await readFile(configPath, 'utf8')).toBe(advanced);
+  expect(await readFile(journalPath, 'utf8')).toBe(journalBytes);
+  // A valid but unrecorded config edit is still drift; so is a removed policy grant. Neither may be restored by replay.
+  const unrecorded = `${JSON.stringify({ ...JSON.parse(advanced), language: 'en' })}\n`;
+  await writeFile(configPath, unrecorded);
+  await expect(applyPolicyTemplateInstallation(root, 'installation')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
+  expect(await readFile(configPath, 'utf8')).toBe(unrecorded);
+  await writeFile(configPath, earlier); // rolling back to a once-audited state is also an unrecorded change
+  await expect(applyPolicyTemplateInstallation(root, 'installation')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
+  await writeFile(configPath, initial); // the journal's original bytes must also agree with the latest audited state
+  await expect(applyPolicyTemplateInstallation(root, 'installation')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
+  expect(await readFile(configPath, 'utf8')).toBe(initial);
+  await writeFile(configPath, advanced);
+  const changedPolicy = JSON.parse(policyBytes); changedPolicy.grants.pop();
+  await writeFile(policyPath, `${JSON.stringify(changedPolicy)}\n`);
+  await expect(applyPolicyTemplateInstallation(root, 'installation')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CHANGED' });
+  expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(changedPolicy);
+  expect(await readFile(journalPath, 'utf8')).toBe(journalBytes);
 });
 
 // G2-1 (analysis 2026-10-18, owner-approved): init gives a new data root its own .gitignore, so `git add -A` in the project never commits the
@@ -74,14 +104,17 @@ it('writes .deckent/.gitignore on a new data root: git add -A takes the project 
   await applyPolicyTemplateInstallation(root, 'installation');
   const ignore = join(root, '.deckent/.gitignore'), bytes = await readFile(ignore, 'utf8');
   expect(bytes).toBe('/*\n!/docs/\n'); expect((await stat(ignore)).mode & 0o777).toBe(0o600);
+  // Keep the installer's real integrity key: replay now verifies its sealed history even when config is unchanged.
+  const authorityPath = join(root, '.deckent/approvals/authority.key'), authorityBytes = await readFile(authorityPath);
   // Product state as a running installation holds it, beside a tracked document.
-  for (const [file, content] of [['approvals/authority.key', 'k'], ['state/terminal-history.jsonl', '{}'], ['live-data/state/ledger.db', 'x'], ['docs/core-memory/MEMORY.md', '# m']]) {
+  for (const [file, content] of [['state/terminal-history.jsonl', '{}'], ['live-data/state/ledger.db', 'x'], ['docs/core-memory/MEMORY.md', '# m']]) {
     await mkdir(join(root, '.deckent', file, '..'), { recursive: true }); await writeFile(join(root, '.deckent', file), `${content}\n`);
   }
   git(root, 'add', '-A');
   expect(git(root, 'ls-files').trim().split('\n').sort()).toEqual(['.deckent/docs/core-memory/MEMORY.md', 'README.md']);
   expect(await applyPolicyTemplateInstallation(root, 'installation')).toMatchObject({ status: 'replayed' });
   expect(await readFile(ignore, 'utf8')).toBe(bytes);
+  expect(await readFile(authorityPath)).toEqual(authorityBytes);
 });
 
 it('keeps the dogfood repository\'s own .deckent/docs allowlist: the data-root rule leaves what lies under docs to the root .gitignore', async () => {

@@ -1,21 +1,21 @@
+import { persistedString, persistedInteger } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { HUB_FILE_TYPES, HUB_LIMITS } from './registry.js';
-
 export const hubDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
-export const hubTimeSchema = z.number().int().safe().nonnegative();
-export const hubText = (max: number) => z.string().min(1).max(max).refine(v => v.trim() === v && !v.includes('\0') && new TextEncoder().encode(v).length <= max);
+export const hubTimeSchema = persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative();
+export const hubText = (max: number) => persistedString(z.string().min(1).max(max)).refine(v => v.trim() === v && !v.includes('\0') && new TextEncoder().encode(v).length <= max);
 /** Agent Skills spec invariants, independent of the catalog's display name. */
-export const hubSkillNameSchema = z.string().min(1).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const hubSkillNameSchema = persistedString(z.string().min(1).max(64)).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 export const hubSkillDescriptionSchema = hubText(1024);
-export const hubPackageIdSchema = z.string().max(130).regex(/^@?[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
+export const hubPackageIdSchema = persistedString(z.string().max(130)).regex(/^@?[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .refine(v => v.split('/').every(part => part.replace(/^@/, '').length <= 64));
-export const hubVersionSchema = z.string().max(50).regex(/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/)
+export const hubVersionSchema = persistedString(z.string().max(50)).regex(/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/)
   .refine(v => v.split('.').every(n => Number.isSafeInteger(Number(n))));
 /** Portable, relative, exact path. Reject encoded aliases, drives, traversal, Windows devices and trailing-dot/space aliases. */
-export const hubFilePathSchema = z.string().min(1).max(1024).refine(path => !/[\\:%<>"|?*]/.test(path) && ![...path].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) && path.split('/').every(segment =>
+export const hubFilePathSchema = persistedString(z.string().min(1).max(1024)).refine(path => !/[\\:%<>"|?*]/.test(path) && ![...path].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127) && path.split('/').every(segment =>
   segment !== '' && segment !== '.' && segment !== '..' && !/[. ]$/.test(segment) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment)));
-export const hubFileSchema = z.object({ path: hubFilePathSchema, mediaType: z.string().refine(type => HUB_FILE_TYPES.mediaTypes.includes(type)),
-  size: hubTimeSchema.max(HUB_LIMITS.skillReadMaxBytes), digest: hubDigestSchema }).strict().readonly();
+export const hubFileSchema = z.strictObject({ path: hubFilePathSchema, mediaType: z.string().refine(type => HUB_FILE_TYPES.mediaTypes.includes(type)),
+  size: hubTimeSchema.max(HUB_LIMITS.skillReadMaxBytes), digest: hubDigestSchema }).readonly();
 export type HubFile = z.infer<typeof hubFileSchema>;
 export const hubFilesSchema = z.array(hubFileSchema).min(1).max(HUB_LIMITS.skillReadMaxFiles)
   .refine(files => new Set(files.map(f => f.path.toLowerCase())).size === files.length

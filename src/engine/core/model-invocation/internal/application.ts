@@ -11,7 +11,7 @@ import type { ModelActivationReader } from '#engine/core/model-activation/index.
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, parseModelInvocationAdmission,
   sameModelInvocationRequest, createModelInvocationClaimReceipt } from './evidence.js';
-import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
+import { createModelInvocationResponseEvidence, verifyModelInvocationResponseEvidence } from './response-evidence.js';
 import { createModelInvocationPreventedRecord, createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
   parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './content.js';
 import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
@@ -309,11 +309,14 @@ export class ModelInvocationApplication {
           if (!('kind' in response) && responseBound !== undefined && BigInt(Buffer.byteLength(JSON.stringify(response), 'utf8')) > responseBound) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
           }
-        } catch {
+        } catch (error) {
           try {
-            const observedAtMs = this.runtime.now();
-            const record = verifyModelInvocationRecord(await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs));
-            if (!isDeepStrictEqual(record, createModelInvocationUnknownRecord(claimReceipt, observedAtMs))) {
+            const observedAtMs = this.runtime.now(), code = (error as { code?: unknown } | null)?.code;
+            // 1b: a thrown typed code is kept as incomplete evidence (the code only, never a message or params); the unknown reason stays transport-error.
+            const evidence = typeof code === 'string' && ErrorRegistry.has(code)
+              ? createModelInvocationResponseEvidence(profile.adapter, 'interrupted', null, Buffer.from(JSON.stringify({ code }), 'utf8'), false) : null;
+            const record = verifyModelInvocationRecord(await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs, evidence));
+            if (!isDeepStrictEqual(record, evidence ? createModelInvocationEvidenceRecord(claimReceipt, evidence, observedAtMs) : createModelInvocationUnknownRecord(claimReceipt, observedAtMs))) {
               throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
             }
             return checkInvocationResultDelivery(publicResult(false, record), delivery);
@@ -338,4 +341,5 @@ export class ModelInvocationApplication {
   }
 }
 import { isDeepStrictEqual } from 'node:util';
+import { ErrorRegistry } from '#platform/index.js';
 import { ProviderSpendError } from '#engine/core/provider-spend/index.js';

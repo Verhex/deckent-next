@@ -1,5 +1,5 @@
+import { persistedString, persistedUrl, counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, exactModelIdSchema, daySchema, cliVersionSchema, aliasesSchema } from './catalog-values.js';
 import { channelMetadataSchema, modelMetadataSchema, reportedModelNameSchema, channelReportedNamesSchema } from './catalog-metadata.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, providerProtocolSchema } from './catalog.js';
@@ -13,19 +13,19 @@ import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, providerProtocolSch
  */
 export const PROVIDER_CATALOG_DOCUMENT_SCHEMA_VERSION = 3;
 export { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, EXACT_MODEL_ID_MAX_LENGTH, exactModelIdSchema } from './catalog-values.js';
-export const modelLifecycleSchema = z.object({ state: z.enum(MODEL_LIFECYCLE_STATES), deprecatedOn: daySchema.nullable(),
+export const modelLifecycleSchema = z.strictObject({ state: z.enum(MODEL_LIFECYCLE_STATES), deprecatedOn: daySchema.nullable(),
   retireNotBefore: daySchema.nullable(), retiredOn: daySchema.nullable(), replacementModelId: exactModelIdSchema.optional(),
-  source: z.object({ url: z.string().url().max(512).startsWith('https://'), observedOn: daySchema }).strict().readonly().nullable(),
-}).strict().readonly();
-const channelV2 = z.object({ kind: z.enum(CATALOG_CHANNEL_KINDS), cli: z.enum(NATIVE_CLI_CHANNELS).nullable(),
-  aliases: aliasesSchema }).strict();
+  source: z.strictObject({ url: persistedString(persistedUrl().max(512)).startsWith('https://'), observedOn: daySchema }).readonly().nullable(),
+}).readonly();
+const channelV2 = z.strictObject({ kind: z.enum(CATALOG_CHANNEL_KINDS), cli: z.enum(NATIVE_CLI_CHANNELS).nullable(),
+  aliases: aliasesSchema });
 /** The v1 model fields (id, version, nativeId, protocols) with the exact-id grammar, plus the selection data. */
-const modelV2 = z.object({ id: identitySchema, version: counterSchema.positive(), nativeId: exactModelIdSchema,
+const modelV2 = z.strictObject({ id: identitySchema, version: counterSchema.positive(), nativeId: exactModelIdSchema,
   protocols: z.array(providerProtocolSchema).min(1).readonly(), lifecycle: modelLifecycleSchema,
   minCliVersion: cliVersionSchema.nullable(), efforts: z.array(z.enum(REASONING_EFFORTS)).max(REASONING_EFFORTS.length).readonly(),
   aliases: aliasesSchema,
-  effortBinding: z.object({ mode: z.literal('fixed-model'), level: z.enum(REASONING_EFFORTS) }).strict().readonly().optional(),
-}).strict();
+  effortBinding: z.strictObject({ mode: z.literal('fixed-model'), level: z.enum(REASONING_EFFORTS) }).readonly().optional(),
+});
 // Additive record metadata: old admission fields are retained and must agree, never a second source of authority.
 const channelV3 = channelV2.extend(channelMetadataSchema.shape).refine(c => c.client === c.cli
   && JSON.stringify(c.aliasesRefused) === JSON.stringify(c.aliases));
@@ -37,12 +37,12 @@ export const catalogModelSchema = z.union([modelV3, modelV2]).readonly();
 const provider = { id: identitySchema, version: counterSchema.positive() };
 const document = { revision: identitySchema };
 export const providerCatalogDocumentSchema = z.discriminatedUnion('schemaVersion', [
-  z.object({ ...document, schemaVersion: z.literal(2), providers: z.array(z.object({ ...provider,
-    channel: channelV2.readonly(), models: z.array(modelV2.readonly()).readonly() }).strict().readonly()).readonly() }).strict(),
-  z.object({ ...document, schemaVersion: z.literal(3), providers: z.array(z.object({ ...provider,
-    channel: channelV3.readonly(), models: z.array(modelV3.readonly()).readonly() }).strict().readonly()).readonly(),
-    recommendedActivations: z.array(z.object({ channelId: identitySchema, modelIds: z.array(exactModelIdSchema).readonly() }).strict().readonly()).readonly().optional(),
-  }).strict(),
+  z.strictObject({ ...document, schemaVersion: z.literal(2), providers: z.array(z.strictObject({ ...provider,
+    channel: channelV2.readonly(), models: z.array(modelV2.readonly()).readonly() }).readonly()).readonly() }),
+  z.strictObject({ ...document, schemaVersion: z.literal(3), providers: z.array(z.strictObject({ ...provider,
+    channel: channelV3.readonly(), models: z.array(modelV3.readonly()).readonly() }).readonly()).readonly(),
+    recommendedActivations: z.array(z.strictObject({ channelId: identitySchema, modelIds: z.array(exactModelIdSchema).readonly() }).readonly()).readonly().optional(),
+  }),
 ]);
 
 export type ProviderCatalogDocument = Readonly<z.infer<typeof providerCatalogDocumentSchema>>;

@@ -1,4 +1,13 @@
 {
   "tuiqueue.shortcut": "Alt+Yukarı  sıradaki son mesajı düzenlemek için geri al (boş satırda)",
-  "tuiqueue.withdrawn": "Sıradan geri alındı (çalışmayacak): {text}"
+  "tuiqueue.steerShortcut": "Ctrl+Enter  satırı çalışan tura bir sonraki model çağrısında ekle (Ctrl+Enter düz Enter olan terminalde Alt+Enter)",
+  "tuiqueue.withdrawn": "Sıradan geri alındı (çalışmayacak): {text}",
+  "tuiqueue.withdraw": "Alt+Yukarı sonuncuyu geri alır",
+  "tuiqueue.more": "+{count} daha",
+  "tuiqueue.steered": "bu tura bir sonraki model çağrısında katılır",
+  "tuiqueue.steerPlaceholder.kitty": "Enter bu turdan sonrası için sıraya alır · Ctrl+Enter şimdi bu tura ekler",
+  "tuiqueue.steerPlaceholder.other": "Enter bu turdan sonrası için sıraya alır · Alt+Enter şimdi bu tura ekler",
+  "tuiqueue.steerFull": "Bu tur en çok {limit} eklenen satır alır; onun yerine tur sonrası için sıraya alındı: {text}",
+  "tuiqueue.steerReturned": "Satır eklenmeden tur bitti; sonraki mesaj olarak gönderildi: {text}",
+  "tuiqueue.steerBack": "Satır eklenmeden tur durdu; yazma alanına geri kondu: {text}"
 }

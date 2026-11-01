@@ -70,7 +70,7 @@ export class HubProfiles {
     return app.change(context, 'register', profileId, { operation: 'profile.invite', member }, async tx => {
       const profile = app.profile(tx, profileId); this.owner(tx, profile, context);
       if (profile.members.filter(m => app.consented(tx, profile, m.accountId)).length >= app.service.policy.maxMembers || profile.members.some(m => m.accountId === member.accountId)) throw new HubServerError('HUB_PROFILE_REFUSED');
-      const account = z.object({ status: z.literal('active') }).passthrough().safeParse(app.data(tx).get('accounts', member.accountId));
+      const account = z.looseObject({ status: z.literal('active') }).safeParse(app.data(tx).get('accounts', member.accountId));
       if (!account.success) throw new HubServerError('HUB_ACCOUNT_REFUSED');
       app.limit(tx, context.principal.id, 'profile-membership', app.service.policy.maxChallenges, app.service.policy.challengeTtlMs);
       for (const row of app.rows(app.data(tx), 'invitations')) {
@@ -147,7 +147,7 @@ export class HubProfiles {
       const data = app.data(tx), profile = app.profile(tx, profileId); this.owner(tx, profile, context);
       const challenge = hubChallengeSchema.parse(data.get('challenges', challengeId));
       if (challenge.purpose !== 'key' || challenge.accountId !== context.principal.id || challenge.expiresAtMs <= app.ports.now()) throw new HubServerError('HUB_PROFILE_REFUSED');
-      const binding = z.object({ profileId: identitySchema, key: hubRegisteredKeySchema }).strict().parse(JSON.parse(challenge.binding));
+      const binding = z.strictObject({ profileId: identitySchema, key: hubRegisteredKeySchema }).parse(JSON.parse(challenge.binding));
       const key = binding.key;
       if (binding.profileId !== profileId || profile.keys.length >= app.service.policy.maxKeys || await tx.key(key.keyId, 'publisher')
         || key.principal.kind === 'person' && !app.consented(tx, profile, key.principal.id)) throw new HubServerError('HUB_PROFILE_REFUSED');
@@ -165,7 +165,7 @@ export class HubProfiles {
       const profile = app.profile(tx, profileId); this.owner(tx, profile, context);
       const challenge = hubChallengeSchema.parse(app.data(tx).get('challenges', challengeId));
       if (challenge.purpose !== 'key' || challenge.accountId !== context.principal.id || challenge.expiresAtMs <= app.ports.now()) throw new HubServerError('HUB_PROFILE_REFUSED');
-      const binding = z.object({ profileId: identitySchema, key: hubRegisteredKeySchema }).strict().parse(JSON.parse(challenge.binding));
+      const binding = z.strictObject({ profileId: identitySchema, key: hubRegisteredKeySchema }).parse(JSON.parse(challenge.binding));
       const lost = profile.keys.find(key => key.keyId === lostKeyId && key.state === 'active');
       if (profile.keys.length >= app.service.policy.maxKeys || binding.profileId !== profileId || !lost || binding.key.principal.id !== lost.principalId || binding.key.principal.kind !== lost.principalKind
         || binding.key.publisherId !== `@${profile.handle}` || await tx.key(binding.key.keyId, 'publisher')) throw new HubServerError('HUB_PROFILE_REFUSED');
@@ -190,7 +190,7 @@ export class HubProfiles {
     return app.change(context, 'register', profileId, { challengeId }, async tx => {
       const profile = app.profile(tx, profileId); this.owner(tx, profile, context);
       const challenge = hubChallengeSchema.parse(app.data(tx).get('challenges', challengeId));
-      const binding = z.object({ profileId: identitySchema, domain: z.string() }).strict().parse(JSON.parse(challenge.binding));
+      const binding = z.strictObject({ profileId: identitySchema, domain: z.string() }).parse(JSON.parse(challenge.binding));
       if (challenge.purpose !== 'domain' || challenge.accountId !== context.principal.id || binding.profileId !== profileId || challenge.expiresAtMs <= app.ports.now()
         || !await app.service.verifyDomain(binding.domain, `deckent-hub-verify=${challenge.id}`, signal) || challenge.expiresAtMs <= app.ports.now()) throw new HubServerError('HUB_PROFILE_REFUSED');
       app.data(tx).remove('challenges', challengeId);

@@ -43,15 +43,15 @@ describe('worker instruction source selection', () => {
     expect(await worker.inspect()).toEqual({ status: 'absent' });
     await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/worker-instructions.md'), 'worker');
     expect(await worker.inspect()).toMatchObject({ status: 'trust-required', source: { content: 'worker', path: expect.stringMatching(/\.deckent[/\\]worker-instructions\.md$/u) } });
-    // Terminal default order (DECKENT.md → AGENTS.md) is unchanged: a repo with only the worker file has no terminal instructions …
+    // S6 terminal fallback sees CLAUDE.md, never the selected worker file …
     const terminal = await openProjectInstructionReader(root, null);
-    expect(await terminal.inspect()).toEqual({ status: 'absent' });
+    expect(await terminal.inspect()).toMatchObject({ status: 'trust-required', source: { content: 'claude' } });
     // … and with AGENTS.md beside it the terminal picks AGENTS.md, never the worker file.
     await writeFile(join(root, 'AGENTS.md'), 'agents');
     expect(await terminal.inspect()).toMatchObject({ status: 'trust-required', source: { content: 'agents' } });
     expect(await (await openProjectInstructionReader(root, null, undefined, [workerInstructionFile('agents-md')])).inspect()).toMatchObject({ source: { content: 'agents' } });
     await writeFile(join(root, 'DECKENT.md'), 'deckent');
-    expect(await terminal.inspect()).toMatchObject({ source: { content: 'deckent' } });
+    expect(await terminal.inspect()).toMatchObject({ source: { content: 'agents' } });
     expect(await worker.inspect()).toMatchObject({ source: { content: 'worker' } }); // the worker selection never falls back
   });
 
@@ -207,7 +207,7 @@ describe.skipIf(process.platform === 'win32')('worker instruction file read from
     // The very first access to an empty store is a no-target trust write.
     expect((await (await at(root, trust, null)).trust(digest)).status).toBe('ready');
     expect([await status(at(root, trust, null)), await status(at(root, trust, REF))]).toEqual(['ready', 'trust-required']);
-    // The terminal's trust of AGENTS.md in the same folder (default DECKENT.md → AGENTS.md lookup, working tree).
+    // The terminal's trust of AGENTS.md in the same folder (S6 AGENTS.md → CLAUDE.md → legacy lookup, working tree).
     const terminal = await openProjectInstructionReader(root, trust);
     expect((await terminal.trust(sha('agents'))).status).toBe('ready');
     expect(await status(at(root, trust, REF, 'AGENTS.md'))).toBe('trust-required');

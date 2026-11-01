@@ -60,11 +60,13 @@ export type ComposerKey =
   | { readonly type: 'move'; readonly to: ComposerMove }
   | { readonly type: 'delete'; readonly span: ComposerDelete }
   | { readonly type: 'mentions'; readonly start: number; readonly query: string; readonly items: readonly string[] }
-  | { readonly type: 'history'; readonly entries: readonly ComposerHistoryEntry[] };
+  | { readonly type: 'history'; readonly entries: readonly ComposerHistoryEntry[] }
+  /** Owner S5: Ctrl+Enter (`ctrl`) or its Alt+Enter fallback (`alt`). */
+  | { readonly type: 'steer'; readonly via: 'ctrl' | 'alt' };
 
 export type ComposerIntent =
   /** `mentions`: the draft's `@path` / `@"path"` mentions outside paste chips, exact paths; the owner attaches them through the service. */
-  | { readonly type: 'submit'; readonly text: string; readonly entry: ComposerHistoryEntry; readonly mentions: readonly string[] }
+  | { readonly type: 'submit' | 'steer'; readonly text: string; readonly entry: ComposerHistoryEntry; readonly mentions: readonly string[] }
   | { readonly type: 'cancel' | 'exit' }
   /** T3: the owner takes its last queued message back (asked only on an empty draft). */
   | { readonly type: 'withdraw' }
@@ -81,6 +83,8 @@ export interface ComposerContext {
   readonly commands?: readonly SlashCommand[];
   /** T4: an external editor is wired; without one Ctrl+G stays the Esc it was. */
   readonly editor?: boolean;
+  /** Owner S5: a running turn takes an added line now; without it Ctrl+Enter sends and Alt+Enter is a new line. */
+  readonly steer?: boolean;
 }
 
 export interface ComposerStep {
@@ -167,14 +171,14 @@ function remove(state: ComposerState, span: ComposerDelete): ComposerState {
   return edit(state, from, cursor, '', true);
 }
 
-function submit(state: ComposerState): ComposerStep {
+function submit(state: ComposerState, type: 'submit' | 'steer' = 'submit'): ComposerStep {
   const { text, cursor, pastes } = state;
   // A trailing backslash continues the draft on a new line (legacy TERMINAL-TOOLS-009), in every terminal.
   if (cursor === text.length && text.endsWith('\\')) return step(edit(state, cursor - 1, cursor, '\n'));
   if (!text.trim()) return step(state);
   const entry: ComposerHistoryEntry = { text, pastes: pastes.filter(paste => text.includes(paste.chip)) };
   const history = state.history.at(-1)?.text === text ? state.history : [...state.history, entry].slice(-COMPOSER_LIMITS.historyEntries);
-  return step({ ...EMPTY_COMPOSER, history, killed: state.killed, stash: state.stash }, { type: 'submit', text: expandChips(text, pastes).trim(), entry,
+  return step({ ...EMPTY_COMPOSER, history, killed: state.killed, stash: state.stash }, { type, text: expandChips(text, pastes).trim(), entry,
     mentions: mentionPaths(text, pastes) });
 }
 
@@ -297,6 +301,9 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
   if (key.type === 'editor' && !context.editor) return reduceComposer(state, { type: 'escape' }, context);
   if (key.type === 'restore') return step(restore(state, key.entry));
   if (key.type === 'remember') return step({ ...state, history: [...state.history, key.entry].slice(-COMPOSER_LIMITS.historyEntries) });
+  // A `/command` is never added to a turn; a draft line is, as typed (its paste chips expanded), only while a turn takes it.
+  if (key.type === 'steer') return context.steer && !state.search && !state.text.trimStart().startsWith('/') ? submit(state, 'steer')
+    : reduceComposer(state, key.via === 'ctrl' ? { type: 'submit' } : { type: 'newline' }, context);
   if (state.search) return searchKey(state, key);
   if (state.shortcuts) {
     state = { ...state, shortcuts: false };

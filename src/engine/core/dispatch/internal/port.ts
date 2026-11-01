@@ -2,16 +2,16 @@ import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index
 import { z } from 'zod';
 import { identitySchema, counterSchema, processExitCauseShape, isValidExitCause, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { workerIncarnationSchema, sandboxRequestSchema, supervisorProfileSchema, containerEvidenceSchema } from '#engine/core/supervisor/index.js';
-const claimObject = z.object({ request: sandboxRequestSchema, owner: identitySchema }).strict();
+const claimObject = z.strictObject({ request: sandboxRequestSchema, owner: identitySchema });
 export const dispatchClaimSchema = claimObject.readonly();
 /** R3: why the supervisor stopped waiting (additive; older records omit it and read as null). `inactivity`: the host watchdog aborted a silent
  * worker; `cancel`: another abort of the execute signal; `deadline`: interrupted without an abort (the profile deadline or a supervisor CLI
  * failure). Only `inactivity` is ever retried. */
 export const DISPATCH_INTERRUPT_CAUSES = ['deadline', 'inactivity', 'cancel'] as const;
-export const dispatchTerminalSchema = z.object({ handle: identitySchema, ...processExitCauseShape, container: containerEvidenceSchema.optional(), interrupted: z.boolean().nullable(),
-  interruptCause: z.enum(DISPATCH_INTERRUPT_CAUSES).nullable().optional() }).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID')
+export const dispatchTerminalSchema = z.strictObject({ handle: identitySchema, ...processExitCauseShape, container: containerEvidenceSchema.optional(), interrupted: z.boolean().nullable(),
+  interruptCause: z.enum(DISPATCH_INTERRUPT_CAUSES).nullable().optional() }).refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID')
   .refine(value => !value.interruptCause || value.interrupted === true, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
-const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const actorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 export const dispatchAdmissionSchema = claimObject.extend({ profile: supervisorProfileSchema }).strict().readonly();
 /** S6R-1: the created container's immutable id, durable before `start`; the later incarnation (`worker`) must be that container. Older records
  * omit it. */
@@ -19,8 +19,8 @@ const containerIdSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const dispatchRecordSchema = claimObject.extend({
   schemaVersion: z.literal(2), containerId: containerIdSchema.optional(), worker: workerIncarnationSchema.optional(), profile: supervisorProfileSchema,
   launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
-  grant: z.object({ generation: counterSchema.positive(), grantedAt: counterSchema, principal: actorSchema }).strict().readonly().optional(),
-  prevention: z.object({ reason: z.literal('cancel-requested') }).strict().readonly().optional(),
+  grant: z.strictObject({ generation: counterSchema.positive(), grantedAt: counterSchema, principal: actorSchema }).readonly().optional(),
+  prevention: z.strictObject({ reason: z.literal('cancel-requested') }).readonly().optional(),
   terminal: dispatchTerminalSchema.nullable(), output: artifactReceiptSchema.optional(), patch: artifactReceiptSchema.optional(), cancellation: actorSchema.optional(),
 }).strict().superRefine((record, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, path: ['launch'], message: 'DISPATCH_LAUNCH_EVIDENCE_CONFLICT' });

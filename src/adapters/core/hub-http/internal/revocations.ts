@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { HUB_LIMITS, hubRevocationFeedSchema } from '#domain/index.js';
 import type { HubClientDependencies } from '#engine/index.js';
-import { DeckentJsonSchemaValidator } from '#platform/index.js';
+import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { createGovernedHubFetch, type HubFetchDependencies } from './client.js';
 import { HubNetworkError } from './listener.js';
 
@@ -19,9 +19,10 @@ export function governedHubRevocationReader(deps: HubFetchDependencies, extensio
     } });
     try {
       await client.connect(transport, { signal, timeout: HUB_LIMITS.fetchTimeoutMs });
-      const response = await client.request({ method: 'hub/revocations/get', params: { input: { afterSequence, ...(cursor ? { continuation: cursor } : {}) } } }, z.object({ value: hubRevocationFeedSchema }),
+      const response = await client.request({ method: 'hub/revocations/get', params: { input: { afterSequence, ...(cursor ? { continuation: cursor } : {}) } } }, z.object({ value: z.unknown().optional() }),
         { signal, timeout: HUB_LIMITS.fetchTimeoutMs });
-      return response.value;
+      if (!inputWithinValidationLimit(response.value, INPUT_VALIDATION_LIMITS.revocations)) throw new HubNetworkError('HUB_NETWORK_INVALID');
+      return hubRevocationFeedSchema.parse(response.value);
     } finally { await client.close(); }
   };
 }

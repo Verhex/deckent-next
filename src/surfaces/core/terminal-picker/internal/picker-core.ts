@@ -1,3 +1,4 @@
+import { filterSearchEntries } from '#surfaces/core/terminal-kit/index.js';
 /**
  * Pure selection core of the terminal pickers (no React, no I/O, no side effects): a filterable, paged, multi-level list
  * (section -> key -> value) with an optional scope step (project / user) and rows that are blocked with a reason (shown, never selectable).
@@ -5,6 +6,8 @@
  * on the surface. A result is a typed value; applying it (config write, model switch) stays with the caller's own authority path.
  */
 
+import type { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+type WorklineInkRole = keyof ReturnType<typeof useWorklinePalette>;
 import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js';
 /** A row. `children` makes it a section that opens a lower level; `blocked.reason` is the already localized why (the row shows it). */
 export type PickerNode = Readonly<{
@@ -12,6 +15,8 @@ export type PickerNode = Readonly<{
   label: string;
   identity?: ModelProviderLabel;
   detail?: string;
+  tone?: WorklineInkRole;
+  glyph?: string;
   /** Extra words the filter also matches (aliases, ids). */
   keywords?: readonly string[];
   blocked?: Readonly<{ reason: string }>;
@@ -116,18 +121,9 @@ export function pickerLevel(tree: PickerTree, trail: PickerState['trail']): Read
   return { title, nodes, titles };
 }
 
-function fold(text: string): string {
-  return text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('en');
-}
-
-/** Typing filters: every whitespace-separated word must appear in the label, id, detail or a keyword (case and accents folded). */
+/** Typing filters the shared label/id/detail/keyword search used by command help. */
 export function filterPickerNodes(nodes: readonly PickerNode[], query: string): readonly PickerNode[] {
-  const words = fold(query.trim()).split(/\s+/u).filter(Boolean);
-  if (!words.length) return nodes;
-  return nodes.filter(node => {
-    const haystack = fold([node.label, node.id, node.detail ?? '', ...(node.keywords ?? [])].join(' '));
-    return words.every(word => haystack.includes(word));
-  });
+  return filterSearchEntries(nodes, query);
 }
 
 export type PickerView = Readonly<{
@@ -137,7 +133,7 @@ export type PickerView = Readonly<{
   crumbs: readonly string[];
   filter: string;
   /** Rows now shown: the filtered level, or the scopes in the scope step. */
-  rows: readonly Readonly<{ id: string; label: string; identity?: ModelProviderLabel; detail?: string; section: boolean; blocked: string | null }>[];
+  rows: readonly Readonly<{ id: string; label: string; identity?: ModelProviderLabel; detail?: string; tone?: WorklineInkRole; glyph?: string; section: boolean; blocked: string | null }>[];
   pos: number;
   /** Total rows before filtering (to tell "no match" from "nothing"). */
   unfiltered: number;
@@ -154,7 +150,7 @@ export function pickerView(tree: PickerTree, state: PickerState): PickerView {
   const nodes = filterPickerNodes(level.nodes, state.filter);
   return { stage: 'list', title: level.title, crumbs: level.titles, filter: state.filter, unfiltered: level.nodes.length,
     rows: nodes.map(node => ({ id: node.id, label: node.label, ...(node.detail !== undefined ? { detail: node.detail } : {}),
-      ...(node.identity ? { identity: node.identity } : {}),
+      ...(node.identity ? { identity: node.identity } : {}), ...(node.tone ? { tone: node.tone } : {}), ...(node.glyph ? { glyph: node.glyph } : {}),
       section: Boolean(node.children), blocked: node.blocked?.reason ?? null })),
     pos: pickerChoice(state.pos, nodes.length) };
 }
@@ -255,7 +251,7 @@ export function pickerNeedsTextFallback(env: Readonly<Record<string, string | un
 export function pickerNumberedLines(view: PickerView, blockedTag: string): readonly string[] {
   return view.rows.map((row, index) => {
     const note = row.blocked !== null ? ` [${blockedTag}: ${row.blocked}]` : row.section ? ' >' : '';
-    return `${index + 1}) ${row.label}${row.detail ? ` - ${row.detail}` : ''}${note}`;
+    return `${index + 1}) ${row.glyph ? `${row.glyph} ` : ''}${row.label}${row.detail ? ` - ${row.detail}` : ''}${note}`;
   });
 }
 

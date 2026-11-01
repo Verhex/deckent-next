@@ -1,6 +1,6 @@
+import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { isAiPrincipal, isMcpPrincipal } from '#domain/core/principal/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
   type PolicyBinding, type PolicyFile, type PolicyGrant } from './schema.js';
 import { sameMcpCapabilityRule } from './mcp-capabilities.js';
@@ -19,21 +19,21 @@ export const DELEGATION_CELL_LIMIT = 4096;
 export const INSTALLATION_OWNER_ROLE_ID = 'installation-owner';
 
 const changeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('grant.add'), grant: policyGrantSchema }).strict(),
-  z.object({ kind: z.literal('grant.remove'), id: identitySchema }).strict(),
-  z.object({ kind: z.literal('grant.replace'), grant: policyGrantSchema }).strict(),
-  z.object({ kind: z.literal('binding.add'), binding: policyBindingSchema }).strict(),
-  z.object({ kind: z.literal('binding.remove'), id: identitySchema }).strict(),
-  z.object({ kind: z.literal('binding.replace'), binding: policyBindingSchema }).strict(),
+  z.strictObject({ kind: z.literal('grant.add'), grant: policyGrantSchema }),
+  z.strictObject({ kind: z.literal('grant.remove'), id: identitySchema }),
+  z.strictObject({ kind: z.literal('grant.replace'), grant: policyGrantSchema }),
+  z.strictObject({ kind: z.literal('binding.add'), binding: policyBindingSchema }),
+  z.strictObject({ kind: z.literal('binding.remove'), id: identitySchema }),
+  z.strictObject({ kind: z.literal('binding.replace'), binding: policyBindingSchema }),
 ]);
 /** `policy.administer@1` input v1: 1–32 changes applied in order to one snapshot. */
-const legacyPolicyChangeSchema = z.object({ schemaVersion: z.literal(1), changes: z.array(changeSchema).min(1).max(POLICY_CHANGE_MAX).readonly() }).strict().readonly();
+const legacyPolicyChangeSchema = z.strictObject({ schemaVersion: z.literal(1), changes: z.array(changeSchema).min(1).max(POLICY_CHANGE_MAX).readonly() }).readonly();
 /** I2 input v2 adds immutable roles. Old v1 commands remain unchanged; older writers reject v2. */
-const profilePolicyChangeSchema = z.object({ schemaVersion: z.literal(2),
-  changes: z.array(z.union([changeSchema, z.object({ kind: z.literal('role.add'), role: policyRoleSchema }).strict()])).min(1).max(POLICY_CHANGE_MAX).readonly(),
-  profile: z.object({ id: identitySchema, version: z.number().int().positive().safe(), digest: z.string().regex(/^[a-f0-9]{64}$/),
-    registryDigest: z.string().regex(/^[a-f0-9]{64}$/), previewDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly(),
-}).strict().readonly();
+const profilePolicyChangeSchema = z.strictObject({ schemaVersion: z.literal(2),
+  changes: z.array(z.union([changeSchema, z.strictObject({ kind: z.literal('role.add'), role: policyRoleSchema })])).min(1).max(POLICY_CHANGE_MAX).readonly(),
+  profile: z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest: z.string().regex(/^[a-f0-9]{64}$/),
+    registryDigest: z.string().regex(/^[a-f0-9]{64}$/), previewDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly(),
+}).readonly();
 export const policyChangeSchema = z.union([legacyPolicyChangeSchema, profilePolicyChangeSchema]);
 export type PolicyChange = z.infer<typeof policyChangeSchema>;
 

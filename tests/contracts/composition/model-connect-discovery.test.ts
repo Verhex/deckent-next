@@ -1,4 +1,6 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
@@ -75,6 +77,54 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     expect((await invoke('json-object-rebound', current)).receipt.outcome).toMatchObject({ state: 'responded' });
     expect(f.state.requests).toMatchObject([{ response_format: { type: 'json_object' }, model: f.command.model.nativeId }]);
     expect(f.rows('SELECT record FROM audit_events').map(row => String(row.record)).join('')).toContain('rebind-json-object');
+
+    const local = await fixture(), readLocal = async () => JSON.parse(await readFile(local.path, 'utf8')) as typeof config;
+    let tools = false, concurrent: 'semantic' | 'format' | null = null, requests = 0;
+    const server = createServer(async (req, res) => {
+      req.resume(); await once(req, 'end');
+      if (concurrent && req.method === 'POST') {
+        const changed = JSON.parse(await readFile(local.path, 'utf8')); if (concurrent === 'semantic') changed.language = 'tr';
+        await writeFile(local.path, JSON.stringify(changed, null, concurrent === 'format' ? 2 : undefined)); clearConfigCache(); concurrent = null;
+      }
+      requests++; res.writeHead(req.method === 'POST' && !tools ? 400 : 200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(req.method === 'GET' ? { data: [{ id: local.command.model.nativeId }] } : tools ? { choices: [] } : { error: { message: 'tools not supported' } }));
+    });
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    try {
+      const endpoint = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+      const reconnect = { ...local.command, endpoint, commandId: 'tools-before' }, env = { env: local.env };
+      const first = await connectConfiguredModel(local.project, reconnect, env);
+      const prior = await readLocal(), oldProfiles = prior.provider_invocation_profiles.profiles;
+      const own = oldProfiles.find(row => row.reference.providerId === first.reference.providerId)!;
+      expect(prior.provider_catalog.providers.find(row => row.id === first.reference.providerId)!.models[0]!.protocols[0]!.capabilities).toEqual([{ id: 'tool-calls', version: 1, state: 'unsupported' }]);
+      const backups = async () => (await readdir(join(local.project, '.deckent'))).filter(name => name.startsWith('config.json.bak.')).length;
+      const beforeBackups = await backups(), beforeAudit = local.rows('SELECT record FROM audit_events').length;
+      tools = true;
+      const updated = await connectConfiguredModel(local.project, { ...reconnect, commandId: 'tools-after' }, env);
+      expect(updated).toMatchObject({ status: 'connected', steps: { declaration: 'written', activation: 'written' } });
+      const current = await inspectModelBinding(local.project, first.reference, env);
+      if (current.status !== 'declared') throw Error('FIXTURE_BINDING');
+      const after = await readLocal(), rebound = after.provider_invocation_profiles.profiles.find(row => row.id === own.id)!;
+      expect(rebound).toEqual({ ...own, version: own.version + 1, bindingDigest: current.binding.digest });
+      expect(after.provider_invocation_profiles.profiles.filter(row => row.id !== own.id)).toEqual(oldProfiles.filter(row => row.id !== own.id));
+      expect(after.provider_catalog.providers.find(row => row.id === first.reference.providerId)!.models[0]!.protocols[0]!.capabilities).toEqual([{ id: 'tool-calls', version: 1, state: 'supported' }]);
+      expect(await backups()).toBe(beforeBackups + 1); // One atomic config publication, not catalog then profile.
+      const events = local.rows('SELECT record FROM audit_events').slice(beforeAudit).map(row => JSON.parse(String(row.record)).event.subject);
+      const changes = events.filter(row => row.kind === 'config-change');
+      expect(changes.map(row => row.keyPath)).toEqual(['provider_catalog', 'provider_invocation_profiles']);
+      expect(changes[0].beforeDigest).toBe(changes[1].beforeDigest); expect(changes[0].afterDigest).toBe(changes[1].afterDigest);
+      const stable = await readFile(local.path, 'utf8');
+      await connectConfiguredModel(local.project, { ...reconnect, commandId: 'tools-stable' }, env);
+      expect(await readFile(local.path, 'utf8')).toBe(stable); expect(await backups()).toBe(beforeBackups + 1);
+      await writeFile(local.path, JSON.stringify(prior)); clearConfigCache(); // Recreate the capability upgrade before the concurrent write.
+      concurrent = 'semantic';
+      await expect(connectConfiguredModel(local.project, { ...reconnect, commandId: 'tools-race' }, env)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+      expect((await readLocal()).provider_invocation_profiles).toEqual(prior.provider_invocation_profiles);
+      concurrent = 'format'; // Even byte-only revision drift is not silently rebased onto a freshly read digest.
+      await expect(connectConfiguredModel(local.project, { ...reconnect, commandId: 'tools-format-race' }, env)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+      expect((await readLocal()).provider_invocation_profiles).toEqual(prior.provider_invocation_profiles);
+      expect(await backups()).toBe(beforeBackups + 1); expect(requests).toBeGreaterThanOrEqual(10);
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
   }, 60_000);
 
   it('free listing → selection → catalog/profile/activation/audit → actual runtime request carries the exact id; retry is stable', async () => {

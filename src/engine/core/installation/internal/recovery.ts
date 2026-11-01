@@ -1,14 +1,13 @@
+import { persistedInteger, identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema, immutableJsonObjectSchema } from '#domain/index.js';
 import type { PreparedInstallation } from './application.js';
 import { createInstallationEvidencePreview, type InstallationEvidencePreview } from './evidence.js';
 
-const consentSchema = z.object({
-  schemaVersion: z.literal(1), mode: z.literal('operator-custom'),
-  id: identitySchema, atMs: z.number().int().nonnegative().safe(),
+const consentSchema = z.strictObject({ schemaVersion: z.literal(1), mode: z.literal('operator-custom'),
+  id: identitySchema, atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   proposalDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  principal: z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly(),
-}).strict().readonly();
+  principal: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(),
+}).readonly();
 export type InstallationConsent = z.infer<typeof consentSchema>;
 export class InstallationRecoveryError extends Error {
   constructor(readonly code: 'INSTALLATION_RECOVERY_INVALID' | 'INSTALLATION_RECOVERY_CONSENT'
@@ -54,10 +53,10 @@ export type InstallationRecovery = ReturnType<typeof createInstallationRecovery>
 export function validateInstallationRecovery(input: unknown, prepared: PreparedInstallation): InstallationRecovery {
   const safe = immutableJsonObjectSchema.safeParse(input);
   if (!safe.success) throw new InstallationRecoveryError('INSTALLATION_RECOVERY_INVALID');
-  const shape = z.object({ schemaVersion: z.literal(1), material: z.unknown(),
-    evidence: z.object({ proposalDigest: z.string(), package: z.unknown(), images: z.array(z.unknown()),
-      publisherVerification: z.literal('unverified') }).strict(), consent: consentSchema,
-  }).strict().safeParse(safe.data);
+  const shape = z.strictObject({ schemaVersion: z.literal(1), material: z.unknown().optional(),
+    evidence: z.strictObject({ proposalDigest: z.string(), package: z.unknown().optional(), images: z.array(z.unknown().optional()),
+      publisherVerification: z.literal('unverified') }), consent: consentSchema,
+  }).safeParse(safe.data);
   if (!shape.success) throw new InstallationRecoveryError('INSTALLATION_RECOVERY_INVALID');
   const evidence = createInstallationEvidencePreview(prepared.preview,
     shape.data.evidence.package as InstallationEvidencePreview['package'],

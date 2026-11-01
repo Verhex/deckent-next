@@ -224,6 +224,8 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   };
   const begin = () => { if (!burst.current) { burst.current = { events: [], owned: true }; setImmediate(flush); } return burst.current; };
   useInput((input, key) => {
+    // S5: adding a line never answers any window's choice or confirmation.
+    if (key.return && (key.ctrl || key.meta)) { if (guarded) begin().owned = false; return; }
     // Any key clears a finished mouse selection (the key itself still goes on as usual).
     if (pickedRef.current && !pickedRef.current.dragging) setPicked(null);
     // A focus switch inside a read taints the whole read (it is dropped), whichever order the events came in.

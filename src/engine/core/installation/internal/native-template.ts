@@ -1,12 +1,12 @@
+import { persistedInteger, executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
+import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
 import { assertConfigPersonWitness, type ConfigSnapshot, type ConfigWriteResult, type ConfigApplication } from '#engine/core/config/index.js';
-import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import defaults from './initial-registry.json' with { type: 'json' };
-const initialRegistryDefaults = z.object({ schemaVersion: z.literal(1), ordering: z.literal('input-order'),
-  evaluators: z.array(evaluatorDefinitionSchema).min(1) }).strict().parse(defaults);
+const initialRegistryDefaults = z.strictObject({ schemaVersion: z.literal(1), ordering: z.literal('input-order'),
+  evaluators: z.array(evaluatorDefinitionSchema).min(1) }).parse(defaults);
 export interface NativeTemplatePorts {
   snapshot(): Promise<ConfigSnapshot>;
   principal(scopeId: string): Promise<VerifiedPrincipal>;
@@ -22,8 +22,8 @@ export interface NativeTemplatePorts {
 const discoveryModeSchema = z.enum(['disabled', 'repository']);
 /** `discovery` omitted: `coding template` keeps the mode of the admitted profiles it derives from, `init registry` takes the adapter default
  * (`disabled`, owner 2026-10-23 Q2). Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
-const requestSchema = z.object({ provider: nativeCliIdSchema, kind: identitySchema,
-  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() }).strict();
+const requestSchema = z.strictObject({ provider: nativeCliIdSchema, kind: identitySchema,
+  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() });
 export type CodingTemplateRequest = z.infer<typeof requestSchema>;
 /** `current` is returned by the first-registry bootstrap only (an equal registry already exists); the template returns the other three. */
 export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
@@ -146,7 +146,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
 
 const initializeSchema = requestSchema.extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
   expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(),
-  poolId: identitySchema, executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
+  poolId: identitySchema, executionSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlightSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   discovery: discoveryModeSchema.optional() }).strict();
 export type InitialRegistryRequest = z.infer<typeof initializeSchema>;
 const authoredRegistry = (document: Record<string, unknown>) => {

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bubblewrapObservation, nativeShellKernelProbe, probeShellCapabilities, type BubblewrapCapability, type BubblewrapLauncher, type BubblewrapRestriction,
   type ShellCapabilities } from '#adapters/core/host-shell/index.js';
+import { PRODUCT_LAYOUT_REGISTRY } from '#platform/index.js';
 import { BUBBLEWRAP_BUNDLED } from './bundled.js';
 
 /** Where a distribution installs bubblewrap; PATH is never consulted for the launcher (a PATH entry is data the command sees). */
@@ -150,7 +151,7 @@ function settledCopy(path: string, expected: string): string | null {
 
 /**
  * The bundled build (S1 second choice): the package file's bytes are read once and hashed; the same bytes are written to
- * `<stateDir>/bin/bwrap-<sha256>` (a 0700 directory, file 0500) and that copy is what runs. The package file's mode is not a rule (umask
+ * `<stateDir>/bin/bwrap-<sha256>` (the registry's `bin` resource of the global state root, so every agent floor seals it; a 0700 directory, file 0500) and that copy is what runs. The package file's mode is not a rule (umask
  * 002 installs it 0775): only its content is, and the copy is ours alone.
  * Concurrent placement (processes of one installation measuring at once): the copy is written under a unique temporary name, synced, and
  * published with `link` — which never replaces — so an existing copy wins and processes normally run the same inode (a publisher stalled past the
@@ -167,7 +168,7 @@ function bundledCandidate(options: BubblewrapSelectOptions): Candidate | { reado
   if (!info.isFile() || info.isSymbolicLink()) return { ok: false, reason: `bundled bwrap at ${path} is not a regular file` };
   if (info.size > BigInt(BUNDLED_MAX_BYTES)) return { ok: false, reason: `bundled bwrap at ${path} is larger than ${BUNDLED_MAX_BYTES} bytes` };
   if (!options.stateDir) return { ok: false, reason: 'no product state root to hold the verified bundled bwrap' };
-  const bin = join(options.stateDir, 'bin'), target = join(bin, `bwrap-${expected}`);
+  const bin = join(options.stateDir, PRODUCT_LAYOUT_REGISTRY.resources.bin), target = join(bin, `bwrap-${expected}`);
   const version = options.bundledVersion ?? BUBBLEWRAP_BUNDLED.version;
   const launcher = (identity: string): Candidate => ({ ok: true, launcher: Object.freeze({ source: 'bundled', path: target, version, sha256: expected,
     overlay: atLeast(version, BUBBLEWRAP_OVERLAY_VERSION), identity }) });

@@ -81,7 +81,7 @@ export class BeuserController {
   step(): void {
     this.context.signal.throwIfAborted();
     this.budget.step();
-    if (++this.steps > Math.min(this.context.limits.maxSteps, this.summary.patience.maxSteps)) throw new BeuserWalkStopped('bound');
+    if (++this.steps > this.summary.patience.maxSteps) throw new BeuserWalkStopped('patience');
   }
   /** Walk20: a wait is charged the time it actually took (the driver returns once the product redrew and settled; surface work may add to
    * it). Past the persona's wait patience it is `patience`; past the admitted wait bound it is `bound`. */

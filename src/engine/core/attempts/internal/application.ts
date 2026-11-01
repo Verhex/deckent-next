@@ -7,14 +7,14 @@ import { AttemptStoreError, type AttemptReceipt, type AttemptStore } from './por
 
 const id = identitySchema;
 export const ATTEMPT_COMMAND_SCHEMA_VERSION = 2;
-export const attemptCommandSchema = z.object({
+export const attemptCommandSchema = z.strictObject({
   schemaVersion: z.literal(ATTEMPT_COMMAND_SCHEMA_VERSION), commandId: clientCommandIdSchema, scopeId: id,
   action: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('create'), identity: attemptIdentitySchema }).strict(),
-    z.object({ kind: z.literal('observe'), observation: attemptObservationSchema }).strict(),
-    z.object({ kind: z.literal('cancel'), attemptId: id }).strict(),
+    z.strictObject({ kind: z.literal('create'), identity: attemptIdentitySchema }),
+    z.strictObject({ kind: z.literal('observe'), observation: attemptObservationSchema }),
+    z.strictObject({ kind: z.literal('cancel'), attemptId: id }),
   ]),
-}).strict();
+});
 export type AttemptCommand = z.infer<typeof attemptCommandSchema>;
 export interface AttemptAuthorization {
   /** Trusted ingress supplies principal; implementations must enforce scope and action authority. */

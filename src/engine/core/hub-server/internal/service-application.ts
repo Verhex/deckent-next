@@ -215,7 +215,7 @@ export class HubModeratedApplication extends HubServiceBase {
     throw new HubServerError('HUB_REVIEW_REFUSED');
   }
   async report(context: HubServerContext, input: unknown, signal?: AbortSignal) {
-    const command = z.object({ targetId: z.string(), reason: z.string(), appealOf: z.string().nullable() }).strict().parse(input);
+    const command = z.strictObject({ targetId: z.string(), reason: z.string(), appealOf: z.string().nullable() }).parse(input);
     return this.change(context, 'review', command.targetId, command, async tx => {
       if (!Object.hasOwn(this.service.policy.reasons, command.reason)) throw new HubServerError('HUB_REVIEW_REFUSED');
       const data = this.data(tx), queue = data.get('queue', command.targetId);

@@ -2,14 +2,16 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { ModelConnectResult } from '#domain/index.js';
 import { ErrorRegistry, t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { CardCopyContext, DECISION_ARM_DEFAULT, PointerContext, WindowStackProvider, type PointerEvent } from '#surfaces/core/terminal-window/index.js';
 import { streamCardCopy } from '#surfaces/core/terminal-host/index.js';
 import { cardCopyLabels } from '#surfaces/core/cli-human/index.js';
-import { QuestionWindow, SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
+import { QuestionWindow, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel, ProviderPanel, modelPanelTree, providerPanelTree, providerPanelPort, type ProviderWindowPort } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle as settleWorkline, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
@@ -421,7 +423,7 @@ describe('/provider seedless discovery window', () => {
       listModels: async () => { throw Object.assign(new Error('unreachable'), { code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' }); } } });
     const screen = mount(element); await settle(80);
     await screen.press(`${ENTER}${DOWN}${ENTER}${ENTER}`, 100);
-    expect(calls.errors).toMatchObject([{ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' }]);
+    expect(calls.errors).toEqual([]); expect(screen.frame()).toContain('ERR:MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
     expect(calls.notices).toEqual([]); expect(screen.frame()).toContain('Providers');
   });
 
@@ -797,6 +799,9 @@ it('U1 confirms the named project before masked key entry and carries that conse
 });
 
 it('U1 optional-key local connections can skip custody and key entry explicitly', async () => {
+  const inspectDelegationPermission = (policy: 'allow' | 'deny' | 'refused' | 'unknown') => async () => policy === 'unknown' ? null : {
+    layers: ['global', 'project'] as const, decisions: (['global', 'project'] as const).map(layer => ({
+      layer, decision: layer === 'project' ? policy : 'allow' as const, ruleId: 'company-profile-write' })) };
   const { port, requests } = providerPort();
   let prepared = 0;
   const provider = { ...port, prepareKey: async () => { prepared++; throw new Error('custody must not run without a key'); } };
@@ -809,6 +814,90 @@ it('U1 optional-key local connections can skip custody and key entry explicitly'
   await armed(view.frame, 'n without key'); await view.press('n', 100);
   expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null }]);
   expect(prepared).toBe(0); expect(calls.errors).toEqual([]);
+  // PV R1: actual consent UI + real provider port; faults occur before or after the fixture's delegate write.
+  for (const widening of [true, false]) for (const fault of ['mutation', 'persist', 'post-write', 'untyped', 'observation'] as const) {
+    const kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null }, requests: unknown[] = [];
+    let persisted: readonly ('ai' | 'system')[] = widening ? [] : ['system'];
+    const subscription = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: inspectDelegationPermission('allow'), providerConnect: {
+      kinds: [{ id: kind.id, labelKey: kind.label, available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
+        secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }),
+      probe: async () => { throw new Error('unused'); }, loginDir: async () => ({ owned: '/fixture/login' }),
+      login: async () => ({ configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }) },
+      connectModel: async (_root, command) => {
+        if (command.delegate && fault === 'mutation') throw ErrorRegistry.createError('POLICY_DENIED', { params: { connectPhase: 'before-profile-write' } });
+        if (command.delegate) persisted = command.delegate;
+        requests.push(command.delegate ?? null);
+        if (command.delegate && ['persist', 'post-write', 'untyped'].includes(fault)) throw ErrorRegistry.createError('POLICY_DENIED',
+          { params: fault === 'untyped' ? {} : { connectPhase: fault === 'persist' ? 'profile-write-started' : 'profile-written' } });
+        return { status: 'connected', reference: { providerId: kind.id, providerVersion: 1, modelId: 'm', modelVersion: 1 }, models: [], notCarried: [], carriedModels: [],
+          cli: { configDir: '/fixture/login', owned: true, delegate: [...persisted] }, steps: {}, tariff: 'unmetered' } as unknown as ModelConnectResult;
+      }, inspectInvocableModels: async () => {
+        if (requests.length > 1 && fault === 'observation') throw ErrorRegistry.createError('POLICY_DENIED');
+        return { schemaVersion: 1, scopeId: 'scope', models: [] };
+      } }, {}, 'en', () => 'POLICY_DENIED').subscription!;
+    const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
+    const ui = mount(panel('provider', { provider }).element, 120, 40);
+    await until(() => ui.frame().includes('Fixture subscription'), 'subscription kind loaded');
+    await ui.press(ENTER);
+    await until(() => ui.frame().includes('Sign in'), 'subscription actions loaded');
+    await ui.press(ENTER);
+    await until(() => ui.frame().includes('Login directory'), 'login directory loaded');
+    await ui.press(ENTER); // default directory; fake login in suspended Ink
+    await until(() => ui.frame().includes('Who may use this login now:'), 'delegation loaded after login');
+    expect(ui.frame()).toContain('Who may use this login now:');
+    await ui.press(`${DOWN}${ENTER}`, 60); // tick/untick system
+    expect(requests).toEqual([null]);
+    await ui.press(`\u001B[A${ENTER}`, 60); // confirm selection
+    if (widening) {
+      expect(ui.frame()).toContain('Let system');
+      expect(requests).toEqual([null]); // approve-card-then-assert: Enter cannot consent; wait for armed hints and answer y.
+      await armed(ui.frame, subscription.words.questionKeys); await ui.press('y', 100);
+    }
+    const summary = t(fault === 'mutation' ? 'tui.provider.login.notApplied' : fault === 'persist' || fault === 'untyped' ? 'tui.provider.login.unknown' : 'tui.provider.login.appliedUnverified', {}, 'en');
+    expect(ui.frame().replace(/[\s│]/gu, '')).toContain(summary.replace(/\s/gu, ''));
+    if (fault === 'persist' || fault === 'untyped') expect(ui.frame()).toContain('/provider'); expect(ui.frame()).toContain('POLICY_DENIED');
+    expect(ui.frame()).not.toContain('Who may use this login now:');
+    expect(persisted).toEqual(fault === 'mutation' ? widening ? [] : ['system'] : widening ? ['system'] : []);
+    expect(requests).toHaveLength(fault === 'mutation' ? 1 : 2);
+    mounted.pop()!.unmount();
+  }
+  // P-B9: SettingsPanel → SubscriptionWindow with the production provider port (the policy read is a typed fixture).
+  for (const locale of ['en', 'tr'] as const) for (const policy of ['deny', 'refused', 'unknown', 'allow'] as const) {
+    const kind = { ...KINDS.kinds[0]!, id: 'fixture-subscription', label: 'Fixture subscription', keyName: null }, delegated: unknown[] = [];
+    const subscription = providerPanelPort('fixture-project', 'scope', { inspectDelegationPermission: inspectDelegationPermission(policy), providerConnect: {
+      kinds: [{ id: kind.id, labelKey: kind.label, available: true, endpointDefault: null, endpointEditable: false, keyRequired: false,
+        secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }), probe: async () => { throw new Error('unused'); },
+      loginDir: async () => ({ owned: '/fixture/login' }), login: async () => ({ configDir: '/fixture/login', owned: true, exit: 'completed', signedIn: true, authMethod: null, subscriptionType: null }) },
+      connectModel: async (_root, command) => { delegated.push(command.delegate ?? null);
+        return { status: 'connected', reference: ref('m', kind.id), models: [], notCarried: [], carriedModels: [],
+          cli: { configDir: '/fixture/login', owned: true, delegate: command.delegate ?? [] }, steps: {}, tariff: 'unmetered' } as unknown as ModelConnectResult;
+      } }, {}, locale, () => 'POLICY_DENIED').subscription!;
+    const provider: ProviderWindowPort = { ...port, inspect: async () => ({ ...KINDS, kinds: [kind] }), subscription };
+    const { element, calls } = panel('provider', { provider }, locale), ui = mount(element, 180, 45);
+    // Wait for each real screen (CI 41293916929 shard 15: three Enters 120 ms apart outran the login directory screen).
+    await until(() => ui.frame().includes(kind.label), 'subscription kind loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(t('tui.provider.login.action', {}, locale).replace('…', '')), 'subscription actions loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(t('tui.provider.login.dirTitle', {}, locale)), 'login directory loaded'); await ui.press(ENTER);
+    await until(() => ui.frame().includes(subscription.words.configPolicy), 'consent with the config policy loaded');
+    expect(ui.frame()).toContain(subscription.words.configPolicy);
+    const reason = policy === 'unknown' ? t('tui.provider.login.policyUnread', {}, locale)
+      : t('tui.provider.login.policyBlocked', { policy: 'company-profile-write', layer: 'project' }, locale);
+    for (const actor of ['system', 'ai'] as const) {
+      await ui.press(`${DOWN}${ENTER}`, 60);
+      expect(ui.frame()).toContain(`[${policy === 'allow' ? 'x' : ' '}] ${subscription.words[actor]}`);
+      if (policy !== 'allow') expect(ui.frame()).toContain(reason);
+      expect(delegated).toEqual([null]); // Choosing a disabled class cannot start a mutation or a widening card.
+      console.info('PV-R3 Ink consent', JSON.stringify({ locale, policy, actor, frame: ui.frame() }));
+    }
+    await ui.press(`\u001B[A\u001B[A${ENTER}`, 60);
+    if (policy === 'allow') {
+      expect(delegated).toEqual([null]);
+      await armed(ui.frame, subscription.words.questionKeys); await ui.press('y', 100); // approve-card-then-assert
+      expect(delegated).toEqual([null, ['system', 'ai']]);
+    } else expect(delegated).toEqual([null]); // Unchanged Enter preserves the existing person-only connection.
+    expect(calls.errors).toEqual([]);
+    mounted.pop()!.unmount();
+  }
 });
 
 it('U1 a stored main key opens the existing first-use card without re-entry; only its answer unlocks model binding', async () => {
@@ -872,4 +961,53 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     await armed(view.frame, keys); await view.press(key, 80);
     expect(closed).toBe(1);
   }
+  // F8: a late refusal returns to the same provider choice, with a cause and a usable alternative, without ending onboarding.
+  for (const locale of ['en', 'tr'] as const) {
+    const { port: base, requests } = providerPort(); let attempts = 0;
+    const provider: ProviderWindowPort = { ...base, prepareKey: async () => ({ grant: false, lines: [] }), inspect: async () => ({ ...KINDS, kinds: [
+      { ...KINDS.kinds[0]!, id: 'fixture-plan', label: 'Fixture ChatGPT', keyName: null },
+      { ...KINDS.kinds[0]!, id: 'fixture-local', label: 'Fixture local model', keyName: null, keyRequired: false } ] }),
+      siwc: { locale, connection: 'fixture-plan', execute: async () => { attempts++;
+        throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason: 'unknown-locality' } }); } } };
+    const { calls } = panel('provider', { provider }, locale);
+    const later = t('onboarding.session.later', {}, locale);
+    const ui = mount(createElement(ProviderPanel, { port: provider, labels: terminalPanelLabels(locale), laterLabel: later,
+      push: notices => { calls.notices.push(...notices); }, onClose: () => { calls.closed++; }, onError: error => { calls.errors.push(error); } }));
+    await until(() => ui.frame().includes('Fixture ChatGPT'), 'provider choice');
+    await ui.press(ENTER); await ui.press(ENTER);
+    await armed(ui.frame, t('siwc.card.keys', {}, locale)); await ui.press(ENTER, 80);
+    await until(() => ui.frame().includes(t('siwc.custody.localDisk', {}, locale).slice(0, 25)), 'refusal with choices');
+    expect(calls.closed).toBe(0); expect(calls.errors).toEqual([]);
+    expect(ui.frame()).toContain('Fixture local model'); expect(ui.frame()).toContain(later);
+    const refusedAttempts = attempts;
+    await ui.press(ENTER); expect(attempts).toBe(refusedAttempts);
+    await ui.press(`${DOWN}${DOWN}`); await ui.press(ENTER); await ui.press(ENTER);
+    await until(() => ui.frame().includes('Connected: X'), 'local route connected');
+    expect(requests).toEqual([{ kind: 'fixture-local', endpoint: null, key: null }]);
+    expect(attempts).toBe(refusedAttempts);
+  }
+
+  let read = 0, complete: ((value: Awaited<ReturnType<NonNullable<ProviderWindowPort['inspectCustody']>>>) => void) | undefined;
+  const preflight = providerPanelPort('/fixture', 'scope', {
+    providerConnect: { kinds: [{ id: 'fixture-plan', labelKey: 'siwc.card.title', available: true, endpointDefault: null,
+      endpointEditable: false, keyRequired: false, secretName: null, probePath: null, endpointChoices: [] }],
+      endpoint: () => ({ ok: false, reason: 'unused' }), probe: async () => { throw new Error('must not probe'); } },
+    siwc: { connection: 'fixture-plan', execute: async () => { throw new Error('must not sign in'); } },
+    inspectSecretStore: async () => { read++; return { schemaVersion: 1, backend: 'core.secret-store.encrypted-file@1', writable: true, enumerable: true, status: 'ready', code: null, personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } }; },
+  }, {}, 'en', error => String(error));
+  const known = await preflight.inspect();
+  expect(read).toBe(0); expect(known.kinds[0]?.blocked).toBeNull();
+  const refusal = await preflight.inspectCustody!();
+  expect(read).toBe(1); expect(refusal?.reason).toContain('/tmp (mode 1777)');
+  const ui = mount(panel('provider', { provider: { ...preflight, inspectCustody: () => new Promise(resolve => { complete = resolve; }) } }).element);
+  await until(() => ui.frame().includes('ChatGPT'), 'choices before custody inspection completes');
+  expect(ui.frame()).not.toContain('Loading');
+  complete!(refusal);
+  await until(() => ui.frame().includes('/tmp (mode 1777)'), 'known custody refusal on the row');
+  expect(ui.frame()).toContain('[blocked]');
+  const stalled = providerPanelPort('/fixture', 'scope', { providerConnect: { kinds: [], endpoint: () => ({ ok: false, reason: 'unused' }),
+    probe: async () => { throw new Error('must not probe'); } }, siwc: { connection: 'fixture-plan', execute: async () => { throw new Error('must not sign in'); } },
+    inspectSecretStore: () => new Promise(() => undefined) }, {}, 'en', String);
+  expect(await stalled.inspectCustody!()).toBeNull();
+
 });

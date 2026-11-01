@@ -1,9 +1,6 @@
+import { configSchemaNode, ProjectedConfigNode, projectConfigSchema, type ConfigSchemaNode } from './schema-node.js';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { CONFIG_FIELDS } from '#platform/index.js';
-import { configSections, configRegistryGeneration, createDefaultConfig } from '#platform/index.js';
-import { isRecord, isSensitiveConfigKey, redactSensitive } from '#platform/index.js';
-import { resolveLocale, MESSAGE_REGISTRY } from '#platform/index.js';
+import { CONFIG_FIELDS, configSections, configRegistryGeneration, createDefaultConfig, isRecord, isSensitiveConfigKey, redactSensitive, resolveLocale, MESSAGE_REGISTRY } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 import RESTART_EXEMPT from './restart-exempt.json' with { type: 'json' };
 
@@ -13,7 +10,7 @@ export function configDefinitions(): ReadonlyMap<string, ConfigDefinition> {
   for (const [key, section] of configSections()) {
     const metadata = section.options.metadata;
     if (!metadata) throw new ConfigApplicationError('CONFIG_METADATA_MISSING');
-    definitions.set(key, { schema: section.schema, ...metadata });
+    definitions.set(key, { schema: configSchemaNode(section.schema), ...metadata });
   }
   return definitions;
 }
@@ -28,30 +25,33 @@ export function atConfigPath(value: unknown, path: readonly string[]): unknown {
   for (const part of path) { if (!isRecord(value) && !Array.isArray(value)) return undefined; value = (value as Record<string, unknown>)[part]; }
   return value;
 }
-function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny {
-  if (schema instanceof z.ZodDefault) return unwrap(schema._def.innerType);
-  if (schema instanceof z.ZodNullable || schema instanceof z.ZodOptional || schema instanceof z.ZodReadonly) return unwrap(schema.unwrap());
-  if (schema instanceof z.ZodEffects) return unwrap(schema.innerType());
+function unwrap(schema: ConfigSchemaNode): ConfigSchemaNode {
+  if (schema instanceof z.ZodDefault || schema instanceof z.ZodPrefault) return unwrap(schema.unwrap() as z.ZodType);
+  if (schema instanceof z.ZodNullable || schema instanceof z.ZodOptional || schema instanceof z.ZodReadonly) return unwrap(schema.unwrap() as z.ZodType);
+  if (schema instanceof z.ZodPipe) return unwrap(schema.in as z.ZodType);
   return schema;
 }
-function childSchema(schema: z.ZodTypeAny, part: string): z.ZodTypeAny | undefined {
+function childSchema(schema: ConfigSchemaNode, part: string): ConfigSchemaNode | undefined {
   const inner = unwrap(schema);
-  if (inner instanceof z.ZodObject) return inner.shape[part] as z.ZodTypeAny | undefined;
-  if (inner instanceof z.ZodRecord) return inner.valueSchema;
-  if (inner instanceof z.ZodArray && /^(0|[1-9]\d*)$/.test(part)) return inner.element;
+  if (inner instanceof ProjectedConfigNode) return inner.child(part);
+  if (inner instanceof z.ZodObject) return inner.shape[part] as ConfigSchemaNode | undefined;
+  if (inner instanceof z.ZodRecord) return inner.valueType as z.ZodType;
+  if (inner instanceof z.ZodArray && /^(0|[1-9]\d*)$/.test(part)) return inner.element as z.ZodType;
   if (inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) {
-    const children = [...inner.options].map(option => childSchema(option, part)).filter((value): value is z.ZodTypeAny => value !== undefined);
-    return children.length > 1 ? z.union(children as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]) : children[0];
+    const children = [...inner.options].map(option => childSchema(option as z.ZodType, part)).filter((value): value is ConfigSchemaNode => value !== undefined);
+    return children.length > 1 ? children.every(child => child instanceof z.ZodType)
+      ? z.union(children as [z.ZodType, z.ZodType, ...z.ZodType[]])
+      : new ProjectedConfigNode({ anyOf: children.map(child => { const projection = projectConfigSchema(child); delete projection['$schema']; return projection; }) }) : children[0];
   }
   return undefined;
 }
 let schemaGeneration = -1;
 const schemaViews = new Map<string, unknown>();
-function schemaCachePart(schema: z.ZodTypeAny, part: string): string {
+function schemaCachePart(schema: ConfigSchemaNode, part: string): string {
   const inner = unwrap(schema);
-  if (inner instanceof z.ZodArray || inner instanceof z.ZodRecord) return '*';
+  if (inner instanceof z.ZodArray || inner instanceof z.ZodRecord || inner instanceof ProjectedConfigNode && (inner.item || inner.entry)) return '*';
   if (inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) return JSON.stringify([...inner.options]
-    .map(option => childSchema(option, part) ? schemaCachePart(option, part) : null));
+    .map(option => childSchema(option as z.ZodType, part) ? schemaCachePart(option as z.ZodType, part) : null));
   return part;
 }
 export function definitionFor(keyPath: string) {
@@ -79,13 +79,13 @@ export function parseConfigInput(keyPath: string, text: string): { readonly ok: 
 }
 /** L-KIT `--schema` (option B, no new dependency owner): a command's zod input contract as JSON Schema with the MCP tool list's projection,
  * so CLI, MCP and SDK describe one contract; the CLI prints it with `renderInputSchema`. */
-export function projectInputSchema(schema: z.ZodTypeAny): unknown {
-  return zodToJsonSchema(schema, { $refStrategy: 'none' });
+export function projectInputSchema(schema: ConfigSchemaNode): unknown {
+  return projectConfigSchema(schema);
 }
-function jsonSchemaView(schema: z.ZodTypeAny, schemaKey: string): unknown {
+function jsonSchemaView(schema: ConfigSchemaNode, schemaKey: string): unknown {
   const generation = configRegistryGeneration();
   if (schemaGeneration !== generation) { schemaViews.clear(); schemaGeneration = generation; }
-  if (!schemaViews.has(schemaKey)) schemaViews.set(schemaKey, zodToJsonSchema(schema, { $refStrategy: 'none' }));
+  if (!schemaViews.has(schemaKey)) schemaViews.set(schemaKey, projectConfigSchema(schema));
   return schemaViews.get(schemaKey);
 }
 function redact(value: unknown, path: readonly string[], secrets: ReadonlySet<string> = new Set()): unknown {
@@ -135,13 +135,21 @@ export function configDisplayText(snapshot: ConfigSnapshot, keyPath: string, val
 }
 export function allConfigKeys(snapshot: ConfigSnapshot): string[] {
   const keys: string[] = [];
-  function visit(schema: z.ZodTypeAny, path: string[], value: unknown) {
+  function visit(schema: ConfigSchemaNode, path: string[], value: unknown) {
     const inner = unwrap(schema);
-    if (inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) { for (const option of inner.options) visit(option, path, value); return; }
-    if (inner instanceof z.ZodObject) { for (const [key, child] of Object.entries(inner.shape)) visit(child as z.ZodTypeAny, [...path, key], atConfigPath(value, [key])); return; }
+    if (inner instanceof ProjectedConfigNode) {
+      if (inner.options.length) { for (const option of inner.options) visit(option, path, value); return; }
+      if (inner.properties) { for (const [key, child] of Object.entries(inner.properties)) visit(child, [...path, key], atConfigPath(value, [key])); return; }
+      keys.push(path.join('.'));
+      if (inner.item && Array.isArray(value)) value.forEach((item, index) => visit(inner.item!, [...path, String(index)], item));
+      if (inner.entry && isRecord(value)) for (const [key, item] of Object.entries(value)) if (!key.includes('.')) visit(inner.entry!, [...path, key], item);
+      return;
+    }
+    if (inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) { for (const option of inner.options) visit(option as z.ZodType, path, value); return; }
+    if (inner instanceof z.ZodObject) { for (const [key, child] of Object.entries(inner.shape)) visit(child as ConfigSchemaNode, [...path, key], atConfigPath(value, [key])); return; }
     keys.push(path.join('.'));
-    if (inner instanceof z.ZodArray && Array.isArray(value)) value.forEach((item, index) => visit(inner.element, [...path, String(index)], item));
-    if (inner instanceof z.ZodRecord && isRecord(value)) for (const [key, item] of Object.entries(value)) if (!key.includes('.')) visit(inner.valueSchema, [...path, key], item);
+    if (inner instanceof z.ZodArray && Array.isArray(value)) value.forEach((item, index) => visit(inner.element as z.ZodType, [...path, String(index)], item));
+    if (inner instanceof z.ZodRecord && isRecord(value)) for (const [key, item] of Object.entries(value)) if (!key.includes('.')) visit(inner.valueType as z.ZodType, [...path, key], item);
   }
   for (const [key, definition] of configDefinitions()) visit(definition.schema, [key], snapshot.effective[key]);
   return [...new Set(keys)];

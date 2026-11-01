@@ -12,7 +12,8 @@ export const codexAnswer = (text: string): Line[] => [{ type: 'thread.started', 
   { type: 'turn.completed', usage: { input_tokens: 1200, cached_input_tokens: 1000, cache_write_input_tokens: 0, output_tokens: 7, reasoning_output_tokens: 3 } }];
 /** `login`: what `login status` reports (`chatgpt` | `api-key` | `none`); `authFromLogin`: ChatGPT exactly when `login` wrote auth.json. */
 export interface FakeCodexScenario { readonly logPath: string; readonly version?: string; readonly login?: 'chatgpt' | 'api-key' | 'none'; readonly authFromLogin?: boolean;
-  readonly steps?: readonly ({ line: Line | string } | { exit: number })[] }
+  readonly installationId?: string | undefined;
+  readonly steps?: readonly ({ line: Line | string } | { exit: number } | { stderr: string })[] }
 /** Help naming every option the registry's call uses, the way `codex exec --help` (0.166.0) lists them. */
 export function codexHelp(): string {
   const flags = new Set([...codexHeadless.args.filter(arg => arg.startsWith('--')), codexHeadless.systemPromptFlag, registry.adapters.codex.modelFlag]);
@@ -32,11 +33,17 @@ if (argv[0] === 'login' && argv[1] === 'status') { log({ mode: 'auth' }); const 
   process.stderr.write(kind === 'chatgpt' ? 'Logged in using ChatGPT\\n' : kind === 'api-key' ? 'API key configured - sk-proj-***\\nAuthentication is checked when you send a request.\\n' : 'Not logged in\\n');
   process.exit(kind === 'none' ? 1 : 0); }
 if (argv[0] === 'login') { log({ mode: 'login' }); fs.rmSync(auth(), { force: true }); fs.writeFileSync(auth(), 'CREDENTIAL-CANARY-91c2', { mode: 0 }); process.exit(0); }
+if (s.installationId) {
+  const fd = fs.openSync(p.join(process.env.CODEX_HOME, 'installation_id'), 'r+');
+  if (fs.readFileSync(fd, 'utf8') !== s.installationId) throw new Error('fixture installation identity was masked');
+  fs.writeSync(fd, 'PRIVATE-COPY-WRITE', 0); fs.closeSync(fd);
+}
 const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); process.stdin.on('end', () => {
   const file = /^model_instructions_file="(.*)"$/.exec(argv.find(arg => arg.startsWith('model_instructions_file=')) ?? '')?.[1];
   log({ mode: 'call', stdin: Buffer.concat(chunks).toString('utf8'), system: file ? fs.readFileSync(file, 'utf8') : null, entries: fs.readdirSync('.').sort() });
   for (const step of s.steps) {
     if (step.line !== undefined) process.stdout.write((typeof step.line === 'string' ? step.line : JSON.stringify(step.line)) + '\\n');
+    else if (step.stderr !== undefined) process.stderr.write(step.stderr);
     else if (step.exit !== undefined) process.exit(step.exit);
   }
 });

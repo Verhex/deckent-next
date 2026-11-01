@@ -1,33 +1,33 @@
+import { persistedString, persistedInteger, withConfigWriteLock } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { withConfigWriteLock } from '#platform/index.js';
-import { MCP_SCOPES, MCP_SERVER_NAME } from './registry.js';
+import { MCP_SCOPES, MCP_SERVER_NAME } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 
 /**
  * The last start failure of a server in this project (MCP-SANDBOX-PATHS follow-up, 2026-09-29): written when a turn could not start a server
  * (its first-use launch card said yes, or a trusted server), so the card is not asked again in a loop and `/mcp` can say why. Advisory only:
  * it may suppress a repeated first-use card, it never makes a server offered or trusted. Keyed by scope, name and definition digest (a changed
- * entry misses it); removed by `/mcp approve|reconnect|remove` and by a later successful start. Private (0600), atomic, in the data root's
+ * entry misses it), client build and protocol digest; removed by `/mcp approve|reconnect|remove` and by a later successful start. Private (0600), atomic, in the data root's
  * `integrations` directory beside the trust record (no layout or ledger change; the agent's floors already close that directory). Every
  * value is display-safe: a diagnosis path written with `${VAR}` is kept as written, never expanded.
  */
 export const MCP_START_FAILURES_FILE = 'mcp-start-failures.json';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const text = (max: number) => z.string().max(max);
+const text = (max: number) => persistedString(z.string().max(max));
 const diagnosisSchema = z.union([
-  z.object({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: z.number().int().min(-1).max(1_024), path: text(4_096),
-    target: text(4_096).optional() }).strict(),
-  z.object({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }).strict(),
+  z.strictObject({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: persistedInteger().min(-1).max(1_024), path: text(4_096),
+    target: text(4_096).optional() }),
+  z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }),
 ]);
-export const mcpStartFailureSchema = z.object({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest,
+export const mcpStartFailureSchema = z.strictObject({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest, clientIdentity: digest.optional(),
   /** `launch`: the first-use card's yes could not start it; `trusted`: a trusted server did not start; `tools` (MCP-VISIBILITY): it started but pinned
-   * tools were withheld (drifted, missing or unmappable); `detail` is their count. */
-  phase: z.enum(['launch', 'trusted', 'tools']), atMs: z.number().int().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() }).strict();
+   * tools were withheld (drifted, missing or unmappable); `detail` is their count. `decision`: a trust/secret refusal, never a trust decision. */
+  phase: z.enum(['launch', 'trusted', 'tools', 'decision']), atMs: persistedInteger().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() });
 export type McpStartFailure = z.infer<typeof mcpStartFailureSchema>;
-const fileSchema = z.object({ schemaVersion: z.literal(1), failures: z.array(mcpStartFailureSchema).max(256) }).strict();
+const fileSchema = z.strictObject({ schemaVersion: z.literal(1), failures: z.array(mcpStartFailureSchema).max(256) });
 const matches = (failure: McpStartFailure, key: { readonly scope: string; readonly name: string }) => failure.scope === key.scope && failure.name === key.name;
 
 /** The recorded failures; absent, unsafe or invalid reads as none (advisory: the worst case is asking a card again). */
@@ -40,8 +40,8 @@ export async function readMcpStartFailures(directory: string): Promise<readonly 
     return parsed.success ? parsed.data.failures : [];
   } catch { return []; }
 }
-export const findMcpStartFailure = (failures: readonly McpStartFailure[], key: { readonly scope: string; readonly name: string; readonly definitionDigest: string }) =>
-  failures.find(failure => matches(failure, key) && failure.definitionDigest === key.definitionDigest) ?? null;
+export const findMcpStartFailure = (failures: readonly McpStartFailure[], key: { readonly scope: string; readonly name: string; readonly definitionDigest: string }, clientIdentity: string) =>
+  failures.find(failure => matches(failure, key) && failure.definitionDigest === key.definitionDigest && failure.clientIdentity === clientIdentity) ?? null;
 
 /** Records (`failure`) or removes (`null`) the entry of one server, under the file's config write lock (read, change, private temporary, rename). */
 export async function updateMcpStartFailure(directory: string, key: { readonly scope: McpStartFailure['scope']; readonly name: string }, failure: McpStartFailure | null): Promise<void> {
@@ -77,11 +77,14 @@ export type McpStartNotice =
   | { readonly kind: 'start-failed'; readonly name: string; readonly failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'> }
   | { readonly kind: 'tools-changed'; readonly name: string; readonly count: number }
   | { readonly kind: 'not-recorded'; readonly name: string }
-  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string }
+  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string; readonly detail?: string | undefined }
   /** K1: trusted, but the approver's grant for its tools was not written (the reason: `delegation`, `unsupported`, …). */
   | { readonly kind: 'grant-refused'; readonly name: string; readonly reason: string } | { readonly kind: 'secret-refused'; readonly name: string; readonly key: string; readonly scope: string; readonly code: string };
 /** Renders one notice as owner-facing text (the host's catalog, in its locale). */
 export type McpStartNoticeRenderer = (notice: McpStartNotice) => string;
+/** Decision data stays identifier-shaped; prose and suggested commands belong to the surface catalog. */
+export const mcpDecisionNotice = (name: string, code: string, detail?: string): McpStartNotice =>
+  ({ kind: 'not-decided', name, code, ...(detail && /^[A-Za-z_][A-Za-z0-9_]{0,255}$/u.test(detail) ? { detail } : {}) });
 export const mcpStartFailedNotice = (name: string, failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'>): McpStartNotice =>
   ({ kind: 'start-failed', name, failure: { code: failure.code, phase: failure.phase, ...(failure.detail ? { detail: failure.detail } : {}),
     ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}) } });

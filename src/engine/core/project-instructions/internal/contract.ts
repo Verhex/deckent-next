@@ -4,6 +4,8 @@ export interface ProjectInstructionSource {
   /** What was read: a working-tree file's verified identity (no-follow, single link: a byte-identical replacement is a different file),
    * or the committed blob a work target's ref named (alpha.54 R1: the commit is shown and sealed, the content digest is what trust binds). */
   readonly identity: ProjectInstructionIdentity;
+  /** Terminal import snapshot only; external content needs a person's session-only trust card. Workers never expand imports. */
+  readonly imports?: readonly string[]; readonly external?: boolean;
 }
 export type ProjectInstructionIdentity = Readonly<{ kind: 'file'; dev: number; ino: number }> | Readonly<{ kind: 'ref'; ref: string; commit: string; blobOid: string }>;
 /** A committed source of instruction files (a Git work target's base ref): `read` resolves the ref's commit again on every call and returns the

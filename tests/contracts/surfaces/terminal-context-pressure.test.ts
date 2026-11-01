@@ -19,7 +19,7 @@ it.each(['en', 'tr'] as const)('shows the real engine context refusal in the ter
         measure: async ({ messages: history }) => ({ promptTokens: history.some(message => message.content.includes('oversized')) ? 990 : 10,
           windowTokens: 1_000, quality: 'provider-count' }),
       });
-      return { schemaVersion: 1, turnId: command.turnId, ...result, answerBytes: Buffer.byteLength(result.answer ?? ''), recorded: true, replayed: false };
+      return { schemaVersion: 1, turnId: command.turnId, ...result, answerBytes: Buffer.byteLength(result.answer ?? ''), recorded: true, replayed: false, notices: [], steer: { joined: [], returned: [] } };
     },
     cancelChatTurn: async () => undefined,
   }) }); mounted.push(view);
@@ -52,7 +52,7 @@ it('projects the same compaction guard after wire decoding, so skipped summaries
           toolCalls: round === 5 ? [] : [{ id: `c${round}`, name: 'read', argumentsJson: '{}' }] }),
         now: () => 0, authorize: async () => 'allow', describe: () => null, execute: async () => ({ status: 'ok', text: 'result' }),
       });
-      return { schemaVersion: 1, turnId: command.turnId, ...result, answerBytes: 4, recorded: true, replayed: false };
+      return { schemaVersion: 1, turnId: command.turnId, ...result, answerBytes: 4, recorded: true, replayed: false, notices: [], steer: { joined: [], returned: [] } };
     },
   })) deltas.push(delta);
   expect(summaries).toBe(2);

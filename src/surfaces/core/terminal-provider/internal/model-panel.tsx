@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { PickerWindow, useLoadingText } from './picker-window.js';
+import { PickerWindow, useLoadingText, BudgetWindow, budgetEntry, WorkspaceWindow, CacheWindow, cacheEntry, type BudgetPanelView, type CachePanelView, type ModelPanelChoice, type ModelPanelLabels, type ModelPanelPort, type ModelPanelReference, type ModelPanelView, type PanelLabels, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { ProviderPanel } from './provider-panel.js';
-import { BudgetWindow, budgetEntry } from './budget-panel.js';
-import { WorkspaceWindow } from './workspace-panel.js';
-import { CacheWindow, cacheEntry } from './cache-panel.js';
-import type { BudgetPanelView, CachePanelView, ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 const SESSION = 'session', DEFAULT = 'default', CONNECT = ':connect', BUDGET = ':budget', CACHE = ':cache', PROTOCOL = ':protocol', WORKSPACE = ':workspace', FRESH = 'fresh', FRESH_DEFAULT = 'fresh-default';
 /** Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed). */

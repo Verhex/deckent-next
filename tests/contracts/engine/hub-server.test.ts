@@ -305,6 +305,8 @@ it('authenticates each modern HTTP request, serves resource metadata and delegat
     scopes = []; expect((await authenticated()).status).toBe(403); scopes = ['hub'];
     await client.connect(transport);
     expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28');
+    expect((await handler.fetch(new Request(endpoint, { method: 'POST', headers: { authorization: 'Bearer synthetic-test-token' }, body: JSON.stringify({ values: Array(16384).fill(0) }) }))).status).toBe(413);
+    await expect(client.request({ method: 'hub/revocations/get', params: { input: { values: Array(16384).fill(0) } } }, z.unknown())).rejects.toThrow();
     expect(client.getServerCapabilities()?.extensions?.[extensionId]).toEqual({});
     const tools = await client.listTools();
     expect(tools.tools.map(tool => tool.name)).toEqual(['hub_publish', 'hub_review', 'hub_yank', 'hub_revoke']);

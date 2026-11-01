@@ -1,9 +1,9 @@
+import { persistedInteger, identitySchema, taskEvaluationSchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { identitySchema, taskEvaluationSchema } from '#domain/index.js';
 import { artifactReceiptSchema, ArtifactError, type ArtifactStore } from '#capabilities/core/artifacts/index.js';
-const itemSchema = z.object({ evidenceId: identitySchema, receipt: artifactReceiptSchema }).strict().readonly();
-const limitsSchema = z.object({ maxEvidenceItems: z.number().int().positive().safe(), maxTotalBytes: z.number().int().positive().safe() }).strict();
+const itemSchema = z.strictObject({ evidenceId: identitySchema, receipt: artifactReceiptSchema }).readonly();
+const limitsSchema = z.strictObject({ maxEvidenceItems: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxTotalBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type EvaluationEvidenceLimits = z.infer<typeof limitsSchema>;
 export class EvaluationEvidenceError extends Error {
   constructor(readonly code: 'EVALUATION_EVIDENCE_INVALID' | 'EVALUATION_EVIDENCE_INCOMPLETE' | 'EVALUATION_EVIDENCE_SCOPE'

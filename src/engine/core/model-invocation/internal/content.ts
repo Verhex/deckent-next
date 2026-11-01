@@ -15,8 +15,8 @@ const nativePrefix = 'deckent.model-invocation-native-response.v1\n';
 const recordEnvelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxDepth + 2,
   maxNodes: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxNodes * 3, maxCodeUnits: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxCodeUnits * 3 });
 const payloadEnvelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
-const purgeAdmissionSchema = z.object({ command: modelInvocationPurgeCommandSchema, actor: modelActivationActorSchema,
-  authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema }).strict();
+const purgeAdmissionSchema = z.strictObject({ command: modelInvocationPurgeCommandSchema, actor: modelActivationActorSchema,
+  authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema });
 function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;

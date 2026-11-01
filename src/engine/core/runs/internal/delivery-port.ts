@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import { attemptIdentitySchema, counterSchema, identitySchema } from '#domain/index.js';
 
-export const cancellationDeliveryLimitsSchema = z.object({
+export const cancellationDeliveryLimitsSchema = z.strictObject({
   maxAttempts: counterSchema.positive(), retryDelayMs: counterSchema.positive(), claimTtlMs: counterSchema.positive(),
-}).strict().readonly();
+}).readonly();
 export const cancellationDeliveryOutcomeSchema = z.enum(['terminal', 'prevented', 'unresolved', 'unavailable', 'denied']);
-export const cancellationDeliverySchema = z.object({
+export const cancellationDeliverySchema = z.strictObject({
   schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   state: z.enum(['claimed', 'queued', 'terminal', 'prevented', 'exhausted']),
   attempts: counterSchema.positive(), token: identitySchema, claimUntil: counterSchema,
   nextEligibleAt: counterSchema, lastOutcome: cancellationDeliveryOutcomeSchema.nullable(),
-}).strict().readonly();
+}).readonly();
 export type CancellationDelivery = z.infer<typeof cancellationDeliverySchema>;
 export type CancellationDeliveryLimits = z.infer<typeof cancellationDeliveryLimitsSchema>;
 export type CancellationDeliveryOutcome = z.infer<typeof cancellationDeliveryOutcomeSchema>;

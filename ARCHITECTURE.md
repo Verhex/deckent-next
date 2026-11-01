@@ -141,7 +141,7 @@ measured rules under the owner's grant, and a role-model decision that may conti
 bounds (`runRuntime.nervous.mode`, `runRuntime.recovery.mode`). Headless Brain: the person's own `claude -p` subscription in a
 bubblewrap realm with a provider-only gateway and an explicit consent for AI and background use. Agents: versioned agent and skill
 rows, system agent selection by standing, sealed statistics with Wilson bounds, suggestions decided on person cards or signed AI
-commands, and person-enrolled signer keys for AI and system writes. Alpha.55 introduced ledger v70; alpha.56 uses v73 and runtime protocol v29, adding person recovery promotion/grant/review cards and sealed would-stop shadow input (no recovery effect), with modes still off by default. Detail, switches and bounds:
+commands, and person-enrolled signer keys for AI and system writes. Alpha.55 introduced ledger v70; alpha.56 used v73 and runtime protocol v29 (alpha.60: v30, lifecycle window [30, 29]), adding person recovery promotion/grant/review cards and sealed would-stop shadow input (no recovery effect), with modes still off by default. Detail, switches and bounds:
 [core-layers](.deckent/docs/architecture/modules/core-layers.md); owner record:
 [decisions](.deckent/docs/decisions/owner-decisions.md#cekirdek-katmanlar-2026-10-23).
 
@@ -178,7 +178,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - Target responsibility layers: platform, domain, capabilities, engine, adapters, surfaces. Domain is pure:
   it can depend on pure contracts/types, never config/filesystem/database drivers. Engine owns application
   transitions and ports; adapters implement ports. An explicit composition root imports and wires adapters.
-  Existing kernel/providers/runtime/orchestration packages migrate only after a reviewed mapping and stable WIP.
+  Existing kernel/providers/runtime/orchestration packages migrate only after a reviewed mapping and stable WIP. Owner 2026-11-01, Z2: legacy persisted scalar acceptance lives in pure `domain/core/primitives`; platform keeps an identical local copy in `platform/core/validate`. Existing dependency boundaries select the copy; a contract test pins the source expressions and acceptance table. Input JSON Schema conversion remains in platform. This placement grants no architecture exception.
 - Tiers (core/base/enterprise/custom/user) describe distribution and extension; they do not grant authority.
   Security policy can narrow permissions; a user override cannot relax a mandatory organization deny.
 - Every transition has one owner. Existing shared legacy services are port inputs, not presumed absent.
@@ -802,7 +802,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   earlier token reports. Semantic `model` blue and `provider` purple tokens are generated from `design/tokens/terminal.map.json` for dark/light
   and daltonized themes. Truecolor and ANSI256 meet 4.5:1 on the declared reference backgrounds; ANSI16 uses host blue/magenta and cannot
   attest a custom host palette. NO_COLOR keeps both names without styles; a narrow status drops the identity pair together. Styling consumes
-  only already projected text, preserving whole-label secret masking. Proof and platform/live limits: `proof/ORPRIVACY-STATUS-2026-10-09/`.
+  only already projected text, preserving whole-label secret masking. Proof and platform/live limits: `proof/ORPRIVACY-STATUS-2026-10-09/`. Theme (alpha.60): roles resolve from the terminal's OSC 11 background answer (bounded probe, contrast guard); the one setter is `TerminalHostContext.theme.apply`, `/theme` and the `/config` Theme row persist through `ConfigApplication.submit` (Esc writes nothing), and the embedded monitor reads the host's live palette.
 - **W11 MODEL-STATE-PARITY (owner card 2026-10-10; landed in alpha.25):** `ModelInvocableNowApplication` owns one v1 scoped, exact-reference read
   model for monitor, `/config` model choices, `/model` and `/provider`. It reuses invocation preview's principal/policy, binding, activation,
   profile/native preparation, verified quote and read-only account capacity; delivery uses the existing activation assessment. Stale catalog
@@ -1114,10 +1114,10 @@ arm64 runtime or full-matrix PASS (main CI run 36884716187: Linux 24/26 success,
 **SDK surface (DEPS-TYPES, owner 2026-09-29 DEPS-SCHEMA C2-b).** `src/index.ts` is an explicit export list; no layer barrel is re-exported
 wholesale. The reviewed inventory `tests/contracts/composition/sdk-public-exports.json` (TypeScript checker over `src/index.ts`, names with
 value/type kind) is the contract; a change needs `node scripts/sdk-exports.mjs --write` and, for a removal, a CHANGELOG BREAKING line. Live
-schema-library objects are never SDK values: callers get derived data types and Standard Schema contracts, not zod objects. Open:
-`registerConfigSection` still takes a zod object (C1) — in the zero-dependency package a consumer's own zod schema is refused both by the type
-checker (vendored zod types are nominally distinct: private `_cached`) and at runtime (`instanceof` against the bundled zod), so third-party
-config sections wait for C1.
+schema-library objects are never SDK values: callers get derived data types and Standard Schema contracts, not zod objects. C1-b:
+`registerConfigSection` accepts `StandardSchemaV1 & StandardJSONSchemaV1`; registration requires a closed object input projection.
+Defaults and effective config use the synchronous section validator; JSON Schema supplies field navigation and display. Compatible issue
+codes are retained; foreign issues without a code become `SECTION_INVALID`, and asynchronous validation is refused.
 
 ## Testing policy
 
@@ -1176,7 +1176,7 @@ CI-SPEED (owner-approved CI stability, 2026-10-06; landed in alpha.8): local int
 
 **W3-AUTHORITY (owner 2026-10-09; released in alpha.22):** `deckent-mcp` uses the same verified OS UID with a distinct actor
 (`issuer = <host>/mcp`, actor id suffixed `/mcp`). All handlers, including direct model-connect/activation writes, enter that code-only context;
-service-bound calls carry `channel: mcp` (current local protocol v29, lifecycle window `[29,28]`), current-only mutations. This metadata delegates no
+service-bound calls carry `channel: mcp` (local protocol v30 since alpha.60, lifecycle window `[30,29]`; was v29 `[29,28]`), current-only mutations. This metadata delegates no
 other OS identity and only narrows the actor. **SEC-1 (owner A48-D5, 2026-10-19):** the socket admits a same-UID peer only in the service's own PID, mount and user namespaces (a sandboxed peer is refused at accept, before any frame); the full-access bubblewrap view hides every bound runtime socket directory; `setPermissionMode`, `setSecret`, `deleteSecret` and `switchSecretStore` need the service-attested terminal witness of the peer on every surface (an engine `AuthorityWitness` port; the MCP actor is always refused; `AUTHORITY_WITNESS_REQUIRED`, nothing decided, audited or written); protocol v29 bytes are unchanged. A same-account process outside a sandbox remains an OS trust boundary. Owner grants and `principals: all` allow rules cannot grant
 MCP authority; an explicit rule or role binding must name the MCP actor. Denies/restrictions still apply. Template v9 and add-only upgrades add
 named observation rules only. Budget creation/revision/unfreeze/reconciliation, activation and invocation require an explicit MCP-specific grant;
@@ -1191,7 +1191,7 @@ unchanged. Contract/design evidence: `proof/W3-AUTHORITY-2026-10-09/`, [decision
 
 ### Project instructions (DECKENT-MD, owner 2026-10-08)
 
-The v1 reader loads workspace-root `DECKENT.md`, falling back to `AGENTS.md` only on absence; Deckent never loads `CLAUDE.md` as model context. Context grants no authority. The adapter registry bounds raw and masked content to 32 KiB; canonical secret masking precedes the trust preview and model delivery. Special files, symlinks and hardlinks fail closed; an invalid primary never falls back. The terminal re-reads before each turn, opens a bounded Ink trust window for an unseen digest, and Escape continues with the file withheld. Line mode requires `--trust-instructions <sha256>` for an unseen digest. `/context` reports the loaded source path, original byte size and SHA-256.
+Since alpha.60 the reader loads `AGENTS.md`, else `CLAUDE.md`, resolving bounded `@` imports (relative, depth from registry data at most 5, cycles refused, a file outside the repository needs a one-time instruction-trust card); `DECKENT.md` is never written and is read only when neither exists (doctor says so). Before alpha.60 (v1) the reader loaded `DECKENT.md`, falling back to `AGENTS.md` only on absence, and never `CLAUDE.md`. Context grants no authority. The adapter registry bounds raw and masked content to 32 KiB; canonical secret masking precedes the trust preview and model delivery. Special files, symlinks and hardlinks fail closed; an invalid primary never falls back. The terminal re-reads before each turn, opens a bounded Ink trust window for an unseen digest, and Escape continues with the file withheld. Line mode requires `--trust-instructions <sha256>` for an unseen digest. `/context` reports the loaded source path, original byte size and SHA-256.
 
 Consent is bound to canonical workspace root + device/inode + content digest in the owner-private user-global `instructionTrust` resource, outside the workspace. Project `DECKENT_HOME` cannot relocate this cache; an explicit global root inside the workspace is not trusted. A cloned/replaced root cannot inherit consent. Unsupported or unsafe persistent storage uses session-only consent and asks again after restart; native Windows persistence remains open. `DECKENT.md` joins the workspace write approval floor.
 

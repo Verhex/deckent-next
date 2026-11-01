@@ -275,9 +275,19 @@ describe('composer key mapping (Ink key events)', () => {
   const key = (over: Partial<Key>): Key => ({ ...none, ...over });
   it('maps readline bindings, modified Enter and modified arrows', () => {
     expect(composerKey('', key({ return: true }))).toEqual({ type: 'submit' });
-    expect(composerKey('', key({ return: true, meta: true }))).toEqual({ type: 'newline' });
     expect(composerKey('', key({ return: true, shift: true }))).toEqual({ type: 'newline' });
     expect(composerKey('\n', none)).toEqual({ type: 'newline' });
+    // Owner S5: Ctrl+Enter (kitty CSI 13;5u) and its Alt+Enter fallback add the line to a running turn; Ctrl+J stays a new line under kitty.
+    expect(composerKey('', key({ return: true, ctrl: true }))).toEqual({ type: 'steer', via: 'ctrl' });
+    expect(composerKey('', key({ return: true, meta: true }))).toEqual({ type: 'steer', via: 'alt' });
+    expect(composerKey('j', key({ ctrl: true }))).toEqual({ type: 'newline' }); expect(composerKey('[?0u', none)).toBeNull(); // the terminal's kitty answer
+
+    const typed = reduceComposer(EMPTY_COMPOSER, { type: 'text', text: 'more' }, context()).state, slash = reduceComposer(EMPTY_COMPOSER, { type: 'text', text: '/status' }, context()).state;
+    expect(reduceComposer(typed, { type: 'steer', via: 'alt' }, context({ steer: true }))).toMatchObject({ state: { text: '' }, intents: [{ type: 'steer', text: 'more', mentions: [] }] });
+    // Without a running turn: Alt+Enter is the new line it was, Ctrl+Enter sends; a /command is never added to a turn.
+    expect(reduceComposer(typed, { type: 'steer', via: 'alt' }, context())).toMatchObject({ state: { text: 'more\n' }, intents: [] });
+    expect(reduceComposer(typed, { type: 'steer', via: 'ctrl' }, context()).intents).toMatchObject([{ type: 'submit', text: 'more' }]);
+    expect(reduceComposer(slash, { type: 'steer', via: 'ctrl' }, context({ steer: true })).intents).toMatchObject([{ type: 'submit', text: '/status' }]);
     expect(composerKey('w', key({ ctrl: true }))).toEqual({ type: 'delete', span: 'spaceWordBack' });
     expect(composerKey('', key({ backspace: true, meta: true }))).toEqual({ type: 'delete', span: 'wordBack' });
     expect(composerKey('', key({ leftArrow: true, ctrl: true }))).toEqual({ type: 'move', to: 'wordLeft' });

@@ -66,6 +66,16 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const answered = runOnboardingSession(counting, { observed: (row: OnboardingSnapshot) => shared.push(row) } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
   try { await until(() => frame.includes('Later'), 'budget card'); stdin.write('\u001b'); expect(await answered).toBeNull(); } finally { stdin.destroy(); stdout.destroy(); }
   expect(deferred).toEqual(['onboarding:budget']); expect(observes).toBe(2); expect(shared).toHaveLength(1);
+  // F8: Later in the provider picker persists the model deferral too; it is not a completed connection.
+  frame = ''; current = chatOnly; deferred.length = 0; let providers = 0;
+  const secondOut = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 120, rows: 40 });
+  const secondIn = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return secondIn; }, ref() { return secondIn; }, unref() { return secondIn; } });
+  const choosing = runOnboardingSession(counting, { locale: 'en', provider: async () => { providers++; } } as never,
+    { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: secondIn as never, stdout: secondOut as never }, true, 'model');
+  try { await until(() => frame.includes('Enter · Continue'), 'model choice'); secondIn.write('\r'); expect(await choosing).toBeNull(); }
+  finally { secondIn.destroy(); secondOut.destroy(); }
+  expect(providers).toBe(1); expect(deferred).toEqual(['core:model']);
+
 });
 
 it('U4C: a relaunched ready card skips settled owners, refuses a refused write and reobserves before the next owner', async () => {
@@ -188,6 +198,7 @@ it('BeUser ZEY-02/D-04 + walk19R: the rights step follows permission mode and ap
     await until(() => frame.includes('Preparing…'), 'preparing'); stdin.write('\r'); await until(() => frame.includes('keys ignored'), 'ignored key note');
     release(); await until(() => frame.includes('> Enter · Continue'), 'permission card'); await settle(200);
     expect(applied).toEqual([]); expect(main().split('Step 1/2').length - 1).toBe(1); expect(main()).not.toContain('Choose a profile');
+    for (const modified of ['\u001b[13;5u', '\u001b\r']) { stdin.write(modified); await settle(60); expect(applied).toEqual([]); }
     stdin.write('\r'); expect(await result).toBe('applied'); expect(applied).toEqual(['p'.repeat(64)]); expect(main()).not.toContain('Step 1/2');
   } finally { stdin.destroy(); stdout.destroy(); }
 });

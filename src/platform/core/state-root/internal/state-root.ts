@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import module from 'node:module';
 import { posix, win32 } from 'node:path';
 import { PRODUCT_LAYOUT_REGISTRY as registry, hasGlobWildcard } from '#platform/core/common/index.js';
@@ -63,10 +63,10 @@ export function enableDeckentCompileCache(argv: readonly string[] = process.argv
       if (!owned(directory, 0o077)) return 'unavailable';
     }
     if (realpathSync(directory) !== directory || !readdirSync(directory).every(name => owned(api.join(directory, name), 0o077))) return 'unavailable';
-    // Astra 2862/2864 R2: a filling process records itself before it can write (Node writes the cache at its exit) and only then looks for the
-    // removal fence an uninstall creates before it waits for the recorded writers (Dekker order: the remover sees this record, or this process
-    // sees the fence, drops its record and runs without the cache). Without its record the process does not fill the cache.
-    if (write && !recordWriter(api.join(directory, registry.compileCacheWritersDirectory), api.join(directory, registry.compileCacheRemovalFence), uid, api.join)) return 'unavailable';
+    // Astra 2862/2864/2867 R2: a filling process records itself before it can write (Node writes the cache at its exit) and only then looks for the
+    // removal fence an uninstall creates before it moves the records directory aside and waits for its writers (Dekker order: the remover sees
+    // this record, or this process sees the fence, drops its record and runs without the cache). Without its record the process does not fill the cache.
+    if (write && !recordWriter(directory, uid, api.join)) return 'unavailable';
     const { status } = module.enableCompileCache(write ? directory : { directory, readOnly: true } as module.EnableCompileCacheOptions);
     // ALREADY_ENABLED: the person's own NODE_COMPILE_CACHE directory is in use; it is left as it is.
     if (status === module.constants.compileCacheStatus.ALREADY_ENABLED) return 'enabled';
@@ -79,9 +79,15 @@ export function enableDeckentCompileCache(argv: readonly string[] = process.argv
 }
 /** The writer record: a new leaf (`<pid>-<start>-<random>`, created exclusively — an existing name, link or not, is never opened) holding pid and
  * start time in the owner-only writers directory. Ended writers' records are pruned (only this user's single-link regular files, unlink only).
- * With the removal fence present after the record exists, the record is withdrawn and the cache is not filled. */
-function recordWriter(directory: string, fence: string, uid: number, join: (...parts: string[]) => string): boolean {
-  try { mkdirSync(directory, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return false; }
+ * Astra 2867 R2-b: a writer that sees the removal fence never creates `writers/` (the remover's rename of it to `writers.<id>` is the
+ * linearization point); one whose first check passed just before the fence removes a directory it made once it sees the fence. With the fence
+ * present after the record exists, the record is withdrawn from either location and the cache is not filled. */
+function recordWriter(cache: string, uid: number, join: (...parts: string[]) => string): boolean {
+  const directory = join(cache, registry.compileCacheWritersDirectory), fence = join(cache, registry.compileCacheRemovalFence);
+  const fenced = () => { try { lstatSync(fence); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== 'ENOENT'; } };
+  const leave = () => { try { rmdirSync(directory); } catch { /* another writer's record, or already gone */ } return false; };
+  if (fenced()) return false;
+  try { mkdirSync(directory, { mode: 0o700 }); if (fenced()) return leave(); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return false; }
   const info = lstatSync(directory);
   if (!info.isDirectory() || info.uid !== uid || (info.mode & 0o077) !== 0) return false;
   for (const name of readdirSync(directory)) {
@@ -90,8 +96,10 @@ function recordWriter(directory: string, fence: string, uid: number, join: (...p
     try { process.kill(pid, 0); continue; } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue; }
     try { const entry = lstatSync(leaf); if (entry.isFile() && entry.nlink === 1 && entry.uid === uid) unlinkSync(leaf); } catch { /* pruned by another start */ }
   }
-  const startedAtMs = Math.floor(performance.timeOrigin), record = join(directory, `${process.pid}-${startedAtMs}-${randomBytes(8).toString('hex')}`);
-  writeFileSync(record, JSON.stringify({ schemaVersion: 1, pid: process.pid, startedAtMs }), { mode: 0o600, flag: 'wx' });
-  try { lstatSync(fence); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true; }
-  unlinkSync(record); return false;
+  const startedAtMs = Math.floor(performance.timeOrigin), name = `${process.pid}-${startedAtMs}-${randomBytes(8).toString('hex')}`;
+  writeFileSync(join(directory, name), JSON.stringify({ schemaVersion: 1, pid: process.pid, startedAtMs }), { mode: 0o600, flag: 'wx' });
+  if (!fenced()) return true;
+  const moved = readdirSync(cache).filter(entry => entry.startsWith(`${registry.compileCacheWritersDirectory}.`)).map(entry => join(cache, entry));
+  for (const at of [directory, ...moved]) try { unlinkSync(join(at, name)); break; } catch { /* moved aside by the removal: the next location */ }
+  return leave();
 }

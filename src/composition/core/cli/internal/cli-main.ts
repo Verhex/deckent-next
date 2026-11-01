@@ -32,16 +32,17 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     process.stderr.write(`${formatHumanError(error, { locale: await hostLocale(argv, process.cwd()), env: process.env, isTTY: Boolean(process.stderr.isTTY) })}\n`);
     return exitCodeFor(error);
   }
-  const root = resolution.root;
-  const [locale, agentEnvironment] = await Promise.all([hostLocale(argv, root), hostAgentEnvironment(root)]);
+  const root = resolution.root, [locale, agentEnvironment] = await Promise.all([hostLocale(argv, resolution.root), hostAgentEnvironment(resolution.root)]);
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve', handlesSignals = isRuntimeServe || SIGNAL_COMMANDS.some(([family, action]) => argv[0] === family && (action === undefined || argv[1] === action));
-  const controller = new AbortController();
-  const stop = () => controller.abort();
+  const controller = new AbortController(), stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   const base = { root, rootResolution: resolution, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal };
-  // COLDSTART: host operations remain lazy. Model-connect help alone loads the public adapter metadata boundary for its current kinds.
   try { return await runCli(argv, { ...base, helpParams: async key => key !== 'cli.help.modelsConnect' ? {} : { kinds: (await import('./model-help.js')).modelConnectHelpKinds() },
-    loadHost: async () => (await import('./host.js')).createCliHost(base, serviceEntry) }); }
+    loadHost: async yieldToInput => {
+      // Evaluate existing host dependencies in pieces while the launch composer owns input.
+      if (yieldToInput) for (const load of [() => import('#composition/core/query-errors/index.js'), () => import('#composition/core/scoped-request/index.js'),
+        () => import('#composition/core/model-connect/index.js')]) { await load(); await yieldToInput(); }
+      return (await import('./host.js')).createCliHost(base, serviceEntry); } }); }
   finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
 export const CLOSED_PIPE_EXIT = 141; // A reader that closed the pipe (`deckent … | head`) is a SIGPIPE: 128 + 13, the code a shell reports for `cat`, `git`, `yes`.

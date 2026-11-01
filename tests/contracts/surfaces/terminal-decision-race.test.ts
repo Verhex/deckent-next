@@ -113,6 +113,9 @@ describe('Codex review 6d458d9d repro sequences (paste split across focus, multi
     try {
       await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
       await until(() => cardShown(view), 'card'); await armed(() => view.stdout.frame, 'Enter confirm');
+      for (const bytes of ['\u001b[13;5u', '\u001b\r', '\u001b[13;5uy']) {
+        view.stdin.write(bytes); await settle(60); expect(calls).toEqual([]); await armed(() => view.stdout.frame, 'Enter confirm');
+      }
       view.stdin.write('\t'); await until(() => view.stdout.frame.includes('Reason'), 'reason field'); await settle(40);
       view.stdin.write('\r\u001b[Ay'); await settle(80);
       expect(calls).toEqual([]);

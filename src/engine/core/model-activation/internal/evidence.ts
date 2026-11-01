@@ -1,15 +1,14 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, createImmutableJsonObjectSchema } from '#domain/index.js';
-import { encodeModelBindingDefinition, parseModelBindingDefinition, PROVIDER_CATALOG_WIRE_LIMITS } from '#domain/index.js';
+import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition, parseModelBindingDefinition, PROVIDER_CATALOG_WIRE_LIMITS } from '#domain/index.js';
 import { encodeModelActivationTarget, ModelActivationError, modelActivationActorSchema, modelActivationAuthorizationSchema,
   modelActivationCommandSchema, parseModelActivationCommand, parseModelActivationRecord, parseModelActivationReceipt,
   type ModelActivationActor, type ModelActivationCommand, type ModelActivationRecord, type ModelActivationReceipt } from '#domain/index.js';
 import { ModelActivationStoreError, type ModelActivationAdmission } from './port.js';
 
 const envelope = createImmutableJsonObjectSchema(PROVIDER_CATALOG_WIRE_LIMITS);
-const admissionSchema = z.object({ command: modelActivationCommandSchema, actor: modelActivationActorSchema,
-  authorization: modelActivationAuthorizationSchema, admittedAtMs: counterSchema, definition: z.unknown().optional() }).strict();
+const admissionSchema = z.strictObject({ command: modelActivationCommandSchema, actor: modelActivationActorSchema,
+  authorization: modelActivationAuthorizationSchema, admittedAtMs: counterSchema, definition: z.unknown().optional() });
 export function modelActivationTargetId(reference: unknown): string {
   return createHash('sha256').update(encodeModelActivationTarget(reference), 'utf8').digest('hex');
 }

@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { NATIVE_MODEL_ID_MAX_LENGTH } from './catalog.js';
 import { nativeCliIds } from './native-cli.js';
@@ -13,7 +14,7 @@ export const EXACT_MODEL_ID_MAX_LENGTH = 256;
 const CATALOG_ALIAS_MAX = 64;
 
 /** An exact model id as a provider's API names it: printable, trimmed, never option-like. Aliases share the grammar and are data. */
-export const exactModelIdSchema = z.string().min(1).max(Math.min(EXACT_MODEL_ID_MAX_LENGTH, NATIVE_MODEL_ID_MAX_LENGTH)).refine(value => value.trim() === value
+export const exactModelIdSchema = persistedString(z.string().min(1).max(Math.min(EXACT_MODEL_ID_MAX_LENGTH, NATIVE_MODEL_ID_MAX_LENGTH))).refine(value => value.trim() === value
   && !value.startsWith('-') && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 /** A calendar day (UTC, ISO 8601 `YYYY-MM-DD`); validated arithmetically so the domain stays clock-free. */
 export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
@@ -21,5 +22,5 @@ export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value =>
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   return month >= 1 && month <= 12 && day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
 });
-export const cliVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/).max(64);
+export const cliVersionSchema = persistedString(z.string().regex(/^\d+\.\d+\.\d+$/).max(64));
 export const aliasesSchema = z.array(exactModelIdSchema).max(CATALOG_ALIAS_MAX).readonly();

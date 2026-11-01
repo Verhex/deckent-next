@@ -6,3 +6,10 @@ export function proposalFixture(workClass = 'small', proposer: RunProposal['prop
       tasks: [{ id: 'task', kind: 'purchase', workClass, dependencies: [], acceptanceCriteria: ['readback'] }],
       criterionDefinitions: [{ id: 'readback', version: 1, description: 'Durable business evidence', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } };
 }
+/** Worked admission default: 256 independent tasks at graph v5's 64-resource maximum. */
+export function largeResourceProposalFixture(): RunProposal {
+  const proposal = proposalFixture();
+  return { ...proposal, graph: { ...proposal.graph, schemaVersion: 5,
+    tasks: Array.from({ length: 256 }, (_, i) => ({ id: `t-${i}`, kind: 'work', dependencies: [], acceptanceCriteria: ['readback'],
+      resources: Array.from({ length: 64 }, (_, j) => ({ kind: 'record', id: `record-${i}-${j}` })) })) } };
+}

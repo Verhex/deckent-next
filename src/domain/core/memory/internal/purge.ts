@@ -9,14 +9,14 @@ import type { MemoryAutomation } from './automation.js';
  * the engine computes the keyed digest, the store rewrites the rows. A purge is a person's act only; it leaves a keyed tombstone in every revision.
  */
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const actor = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 /** The sealed record of one purge (keyed digests and ids only, never content). `decision`: the person's `memory`/`purge` policy decision; it is
  * the only authority for removing the stored content of `invocationIds` — exactly the evaluator calls the entry's sealed evaluation records
  * (`evaluationRecordIds`) name. The record keeps them so a replay after a restore removes them again under the same decision. */
-export const memoryPurgeRecordSchema = z.object({ schemaVersion: z.literal(1), purgeId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
+export const memoryPurgeRecordSchema = z.strictObject({ schemaVersion: z.literal(1), purgeId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
   contentDigest: digest, digestKind: z.literal('keyed'), reasonCode: identitySchema, by: actor,
-  decision: z.object({ revision: identitySchema, ruleId: identitySchema }).strict().readonly(), evaluationRecordIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(),
-  invocationIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(), atMs: counterSchema }).strict().readonly();
+  decision: z.strictObject({ revision: identitySchema, ruleId: identitySchema }).readonly(), evaluationRecordIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(),
+  invocationIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(), atMs: counterSchema }).readonly();
 export type MemoryPurgeRecord = z.infer<typeof memoryPurgeRecordSchema>;
 export const parseMemoryPurgeRecord = (value: unknown): MemoryPurgeRecord => {
   const parsed = memoryPurgeRecordSchema.safeParse(value);
@@ -41,8 +41,8 @@ export function tombstoneMemoryRevision(revision: MemoryEntry, record: MemoryPur
 
 /** S4B-4 A9 resolution: a person retires the contested (older, verified) entry, retires the new candidate, or dismisses the contest. */
 export const MEMORY_CONTEST_DECISIONS = Object.freeze(['retire-contested', 'retire-candidate', 'dismiss'] as const);
-export const memoryContestResolutionSchema = z.object({ schemaVersion: z.literal(1), contestId: identitySchema, scopeId: identitySchema,
-  decision: z.enum(MEMORY_CONTEST_DECISIONS), by: actor, retiredEntryId: identitySchema.nullable(), atMs: counterSchema }).strict()
+export const memoryContestResolutionSchema = z.strictObject({ schemaVersion: z.literal(1), contestId: identitySchema, scopeId: identitySchema,
+  decision: z.enum(MEMORY_CONTEST_DECISIONS), by: actor, retiredEntryId: identitySchema.nullable(), atMs: counterSchema })
   .refine(value => (value.decision === 'dismiss') === (value.retiredEntryId === null)).readonly();
 export type MemoryContestResolution = z.infer<typeof memoryContestResolutionSchema>;
 export type MemoryContestDecision = typeof MEMORY_CONTEST_DECISIONS[number];

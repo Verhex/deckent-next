@@ -37,7 +37,8 @@
     "headlessLogins": "headless/logins",
     "workerImageBuilders": "state/worker-image-builders",
     "onboarding": "state/onboarding.json",
-    "compileCache": "state/compile-cache"
+    "compileCache": "state/compile-cache",
+    "bin": "bin"
   },
   "bootstrapResource": "config",
   "fixedResources": [

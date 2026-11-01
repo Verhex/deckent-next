@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { createMcpHandler, Server } from '@modelcontextprotocol/server';
 
-export async function startMcpHttpFixture() {
+export async function startMcpHttpFixture(rewrite = (_message, response) => response) {
   const requests = [];
   let authorization = null;
   const build = () => {
@@ -26,7 +26,8 @@ export async function startMcpHttpFixture() {
     const headers = new Headers();
     for (const [name, value] of Object.entries(incoming.headers)) if (typeof value === 'string') headers.set(name, value);
     const body = incoming.method === 'GET' || incoming.method === 'HEAD' || incoming.method === 'DELETE' ? undefined : Buffer.concat(chunks);
-    const response = await handler.fetch(new Request(`http://127.0.0.1${incoming.url}`, { method: incoming.method, headers, body }));
+    const response = await rewrite(body?.length ? JSON.parse(body.toString('utf8')) : null,
+      await handler.fetch(new Request(`http://127.0.0.1${incoming.url}`, { method: incoming.method, headers, body })));
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     if (response.body) for await (const chunk of response.body) outgoing.write(chunk);
     outgoing.end();

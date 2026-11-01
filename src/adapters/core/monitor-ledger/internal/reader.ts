@@ -1,4 +1,5 @@
-import { readQuotaHolds } from '#adapters/core/sqlite-ledger/index.js';
+import { persistedInteger } from '#platform/index.js';
+import { readQuotaHolds, readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
@@ -6,7 +7,6 @@ import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelC
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerIndex, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
-import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
@@ -21,8 +21,8 @@ const OPEN_PHASES = "('pending','active','evaluating','reconciling','awaiting-de
 const idsSchema = z.array(z.string()).max(100_000).readonly();
 /** M-VIS (PB-POOL-VIS): `scope` limits what is read. Runs, their receipts and approvals only of `scopeIds`; pool rows and pool occupancy only of
  * `poolIds` (occupancy still counts every Run in an admitted pool, since a pool is installation-wide). Absent: the whole ledger (single-Run reads). */
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000), run: z.object({ scopeId: z.string(), runId: z.string() }).strict().optional(),
-  scope: z.object({ scopeIds: idsSchema, poolIds: idsSchema }).strict().optional() }).strict();
+const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647), maxRuns: persistedInteger().positive().max(100_000), run: z.strictObject({ scopeId: z.string(), runId: z.string() }).optional(),
+  scope: z.strictObject({ scopeIds: idsSchema, poolIds: idsSchema }).optional() });
 export type MonitorLedgerOptions = z.infer<typeof optionsSchema>;
 type Scope = MonitorLedgerOptions['scope'];
 /** SQL fragment + bound JSON array: `column IN (ids)` without building placeholders from data; '' when the read is not scoped. */

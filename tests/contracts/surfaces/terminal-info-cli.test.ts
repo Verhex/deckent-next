@@ -10,7 +10,7 @@ import { clearConfigCache } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const plan = { schemaVersion: 1, status: 'ready', reference: { providerId: 'local-vllm', providerVersion: 1, modelId: 'qwen-x', modelVersion: 1 }, source: 'project',
-  catalogRevision: 'c1', maxCompletionTokens: 4096, historyMessages: 40 };
+  tools: 'none', catalogRevision: 'c1', maxCompletionTokens: 4096, historyMessages: 40 };
 async function run(argv: string[]) {
   const root = await mkdtemp(join(tmpdir(), 'dn-terminal-info-')); roots.push(root);
   await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'd') } }));
@@ -45,6 +45,8 @@ it('status adds chat-model reachability (not tested) and why the context window 
   expect(human.code).toBe(0);
   expect(human.out).toContain('Chat model: local-vllm/qwen-x@1');
   expect(human.out).toContain('Chat model reachability: not tested');
+  expect(human.out).toContain('no tool calls');
+  expect((await run(['terminal', 'status', '--lang', 'tr'])).out).toContain('araç');
   expect(human.out).toContain('Context window: unknown until the first answer is measured; with no inference_serving profile');
   const json = JSON.parse((await run(['terminal', 'status', '--json'])).out);
   expect(Object.keys(json).sort()).toEqual(['chat', 'identity', 'inference', 'installationId', 'projectId', 'schemaVersion', 'tty']);

@@ -1,12 +1,12 @@
+import { persistedInteger, parseProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { parseProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { parseProviderSpendAuditReceipt, verifyModelInvocationReceipt, ProviderSpendError, type ProviderSpendAccountReader, type ProviderSpendHoldPage } from '#engine/index.js';
 import { PROVIDER_SPEND_AUDIT_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
+const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647) });
 
 class SqliteProviderSpendAccountReader implements ProviderSpendAccountReader {
   constructor(private readonly db: DatabaseSync) {}

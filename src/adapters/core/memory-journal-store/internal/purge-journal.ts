@@ -1,19 +1,19 @@
+import { persistedString, persistedInteger, encodeCommandProjection, memoryPurgeRecordSchema, type MemoryPurgeRecord } from '#domain/index.js';
+import { withConfigWriteLock, type IntegrityAuthority } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { mkdir, open, type FileHandle } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { encodeCommandProjection, memoryPurgeRecordSchema, type MemoryPurgeRecord } from '#domain/index.js';
 import { MemoryJournalError, type MemoryPurgeJournal } from '#engine/index.js';
-import { withConfigWriteLock, type IntegrityAuthority } from '#platform/index.js';
 import limits from './purge-limits.json' with { type: 'json' };
 
 const SEAL = 'memory-purge-journal:1';
-export const memoryPurgeJournalLimitsSchema = z.object({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: z.number().int().positive().safe(),
-  maxFileBytes: z.number().int().positive().safe(), maxEntries: z.number().int().positive().safe(), lockTimeoutMs: z.number().int().positive().safe() }).strict().readonly();
+export const memoryPurgeJournalLimitsSchema = z.strictObject({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), lockTimeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export type MemoryPurgeJournalLimits = z.infer<typeof memoryPurgeJournalLimitsSchema>;
 export const MEMORY_PURGE_JOURNAL_LIMITS: MemoryPurgeJournalLimits = memoryPurgeJournalLimitsSchema.parse(limits);
-const lineSchema = z.object({ record: z.unknown(), keyId: z.string().min(1), mac: z.string().regex(/^[a-f0-9]{64}$/u) }).strict();
+const lineSchema = z.strictObject({ record: z.unknown().optional(), keyId: persistedString(z.string().min(1)), mac: z.string().regex(/^[a-f0-9]{64}$/u) });
 const unreadable = () => new MemoryJournalError('MEMORY_PURGE_REPLAY_HELD');
 
 /**

@@ -7,8 +7,8 @@ import asset from '../../../../../assets/model-makers/makers.json' with { type: 
  * it; this versioned registry maps vendor aliases to one canonical maker, so two channels that serve one maker's models count as the same maker.
  * It holds no tier or role (S2 `model_roles` stays their only owner); a new maker or alias is a data update, never code.
  */
-const registrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
-  aliases: z.record(identitySchema, identitySchema).refine(aliases => Object.values(aliases).every(target => !Object.hasOwn(aliases, target))) }).strict();
+const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema,
+  aliases: z.record(identitySchema, identitySchema).refine(aliases => Object.values(aliases).every(target => !Object.hasOwn(aliases, target))) });
 export const MODEL_MAKERS = Object.freeze(registrySchema.parse(asset));
 /** The canonical maker of one catalog model entry; `null` (maker unknown) for an entry without metadata or one whose model the provider chooses. */
 export function canonicalModelMaker(model: unknown): string | null {

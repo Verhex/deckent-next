@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
-import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
 import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
@@ -242,5 +242,5 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
 
 /** The body for a host's window (the terminal's `/monitor`): the same view and keys, closed by the host instead of ending the program. */
 export function MonitorBody(props: MonitorBodyProps) {
-  return <MonitorApp {...props} />;
+  return <MonitorApp {...props} palette={useWorklinePalette()} />;
 }

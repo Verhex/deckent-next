@@ -5,7 +5,7 @@ import { targetBindingSchema, candidateBindingSchema, candidateEvidenceSchema } 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** A typed error code (never a message or an arbitrary error text). */
 export const queueReasonSchema = z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/);
-const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const actor = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 type QueueActor = z.infer<typeof actor>;
 /** D2b (owner 2026-10-18): a human's explicit per-Run delivery intent, set only on that human's own enqueue (one Run = identity.runId, one
  * target = target). Under it the service may re-attempt this ticket's task once the target base advanced and enqueue the re-attempt for the
@@ -13,22 +13,22 @@ type QueueActor = z.infer<typeof actor>;
 export const queueDeliveryIntentSchema = z.literal('service-reattempt');
 /** D1a lineage of a service-enqueued re-attempt: the ticket it replaces, the human intent ticket it acts under, its count and typed cause.
  * `approvedBy` is the delegating human; the ticket's actor is that human's service principal (provenance, never a policy principal). */
-export const queueReattemptSchema = z.object({ sourceCommandId: identitySchema, intentCommandId: identitySchema, count: counterSchema.positive(),
-  cause: queueReasonSchema, approvedBy: actor }).strict().readonly();
+export const queueReattemptSchema = z.strictObject({ sourceCommandId: identitySchema, intentCommandId: identitySchema, count: counterSchema.positive(),
+  cause: queueReasonSchema, approvedBy: actor }).readonly();
 /** The service principal acting for one delegating human; it mirrors the MCP derivation and never verifies as a human. */
 export const queueServiceActor = (approver: QueueActor): QueueActor =>
   Object.freeze({ id: identitySchema.parse(`${approver.id}/service`), issuer: identitySchema.parse(`${approver.issuer}/service`), subject: approver.subject });
 /** D2b (owner 2026-10-18) Run delivery intent: the service submits (or re-queues) an accepted Attempt of the Run whose human-approved
  * proposal carries the intent, as the granting human's service principal. `intentRef` names that Run's approved proposal; `requeue` is
  * the bounded lineage of a re-queue after a pre-effect stop (`parked` without a started effect, or `expired`), typed by cause. */
-export const queueDelegationSchema = z.object({ intentRef: z.object({ runId: identitySchema, proposalId: identitySchema, digest }).strict().readonly(), grantedBy: actor,
-  requeue: z.object({ sourceCommandId: identitySchema, count: counterSchema.positive(), cause: z.enum(['parked', 'expired']), reason: queueReasonSchema.optional() }).strict().readonly().optional(),
-}).strict().readonly();
+export const queueDelegationSchema = z.strictObject({ intentRef: z.strictObject({ runId: identitySchema, proposalId: identitySchema, digest }).readonly(), grantedBy: actor,
+  requeue: z.strictObject({ sourceCommandId: identitySchema, count: counterSchema.positive(), cause: z.enum(['parked', 'expired']), reason: queueReasonSchema.optional() }).readonly().optional(),
+}).readonly();
 const sameActor = (a: QueueActor, b: QueueActor) => a.id === b.id && a.issuer === b.issuer && a.subject === b.subject;
-export const targetQueueRequestSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+export const targetQueueRequestSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   operation: z.enum(['delivery', 'rollback']).optional(), sourceCommandId: identitySchema.optional(), replacesCommandId: identitySchema.optional(), identity: attemptIdentitySchema, target: targetBindingSchema, actor, payloadDigest: digest, policyRevision: identitySchema,
   outputDigest: digest, acceptedRevision: counterSchema, submittedAt: counterSchema, deadline: counterSchema,
-  deliveryIntent: queueDeliveryIntentSchema.optional(), reattempt: queueReattemptSchema.optional(), delegation: queueDelegationSchema.optional() }).strict()
+  deliveryIntent: queueDeliveryIntentSchema.optional(), reattempt: queueReattemptSchema.optional(), delegation: queueDelegationSchema.optional() })
   .refine(value => value.deadline > value.submittedAt && ((value.operation === 'rollback') === (value.sourceCommandId !== undefined)), 'QUEUE_EXPIRED')
   // A re-attempt exists only under an intent, as a delivery, by the approver's service principal; a rollback never carries an intent.
   .refine(value => (!value.deliveryIntent || value.operation !== 'rollback') && (!value.reattempt || (value.deliveryIntent !== undefined
@@ -43,13 +43,13 @@ export const queueApprover = (request: Pick<TargetQueueRequest, 'actor' | 'reatt
 export const targetQueueStateSchema = z.enum(['queued', 'revalidating', 'verifying', 'awaiting-confirmation', 'publishing', 'adopting',
   'reconciling', 'cancelled', 'expired', 'parked', 'settled']);
 export const targetQueueOutcomeSchema = z.enum(['adopted', 're-prepared+adopted', 'conflict-needs-reattempt', 'verification-failed', 'target-protected', 'stale-refused']);
-export const targetQueueRecordSchema = z.object({ schemaVersion: z.literal(1), request: targetQueueRequestSchema,
+export const targetQueueRecordSchema = z.strictObject({ schemaVersion: z.literal(1), request: targetQueueRequestSchema,
   key: digest, ordinal: counterSchema.positive(), revision: counterSchema, state: targetQueueStateSchema,
   ownerInstance: identitySchema.nullable(), epoch: counterSchema, leaseDeadline: counterSchema.nullable(),
   candidate: candidateBindingSchema.nullable(), verification: candidateEvidenceSchema.nullable(), batchDigest: digest.nullable(),
   effectCommandIds: z.array(identitySchema), evidenceRefs: z.array(digest), outcome: targetQueueOutcomeSchema.nullable(),
   /** Additive (BENIMSEME-DEPO-KIMLIGI): the typed code of the failure an effect stopped on, or why a started ticket parked as not applied. */
-  reason: queueReasonSchema.nullable().optional() }).strict().readonly();
+  reason: queueReasonSchema.nullable().optional() }).readonly();
 export type TargetQueueRecord = z.infer<typeof targetQueueRecordSchema>;
 export type TargetQueueState = z.infer<typeof targetQueueStateSchema>;
 export type TargetQueueOutcome = z.infer<typeof targetQueueOutcomeSchema>;

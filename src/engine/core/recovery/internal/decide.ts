@@ -46,7 +46,7 @@ export type RecoveryDecisionOutcome = Readonly<{ kind: 'skipped'; reason: 'off' 
   | Readonly<{ kind: 'shadow'; action: Sealed['action']; code: string | null; replay: boolean }>
   | Readonly<{ kind: 'continued'; case: RecoveryCase; run: RunSnapshot | null; replay: boolean }>
   | Readonly<{ kind: 'escalated'; case: RecoveryCase; replay: boolean }>;
-const decideSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, caseId: z.string().regex(/^[a-f0-9]{64}$/u), mode: z.enum(RECOVERY_RUN_MODES) }).strict();
+const decideSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, caseId: z.string().regex(/^[a-f0-9]{64}$/u), mode: z.enum(RECOVERY_RUN_MODES) });
 const OFFERED = Object.freeze([...RECOVERY_DECISION_ACTIONS]);
 const failureCode = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' && identitySchema.safeParse(code).success ? code : 'RECOVERY_MODEL_CALL_FAILED'; };
 

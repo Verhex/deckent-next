@@ -72,6 +72,14 @@ describe('versioned vendor-neutral decision contracts', () => {
       adviceRef: { invocationId: 'i1', adviceDigest: 'b'.repeat(64) },
       actor: { principalId: 'human:owner', selectedOption: 'a', rationale: 'Bounded scope', decidedAt: '2026-10-02T12:00:00Z' }, outcome: null };
     expect(decisionRecordSchema.safeParse(record).success).toBe(true);
+    // Persisted Zod 3 dates remain readable without rewriting their bytes.
+    for (const observedAt of ['2026-01-01T00:00Z', '2026-01-01T00:00:00+0100', '2026-01-01T00:00:00Z', '2024-02-29T12:30:00.123456-0230']) {
+      const parsed = decisionRecordSchema.parse({ ...record, outcome: { principalId: 'human:owner', observedAt, observation: 'Retained outcome' } });
+      expect(parsed.outcome?.observedAt).toBe(observedAt);
+    }
+    for (const observedAt of ['2026-02-30T00:00:00Z', '2026-01-01T24:00:00Z', '2026-01-01 00:00:00Z', '2026-01-01T00:00', 'invalid']) {
+      expect(decisionRecordSchema.safeParse({ ...record, outcome: { principalId: 'human:owner', observedAt, observation: 'Invalid outcome' } }).success).toBe(false);
+    }
     expect(decisionRecordSchema.safeParse({ ...record, authority: 'allow' }).success).toBe(false);
   });
 });

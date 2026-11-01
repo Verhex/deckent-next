@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "maxSessions": 256,
+  "maxKeysPerSession": 256
+}

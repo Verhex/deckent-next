@@ -4,21 +4,21 @@ import type { TaskDefinition, CriterionDefinition } from '#domain/core/task-grap
 import { resolveTaskWorkClass, workClassAcceptanceProfileSchema, criterionTypeSchema, evidenceTypeSchema, evidenceExtensionSchema,
   WorkClassRegistryError, type WorkClassRegistry } from './work-class.js';
 
-export const frozenWorkClassProfileSchema = z.object({ workClass: identitySchema, policyRevision: identitySchema,
+export const frozenWorkClassProfileSchema = z.strictObject({ workClass: identitySchema, policyRevision: identitySchema,
   profileVersion: counterSchema.positive(), profile: workClassAcceptanceProfileSchema,
   evidenceExtensions: z.array(evidenceExtensionSchema).max(256).readonly(),
-}).strict().superRefine((value, ctx) => {
+}).superRefine((value, ctx) => {
   if (value.profileVersion !== value.profile.version || new Set(value.evidenceExtensions.map(row => row.id)).size !== value.evidenceExtensions.length
     || value.profile.evidenceTypes.some(type => type.startsWith('ext:') && !value.evidenceExtensions.some(row => row.id === type))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_EVALUATION_PROFILE_MISMATCH' });
   }
 }).readonly();
-export const acceptanceCriterionSchema = z.object({ criterionId: identitySchema, criterionType: criterionTypeSchema,
+export const acceptanceCriterionSchema = z.strictObject({ criterionId: identitySchema, criterionType: criterionTypeSchema,
   evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
-}).strict().refine(value => new Set(value.evidenceTypes).size === value.evidenceTypes.length).readonly();
-export const taskAcceptanceReferenceSchema = z.object({ workClass: identitySchema, policyRevision: identitySchema,
+}).refine(value => new Set(value.evidenceTypes).size === value.evidenceTypes.length).readonly();
+export const taskAcceptanceReferenceSchema = z.strictObject({ workClass: identitySchema, policyRevision: identitySchema,
   profileVersion: counterSchema.positive(), criteria: z.array(acceptanceCriterionSchema).min(1).readonly(),
-}).strict().refine(value => new Set(value.criteria.map(row => row.criterionId)).size === value.criteria.length).readonly();
+}).refine(value => new Set(value.criteria.map(row => row.criterionId)).size === value.criteria.length).readonly();
 export class AcceptanceProfileError extends WorkClassRegistryError {
   constructor() { super('TASK_EVALUATION_PROFILE_MISMATCH'); this.name = 'AcceptanceProfileError'; }
 }

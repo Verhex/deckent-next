@@ -44,9 +44,9 @@ export async function checkModelInvocationCapacity(open: () => Promise<ProviderS
     assertProviderSpendCapacity(account, quote);
   } finally { reader.close(); }
 }
-const spendingSchema = immutableJsonObjectSchema.pipe(z.object({
+const spendingSchema = immutableJsonObjectSchema.pipe(z.strictObject({
   budget: providerSpendBudgetSchema.nullable(), quote: providerSpendQuoteSchema,
-}).strict().readonly());
+}).readonly());
 
 export async function authorizeModelInvocationSpending(authority: ModelInvocationSpendingAuthority | undefined,
   input: ModelInvocationSpendingInput, signal?: AbortSignal): Promise<ModelInvocationSpending> {

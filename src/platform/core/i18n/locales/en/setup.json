@@ -104,9 +104,9 @@
   "error.SETUP_OBSERVATION_INVALID.field": "The setup observation is invalid: the {family} facts refuse the field {field}.",
   "error.SETUP_ANSWER_INVALID": "A setup answer is invalid or names an unknown stage.",
   "setup.instructions.title": "Project instructions",
-  "setup.instructions.present": "DECKENT.md is present ({bridges} host bridge(s) found); deckent init --preview shows the bridge lines.",
-  "setup.instructions.missing": "No DECKENT.md yet; it describes this project for AI hosts ({bridges} host bridge(s) found).",
-  "setup.instructions.question": "Write DECKENT.md and choose host bridges?",
+  "setup.instructions.present": "AGENTS.md or CLAUDE.md is present; existing instruction files are preserved.",
+  "setup.instructions.missing": "No AGENTS.md or CLAUDE.md yet; preview AGENTS.md with detected project facts.",
+  "setup.instructions.question": "Preview and create AGENTS.md?",
   "setup.instructions.waits": "Waits for the permissions: project files are written through them.",
   "setup.instructions.declined": "Skipped at your request.",
   "setup.instructions.unavailable": "Project instructions could not be read here.",
@@ -327,5 +327,8 @@
   "setup.workerImage.progress.probe": "Checking required CLI flags without network access.",
   "setup.workerImage.progress.elapsed": "Elapsed: {elapsed}. Last durable progress: {at}.",
   "setup.workerImage.progress.unmeasured": "No previous build duration has been measured here.",
-  "setup.workerImage.progress.previous": "Previous measured preparation: {elapsed}; this is not an ETA."
+  "setup.workerImage.progress.previous": "Previous measured preparation: {elapsed}; this is not an ETA.",
+  "setup.instructions.external": "Imports outside this project are listed below. Trust applies only to this session; these instructions grant no permissions.",
+  "setup.instructions.legacy": "Legacy DECKENT.md is used only because AGENTS.md and CLAUDE.md are absent. Move your instructions to AGENTS.md; Deckent never generates DECKENT.md.",
+  "setup.instructions.legacyNext": "Move the instructions to AGENTS.md, then run deckent doctor again."
 }

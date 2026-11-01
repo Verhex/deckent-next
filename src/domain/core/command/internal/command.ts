@@ -2,12 +2,12 @@ import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 
-export const commandEnvelopeSchema = z.object({
+export const commandEnvelopeSchema = z.strictObject({
   schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema,
-  principalRef: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly(),
+  principalRef: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly(),
   sessionRef: identitySchema.optional(), expectedRevision: counterSchema.optional(),
   idempotencyKeyHash: z.string().regex(/^[a-f0-9]{64}$/),
-}).strict().readonly();
+}).readonly();
 export type CommandEnvelope = z.infer<typeof commandEnvelopeSchema>;
 /** Exact versioned source projection; callers select the fields, readers cannot extend its MAC scope.
  * Object order is canonical; text stays byte-exact so different filesystem names are never conflated.

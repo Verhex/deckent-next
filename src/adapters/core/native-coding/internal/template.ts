@@ -15,12 +15,12 @@ import { nativeCodingTemplateEnvironment } from './environment.js';
  */
 export const NATIVE_CODING_TEMPLATE_ADAPTER = Object.freeze({ id: 'native-coding-template', version: 1 });
 const TEMPLATE_ARGV = '__DECKENT_TEMPLATE__';
-const templateParametersSchema = z.object({ schemaVersion: z.literal(1), docker: immutableJsonObjectSchema,
+const templateParametersSchema = z.strictObject({ schemaVersion: z.literal(1), docker: immutableJsonObjectSchema,
   invocation: nativeCodingInvocationFields.omit({ schemaVersion: true, model: true, prompt: true, composition: true, effort: true }).extend({
-    composition: z.object({ core: promptPartSchema.optional(), persona: promptPartSchema.optional(),
-      skills: z.array(promptPartSchema).max(16).optional(), context: z.array(promptPartSchema).max(8).optional() }).strict().optional(),
+    composition: z.strictObject({ core: promptPartSchema.optional(), persona: promptPartSchema.optional(),
+      skills: z.array(promptPartSchema).max(16).optional(), context: z.array(promptPartSchema).max(8).optional() }).optional(),
   }).strict(),
-}).strict();
+});
 
 export const isNativeCodingTemplate = (profile: ExecutionProfileDefinition) => profile.adapter.id === NATIVE_CODING_TEMPLATE_ADAPTER.id;
 

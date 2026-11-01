@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/index.js';
 import { z } from 'zod';
 import type { NativeJsonHttpParsed } from '#adapters/core/provider-http-json/index.js';
 import { openAiChatWireObjectSchema, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
@@ -5,13 +6,13 @@ import type { AnthropicContinuationScope } from './continuation.js';
 import { anthropicUsageSchema, assembleAnthropicMessage, stopReasonSchema } from './assemble.js';
 
 const block = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('text'), text: z.string() }).passthrough(),
-  z.object({ type: z.literal('thinking'), thinking: z.string(), signature: z.string() }).passthrough(),
-  z.object({ type: z.literal('redacted_thinking'), data: z.string() }).passthrough(),
-  z.object({ type: z.literal('tool_use'), id: z.string().min(1).max(256), name: z.string(), input: z.record(z.string(), z.unknown()) }).passthrough(),
+  z.looseObject({ type: z.literal('text'), text: z.string() }),
+  z.looseObject({ type: z.literal('thinking'), thinking: z.string(), signature: z.string() }),
+  z.looseObject({ type: z.literal('redacted_thinking'), data: z.string() }),
+  z.looseObject({ type: z.literal('tool_use'), id: persistedString(z.string().min(1).max(256)), name: z.string(), input: z.record(z.string(), z.unknown().optional()) }),
 ]);
-const responseSchema = z.object({ id: z.string().min(1), type: z.literal('message'), role: z.literal('assistant'), model: z.string().min(1),
-  content: z.array(block), stop_reason: stopReasonSchema, usage: anthropicUsageSchema }).passthrough();
+const responseSchema = z.looseObject({ id: persistedString(z.string().min(1)), type: z.literal('message'), role: z.literal('assistant'), model: persistedString(z.string().min(1)),
+  content: z.array(block), stop_reason: stopReasonSchema, usage: anthropicUsageSchema });
 
 /** Non-streamed Messages response (compaction and other one-shot calls) with the same validation as the assembled stream. */
 export function parseAnthropicMessageResponse(body: Buffer, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope): NativeJsonHttpParsed {

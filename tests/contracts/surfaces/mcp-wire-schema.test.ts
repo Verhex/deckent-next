@@ -5,7 +5,7 @@ import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.
 
 /**
  * ZOD4-PREP step 1 (owner 2026-09-29, zod4-migration-plan.md §1.3): the `tools/list` inputSchema every Deckent MCP tool publishes
- * today — `zodToJsonSchema(schema, { $refStrategy: 'none' })` from zod-to-json-schema 3.25.0 over zod 3.25.76, JSON Schema draft-07.
+ * retains the zod 3 draft-07 wire contract through native z.toJSONSchema plus the shared compatibility projection.
  * No tool publishes an outputSchema today (pinned below). The migration (plan step 5) DELIBERATELY moves to
  * `z.toJSONSchema(schema, { target: 'draft-2020-12', io: 'input' })` (https://zod.dev/json-schema, read 2026-09-29; MCP 2026-07-28
  * recommends 2020-12): the committed fixture below is the reviewed diff of that change — refresh it only with
@@ -62,6 +62,12 @@ describe('MCP tool wire schema (zod 4 / JSON Schema dialect guard)', () => {
   it('today\'s draft-07 forms that a 2020-12 conversion rewrites are pinned explicitly', async () => {
     const tools = new Map((await listTools()).map(tool => [tool.name, tool.inputSchema as { properties: Record<string, unknown>; required?: string[]; additionalProperties?: unknown }]));
     expect(tools.get('inspect_run')!.additionalProperties).toBe(false);
+    // The JSON-copy input pipeline must still publish its final closed object contract.
+    expect(tools.get('inspect_decision')!.required).toEqual(['schemaVersion', 'scopeId', 'decisionId']);
+    expect(tools.get('inspect_decision')!.additionalProperties).toBe(false);
+    expect(tools.get('invoke_model')!.required).toContain('nativeRequest');
+    const graph = tools.get('create_run')!.properties['graph'] as { properties: { criterionDefinitions: { items: { required: string[] } } } };
+    expect(graph.properties.criterionDefinitions.items.required).toContain('parameters');
     expect(tools.get('inspect_inventory')!.properties['limit']).toEqual({ type: 'integer', exclusiveMinimum: 0, maximum: 2_147_483_646 });
     expect(tools.get('renew_approval')!.properties['expectedRevision']).toEqual({ type: 'integer', minimum: -9_007_199_254_740_991, maximum: 9_007_199_254_740_991 });
     const execute = tools.get('execute_operation')!;

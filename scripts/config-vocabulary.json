@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "68e0b420d5b07cbf302b05b7e9149640e6f4fb1792b98bef9a29717ec2880b45",
-    "src/platform/core/config-fields/internal/fields-models.ts": "9d347347153aa5af2a808d8e2dd7d3ff064db34c2911deee6eba63fa58dbf165",
-    "src/platform/core/config-fields/internal/fields-setup.ts": "bfb8d883744c1586bcc7e11de80586f3fcf892da42963e3ac292ecb6ea7cd768",
-    "src/platform/core/config-fields/internal/fields.ts": "5ae2d1917a61e84abc3fd243905a36abe214f33f1ca15ec8d062db5a69616e87",
+    "src/platform/core/config-fields/internal/fields-models.ts": "ece9d1ec0bd4c87086aae3cdefe56d0e089dbaa825553a46603ffa79a50dbbb9",
+    "src/platform/core/config-fields/internal/fields-setup.ts": "dc75c669f0370a264b3956322fe3c2bf1580a139b8ce3d5ed796daa7abbf24c5",
+    "src/platform/core/config-fields/internal/fields.ts": "3178ede74a1632f5695c202e4ae5cf1ed5cbe0976a7637e245de8d6a84676700",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -91,6 +91,7 @@
       "default"
     ],
     "enforce_principal_assurance": [],
+    "beuser": [],
     "models": []
   }
 }

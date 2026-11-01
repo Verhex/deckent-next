@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearConfigCache, t } from '#platform/index.js';
 import type { WorkLedgerEntry, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
-import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
+import { terminalComposerLabels, worklineLabels } from '#surfaces/core/terminal-labels/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { pickerLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { helpInfoModel, type SlashWindowLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
@@ -31,7 +31,7 @@ const WINDOWS: SlashWindowLabels = { picker: pickerLabels('en'), position: '{fro
   scratch: { title: 'Scratch', status: '{count} {bytes} {limit}', folder: 'Folder', more: '+{count}', empty: 'empty', fileDetail: '{bytes}', clear: 'Clear', clearDetail: '',
     clearTitle: 'Clear?', clearBody: '{count} {bytes} {path}', clearPrompt: 'y/n', pathTitle: 'Path' },
   unknown: { title: words('terminal.window.unknown.title'), body: words('terminal.window.unknown.body'), closest: words('terminal.window.unknown.closest'),
-    none: words('terminal.window.unknown.none'), all: words('terminal.window.unknown.all'), allDetail: words('terminal.window.unknown.allDetail') } };
+    none: words('terminal.window.unknown.none'), all: words('terminal.window.unknown.all'), allDetail: words('terminal.window.unknown.allDetail'), english: words('terminal.window.unknown.english') } };
 const SESSIONS = { started: 'New conversation started.', entry: '{index} {session} {count} {preview}', none: 'none', notFound: 'nf', unavailable: 'np', saveFailed: 'sf',
   resumed: 'resumed {count} {session}', context: 'ctx', contextNone: 'ctx {count}' };
 const LEDGER: WorklineLedgerPorts = { scopeId: 's', async inspectRun() { return null; },
@@ -51,7 +51,7 @@ async function open(extra: Partial<WorklineProps> = {}) {
   const completeTurn = vi.fn(async () => 'unexpected');
   const view = mountWorkline({ info, ledger: LEDGER, pollMs: 60_000, completeTurn,
     sessions: { async save() { /* kept in memory by the view */ }, async list() { return []; }, async load() { return null; } },
-    labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en'), windows: WINDOWS, sessions: SESSIONS,
+    labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en'), windows: WINDOWS, sessions: SESSIONS, uninstall: worklineLabels('en', '').uninstall,
       composer: { ...WORKLINE_TEST_LABELS.composer, slash: terminalComposerLabels('en').slash } }, ...extra });
   views.push(view);
   await until(() => view.stdout.frame.includes('READY'), 'workline ready'); await settle(40);
@@ -93,7 +93,20 @@ describe('slash windows integrated on one workline', () => {
   });
 
   it('an unknown command offers every command; picking it opens the /help window, which lists the whole registry', async () => {
-    const { view, info } = await open();
+    const copied: string[] = [];
+    const { view, info } = await open({ clipboard: text => { copied.push(text); return { ok: true, bytes: text.length }; } });
+    // Owner S4 (lead 3-4): a typo names exactly one nearest English command (plus /help); picking it opens /uninstall's window, which removes
+    // nothing and whose copy row sends exactly the shell command. A word in another language gets the English-only note and no suggestion.
+    await type(view, '/unintsall \r');
+    await until(() => view.stdout.frame.includes(WINDOWS.unknown.english) && /> {3}\/uninstall .*\n│ {5}All commands…/u.test(view.stdout.frame), 'one nearest command, then /help');
+    view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('deckent uninstall') && view.stdout.frame.includes(words('terminal.workline.uninstall.where')), '/uninstall window');
+    view.stdin.write('\r'); await until(() => copied.length === 1, 'command copied');
+    expect(copied).toEqual(['deckent uninstall']);
+    await type(view, '/kaldır \r');
+    await until(() => view.stdout.frame.includes('/kaldır') && view.stdout.frame.includes(WINDOWS.unknown.none) && view.stdout.frame.includes('>   All commands…'), 'English-only card');
+    expect(view.stdout.frame).toContain(WINDOWS.unknown.english); view.stdin.write(ESC); await settle(60);
+    captured.entries = [];
     await type(view, '/qqqqzzzz \r');
     await until(() => view.stdout.frame.includes(WINDOWS.unknown.all), 'all-commands row');
     view.stdin.write('\r');
@@ -115,9 +128,8 @@ describe('slash windows integrated on one workline', () => {
     const { view } = await open({ streamTurn: streamTurn as never, inputHistory: { async load() { return []; }, append(entry) { appended.push(entry.text); } } });
     await type(view, 'first\r'); await settle(60);
     await type(view, '/status SECRET-ARG-77\r');
-    await until(() => captured.entries.some(entry => entry.kind === 'notice' && entry.text.startsWith('QUEUED')), 'queued notice');
-    const queued = captured.entries.find(entry => entry.kind === 'notice' && entry.text.startsWith('QUEUED'))!;
-    expect(queued).toMatchObject({ text: 'QUEUED: /status' });
+    await until(() => view.stdout.frame.includes('QUEUED · ') && view.stdout.frame.includes('• /status'), 'queued row above the composer');
+    expect(captured.entries.some(entry => entry.kind === 'notice' && entry.text.includes('/status'))).toBe(false);
     expect(appended).toEqual(['first', '/status']);
     release();
     await until(() => view.stdout.frame.includes('▸ Runtime service') && view.stdout.frame.includes(WINDOWS.typedArgument), 'queued command opens its window with the note');

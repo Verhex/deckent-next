@@ -10,8 +10,8 @@ const steps = Object.freeze([
 ]);
 export const getDecisionSteps = () => steps;
 export type DecisionStep = typeof steps[number];
-const queryFields = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  actor: z.literal('mcp').default('mcp'), resourceId: identitySchema.optional() }).strict();
+const queryFields = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  actor: z.literal('mcp').prefault('mcp'), resourceId: identitySchema.optional() });
 export const delegationQuerySchema = queryFields.readonly();
 export const delegationCommandSchema = queryFields.extend({ step: identitySchema, action: z.enum(['grant', 'revoke']), expectedRevision: identitySchema }).strict().readonly();
 export type DelegationQuery = z.input<typeof delegationQuerySchema>;

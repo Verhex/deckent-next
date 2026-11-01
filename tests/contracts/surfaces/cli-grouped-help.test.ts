@@ -117,10 +117,16 @@ it.each(['run', 'task'])('preserves existing %s unknown-action help and extra-fl
   expect(await main([family, '--help', '--json'], context)).toBe(2);
 });
 
-it('keeps the same command inventory in both localized golden sets', () => {
+it('keeps the same command inventory and shares localized search with the Terminal browser', async () => {
   const load = (locale: string) => JSON.parse(readFileSync(new URL(`../../fixtures/cli-help/commands-${locale}.json`, import.meta.url), 'utf8')) as Record<string, string>;
   expect(Object.keys(load('en'))).toEqual(Object.keys(load('tr')));
   expect(Object.keys(load('en'))).toEqual(CLI_COMMANDS.map(command => command.path.join(' ')));
+  for (const [locale, query] of [['tr', 'kaldır'], ['tr', 'sil'], ['en', 'remove'], ['en', 'uninstall']] as const) {
+    let output = '';
+    const code = await main(['help', query, '--lang', locale], { env: {}, initialize: () => { throw Error('must not initialize'); }, stdout: { write: text => { output += text; } } });
+    expect(code).toBe(0);
+    expect(output.split('\n').filter(line => line.startsWith('  /'))[0]).toMatch(/^ {2}\/uninstall /u);
+  }
 });
 
 it.each(['en', 'tr'] as const)('keeps %s syntax whole and creates no short wrapping orphans', language => {

@@ -1,6 +1,7 @@
+import { persistedInteger } from '#domain/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { ErrorRegistry } from '#platform/index.js';
 import { SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, type SecretStoreContext, type SecretStoreFactory } from './port.js';
 import type { SecretChangeDecision } from './administration.js';
 
@@ -20,10 +21,10 @@ export interface SecretHelperOptions {
 /** Internal I/O port: adapter must dispose pipes and kill the process group on abort. No secret output/raw exceptions in its errors. */
 export type SecretHelperReadPort = (options: SecretHelperOptions, name: string, signal: AbortSignal) => Promise<string | undefined>;
 const text = z.string().refine(value => !value.includes('\0'));
-const definition = z.object({ id: z.string().regex(SECRET_STORE_ID_PATTERN).refine(id => !id.startsWith('core.')),
+const definition = z.strictObject({ id: z.string().regex(SECRET_STORE_ID_PATTERN).refine(id => !id.startsWith('core.')),
   executable: text.refine(isAbsolute), args: z.array(text), cwd: text.refine(isAbsolute),
-  timeoutMs: z.number().int().positive().safe().max(2_147_483_647),
-  maxOutputBytes: z.number().int().positive().max(SECRET_VALUE_MAX_BYTES + 2), authorize: z.custom<SecretHelperOptions['authorize']>(value => typeof value === 'function') }).strict();
+  timeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).max(2_147_483_647),
+  maxOutputBytes: persistedInteger().positive().max(SECRET_VALUE_MAX_BYTES + 2), authorize: z.custom<SecretHelperOptions['authorize']>(value => typeof value === 'function') });
 
 /** One application owner for authorization, deadline and concurrency. All store instances of a factory share one admission slot.
  * Late authorization cannot execute after the deadline. No queue, retries, cached value or cross-store fallback.

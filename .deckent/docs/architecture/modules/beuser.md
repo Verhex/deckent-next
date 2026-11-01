@@ -44,8 +44,8 @@ Uncertain cleanup retains quarantine/unknown; Docker rm exit alone is not destru
 
 The limits registry contains the `b1-dogfood-provisional-1` profile and, from `beuser-limits-5` (owner
 2026-10-31: generous development ceilings so a walk is not cut by its budget; optimisation later),
-`b1-dogfood-provisional-2`, which the packaged journeys, personas and calibration use: 256 calls,
-16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged. Their finite ceilings are provisional
+`b1-dogfood-provisional-2` (256 calls,
+16777216 tokens, one hour of wall time and 3 USD for priced (API key) models, other ceilings unchanged), and from `beuser-limits-6` `b1-dogfood-provisional-3`, which the packaged journeys, personas and calibration use: the same ceilings with a 45 s wait bound so the owner's persona wait patience (Ayşe 45 s, Mert 30 s, 2026-10-31) applies in full. Their finite ceilings are provisional
 planning bounds, not measurements, model spend permission or a capacity claim. C7 owns measurement
 and replacement. Each model call reserves its prompt size plus the requested completion cap: the
 invocation adapter's measured prompt count (including the served template) where the transport has a
@@ -112,7 +112,7 @@ raw manifest `sha256`, complete measured `fileCount` (including both metadata fi
 creation share the same loader: bounded stable package measurement recomputes the
 manifest digest, checks file count/package measurement and source identity against
 both release metadata and the manifest-pinned build identity, then runs the existing
-full distribution and credential verifier. Any mismatch returns localized
+full distribution and credential verifier. One-command preview also reads release identity only after successful measurement, reusing the same measured-size, hash-checked, regular-file reader with `O_NOFOLLOW | O_NONBLOCK`. Oversized, symlink, FIFO and changed metadata cannot start an unbounded sibling read. Any mismatch returns localized
 `BEUSER_CANDIDATE_MISMATCH` before launch. Neither metadata record is excluded.
 Old inline journey profiles must be regenerated; generic JSON guards, supervisor
 adapter v1, binding/evidence contracts, ledger and protocol versions are unchanged.
@@ -125,6 +125,63 @@ pool owner provisions the matching pool separately; a failed pool step is return
 can be reconciled by repeating setup. An equal registry is not rewritten; a different existing
 registry or pool is refused for governed reconciliation. `beuser.*` remains a protected root;
 execution profiles continue to live in the general execution registry.
+
+### One-command walk (owner S9, alpha.60 source candidate)
+
+`deckent beuser walk --journey <id> [--candidate <path>]` without `--scope` runs from any folder on the
+person's terminal (an AI-marked or piped terminal is refused before any step). Its controller is the
+private Deckent installation at `<global state root>/beuser-controller` (folder name and the profile's
+terminal, bounds and pool values in the versioned `assets/beuser/controller.json`); its scope is that
+installation's `terminal.scopeId`. The command creates only the folder: the person installs it and
+connects subscriptions or keys there with the existing onboarding and `/provider` (`cd <controller> &&
+deckent`); without an active connected model it prints that next step and refuses
+`BEUSER_MODEL_UNAVAILABLE` with nothing staged. Otherwise a card lists the connected models with
+a toggle for each walker and a Continue row. Each provider starts with its first active, invocable seed recommendation, or its first connected catalog row when no seed recommendation is available. The person selects 1–4 walkers, then one judge in a separate card; the first recommended subscription model is preselected for the judge, falling back visibly to the first recommended connected model. Empty and over-ceiling selections stay on the walker card with a correction message. No model is chosen silently.
+The profile is built in product code the way the packaged example builds it (first branch, first
+persona, its probe set, v3 start state) from this package's journey, persona and calibration assets
+and the measured candidate, with one distinct profile and Task per selected walker: by default this package's own build, which must be a staged dev-release
+(a source checkout is refused `BEUSER_CANDIDATE_MISMATCH`). The environment reference digests the realm
+recipe revision and the controller's configured image (null when absent; the walk then reports
+`EXECUTION_NOT_CONFIGURED`). Contributor receipts are recorded as unavailable. The setup card shows
+journey, candidate version and revision, each walker, the judge, per-walker shared walk/judge budget and completion reservation, aggregate call/token/cost ceilings, execution/in-flight slots before→after and the content digest. A judge also selected as a walker is labelled `reduced`; a different model alone remains `unknown` independence, with unavailable contributor receipts. The judge consumes each walker's existing envelope; the limits registry is unchanged; Esc or Cancel applies nothing. Setup in this mode may replace an existing registry
+only when all its profiles are BeUser profiles. `beuser-controller-2` records the lead's measured capacity ceiling of four execution/in-flight slots; the selected walk uses exactly its walker count. Only these two pool fields may change, after the person sees before→after and approves; other pool fields remain equal. The existing policy-checked pool capacity command owns a stored capacity change (including occupied-shrink refusal). This requires installation-wide `set-capacity` authority; a scope-only owner grant is refused as `POLICY_DENIED`, even after the person approves the setup card. Setup never creates that grant, and the normal installer provisions a fresh pool. Config and pool are separate durable writes; a failure after config publication remains explicit and requires reconciliation, never a fabricated completed walk. Any other difference is still `BEUSER_SETUP_CONFLICT`. The walk then runs under the
+same admission; human output separates walker diagnostics from each judge verdict, preserving unknown results. The output ends with the walked revision and `cd <controller> && deckent beuser
+report`. The `--scope` form is unchanged and also defaults `--candidate` to this package's build.
+
+### BS part 2b author slice (alpha.60 candidate)
+
+An omitted `--journey` opens a list of the packaged journey files on the person's terminal,
+with the package's recommendation marked; AI and pipe callers cannot answer it. Esc cancels.
+Sequential cards resume the input stream paused by the previous card; decision arming and
+text/key filtering remain unchanged.
+The existing exclusive write-lock custody protects a walk across processes and is checked again
+before setup publication: a second invocation refuses with `BEUSER_WALK_RUNNING` and points to
+`/beuser`, without another Run. Unsupported controller config versions retain their typed
+`CONFIG_VERSION_UNSUPPORTED` refusal instead of becoming a missing-model suggestion.
+
+For an existing pool resize, installation-wide `set-capacity` authorization is checked before
+any config publication. A denial preserves the authored config bytes. The capacity owner checks
+authority again when applying; a failure after config publication returns `applied-unverified`,
+and the CLI states the partial effect. This is not an atomic config/pool transaction.
+
+`/beuser` opens the terminal monitor through the production CLI host and workline settings port.
+It shows the recorded Run/journey, walker and judge models, branch progress, elapsed time, pinned
+limits and early-stop reasons. Parked Run reasons remain visible before a report exists. State
+and observation age do not prove process liveness; `r` refreshes and Esc closes only the window.
+The next walk's limits are shown separately from the recorded walk's snapshot.
+
+Owner 2026-11-01: `beuser.limits` can narrow time, reruns, steps and spend through the same
+ConfigApplication policy/approval/digest/audit writer. Values above the code ceiling are refused
+with the versioned-record remedy. The monitor offers presets, an exact preview and a separate
+armed person card with no default answer; it has no inline field editor or AI/MCP write route.
+An approval-held change opens the existing approval surface and writes nothing until the same
+pending command is approved and resubmitted. Denial leaves config unchanged.
+
+New setup/admission pins effective budgets in journey profile v4. The Attempt, captured supervisor,
+realm, monitor record and recovery consume that snapshot, including its code/config source; later
+config cannot rewrite a recorded Attempt. v2/v3 records still resolve their original limits revision
+and original start-state semantics; no ledger migration is introduced. Author checks and fixture PTYs
+are separate from the assembled release BeUser walk, native-platform and independent acceptance.
 
 ### Walker and evaluator models (owner 2026-10-31)
 
@@ -337,6 +394,35 @@ verdict. Cleanup uncertainty remains separately unknown; the diagnostic grants n
 calibration, safety pass or independent acceptance. Only retained screen observations count as
 walked; missing verdict coverage remains explicitly unknown.
 
+
+## Early-stop evaluation (alpha.60 source candidate)
+
+The controller seals the transcript after `patience`, `loop`, `observing` or an admitted
+`bound`, including one `stopped` friction row with the last screen and proposed action
+(typed text withheld). Persona decision exhaustion is `patience`; the admitted execution
+budget remains `bound`. The existing readback invokes the experience evaluator after
+proven destruction and a valid controller audit. An unknown, cancelled,
+deadline, drift or leak stop, uncertain cleanup, unavailable audit or exhausted wall
+budget cannot start that evaluator. Its calls, tokens and cost use the existing shared
+reservation envelope; no evaluator capacity is added.
+
+The judge, after a normal finish or an early stop, is one readback phase. A malformed,
+schema-invalid or foreign-reference answer gets the same bounded format correction as the
+walker (`correctBeuserModelOutput`): each later call carries `BEUSER_MODEL_OUTPUT_INVALID`
+as feedback, at most the smallest of the admitted calls, the admitted steps and the persona
+step patience, every call reserved from the same envelope. There is no evaluator-specific
+retry or second phase. A refused reservation ends the phase; repeated invalid output ends
+it with `BEUSER_MODEL_OUTPUT_INVALID`, no verdict and no evidence file. A failed judge never
+erases an early stop: the walk keeps its stop reason and RED persona finding, and the terminal
+record carries the judge failure separately (`judgeFailure`), reported as its own unknown row.
+
+This retains the existing acceptance gates: experience advice cannot replace missing
+business readback, authorization/safety probes or calibration. Such a walk can now retain
+a non-null verdict with unknown outcome; its persona diagnostic remains separate from
+acceptance. Guaranteed RED/FRICTION on every early stop requires a separate decision about
+that contract. Owner S8 (2026-10-31) changes registry `b1-personas-2`: Ayşe waits up to
+45 seconds and Mert up to 30 seconds. New admission pins these updated summaries; existing
+sealed profiles keep their original summaries and require regeneration to adopt the change.
 
 ## Realm destruction assurance (owner amendment A, 2026-10-29)
 

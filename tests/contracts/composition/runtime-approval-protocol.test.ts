@@ -52,11 +52,11 @@ async function fixture() {
 }
 
 // Protocol v15 (T-L5 lane, owner 2026-09-27 v15 package) activated C12 G4 visibility: OPERATION_SUBJECT_PROTOCOL_VERSION is 15 (a
-// threshold; v16 and v17 keep it), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
+// threshold retained by v30), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
-it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
-  // TESLIM-KUYRUGU phase 2 raised the protocol to 29 (queue operations); the subject visibility thresholds below are unchanged.
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(29);
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a current runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
+  // TP raised the protocol to 30; the lifecycle window is [30,29], and subject visibility thresholds remain unchanged.
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(30);
   // T3 L2: config-change records reach clients from v22 (the integration raises the protocol to it); below, they are hidden like operations below v15.
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change', 'run-create']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual(['config-change', 'run-create']);
@@ -68,7 +68,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] d
     const query = { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 };
     const listed = await client.listApprovals(query) as { request: { approvalId: string; subject?: { kind: string } } }[];
     expect(listed.map(record => record.request.approvalId).sort()).toEqual([f.task.request.approvalId, 'operation', 'tool-call'].sort());
-    // The terminal's /approvals page parser (terminal-ledger) accepts every record v15 delivers.
+    // The terminal's /approvals page parser (terminal-ledger) accepts every record the current protocol delivers.
     expect(() => z.array(approvalRecordSchema).parse(listed)).not.toThrow();
     // Service start closed the orphaned tool-call approval as expired (C12 sweep); the operation approval is not a turn's and stays pending.
     expect(await client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'tool-call' })).toMatchObject({ request: f.call.request, status: 'expired' });
@@ -85,7 +85,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] p
   const service = await startTestRuntimeService(f.project, f.env);
   try {
     const client = createTerminalRuntimeClient(f.project, { env: f.env });
-    // Ids order: <task uuid> | 'operation' | 'tool-call'. After 'n' the full page of one is the operation approval (SDK and v15 client);
+    // Ids order: <task uuid> | 'operation' | 'tool-call'. After 'n' the full page of one is the operation approval (SDK and current client);
     // the page of one of a view that hides operation subjects (the released-v14 view) is the next visible record, never an empty page.
     const query = { schemaVersion: 1, scopeId: 's', afterId: 'n', limit: 1 };
     const hidden = { excludeSubjects: approvalSubjectsHiddenFromProtocol(14) };

@@ -8,7 +8,7 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { useWindowLayer, useWindowReserve, useWindowInputGuard, WINDOW_PRIORITY } from '#surfaces/core/terminal-window/index.js';
-import { fillTemplate, truncateEnd, useRenderGlyphs, wrapCells, modelProviderSpans, spanStyle } from '#surfaces/core/terminal-render/index.js';
+import { cells, fillTemplate, truncateEnd, useRenderGlyphs, wrapCells, modelProviderSpans, spanStyle } from '#surfaces/core/terminal-render/index.js';
 import { ARROW_PICKER_ROWS } from './arrow-picker.js';
 import { PICKER_INITIAL, pickerActionOf, pickerFirstRow, pickerReduce, pickerView, type PickerOutcome, type PickerResult, type PickerState, type PickerTree, type PickerView } from './picker-core.js';
 
@@ -127,6 +127,16 @@ export function ListPicker(props: {
     ? <Text {...palette.muted} wrap="truncate">{view.unfiltered === 0 ? props.labels.empty : props.labels.noMatches}</Text> : null;
   const rows = shown.map((row, offset) => {
     const at = first + offset, selected = at === view.pos;
+    if (row.tone) {
+      const prefix = `${selected ? '>' : ' '} ${row.blocked !== null ? lock : ' '} `;
+      const label = `${row.label}${row.section ? ` ${arrow}` : ''}`;
+      const detail = `${row.detail ? `  ${row.detail}` : ''}${row.blocked !== null ? `  [${props.labels.blocked}]` : ''}`;
+      // Keep the name in terminal foreground even when selected; colour only the state glyph and detail.
+      const room = Math.max(0, width - cells(prefix + (row.glyph ? `${row.glyph} ` : '') + label));
+      return <Text key={`${row.id}:${at}`} wrap="truncate"><Text {...(selected ? { bold: true } : {})}>{prefix}</Text>
+        <Text {...palette[row.tone]}>{row.glyph ? `${row.glyph} ` : ''}</Text><Text>{label}</Text>
+        <Text {...palette[row.tone]}>{room > 0 ? truncateEnd(detail, room, glyphs.ellipsis) : ''}</Text></Text>;
+    }
     const text = `${selected ? '>' : ' '} ${row.blocked !== null ? lock : ' '} ${row.label}${row.section ? ` ${arrow}` : ''}${row.detail ? `  ${row.detail}` : ''}${row.blocked !== null ? `  [${props.labels.blocked}]` : ''}`;
     const tone = selected ? palette.selection : row.blocked !== null ? palette.muted : {};
     return <Text key={`${row.id}:${at}`} wrap="truncate" {...tone}>{modelProviderSpans(truncateEnd(text, width, glyphs.ellipsis), row.identity)

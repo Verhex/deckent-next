@@ -1,5 +1,5 @@
 import { assertWorkerConsentChange } from './worker-consent.js';
-import { assertCatalogProfileBindings } from './model-profiles.js';
+import { capabilityProfileChange, assertCatalogProfileBindings } from './model-profiles.js';
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, protectedConfigKey, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
@@ -74,23 +74,39 @@ export class ConfigApplication {
    * A protected root first needs the person's terminal witness (`authority.witness`). `set`/`unset` stay the installer's and the toolchain
    * refresh's derived writes (no person-chosen key or value); a composition writer of a person's choice asks the same witness itself.
    */
-  async submit(action: 'set' | 'unset', input: ConfigWriteInput): Promise<ConfigChangeOutcome> {
-    const unset = action === 'unset', approvals = this.authority.approvals;
+  async submit(action: 'set' | 'unset', input: ConfigWriteInput): Promise<ConfigChangeOutcome> { return this.submitChanges(action, [input]); }
+  /** Trusted connect composition only: a capability-only declaration and its exact scoped profile share one governed publish. */
+  async submitCatalogCapabilities(input: ConfigWriteInput, target: Parameters<typeof capabilityProfileChange>[2]): Promise<ConfigChangeOutcome> {
     this.admitInput(input);
-    // alpha.55.1 (functest B P1): a protected root is a person's act at a terminal on every human surface, whatever the policy grants.
-    await assertConfigPersonWitness(action, input.keyPath, this.authority.witness);
-    if (!approvals) return { status: 'applied', result: await this.change(input, unset), approvalId: null };
-    if ((await approvals.evaluate(input)).decision === 'allow') return { status: 'applied', result: await this.write(input, unset, approvals, null), approvalId: null };
+    if (this.authority.approvals) await this.authority.approvals.evaluate(input); else await this.authority.authorize(input);
+    const snapshot = await this.documents.snapshot(input.layer ?? 'project');
+    if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
+    return this.submitChanges('set', [{ ...input, expect: snapshot.digest }, ...capabilityProfileChange(snapshot, input, target)]);
+  }
+  private async submitChanges(action: 'set' | 'unset', inputs: readonly ConfigWriteInput[]): Promise<ConfigChangeOutcome> {
+    const input = inputs[0]!;
+    const unset = action === 'unset', approvals = this.authority.approvals;
+    for (const item of inputs) { this.admitInput(item); await assertConfigPersonWitness(action, item.keyPath, this.authority.witness); }
+    if (!approvals) {
+      for (const item of inputs) await this.authority.authorize(item);
+      return { status: 'applied', result: await this.write(inputs, unset, null, []), approvalId: null };
+    }
+    const decisions = await Promise.all(inputs.map(item => approvals.evaluate(item)));
+    if (decisions.every(row => row.decision === 'allow')) return { status: 'applied', result: await this.write(inputs, unset, approvals, []), approvalId: null };
     const preview = await this.documents.snapshot(input.layer ?? 'project');
-    if (input.expect !== undefined && input.expect !== preview.digest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
-    await this.check(input, preview, planConfigChange(preview.document, input.keyPath, input.value, unset));
-    // Re-evaluated on the previewed state: the rule that asks is the one the card names.
-    const authorization = await approvals.evaluate(input);
-    if (authorization.decision === 'allow') return { status: 'applied', result: await this.write(input, unset, approvals, null), approvalId: null };
-    const subject = configChangeSubject(preview, input, unset, authorization.ruleId ?? 'policy');
-    const admission = await approvals.admit(input, subject, authorization);
-    if ('pending' in admission) return { status: 'approval-pending', commandId: input.commandId, expect: preview.digest, keyPath: input.keyPath, layer: preview.layer, approval: admission.pending };
-    return { status: 'applied', result: await this.write(input, unset, approvals, subject), approvalId: admission.approved.approvalId };
+    for (const item of inputs) if (item.expect !== undefined && item.expect !== preview.digest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
+    const document = inputs.reduce((doc, item) => planConfigChange(doc, item.keyPath, item.value, unset), preview.document);
+    for (const item of inputs) await this.check(item, preview, document);
+    const subjects: (ConfigChangeSubject | null)[] = []; let approvalId: string | null = null;
+    for (const item of inputs) {
+      const authorization = await approvals.evaluate(item);
+      if (authorization.decision === 'allow') { subjects.push(null); continue; }
+      const subject = configChangeSubject(preview, item, unset, authorization.ruleId ?? 'policy');
+      const admission = await approvals.admit(item, subject, authorization);
+      if ('pending' in admission) return { status: 'approval-pending', commandId: item.commandId, expect: preview.digest, keyPath: item.keyPath, layer: preview.layer, approval: admission.pending };
+      subjects.push(subject); approvalId = admission.approved.approvalId;
+    }
+    return { status: 'applied', result: await this.write(inputs, unset, approvals, subjects), approvalId };
   }
   /** Layer validation, the person-only subscription profiles and the precondition port, in that order, over one planned document. */
   private async check(input: ConfigWriteInput, snapshot: ConfigSnapshot, document: Record<string, unknown>) {
@@ -110,36 +126,44 @@ export class ConfigApplication {
   private async change(input: ConfigWriteInput, unset: boolean) {
     this.admitInput(input);
     await this.authority.authorize(input);
-    return this.write(input, unset, null, null);
+    return this.write([input], unset, null, []);
   }
   /**
    * The one write under the layer lock. `approved` (a config-change subject whose approval was found allowed): the layer must still be at its
    * previewed digest, and the current policy must still permit the write — an `allow`, or a `require-approval` whose stored allow of this exact
    * change is still within its admission window. Without an approval port the allow-only authorization decides, as before.
    */
-  private write(input: ConfigWriteInput, unset: boolean, approvals: ConfigApprovalPort | null, approved: ConfigChangeSubject | null) {
+  private write(inputs: readonly ConfigWriteInput[], unset: boolean, approvals: ConfigApprovalPort | null, subjects: readonly (ConfigChangeSubject | null)[]) {
+    const input = inputs[0]!;
     return this.documents.publish(input, async snapshot => {
-      if (approved && snapshot.digest !== approved.expectDigest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
-      if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
-      const document = planConfigChange(snapshot.document, input.keyPath, input.value, unset); await this.check(input, snapshot, document);
-      let revision: string, approvalId: string | null = null;
-      if (!approvals) revision = await this.authority.authorize(input);
-      else {
-        const current = await approvals.evaluate(input);
-        if (current.decision === 'require-approval') {
-          if (!approved) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
-          const admission = await approvals.admit(input, approved, current);
-          if (!('approved' in admission)) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
-          approvalId = admission.approved.approvalId;
+      if (subjects.some(subject => subject && snapshot.digest !== subject.expectDigest)) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
+      if (inputs.some(item => item.expect !== undefined && item.expect !== snapshot.digest)) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
+      const document = inputs.reduce((doc, item) => planConfigChange(doc, item.keyPath, item.value, unset), snapshot.document);
+      for (const item of inputs) await this.check(item, snapshot, document);
+      const events: AuditEvent[] = [];
+      for (const [index, input] of inputs.entries()) {
+        const approved = subjects[index];
+        let revision: string, approvalId: string | null = null;
+        if (!approvals) revision = await this.authority.authorize(input);
+        else {
+          const current = await approvals.evaluate(input);
+          if (current.decision === 'require-approval') {
+            if (!approved) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
+            const admission = await approvals.admit(input, approved, current);
+            if (!('approved' in admission)) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
+            approvalId = admission.approved.approvalId;
+          }
+          revision = current.revision;
         }
-        revision = current.revision;
+        const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId,
+          principal: { issuer: input.principal.issuer, subject: input.principal.subject }, policyRevision: revision, atMs: Date.now(),
+          subject: { kind: 'config-change' as const, action: unset ? 'unset' as const : 'set' as const, layer: snapshot.layer,
+            keyPath: input.keyPath, commandId: input.commandId, beforeDigest: snapshot.digest, afterDigest: digestText(serializeJsonDocument(document)),
+            ...(approvalId === null ? {} : { approvalId }) } };
+        events.push(event);
       }
-      const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId,
-        principal: { issuer: input.principal.issuer, subject: input.principal.subject }, policyRevision: revision, atMs: Date.now(),
-        subject: { kind: 'config-change' as const, action: unset ? 'unset' as const : 'set' as const, layer: snapshot.layer,
-          keyPath: input.keyPath, commandId: input.commandId, beforeDigest: snapshot.digest, afterDigest: digestText(serializeJsonDocument(document)),
-          ...(approvalId === null ? {} : { approvalId }) } };
-      await this.authority.audit(event); return { document, event };
+      for (const event of events) await this.authority.audit(event);
+      return { document, event: events[0]! };
     });
   }
 }

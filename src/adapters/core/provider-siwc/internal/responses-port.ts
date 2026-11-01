@@ -1,3 +1,4 @@
+import { persistedString, persistedUuid } from '#platform/index.js';
 import { z } from 'zod';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, delegatedUseConsentSchema, modelReferenceSchema, openAiChatDialectSchema,
   type HeadlessRejectionBody, type ModelInvocationDeltaSink } from '#domain/index.js';
@@ -9,11 +10,11 @@ import { sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { SIWC_INFERENCE as I } from './registry.js';
 import { siwcResponsesBody, siwcRejection } from './responses.js';
 
-const definitionV1 = z.object({ schemaVersion: z.literal(1), connectionId: z.string().uuid(),
-  owner: z.object({ issuer: z.string().min(1), subject: z.string().min(1) }).strict(), rawUse: z.literal('person'),
-  delegatedUse: delegatedUseConsentSchema.nullable(), apiContinuation: z.null(), dialect: openAiChatDialectSchema.optional() }).strict().readonly();
+const definitionV1 = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(),
+  owner: z.strictObject({ issuer: persistedString(z.string().min(1)), subject: persistedString(z.string().min(1)) }), rawUse: z.literal('person'),
+  delegatedUse: delegatedUseConsentSchema.nullable(), apiContinuation: z.null(), dialect: openAiChatDialectSchema.optional() }).readonly();
 export const siwcResponsesDefinitionSchema = z.union([definitionV1, definitionV1.unwrap().extend({ schemaVersion: z.literal(2),
-  apiContinuation: z.object({ reference: modelReferenceSchema, profileDigest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict().readonly().nullable() }).strict().readonly()]);
+  apiContinuation: z.strictObject({ reference: modelReferenceSchema, profileDigest: z.string().regex(/^[a-f0-9]{64}$/u) }).readonly().nullable() }).strict().readonly()]);
 /** Lease is a trusted host-side closure over a verified caller, never a secret-name resolver or request-supplied token. */
 export function createSiwcResponsesPort(options: { readonly now: () => number;
   readonly lease: (connectionId: string, signal?: AbortSignal) => Promise<OAuthAccessTokenLease> }): ModelInvocationNativePort {

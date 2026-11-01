@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { RegistryError, type ModelInvocationProfile, type ModelInvocationReceipt, type ProviderSpendQuote } from '#domain/index.js';
+import { persistedString, persistedInteger, persistedUrl, RegistryError, type ModelInvocationProfile, type ModelInvocationReceipt, type ProviderSpendQuote } from '#domain/index.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
+import { z } from 'zod';
 import data from './no-charge-policy.json' with { type: 'json' };
 import { providerSpendEvidenceDigest, providerSpendQuoteDigest } from './account.js';
 import { providerSpendRejectionHasNoCharge } from './invocation.js';
@@ -8,12 +8,12 @@ import { providerSpendRejectionHasNoCharge } from './invocation.js';
 /** Complete admission rejections that can carry no charge (invariant): 408/409/499 and every 5xx stay uncertain. */
 export const PROVIDER_SPEND_NO_CHARGE_STATUSES: readonly number[] = Object.freeze([400, 401, 402, 403, 404, 405, 406, 407, 410, 411, 412, 413, 414, 415, 416,
   417, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451]);
-const exactEndpoint = z.string().url().refine(value => { const url = new URL(value); return url.protocol === 'https:' && url.href === value && !url.username && !url.password && !url.search && !url.hash; });
-const certificationSchema = z.object({ vendor: z.string().min(1).max(128), endpoints: z.array(exactEndpoint).min(1).max(32),
-  statuses: z.array(z.number().int().refine(status => PROVIDER_SPEND_NO_CHARGE_STATUSES.includes(status))).min(1), source: z.string().url(),
-  retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional() }).strict();
+const exactEndpoint = persistedUrl().refine(value => { const url = new URL(value); return url.protocol === 'https:' && url.href === value && !url.username && !url.password && !url.search && !url.hash; });
+const certificationSchema = z.strictObject({ vendor: persistedString(z.string().min(1).max(128)), endpoints: z.array(exactEndpoint).min(1).max(32),
+  statuses: z.array(persistedInteger().refine(status => PROVIDER_SPEND_NO_CHARGE_STATUSES.includes(status))).min(1), source: persistedUrl(),
+  retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional() });
 type Certification = z.infer<typeof certificationSchema>;
-const policy = z.object({ schemaVersion: z.literal(1), retrievedAt: z.string(), note: z.string(), vendors: z.array(certificationSchema) }).strict().parse(data);
+const policy = z.strictObject({ schemaVersion: z.literal(1), retrievedAt: z.string(), note: z.string(), vendors: z.array(certificationSchema) }).parse(data);
 /** Law 10: the packaged policy is the seed; a distribution adds its own vendor rows (dotted ids) through `deckent/extensions` before composeCore
  * seals. Add-only: a row can never widen an existing certification (no endpoint on a host another row certifies, no core namespace). An overlay
  * row names the date its source was read (`retrievedAt`, the seed's is file-level), so its certification digest carries that provenance.

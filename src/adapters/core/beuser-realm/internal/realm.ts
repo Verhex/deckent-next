@@ -1,20 +1,20 @@
+import { persistedInteger, persistedUuid } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { lstat, open, realpath, readlink } from 'node:fs/promises';
 import { isAbsolute, dirname, parse, resolve, sep } from 'node:path';
 import { z } from 'zod';
-import { BeuserContractError, type BeuserContext } from '#engine/index.js';
-import { beuserBindingDigest, type BeuserRealmHandle } from '#engine/index.js';
+import { BeuserContractError, type BeuserContext, beuserBindingDigest, type BeuserRealmHandle } from '#engine/index.js';
 import recipe from './recipe.json' with { type: 'json' };
 
 // Physical unit conversion, independent of policy/resource ceilings.
 export const NANOSECONDS_PER_SECOND = 1_000_000_000;
 export const BEUSER_REALM_RECIPE = Object.freeze(recipe);
-const positive = z.number().int().positive().safe();
-const optionsSchema = z.object({ controllerRoot: z.string(), packageRoot: z.string(), executable: z.string(),
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const optionsSchema = z.strictObject({ controllerRoot: z.string(), packageRoot: z.string(), executable: z.string(),
   image: z.string().regex(/^sha256:[a-f0-9]{64}$/u), uid: positive, gid: positive,
   memoryBytes: positive, nanoCpus: positive, pids: positive, filesystemBytes: positive,
-}).strict().readonly();
+}).readonly();
 export type BeuserRealmOptions = z.infer<typeof optionsSchema>;
 export interface BeuserRealmCommand {
   (args: readonly string[], context: BeuserContext): Promise<string>;
@@ -82,6 +82,6 @@ export async function namespaceReadback() {
   return Object.fromEntries(await Promise.all(names.map(async name => [name, await readlink(`/proc/self/ns/${name}`)])));
 }
 export function checkHandle(context: BeuserContext, handle: BeuserRealmHandle) {
-  if (!/^[a-f0-9]{64}$/u.test(handle.containerId) || !z.string().uuid().safeParse(handle.incarnation).success
+  if (!/^[a-f0-9]{64}$/u.test(handle.containerId) || !persistedUuid().safeParse(handle.incarnation).success
     || beuserBindingDigest(context.binding) !== beuserBindingDigest(handle.binding)) return refuseRealm();
 }

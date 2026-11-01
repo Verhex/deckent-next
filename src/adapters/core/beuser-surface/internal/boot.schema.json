@@ -169,6 +169,71 @@
         "inactivityMs"
       ],
       "additionalProperties": false
+    },
+    "terminalFixture": {
+      "type": "object",
+      "properties": {
+        "foreground": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "background": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "ansi": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "minItems": 16,
+          "maxItems": 16
+        },
+        "osc11": {
+          "type": "object",
+          "properties": {
+            "reply": {
+              "type": "boolean"
+            },
+            "delayMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "digits": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          },
+          "required": [
+            "reply",
+            "delayMs",
+            "digits"
+          ],
+          "additionalProperties": false
+        },
+        "colorTier": {
+          "type": "string",
+          "enum": [
+            "truecolor",
+            "none"
+          ]
+        },
+        "colorfgbg": {
+          "type": "string",
+          "pattern": "^[0-9]+;[0-9]+$"
+        }
+      },
+      "required": [
+        "foreground",
+        "background",
+        "ansi",
+        "osc11",
+        "colorTier"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

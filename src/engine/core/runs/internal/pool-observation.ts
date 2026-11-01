@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { counterSchema, identitySchema, inspectTaskReadiness, type RunSnapshot } from '#domain/index.js';
 import { measureTaskOccupancy } from '#engine/core/scheduling/index.js';
 import { poolOccupancySchema, type PoolHoldRecord } from './pool-hold.js';
-const capacity = z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict().readonly();
-export const poolWaitSchema = z.object({ code: z.enum(['waiting-pool-slot', 'pool-held']), poolId: identitySchema,
-  capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema, sinceMs: counterSchema.nullable() }).strict().readonly();
-export const poolDriftSchema = z.object({ code: z.literal('POOL_ADMISSION_CAPACITY_DRIFT'), poolId: identitySchema,
-  source: z.enum(['admission', 'run']), requested: capacity, capacity }).strict().readonly();
-export const runPoolObservationSchema = z.object({ poolId: identitySchema, capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema,
-  drift: z.array(poolDriftSchema).readonly(), waiting: z.array(z.object({ taskId: identitySchema, reason: poolWaitSchema }).strict().readonly()).readonly() }).strict().readonly();
+const capacity = z.strictObject({ executionSlots: counterSchema, inFlightSlots: counterSchema }).readonly();
+export const poolWaitSchema = z.strictObject({ code: z.enum(['waiting-pool-slot', 'pool-held']), poolId: identitySchema,
+  capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema, sinceMs: counterSchema.nullable() }).readonly();
+export const poolDriftSchema = z.strictObject({ code: z.literal('POOL_ADMISSION_CAPACITY_DRIFT'), poolId: identitySchema,
+  source: z.enum(['admission', 'run']), requested: capacity, capacity }).readonly();
+export const runPoolObservationSchema = z.strictObject({ poolId: identitySchema, capacity, effectiveCapacity: capacity, occupancy: poolOccupancySchema,
+  drift: z.array(poolDriftSchema).readonly(), waiting: z.array(z.strictObject({ taskId: identitySchema, reason: poolWaitSchema }).readonly()).readonly() }).readonly();
 export type PoolWait = z.infer<typeof poolWaitSchema>;
 export type PoolDrift = z.infer<typeof poolDriftSchema>;
-export const taskQuotaHoldSchema = z.object({ taskId: identitySchema, since: counterSchema, deadline: counterSchema, resetsAtMs: counterSchema.nullable() }).strict().readonly();
+export const taskQuotaHoldSchema = z.strictObject({ taskId: identitySchema, since: counterSchema, deadline: counterSchema, resetsAtMs: counterSchema.nullable() }).readonly();
 export type TaskQuotaHold = z.infer<typeof taskQuotaHoldSchema>;
 export interface RunPoolEvidence { readonly quotaHolds?: readonly TaskQuotaHold[]; readonly snapshot: RunSnapshot | null; readonly pool: { readonly poolId: string; readonly capacity: z.infer<typeof capacity>;
   readonly runCapacity: z.infer<typeof capacity>; readonly occupancy: z.infer<typeof poolOccupancySchema>; readonly hold: PoolHoldRecord | null; readonly admitted: boolean } | null }

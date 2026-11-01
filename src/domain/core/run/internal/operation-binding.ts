@@ -1,15 +1,15 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 
-const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const actorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 /** Trusted durable execution context, never authored criterion parameters. `notBefore` is the earliest admissible settlement
  * instant for a new settlement; exact already accepted same-Run references permit explicit sharing.
  * The engine derives the boundary from the durable launch grant (one constructor). */
-export const operationEvidenceBindingSchema = z.object({ notBefore: counterSchema,
+export const operationEvidenceBindingSchema = z.strictObject({ notBefore: counterSchema,
   principals: z.array(actorSchema).min(1).max(2).readonly(),
   /** Exact settlements already accepted by this Run, derived from its immutable evaluation receipts. */
-  acceptedSettlements: z.array(z.object({ commandId: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly().optional(),
-}).strict().readonly();
+  acceptedSettlements: z.array(z.strictObject({ commandId: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly()).readonly().optional(),
+}).readonly();
 export type OperationEvidenceBinding = z.infer<typeof operationEvidenceBindingSchema>;
 export function operationEvidenceBindingReason(input: unknown, actorInput: unknown, observedAt?: number, settlement?: Readonly<{ commandId: string; digest: string }>) {
   const binding = operationEvidenceBindingSchema.safeParse(input), actor = actorSchema.safeParse(actorInput);

@@ -5,7 +5,7 @@ import type { ModelCatalogInspectionHandler, ModelRoleInspectionHandler, Provide
 
 /** The slice of the host's command context the read-only management commands use; the CLI context satisfies it. */
 export interface TerminalAdminContext {
-  readonly describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ status: 'ready' | 'not-configured' | 'model-not-declared'; reference: ModelReference | null }>>;
+  readonly describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ status: 'ready' | 'not-configured' | 'model-not-declared'; reference: ModelReference | null; tools?: 'available' | 'none' | 'unknown' }>>;
   readonly inspectModelCatalog?: ModelCatalogInspectionHandler;
   readonly inspectModelRoles?: ModelRoleInspectionHandler;
   readonly inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;

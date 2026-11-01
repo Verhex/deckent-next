@@ -59,6 +59,9 @@
       "recorded-service",
       "unrecorded-service"
     ],
+    "sandbox": [
+      "bin"
+    ],
     "shared": [
       "global-home",
       "headlessLogins",

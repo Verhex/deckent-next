@@ -1,24 +1,23 @@
+import { persistedString, persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import limits from './work-input-limits.json' with { type: 'json' };
-import { identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, REASONING_EFFORTS } from '#domain/core/provider-catalog/index.js';
-
 /** Owner 2026-09-30 K3 = A: the typed input of one coding task (task graph v3). A registry TEMPLATE supplies everything else;
  * admission compiles template + input once into the Run's frozen execution snapshot. Task text never lives in the registry. */
 export const WORK_INPUT_SCHEMA_VERSION = 1;
 export const WORK_INPUT_TEXT_MAX_BYTES = 16_384;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-const workText = z.string().min(1).refine(value => value.trim().length > 0 && !value.includes('\0') && bytes(value) <= WORK_INPUT_TEXT_MAX_BYTES);
+const workText = persistedString(z.string().min(1)).refine(value => value.trim().length > 0 && !value.includes('\0') && bytes(value) <= WORK_INPUT_TEXT_MAX_BYTES);
 /** Repository-relative POSIX path or glob; K6 enforces it later on patch preparation. No absolute, parent, empty or control segment. */
-const scopePath = z.string().min(1).max(512).refine(value => value.trim() === value && !value.startsWith('/') && !value.includes('\\')
+const scopePath = persistedString(z.string().min(1).max(512)).refine(value => value.trim() === value && !value.startsWith('/') && !value.includes('\\')
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
   && value.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..'));
-const modelSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema, auxiliaryModelIds: z.array(exactModelIdSchema).max(8).readonly() }).strict().readonly();
+const modelSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, auxiliaryModelIds: z.array(exactModelIdSchema).max(8).readonly() }).readonly();
 const head = {
   task: workText,
   /** M1: optional human title; task remains the instruction. Additive work-input v1 metadata. */
   title: workText.refine(value => bytes(value) <= limits.titleMaxBytes).optional(),
-  scope: z.object({ paths: z.array(scopePath).min(1).max(64).readonly() }).strict().readonly(),
+  scope: z.strictObject({ paths: z.array(scopePath).min(1).max(64).readonly() }).readonly(),
   acceptance: workText,
   /** Coding acceptance policy frozen with the task; only an explicit true permits an empty verified patch. */
   noChangeAllowed: z.boolean().optional(),
@@ -29,17 +28,17 @@ const tail = {
   /** Optional class/load override from the versioned registry; independent of deadline and budget. */
   workClass: identitySchema.optional(),
   /** Overrides the template's turn limit when present; only CLIs with a turn-limit flag accept one. */
-  maxTurns: z.number().int().positive().safe().optional(),
+  maxTurns: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
 };
 /** ATAMA-1 (owner ASS1): v2 leaves the model to the system. Without `model`, admission assigns (channel, model, effort) from the task's
  * WorkClass candidate list and seals the choice; an explicit pin is a person's directive (the Brain path refuses one). An effort without an
  * explicit model is refused: a reasoning level is only meaningful for a known model. v1 (model required) stays valid unchanged. */
 export const WORK_INPUT_ASSIGNED_SCHEMA_VERSION = 2;
 export const workInputSchema = z.discriminatedUnion('schemaVersion', [
-  z.object({ schemaVersion: z.literal(WORK_INPUT_SCHEMA_VERSION), ...head,
+  z.strictObject({ schemaVersion: z.literal(WORK_INPUT_SCHEMA_VERSION), ...head,
     /** Exact API model ids of a catalog channel; aliases are refused at admission, never resolved. */
-    model: modelSchema, ...tail }).strict(),
-  z.object({ schemaVersion: z.literal(WORK_INPUT_ASSIGNED_SCHEMA_VERSION), ...head, model: modelSchema.optional(), ...tail }).strict(),
+    model: modelSchema, ...tail }),
+  z.strictObject({ schemaVersion: z.literal(WORK_INPUT_ASSIGNED_SCHEMA_VERSION), ...head, model: modelSchema.optional(), ...tail }),
 ]).superRefine((value, context) => {
   if (new Set(value.scope.paths).size !== value.scope.paths.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ['scope', 'paths'], message: 'duplicate' });
   if (value.model === undefined && value.effort !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['effort'], message: 'effort-without-model' });

@@ -4,20 +4,30 @@ import { join, resolve } from 'node:path';
 import { beuserBindingSchema, executionProfileDefinitionSchema, executionRegistrySchema } from '#domain/index.js';
 import { BEUSER_EVALUATOR, beuserDigest, beuserParametersSchema, evaluateBeuserEvidence } from '#capabilities/index.js';
 import { openSqliteAttemptStore, FileArtifactStore, beuserPrivateRecord, canonicalRealmPath, readBeuserCandidate } from '#adapters/index.js';
-import { BEUSER_LIMITS_REGISTRY, BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, beuserArrangePlan, type BeuserReport, type SandboxRequest } from '#engine/index.js';
+import { BeuserContractError, beuserEvaluatorFor, beuserPersonaDigest, readBeuserDispatchEvidence, createBeuserReport, beuserPersonaCoverage, beuserArrangePlan, type BeuserReport, type SandboxRequest } from '#engine/index.js';
 import { sha256, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { evaluateConfiguredBeuserTask } from './evaluate.js';
-import { validateBeuserSupervisorProfile } from '#composition/core/supervisors/index.js';
+import { validateBeuserSupervisorProfile, pinBeuserProfile, beuserProfileLimits } from '#composition/core/supervisors/index.js';
 import { beuserJourneyProfileSchema, executeConfiguredBeuserAttempt } from './application.js';
+import { BEUSER_PACKAGE_ROOT } from './setup.js';
+import { withConfiguredBeuserWalkCustody } from './custody.js';
+import { beuserMonitorName } from './monitor.js';
 
 /** The CLI selects installed registry data. It supplies no profile, principal, Attempt id, probe or launch command. */
-export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate: string },
+export async function walkConfiguredBeuser(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal): Promise<BeuserReport> {
+  return withConfiguredBeuserWalkCustody(root, input.scopeId, options, () => walk(root, input, options, signal));
+}
+async function walk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
+  options: ConfigLoadOptions, signal: AbortSignal): Promise<BeuserReport> {
   const started = performance.now();
   const { c, selected, runId, principal, profiles, definitions, candidateRoot } = await admitConfiguredBeuserWalk(root, input, options, signal);
+  await beuserPrivateRecord(await prepareProductDirectory(c.layout, 'crashes'), beuserMonitorName(input.scopeId, c.principal), c.config.artifacts.maxBytes)
+    .write({ schemaVersion: 1, runId, journey: input.journey, startedAt: Date.now(), walkers: selected.map(({ profile, data }) => ({ id: profile.id,
+      walker: data.choices['beuser-walker'], judge: data.choices['beuser-evaluator'], limitsRevision: data.limitsRevision, limits: beuserProfileLimits(data) })) });
   const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateBeuserSupervisorProfile });
   const segments: BeuserReport['segments'] = [], unknown: BeuserReport['unknown'] = [], findings: NonNullable<BeuserReport['findings']> = [];
   const cleanup: NonNullable<BeuserReport['cleanup']> = [];
@@ -33,7 +43,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
         taskId => definitions.find(d => d.binding.identity.taskId === taskId)!.binding.identity.attemptId);
       const executions = await Promise.all(reservation.reservation.identities.map(async identity => {
         const profile = profiles.get(identity.taskId)!, data = beuserJourneyProfileSchema.parse(profile.parameters),
-          limits = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === data.limitsRevision)!;
+          limits = beuserProfileLimits(data);
         const request: SandboxRequest = { protocolVersion: 1, identity, workspace: candidateRoot, argv: data.entry.args.length ? data.entry.args : [data.entry.mode] };
         const start = performance.now(); attempted++;
         try {
@@ -54,6 +64,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
           const finding = dispatch.diagnostic?.finding;
           if (finding) findings.push(finding);
           if (dispatch.reason && !finding) unknown.push({ branch: identity.taskId, reason: dispatch.reason });
+          if (dispatch.judgeFailure) unknown.push({ branch: identity.taskId, reason: dispatch.judgeFailure });
           if (dispatch.kind !== 'terminal') { unknown.push({ branch: identity.taskId, reason: 'BEUSER_CLEANUP_UNPROVEN' }); continue; }
           await evaluateConfiguredBeuserTask(root, { binding: data.binding, principal, limits, signal: new AbortController().signal }, randomUUID(), options);
           const record = await store.readDispatch(request);
@@ -79,7 +90,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
     unarranged: selected.flatMap(({ profile, data }) => beuserArrangePlan(data.startState).unarranged.map(row => ({ branch: profile.id, ...row }))), counts: { defined: selected.length, selected: selected.length, walked, concurrent: Math.max(0, ...intervals.map(row => intervals.filter(other => other.start <= row.start && other.end > row.start).length)) }, segments, findings, cleanup,
     unwalked: selected.filter(row => !segments.some(s => s.segment === row.profile.id) && !unknown.some(u => u.branch === row.profile.id)).map(row => ({ branch: row.profile.id, reason: signal.aborted ? 'cancelled' : 'not-reserved' })),
     unknown, criticalCoverage: selected.map(({ profile }) => beuserPersonaCoverage(profile.id,
-      segments.find(segment => segment.segment === profile.id)?.verdict)), reliability: { completed, attempted }, reservation: tokenBasis, cost: null, currency: BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === selected[0]!.data.limitsRevision)!.currency,
+      segments.find(segment => segment.segment === profile.id)?.verdict)), reliability: { completed, attempted }, reservation: tokenBasis, cost: null, currency: beuserProfileLimits(selected[0]!.data).currency,
     elapsedMs: performance.now() - started });
   const directory = join(await prepareProductDirectory(c.layout, 'crashes'), 'beuser-reports');
   await beuserPrivateRecord(directory, sha256(JSON.stringify([input.scopeId, runId])), c.config.artifacts.maxBytes).write({ schemaVersion: 1, scopeId: input.scopeId, runId, report });
@@ -88,7 +99,7 @@ export async function walkConfiguredBeuser(root: string, input: { readonly scope
 }
 
 /** Real admission only: seals the same Run and profiles used by walk, without starting a realm or invoking a model. */
-export async function admitConfiguredBeuserWalk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate: string },
+export async function admitConfiguredBeuserWalk(root: string, input: { readonly scopeId: string; readonly journey: string; readonly candidate?: string | undefined },
   options: ConfigLoadOptions = {}, signal: AbortSignal = new AbortController().signal) {
   const c = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
   if (c.config.admission === null) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');
@@ -100,17 +111,17 @@ export async function admitConfiguredBeuserWalk(root: string, input: { readonly 
     if (profile.adapter.id !== 'beuser' || profile.adapter.version !== 1) return [];
     const parsed = beuserJourneyProfileSchema.safeParse(profile.parameters);
     if (!parsed.success) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    const data = parsed.data;
+    const data = pinBeuserProfile(parsed.data, c.config.beuser.limits);
     return data.summary.journeyId === input.journey ? [{ kind, profile, data }] : [];
   });
   if (!selected.length) throw new BeuserContractError('BEUSER_PROFILE_REQUIRED');
   if (selected.some(row => !isDeepStrictEqual(row.data.calibration, selected[0]!.data.calibration))) throw new BeuserContractError('BEUSER_INPUT_INVALID');
-  const candidateRoot = await canonicalRealmPath(resolve(input.candidate), 'directory');
+  const candidateRoot = await canonicalRealmPath(resolve(input.candidate ?? BEUSER_PACKAGE_ROOT), 'directory'); // owner S9: default = this package's build
   const runId = randomUUID(), principal = beuserEvaluatorFor(c.principal, input.scopeId);
   const profiles = new Map<string, typeof registry.profiles[number]>();
   const definitions: ReturnType<typeof beuserParametersSchema.parse>[] = [];
   for (const { profile, data } of selected) {
-    const limits = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === data.limitsRevision);
+    const limits = beuserProfileLimits(data);
     if (!limits || data.candidateRoot !== candidateRoot) throw new BeuserContractError('BEUSER_INPUT_INVALID');
     await readBeuserCandidate(candidateRoot, data.candidateManifest, c.config.installation.packageMeasurement,
       data.packageDigest, data.binding.candidate.stateDigest);

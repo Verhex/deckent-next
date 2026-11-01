@@ -1,11 +1,11 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
 export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, type ResumedHistoryLabels } from '#surfaces/core/terminal-conversation/index.js';
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
-export type { SlashWindowLabels } from './internal/workline-windows.js';
+export type { SlashWindowLabels } from '#surfaces/core/terminal-session/index.js';
 export { helpInfoModel } from './internal/workline-info.js';
 export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from '#surfaces/core/terminal-conversation/index.js';
 export { PermissionModeKeys, runModeCommand, cyclePermissionMode, permissionModeCycle, permissionModeStop, nextPermissionModeStop, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
-export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from './internal/workline-sessions.js';
+export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from '#surfaces/core/terminal-session/index.js';
 export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,
   type ChatTurnMessage, type LedgerBuffer } from '#surfaces/core/terminal-ledger/index.js';
 export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';

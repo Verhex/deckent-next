@@ -1,4 +1,4 @@
-import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ModelInvocationCancellationCommand, ModelInvocationCommand,
+import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnSteer, ModelInvocationCancellationCommand, ModelInvocationCommand,
   ModelInvocationDeltaSink, ModelInvocationQuery, ModelInvocationPurgeCommand, WorkspaceAttachmentRequest, WorkspaceFileQuery } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { createRuntimeServiceClient } from './client.js';
@@ -36,6 +36,10 @@ function runRuntimeChatTurn(projectRoot: string, input: ChatTurnCommand, onEvent
 function cancelRuntimeChatTurn(projectRoot: string, input: ChatTurnCancellation, options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).cancelChatTurn(input);
 }
+/** v30: queues one person line for the caller's own running turn (joined at its next model-call boundary). */
+function steerRuntimeChatTurn(projectRoot: string, input: ChatTurnSteer, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).steerChatTurn(input);
+}
 /** v15 composer `@file` candidates from the runtime service's scoped read port. */
 function findRuntimeWorkspaceFiles(projectRoot: string, input: WorkspaceFileQuery, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return createConfiguredRuntimeClient(projectRoot, options).findWorkspaceFiles(input, signal);
@@ -44,5 +48,5 @@ function findRuntimeWorkspaceFiles(projectRoot: string, input: WorkspaceFileQuer
 function attachRuntimeWorkspaceFile(projectRoot: string, input: WorkspaceAttachmentRequest, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return createConfiguredRuntimeClient(projectRoot, options).attachWorkspaceFile(input, signal);
 }
-  return { invokeRuntimeModel, invokeRuntimeModelStream, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile };
+  return { invokeRuntimeModel, invokeRuntimeModelStream, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, runRuntimeChatTurn, cancelRuntimeChatTurn, steerRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile };
 }

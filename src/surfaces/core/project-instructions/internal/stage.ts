@@ -1,8 +1,6 @@
 import { setupObservationSchema, type InstructionInitPreview, type SetupDecision, type SetupFamilyPackage, type SetupStageContext } from '#engine/index.js';
 
-/** I-S4: the bridges window as one setup stage (ANALYSIS §4.2 stage 11). Project instructions and host bridges are a family stage, not a
- * Core stage: they write user files for AI coding hosts. Facts come from the existing read-only preview; the write stays with
- * `ProjectInstructionPort.initialize` (its own preview, digest and governed file effect), which the setup apply port calls (I-S3). */
+/** Stable setup stage id; S6 removes bridge selection. Writes stay with the existing governed file effect. */
 export const PROJECT_INSTRUCTION_STAGE_ID = 'instructions:bridges';
 export type ProjectInstructionFacts = Readonly<{ file: 'present' | 'missing'; bridges: readonly Readonly<{ id: string; detected: boolean }>[] }>;
 const isFacts = (value: unknown): value is ProjectInstructionFacts => {
@@ -13,10 +11,10 @@ const isFacts = (value: unknown): value is ProjectInstructionFacts => {
 };
 // The registry takes a zod schema and this unit is not a zod owner (dependencies registry): the setup contract's own family-facts schema,
 // narrowed by the guard above, validates the facts (I-S4; delta/I-S4-dependencies.md names the clean placement for the lead).
-const facts = setupObservationSchema.shape.families.removeDefault().refine(isFacts).optional();
+const facts = setupObservationSchema.shape.families.unwrap().refine(isFacts).optional();
 
 export function projectInstructionFacts(preview: InstructionInitPreview): ProjectInstructionFacts {
-  // `preview([])` lists a change only for a missing DECKENT.md: no bridge is selected yet.
+  // `preview([])` lists a change only for a missing standard instruction file.
   return { file: preview.changes.length === 0 ? 'present' : 'missing', bridges: preview.bridges.map(row => ({ id: row.id, detected: row.detected })) };
 }
 

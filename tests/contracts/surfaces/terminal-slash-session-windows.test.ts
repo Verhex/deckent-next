@@ -15,7 +15,7 @@ const WIN: SlashWindowLabels = { picker: pickerLabels('en'), position: '{from}-{
     thinkingOnDetail: 'rz-d1', thinkingOffDetail: 'rz-d2', previewOnDetail: 'rz-d3', previewOffDetail: 'rz-d4', statusOn: 'RZ-STATUS-ON', statusOnHidden: 'RZ-STATUS-HIDDEN', statusOff: 'RZ-STATUS-OFF' },
   scratch: { title: 'SC-TITLE', status: 'SC-STATUS {count} {bytes} {limit}', folder: 'SC-FOLDER', more: 'SC-MORE {count}', empty: 'SC-EMPTY', fileDetail: 'SC-BYTES {bytes}',
     clear: 'SC-CLEAR-ROW', clearDetail: 'sc-ask', clearTitle: 'SC-CONFIRM-TITLE', clearBody: 'SC-CONFIRM-BODY {count} {bytes} {path}', clearPrompt: 'SC-CONFIRM-PROMPT', pathTitle: 'SC-PATH-TITLE' },
-  unknown: { title: 'UN-TITLE', body: 'UN-BODY {command}', closest: 'UN-CLOSEST', none: 'UN-NONE', all: 'UN-ALL', allDetail: 'un-all-detail' } };
+  unknown: { title: 'UN-TITLE', body: 'UN-BODY {command}', closest: 'UN-CLOSEST', none: 'UN-NONE', all: 'UN-ALL', allDetail: 'un-all-detail', english: 'UN-ENGLISH' } };
 const sessions = { started: 'NEW-SESSION', entry: 'SESSION {index} {session} {count} {preview}', none: 'NO-SESSIONS', notFound: 'NF', unavailable: 'NP', saveFailed: 'SF',
   resumed: 'RESUMED {count} {session}', context: 'CTX', contextNone: 'CTX-NONE {count}' };
 const withWindows = { ...WORKLINE_TEST_LABELS, windows: WIN, sessions, composer: { ...WORKLINE_TEST_LABELS.composer, slash: { 'terminal.slash.clear': 'CLEAR-DESC' } } };

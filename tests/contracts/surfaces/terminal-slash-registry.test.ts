@@ -1,7 +1,7 @@
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
-import { RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
+import { nearestSlashCommand, RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY, slashSearchKey, searchSlashCommands } from '#surfaces/core/terminal-kit/index.js';
 import { paletteCommand } from '#surfaces/core/terminal-composer/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
@@ -30,18 +30,34 @@ async function open(props: Partial<WorklineProps> = {}) {
 }
 
 describe('terminal slash registry', () => {
-  it('parses slash lines', () => {
+  it('lists core commands and parses slash lines', () => {
+    expect(WORKLINE_SLASH_COMMANDS.find(cmd => cmd.name === 'beuser')).toEqual({ name: 'beuser', group: 'settings', descriptionKey: 'tui.beuser.slash' });
+    expect(parseSlashLine('/beuser')).toEqual({ command: 'beuser', args: '' });
     expect(parseSlashLine('/status')).toEqual({ command: 'status', args: '' });
     expect(parseSlashLine('  /help  ')).toEqual({ command: 'help', args: '' });
     expect(parseSlashLine('/exit now')).toEqual({ command: 'exit', args: 'now' });
     expect(parseSlashLine('hello')).toBeNull();
-  });
-
-  it('lists core commands', () => {
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'help')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'workers')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'run')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'runs')).toBe(true);
+    // Owner S4: names are English only (no alias in another language); /uninstall hands its shell command over. An unknown name gets exactly
+    // one nearest command (prefix, else at most the registry's edit distance) or none: never a guess for a tie, a short stray word or Turkish.
+    expect(WORKLINE_SLASH_COMMANDS.every(cmd => /^[a-z-]+$/u.test(cmd.name))).toBe(true);
+    expect(WORKLINE_SLASH_COMMANDS.find(cmd => cmd.name === 'uninstall')).toMatchObject({ shellCommand: 'deckent uninstall' });
+    for (const typed of ['unistall', 'unintsall', 'uni', 'UNINSTAL']) expect(nearestSlashCommand(typed)?.name, typed).toBe('uninstall');
+    for (const typed of ['kaldır', 'kaldir', 'xyzzy', 'zz', 're']) expect(nearestSlashCommand(typed), typed).toBeNull();
+    for (const [locale, words] of [['tr', ['kaldır', 'KALDIR', 'kaldir', 'sil']], ['en', ['remove', 'uninstall', 'delete']]] as const) {
+      const labels = terminalComposerLabels(locale).slash;
+      for (const word of words) {
+        expect(searchSlashCommands(word, labels)[0]?.name, word).toBe('uninstall');
+        expect(nearestSlashCommand(word, WORKLINE_SLASH_COMMANDS, labels)?.name, word).toBe('uninstall');
+      }
+      expect(searchSlashCommands('no-such-command', labels)).toEqual([]);
+      expect(nearestSlashCommand('xyzzy', WORKLINE_SLASH_COMMANDS, labels)).toBeNull();
+      const synthetic = [{ name: 'one', descriptionKey: 'one' }, { name: 'two', descriptionKey: 'two' }];
+      expect(nearestSlashCommand('erase', synthetic, { 'command.search.one': 'erase', 'command.search.two': 'erase' })).toBeNull();
+    }
   });
 
   it('reserves no name now that /copy and /rename are registered', () => {
@@ -51,7 +67,7 @@ describe('terminal slash registry', () => {
 
   it.each(['en', 'tr'] as const)('%s labels cover exactly the registry description and argument keys, including mcp/config', locale => {
     const labels = terminalComposerLabels(locale).slash;
-    const keys = [...new Set([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY])];
+    const keys = [...new Set([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : []), ...(command.name === 'uninstall' ? [slashSearchKey(command.name)] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY])];
     expect(Object.keys(labels).sort()).toEqual(keys.sort());
     for (const key of keys) {
       expect(labels[key]).toBe(t(key, {}, locale));
@@ -125,8 +141,8 @@ describe('terminal slash registry', () => {
     await type(view, '/status \r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), `dispatch ${command.name} then status`);
     expect(view.stdout.text).not.toContain('UNKNOWN');
-    if (command.name === 'do') {
-      expect(view.stdout.text).toContain('NO-PORT do');
+    if (command.name === 'do' || command.name === 'beuser') {
+      expect(view.stdout.text).toContain(`NO-PORT ${command.name}`);
       expect(view.stdout.text).not.toContain('NO-PORT {part}');
     }
     expect(completeTurn).not.toHaveBeenCalled();

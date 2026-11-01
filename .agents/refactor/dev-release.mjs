@@ -181,9 +181,12 @@ function lastSwitchTo(L, id) {
   catch { return null; }
 }
 const codeDir = (L, id) => id === 'checkout' || id === null ? L.project : join(L.versions, id);
+/** The compiled module's text, or its shipped declaration when P5b bundled the module into a chunk. */
+const compiledConstantSource = (dir, base) => existsSync(join(dir, `${base}.js`)) ? readFileSync(join(dir, `${base}.js`), 'utf8') : readFileSync(join(dir, `${base}.d.ts`), 'utf8');
 /** The newest ledger version the code in `dir` opens (its compiled CURRENT_LEDGER_VERSION). */
 function codeLedgerVersion(dir) {
-  try { return Number(/CURRENT_LEDGER_VERSION = (\d+)/u.exec(readFileSync(join(dir, 'dist/adapters/core/sqlite-ledger/internal/schema.js'), 'utf8'))[1]); }
+  // P5b bundles the module into a shared chunk; the shipped declaration keeps the constant (`declare const … = N`).
+  try { return Number(/CURRENT_LEDGER_VERSION = (\d+)/u.exec(compiledConstantSource(dir, 'dist/adapters/core/sqlite-ledger/internal/schema'))[1]); }
   catch { fail('DEV_RELEASE_METADATA_MISSING', { dir, field: 'CURRENT_LEDGER_VERSION' }); }
 }
 function walk(dir, out = []) {
@@ -400,7 +403,7 @@ export async function stage(L, ref, opts) {
       const manifest = `${JSON.stringify(manifestOf(partial), null, 1)}\n`;
       writeFileSync(join(partial, 'manifest.json'), manifest, { mode: 0o600 });
       let protocol = null;
-      try { protocol = /RUNTIME_SERVICE_SCHEMA_VERSION = (\d+)/u.exec(readFileSync(join(partial, 'dist/engine/core/runtime/internal/service-protocol.js'), 'utf8'))?.[1] ?? null; } catch { /* recorded as null */ }
+      try { protocol = /RUNTIME_SERVICE_SCHEMA_VERSION(?:: | = )(\d+)/u.exec(compiledConstantSource(partial, 'dist/engine/core/runtime/internal/service-protocol'))?.[1] ?? null; } catch { /* recorded as null */ }
       const release = { schemaVersion: 1, versionId: id, sequence: (stagedOrder(L)[0]?.sequence ?? 0) + 1, sourceCommit: sha, sourceCommonDir, sourceTreeSha256: identity.sourceTreeSha256, identity, version, packageVersion: packageVer, sameVersionWaived: same,
         publishable: { ok: Boolean(packed.publishable?.ok), blockers: packed.publishable?.blockers ?? [] }, pushed, remoteRef: opts.remoteRef, local: !pushed && !opts.preview, preview: Boolean(opts.preview), node: spawnSync(opts.node, ['--version'], { encoding: 'utf8' }).stdout.trim(),
         ledgerVersion: codeLedgerVersion(partial), protocolVersion: protocol === null ? null : Number(protocol),

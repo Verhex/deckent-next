@@ -125,6 +125,12 @@ describe('doctor rows (pure)', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: ['ai', 'system'] },
       { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude-team', consent: [] },
       { state: 'unknown' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.other', consent: [] }];
+    const connection = { profile: 'local-profile', tools: 'unknown' as const, stale: false };
+    expect(doctorChecks(report, facts({ modelConnections: [connection] }), 'en').find(row => row.id === 'work.modelConnection')).toMatchObject({ state: 'warning', text: 'local-profile · tool support unknown', next: 'deckent models connect --scope live' });
+    expect(doctorChecks(report, facts({ modelConnections: [{ ...connection, tools: 'none' }] }), 'tr').find(row => row.id === 'work.modelConnection')?.text).toContain('araç');
+    expect(doctorChecks(report, facts({ modelConnections: [{ ...connection, tools: 'available' }] }), 'en').some(row => row.id === 'work.modelConnection')).toBe(false);
+    expect(doctorChecks(report, facts({ modelConnections: [{ ...connection, stale: true }] }), 'en').find(row => row.id === 'work.modelConnection')?.text).toContain('No matching current invocation profile');
+    expect(doctorChecks(report, facts({ headlessLogins: [{ ...logins[0]!, cliUpdated: { from: '1', to: '2' } }] }), 'en').some(row => row.id === 'work.cliUpdated')).toBe(true); // HL supplies the translation at join.
     const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
     expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
       ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
@@ -183,14 +189,17 @@ const failedImage = { inspectToolchainRefresh: async () => ({ status: 'failed', 
 describe('deckent doctor (command)', () => {
   it('default output is grouped text; --verbose adds the old details; --json keeps the collected report contract', async () => {
     const root = await project();
+    let legacy = true;
     const run = async (args: string[]) => { const out: string[] = [];
-      await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
+      await runKernelCommand(['doctor', '--lang', 'en', ...args], { root, inspectLegacyProjectInstructions: async () => legacy, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} } })
         .catch((error: unknown) => out.push(`[${(error as { code?: string }).code}]`));
       return out.join(''); };
     const grouped = await run([]);
     expect(grouped.split('\n')[0]).toMatch(/^Status: /);
     expect(grouped).toContain('\nInstallation\n');
     expect(grouped).not.toContain('Details (--verbose):');
+    expect(grouped).toContain('Legacy DECKENT.md'); legacy = false;
+    expect(await run([])).not.toContain('Legacy DECKENT.md');
     const verbose = await run(['--verbose']);
     expect(verbose).toContain('Details (--verbose):');
     expect(verbose).toContain('Platform: ');

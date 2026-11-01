@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { persistedString, clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { identitySchema, immutableJsonObjectSchema, counterSchema } from '#domain/core/primitives/index.js';
 import { providerSpendBudgetSchema } from './contract.js';
@@ -7,14 +7,14 @@ const common = { schemaVersion: z.literal(1), scopeId: identitySchema, commandId
   budgetId: identitySchema, budgetRevision: counterSchema.positive(), expectedCheckpointDigest: digest };
 /** Evidence is a retained external receipt digest, never console text, prompts or credentials. */
 export const providerSpendManagementCommandSchema = z.discriminatedUnion('kind', [
-  z.object({ ...common, kind: z.literal('reconcile'), invocationId: identitySchema,
-    resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: z.string().max(272),
-    evidence: z.object({ kind: z.enum(['provider-usage', 'console-figure', 'write-off']), digest }).strict() }).strict(),
-  z.object({ ...common, kind: z.literal('budget-revision'), budget: providerSpendBudgetSchema,
-    unfreeze: z.boolean(), evidenceDigest: digest }).strict(),
+  z.strictObject({ ...common, kind: z.literal('reconcile'), invocationId: identitySchema,
+    resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: persistedString(z.string().max(272)),
+    evidence: z.strictObject({ kind: z.enum(['provider-usage', 'console-figure', 'write-off']), digest }) }),
+  z.strictObject({ ...common, kind: z.literal('budget-revision'), budget: providerSpendBudgetSchema,
+    unfreeze: z.boolean(), evidenceDigest: digest }),
   // Stage 1: the scope's first account at revision 1 (no checkpoint exists yet, so no expected digest); the engine checks the budget names it.
-  z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema, kind: z.literal('budget-create'), budgetId: identitySchema,
-    budgetRevision: z.literal(1), budget: providerSpendBudgetSchema, evidenceDigest: digest }).strict(),
+  z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema, kind: z.literal('budget-create'), budgetId: identitySchema,
+    budgetRevision: z.literal(1), budget: providerSpendBudgetSchema, evidenceDigest: digest }),
 ]).readonly();
 export const providerSpendManagementCommandInputSchema = immutableJsonObjectSchema.pipe(providerSpendManagementCommandSchema);
 export function parseProviderSpendManagementCommand(input: unknown) {

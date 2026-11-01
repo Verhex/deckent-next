@@ -9,6 +9,7 @@ import fcntl
 import json
 import os
 import pty
+import re
 import select
 import signal
 import struct
@@ -62,6 +63,13 @@ def main():
     environment = boot['env']
     if not isinstance(environment, dict) or any(key not in ('TERM', 'LANG', 'LC_ALL', 'HOME', 'DECKENT_GLOBAL_HOME') for key in environment):
         return
+    fixture = boot.get('terminalFixture')
+    if fixture:
+        environment['COLORTERM'] = 'truecolor'
+        if fixture['colorTier'] == 'none':
+            environment['NO_COLOR'] = '1'
+        if 'colorfgbg' in fixture:
+            environment['COLORFGBG'] = fixture['colorfgbg']
     started = time.monotonic()
     deadline = started + limits['maxWallMs'] / 1000
     fd, pid, status = None, None, None
@@ -69,6 +77,8 @@ def main():
     raw_bytes, steps = 0, 0
     blocked, eof = False, False
     state = 'ready'
+    query_buffer = b''
+    scheduled, exchange = [], []
 
     def size():
         return struct.pack('HHHH', rows, columns, 0, 0)
@@ -124,6 +134,48 @@ def main():
         if fd is not None:
             os.close(fd)
 
+    def send_terminal_replies():
+        if blocked or fd is None or eof:
+            return
+        now = time.monotonic()
+        while scheduled and scheduled[0][0] <= now:
+            _, query, request, response = scheduled.pop(0)
+            if os.write(fd, response) != len(response):
+                raise ValueError()
+            exchange.append({'query': query, 'request': base64.b64encode(request).decode('ascii'), 'response': base64.b64encode(response).decode('ascii'),
+                             'atMs': int((now - started) * 1000)})
+
+    def terminal_queries(chunk):
+        nonlocal query_buffer
+        if not fixture or blocked:
+            return
+        query_buffer += chunk
+        pattern = rb'\x1b\]11;\?(?:\x07|\x1b\\)|\x1b\[(?:0)?c'
+        for match in list(re.finditer(pattern, query_buffer)):
+            query = 'osc11' if match.group().startswith(b'\x1b]') else 'da1'
+            exchange.append({'query': query, 'request': base64.b64encode(match.group()).decode('ascii'), 'response': None,
+                             'atMs': int((time.monotonic() - started) * 1000)})
+            if query == 'osc11' and not fixture['osc11']['reply']:
+                continue
+            if query == 'osc11':
+                digits = fixture['osc11']['digits']
+                maximum = (1 << (4 * digits)) - 1
+                color = fixture['background'][1:]
+                channels = [format(round(int(color[n:n+2], 16) * maximum / 255), '0' + str(digits) + 'x') for n in (0, 2, 4)]
+                response = ('\x1b]11;rgb:' + '/'.join(channels) + '\x1b\\').encode('ascii')
+                delay = fixture['osc11']['delayMs'] / 1000
+            else:
+                response, delay = b'\x1b[?1;2c', 0
+            scheduled.append((time.monotonic() + delay, query, match.group(), response))
+        matches = list(re.finditer(pattern, query_buffer))
+        if matches:
+            query_buffer = query_buffer[matches[-1].end():]
+        query_buffer = query_buffer[-16:]
+        scheduled.sort(key=lambda item: item[0])
+        if len(scheduled) + len(exchange) > boot['maxArtifactBytes'] // 128:
+            raise ValueError()
+        send_terminal_replies()
+
     def receive_output():
         nonlocal raw_bytes, state, eof
         if fd is None or eof:
@@ -138,8 +190,10 @@ def main():
             chunk = b''
         if not chunk:
             eof = True
+            scheduled.clear()
             reap()
             return False
+        terminal_queries(chunk)
         raw_bytes += len(chunk)
         if raw_bytes > limits['maxTranscriptBytes']:
             state = 'limit'
@@ -155,12 +209,15 @@ def main():
         silence = (silence_ms or limits['quietMs']) / 1000
         quiet_end = None
         while time.monotonic() < end and state == 'ready':
+            send_terminal_replies()
             reap()
             if eof and (not until_exit or status is not None):
                 break
             wait_end = end if until_exit or quiet_end is None else min(end, quiet_end)
-            remaining = wait_end - time.monotonic()
+            remaining = min(wait_end, scheduled[0][0] if scheduled else wait_end) - time.monotonic()
             if remaining <= 0:
+                if scheduled and scheduled[0][0] <= time.monotonic():
+                    continue
                 break
             if eof:
                 # PTY slave closed before the child became waitable: poll the exit within the same bound.
@@ -179,6 +236,9 @@ def main():
         pending.clear()
         message = {'id': request_id, 'data': data, 'state': current,
                    'exitCode': status, 'columns': columns, 'rows': rows}
+        if fixture and not blocked:
+            message['terminalExchange'] = list(exchange)
+        exchange.clear()
         sys.stdout.write(json.dumps(message, separators=(',', ':')) + '\n')
         sys.stdout.flush()
 
@@ -192,8 +252,9 @@ def main():
             launch(boot['entry'])
         wire = bytearray()
         while time.monotonic() < deadline and state == 'ready':
+            send_terminal_replies()
             sources = [0] + ([fd] if fd is not None and not eof else [])
-            ready, _, _ = select.select(sources, [], [], max(0, deadline - time.monotonic()))
+            ready, _, _ = select.select(sources, [], [], max(0, min(deadline, scheduled[0][0] if scheduled else deadline) - time.monotonic()))
             if fd is not None and fd in ready:
                 receive_output()
             if 0 not in ready:
@@ -223,6 +284,9 @@ def main():
                 elif command['op'] == 'secret':
                     blocked = True
                     pending.clear()
+                    scheduled.clear()
+                    exchange.clear()
+                    query_buffer = b''
                     secret_fd = boot['secretFds'][command['ref']]
                     if type(secret_fd) is not int or secret_fd < 3:
                         raise ValueError()

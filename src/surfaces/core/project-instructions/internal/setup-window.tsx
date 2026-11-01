@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import { Text, render, useApp, useWindowSize } from 'ink';
-import { colorCapability } from '#platform/index.js';
+import { Text, useApp, useWindowSize } from 'ink';
+import { colorCapability, loadConfigTerminalLaunch } from '#platform/index.js';
 import { QuestionRows, Window, WindowStackProvider, questionStep, type QuestionOption, type QuestionState } from '#surfaces/core/terminal-window/index.js';
-import { RenderGlyphsContext, prefersAsciiGlyphs, resolveRenderGlyphs, span, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
-import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { prefersAsciiGlyphs, span, truncateEnd, useSpinnerGlyph, wrapCells } from '#surfaces/core/terminal-render/index.js';
+import { terminalPalette, TERMINAL_THEME_SETTINGS } from '#surfaces/core/terminal-kit/index.js';
+
+import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
 
 /** One step of the guided `deckent init` window (I-S4): the setup controller (surfaces/core/setup) decides every row and answer; this view
  * only draws them. `rows`, `heights` and `optionRows` are constant across steps, so the window keeps one height and its bottom row never moves:
@@ -52,12 +54,13 @@ function SetupWindow({ initial, step, failed }: Readonly<{ initial: SetupWindowM
 }
 
 /** Mounts the window on the person's terminal and resolves when a step returns null (closed). Ink loads only through this lazy module. */
-export async function mountSetupWindow(initial: SetupWindowModel, step: SetupWindowStep, io: Readonly<{ stdin: NodeJS.ReadStream; stdout: NodeJS.WriteStream; env: NodeJS.ProcessEnv }>) {
+export async function mountSetupWindow(initial: SetupWindowModel, step: SetupWindowStep, io: Readonly<{ stdin: NodeJS.ReadStream; stdout: NodeJS.WriteStream; env: NodeJS.ProcessEnv; root?: string }>) {
   let failure: unknown = null;
-  const palette = resolveWorklinePalette(colorCapability({ env: io.env, isTTY: true, argv: [] }));
-  const view = render(<WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={resolveRenderGlyphs(prefersAsciiGlyphs(io.env))}>
-    <WindowStackProvider reservedRows={1}><SetupWindow initial={initial} step={step} failed={error => { failure = error; }} /></WindowStackProvider>
-  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
-  try { await view.waitUntilExit(); } finally { view.unmount(); }
+  const presentation = await loadConfigTerminalLaunch(io.root ?? process.cwd(), { env: io.env }).catch(() => null);
+  const setting = TERMINAL_THEME_SETTINGS.find(value => value === presentation?.terminal['theme']) ?? TERMINAL_THEME_SETTINGS[0];
+  const theme = { setting, capability: colorCapability({ env: io.env, isTTY: true, argv: process.argv }), colorfgbg: io.env['COLORFGBG'] };
+  await runTerminalHost({ palette: terminalPalette(setting, theme.capability, theme.colorfgbg), theme, stdout: io.stdout, stdin: io.stdin,
+    ascii: prefersAsciiGlyphs(io.env), clearScreen: false, fullscreen: false,
+    view: () => <WindowStackProvider reservedRows={1}><SetupWindow initial={initial} step={step} failed={error => { failure = error; }} /></WindowStackProvider> });
   if (failure !== null) throw failure;
 }

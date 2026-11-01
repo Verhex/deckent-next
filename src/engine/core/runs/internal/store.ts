@@ -1,19 +1,18 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { clientCommandIdSchema, runProposalBindingSchema, authorityAdmissionSchema, branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import { z } from 'zod';
-import { runProposalBindingSchema, authorityAdmissionSchema, branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import type { ReservationDiagnostic } from '#engine/core/scheduling/index.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
-const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();
-const capacity = z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict();
-export const executionPoolSchema = z.object({ schemaVersion: z.literal(1), poolId: identitySchema, capacity }).strict().readonly();
+const actor = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema });
+const capacity = z.strictObject({ executionSlots: counterSchema, inFlightSlots: counterSchema });
+export const executionPoolSchema = z.strictObject({ schemaVersion: z.literal(1), poolId: identitySchema, capacity }).readonly();
 export type ExecutionPool = z.infer<typeof executionPoolSchema>;
-export const runExecutionPolicySchema = z.object({ schemaVersion: z.literal(2), poolId: identitySchema, capacity, ordering: z.array(identitySchema) }).strict();
-export const runCreateSchema = z.object({ commandId: clientCommandIdSchema, actor, identity: runIdentitySchema, graph: taskGraphSchema, now: counterSchema,
+export const runExecutionPolicySchema = z.strictObject({ schemaVersion: z.literal(2), poolId: identitySchema, capacity, ordering: z.array(identitySchema) });
+export const runCreateSchema = z.strictObject({ commandId: clientCommandIdSchema, actor, identity: runIdentitySchema, graph: taskGraphSchema, now: counterSchema,
   policy: runExecutionPolicySchema, execution: runExecutionSnapshotSchema, branch: branchDecisionSchema.optional(), authority: authorityAdmissionSchema.optional(), proposal: runProposalBindingSchema.optional(),
-}).strict();
-export const runReservationSchema = z.object({ commandId: clientCommandIdSchema, actor, scopeId: identitySchema, runId: identitySchema,
+});
+export const runReservationSchema = z.strictObject({ commandId: clientCommandIdSchema, actor, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema, now: counterSchema, identities: z.array(attemptIdentitySchema).min(1),
-}).strict();
+});
 export const runProjectionSchema = runReservationSchema.omit({ now: true, identities: true }).extend({ attemptId: identitySchema });
 export const runCancellationSchema = runReservationSchema.omit({ now: true, identities: true });
 export type RunCancellation = z.infer<typeof runCancellationSchema>;

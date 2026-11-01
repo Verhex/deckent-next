@@ -75,6 +75,10 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576,
       agentEnvironment: ['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI'] });
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8, maxServers: 20 });
+    for (const section of ['mcp', 'service']) {
+      expect(CORE_SCHEMA.safeParse({ [section]: { inputMaxBytes: 1_048_577 } }).success).toBe(false);
+      expect(CORE_SCHEMA.safeParse({ [section]: { inputMaxBytes: 1_048_575 } }).success).toBe(true);
+    }
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000, admissionWaitMs: 250, busyRetryLimit: 2, idleShutdown: { afterMs: 900_000 } });
     expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 18000000, maxRewaits: 3 }, stallRecovery: { schemaVersion: 1, warnAfterMs: 180000, stopAfterMs: 3600000, maxRetries: 1, backoffMs: 30000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, maxPreparationAborts: 2, pageSize: 64, nervous: { mode: 'off' }, recovery: { mode: 'off' } });

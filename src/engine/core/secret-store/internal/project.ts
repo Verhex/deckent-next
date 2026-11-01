@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, identitySchema, installationIdSchema, projectIdSchema } from '#domain/index.js';
+import { persistedString, counterSchema, identitySchema, installationIdSchema, projectIdSchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import type { DeckDeclaration } from './deck.js';
 import { SECRET_NAME_PATTERN } from './port.js';
@@ -10,8 +10,8 @@ import REGISTRY from './project-vault.json' with { type: 'json' };
 export const PROJECT_VAULT = Object.freeze({ ...REGISTRY.vault });
 
 /** A directory's identity: canonical path, device and inode (the installation identity binding's location shape). */
-const locationSchema = z.object({ canonicalRoot: z.string().min(1).max(4096), device: z.string().regex(/^\d+$/u),
-  inode: z.string().regex(/^[1-9]\d*$/u) }).strict().readonly();
+const locationSchema = z.strictObject({ canonicalRoot: persistedString(z.string().min(1).max(4096)), device: z.string().regex(/^\d+$/u),
+  inode: z.string().regex(/^[1-9]\d*$/u) }).readonly();
 export type ProjectVaultLocation = z.infer<typeof locationSchema>;
 /**
  * The project a vault belongs to (PRE-8 v2, owner decision 5 and law audit BLOCKER): the installation and project identity of its anchor data
@@ -19,12 +19,12 @@ export type ProjectVaultLocation = z.infer<typeof locationSchema>;
  * one repository resolve to the same anchor (the repository's main working tree), so they are one project; a copied folder carries the
  * same identities but another data root location, so it is refused (`SECRET_PROJECT_VAULT_CLAIMED`) until an explicit handover.
  */
-export const projectVaultAnchorSchema = z.object({ installationId: installationIdSchema, projectId: projectIdSchema, binding: locationSchema,
-  repository: locationSchema.nullable(), projectRoot: z.string().min(1).max(4096) }).strict().readonly();
+export const projectVaultAnchorSchema = z.strictObject({ installationId: installationIdSchema, projectId: projectIdSchema, binding: locationSchema,
+  repository: locationSchema.nullable(), projectRoot: persistedString(z.string().min(1).max(4096)) }).readonly();
 export type ProjectVaultAnchor = z.infer<typeof projectVaultAnchorSchema>;
 /** `project.json` v1 beside the vault: who owns it (the anchor it was first opened for) and since when. Never a secret. */
-export const projectVaultRecordSchema = z.object({ schemaVersion: z.literal(1), anchor: projectVaultAnchorSchema, firstSeenAtMs: counterSchema,
-  handedOverAtMs: counterSchema.nullable() }).strict().readonly();
+export const projectVaultRecordSchema = z.strictObject({ schemaVersion: z.literal(1), anchor: projectVaultAnchorSchema, firstSeenAtMs: counterSchema,
+  handedOverAtMs: counterSchema.nullable() }).readonly();
 export type ProjectVaultRecord = z.infer<typeof projectVaultRecordSchema>;
 
 /** The vault directory name: a versioned salt over the anchor's installation and project identities (never a path). */
@@ -55,17 +55,17 @@ export function projectVaultHandover(recorded: ProjectVaultRecord, current: Proj
 export const projectVaultClaimed = (current: Pick<ProjectVaultAnchor, 'projectRoot'>) =>
   ErrorRegistry.createError('SECRET_PROJECT_VAULT_CLAIMED', { params: { project: current.projectRoot } });
 
-const principalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const principalSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 /**
  * One grant: main-vault key NAME may be used in this project. It exists only with the id of the sealed `authority-decision` event that decided
  * it on the `secret`/`set` cell (recorded before this file is written); a grant without that id does not parse, so it grants nothing.
  */
-export const secretGrantSchema = z.object({ name: z.string().regex(SECRET_NAME_PATTERN), scopeId: identitySchema, by: principalSchema,
-  atMs: counterSchema, source: z.enum(['card', 'admin']), decisionEventId: identitySchema }).strict().readonly();
+export const secretGrantSchema = z.strictObject({ name: z.string().regex(SECRET_NAME_PATTERN), scopeId: identitySchema, by: principalSchema,
+  atMs: counterSchema, source: z.enum(['card', 'admin']), decisionEventId: identitySchema }).readonly();
 export type SecretGrant = z.infer<typeof secretGrantSchema>;
 /** `grants.json` v1 beside the project vault (the main-vault owner's custody, outside every project and worker tree). */
-export const secretGrantFileSchema = z.object({ schemaVersion: z.literal(1), installationId: installationIdSchema, projectId: projectIdSchema,
-  revision: counterSchema, grants: z.array(secretGrantSchema).max(PROJECT_VAULT.grantsMaxEntries) }).strict().readonly()
+export const secretGrantFileSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: installationIdSchema, projectId: projectIdSchema,
+  revision: counterSchema, grants: z.array(secretGrantSchema).max(PROJECT_VAULT.grantsMaxEntries) }).readonly()
   .refine(file => new Set(file.grants.map(grant => grant.name)).size === file.grants.length);
 export type SecretGrantFile = z.infer<typeof secretGrantFileSchema>;
 export const emptySecretGrantFile = (anchor: Pick<ProjectVaultAnchor, 'installationId' | 'projectId'>): SecretGrantFile =>

@@ -10,22 +10,22 @@ import limits from './limits.json' with { type: 'json' };
  */
 export const AGENT_STANDINGS = ['candidate', 'active', 'redesign-required', 'retired'] as const;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const actorSchema = z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly();
-export const agentStandingSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, agentId: catalogIdSchema, revision: counterSchema.positive(),
+const actorSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).readonly();
+export const agentStandingSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, agentId: catalogIdSchema, revision: counterSchema.positive(),
   workClass: identitySchema, standing: z.enum(AGENT_STANDINGS), standingRevision: counterSchema.positive(),
   /** Why the row holds its value: the definition (or the previous revision's promotion it inherited), a person's card, a signed AI/system command or a
    * sealed rule suggestion (S8-4: the last two carry the action key and signature digest verified at commit). */
-  basis: z.object({ kind: z.enum(['definition', 'inherited', 'person-card', 'signed', 'rule']), decidedBy: actorSchema, atMs: counterSchema, commandId: identitySchema.nullable(),
-    suggestionId: digest.nullable(), reasonCode: identitySchema.nullable(), fromRevision: counterSchema.positive().optional(), signed: z.object({ keyId: digest, signatureDigest: digest }).strict().optional() }).strict()
+  basis: z.strictObject({ kind: z.enum(['definition', 'inherited', 'person-card', 'signed', 'rule']), decidedBy: actorSchema, atMs: counterSchema, commandId: identitySchema.nullable(),
+    suggestionId: digest.nullable(), reasonCode: identitySchema.nullable(), fromRevision: counterSchema.positive().optional(), signed: z.strictObject({ keyId: digest, signatureDigest: digest }).optional() })
     .refine(basis => (basis.kind === 'inherited') === (basis.fromRevision !== undefined) && (basis.kind !== 'rule' || basis.suggestionId !== null)
       && (basis.signed !== undefined) === (basis.kind === 'signed' || basis.kind === 'rule')).readonly(),
-}).strict().readonly();
+}).readonly();
 export type AgentStanding = z.infer<typeof agentStandingSchema>;
 /** The agent a Run task was admitted with (frozen task field `agent`, v1): exact revision, digests and pins, the standing it was chosen under and why. */
-export const taskAgentSealSchema = z.object({ schemaVersion: z.literal(1), agentId: catalogIdSchema, revision: counterSchema.positive(), workClass: identitySchema,
+export const taskAgentSealSchema = z.strictObject({ schemaVersion: z.literal(1), agentId: catalogIdSchema, revision: counterSchema.positive(), workClass: identitySchema,
   personaDigest: digest, skillSetDigest: digest, skills: z.array(skillRefSchema).max(limits.skillsPerAgentMax).readonly(),
   standing: z.enum(['active', 'candidate']), standingRevision: counterSchema.positive(),
-  selection: z.object({ eligible: counterSchema.positive(), position: counterSchema, reason: z.enum(['active-agent', 'first-candidate']) }).strict().readonly() }).strict().readonly();
+  selection: z.strictObject({ eligible: counterSchema.positive(), position: counterSchema, reason: z.enum(['active-agent', 'first-candidate']) }).readonly() }).readonly();
 export type TaskAgentSeal = z.infer<typeof taskAgentSealSchema>;
 export type AgentPromptPart = Readonly<{ id: string; version: number; text: string }>;
 /** The prompt parts an agent revision contributes: its persona (part id = agent id, version = revision) and each pinned skill (skill id @ revision). */

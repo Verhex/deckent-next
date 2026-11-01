@@ -6,8 +6,8 @@ import { includes, policySchema, principalGrants, PolicyError, type Policy, type
 export { includes, policySchema, PolicyError } from './schema.js';
 export type { Policy } from './schema.js';
 /** Role is never a request field: authority comes from the principal's bindings in trusted policy data, not from the caller. */
-export const policyRequestSchema = z.object({ principal: verifiedPrincipalSchema, scopeId: identitySchema, action: identitySchema,
-  resource: z.object({ kind: identitySchema, id: identitySchema }).strict().readonly() }).strict().readonly();
+export const policyRequestSchema = z.strictObject({ principal: verifiedPrincipalSchema, scopeId: identitySchema, action: identitySchema,
+  resource: z.strictObject({ kind: identitySchema, id: identitySchema }).readonly() }).readonly();
 export type PolicyRequest = z.infer<typeof policyRequestSchema>;
 export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED' | 'AI_NON_DELEGABLE'; ruleId?: string }>;
 function matches(rule: PolicyRule, request: PolicyRequest) {

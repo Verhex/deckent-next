@@ -8,7 +8,7 @@ import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'hub' | 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
+export type PanelKind = 'beuser' | 'hub' | 'mode' | 'config' | 'theme' | 'mcp' | 'model' | 'provider' | 'policy';
 export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string; identity?: ModelProviderLabel }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
@@ -35,6 +35,18 @@ export interface ModePanelLabels {
 }
 
 export type ConfigPanelLayer = 'project' | 'global';
+/** Human-only theme window. Preview is local to its provider; only Enter reaches the governed config writer. */
+export interface ThemePanelPort {
+  readonly title: string;
+  inspect(): Promise<Readonly<{ current: string; source: string; notes: readonly string[];
+    choices: readonly Readonly<{ id: string; label: string; detail: string }>[] }>>;
+  palette(setting: string): ReturnType<typeof import('#surfaces/core/terminal-kit/index.js').useWorklinePalette>;
+  readonly words: Readonly<{ hints: string; current: string; preview: string; contrast: string; inherited: string; noColor: string; sessionOnly: string;
+    samples: readonly Readonly<{ text: string; role: import('#surfaces/core/terminal-render/index.js').SpanRole }>[] }>;
+  background(): string | null;
+  apply(setting: string): void;
+  write(setting: string): Promise<ConfigPanelOutcome>;
+}
 /** One key as the panel shows it: localized words only, plus the choices its schema allows and each layer's lock or note. */
 export type ConfigPanelField = Readonly<{
   key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
@@ -85,7 +97,9 @@ export interface ConfigPanelLabels {
 }
 
 export type McpScopeId = 'local' | 'project' | 'user';
-export type McpPanelServer = Readonly<{ name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
+export type McpPanelState = 'connected' | 'checking' | 'not-started' | 'pending-approval' | 'changed' | 'declined' | 'invalid-launch'
+  | 'trust-store-unavailable' | 'secret-unresolved' | 'secret-refused' | 'secret-project-missing' | 'secret-undeclared' | 'secret-no-identity' | 'failed' | 'tools-changed' | 'timed-out' | 'unknown';
+export type McpPanelServer = Readonly<{ state: McpPanelState; name: string; scope: string; status: string; attention: boolean; tools: string; realm: string; launch: string;
   trusted: boolean; grantKey?: string }>; // KER-17: a main-vault key this project has not granted (the person-only first-use card answers it)
 export type McpPanelList = Readonly<{ servers: readonly McpPanelServer[]; problems: readonly string[] }>;
 /** One trust question of the wizard or a re-approval (the launch card, then the tools card): the window shows it, y says yes, n/Esc say no. */
@@ -96,7 +110,7 @@ export type McpServerDraft = Readonly<{ transport: 'stdio' | 'http'; name: strin
   env: Readonly<Record<string, string>>; headers: Readonly<Record<string, string>>; realm: string; scope: McpScopeId }>;
 export type McpChoice = Readonly<{ id: string; label: string; detail?: string; blocked?: string }>;
 export interface McpPanelPort {
-  list(): Promise<McpPanelList>;
+  list(options?: { readonly health?: boolean; readonly checking?: boolean; readonly signal?: AbortSignal }): Promise<McpPanelList>;
   detail(name: string): Promise<readonly PanelLine[]>;
   /** Revoke this server's trust (it asks again before it starts); re-approve with the trust windows; restart on next use; remove its entry. */
   revoke(name: string): Promise<readonly string[]>;
@@ -328,6 +342,8 @@ export interface PanelLabels {
   readonly workspace?: Readonly<{ entry: string; title: string; confirm: string; empty: string; note: string; hints: string }>;
 }
 export interface PanelPorts {
+  readonly beuser?: { render(input: Parameters<NonNullable<PanelPorts['hub']>['render']>[0] & { readonly openApproval: (approvalId: string) => void }): import('react').ReactNode };
+  readonly theme?: ThemePanelPort;
   readonly hub?: { render(input: { readonly labels: PanelLabels; readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void }): import('react').ReactNode };
   readonly policy?: PolicyPanelPort;
   readonly mode?: ModePanelPort;

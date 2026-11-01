@@ -15,7 +15,7 @@ const IV_LENGTH = 12, TAG_LENGTH = 16;
 const AAD = Buffer.from(`deckent:${ENCRYPTED_FILE_SECRET_STORE_ID}:envelope-v1`, 'utf8');
 const base64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/);
 /** Envelope v1: one AES-256-GCM sealing of the whole store document v1 (the plaintext backend's document), fresh IV per write. */
-const envelopeSchema = z.object({ schemaVersion: z.literal(1), algorithm: z.literal(ALGORITHM), iv: base64, tag: base64, ciphertext: base64 }).strict();
+const envelopeSchema = z.strictObject({ schemaVersion: z.literal(1), algorithm: z.literal(ALGORITHM), iv: base64, tag: base64, ciphertext: base64 });
 /** Room for the envelope's fixed fields (names, algorithm, IV, tag) around the ciphertext. */
 const ENVELOPE_FIELDS_LENGTH = 512;
 /** The envelope length of a document: base64 of the ciphertext (same length as the document under GCM) plus the fixed fields. */

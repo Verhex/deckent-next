@@ -7,3 +7,6 @@ export { beuserDiagnosticSchema, beuserStuckFindingSchema } from './internal/dia
 export type { BeuserDiagnostic } from './internal/diagnostics.js';
 export { beuserArrangeRegistrySchema, beuserStartStateSchema, beuserArrangePlan, beuserStartStateFits, BEUSER_ARRANGE_REGISTRY, BEUSER_UNREACHABLE_REASONS } from './internal/arrange.js';
 export type { BeuserArrangeStep, BeuserUnarrangedState } from './internal/arrange.js';
+
+export { BEUSER_JOURNEY_PROFILE_VERSION, validPinnedBeuserLimits, beuserProfileLimits, narrowBeuserLimits, pinBeuserProfile, beuserMonitorRecord } from './internal/limits.js';
+export type { BeuserLimitOverrides } from './internal/limits.js';

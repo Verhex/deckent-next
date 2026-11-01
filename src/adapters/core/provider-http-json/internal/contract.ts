@@ -1,6 +1,7 @@
+import { persistedString, persistedInteger, counterSchema, identitySchema } from '#domain/index.js';
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/index.js';
+
 
 export type NativeJsonHttpErrorCode = 'NATIVE_JSON_HTTP_DEFINITION_INVALID' | 'NATIVE_JSON_HTTP_REQUEST_INVALID'
   | 'NATIVE_JSON_HTTP_REQUEST_TOO_LARGE' | 'NATIVE_JSON_HTTP_RESPONSE_TOO_LARGE' | 'NATIVE_JSON_HTTP_TIMEOUT'
@@ -19,9 +20,9 @@ export type NativeJsonHttpDefinition = Readonly<{ endpoint: string; authenticati
   tls?: Readonly<{ caPem: string }> }>;
 export type NativeJsonHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 
-const positive = z.number().int().positive().safe();
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const credentialReference = z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/);
-export const nativeJsonHttpCertificateSchema = z.string().min(1).max(65_536).refine(value => {
+export const nativeJsonHttpCertificateSchema = persistedString(z.string().min(1).max(65_536)).refine(value => {
   if ((value.match(/-----BEGIN CERTIFICATE-----/g) ?? []).length !== 1
     || (value.match(/-----END CERTIFICATE-----/g) ?? []).length !== 1 || value.includes('PRIVATE KEY')) return false;
   try {
@@ -36,14 +37,14 @@ const headerValue = z.string().regex(/^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7
 /** Static, non-secret request headers (for example a pinned API version). Bounded; secrets never belong here. */
 export const nativeJsonHttpStaticHeadersSchema = z.record(nativeJsonHttpHeaderNameSchema, headerValue)
   .refine(headers => Object.keys(headers).length <= 8);
-const definitionSchema = z.object({ endpoint: z.string().min(1),
-  authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
-    z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict(),
-    z.object({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: credentialReference }).strict()]),
-  tls: z.object({ caPem: nativeJsonHttpCertificateSchema }).strict().optional() }).strict();
-const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
-  timeoutMs: positive.max(2_147_483_647) }).strict();
-export const nativeJsonHttpAdapterSchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict();
+const definitionSchema = z.strictObject({ endpoint: persistedString(z.string().min(1)),
+  authentication: z.discriminatedUnion('type', [z.strictObject({ type: z.literal('none') }),
+    z.strictObject({ type: z.literal('bearer'), credentialRef: credentialReference }),
+    z.strictObject({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: credentialReference })]),
+  tls: z.strictObject({ caPem: nativeJsonHttpCertificateSchema }).optional() });
+const limitsSchema = z.strictObject({ requestMaxBytes: positive, responseMaxBytes: positive,
+  timeoutMs: positive.max(2_147_483_647) });
+export const nativeJsonHttpAdapterSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() });
 
 function copyPlainData(input: unknown, seen = new WeakSet<object>()): unknown {
   if (input === null || typeof input !== 'object') return input;

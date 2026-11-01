@@ -31,14 +31,14 @@ async function refusal(request: Promise<Response>, reason: string) {
 describe('MCP bounded manual redirects (stub fetch only)', () => {
   it.each([307, 308])('follows same-origin %s with the original method, headers and body, overriding automatic redirects', async status => {
     const answer = new Response('answer'), fetchStub = stub(redirect(status, '/next'), answer);
-    expect(await pool.createMcpRedirectFetch(APPROVED, fetchStub)(new URL(APPROVED), INIT)).toBe(answer);
+    expect(await (await pool.createMcpRedirectFetch(APPROVED, fetchStub)(new URL(APPROVED), INIT)).text()).toBe('answer');
     expect(targets(fetchStub)).toEqual([APPROVED, 'https://mcp.example.test:8443/next']);
     unchanged(fetchStub);
   });
 
   it('resolves every relative Location against the current URL and accepts exactly three hops', async () => {
     const answer = new Response('answer'), fetchStub = stub(redirect(307, './a/step'), redirect(308, '../b/step'), redirect(307, '?done=1'), answer);
-    expect(await pool.createMcpRedirectFetch(APPROVED, fetchStub)(APPROVED, INIT)).toBe(answer);
+    expect(await (await pool.createMcpRedirectFetch(APPROVED, fetchStub)(APPROVED, INIT)).text()).toBe('answer');
     expect(targets(fetchStub)).toEqual([APPROVED, 'https://mcp.example.test:8443/a/step', 'https://mcp.example.test:8443/b/step', 'https://mcp.example.test:8443/b/step?done=1']);
     unchanged(fetchStub);
   });
@@ -53,15 +53,37 @@ describe('MCP bounded manual redirects (stub fetch only)', () => {
       return seen.length === 1 ? redirect(307, '/next') : answer;
     });
     const original = new Request(APPROVED, INIT);
-    expect(await pool.createMcpRedirectFetch(APPROVED, fetchStub)(original)).toBe(answer);
+    expect(await (await pool.createMcpRedirectFetch(APPROVED, fetchStub)(original)).text()).toBe('answer');
     expect(targets(fetchStub)).toEqual([APPROVED, 'https://mcp.example.test:8443/next']);
     const expected = { method: INIT.method, headers: [...new Headers(HEADERS)], body: BODY, redirect: 'manual' };
     expect(seen).toEqual([expected, expected]);
   });
 
-  it('keeps default GET requests manual even without requestInit', async () => {
+  it('keeps GET requests manual and bounds HTTP bytes before consumption, including cancellation', async () => {
     const answer = new Response('answer'), fetchStub = stub(redirect(308, '/next'), answer);
-    expect(await pool.createMcpRedirectFetch(APPROVED, fetchStub)(APPROVED)).toBe(answer);
+    expect(await (await pool.createMcpRedirectFetch(APPROVED, fetchStub)(APPROVED)).text()).toBe('answer');
+    const cap = 65_536, chunkBytes = 4_096;
+    for (const length of [cap - 1, cap, cap + 1, 1_073_741_824]) {
+      let produced = 0, cancelled = 0; const memoryBefore = process.memoryUsage();
+      const body = new ReadableStream<Uint8Array>({ pull(controller) {
+        if (produced === length) { controller.close(); return; }
+        const bytes = Math.min(chunkBytes, length - produced); produced += bytes; controller.enqueue(new Uint8Array(bytes).fill(32));
+      }, cancel() { cancelled++; } }, { highWaterMark: 0 });
+      const response = await pool.createMcpRedirectFetch(APPROVED, stub(new Response(body, { headers: { 'Content-Length': '1' } })), cap)(APPROVED);
+      if (length <= cap) { expect((await response.arrayBuffer()).byteLength).toBe(length); expect(cancelled).toBe(0); }
+      else { await expect(response.arrayBuffer()).rejects.toMatchObject({ code: 'MCP_HTTP_RESPONSE_TOO_LARGE', maxBytes: cap }); expect(cancelled).toBe(1); }
+      expect(produced).toBeLessThanOrEqual(cap + chunkBytes);
+      console.info('MCP_HTTP_BOUND', JSON.stringify({ length, cap, produced, cancelled, heapDelta: process.memoryUsage().heapUsed - memoryBefore.heapUsed, externalDelta: process.memoryUsage().external - memoryBefore.external }));
+    }
+    let cancelled = false, reads = 0;
+    const oversized = new Response(new ReadableStream({ pull() { reads++; }, cancel() { cancelled = true; } }, { highWaterMark: 0 }), { headers: { 'Content-Length': String(cap + 1) } });
+    await expect(pool.createMcpRedirectFetch(APPROVED, stub(oversized), cap)(APPROVED)).rejects.toMatchObject({ code: 'MCP_HTTP_RESPONSE_TOO_LARGE' });
+    expect({ reads, cancelled }).toEqual({ reads: 0, cancelled: true });
+    const utf8 = await pool.createMcpRedirectFetch(APPROVED, stub(new Response('☃')), 2)(APPROVED);
+    await expect(utf8.text()).rejects.toMatchObject({ code: 'MCP_HTTP_RESPONSE_TOO_LARGE' });
+    let downstreamCancelled = false;
+    const downstream = await pool.createMcpRedirectFetch(APPROVED, stub(new Response(new ReadableStream({ cancel() { downstreamCancelled = true; } }))))(APPROVED);
+    await downstream.body!.cancel(); expect(downstreamCancelled).toBe(true);
     expect(targets(fetchStub)).toEqual([APPROVED, 'https://mcp.example.test:8443/next']);
     expect(fetchStub.mock.calls.map(([, options]) => options)).toEqual([{ redirect: 'manual' }, { redirect: 'manual' }]);
   });

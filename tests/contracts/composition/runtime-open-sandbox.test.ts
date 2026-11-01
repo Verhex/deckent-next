@@ -264,18 +264,18 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     }
     for (const path of ['.deckent/docs2', '.deckent/mcp.json', '.deckent/newdir', '.deckent/crashes/x', '.deckent/data/x']) expect({ path, exists: await exists(join(f.project, path)) }).toEqual({ path, exists: false });
     // P5a: a global state root inside the project that is not the default `.deckent` (here the conventional one of a HOME in the project) is sealed;
-    // its compile cache is product state, never an owner-Y subtree the open view binds writable.
-    const cached = join(f.project, 'person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0');
-    await mkdir(cached, { recursive: true, mode: 0o700 }); await writeFile(join(cached, '0000abcd'), 'CACHE', { mode: 0o600 });
+    // its compile cache and its bwrap copy's `bin` (Astra 2867) are product state, never an owner-Y subtree the open view binds writable.
+    const cached = join(f.project, 'person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0'), copied = join(f.project, 'person/.deckent/bin');
+    for (const [dir, file, bytes] of [[cached, '0000abcd', 'CACHE'], [copied, 'bwrap-0', 'BWRAP']]) { await mkdir(dir!, { recursive: true, mode: 0o700 }); await writeFile(join(dir!, file!), bytes!, { mode: 0o600 }); }
     vi.stubEnv('HOME', join(f.project, 'person'));
-    const poison = await f.call('run_shell', { command: 'echo POISON > person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd; mkdir person/.deckent/state/compile-cache/planted' }, 'deny', fa);
+    const poison = await f.call('run_shell', { command: 'echo POISON > person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd; mkdir person/.deckent/state/compile-cache/planted; echo POISON > person/.deckent/bin/bwrap-0; mkdir person/.deckent/bin/planted' }, 'deny', fa);
     // The cache is in the deny list too (edit tools), so the view masks it: the path is not there to write, and nothing reaches the host.
-    expect({ card: poison.card, ran: /sandbox: bubblewrap; exit [1-9]/u.test(poison.text), masked: (poison.text.match(/No such file or directory/gu) ?? []).length }).toEqual({ card: false, ran: true, masked: 2 });
-    expect({ member: await readFile(join(cached, '0000abcd'), 'utf8'), planted: await exists(join(f.project, 'person/.deckent/state/compile-cache/planted')) }).toEqual({ member: 'CACHE', planted: false });
+    expect({ card: poison.card, ran: /sandbox: bubblewrap; exit [1-9]/u.test(poison.text), masked: (poison.text.match(/No such file or directory/gu) ?? []).length }).toEqual({ card: false, ran: true, masked: 4 });
+    expect({ member: await readFile(join(cached, '0000abcd'), 'utf8'), planted: await exists(join(f.project, 'person/.deckent/state/compile-cache/planted')), bwrap: await readFile(join(copied, 'bwrap-0'), 'utf8'), bin: await exists(join(copied, 'planted')) }).toEqual({ member: 'CACHE', planted: false, bwrap: 'BWRAP', bin: false });
     // The agent's edit tools refuse the same paths the shell floor seals (one derivation), here and when the project is HOME itself; a project file
     // is still edited. The approval answer is `allow`, so only the deny list can stop the write.
     await f.writeAuthority([...GRANTS, rule('edit-tools', 'agent-tool', ['edit_file', 'write_file'], 'require-approval', true), rule('file-write', 'operation', ['workspace.file.write'], 'allow')], 'full-auto', 'edit-cache');
-    for (const [home, path] of [[join(f.project, 'person'), 'person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd'], [f.project, '.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd']] as const) {
+    for (const [home, path] of [[join(f.project, 'person'), 'person/.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd'], [join(f.project, 'person'), 'person/.deckent/bin/bwrap-0'], [f.project, '.deckent/state/compile-cache/v0.0.0-x64-00000000-0/0000abcd']] as const) {
       vi.stubEnv('HOME', home);
       const before = await readFile(join(f.project, path), 'utf8').catch(() => null);
       const edit = await f.call('write_file', { path, content: 'POISON' }, 'allow', fa);

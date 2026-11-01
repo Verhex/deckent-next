@@ -68,6 +68,9 @@ describe('config error shape (zod 4 issue-code guard)', () => {
   it('the localized message carries the reason verbatim in both catalogs; an enum names the values it takes (BeUser KER-05)', () => {
     const error = (() => { try { validateConfig({ output_mode: 'turbo', mcp: { maxConcurrentCalls: 'x' } }, 'tr'); } catch (caught) { return caught as ConfigValidationError; } throw new Error('expected'); })();
     expect(error.code).toBe('CONFIG_VALIDATION');
+    expect(issues({ mcp: { maxConcurrentCalls: -1.5 } })).toEqual([
+      { path: 'mcp.maxConcurrentCalls', reason: 'invalid_type' }, { path: 'mcp.maxConcurrentCalls', reason: 'too_small' },
+    ]);
     expect(error.message).toContain('mcp.maxConcurrentCalls: geçersiz değer (değer türü geçersiz)');
     expect(error.message).toContain('output_mode: geçersiz değer (geçerli değerler: standard, explanatory, verbose, json)');
     expect(error.localize?.('en').message).toContain('output_mode: invalid value (allowed values: standard, explanatory, verbose, json)');

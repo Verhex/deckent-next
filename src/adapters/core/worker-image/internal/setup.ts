@@ -1,3 +1,4 @@
+import { persistedDateTime } from '#platform/index.js';
 import { lstat, mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,9 +12,9 @@ import limits from './limits.json' with { type: 'json' };
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u), RECEIPT = /^(?:r[1-9][0-9]*-\d{8}|adopted-\d{1,16})\.json$/u;
-const imagePin = z.object({ imageId: digest, providers: z.array(z.string().regex(/^[a-z0-9]{1,32}$/u)).nonempty() }).passthrough();
-const receiptSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: digest, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
-  images: z.array(imagePin).nonempty().optional(), manifest: z.object({ providers: z.array(z.object({ id: z.string().regex(/^[a-z0-9]{1,32}$/u) }).passthrough()).nonempty() }).passthrough().optional(), measuredAt: z.string().datetime() }).passthrough()
+const imagePin = z.looseObject({ imageId: digest, providers: z.array(z.string().regex(/^[a-z0-9]{1,32}$/u)).nonempty() });
+const receiptSchema = z.looseObject({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: digest, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
+  images: z.array(imagePin).nonempty().optional(), manifest: z.looseObject({ providers: z.array(z.looseObject({ id: z.string().regex(/^[a-z0-9]{1,32}$/u) })).nonempty() }).optional(), measuredAt: persistedDateTime() })
   .refine(value => value.schemaVersion === 2 || value.images?.[0]?.imageId === value.imageId);
 export type WorkerImagePresence = 'present' | 'missing' | 'unknown';
 export type WorkerImageReceiptView = Readonly<{ imageId: string; imageVersion: string; durationMs?: number; images?: readonly Readonly<{ imageId: string; providers: readonly string[] }>[] }>;

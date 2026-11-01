@@ -11,7 +11,9 @@ import { readlink } from 'node:fs/promises';
 import { generateKeyPairSync } from 'node:crypto';
 import { measureInstalledPackage } from '#adapters/core/installation-artifacts/index.js';
 import { readBeuserCandidate, verifyBeuserDistribution, createBeuserArrange } from '#adapters/core/beuser-realm/index.js';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, fork } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import modelFixture from '../../../assets/beuser/model-fixture.json' with { type: 'json' };
 import { sha256, redactForRecord } from '#platform/index.js';
 
 const retain: BeuserEvidenceRetention = async (_context, evidence) => `fixture-retained:${evidence.digest}`;
@@ -70,7 +72,7 @@ it('admits only retained binding and fresh inspection; arrange exec is TTY-less 
     const options = { controllerRoot: '/fixture/controller', packageRoot: '/fixture/package', executable: '/usr/bin/docker', image: 'sha256:' + 'a'.repeat(64),
       uid: 1000, gid: 1001, memoryBytes: 1048576, nanoCpus: 1000000000, pids: 10, filesystemBytes: 1048576 };
     const command: BeuserRealmCommand = async args => { calls.push([...args]);
-      return JSON.stringify(args.includes(JSON.stringify([step, r.ctx.limits.maxArtifactBytes])) ? { exitCode: 0, stdoutBytes: 1, stdoutDigest: '0'.repeat(64) } : 'installed'); };
+      return JSON.stringify(args.includes(JSON.stringify([step, r.ctx.limits.maxArtifactBytes, r.ctx.limits.maxWallMs])) ? { exitCode: 0, stdoutBytes: 1, stdoutDigest: '0'.repeat(64) } : 'installed'); };
     const arrange = createBeuserArrange({ realm: r.app, custody: r.custody, options, language: 'tr', command });
     await expect(arrange.run(r.ctx, step)).rejects.toMatchObject({ code: 'BEUSER_TARGET_NOT_SANDBOX' });
     expect(calls).toEqual([]);
@@ -88,9 +90,9 @@ it('admits only retained binding and fresh inspection; arrange exec is TTY-less 
     const [node, ...tail] = exec.slice(at + 1), entry = `${BEUSER_REALM_RECIPE.packageTarget}/dist/composition/core/cli/internal/entry.js`;
     expect(node).toBe(BEUSER_REALM_RECIPE.nodeExecutable);
     const script = tail[tail.indexOf('--eval') + 1]!, base = await realpath(await mkdtemp(join(tmpdir(), 'beuser-arrange-'))), work = join(base, 'realm'); roots.push(base);
-    expect(script.split(entry)).toHaveLength(2);
+    expect(script.split(entry)).toHaveLength(3);
     await mkdir(work);
-    const local = (text: string) => text.replace(entry, join(base, 'probe.mjs')).replaceAll(JSON.stringify(BEUSER_REALM_RECIPE.workTarget), JSON.stringify(work));
+    const local = (text: string) => text.replaceAll(entry, join(base, 'probe.mjs')).replaceAll(JSON.stringify(BEUSER_REALM_RECIPE.workTarget), JSON.stringify(work));
     const observeScript = calls[1]!.at(-2)!, wrap = (value: unknown) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '--eval', local(script),
       JSON.stringify([value, 4096])], { input: 'y\n', encoding: 'utf8' })) as { exitCode: number | null };
     const look = (readback: unknown) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '--eval', local(observeScript), JSON.stringify(readback)], { encoding: 'utf8' })) as unknown;
@@ -112,6 +114,43 @@ it('admits only retained binding and fresh inspection; arrange exec is TTY-less 
     for (const id of ['git-repository', 'team-notes-tracked', 'team-notes-committed']) expect(wrap(BEUSER_ARRANGE_REGISTRY.steps.find(row => row.id === id))).toMatchObject({ exitCode: 0 });
     expect(look({ kind: 'git', path: '.deckent/team-notes.md', expected: 'tracked' })).toBe('tracked');
     expect(look({ kind: 'git', path: 'link.md', expected: 'tracked' })).toBe('untracked');
+    // The shipped asset serves only versioned fixture bytes, with finite life, anonymous loopback and no request echo.
+    const asset = fileURLToPath(new URL('../../../assets/beuser/model-fixture.mjs', import.meta.url));
+    const { readFile } = await import('node:fs/promises');
+    await writeFile(join(base, 'model-fixture.mjs'), await readFile(asset));
+    await writeFile(join(base, 'model-fixture.json'), JSON.stringify({ ...modelFixture, endpoint: 'http://127.0.0.1:0' }));
+    const child = fork(join(base, 'model-fixture.mjs'), ['serve', '5000'], { execArgv: [], env: {}, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+    try {
+      const ready = await new Promise<{ revision: string; port: number }>((resolve, reject) => {
+        child.once('message', value => resolve(value as { revision: string; port: number })); child.once('error', reject);
+        child.once('exit', () => reject(new Error('fixture did not start')));
+      });
+      expect(ready.revision).toBe(modelFixture.revision);
+      const url = `http://127.0.0.1:${ready.port}`;
+      expect((await (await fetch(url + '/v1/models')).json() as { data: { id: string }[] }).data.map(row => row.id)).toEqual([modelFixture.modelId]);
+      const post = (model: string, stream = false) => fetch(url + '/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model, stream, messages: [{ role: 'user', content: 'must-never-be-echoed' }] }) });
+      expect(await (await post(modelFixture.modelId)).json()).toEqual(modelFixture.response);
+      const streamed = await (await post(modelFixture.modelId, true)).text();
+      expect(streamed).toContain(modelFixture.response.choices[0]!.message.content); expect(streamed).toContain('data: [DONE]');
+      expect(streamed).not.toContain('must-never-be-echoed');
+      expect((await post('foreign-model')).status).toBe(400);
+      expect((await fetch(url + '/v1/models', { headers: { authorization: 'synthetic-fixture-value' } })).status).toBe(403);
+      expect((await fetch(url + '/outside')).status).toBe(404);
+    } finally { if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await new Promise(resolve => child.once('exit', resolve)); } }
+    const helper = await import(pathToFileURL(join(base, 'model-fixture.mjs')).href);
+    const probe = join(base, 'probe.mjs'), receipt = join(work, modelFixture.receiptPath);
+    await writeFile(receipt, JSON.stringify(modelFixture.receipt), { mode: 0o600 });
+    const declared = { catalog: { providers: [{ id: 'fixture-channel', version: 1, models: [{ id: 'catalog-model', version: 3, nativeId: modelFixture.modelId }] }] } };
+    const setActivation = async (state: string) => writeFile(probe, `console.log(JSON.stringify(process.argv.includes('activation') ? ${JSON.stringify({ activation: { state } })} : ${JSON.stringify(declared)}));`);
+    await setActivation('active');
+    expect(helper.observeModelFixture(probe, work, 1000, 4096)).toMatchObject({ state: 'file', mode: '0600', sha256: sha256(JSON.stringify(modelFixture.receipt)) });
+    await setActivation('inactive');
+    expect(() => helper.observeModelFixture(probe, work, 1000, 4096)).toThrow('BEUSER_MODEL_FIXTURE_UNAVAILABLE');
+    await setActivation('active'); await rm(receipt); await symlink(probe, receipt);
+    expect(() => helper.observeModelFixture(probe, work, 1000, 4096)).toThrow();
+    await expect(helper.arrangeModelFixture(probe, work, { kind: 'cli', id: modelFixture.stepId, args: ['--version'] }, 4096, 1000)).rejects.toThrow('BEUSER_MODEL_FIXTURE_UNAVAILABLE');
+
   }
 });
 it('refuses wrong nonce/generation and forged observations before runtime inspection even with the admitted evaluator', async () => {

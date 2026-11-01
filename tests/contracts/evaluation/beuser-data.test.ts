@@ -4,20 +4,22 @@ import { expect, it } from 'vitest';
 import personas from '../../../assets/beuser/personas.json' with { type: 'json' };
 import uninstall from '../../../assets/beuser/journeys/uninstall-v2.json' with { type: 'json' };
 import onboarding from '../../../assets/beuser/journeys/onboarding.json' with { type: 'json' };
+import theme from '../../../assets/beuser/journeys/theme-light.json' with { type: 'json' };
 import self from '../../../assets/beuser/journeys/beuser-self.json' with { type: 'json' };
 import manifest from '../../../assets/beuser/calibration/manifest.json' with { type: 'json' };
 import good from '../../../assets/beuser/calibration/known-good.json' with { type: 'json' };
 import bad from '../../../assets/beuser/calibration/known-bad.json' with { type: 'json' };
 import { beuserBindingSchema, beuserSealedRubricSchema } from '#domain/core/beuser/index.js';
 import { pinBeuserWalkerSummary, BEUSER_LIMITS_REGISTRY, BEUSER_ARRANGE_REGISTRY, beuserArrangeRegistrySchema, beuserArrangePlan } from '#engine/core/beuser-contract/index.js';
-import { beuserJourneyProfileSchema } from '#composition/core/supervisors/index.js';
-import { BEUSER_REALM_RECIPE } from '#adapters/core/beuser-realm/index.js';
+import { listConfiguredBeuserJourneys } from '#composition/core/beuser/index.js';
+import { beuserJourneyProfileSchema, beuserProfileLimits, pinBeuserProfile } from '#composition/core/supervisors/index.js';
+import { BEUSER_REALM_RECIPE, inspectPackagedBeuserJourney } from '#adapters/core/beuser-realm/index.js';
 import arrange from '../../../assets/beuser/arrange.json' with { type: 'json' };
 import { beuserReliabilityPolicySchema } from '#engine/core/beuser/index.js';
 import { beuserCalibrationSchema, beuserDigest, beuserReadbackSchema, beuserParametersSchema,
   beuserEvidenceSchema, evaluateBeuserEvidence } from '#capabilities/core/evaluation-evidence/index.js';
 
-const journeys = [uninstall, onboarding, self];
+const journeys = [uninstall, onboarding, self, theme];
 // Test-only binding. No candidate, realm, Run, receipt or model invocation is created.
 const binding = beuserBindingSchema.parse({ schemaVersion: 1,
   identity: { scopeId: 'fixture-scope', runId: 'fixture-run', taskId: 'fixture-task', attemptId: 'fixture-attempt', layoutRevision: 'fixture', generation: 1 },
@@ -30,10 +32,15 @@ function parameters(probes: unknown, calibration: unknown = manifest.calibration
     fileName: 'fixture-evidence', dimension: 'outcome', probes, calibration });
 }
 
-it('loads all seven assets through frozen C1/C5 parsers and resolves every persona, profile, branch and probe set', () => {
+it('loads all packaged assets through frozen C1/C5 parsers and resolves every persona, profile, branch and probe set', async () => {
+  expect(await inspectPackagedBeuserJourney(theme)).toMatchObject({ ready: true, branchCount: 12, evidenceClass: 'package-assets-only' });
+  expect(await listConfiguredBeuserJourneys()).toContainEqual({ id: 'theme-light', recommended: false });
+  await expect(inspectPackagedBeuserJourney({ ...theme, rubric: { ...theme.rubric, digest: '0'.repeat(64) } })).rejects.toThrow();
   const profile = BEUSER_LIMITS_REGISTRY.profiles.find(row => row.revision === personas.limitsProfile);
   expect(profile).toBeDefined();
   expect(new Set(personas.personas.map(row => row.personaId)).size).toBe(personas.personas.length);
+  expect(personas.personas.find(row => row.personaId === 'ayse')?.patience.maxWaitMs).toBe(45000);
+  expect(personas.personas.find(row => row.personaId === 'mert')?.patience.maxWaitMs).toBe(30000);
   for (const input of personas.personas) {
     const summary = pinBeuserWalkerSummary(input);
     // Walk20: each decision may cost a guard read plus its action; the first look and a stop's read come on top.
@@ -104,6 +111,10 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
   ]));
   expect(onboarding.rubric.parameters.branches[0]!.variants).toContain('reopen');
   expect(onboarding.rubric.parameters.workerBoundary).toBe('actual-worker-execution-and-durable-target-readback-not-terminal-fallback');
+  expect(theme.branches.map(row => row.id)).toEqual(Array.from({ length: 12 }, (_, index) => `TL-B${index + 1}`));
+  expect(theme.branches[0]!.goal.tr).toContain('/theme'); expect(theme.branches[0]!.goal.en).toContain('/mcp');
+  expect(theme.branches[0]!.personaIds[0]).toBe('zeynep');
+  expect(theme.rubric.parameters.measurement).toMatchObject({ textMinimum: 4.5, boundaryMinimum: 3, minimumContrastRatio: 1 });
   expect(self.rubric.parameters.recursion).toMatchObject({ maxDepth: 1, selfInChildCohort: false });
   expect(self.rubric.parameters.recursion.childJourneyIds).toEqual(['uninstall-v2', 'onboarding']);
   {
@@ -117,6 +128,20 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
     const startState = { schemaVersion: 2, catalogRevision: BEUSER_ARRANGE_REGISTRY.revision, states: ['T1'] };
     const ok = (value: object) => beuserJourneyProfileSchema.safeParse(value).success;
     expect(ok(v2)).toBe(true);
+    const old = beuserJourneyProfileSchema.parse(v2), v3 = beuserJourneyProfileSchema.parse({ ...v2, schemaVersion: 3, startState });
+    expect(beuserProfileLimits(old)).toEqual(BEUSER_LIMITS_REGISTRY.profiles[0]);
+    expect(beuserProfileLimits(v3)).toEqual(BEUSER_LIMITS_REGISTRY.profiles[0]);
+    const v4 = pinBeuserProfile(v3, { maxWallMs: 10000, maxSteps: 30, maxReruns: 1, maxCost: 0.5 });
+    expect(v4).toMatchObject({ schemaVersion: 4, startState, limitsRevision: v2.limitsRevision,
+      limits: { maxWallMs: 10000, maxWaitMs: 10000, cleanupDeadlineMs: 10000, maxSteps: 30, maxReruns: 1, maxCost: 0.5, source: 'config' } });
+    expect(beuserProfileLimits(pinBeuserProfile(v4, {}))).toEqual(v4.limits);
+    expect(beuserProfileLimits(pinBeuserProfile(v4, { maxWallMs: 1200000, maxSteps: 242, maxReruns: 2, maxCost: 1 }))).toEqual(v4.limits);
+    expect(ok({ ...v4, limits: undefined })).toBe(false);
+    expect(ok({ ...v3, limits: v4.limits })).toBe(false);
+    for (const change of [{ maxWallMs: 1200001 }, { maxSteps: 243 }, { maxReruns: 3 }, { maxCost: 1.01 }, { maxCalls: 129 }, { currency: 'OTHER' }, { revision: 'other' }, { source: 'invented' }])
+      expect(ok({ ...v4, limits: { ...v4.limits, ...change } }), JSON.stringify(change)).toBe(false);
+    expect(pinBeuserProfile(old, {}).startState).toBeUndefined();
+
     expect(ok({ ...v2, schemaVersion: 3, startState })).toBe(true);
     expect(ok({ ...v2, schemaVersion: 3, startState: { ...startState, states: [] } })).toBe(true);
     expect(ok({ ...v2, startState })).toBe(false);
@@ -139,6 +164,11 @@ it('retains the entire uninstall and onboarding catalogs, explicit unknown varia
     expect(plan(['T3', 'S10a']).steps).toEqual(['git:git-repository', 'cli:installed', 'file:team-notes', 'git:team-notes-tracked', 'git:team-notes-committed', 'file:project-data']);
     expect(plan(['sealed-owner-like-fixture', 'S2', 'S4']).unarranged).toEqual([{ state: 'S2', reason: 'realm-external' }, { state: 'S4', reason: 'realm-external' }]);
     expect(plan(['fresh-home', 'cancel'])).toEqual({ steps: ['check:installation-absent', 'check:global-home-absent'], unarranged: [{ state: 'cancel', reason: 'persona' }] });
+    expect(plan(['fresh-own-installation', 'model-connected']).steps).toEqual(['cli:installed', 'cli:model-connected']);
+    expect(onboarding.rubric.parameters.branches.find(row => row.id === 'O-B1')!.initialStates).toEqual(['fresh-home', 'fresh-session', 'no-prefilled-model-or-consent']);
+    expect(onboarding.rubric.parameters.branches.find(row => row.id === 'O-B1-CONNECTED')!.initialStates).toEqual(['model-connected']);
+    expect(self.rubric.parameters.branches.find(row => row.id === 'SELF-B1')!.initialStates).toContain('model-connected');
+    expect(self.rubric.parameters.branches.find(row => row.id === 'SELF-B2')!.initialStates).not.toContain('model-connected');
     expect(plan(['T1', 'S17']).unarranged).toEqual([{ state: 'S17', reason: 'driver-limit' }]);
     // Catalog invariants live in code: exact structured CLI tuples, realm-confined fixture paths, a fixed Git subcommand set and resolvable states.
     expect(beuserArrangeRegistrySchema.safeParse(arrange).success).toBe(true);
@@ -185,6 +215,8 @@ it('pins calibration bytes and verifies synthetic oracle outcomes without claimi
     const bytes = readFileSync(new URL(`../../../assets/beuser/calibration/${file.fileName}`, import.meta.url));
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256);
   }
+  for (const file of manifest.assetDigests) expect(createHash('sha256').update(readFileSync(new URL(`../../../assets/beuser/${file.fileName}`, import.meta.url))).digest('hex')).toBe(file.sha256);
+  expect(manifest.assetSetDigest).toBe(beuserDigest(manifest.assetDigests));
   expect(manifest.blindSetDigest).toBe(beuserDigest(manifest.files.map(row => ({ fileName: row.fileName, sha256: row.sha256 }))));
   expect(manifest).toMatchObject({ phase: 'preparation-only', calibrationClaim: 'uncalibrated',
     calibration: { trapHits: 0, trapTotal: 0, falseRed: 0, goodTotal: 0, retries: 0 },

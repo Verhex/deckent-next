@@ -1,7 +1,7 @@
+import { persistedInteger } from '#domain/index.js';
 import { AsyncResource } from 'node:async_hooks';
-import { z } from 'zod';
 
-const positiveSafeInteger = z.number().int().positive().safe();
+const positiveSafeInteger = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export interface RuntimeServiceDeadline { wait(milliseconds: number, signal: AbortSignal): Promise<void> }
 /** `admissionWaitMs` bounds how long a transport request may wait for capacity before the typed refusal (0 or absent: refuse at once);
  * the wait queue never holds more than `maxConcurrentRequests` requests. */
@@ -32,7 +32,7 @@ export class RuntimeServiceLifecycle {
       this.maxConcurrentRequests = positiveSafeInteger.parse(options.maxConcurrentRequests);
       this.maxConcurrentExecutions = positiveSafeInteger.parse(options.maxConcurrentExecutions);
       if (this.maxConcurrentExecutions >= this.maxConcurrentRequests) throw new Error('invalid');
-      this.admissionWaitMs = options.admissionWaitMs === undefined ? 0 : z.number().int().nonnegative().safe().parse(options.admissionWaitMs);
+      this.admissionWaitMs = options.admissionWaitMs === undefined ? 0 : persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).parse(options.admissionWaitMs);
     } catch { throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_OPTIONS'); }
     if (typeof stopRecovery !== 'function' || !deadline || typeof deadline.wait !== 'function') throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_OPTIONS');
   }

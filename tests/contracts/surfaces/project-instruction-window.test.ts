@@ -39,6 +39,13 @@ describe('project instruction trust on the real Ink workline', () => {
     expect(view.stdout.frame).toContain('DECKENT.md'); expect(view.stdout.frame).toContain('20 bytes'); expect(calls).toEqual([]);
     view.stdin.write('\u001b'); await until(() => calls.length === 1, 'declined turn');
     expect(calls[0]).not.toContain('PROJECT-ONLY-CONTEXT'); expect(await f.port.inspect()).toMatchObject({ status: 'trust-required' });
+    await writeFile(join(f.root, 'AGENTS.md'), '@../outside.md'); await writeFile(join(f.root, '../outside.md'), 'EXTERNAL-CONTEXT');
+    await settle(80); view.stdin.write('external\r');
+    await until(() => view.stdout.frame.includes('EXTERNAL-CONTEXT'), 'external import trust window');
+    expect(view.stdout.frame).toContain('Trust applies only to this session');
+    expect(view.stdout.frame).toContain('outside.md'); expect(calls).toHaveLength(1);
+    view.stdin.write('\u001b'); await until(() => calls.length === 2, 'declined external turn');
+    expect(calls[1]).not.toContain('EXTERNAL-CONTEXT');
   });
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: project instruction trust cache] Down then Enter accepts exact content, persists its digest and changed content asks again before the next model turn', async () => {
     const f = await fixture(), calls: string[] = [];
@@ -62,6 +69,11 @@ describe('project instruction trust on the real Ink workline', () => {
     expect(instructionModelContext(await lineInstructionContext(f.port, view.source.digest))).toContain('PROJECT-ONLY-CONTEXT');
     await writeFile(join(f.root, 'DECKENT.md'), 'changed');
     expect(instructionModelContext(await lineInstructionContext(f.port, view.source.digest))).toBe('');
+    await writeFile(join(f.root, 'AGENTS.md'), '@../outside.md'); await writeFile(join(f.root, '../outside.md'), 'EXTERNAL');
+    const external = await f.port.inspect(); if (!('source' in external)) throw new Error('source');
+    expect(external.source.external).toBe(true);
+    expect(instructionModelContext(await lineInstructionContext(f.port, external.source.digest))).toBe('');
+
   });
   it('the CLI line entry sends only trusted context and /context prints its real source and size locally', async () => {
     registerProviderConfig();
@@ -89,8 +101,7 @@ describe('project instruction trust on the real Ink workline', () => {
     const view = render(createElement(InstructionInitWindow, { port, initial, skeleton, labels: projectInstructionLabels('en'), finish: () => { finished = true; } }),
       { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, interactive: true, exitOnCtrlC: false, patchConsole: false });
     cleanup.push(() => { view.unmount(); stdin.end(); });
-    await until(() => frame.includes('Optional host bridges'), 'init bridge selection');
-    stdin.write('\r'); await until(() => frame.includes('Preview project instructions'), 'init preview');
+    await until(() => frame.includes('Preview project instructions'), 'init preview');
     expect(frame).toContain('init-derived'); expect(frame).toContain('npm run test'); expect(written).toEqual([]);
     stdin.write('\u001b'); await until(() => finished, 'init escaped'); expect(written).toEqual([]);
   });

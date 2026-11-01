@@ -10,7 +10,7 @@ import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type Liv
  * injected so the machine stays deterministic.
  */
 export type TurnFinish = Extract<TurnDelta, { kind: 'done' }>['finish'];
-export type AnswerUnit = Readonly<{ kind: Segment['kind']; markdown: string; lead: boolean }>;
+export type AnswerUnit = Segment & Readonly<{ lead: boolean }>;
 export type ReasoningUnit = Readonly<{ kind: 'reasoning'; tokens: number; approximate: boolean; elapsedMs: number }>;
 export type ContextView = Readonly<{ promptTokens: number; windowTokens: number | null; quality: Extract<TurnDelta, { kind: 'context' }>['quality'] }>;
 /** The part of a turn that was running (TL-A): summarizing older messages, the model's answer, or a tool call. */
@@ -145,7 +145,7 @@ function reasoningSummary(state: AssistantStreamState, nowMs: number): Reasoning
 }
 
 function answerUnits(segments: readonly Segment[], answered: boolean): AnswerUnit[] {
-  return segments.map((segment, index) => Object.freeze({ kind: segment.kind, markdown: segment.markdown, lead: !answered && index === 0 }));
+  return segments.map((segment, index) => Object.freeze({ ...segment, lead: !answered && index === 0 }));
 }
 
 export function narrationOf(state: AssistantStreamState): Narration | null {
@@ -155,10 +155,8 @@ export function narrationOf(state: AssistantStreamState): Narration | null {
 }
 
 function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[], footer: FooterUnit | null = null): AssistantStreamStep {
-  const tail = segmenterTail(state.segmenter);
   const pending = previewRecordStream(state.answerRecord, state.known, terminalSafeText);
-  const joiner = pending && state.segmenter.partial === '' && state.segmenter.block.length > 0 ? '\n' : '';
-  const liveTail = { ...tail, markdown: tail.markdown + joiner + pending };
+  const liveTail = segmenterTail({ ...state.segmenter, partial: state.segmenter.partial + pending });
   const activeTool = state.activeTool ? { ...state.activeTool, output: (state.activeTool.output + previewRecordStream(state.outputRecord.stdout, state.known, terminalSafeText) + previewRecordStream(state.outputRecord.stderr, state.known, terminalSafeText)).slice(-LIVE_OUTPUT_TAIL_CHARS) } : null;
   return Object.freeze({ state, staticUnits: Object.freeze([...staticUnits]), liveTail, narration: narrationOf(state), footer,
     activeTool, waiting: waitingOf(state), toolGroup: state.toolGroup,

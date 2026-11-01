@@ -27,8 +27,7 @@ import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 // S9: the real host measurement gates the bubblewrap turn; other shell tests pin the realm to `host` or inject `() => []`.
-const measured = await measureTestShellHost();
-const sandboxReady = measured.bubblewrap.status === 'available';
+const measured = await measureTestShellHost(), sandboxReady = measured.bubblewrap.status === 'available';
 const kernelLandlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
 /** S11 through the port: only the Landlock provider, judged against an injected measurement (the kernel's ABI, or one it does not have). */
 const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
@@ -49,7 +48,7 @@ const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: Str
 const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
 type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
-async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
+async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number; responseMaxBytes?: number;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
   thinkingSwitch?: boolean; dataInside?: boolean; shellRealm?: 'host' | 'prefer-sandbox' | 'require-sandbox' | 'absent';
@@ -114,7 +113,7 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     ...(options.approvalTtlMs ? { approvals: { requestTtlMs: options.approvalTtlMs } } : {}),
-    service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
+    service: { inputMaxBytes: 262144, responseMaxBytes: options.responseMaxBytes ?? 65536, maxConnections: 8, maxConcurrentRequests: 4,
       maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
@@ -161,7 +160,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const events: AgentTurnStreamEvent[] = [];
     const result = await f.client().chatTurn(ask('turn-1'), event => events.push(event));
     expect(result).toEqual({ schemaVersion: 1, turnId: 'turn-1', finish: 'stop', note: null, rounds: 2, toolCalls: 1, answer: 'It exports a.',
-      answerBytes: 13, replayed: false, recorded: true });
+      answerBytes: 13, replayed: false, recorded: true, notices: [], steer: { joined: [], returned: [] } });
     expect(events.filter(event => event.kind.startsWith('tool.'))).toEqual([{ kind: 'tool.started', callId: 'call_1', name: 'read_file', target: 'src/a.ts' },
       expect.objectContaining({ kind: 'tool.finished', callId: 'call_1', name: 'read_file', status: 'ok' })]);
     const history = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
@@ -505,19 +504,19 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   }, 30_000);
 
   it('waits for the owner on an approval-gated call: allow runs it once, deny never runs it, expiry and cancel close the request (T-L4, C12)', async () => {
-    const f = await runtime({ toolGrant: 'approval' }); await f.start();
-    const client = f.client();
-    const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => {
-      if (event.kind !== 'approval.requested') return;
+    const f = await runtime({ toolGrant: 'approval', responseMaxBytes: 4096 }), client = f.client(), steered: { state: string }[] = []; await f.start(); // v30 (Astra 2888):
+    // at a 4096-byte response bound, 16 longest steer ids and an escape-heavy answer (quotes, backslashes, controls, multibyte).
+    const ids = Array.from({ length: 16 }, (_, n) => String(n).padStart(64, 'x')), heavy = `${'"'.repeat(700)}${'\\'.repeat(300)}${'\u0001\n\t'.repeat(40)}${'ş'.repeat(300)}`;
+    const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => { if (event.kind !== 'approval.requested') return;
+      if (decision === 'allow') for (const steerId of ids) steered.push(await client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-allow', steerId, content: 'and name its type' }));
       await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: `${decision}-${event.approvalId}`,
         expectedRevision: event.revision, decision, reason: 'Reviewed' });
     };
     const run = async (turnId: string, onApproval: (event: AgentTurnStreamEvent) => Promise<void>) => {
-      const events: AgentTurnStreamEvent[] = [], pending: Promise<void>[] = [];
-      const result = await client.chatTurn(ask(turnId), event => { events.push(event); pending.push(onApproval(event)); });
+      const events: AgentTurnStreamEvent[] = [], pending: Promise<void>[] = []; const result = await client.chatTurn(ask(turnId), event => { events.push(event); pending.push(onApproval(event)); });
       await Promise.all(pending); return { result, events };
     };
-    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' },
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: heavy },
       { toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Not allowed.' }];
     const allowed = await run('turn-allow', decide('allow'));
     const requested = allowed.events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
@@ -525,17 +524,22 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       preview: expect.stringContaining('"path": "src/a.ts"') });
     expect(allowed.events.find(event => event.kind === 'approval.settled')).toMatchObject({ approvalId: requested.approvalId, outcome: 'allow' });
     expect(allowed.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
-    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    // Frame fits, ids whole, answer repeat left out (size named); so too with a maximal escape-heavy note (cut, …). Each steer was sent while the card
+    // waited: it never answered the card (the record below is the person's decision); it joined after the tool result.
+    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1, notices: [], answer: null, answerBytes: Buffer.byteLength(heavy), steer: { joined: ids, returned: [] } });
+    const capacity = engine.runtimeServiceResultCapacity(randomUUID(), 4096), fitted = engine.fitChatTurnResult({ ...allowed.result, answer: heavy, note: '"\\\u0001ş'.repeat(1024) }, capacity);
+    expect(Buffer.byteLength(JSON.stringify(fitted))).toBeLessThanOrEqual(capacity); expect(fitted).toMatchObject({ answer: null, notices: [], steer: { joined: ids, returned: [] } }); expect(fitted.note?.startsWith('"\\\u0001ş') && fitted.note.endsWith('…')).toBe(true);
+    expect(steered.map(answer => answer.state)).toEqual(ids.map(() => 'queued')); expect(allowed.events.flatMap(event => event.kind === 'text' ? [event.text] : []).join('')).toBe(heavy);
+    const sent = (f.state.requests[1]!['messages'] as { role: string; content: string }[]).slice(-17); expect(sent.map(message => message.role)).toEqual(['tool', ...ids.map(() => 'user')]); expect(allowed.events.filter(event => event.kind === 'message' && event.steerId)).toHaveLength(16);
     const record = JSON.parse((f.rows(`SELECT snapshot FROM approvals WHERE approval_id='${requested.approvalId}'`)[0] as { snapshot: string }).snapshot);
     expect(record).toMatchObject({ status: 'decided', request: { schemaVersion: 3, subject: { kind: 'agent-tool-call', turnId: 'turn-allow', round: 1, index: 0,
-      tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } });
+      tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } }); expect(JSON.stringify(record)).not.toContain('and name its type');
 
     const denied = await run('turn-deny', decide('deny'));
     expect(denied.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
     const toolMessage = denied.events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0];
     expect(toolMessage).toContain('denied-by-owner'); expect(toolMessage).not.toContain('export const a');
-    // Single use: every call opens its own request; nothing was reused across turns.
-    expect(f.rows("SELECT count(*) AS count FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ count: 2 }]);
+    expect(f.rows("SELECT count(*) AS count FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ count: 2 }]); // Single use: one request per call, none reused across turns.
   }, 60_000);
 
   // D2 checkpoint (TL-B, owner): the tool line may show grep's pattern first (call-approvals.ts's displayTarget shows
@@ -1182,24 +1186,28 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   }, 30_000);
 
   it('cancels a running turn at once for the same principal, and reports an unknown turn as not running', async () => {
-    const f = await runtime(); await f.start();
-    f.state.script = [{ hold: true }];
-    const client = f.client(); let seen = false;
-    // Wait for the provider's stream (the first event is now the pre-send `context` measurement).
-    const running = client.chatTurn(ask('turn-cancel'), event => { if (event.kind === 'text') seen = true; });
-    const until = performance.now() + 5_000;
-    while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
-    expect(seen).toBe(true);
-    const cancelledAt = performance.now();
-    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toEqual({ schemaVersion: 1, turnId: 'turn-cancel', state: 'cancelling' });
-    expect(await running).toMatchObject({ finish: 'cancelled', replayed: false });
-    // At once: the held provider stream is aborted, not waited out.
-    expect(performance.now() - cancelledAt).toBeLessThan(1_000);
-    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toMatchObject({ state: 'not-running' });
-    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: randomUUID() })).toMatchObject({ state: 'not-running' });
-    while (f.state.closed === 0 && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
-    expect(f.state.closed).toBe(1);
-  }, 30_000);
+    // v30 cancel/steer race (Astra 2882/2889) at a 4096- and a 1024-byte bound: a line is accepted only while every id fits the result whole (16 longest
+    // ids at 4096, fewer at 1024, then `full`); the cancel returns each in the final frame (the note cut if need be), a later line is refused, a replay the same.
+    for (const bound of [4096, 1024]) {
+      const f = await runtime({ responseMaxBytes: bound }), live = await f.start(), client = f.client(); let seen = false; f.state.script = [{ hold: true }];
+      // Wait for the provider's stream (the first event is now the pre-send `context` measurement).
+      const running = client.chatTurn(ask('turn-cancel'), event => { if (event.kind === 'text') seen = true; });
+      const until = performance.now() + 5_000;
+      while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+      expect(seen).toBe(true); const steer = (steerId: string) => client.steerChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel', steerId, content: 'and b.ts' });
+      const ids = Array.from({ length: 17 }, (_, n) => String(n).padStart(64, 'x')), states: string[] = []; for (const id of ids) states.push((await steer(id)).state);
+      const accepted = ids.slice(0, states.indexOf('full')); expect(states).toEqual(ids.map((_, n) => n < accepted.length ? 'queued' : 'full')); expect(bound === 4096 ? accepted.length === 16 : accepted.length > 0 && accepted.length < 16).toBe(true);
+      const cancelledAt = performance.now();
+      expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel' })).toEqual({ schemaVersion: 1, turnId: 'turn-cancel', state: 'cancelling' });
+      expect(await steer('after')).toMatchObject({ state: 'not-running' });
+      expect(await running).toMatchObject({ finish: 'cancelled', replayed: false, steer: { joined: [], returned: accepted } });
+      expect(performance.now() - cancelledAt).toBeLessThan(1_000); // At once: the held provider stream is aborted, not waited out.
+      for (const turnId of ['turn-cancel', randomUUID()]) expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId })).toMatchObject({ state: 'not-running' });
+      while (f.state.closed === 0 && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10)); expect(f.state.closed).toBe(1);
+      await live.stop(); await live.done.catch(() => undefined); services.splice(services.indexOf(live), 1); await f.start();
+      expect(await f.client().chatTurn(ask('turn-cancel'), () => undefined)).toMatchObject({ finish: 'cancelled', replayed: true, steer: { joined: [], returned: accepted } });
+    }
+  }, 60_000);
 
   it('cancels the turn on the service when the client disconnects mid-stream', async () => {
     const f = await runtime(); await f.start();

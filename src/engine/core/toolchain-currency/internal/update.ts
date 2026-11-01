@@ -1,30 +1,30 @@
+import { persistedString, persistedDateTime, identitySchema, counterSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { layeredWorkerRecipeSchema } from './image-plan.js';
-import { identitySchema, counterSchema } from '#domain/index.js';
 import { toolchainCurrencyReportSchema, toolchainCatalog, type ToolchainCurrencyReport } from './contract.js';
 
 const imageVersion = z.string().regex(/^r[1-9][0-9]*-\d{8}$/);
 /** The installed builder recipe fields this planner reads and rewrites; other fields pass through untouched. */
-const legacyRecipeSchema = z.object({ schemaVersion: z.literal(2), repository: z.string().min(1), imageVersion,
-  previousVersion: imageVersion.nullable(), baseImage: z.string().min(1) }).passthrough();
+const legacyRecipeSchema = z.looseObject({ schemaVersion: z.literal(2), repository: persistedString(z.string().min(1)), imageVersion,
+  previousVersion: imageVersion.nullable(), baseImage: persistedString(z.string().min(1)) });
 export const workerImageRecipeSchema = z.union([layeredWorkerRecipeSchema, legacyRecipeSchema]);
 export type WorkerImageRecipe = z.infer<typeof workerImageRecipeSchema>;
-const profileReference = z.object({ id: identitySchema, version: counterSchema.positive() }).strict();
-export const affectedProfileSchema = z.object({ profile: profileReference, provider: identitySchema, cliVersion: z.string().min(1),
-  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/).nullable() }).strict().readonly();
+const profileReference = z.strictObject({ id: identitySchema, version: counterSchema.positive() });
+export const affectedProfileSchema = z.strictObject({ profile: profileReference, provider: identitySchema, cliVersion: persistedString(z.string().min(1)),
+  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/).nullable() }).readonly();
 export type AffectedProfile = z.infer<typeof affectedProfileSchema>;
-export const toolchainUpdatePlanSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('toolchain-update-plan'), plannedAt: z.string().datetime(),
+export const toolchainUpdatePlanSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('toolchain-update-plan'), plannedAt: persistedDateTime(),
   decision: z.enum(['no-change', 'build']), staleProviders: z.array(identitySchema).readonly(), report: toolchainCurrencyReportSchema,
-  current: z.object({ imageVersion, repository: z.string() }).strict(),
-  next: z.object({ imageVersion, previousVersion: imageVersion, historyLine: z.string().min(1), recipe: workerImageRecipeSchema }).strict().nullable(),
+  current: z.strictObject({ imageVersion, repository: z.string() }),
+  next: z.strictObject({ imageVersion, previousVersion: imageVersion, historyLine: persistedString(z.string().min(1)), recipe: workerImageRecipeSchema }).nullable(),
   affectedProfiles: z.array(affectedProfileSchema).readonly(),
-  basis: z.string() }).strict().readonly();
+  basis: z.string() }).readonly();
 export type ToolchainUpdatePlan = z.infer<typeof toolchainUpdatePlanSchema>;
-export const profileRevisionProposalSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('profile-revision-proposal'), proposedAt: z.string().datetime(),
+export const profileRevisionProposalSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('profile-revision-proposal'), proposedAt: persistedDateTime(),
   imageVersion, imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), tag: z.string().nullable(),
-  profiles: z.array(z.object({ profile: profileReference, provider: identitySchema,
-    changes: z.object({ cliVersion: z.object({ from: z.string(), to: z.string() }).strict(), imageId: z.object({ from: z.string().nullable(), to: z.string() }).strict() }).strict() }).strict()).readonly(),
-  application: z.literal('not-applied'), basis: z.string() }).strict().readonly();
+  profiles: z.array(z.strictObject({ profile: profileReference, provider: identitySchema,
+    changes: z.strictObject({ cliVersion: z.strictObject({ from: z.string(), to: z.string() }), imageId: z.strictObject({ from: z.string().nullable(), to: z.string() }) }) })).readonly(),
+  application: z.literal('not-applied'), basis: z.string() }).readonly();
 export type ProfileRevisionProposal = z.infer<typeof profileRevisionProposalSchema>;
 export class ToolchainUpdateError extends Error {
   constructor(readonly code: 'TOOLCHAIN_RECIPE_INVALID' | 'TOOLCHAIN_HISTORY_INVALID' | 'TOOLCHAIN_RECEIPT_INVALID' | 'TOOLCHAIN_PLAN_INVALID') { super(code); this.name = 'ToolchainUpdateError'; }
@@ -62,9 +62,9 @@ export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyR
   return toolchainUpdatePlanSchema.parse({ schemaVersion: 1, kind: 'toolchain-update-plan', plannedAt: input.plannedAt, decision: 'build', staleProviders: stale, report: input.report, current,
     next: { imageVersion: version, previousVersion: recipe.data.imageVersion, historyLine, recipe: recipe.data.schemaVersion === 3 ? recipe.data : nextRecipe }, affectedProfiles: affected, basis });
 }
-const manifestSchema = z.object({ providers: z.array(z.object({ id: identitySchema, version: z.string().min(1) }).passthrough()) }).passthrough();
-const receiptSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), imageVersion, tag: z.string().nullable(),
-  manifest: manifestSchema.optional(), images: z.array(z.object({ imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), manifest: manifestSchema }).passthrough()).optional() }).passthrough();
+const manifestSchema = z.looseObject({ providers: z.array(z.looseObject({ id: identitySchema, version: persistedString(z.string().min(1)) })) });
+const receiptSchema = z.looseObject({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), imageVersion, tag: z.string().nullable(),
+  manifest: manifestSchema.optional(), images: z.array(z.looseObject({ imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), manifest: manifestSchema })).optional() });
 /** Exact profile changes derived from a build receipt; applying them is a separate installation revision, never done here. */
 export function proposeProfileRevisions(plan: ToolchainUpdatePlan, receiptInput: unknown, proposedAt: string): ProfileRevisionProposal {
   const receipt = receiptSchema.safeParse(receiptInput);

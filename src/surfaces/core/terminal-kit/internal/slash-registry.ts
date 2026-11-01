@@ -1,4 +1,7 @@
-/** Slash command registry — behavior contract; full catalog ports from legacy repl incrementally. */
+import { filterSearchEntries, foldSearchText } from './search.js';
+import SUGGEST from './slash-suggest.json' with { type: 'json' };
+
+/** Slash command registry — behavior contract; full catalog ports from legacy repl incrementally. Names are English only (owner S4). */
 export interface SlashCommand {
   readonly name: string;
   readonly descriptionKey: string;
@@ -9,6 +12,8 @@ export interface SlashCommand {
   readonly argumentKey?: string;
   /** The rich terminal keeps the typed argument because no window takes its place (SLASH-WINDOWS I-1 runs every other command bare). */
   readonly typedArgument?: true;
+  /** The CLI command this one hands to the person's shell, shown and copied exactly (owner S4: `/uninstall` never removes in the terminal). */
+  readonly shellCommand?: string;
 }
 
 /** The groups `/help` lists commands under, in display order; each heading is a catalog text (`labelKey`). */
@@ -53,6 +58,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
   { name: 'setup', group: 'settings', descriptionKey: 'terminal.slash.setup' },
   { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
+  { name: 'beuser', group: 'settings', descriptionKey: 'tui.beuser.slash' },
+  { name: 'theme', group: 'settings', descriptionKey: 'tui.theme.slash' },
   // T4 PROVIDER-CONNECT: connect a provider (masked key, free check, secret store) or disconnect it; a window only.
   { name: 'provider', group: 'settings', descriptionKey: 'terminal.slash.provider' },
   { name: 'monitor', group: 'info', descriptionKey: 'terminal.slash.monitor' },
@@ -63,9 +70,11 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'scope', group: 'info', descriptionKey: 'terminal.slash.scope' },
   // M2 follow-up: which exact catalog model holds which tier/roles (the `deckent models roles show` view); read-only, assigning stays `models roles set`.
   { name: 'roles', group: 'info', descriptionKey: 'terminal.slash.roles' },
+  // Owner S4 (alpha.60): explains removal and gives the copyable `deckent uninstall`; removal itself runs in the shell, never in this terminal.
+  { name: 'uninstall', group: 'settings', descriptionKey: 'terminal.slash.uninstall', shellCommand: 'deckent uninstall' },
   { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', group: 'session', descriptionKey: 'terminal.slash.exit' },
-  { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
+  { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help', typedArgument: true },
 ]);
 
 /**
@@ -130,11 +139,22 @@ export function slashCommandRow(command: SlashCommand, labels: Readonly<Record<s
   return { name: `/${command.name}${argument ? ` ${argument}` : ''}`, detail: labels[command.descriptionKey] ?? '' };
 }
 
+/** Localized names/synonyms live in the same catalog for Terminal, CLI help and unknown-command suggestions. */
+export const slashSearchKey = (name: string): string => `command.search.${name}`;
+export function slashSearchEntries(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS) {
+  return commands.map(command => ({ id: command.name, label: `/${command.name}`, detail: labels[command.descriptionKey] ?? '',
+    keywords: (labels[slashSearchKey(command.name)] ?? '').split('|').map(word => word.trim()).filter(Boolean) }));
+}
+export function searchSlashCommands(query: string, labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): readonly SlashCommand[] {
+  return filterSearchEntries(slashSearchEntries(labels, commands), query).map(row => commands.find(command => command.name === row.id)!);
+}
+
 /** The catalog key of the first `/help` line (a title, so a level word such as `Info:` never sits in front of a group heading). */
 export const SLASH_HELP_TITLE_KEY = 'terminal.slash.helpTitle';
 
 /** `/help`: a title, then the registry rows under their group headings (one line per command), so the palette and the help share the same row text. */
-export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): string {
+export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS, query = ''): string {
+  commands = searchSlashCommands(query, labels, commands);
   const groups = SLASH_GROUPS.flatMap(group => {
     const members = commands.filter(command => (command.group ?? 'other') === group.id);
     if (members.length === 0) return [];
@@ -142,6 +162,38 @@ export function slashHelpText(labels: Readonly<Record<string, string>>, commands
     return [[labels[group.labelKey] ?? group.id, ...rows].join('\n')];
   }).join('\n\n');
   return labels[SLASH_HELP_TITLE_KEY] ? `${labels[SLASH_HELP_TITLE_KEY]}\n${groups}` : groups;
+}
+
+/** Edits between two names (insert, delete, change, swap of neighbours: the optimal string alignment distance). */
+function editDistance(a: string, b: string): number {
+  const rows = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+    rows[i]![j] = Math.min(rows[i - 1]![j]! + 1, rows[i]![j - 1]! + 1, rows[i - 1]![j - 1]! + cost);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) rows[i]![j] = Math.min(rows[i]![j]!, rows[i - 2]![j - 2]! + 1);
+  }
+  return rows[a.length]![b.length]!;
+}
+
+/**
+ * The one command an unknown typed name most likely meant (git/npm "did you mean"): the shortest command it begins, else the closest within
+ * `maxDistance` edits and one edit per `lettersPerEdit` letters (registry data `slash-suggest.json`). A tie, a name in another alphabet
+ * or nothing near gives null. Localized catalog matches precede typo matching; this suggests a name, never dispatches an alias.
+ */
+export function nearestSlashCommand(name: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS, labels: Readonly<Record<string, string>> = {}): SlashCommand | null {
+  const matches = searchSlashCommands(name, labels, commands);
+  const exact = slashSearchEntries(labels, matches).filter(row => [row.id, ...row.keywords].some(word => foldSearchText(word) === foldSearchText(name)));
+  if (exact.length === 1) return matches.find(command => command.name === exact[0]!.id)!;
+  if (exact.length > 1) return null;
+  if (matches.length === 1) return matches[0]!;
+  const typed = name.toLowerCase();
+  if (!/^[a-z0-9-]+$/u.test(typed)) return null;
+  const prefixed = commands.filter(command => command.name.startsWith(typed)).sort((a, b) => a.name.length - b.name.length);
+  if (prefixed.length) return prefixed.length > 1 && prefixed[1]!.name.length === prefixed[0]!.name.length ? null : prefixed[0]!;
+  const allowed = Math.min(SUGGEST.maxDistance, Math.floor(typed.length / SUGGEST.lettersPerEdit));
+  const near = commands.map(command => ({ command, distance: editDistance(typed, command.name) })).filter(item => item.distance <= allowed)
+    .sort((a, b) => a.distance - b.distance);
+  return near.length === 0 || (near.length > 1 && near[1]!.distance === near[0]!.distance) ? null : near[0]!.command;
 }
 
 export function parseSlashLine(line: string): { command: string; args: string } | null {

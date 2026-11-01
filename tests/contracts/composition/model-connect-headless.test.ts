@@ -1,9 +1,22 @@
 // S3-3 `models connect claude-cli-subscription` through the real configured paths (governed config writer, ledger catalog, activation, audit) with
 // a scripted fake CLI: no real CLI and no model call. Model ids come from the packaged seed, never from this file.
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { resolve } from 'node:path';
+import { DRIVER } from '../support/pty-steps.js';
+import * as adapters from '#adapters/index.js';
 import { lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
+import { connectModel } from '../../../src/index.js';
+import * as platform from '#platform/index.js';
+import * as catalog from '#composition/core/provider-catalog/index.js';
+import * as configComposition from '#composition/core/config/index.js';
+import { providerPanelPort } from '#surfaces/core/terminal-provider/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins } from '#composition/core/model-connect/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
@@ -38,6 +51,36 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
   return { f, configDir, executable, connect, profile, spawns };
 }
 
+async function unwitnessedDelegation(h: Awaited<ReturnType<typeof harness>>) {
+  const path = join(h.f.project, '.deckent/config.json'), original = await readFile(path, 'utf8');
+  const argv = ['models', 'connect', '--scope', 'scope', '--connection', 'claude-cli-subscription', '--model', nativeId,
+    '--executable', h.executable, '--config-dir', h.configDir, '--delegate', 'ai,system', '--command-id', 'f11-cli', '--json'];
+  const cli = resolve('dist/composition/core/cli/internal/entry.js');
+  // Keep the reproducer's /dev/null input and piped output, without altering the actual models.connect command.
+  const denied = await promisify(execFile)('/bin/sh', ['-c', 'exec "$@" </dev/null', 'f11-fixture', process.execPath, cli, ...argv], { cwd: h.f.project,
+    env: { ...h.f.env, CLAUDECODE: '1', AI_AGENT: 'fixture-agent' } }).then(value => ({ code: 0, ...value }),
+    (error: { code: number; stdout: string; stderr: string }) => error);
+  console.info('F11 non-TTY AI CLI:', JSON.stringify(denied));
+  expect(denied.code).not.toBe(0); expect(denied.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
+  expect(await readFile(path, 'utf8')).toBe(original); expect(await h.spawns()).toEqual([]);
+  await expect(connectModel(h.f.project, { schemaVersion: 1, commandId: 'sdk-delegate', scopeId: 'scope', connection: 'claude-cli-subscription',
+    model: { nativeId }, cli: { executable: h.executable, configDir: h.configDir }, delegate: ['ai'] }, { env: h.f.env }))
+    .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(await readFile(path, 'utf8')).toBe(original);
+  const person = async (extraEnv: Record<string, string>, commandId: string) => {
+    // A synthetic person on this test's disposable install, with its own controlling terminal; never the host's login or authority.
+    const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...argv.slice(0, -3), '--command-id', commandId, '--json']), '[]', 'tty', 'until-exit'],
+      { cwd: h.f.project, env: { ...h.f.env, ...extraEnv }, timeout: 60_000 });
+    return JSON.parse(stdout) as { status: number; output: string };
+  };
+  const agentPty = await person({ CLAUDECODE: '1' }, 'agent-pty');
+  expect(agentPty.status).not.toBe(0); expect(agentPty.output).toContain('AUTHORITY_WITNESS_REQUIRED');
+  expect(await readFile(path, 'utf8')).toBe(original);
+  return { person, cli, argv };
+}
+
+afterEach(() => vi.restoreAllMocks());
+const platformPrune = platform.pruneConfigBackups;
 const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
   it('S3-5: the kind needs no preview switch any more: it connects wherever its isolation realm works, the retired key set or not', async () => {
@@ -49,11 +92,22 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
   });
   it('N19: an MCP actor can neither connect the person\'s login nor change its consent', async () => {
     const h = await harness(true);
-    await expect(withMcpPrincipal(() => h.connect('c-1', { delegate: ['ai'] }))).rejects.toMatchObject({ code: 'HEADLESS_PERSON_REQUIRED' });
-    expect(await h.spawns()).toEqual([]);
+    const path = join(h.f.project, '.deckent/config.json'), before = await readFile(path, 'utf8');
+    await expect(withMcpPrincipal(() => h.connect('c-0'))).rejects.toMatchObject({ code: 'HEADLESS_PERSON_REQUIRED' });
+    await expect(withMcpPrincipal(() => h.connect('c-1', { delegate: ['ai'] }))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    const server = createMcpServer({ connectModel: command => withMcpPrincipal(() => connectModel(h.f.project, command, { env: h.f.env })) } as McpApplications,
+      { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en');
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport); const client = new Client({ name: 'f11-fixture', version: '1' }); await client.connect(clientTransport);
+    try {
+      const result = await client.callTool({ name: 'connect_model', arguments: { schemaVersion: 1, commandId: 'mcp-delegate', scopeId: 'scope',
+        connection: 'claude-cli-subscription', model: { nativeId }, cli: { executable: h.executable, configDir: h.configDir }, delegate: ['ai', 'system'] } });
+      expect(result.isError).toBe(true); expect(JSON.stringify(result)).toContain('AUTHORITY_WITNESS_REQUIRED');
+    } finally { await client.close(); await server.close(); }
+    expect(await readFile(path, 'utf8')).toBe(before); expect(await h.spawns()).toEqual([]);
   });
   it('the person connects: preflight without a model call, uid floor and login dir sealed, subscription profile with no key; consent is theirs to give, keep and withdraw', async () => {
-    const h = await harness(true);
+    const h = await harness(true), { person, cli, argv } = await unwitnessedDelegation(h), path = join(h.f.project, '.deckent/config.json');
     const first = await h.connect('c-1');
     expect(first).toMatchObject({ status: 'connected', credentialRef: null, tariff: 'unmetered', cli: { configDir: h.configDir, delegate: [] },
       steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written' } });
@@ -63,18 +117,68 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(profile).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', allocation: { maxCalls: null, maxInFlight: 1 }, adapter: { id: 'native-cli-headless', definition: { schemaVersion: 1, executable: h.executable,
       configDir: h.configDir, ownerUid: process.getuid!(), delegatedUse: null } } });
     expect(String(profile.adapter.definition['stateDir'])).toContain(join('headless', ''));
-    const granted = await h.connect('c-2', { delegate: ['system', 'ai'] });
-    expect(granted.cli).toEqual({ configDir: h.configDir, owned: false, delegate: ['ai', 'system'] });
+    const granted = await person({}, 'c-2');
+    console.info('F11 synthetic-person PTY:', JSON.stringify(granted));
+    expect(granted.status).toBe(0); expect(granted.output).toContain('"delegate":["ai","system"]');
     const consent = (await h.profile())!.adapter.definition['delegatedUse'];
     expect(consent).toEqual({ consentedBy: me[0], atMs: expect.any(Number), classes: ['ai', 'system'] });
     // A reconnect without a consent choice keeps it byte for byte; the same choice again changes nothing.
     expect(await h.connect('c-3')).toMatchObject({ steps: { profile: 'present' }, cli: { delegate: ['ai', 'system'] } });
     expect(await h.connect('c-4', { delegate: ['ai', 'system'] })).toMatchObject({ steps: { profile: 'present' } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toEqual(consent);
-    expect(await h.connect('c-5', { delegate: [] })).toMatchObject({ steps: { profile: 'written' }, cli: { delegate: [] } });
+    expect(await h.connect('c-shrink', { delegate: ['ai'] })).toMatchObject({ cli: { delegate: ['ai'] } });
+    const beforeExpand = await readFile(path, 'utf8');
+    await expect(h.connect('c-expand', { delegate: ['ai', 'system'] })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect(await readFile(path, 'utf8')).toBe(beforeExpand);
+    const revoked = await promisify(execFile)(process.execPath, [cli, ...argv.map(value => value === 'ai,system' ? 'none' : value === 'f11-cli' ? 'c-5' : value)],
+      { cwd: h.f.project, env: { ...h.f.env, CLAUDECODE: '1', AI_AGENT: 'fixture-agent' } });
+    expect(JSON.parse(revoked.stdout)).toMatchObject({ steps: { profile: 'written' }, cli: { delegate: [] } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toBeNull();
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
+    // R5: real config publication followed by a rejected prune/read/binding, through the production provider port.
+    for (const wanted of [['ai'], []] as const) for (const fault of ['before', 'prune', 'layers', 'binding'] as const) {
+      const before = wanted.length ? [] : ['ai'];
+      await h.connect(`reset-${wanted.length}-${fault}`, { delegate: before });
+      const path = join(h.f.project, '.deckent/config.json'), bytesBefore = await readFile(path, 'utf8');
+      let attempts = 0, caught: unknown;
+      const readLayers = configComposition.snapshotConfiguredConfig, readBinding = catalog.inspectModelBinding;
+      let published = false;
+      const prune = vi.spyOn(platform, 'pruneConfigBackups').mockImplementation(async (...args) => {
+        if (fault === 'prune') throw new Error('fixture prune rejection after publication');
+        await platformPrune(...args); published = true;
+      });
+      const layers = vi.spyOn(configComposition, 'snapshotConfiguredConfig').mockImplementation(async (...args) => {
+        if (fault === 'layers' && published) throw platform.ErrorRegistry.createError('CONFIG_READ_IO_HOLD');
+        return readLayers(...args);
+      });
+      const binding = vi.spyOn(catalog, 'inspectModelBinding').mockImplementation(async (...args) => {
+        if (fault === 'binding' && published) throw platform.ErrorRegistry.createError('POLICY_DENIED');
+        return readBinding(...args);
+      });
+      try {
+        const port = providerPanelPort(h.f.project, 'scope', { providerConnect: {
+          kinds: [{ id: 'claude-cli-subscription', labelKey: 'tui.provider.kind.claudeCli', available: true, endpointDefault: null, endpointEditable: false,
+            keyRequired: false, secretName: null, probePath: null, endpointChoices: [], headlessLogin: true }], endpoint: () => ({ ok: false, reason: 'unused' }),
+          probe: async () => { throw new Error('unused'); }, loginDir: async () => ({ owned: h.configDir }), login: async () => null },
+          connectModel: async (_root, command) => {
+            attempts++;
+            try { return await h.connect(command.commandId, { delegate: command.delegate, ...(fault === 'before' ? { model: { nativeId: 'missing-fixture-model' } } : {}) }); }
+            catch (error) { caught = error; throw error; }
+          } }, { env: h.f.env }, 'en', error => String((error as { code: string }).code)).subscription!;
+        const outcome = await port.connect('claude-cli-subscription', null, wanted);
+        const code = fault === 'before' ? 'MODEL_CONNECT_MODEL_UNKNOWN' : fault === 'prune' ? 'CONFIG_BACKUP_PRUNE_FAILED' : fault === 'layers' ? 'CONFIG_READ_IO_HOLD' : 'POLICY_DENIED';
+        expect(caught).toMatchObject({ code, params: { connectPhase: fault === 'before' ? 'before-profile-write' : fault === 'prune' ? 'profile-write-started' : 'profile-written' } });
+        expect(outcome).toMatchObject({ connected: false, delegate: null, state: fault === 'before' ? 'not-applied' : fault === 'prune' ? 'unknown' : 'applied-unverified' });
+        expect(outcome.lines.map(line => line.text).join('\n')).toContain(code); expect(attempts).toBe(1);
+        if (fault === 'prune') expect(outcome.summary).toContain('/provider');
+        if (fault === 'before') expect(await readFile(path, 'utf8')).toBe(bytesBefore);
+        else expect(await readFile(path, 'utf8')).not.toBe(bytesBefore);
+        const consent = (await h.profile())!.adapter.definition['delegatedUse'] as { classes: string[] } | null;
+        expect(consent?.classes ?? []).toEqual(fault === 'before' ? before : wanted);
+      } finally { prune.mockRestore(); layers.mockRestore(); binding.mockRestore(); }
+    }
   });
-  it('without flags: the first CLI of the registry name in PATH (by realpath) and s3c the Brain\'s own login dir (never ~/.claude); none in PATH is refused typed', async () => {
+  it('without flags: the first CLI of the registry name in PATH (S7: that path, not its realpath) and s3c the Brain\'s own login dir (never ~/.claude); none in PATH is refused typed', async () => {
     const h = await harness(true), bin = join(h.f.data, 'path-bin'), home = h.f.env.HOME;
     await mkdir(bin); await symlink(h.executable, join(bin, 'claude')); await mkdir(join(home, '.claude'), { mode: 0o700 });
     const run = (env: Record<string, string>, commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
@@ -83,7 +187,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     expect(await h.spawns()).toEqual([]);
     const owned = join(await realpath(home), '.deckent', 'headless', 'logins', 'claude');
     await expect(run({ PATH: bin }, 'c-1')).resolves.toMatchObject({ status: 'connected', cli: { configDir: owned, owned: true } });
-    expect((await h.profile())!.adapter.definition).toMatchObject({ executable: await realpath(h.executable), configDir: owned });
+    expect((await h.profile())!.adapter.definition).toMatchObject({ executable: join(bin, 'claude'), configDir: owned });
     expect((await lstat(owned)).mode & 0o777).toBe(0o700);
     // An explicit dir is the person's override, never the default; the doctor tells the two apart (no spawn, nothing created).
     expect(await h.connect('c-2')).toMatchObject({ cli: { configDir: h.configDir, owned: false } });
@@ -122,6 +226,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect c
     const codexDir = join(h.f.data, 'codex-login'), codexModel = codexSeed.recommendedActivations[0]!.modelIds[0]!, path = join(h.f.project, '.deckent/config.json');
     await mkdir(codexDir, { mode: 0o700 });
     const codexExe = await writeFakeCodexCli(join(h.f.data, 'bin'), { logPath: join(codexDir, 'config.toml') });
+    vi.spyOn(adapters, 'attestLocalInteractiveTerminal').mockResolvedValue(true);
     const codex = (commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope', connection: 'codex-cli-subscription', endpoint: null,
       model: { nativeId: codexModel }, cli: { executable: codexExe, configDir: codexDir }, delegate: ['ai'] }, { env: h.f.env });
     const workerModel = async () => (await inspectConfiguredModelCatalog(h.f.project, { schemaVersion: 1, scopeId: 'scope', channelId: 'codex-cli-subscription' }, { env: h.f.env }))

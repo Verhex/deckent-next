@@ -1,3 +1,4 @@
+import { persistedString, persistedUuid, jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { lstat, mkdir } from 'node:fs/promises';
@@ -12,15 +13,15 @@ import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type Be
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
   type SandboxRequest, type BeuserArrangePort, type BeuserArrangeStep, beuserFilesystemProofSchema } from '#engine/index.js';
-import { jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { createBeuserRemovalReadback } from './removal.js';
 import { retainBeuserJson } from './records.js';
+import fixture from '../../../../../assets/beuser/model-fixture.json' with { type: 'json' };
 import type { ArtifactStore } from '#capabilities/index.js';
 
-const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)), filesystemProof: beuserFilesystemProofSchema.optional() }).strict();
-const handleSchema = z.object({ binding: beuserBindingSchema, incarnation: z.string().uuid(), containerId: z.string(), controlDirectory: z.string(), controlIdentity: z.string() }).strict();
-const recordSchema = z.object({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
-  lease: z.object({ handle: handleSchema.nullable(), observation: observationSchema }).strict() }).strict();
+const observationSchema = z.strictObject({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(persistedString(z.string().min(1))), filesystemProof: beuserFilesystemProofSchema.optional() });
+const handleSchema = z.strictObject({ binding: beuserBindingSchema, incarnation: persistedUuid(), containerId: z.string(), controlDirectory: z.string(), controlIdentity: z.string() });
+const recordSchema = z.strictObject({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
+  lease: z.strictObject({ handle: handleSchema.nullable(), observation: observationSchema }) });
 const refuse = (): never => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); };
 /** The supervisor's per-Attempt custody file is never a scheduler or a launch grant. Dispatch remains the owner. */
 export async function createBeuserRealmCustody(input: { readonly context: BeuserContext; readonly request: SandboxRequest;
@@ -89,7 +90,7 @@ export function createBeuserRealm(input: { readonly context: BeuserContext; read
 }
 /** Private pipes to the packaged driver inside the exact, re-admitted container. No public executable/socket path. */
 export function createBeuserChannel(input: { readonly context: BeuserContext; readonly realm: BeuserRealmApplication; readonly custody: BeuserRealmCustody;
-  readonly options: BeuserRealmOptions; readonly boot: Pick<BeuserDriverBoot, 'mode' | 'entry' | 'commands'> & { readonly maxBootBytes: number; readonly language: string } }): BeuserRealmChannel {
+  readonly options: BeuserRealmOptions; readonly boot: Pick<BeuserDriverBoot, 'mode' | 'entry' | 'commands' | 'terminalFixture'> & { readonly maxBootBytes: number; readonly language: string } }): BeuserRealmChannel {
   const { context, realm, custody, options, boot } = input, command = dockerRealmCommand(options);
   const verify = async (ctx: BeuserContext) => {
     assertBeuserAccess(ctx, context.binding, context.principal, { kind: 'beuser-sandbox', id: context.binding.realmId }, 'create');
@@ -98,6 +99,7 @@ export function createBeuserChannel(input: { readonly context: BeuserContext; re
   return { binding: context.binding, verify, async open(ctx, size, bounds): Promise<RealmDriverIO> {
     await verify(ctx); const handle = (await custody.load(ctx))?.handle; if (!handle?.containerId) return refuse();
     const wire = JSON.stringify(pinBeuserDriverBoot({ schemaVersion: 1, nonce: ctx.binding.nonce, mode: boot.mode, entry: boot.entry, commands: boot.commands,
+      ...(boot.terminalFixture ? { terminalFixture: boot.terminalFixture } : {}),
       secretFds: {}, columns: size.columns, rows: size.rows, maxArtifactBytes: ctx.limits.maxArtifactBytes,
       env: { TERM: 'xterm-256color', LANG: boot.language, LC_ALL: boot.language, HOME: BEUSER_REALM_RECIPE.home, DECKENT_GLOBAL_HOME: `${BEUSER_REALM_RECIPE.home}/.deckent` },
       limits: { maxSteps: ctx.limits.maxSteps, maxWallMs: ctx.limits.maxWallMs, maxWaitMs: ctx.limits.maxWaitMs,
@@ -138,6 +140,9 @@ if (readback.kind === 'installation') {
   const { FileInstallationIdentityStore } = await import(target + '/dist/adapters/core/installation-files/index.js'), { resolveProductLayout, getConfigFieldDefault } = await platform();
   const read = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: inRealm(readback.root) }), getConfigFieldDefault('installation').writeLockTimeoutMs).read();
   value = read.status === 'available' ? 'installed' : read.status === 'unavailable' && read.reason === 'not-created' ? 'absent' : 'unknown';
+} else if (readback.kind === 'path' && readback.path === ${JSON.stringify(join(recipe.workTarget, fixture.receiptPath))}) {
+  const { observeModelFixture } = await import(target + '/assets/beuser/model-fixture.mjs');
+  value = observeModelFixture(${JSON.stringify(cli)}, work, ${fixture.requestTimeoutMs}, ${fixture.maxRequestBytes});
 } else if (readback.kind === 'path') {
   const info = stat(readback.path);
   value = !info ? { state: 'absent' } : { state: info.isFile() ? 'file' : info.isDirectory() ? 'directory' : info.isSocket() ? 'socket' : 'other',
@@ -168,7 +173,7 @@ export async function readBeuserInstallationSummary(context: BeuserContext, hand
 // and Git stay under the work target (no symlink is followed for the file itself). Exit codes are data.
 const arrangeScript = `const { spawnSync } = await import('node:child_process'), { createHash } = await import('node:crypto'), { resolve, dirname } = await import('node:path');
 const { mkdirSync, realpathSync, openSync, writeSync, closeSync, lstatSync, chmodSync, constants } = await import('node:fs');
-const [step, maxBuffer] = JSON.parse(process.argv[1]); ${inRealm}
+const [step, maxBuffer, maxWallMs] = JSON.parse(process.argv[1]); ${inRealm}
 // Creates a missing directory one level at a time below the work target, never through a symlink: no effect lands outside it (Astra 2830).
 const safeDir = dir => { let at = work;
   for (const part of dir.slice(work.length).split('/').filter(Boolean)) { at += '/' + part; let info;
@@ -176,7 +181,11 @@ const safeDir = dir => { let at = work;
     if (info.isSymbolicLink() || !info.isDirectory()) throw new Error('outside'); }
   return dir; };
 let run;
-if (step.kind === 'file') {
+if (step.kind === 'cli' && step.id === ${JSON.stringify(fixture.stepId)}) {
+  const { arrangeModelFixture } = await import(${JSON.stringify(recipe.packageTarget + '/assets/beuser/model-fixture.mjs')});
+  try { const stdout = await arrangeModelFixture(${JSON.stringify(cli)}, work, step, maxBuffer, maxWallMs);
+    run = { status: 0, stdout: Buffer.from(stdout) }; } catch { run = { status: 1 }; }
+} else if (step.kind === 'file') {
   try { const path = inRealm(step.path); safeDir(dirname(path));
     if (realpathSync(dirname(path)) !== dirname(path)) throw new Error('outside');
     if (step.content !== undefined) { const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
@@ -201,7 +210,7 @@ export function createBeuserArrange(input: { readonly realm: BeuserRealmApplicat
   return {
     run: async (ctx, step) => JSON.parse(await command(['container', 'exec', '--user', `${options.uid}:${options.gid}`, '--workdir', recipe.workTarget,
       ...[`LANG=${language}`, `LC_ALL=${language}`, `HOME=${recipe.home}`, `DECKENT_GLOBAL_HOME=${recipe.home}/.deckent`].flatMap(env => ['--env', env]),
-      (await admitted(ctx)).containerId, recipe.nodeExecutable, '--input-type=module', '--eval', arrangeScript, JSON.stringify([step, ctx.limits.maxArtifactBytes])], ctx)) as unknown,
+      (await admitted(ctx)).containerId, recipe.nodeExecutable, '--input-type=module', '--eval', arrangeScript, JSON.stringify([step, ctx.limits.maxArtifactBytes, ctx.limits.maxWallMs])], ctx)) as unknown,
     observe: async (ctx, readback) => observe(ctx, await admitted(ctx), options, command, readback),
   };
 }

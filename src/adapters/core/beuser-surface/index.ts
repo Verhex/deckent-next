@@ -8,3 +8,5 @@ export type { BeuserDriverBoot } from './internal/boot.js';
 export type { SurfaceFailure } from './internal/input.js';
 export type { SurfaceCommand } from './internal/argv.js';
 export type { HarnessEvent, HarnessSink, HarnessAction, HarnessProcess } from './internal/capture.js';
+export { beuserTerminalFixture, beuserTerminalFixtureSchema } from './internal/measurement.js';
+export type { BeuserTerminalFixture, CellRun } from './internal/measurement.js';

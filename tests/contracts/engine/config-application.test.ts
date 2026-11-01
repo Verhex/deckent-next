@@ -4,7 +4,7 @@ import { createDefaultConfig, validateConfig } from '../../../src/platform/core/
 import { ModelBindingApplication } from '#engine/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { parseModelInvocationProfile } from '#domain/index.js';
-import type { ConfigSnapshot } from '#engine/core/config/index.js';
+import type { ConfigSnapshot, ConfigApprovalPort, ConfigChangeSubject } from '#engine/core/config/index.js';
 import { digestText } from '../../../src/platform/core/utils/index.js';
 
 const principal = { id: 'test', issuer: 'local-os', subject: 'test', assurance: 'os-user', scopeIds: ['test'] } as const;
@@ -163,4 +163,63 @@ it('a masked global catalog write cannot stale another scope profile; identical 
   expect(writes).toBe(1); expect(audits).toBe(1);
   snapshot.global['provider_invocation_profiles'].profiles = [];
   await app.set(write); expect(writes).toBe(2); expect(audits).toBe(2);
+
+  // Capability reconnect is one publish with two exact-key authorizations; every refusal leaves the snapshot untouched.
+  const mine = { ...profile, scopeId: 'test' }, document = { provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [mine] } };
+  const own: ConfigSnapshot = { ...snapshot, layer: 'project', document, global: {}, project: document,
+    effective: validateConfig({ ...createDefaultConfig(), ...document }).config };
+  const next = structuredClone(catalog); next.revision = 'capability';
+  next.providers[0]!.models[0]!.protocols[0]!.capabilities.push({ id: 'tool-calls', version: 1, state: 'supported' } as never);
+  const request = { ...command, keyPath: 'provider_catalog', value: next }, target = { reference, adapter: mine.adapter, protocol: mine.protocol };
+  let applied = 0, race = false, deny = false, pending = true, stale = false;
+  const subjects = new Map<string, ConfigChangeSubject>(), allowed = new Set<string>(), records: unknown[] = [];
+  const approvals: ConfigApprovalPort = {
+    async evaluate(input) {
+      if (deny && input.keyPath === 'provider_invocation_profiles') throw new ConfigApplicationError('POLICY_DENIED');
+      return { decision: pending ? 'require-approval' : 'allow', revision: 'policy', ruleId: 'ask' };
+    },
+    async admit(input, subject) {
+      if (stale) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
+      const old = subjects.get(input.keyPath); if (old) expect(subject).toEqual(old); else subjects.set(input.keyPath, subject);
+      return allowed.has(input.keyPath) ? { approved: { approvalId: input.keyPath, actionDigest: 'digest' } }
+        : { pending: { approvalId: input.keyPath, revision: 0, expiresAt: 1000, summary: input.keyPath } };
+    },
+  };
+  const atomic = new ConfigApplication({ snapshot: async () => own, publish: async (input, plan) => {
+    const result = await plan(race ? { ...own, digest: 'a'.repeat(64) } : own); applied++;
+    expect(result.document).toMatchObject({ provider_catalog: next, provider_invocation_profiles: { profiles: [{ version: 2 }] } });
+    expect(result.document['provider_invocation_profiles']).not.toEqual(document.provider_invocation_profiles);
+    return { keyPath: input.keyPath, layer: 'project', beforeDigest: null, afterDigest: digestText(JSON.stringify(result.document)), backupPath: null, overridden: false };
+  } }, { authorize: async () => 'policy', approvals, audit: async event => { records.push(event); } });
+  deny = true;
+  await expect(atomic.submitCatalogCapabilities(request, target)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(applied).toBe(0); expect(subjects.size).toBe(0); deny = false;
+  await expect(atomic.submitCatalogCapabilities(request, target)).resolves.toMatchObject({ status: 'approval-pending', keyPath: 'provider_catalog' });
+  expect(applied).toBe(0); allowed.add('provider_catalog');
+  await expect(atomic.submitCatalogCapabilities(request, target)).resolves.toMatchObject({ status: 'approval-pending', keyPath: 'provider_invocation_profiles' });
+  expect(applied).toBe(0); expect(records).toEqual([]); allowed.add('provider_invocation_profiles');
+  stale = true;
+  await expect(atomic.submitCatalogCapabilities(request, target)).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_STALE' });
+  stale = false; race = true;
+  await expect(atomic.submitCatalogCapabilities(request, target)).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_STALE' });
+  pending = false;
+  await expect(atomic.submitCatalogCapabilities(request, target)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  expect(applied).toBe(0); expect(records).toEqual([]); race = false; pending = true;
+  await expect(atomic.submitCatalogCapabilities(request, target)).resolves.toMatchObject({ status: 'applied' });
+  expect(applied).toBe(1); expect(records).toMatchObject([{ subject: { keyPath: 'provider_catalog', approvalId: 'provider_catalog' } },
+    { subject: { keyPath: 'provider_invocation_profiles', approvalId: 'provider_invocation_profiles' } }]);
+  expect(document.provider_invocation_profiles.profiles).toEqual([mine]);
+  const refuse = async (value = next, selected = target) => {
+    await expect(atomic.submitCatalogCapabilities({ ...request, value }, selected)).rejects.toMatchObject({ code: 'CONFIG_MODEL_PROFILE_REBIND_REQUIRED' });
+    expect(applied).toBe(1); expect(records).toHaveLength(2);
+  };
+  await refuse(next, { ...target, adapter: { ...mine.adapter, definition: { endpoint: 'https://different.invalid' } } });
+  await refuse(next, { ...target, protocol: { family: 'other', version: 'v1' } });
+  const identityChange = structuredClone(next); identityChange.providers[0]!.models[0]!.nativeId = 'different'; await refuse(identityChange);
+  const protocolChange = structuredClone(next); protocolChange.providers[0]!.models[0]!.protocols[0]!.version = 'v2'; await refuse(protocolChange);
+  document.provider_invocation_profiles.profiles = [{ ...mine, bindingDigest: '0'.repeat(64) }]; await refuse();
+  document.provider_invocation_profiles.profiles = [profile]; await refuse();
+  document.provider_invocation_profiles.profiles = [mine];
+  // A masking project catalog cannot be silently rebound through a global write.
+  Object.assign(own, { layer: 'global', global: document, project: { provider_catalog: catalog } }); await refuse();
 });

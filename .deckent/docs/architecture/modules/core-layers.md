@@ -181,7 +181,7 @@ models login --connection codex-cli-subscription` signs the Brain's own `headles
 credential store). The call is one `codex exec --json` turn with the read-only sandbox, approvals never, no persisted session, user config
 and execpolicy rules ignored, every documented tool switch off and the system prompt as `model_instructions_file`; the message is on stdin
 and `CODEX_HOME` is the login directory. Codex has no turn flag and no tool-disable flag for `apply_patch`, so the line guard enforces one
-thread and one turn and stops the process on any item other than the answer and its reasoning (a tool item is `guard`, field
+thread and one turn and stops the process on any item other than the answer, its reasoning and the bounded startup notice below (a tool item is `guard`, field
 `item.<type>`); an error line is `quota` (the worker's `providers.json` patterns), `login-required` (registry patterns) or `invalid-output`.
 The guard acts on an event the CLI reports, so it is not a pre-effect block: the read-only sandbox and the realm bound what could already
 have run, and the realm still leaves its private memory and the login directory's state writable. The completed turn is final (any later
@@ -191,7 +191,32 @@ never settles a reservation as zero; per-model counters that are missing or inva
 The preflight reads `codex login status` (exit 0 and `Logged in using ChatGPT` on stderr; an API key is `HEADLESS_LOGIN_REQUIRED`). The
 stream names no model, so the answer is attributed to the argv-pinned id (`modelEvidence: argv`), weaker than the Claude guard; the
 worker's rollout reader does not apply because the call keeps no session file. The flags are sourced from `codex exec --help` 0.166.0 and
-learn.chatgpt.com; the realm bounds are the Claude ones and the step is unmeasured against a real Codex turn.
+learn.chatgpt.com; the realm bounds are the Claude ones and the step is unmeasured against a real Codex turn. Revision `-r2` (owner S12
+probe: the exact argv, an empty `CODEX_HOME`, no network, no login) replaced `tools.view_image`, which 0.166.0 `--strict-config` refuses
+as an unknown field (the WALK21 unknown calls), with the feature switch `features.view_image`; the preflight proves `--` flags by help but
+not `-c` keys, so such drift is visible only as the evidence below. The CLI's own counted stream retries arrive as error lines
+`Reconnecting... <n>/<max>`; a line matching the registry `reconnectPatterns` is a notice, tolerated up to `maxReconnects` (the CLI default,
+5) per call, and past that bound it is `invalid-output` (`reconnect-limit`); any other error line and `turn.failed` still refuse. Even with
+`--ephemeral` and memories and history off, the CLI writes its own state databases and `installation_id` into `CODEX_HOME`; that is the
+Brain's own separate login directory, so this is accepted (lead 2026-10-31).
+Revision `-r4` (F14 R2, 2026-11-01) also disables `features.code_mode_host`. Only an item of type `error` whose complete,
+case-sensitive text matches the registry's anchored Code Mode fail-closed `noticePatterns` may continue, up to `maxNotices` (1)
+per invocation; another is `invalid-output` (`notice-limit`). The notice emits no answer and cannot complete a turn. All other
+item errors, top-level errors (apart from counted reconnects) and `turn.failed` refuse. The empty-login, network-isolated 0.166.0
+parser probe reached `turn.started` with `--strict-config`; it proves key acceptance, not a completed model call.
+
+A CLI of either family that ends by itself before a complete turn (a crash, a missing result, a refused argv) settles as incomplete
+evidence (`interrupted`, `complete: false`), so the receipt stays `unknown` (`transport-error`, ledger v73 unchanged) and keeps an adapter
+body `process-exit` (schema version 4, read by `readHeadlessRejection`, owner-approved) with the exit code, the signal and a stderr summary,
+the only CLI text a body may carry. The summary is an allowlist (Astra 2875/2878 R1): a whole line matching one of the CLI's registry
+`stderrAllow` rules (parser and connection diagnostics from the probe captures) is stored only as the rule's fixed `keep` text with
+identifier-shaped captures (a flag or field name, never an echoed value), still redacted with the call's known secrets, newest first within
+`stderrSummaryBytes`; every other line is withheld and counted (`[N stderr lines withheld]`). Timeout and cancellation still throw. When `send` throws a
+registered error code after the claim, the engine keeps only that code as the unknown receipt's evidence. S7 (owner 2026-10-31): connect
+keeps the executable path the person gave or PATH found (a path with `.`/`..` segments by its realpath) and every call resolves it again;
+a changed realpath, size, mtime or inode runs the preflight once, every spawn binds the resolved file, the preflight record keeps
+`updatedFrom` while the version differs (`readHeadlessLogins` `cliUpdated`, catalog `doctor.headless.updated`), and a path that leads to
+no executable file is `HEADLESS_CLI_UNAVAILABLE`, whose text names the reconnect command. Profiles sealed with a realpath stay valid.
 
 When a subscription quota is exhausted, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command

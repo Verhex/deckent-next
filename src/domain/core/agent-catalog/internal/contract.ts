@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
 
 /**
@@ -13,40 +13,40 @@ export const AGENT_CATALOG_LIMITS = Object.freeze({ ...limits });
 /** The same identifier shape as a native prompt part (`persona`/`skill` ids), so a catalog row can become a prompt part unchanged. */
 export const catalogIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/);
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-const text = (max: number) => z.string().min(1).refine(value => value.trim() === value && !value.includes('\0') && bytes(value) <= max);
+const text = (max: number) => persistedString(z.string().min(1)).refine(value => value.trim() === value && !value.includes('\0') && bytes(value) <= max);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const unique = (values: readonly string[]) => new Set(values).size === values.length;
-const authorSchema = z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly();
+const authorSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema, get ai() { return z.boolean(); } }).readonly();
 /** S8-5: an AI/system author's write carries the key and signature digest it was verified with at commit; a person's card row carries none. */
-const provenanceSchema = z.object({ author: authorSchema, commandId: identitySchema, definedAtMs: counterSchema,
-  signed: z.object({ keyId: z.string().regex(/^[a-f0-9]{64}$/), signatureDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
+const provenanceSchema = z.strictObject({ author: authorSchema, commandId: identitySchema, definedAtMs: counterSchema,
+  get signed() { return z.strictObject({ keyId: z.string().regex(/^[a-f0-9]{64}$/), signatureDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly().optional(); },
   /** S8-4 (§6 fold A): a revision defined from a suggestion's draft names it; `lessons-derived` text came from worker lesson claims (AI output, N36). */
-  origin: z.object({ kind: z.enum(['lessons-derived', 'template']), suggestionId: digest, template: identitySchema, lessonSetDigest: digest.nullable() }).strict().readonly().optional() }).strict()
+  get origin() { return z.strictObject({ kind: z.enum(['lessons-derived', 'template']), suggestionId: digest, template: identitySchema, lessonSetDigest: digest.nullable() }).readonly().optional(); } })
   .refine(row => (row.signed !== undefined) === row.author.ai).readonly();
 
 /** One exact skill revision an agent uses; `digest` is that revision's content digest (the pin). */
-export const skillRefSchema = z.object({ skillId: catalogIdSchema, revision: counterSchema.positive(), digest }).strict().readonly();
-export const agentContentSchema = z.object({ name: text(limits.nameMaxBytes), persona: text(limits.personaMaxBytes),
-  workClasses: z.array(identitySchema).min(1).max(limits.workClassesPerAgentMax).refine(unique).readonly(),
-  skills: z.array(skillRefSchema).max(limits.skillsPerAgentMax).refine(rows => unique(rows.map(row => row.skillId))).readonly(),
-  parentAgentId: catalogIdSchema.nullable() }).strict().readonly();
-export const agentDefinitionSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, agentId: catalogIdSchema, revision: counterSchema.positive(),
+export const skillRefSchema = z.strictObject({ skillId: catalogIdSchema, get revision() { return counterSchema.positive(); }, digest }).readonly();
+export const agentContentSchema = z.strictObject({ get name() { return text(limits.nameMaxBytes); }, get persona() { return text(limits.personaMaxBytes); },
+  get workClasses() { return z.array(identitySchema).min(1).max(limits.workClassesPerAgentMax).refine(unique).readonly(); },
+  get skills() { return z.array(skillRefSchema).max(limits.skillsPerAgentMax).refine(rows => unique(rows.map(row => row.skillId))).readonly(); },
+  get parentAgentId() { return catalogIdSchema.nullable(); } }).readonly();
+export const agentDefinitionSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, agentId: catalogIdSchema, get revision() { return counterSchema.positive(); },
   content: agentContentSchema, personaDigest: digest, skillSetDigest: digest,
   /** A4: always empty in v1; a later schema version carries owner-set values from ledger evidence. */
-  tier: z.null(), provenance: provenanceSchema }).strict().refine(row => row.content.parentAgentId !== row.agentId).readonly();
+  get tier() { return z.null(); }, provenance: provenanceSchema }).refine(row => row.content.parentAgentId !== row.agentId).readonly();
 
-export const skillContentSchema = z.object({ name: text(limits.nameMaxBytes), text: text(limits.skillTextMaxBytes) }).strict().readonly();
-const signatureValue = z.string().min(1).max(limits.signatureMaxBytes).regex(/^[A-Za-z0-9+/]+={0,2}$/);
-export const skillSignatureSchema = z.object({ algorithm: z.literal('ed25519'), keyId: identitySchema, value: signatureValue }).strict().readonly();
+export const skillContentSchema = z.strictObject({ get name() { return text(limits.nameMaxBytes); }, get text() { return text(limits.skillTextMaxBytes); } }).readonly();
+const signatureValue = persistedString(z.string().min(1).max(limits.signatureMaxBytes)).regex(/^[A-Za-z0-9+/]+={0,2}$/);
+export const skillSignatureSchema = z.strictObject({ get algorithm() { return z.literal('ed25519'); }, keyId: identitySchema, value: signatureValue }).readonly();
 /** Where an imported skill came from (a hub or file reference; shown to people, never fetched by Core). */
 export const skillSourceRefSchema = text(limits.sourceRefMaxBytes);
-export const skillSourceSchema = z.discriminatedUnion('kind', [z.object({ kind: z.literal('local') }).strict(),
-  z.object({ kind: z.literal('import'), ref: skillSourceRefSchema }).strict()]).readonly();
-const signatureStatusSchema = z.discriminatedUnion('status', [z.object({ status: z.literal('unsigned') }).strict(),
-  z.object({ status: z.literal('verified'), algorithm: z.literal('ed25519'), keyId: identitySchema, value: signatureValue }).strict()]).readonly();
+export const skillSourceSchema = z.discriminatedUnion('kind', [z.strictObject({ get kind() { return z.literal('local'); } }),
+  z.strictObject({ get kind() { return z.literal('import'); }, ref: skillSourceRefSchema })]).readonly();
+const signatureStatusSchema = z.discriminatedUnion('status', [z.strictObject({ get status() { return z.literal('unsigned'); } }),
+  z.strictObject({ get status() { return z.literal('verified'); }, get algorithm() { return z.literal('ed25519'); }, keyId: identitySchema, value: signatureValue })]).readonly();
 /** Floor (d) as a row invariant: an imported row exists only with a verified signature; a local row is a person's own text, pinned by its digest. */
-export const skillDefinitionSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, skillId: catalogIdSchema, revision: counterSchema.positive(),
-  content: skillContentSchema, contentDigest: digest, source: skillSourceSchema, signature: signatureStatusSchema, provenance: provenanceSchema }).strict()
+export const skillDefinitionSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema, skillId: catalogIdSchema, get revision() { return counterSchema.positive(); },
+  content: skillContentSchema, contentDigest: digest, source: skillSourceSchema, signature: signatureStatusSchema, provenance: provenanceSchema })
   .refine(row => (row.source.kind === 'import') === (row.signature.status === 'verified')).readonly();
 
 export type SkillRef = z.infer<typeof skillRefSchema>;

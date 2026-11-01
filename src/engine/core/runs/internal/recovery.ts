@@ -10,8 +10,8 @@ import type { RunCancellationDispatchStore, RunCancellationOutcome } from './can
 import type { RunCancellationSettlementStore } from './settlement.js';
 import { cancellationRecoveryPageSchema, type CancellationRecoveryQueryStore } from './recovery-query.js';
 
-export const cancellationRecoveryCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  afterAttemptId: identitySchema.nullable() }).strict();
+export const cancellationRecoveryCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  afterAttemptId: identitySchema.nullable() });
 export type CancellationRecoveryCommand = z.infer<typeof cancellationRecoveryCommandSchema>;
 export const cancellationRecoveryFailureReasonSchema = z.enum(['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED',
   'POLICY_DENIED', 'POLICY_UNAVAILABLE', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN',

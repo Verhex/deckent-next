@@ -4,7 +4,7 @@ import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 
 /** The chat plan the terminal reports (the `cli-terminal` view, read structurally; no field is added to it). */
 type ChatPlan = Readonly<{ status: string; reference: Readonly<{ providerId: string; modelId: string; modelVersion: number }> | null;
-  source?: string | null; catalogRevision: string | null; maxCompletionTokens: number | null; historyMessages: number | null }>;
+  tools?: 'available' | 'none' | 'unknown'; source?: string | null; catalogRevision: string | null; maxCompletionTokens: number | null; historyMessages: number | null }>;
 export interface TerminalInfoContext extends CliBaseContext {
   describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<ChatPlan>;
 }
@@ -36,6 +36,7 @@ function chatPlanText(plan: ChatPlan, locale: Locale): string {
     ...(model ? [t('cli.terminalInfo.chat.model', { model, source }, locale)] : [t('cli.terminalInfo.chat.next', {}, locale)]),
     ...(plan.maxCompletionTokens === null && plan.historyMessages === null ? []
       : [t('cli.terminalInfo.chat.limits', { tokens: value(plan.maxCompletionTokens), history: value(plan.historyMessages) }, locale)]),
+    plan.tools === 'available' ? t('terminal.admin.model.toolsSupported', {}, locale) : plan.tools === 'none' ? t('terminal.admin.model.toolsUnsupported', {}, locale) : t('terminal.admin.model.toolsUnknown', {}, locale),
     t('cli.terminalInfo.reachability', {}, locale)].join('\n'));
 }
 

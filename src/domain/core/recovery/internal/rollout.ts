@@ -1,17 +1,17 @@
+import { persistedInteger, counterSchema, identitySchema, rolloutCriterionMet } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema, rolloutCriterionMet } from '#domain/core/primitives/index.js';
 import seed from '../../../../../assets/recovery/rollout.json' with { type: 'json' };
 
-const positive = counterSchema.positive(), criterion = (extra: z.ZodRawShape) => z.object({ id: identitySchema, minSample: counterSchema, ...extra }).strict().readonly();
+const positive = counterSchema.positive(), criterion = (extra: z.ZodRawShape) => z.strictObject({ id: identitySchema, minSample: counterSchema, ...extra }).readonly();
 /**
  * alpha.56 G4 (owner Q-A2/Q-A4/Q-A5; S6R-DESIGN §11): the recovery rollout registry, versioned Core data (`assets/recovery/rollout.json`,
  * provisional until measured). `rules`: the Nervous rules a person may promote in this release (the lost-worker rules); `detection`: per
  * rule@version, the shadow cases since its last false positive; `decision`: the model-decided cases a person reviewed blind and how many agreed
  * (per mille); `scan`: the newest sealed records read per source (a bound hit leaves every criterion unmet) and the cases one review page lists. Meeting them is evidence only.
  */
-export const recoveryRolloutRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
-  rules: z.array(identitySchema).min(1).max(32).readonly(), scan: z.object({ detections: positive, decisions: positive, verdicts: positive, reviewPage: positive.max(100) }).strict().readonly(),
-  detection: criterion({}), decision: criterion({ minPerMille: z.number().int().min(0).max(1000) }) }).strict().readonly();
+export const recoveryRolloutRegistrySchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, revision: identitySchema, get status() { return z.enum(['provisional', 'measured']); },
+  get rules() { return z.array(identitySchema).min(1).max(32).readonly(); }, get scan() { return z.strictObject({ detections: positive, decisions: positive, verdicts: positive, reviewPage: positive.max(100) }).readonly(); },
+  get detection() { return criterion({}); }, get decision() { return criterion({ minPerMille: persistedInteger().min(0).max(1000) }); } }).readonly();
 export type RecoveryRolloutRegistry = z.infer<typeof recoveryRolloutRegistrySchema>;
 export const RECOVERY_ROLLOUT: RecoveryRolloutRegistry = Object.freeze(recoveryRolloutRegistrySchema.parse(seed));
 /** The sealed records one scope's view is measured from (engine reader): targeted detections, model-decided seals, blind verdicts and the cases

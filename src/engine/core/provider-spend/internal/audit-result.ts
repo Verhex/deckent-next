@@ -4,8 +4,8 @@ import { parseProviderSpendAuditReceipt, type ProviderSpendAuditReceipt } from '
 import { ProviderSpendError } from './error.js';
 
 export type ProviderSpendAuditResult = Readonly<{ schemaVersion: 1; receipt: ProviderSpendAuditReceipt; replayed: boolean }>;
-const resultSchema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.literal(1),
-  receipt: z.unknown(), replayed: z.boolean() }).strict().readonly());
+const resultSchema = immutableJsonObjectSchema.pipe(z.strictObject({ schemaVersion: z.literal(1),
+  receipt: z.unknown().optional(), replayed: z.boolean() }).readonly());
 
 export function parseProviderSpendAuditResultForCommand(commandInput: unknown, resultInput: unknown): ProviderSpendAuditResult {
   let command;

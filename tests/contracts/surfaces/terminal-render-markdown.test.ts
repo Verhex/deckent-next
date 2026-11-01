@@ -15,19 +15,21 @@ describe('terminal markdown renderer (plain text under the none palette)', () =>
       'Math 2 * 3 * 4 stays literal; snake_case_name too.',
     ].join('\n');
     expect(plain(markdown)).toBe([
-      'Title', 'Sub bold', 'Some bold, italic, also, gone and code() text.',
-      '• first', '  • nested', '1. one', '10) ten', '▌ quoted line', '─'.repeat(40), 'See the docs (https://example.test/a_(b)) or https://x.test.',
+      'Title', '', 'Sub bold', '', 'Some bold, italic, also, gone and code() text.', '',
+      '• first', '  • nested', '1. one', '10) ten', '', '▌ quoted line', '', '─'.repeat(40), '', 'See the docs (https://example.test/a_(b)) or https://x.test.',
       'Math 2 * 3 * 4 stays literal; snake_case_name too.',
     ].join('\n'));
   });
 
   it('uses ASCII decoration when the terminal cannot draw Unicode', () => {
-    expect(plain('- a\n> b\n***\n```\nx\n```', 20, ascii)).toBe(['- a', '| b', '-'.repeat(20), '+- code', '| x', '+-'].join('\n'));
+    expect(plain('- a\n> b\n***\n```\nx\n```', 20, ascii)).toBe(['- a', '', '| b', '', '-'.repeat(20), '', '+- code', '| x', '+-'].join('\n'));
   });
 
   it('frames fenced code with its language label, collapses blank runs outside code and keeps blank lines inside', () => {
+    expect(plain('\n\nIntro\nsoft\n\n\n- first\n  - nested\n    continuation\n\n- loose\n> quote\n> next\n\n')).toBe(
+      ['Intro', 'soft', '', '• first', '  • nested', '    continuation', '', '• loose', '', '▌ quote', '▌ next'].join('\n'));
     expect(plain('Intro\n\n\n```ts\nconst a = 1;\n\nreturn a;\n```\nOutro')).toBe(
-      ['Intro', '', '╭─ ts', '│ const a = 1;', '│ ', '│ return a;', '╰─', 'Outro'].join('\n'));
+      ['Intro', '', '╭─ ts', '│ const a = 1;', '│ ', '│ return a;', '╰─', '', 'Outro'].join('\n'));
   });
 
   it('renders an unclosed fence as an open block (live tail) without a bottom frame', () => {
@@ -90,7 +92,7 @@ describe('terminal markdown tables (width-aware)', () => {
   });
 
   it('keeps a pipe line followed by a rule as prose (a delimiter row needs a pipe)', () => {
-    expect(plain('a | b\n---', 10)).toBe(['a | b', '─'.repeat(10)].join('\n'));
+    expect(plain('a | b\n---', 10)).toBe(['a | b', '', '─'.repeat(10)].join('\n'));
   });
 
   it('uses ASCII borders for the ASCII glyph set', () => {

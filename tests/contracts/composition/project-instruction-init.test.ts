@@ -22,30 +22,33 @@ async function fixture() {
   return { root, port, ledger: opened.path, options };
 }
 describe.skipIf(process.platform !== 'linux')('init through the existing scoped file effect and approval broker', () => {
-  it('applies the generated skeleton and selected bridges without overwriting and records settled effects/approvals', async () => {
-    const f = await fixture(); await writeFile(join(f.root, 'CLAUDE.md'), 'preserve these bytes');
+  it('creates only AGENTS through the approved file effect and preserves both existing standard files', async () => {
+    const f = await fixture();
     // W3-AUTHORITY: confirmation and its governed approval execute in a real terminal; preview is issued in that same process.
     expect(await terminalApplication({ project: f.root, env: f.options.env }, 'project-init', 'installation',
-      { bridges: ['claude-code'], locale: 'en' })).toEqual([{ path: 'DECKENT.md', status: 'settled' }, { path: 'CLAUDE.md', status: 'settled' }]);
-    expect(await readFile(join(f.root, 'CLAUDE.md'), 'utf8')).toBe('preserve these bytes\n@DECKENT.md\n');
-    expect(await readFile(join(f.root, 'DECKENT.md'), 'utf8')).toContain('# project');
+      { bridges: [], locale: 'en' })).toEqual([{ path: 'AGENTS.md', status: 'settled' }]);
+    expect(await readFile(join(f.root, 'AGENTS.md'), 'utf8')).toContain('# project');
+    await expect(readFile(join(f.root, 'DECKENT.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await writeFile(join(f.root, 'CLAUDE.md'), 'preserve these bytes');
+    expect((await f.port.preview([], projectSkeleton('en'))).changes).toEqual([]);
+    expect(await readFile(join(f.root, 'CLAUDE.md'), 'utf8')).toBe('preserve these bytes');
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try {
       const effects = db.prepare('SELECT state FROM effect_intents').all();
-      expect(effects.filter(row => row['state'] === 'settled')).toHaveLength(2);
-      expect(db.prepare('SELECT COUNT(*) AS n FROM approvals').get()?.['n']).toBe(2);
+      expect(effects.filter(row => row['state'] === 'settled')).toHaveLength(1);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM approvals').get()?.['n']).toBe(1);
     } finally { db.close(); }
   });
   it('refuses noninteractive initialization before publishing a file and retains its pending approval', async () => {
     const f = await fixture(), preview = await f.port.preview([], projectSkeleton('en'));
     await expect(f.port.initialize(preview)).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
-    await expect(readFile(join(f.root, 'DECKENT.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(f.root, 'AGENTS.md'))).rejects.toMatchObject({ code: 'ENOENT' });
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(db.prepare("SELECT json_extract(snapshot,'$.status') AS status FROM approvals").all()).toEqual([{ status: 'pending' }]); }
     finally { db.close(); }
   });
   it('refuses a raced preview before touching any proposed file', async () => {
-    const f = await fixture(), preview = await f.port.preview(['agents-md'], projectSkeleton('en'));
+    const f = await fixture(), preview = await f.port.preview([], projectSkeleton('en'));
     await writeFile(join(f.root, 'AGENTS.md'), 'concurrent edit');
     await expect(f.port.initialize(preview)).rejects.toThrow('unsafe');
     expect(await readFile(join(f.root, 'AGENTS.md'), 'utf8')).toBe('concurrent edit');
@@ -56,7 +59,7 @@ describe.skipIf(process.platform !== 'linux')('init through the existing scoped 
     await expect(f.port.initialize({ ...preview })).rejects.toThrow('unsafe');
     (preview as { digest: string }).digest = '0'.repeat(64);
     await expect(f.port.initialize(preview)).rejects.toThrow('unsafe');
-    await expect(readFile(join(f.root, 'DECKENT.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(f.root, 'AGENTS.md'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('keeps trust out of the workspace even when the installation has a project root override', async () => {
     const f = await fixture(); await writeFile(join(f.root, 'DECKENT.md'), 'context');

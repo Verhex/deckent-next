@@ -49,8 +49,9 @@ describe('assistant stream state machine', () => {
     state = step.state;
     step = renderAssistantStream(state, { kind: 'text', text: 'tail' }, 30);
     expect(step.staticUnits).toEqual([]);
+    expect(step.liveTail).toEqual({ markdown: 'tail', open: null, spaceBefore: true });
     step = renderAssistantStream(step.state, { kind: 'done', finish: 'length' }, 40);
-    expect(step.staticUnits).toEqual([{ kind: 'text', markdown: 'tail', lead: false }]);
+    expect(step.staticUnits).toEqual([{ kind: 'text', markdown: 'tail', lead: false, spaceBefore: true }]);
     expect(step.footer).toMatchObject({ finish: 'length', elapsedMs: 40, promptTokens: null });
     expect(streamStepEntries(step).map(entry => entry.kind === 'chat' && entry.assistant?.kind)).toEqual(['text', 'footer']);
     const after = renderAssistantStream(step.state, { kind: 'text', text: 'late\n' }, 50);
@@ -94,8 +95,8 @@ describe('assistant stream state machine', () => {
 
   it('adapts a complete non-streaming reply into lead units plus a footer', () => {
     expect(renderCompleteReply('# Hi\n\n| a |\n|---|\n| 1 |', 100, 350)).toEqual([
-      { kind: 'text', markdown: '# Hi\n', lead: true },
-      { kind: 'table', markdown: '| a |\n|---|\n| 1 |', lead: false },
+      { kind: 'text', markdown: '# Hi', lead: true },
+      { kind: 'table', markdown: '| a |\n|---|\n| 1 |', lead: false, spaceBefore: true },
       { kind: 'footer', elapsedMs: 250, promptTokens: null, completionTokens: null, reasoningTokens: null, finish: 'stop' },
     ]);
   });

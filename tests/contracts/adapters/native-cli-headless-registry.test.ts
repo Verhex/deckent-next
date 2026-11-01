@@ -20,9 +20,24 @@ describe('S3-1 headless registry data', () => {
     // Codex: found by its catalog family (not its event-stream name), every tool switch off, read-only, one turn bounded by the line guard.
     expect(nativeCliHeadless('codex-exec-json')).toBeNull();
     const codex = nativeCliHeadless(CODEX_FAMILY)!;
+    expect(codex.headless.revision).toBe('codex-headless-2026-11-01-r4');
+    expect(codex.headless.guards).toMatchObject({ maxNotices: 1 });
+    for (const guards of [{ ...registry.adapters.codex.headless.guards, maxNotices: 0 },
+      { ...registry.adapters.codex.headless.guards, noticePatterns: undefined }]) {
+      const invalid = structuredClone(registry);
+      Object.assign(invalid.adapters.codex.headless, { guards });
+      expect(() => parseNativeCliRegistry(invalid)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+    }
+    expect(codex.headless.isolation.configVisible).toEqual(['auth.json', 'config.toml', 'installation_id']);
+    expect(codex.headless.isolation.configEphemeral).toEqual({ files: ['installation_id'], maxBytes: 4096 });
+    for (const configEphemeral of [{ files: ['..'], maxBytes: 4096 }, { files: ['not-visible'], maxBytes: 4096 }, { files: ['installation_id'], maxBytes: 0 }]) {
+      const invalid = structuredClone(registry);
+      invalid.adapters.codex.headless.isolation.configEphemeral = configEphemeral;
+      expect(() => parseNativeCliRegistry(invalid)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+    }
     expect(codex.command.capabilities.eventStream).toBe('codex-exec-json');
     expect(codex.headless.args).toEqual(expect.arrayContaining(['--sandbox', 'read-only', '--ephemeral', '--ignore-user-config', '--ignore-rules', 'approval_policy="never"',
-      'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'tools.view_image=false', 'features.apps=false', 'features.multi_agent=false']));
+      'features.code_mode_host=false', 'features.shell_tool=false', 'features.unified_exec=false', 'web_search="disabled"', 'features.view_image=false', 'features.apps=false', 'features.multi_agent=false']));
     for (const flag of codex.headless.forbiddenFlags) expect(codex.headless.args.some(arg => arg === flag || arg.startsWith(flag + '='))).toBe(false);
     expect([codex.command.capabilities.maxTurns, codex.headless.turnBound]).toEqual([null, 'stream']);
     const unbounded = structuredClone(registry) as unknown as { adapters: { codex: { headless: Record<string, unknown> } } };

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
@@ -10,10 +10,9 @@ const limits = registry.limits;
 /** PRE-7: a task environment requirement as versioned registry data in one generic form: `kind` names a probe kind an adapter registers
  * (coding kinds in the native-coding adapter, business-process kinds in their own adapters), `target` what it probes and `expect` an optional
  * expectation. The declaration never carries a command: probe commands come only from the adapter's probe-kind registry. */
-export const environmentRequirementSchema = z.object({ id: identitySchema, kind: identitySchema,
-  target: z.string().min(1).max(limits.targetChars).refine(value => !value.includes('\0')), expect: z.string().min(1).max(limits.expectChars).refine(value => !value.includes('\0')).optional() }).strict().readonly();
-export const environmentRequirementsSchema = z.object({ schemaVersion: z.literal(1), requirements: z.array(environmentRequirementSchema).min(1).max(limits.requirements).readonly() })
-  .strict().refine(value => new Set(value.requirements.map(row => row.id)).size === value.requirements.length).readonly();
+export const environmentRequirementSchema = z.strictObject({ id: identitySchema, kind: identitySchema,
+  target: persistedString(z.string().min(1).max(limits.targetChars)).refine(value => !value.includes('\0')), expect: persistedString(z.string().min(1).max(limits.expectChars)).refine(value => !value.includes('\0')).optional() }).readonly();
+export const environmentRequirementsSchema = z.strictObject({ schemaVersion: z.literal(1), requirements: z.array(environmentRequirementSchema).min(1).max(limits.requirements).readonly() }).refine(value => new Set(value.requirements.map(row => row.id)).size === value.requirements.length).readonly();
 export type EnvironmentRequirement = z.infer<typeof environmentRequirementSchema>;
 
 /** The timed projection of an attempt that closed without a launch. A refusal by Deckent's own environment preflight parks the Run for the

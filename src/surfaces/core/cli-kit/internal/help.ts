@@ -193,15 +193,17 @@ export function renderCommandHelp(command: CliHelpSpec, locale: Locale, params: 
 }
 
 /** Recognize only a help request. Extra execution flags still reach the unchanged parser. */
-export async function cliHelpRequest<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[], env: NodeJS.ProcessEnv = process.env, readLanguage?: () => Promise<Locale | undefined>, helpParams?: (key: MessageKey) => Promise<Params>): Promise<{ output: string; locale: Locale } | null> {
+export async function cliHelpRequest<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[], env: NodeJS.ProcessEnv = process.env, readLanguage?: () => Promise<Locale | undefined>, helpParams?: (key: MessageKey) => Promise<Params>, commandBrowser?: (locale: Locale, query: string) => Promise<string>): Promise<{ output: string; locale: Locale } | null> {
   const helpAt = argv.findIndex(value => value === '--help' || value === '-h');
-  if (helpAt < 0) return null;
-  const path = argv.slice(0, helpAt), tail = argv.slice(helpAt + 1);
+  const browser = argv[0] === 'help' && commandBrowser;
+  if (helpAt < 0 && !browser) return null;
+  const path = browser ? [] : argv.slice(0, helpAt), tail = browser ? argv.slice(1) : argv.slice(helpAt + 1), query: string[] = [];
   // `--all` is retired: the main help shows every command. It is still tolerated on the main help so that call stays side-effect free.
   let language: string | undefined, all = false;
   for (let index = 0; index < tail.length; index++) {
     if (tail[index] === '--all' && path.length === 0 && !all) all = true;
     else if (tail[index] === '--lang' && language === undefined && tail[index + 1] && !tail[index + 1]!.startsWith('-')) language = tail[++index];
+    else if (browser && !tail[index]!.startsWith('-')) query.push(tail[index]!);
     else return null;
   }
   const command = commands.find(item => item.path.join('\0') === path.join('\0'))
@@ -213,5 +215,6 @@ export async function cliHelpRequest<C>(argv: readonly string[], commands: reado
     .some(value => LOCALES.some(locale => locale === value?.slice(0, 2).toLowerCase()));
   const configLanguage = overridden ? undefined : await readLanguage?.().catch(() => undefined);
   const locale = resolveLocale(language, env, configLanguage);
+  if (browser) return { output: await commandBrowser!(locale, query.join(' ')), locale };
   return { output: command ? renderCommandHelp(command, locale, await helpParams?.(command.detail) ?? {}) : renderTopHelp(locale), locale };
 }

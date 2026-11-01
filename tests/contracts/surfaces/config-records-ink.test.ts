@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { ConfigRecordWindow, SettingsPanel, type ConfigPanelPort } from '#surfaces/core/terminal-panels/index.js';
+import { ConfigRecordWindow, type ConfigPanelPort } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import type { ConfigRecordPort } from '#surfaces/core/config/index.js';
 class Screen extends Writable {

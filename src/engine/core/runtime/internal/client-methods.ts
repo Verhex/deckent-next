@@ -1,4 +1,4 @@
-import { chatTurnCancellationResultSchema, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnResultSchema, modelInvocationCancellationCommandInputSchema,
+import { chatTurnCancellationResultSchema, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnResultSchema, chatTurnSteerResultSchema, chatTurnSteerSchema, type ChatTurnSteer, modelInvocationCancellationCommandInputSchema,
   modelInvocationCommandInputSchema, modelInvocationPurgeCommandInputSchema, modelInvocationQueryInputSchema, ModelInvocationError, permissionModeChangeSchema,
   permissionModeCommandSchema, permissionModeQuerySchema, permissionModeViewSchema, providerSpendAccountQueryInputSchema, providerSpendAuditCommandInputSchema,
   providerSpendManagementCommandInputSchema, scratchClearanceSchema, scratchQuerySchema, scratchViewSchema, type AgentTurnStreamEvent, type ChatTurnCancellation,
@@ -112,6 +112,16 @@ export function runtimeChatTurnMethods(call: RuntimeStreamingCall, mapFailure: R
         if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
         const result = chatTurnCancellationResultSchema.safeParse(await call('cancelChatTurn', parsed.data));
         if (!result.success || result.data.turnId !== parsed.data.turnId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw mapFailure(error); }
+    },
+    /** v30: one person line for the caller's own running turn; the answer must name the same turn and line. */
+    async steerChatTurn(input: ChatTurnSteer) {
+      try {
+        const parsed = chatTurnSteerSchema.safeParse(input);
+        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+        const result = chatTurnSteerResultSchema.safeParse(await call('steerChatTurn', parsed.data));
+        if (!result.success || result.data.turnId !== parsed.data.turnId || result.data.steerId !== parsed.data.steerId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
         return result.data;
       } catch (error) { throw mapFailure(error); }
     },

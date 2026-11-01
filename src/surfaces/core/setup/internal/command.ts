@@ -84,7 +84,7 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     try {
       do {
         const giveBack = lendHeldInput(stdin);
-        try { await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env }); } finally { giveBack(); }
+        try { await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env, root }); } finally { giveBack(); }
       } while (await controller.runPending());
     } finally { release(); stdin.pause(); }
     const outcome = controller.outcome();

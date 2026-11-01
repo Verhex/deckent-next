@@ -9,8 +9,10 @@ const outPath = join(root, 'src/surfaces/core/terminal-theme/internal/generated/
 
 /**
  * NOVA primitive hex/256 per theme. `dark` is the base; the other themes override what differs. An absent `ansi256` is the nearest xterm
- * 256-colour index (cube + gray ramp). Light values keep WCAG 2.2 4.5:1 on white; the daltonized themes move the success/error pair
- * to the blue/orange axis of the Okabe–Ito colour-universal palette (red–green deficiencies keep that pair apart).
+ * 256-colour index (cube + gray ramp); a pinned one keeps 4.5:1 or the hue where the nearest does not. Light values keep WCAG 2.2 4.5:1 on
+ * every light reference background (white to the warm #F0ECE5); the daltonized themes move the success/error pair to the blue/orange axis
+ * of the Okabe–Ito colour-universal palette, darkened on light backgrounds; the high-contrast themes keep 7:1 (1.4.6). `ansiOnly` themes have
+ * none (the terminal's 16 colours). Measured 2026-10-31: proof/ALPHA60/PAKET-2/THA.
  */
 const PRIMITIVES = {
   dark: {
@@ -21,17 +23,26 @@ const PRIMITIVES = {
     novaGlow: { hex: '#38D3FF', ansi256: 81 },
     novaGlowBright: { hex: '#7BE8FF', ansi256: 117 },
     seaTextMuted: { hex: '#7FA3B2', ansi256: 109 },
+    novaOrange: { hex: '#F0883E' },
   },
   light: {
     modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
-    novaGo: { hex: '#16774A' }, novaAbort: { hex: '#B3261E' }, novaAmber: { hex: '#8A5A00' },
-    novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' },
+    novaGo: { hex: '#16774A', ansi256: 22 }, novaAbort: { hex: '#B3261E' }, novaAmber: { hex: '#8A5A00' },
+    novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' }, novaOrange: { hex: '#A64B00', ansi256: 94 },
   },
-  'dark-daltonized': { novaGo: { hex: '#56B4E9' }, novaAbort: { hex: '#E69F00' }, novaAmber: { hex: '#F0E442' } },
+  'dark-daltonized': { novaGo: { hex: '#56B4E9' }, novaAbort: { hex: '#E69F00' }, novaAmber: { hex: '#F0E442' }, novaOrange: { hex: '#E69F00' } },
   'light-daltonized': {
     modelBlue: { hex: '#005FAF', ansi256: 25 }, providerPurple: { hex: '#8700AF', ansi256: 91 },
-    novaGo: { hex: '#0072B2' }, novaAbort: { hex: '#B85000' }, novaAmber: { hex: '#8A5A00' },
-    novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' },
+    novaGo: { hex: '#00669E' }, novaAbort: { hex: '#A04A00', ansi256: 88 }, novaAmber: { hex: '#8A5A00' },
+    novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' }, novaOrange: { hex: '#A64B00', ansi256: 94 },
+  },
+  'dark-high-contrast': {
+    modelBlue: { hex: '#B4CCFF' }, providerPurple: { hex: '#E0C2FF' }, novaGo: { hex: '#7EE2A8' }, novaAbort: { hex: '#FFB3AB' }, novaAmber: { hex: '#FFB86B' },
+    novaGlow: { hex: '#9CD3FF' }, novaGlowBright: { hex: '#B8ECFF' }, seaTextMuted: { hex: '#C9D1D9' }, novaOrange: { hex: '#FFB86B' },
+  },
+  'light-high-contrast': {
+    modelBlue: { hex: '#00338A' }, providerPurple: { hex: '#5A1A86' }, novaGo: { hex: '#0A4A26' }, novaAbort: { hex: '#8B0A0A' }, novaAmber: { hex: '#7A3300' },
+    novaGlow: { hex: '#0A3069', ansi256: 18 }, novaGlowBright: { hex: '#0B3D5C' }, seaTextMuted: { hex: '#3D4650' }, novaOrange: { hex: '#7A3300' },
   },
 };
 
@@ -42,7 +53,7 @@ if (!roles.length || !themes.length) {
   console.error('build-terminal-palette: terminal.map.json needs roles and themes');
   process.exit(1);
 }
-for (const [name] of themes) if (!PRIMITIVES[name]) { console.error(`build-terminal-palette: no primitives for theme ${name}`); process.exit(1); }
+for (const [name, spec] of themes) if (!spec.ansiOnly && !PRIMITIVES[name]) { console.error(`build-terminal-palette: no primitives for theme ${name}`); process.exit(1); }
 
 const CUBE = [0, 95, 135, 175, 215, 255];
 /** Nearest xterm 256-colour index of a hex (6×6×6 cube 16–231 and gray ramp 232–255; squared RGB distance). */
@@ -69,12 +80,12 @@ function primitiveFor(theme, name) {
 }
 
 function entryFor(theme, roleName, spec) {
-  const primitive = spec.primitive ? primitiveFor(theme, spec.primitive) : undefined;
+  const primitive = spec.primitive && !map.themes[theme].ansiOnly ? primitiveFor(theme, spec.primitive) : undefined;
   const hex = primitive?.hex ?? null;
   const ansi256 = primitive?.ansi256 ?? null;
   const override = map.themes[theme]?.ansi16?.[roleName];
   const ansi16 = typeof override === 'string' ? override : typeof spec.ansi16 === 'string' ? spec.ansi16 : '';
-  const attrs = Array.isArray(spec.attrs) ? spec.attrs.map(String) : [];
+  const attrs = (map.themes[theme]?.attrs?.[roleName] ?? spec.attrs ?? []).map(String);
   const className = spec.class ?? 'primary';
   const contrast = hex === null ? 'none' : spec.contrast ?? 'text';
   return `    ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}', contrast: '${contrast}' },`;
@@ -110,7 +121,12 @@ export const THEME_PALETTES: Readonly<Record<PaletteTheme, Readonly<Record<Palet
 ${themes.map(([theme]) => `  '${theme}': {\n${roles.map(([name, spec]) => entryFor(theme, name, spec)).join('\n')}\n  },`).join('\n')}
 };
 
-/** Reference backgrounds each theme's contrast is measured against (Deckent never sets the terminal background). */
+/** The text-role contrast each theme keeps (WCAG 2.2 1.4.3 4.5:1; the high-contrast themes 1.4.6 7:1); border roles keep 3:1. */
+export const THEME_TEXT_MINIMUM: Readonly<Record<PaletteTheme, number>> = {
+${themes.map(([theme, spec]) => `  '${theme}': ${spec.minimum ?? 4.5},`).join('\n')}
+};
+
+/** Reference backgrounds each theme's contrast is measured against (Deckent never sets the terminal background); none for \`ansiOnly\` themes. */
 export const THEME_BACKGROUNDS: Readonly<Record<PaletteTheme, readonly string[]>> = {
 ${themes.map(([theme, spec]) => `  '${theme}': [${(spec.backgrounds ?? []).map(value => `'${value}'`).join(', ')}],`).join('\n')}
 };

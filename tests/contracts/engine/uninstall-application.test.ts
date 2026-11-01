@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, readFile, rm, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,8 +22,9 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
   try {
     const cache = join(root, 'cache'), ledger = join(root, 'ledger');
     await mkdir(cache, { mode: 0o700 }); await writeFile(join(cache, 'disposable'), 'cache', { mode: 0o600 }); await writeFile(ledger, 'KEEP', { mode: 0o600 });
-    const cacheTarget = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64), members: ['^[a-z]+$'] }], [ledger],
-      { maxEntries: 10, maxDepth: 2 }, work => work());
+    // Astra 2876 R1: a writer-witnessed cache (records `writers`, fence `removing`), as the compile cache.
+    const cacheTarget = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64), members: ['^(?:[a-z]+|writers\\.[0-9a-f]{16})$'] }], [ledger],
+      { maxEntries: 10, maxDepth: 2 }, work => work(), undefined, { resourceId: 'cache', directory: 'writers', fence: 'removing', budgetMs: 1000, pollMs: 20 });
     const version = (await cacheTarget.observe({ kind: 'installation-cache', id: 'cache' })).version;
     let principal: VerifiedPrincipal = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] };
     let channel: 'mcp' | undefined, witness = true, approved = false, unknown = false, sends = 0, backupCalls = 0, changed = false, covered = true;
@@ -39,6 +41,9 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
       identity: () => cacheTarget.identity(), observe: target => cacheTarget.observe(target),
       async apply(request) {
         sends++; const result = await cacheTarget.apply(request);
+        // The removal is done but its reply is lost; an ended late writer's record stays beside it (coordination, never a member).
+        if (sends === 1) { const ended = execFileSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' });
+          await mkdir(join(cache, 'writers'), { recursive: true, mode: 0o700 }); await writeFile(join(cache, 'writers', `${ended}-1-late`), JSON.stringify({ schemaVersion: 1, pid: Number(ended), startedAtMs: 1 }), { mode: 0o600 }); }
         if (loseReply) { unknown = true; throw new EffectTargetError('EFFECT_TARGET_UNKNOWN'); }
         return result;
       },
@@ -83,11 +88,12 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
     expect(sends).toBe(0); expect(await readFile(ledger, 'utf8')).toBe('KEEP'); expect(await lstat(cache)).toBeTruthy();
     const first = await app.apply(command, interaction); expect(first.status).toBe('unknown'); expect(sends).toBe(1);
     app = new UninstallApplication(ports()); expect((await app.apply(command, interaction)).status).toBe('unknown'); expect(sends).toBe(1);
+    // The resumed effect settles from target evidence: the removed cache with only that leftover record observes as absent (`applied`, not unknown).
     unknown = false; expect((await new UninstallApplication(ports()).apply(command, interaction)).status).toBe('completed'); expect(sends).toBe(1);
     expect((await new UninstallApplication(ports()).apply({ ...command, commandId: 'another-cli-invocation' }, interaction)).status).toBe('noop'); expect(sends).toBe(1);
     expect(finished.at(-1)?.status).toBe('noop');
     // Purge cancellation and backup failure run against a fresh data resource, before its generic effect may be claimed.
-    await mkdir(cache, { mode: 0o700 }); await writeFile(join(cache, 'retained'), 'DATA', { mode: 0o600 });
+    await mkdir(cache, { recursive: true, mode: 0o700 }); await writeFile(join(cache, 'retained'), 'DATA', { mode: 0o600 });
     // K7: a tier that deletes data (here an archived file group) backs it up first; caches alone need no backup.
     const purgeInventory = { ...inventory, backupDestination: join(`${root}-external`, 'backup'), resources: [{ ...inventory.resources[0]!, contribution: 'conversation', version: (await cacheTarget.observe({ kind: cacheTarget.kind, id: 'cache' })).version }] };
     observed = purgeInventory; retained = createUninstallPlan({ schemaVersion: 2, tier: 'all', force: false, disableUnit: false }, purgeInventory);

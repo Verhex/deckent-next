@@ -1,6 +1,6 @@
 import { prepareSubscriptionConsent } from '#engine/index.js';
 import { readFile, realpath } from 'node:fs/promises';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {  headlessEgressSchema, headlessEgressReasons,  type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
@@ -11,14 +11,16 @@ import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation }
 export type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
   executable?: string | undefined; configDir?: string | undefined; ownedConfigDir: string; env: Readonly<Record<string, string | undefined>>; now: () => number;
   isolation: HeadlessIsolation; signal?: AbortSignal }>;
-/** The absolute executable by realpath: the one given, else the first of the registry's CLI name in the person's PATH (bounded search). */
+/** The absolute executable the person gave, else the first of the registry's CLI name in the person's PATH (bounded search). S7 (owner 2026-10-31): that
+ * path is kept, not its realpath (a self-updating CLI moves it); it must resolve to a file now, and every call resolves it again. */
 export async function headlessExecutable(entry: NonNullable<ReturnType<typeof nativeCliHeadless>>, input: Readonly<{ executable?: string | undefined;
   env: Readonly<Record<string, string | undefined>>; signal?: AbortSignal | undefined }>): Promise<string> {
   const { connect } = entry.headless, controller = AbortSignal.timeout(connect.pathSearchTimeoutMs);
   const named = input.executable ?? await findExecutable(entry.command.executable, input.env, connect.pathSearchDirectories, input.signal ? AbortSignal.any([input.signal, controller]) : controller);
   const executable = named && isAbsolute(named) ? await realpath(named).catch(() => null) : null;
   if (!executable) refuse('HEADLESS_CLI_UNAVAILABLE');
-  return executable;
+  // A path with `.`/`..` segments is kept by its realpath (a lexical normalization could name another file).
+  return resolve(named!) === named ? named! : executable;
 }
 /**
  * S3-3 connect (no model call): the absolute executable and the login directory (given, else s3c the Brain's own Deckent-owned one, owner
@@ -61,7 +63,7 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
   const text = (value: unknown) => typeof value === 'string' ? value.slice(0, 64) : null;
   return Promise.all(profiles.flatMap(profile => { const definition = profile.scopeId === scopeId && profile.adapter && isNativeCliHeadlessAdapter(profile.adapter)
     ? nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition) : null; return definition?.success ? [definition.data] : []; }).map(async definition => {
-    const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; refusal?: unknown;
+    const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; refusal?: unknown; version?: unknown; updatedFrom?: unknown;
       auth?: { authMethod?: unknown; subscriptionType?: unknown }; isolation?: { launcher?: unknown; version?: unknown } }, () => null);
     const isolation = record?.state === 'open' && text(record.isolation?.version) ? { launcher: text(record.isolation?.launcher) ?? '-', version: text(record.isolation?.version)! }
       : record?.refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? 'unavailable' as const : null;
@@ -69,6 +71,8 @@ export async function readHeadlessLogins(section: unknown, scopeId: string, owne
       // s3c: whether the connection uses the Brain's own login dir (a sealed older one keeps working; the doctor suggests the move).
       subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, owned: ownedRoot !== null && dirname(definition.configDir) === ownedRoot,
       consent: definition.delegatedUse?.classes ?? [], isolation,
+      // S7: the CLI behind the connected path changed version since an earlier passing check (`doctor.headless.updated`).
+      cliUpdated: record?.state === 'open' && text(record.updatedFrom) && text(record.version) ? { from: text(record.updatedFrom)!, to: text(record.version)! } : null,
       egress: await readEgress(definition.stateDir) });
   }));
 }

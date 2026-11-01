@@ -1,12 +1,12 @@
+import { persistedString, persistedInteger, modelReferenceSchema, type ModelReference } from '#domain/index.js';
+import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import { isIP } from 'node:net';
 import { z } from 'zod';
-import { modelReferenceSchema, type ModelReference } from '#domain/index.js';
-import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection, TERMINAL_SCOPE_ID_SCHEMA } from '#platform/index.js';
 import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
 import responseStyleData from './terminal-response-styles.json' with { type: 'json' };
 
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
-export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
+export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi', 'dark-high-contrast', 'light-high-contrast', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
 /** T2 attention notices (first entry = default): the terminal bell while the window is unfocused, or nothing. */
 export const TERMINAL_NOTIFY = ['bell', 'off'] as const;
@@ -16,80 +16,80 @@ const DEFAULT_RESPONSE_STYLE = responseStyleData.default;
 
 /** Operator terminal chat is a governed model invocation: the section names a declared catalog model;
  * catalog revision and binding are read fresh per turn and enforced by the model invocation service. */
-export const terminalConfigSchema = z.object({
+export const terminalConfigSchema = z.strictObject({
   /** Scope the interactive terminal (`deckent` with no arguments) works in; `--scope` overrides it. */
   scopeId: TERMINAL_SCOPE_ID_SCHEMA.optional(),
   /** Keep the composer's visible input history across sessions in this project (private file; pastes never stored). */
-  persistHistory: z.boolean().default(true),
+  persistHistory: z.boolean().prefault(true),
   /** Session-local /do completion records; mutable resource policy from the terminal registry defaults. */
-  maxTrackedRuns: z.number().int().min(1).max(10_000).default(chatDefaults.maxTrackedRuns),
+  maxTrackedRuns: persistedInteger().min(1).max(10_000).prefault(chatDefaults.maxTrackedRuns),
   /** Interactive terminals start the runtime service when none is running (owner 2026-09-23); false only connects. */
-  autostartService: z.boolean().default(true),
+  autostartService: z.boolean().prefault(true),
   /** Deadline for an automatically started runtime service to answer on its endpoint. */
-  serviceStartTimeoutMs: z.number().int().min(1_000).max(120_000).default(20_000),
-  /** T2 (T-READABLE): the workline's colour theme. `auto` follows a background the terminal reports (COLORFGBG) and otherwise keeps the
-   * terminal's own 16 colours; `ansi` always does; the daltonized themes keep success and failure on the blue/orange axis. */
-  theme: z.enum(TERMINAL_THEMES).default(TERMINAL_THEMES[0]),
+  serviceStartTimeoutMs: persistedInteger().min(1_000).max(120_000).prefault(20_000),
+  /** The terminal's colour theme (TEMA-OKUNURLUK): `auto` follows the background the terminal reports (OSC 11, else COLORFGBG; unknown: its own
+   * foreground with attributes); the daltonized themes keep success and failure apart without red/green; `*-ansi` draw with the terminal's 16 colours, `ansi` = that of the background. */
+  theme: z.enum(TERMINAL_THEMES).prefault(TERMINAL_THEMES[0]),
   /** T2 (T-STARTUP): the opening banner — the Deckent mark with version, project, model, mode and a hint (`full`), one line (`compact`), or none. */
-  banner: z.enum(TERMINAL_BANNERS).default(TERMINAL_BANNERS[0]),
+  banner: z.enum(TERMINAL_BANNERS).prefault(TERMINAL_BANNERS[0]),
   /** T2 (T-STARTUP): clear the visible screen (never the scrollback) when the interactive workline opens on a terminal. */
-  clearOnStart: z.boolean().default(true),
+  clearOnStart: z.boolean().prefault(true),
   /** T6 (alpha.54): how the model words its answers (`standard` adds nothing; the other ids add one line to the model-facing instructions). Read per turn. */
-  responseStyle: z.enum(TERMINAL_RESPONSE_STYLES).default(DEFAULT_RESPONSE_STYLE),
-  layout: z.enum(['fullscreen', 'inline']).default('fullscreen'), // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback)
+  responseStyle: z.enum(TERMINAL_RESPONSE_STYLES).prefault(DEFAULT_RESPONSE_STYLE),
+  layout: z.enum(['fullscreen', 'inline']).prefault('fullscreen'), // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback)
   /** T2 (alpha.54): `bell` rings the terminal bell when work finishes or a card waits while the window reports it lost focus; `off` never does. */
-  notify: z.enum(TERMINAL_NOTIFY).default(TERMINAL_NOTIFY[0]),
-  viewportRows: z.number().int().min(100).max(100_000).default(2_000), // rows the full-window conversation scrolls back through
+  notify: z.enum(TERMINAL_NOTIFY).prefault(TERMINAL_NOTIFY[0]),
+  viewportRows: persistedInteger().min(100).max(100_000).prefault(2_000), // rows the full-window conversation scrolls back through
   /** T4-B (owner 2026-10-08, Jev d84b248d): the person's own default terminal model — an exact catalog reference, nothing else. Only the user
    * (global) layer may hold it; precedence is in {@link resolveTerminalModel}. Additive optional key (the `readResultMaxBytes` pattern). */
   defaultModel: modelReferenceSchema.optional(),
-  chat: z.object({
+  chat: z.strictObject({
     schemaVersion: z.literal(1),
     /** Optional since T4-B (owner 2026-10-08, Jev 77898686): a project may drop its own model so the user's `terminal.defaultModel` applies; the
      * chat settings around it stay. With no model anywhere the terminal reports `TERMINAL_CHAT_NOT_CONFIGURED`. */
     reference: modelReferenceSchema.optional(),
-    maxCompletionTokens: z.number().int().positive().safe().default(chatDefaults.maxCompletionTokens),
+    maxCompletionTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(chatDefaults.maxCompletionTokens),
     /** Complete-message window in line and rich modes; tool results keep their assistant call. */
-    historyMessages: z.number().int().min(2).max(1_000).default(chatDefaults.historyMessages),
+    historyMessages: persistedInteger().min(2).max(1_000).prefault(chatDefaults.historyMessages),
     /** Absolute input-token compaction threshold, alongside the window and request-byte guards. */
-    compactionThresholdTokens: z.number().int().positive().safe().default(chatDefaults.compactionThresholdTokens),
+    compactionThresholdTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).prefault(chatDefaults.compactionThresholdTokens),
     /** Byte ceiling of one agent tool result (T-L5c, owner 2026-09-28): the workspace-read adapter's own default (64 KiB)
      * applies when absent; an additive field, `chat.schemaVersion` stays 1 (same pattern as `historyMessages`). */
-    readResultMaxBytes: z.number().int().min(1_024).max(1_048_576).default(65_536),
-  }).strict().default({ schemaVersion: 1 }),
+    readResultMaxBytes: persistedInteger().min(1_024).max(1_048_576).prefault(65_536),
+  }).prefault({ schemaVersion: 1 }),
   /** The agent's host shell (T-L4 slice 3c): its per-command deadline, and variable names copied from the service environment in
    * addition to the built-in allowlist (credentials never pass unless named here). */
-  shell: z.object({
+  shell: z.strictObject({
     schemaVersion: z.literal(1),
-    timeoutMs: z.number().int().min(1_000).max(3_600_000).default(300_000),
-    realm: z.enum(['require-sandbox', 'prefer-sandbox', 'host']).default('prefer-sandbox'),
-    environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).default([]),
+    timeoutMs: persistedInteger().min(1_000).max(3_600_000).prefault(300_000),
+    realm: z.enum(['require-sandbox', 'prefer-sandbox', 'host']).prefault('prefer-sandbox'),
+    environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).prefault([]),
     /** SHELL-OVERLAY clock guard (CI-KARARLILIK, lead 2026-10-14): how far the wall clock may fall behind the monotonic clock during a call
      * (slew) before its write set is kept aside as a clock step; also the lag at the mark that names a conflict as the clock's. */
-    clockStepToleranceMs: z.number().int().min(10).max(60_000).default(250),
-  }).strict().optional(),
+    clockStepToleranceMs: persistedInteger().min(10).max(60_000).prefault(250),
+  }).optional(),
   /** The agent's scratch area (SCR-A, owner 2026-09-28): per-write, per-session and installation-wide byte ceilings of the layout's
    * `scratch` resource, how many days an unused session area is kept, and how often the running service sweeps. Data, not code. */
-  scratch: z.object({
+  scratch: z.strictObject({
     schemaVersion: z.literal(1),
-    writeMaxBytes: z.number().int().min(1_024).max(1_048_576).default(1_048_576),
-    sessionMaxBytes: z.number().int().min(1_024).max(1_073_741_824).default(67_108_864),
-    installationMaxBytes: z.number().int().min(1_024).max(17_179_869_184).default(536_870_912),
-    retentionDays: z.number().int().min(1).max(365).default(7),
-    sweepIntervalMs: z.number().int().min(60_000).max(86_400_000).default(3_600_000),
-  }).strict().optional(),
+    writeMaxBytes: persistedInteger().min(1_024).max(1_048_576).prefault(1_048_576),
+    sessionMaxBytes: persistedInteger().min(1_024).max(1_073_741_824).prefault(67_108_864),
+    installationMaxBytes: persistedInteger().min(1_024).max(17_179_869_184).prefault(536_870_912),
+    retentionDays: persistedInteger().min(1).max(365).prefault(7),
+    sweepIntervalMs: persistedInteger().min(60_000).max(86_400_000).prefault(3_600_000),
+  }).optional(),
   /** The agent's `fetch_url` (FETCH S6, owner 2026-09-28): `none` (default: no tool, no network), `allowlist` (only the listed hosts),
    * `approval` (listed hosts at once, any other host asks the owner). Hosts are exact lowercase DNS names (no wildcard, no IP). No proxy. */
-  fetch: z.object({
+  fetch: z.strictObject({
     schemaVersion: z.literal(1),
-    egress: z.enum(['none', 'allowlist', 'approval']).default('none'),
-    allowedHosts: z.array(z.string().max(253).regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u)
-      .refine(host => isIP(host) === 0, 'FETCH_HOST_IS_IP')).max(256).default([]),
-    maxBytes: z.number().int().min(1_024).max(67_108_864).default(4_194_304),
-    timeoutMs: z.number().int().min(1_000).max(300_000).default(30_000),
-    maxRedirects: z.number().int().min(0).max(10).default(3),
-  }).strict().optional(),
-}).strict();
+    egress: z.enum(['none', 'allowlist', 'approval']).prefault('none'),
+    allowedHosts: z.array(persistedString(z.string().max(253)).regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u)
+      .refine(host => isIP(host) === 0, 'FETCH_HOST_IS_IP')).max(256).prefault([]),
+    maxBytes: persistedInteger().min(1_024).max(67_108_864).prefault(4_194_304),
+    timeoutMs: persistedInteger().min(1_000).max(300_000).prefault(30_000),
+    maxRedirects: persistedInteger().min(0).max(10).prefault(3),
+  }).optional(),
+});
 
 export type TerminalConfig = z.infer<typeof terminalConfigSchema>;
 export type TerminalChatConfig = NonNullable<TerminalConfig['chat']>;

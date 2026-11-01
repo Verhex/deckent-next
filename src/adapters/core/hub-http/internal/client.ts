@@ -67,8 +67,14 @@ export function createGovernedHubFetch(deps: HubFetchDependencies): typeof fetch
     const commandId = deps.commandId();
     const command: EffectCommand = { schemaVersion: 1, commandId, scopeId: deps.scopeId, operation: HUB_NETWORK_OPERATION.operation,
       idempotencyKey: commandId, target: { kind: target.kind, id: sha256(commandId) }, expectedVersion: null, input: payload };
-    await new EffectApplication({ resolve: async ref => ref.id === HUB_NETWORK_OPERATION.operation.id && ref.version === 1 ? HUB_NETWORK_OPERATION : null },
-      { resolve: kind => kind === target.kind ? target : null }, deps.store, deps.approvals, deps.sessions, deps.authorization, deps.clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command, deps.credential);
+    try {
+      await new EffectApplication({ resolve: async ref => ref.id === HUB_NETWORK_OPERATION.operation.id && ref.version === 1 ? HUB_NETWORK_OPERATION : null },
+        { resolve: kind => kind === target.kind ? target : null }, deps.store, deps.approvals, deps.sessions, deps.authorization, deps.clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command, deps.credential);
+    } catch (error) {
+      // Keep the effect's unknown settlement while reporting the transport's response limit to the caller.
+      if (result?.reason === 'response-too-large') throw new HubNetworkError('HUB_NETWORK_INVALID');
+      throw error;
+    }
     if (!result || result.outcome !== 'response' || result.status === null) throw new HubNetworkError('HUB_NETWORK_FAILED');
     return new Response(Buffer.from(result.body), { status: result.status, headers: result.headers });
   };

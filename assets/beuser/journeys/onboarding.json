@@ -1,9 +1,26 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-onboarding-1",
+  "revision": "b1-onboarding-2",
   "journeyId": "onboarding",
-  "limitsProfile": "b1-dogfood-provisional-2",
+  "recommended": true,
+  "limitsProfile": "b1-dogfood-provisional-3",
   "branches": [
+    {
+      "id": "O-B1-CONNECTED",
+      "personaIds": [
+        "ayse",
+        "mert",
+        "selin",
+        "managed-admin",
+        "managed-member",
+        "screen-reader",
+        "narrow-terminal"
+      ],
+      "goal": {
+        "tr": "Açıkça fixture olarak etiketlenmiş model bağlantısıyla ilk küçük işini dene, kalıcı sonucu ve yeniden açılışı kontrol et.",
+        "en": "With an explicitly labelled fixture model connected, try a small first task and check its durable result after reopening."
+      }
+    },
     {
       "id": "O-B1",
       "personaIds": [
@@ -240,14 +257,35 @@
   "rubric": {
     "schemaVersion": 1,
     "journeyId": "onboarding",
-    "version": 1,
-    "digest": "5c316370906605583000a79ddf9d75a3f2cc85555ffff5f09a911734598d0754",
+    "version": 2,
+    "digest": "1ee4910f2f5ad71864dba88e8dd021ae38073abd4c03f2997cddc7e79db21849",
     "parameters": {
       "phase": "preparation-only",
       "ownerSteps": 0,
       "personDecisions": "synthetic-person-decision",
-      "limitsProfile": "b1-dogfood-provisional-2",
+      "limitsProfile": "b1-dogfood-provisional-3",
       "branches": [
+        {
+          "id": "O-B1-CONNECTED",
+          "initialStates": [
+            "model-connected"
+          ],
+          "variants": [
+            "terminal",
+            "cli-twin",
+            "reopen"
+          ],
+          "criteria": [
+            "explicit-loopback-fake-provider-label",
+            "no-vendor-login-claim",
+            "actual-worker-evidence-required",
+            "no-terminal-fallback-as-worker-proof",
+            "durable-result-reopen-or-typed-refusal"
+          ],
+          "walkStatus": "not-walked",
+          "unavailable": [],
+          "probeSet": "probe-set-1"
+        },
         {
           "id": "O-B1",
           "initialStates": [

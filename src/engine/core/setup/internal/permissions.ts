@@ -10,9 +10,9 @@ export type SetupPermissionPreview = Readonly<{
   currentMode: 'standart' | 'full-auto' | 'full-access'; effectiveMode: 'standart' | 'full-auto' | 'full-access';
   mode: 'standart' | 'full-auto' | 'full-access'; preserveMode: boolean;
 }>;
-const facts = z.object({ state: z.enum(['needs-profile', 'needs-confirmation', 'applied', 'not-applicable', 'blocked']),
+const facts = z.strictObject({ state: z.enum(['needs-profile', 'needs-confirmation', 'applied', 'not-applicable', 'blocked']),
   digest: z.string(), profile: z.string(), mode: z.enum(['standart', 'full-auto', 'full-access']), effectiveMode: z.enum(['standart', 'full-auto', 'full-access']), principal: z.string(),
-  selectedProfile: setupProfileRefSchema.nullable() }).strict().nullable();
+  selectedProfile: setupProfileRefSchema.nullable() }).nullable();
 /** Permission defaults are an install responsibility. Every write still needs the carrier's witness, preview and conditional owners. */
 export const SETUP_PERMISSIONS_FAMILY: SetupFamilyPackage = {
   namespace: 'permissions', source: 'core:setup-permissions', facts,

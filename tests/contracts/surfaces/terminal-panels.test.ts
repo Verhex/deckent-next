@@ -11,8 +11,9 @@ import type { PermissionModeView } from '#domain/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { SettingsPanel, configPanelTree, editEntry, maskEntry, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
+import { configPanelTree, editEntry, maskEntry, mcpPanelTree, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
   type McpServerDraft, type McpTrustQuestion, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 // T3 L4 PANELS — the `/mode`, `/config` and `/mcp` windows on the real Ink view (in-process ports): locked rows say why and cannot be chosen,
@@ -172,7 +173,7 @@ describe('window height on a short terminal (owner 2026-10-07: capped to the ter
 
 function mcpPort(log: unknown[], answers: (boolean | null)[]): McpPanelPort {
   return {
-    list: async () => ({ servers: [{ name: 'files', scope: 'local', status: 'trusted', attention: false, tools: '2 tools', realm: 'sandbox', launch: 'npx files', trusted: true }],
+    list: async () => ({ servers: [{ name: 'files', scope: 'local', state: 'connected', status: 'trusted', attention: false, tools: '2 tools', realm: 'sandbox', launch: 'npx files', trusted: true }],
       problems: [] }),
     detail: async name => [{ label: 'Status', text: `trusted ${name}` }, { label: 'Tools', text: 'read_file 0123456789ab' }],
     revoke: async name => { log.push(['revoke', name]); return [`revoked ${name}`]; },
@@ -194,7 +195,24 @@ function mcpPort(log: unknown[], answers: (boolean | null)[]): McpPanelPort {
 describe('/mcp window', () => {
   it('lists servers with state; detail, revoke and remove (asked first) act through the port', async () => {
     const log: unknown[] = [], answers: (boolean | null)[] = [];
-    const { element, calls } = panel('mcp', { mcp: mcpPort(log, answers) });
+    const source = mcpPort(log, answers), initial = await source.list();
+    const words = terminalPanelLabels('en').mcp;
+    for (const ascii of [false, true]) {
+      const tree = mcpPanelTree(initial, words, ascii), node = tree.items[1]!;
+      expect(node).toMatchObject({ label: 'files', tone: 'stateConnected', glyph: ascii ? '+' : '✔' });
+      for (const state of ['not-started', 'pending-approval', 'failed', 'timed-out'] as const)
+        expect(mcpPanelTree({ ...initial, servers: [{ ...initial.servers[0]!, state }] }, words, ascii).items[1]).toMatchObject({ tone: 'stateDisconnected', glyph: '!' });
+    }
+    let signal: AbortSignal | undefined, finish: ((value: typeof initial) => void) | undefined;
+    const stalled = panel('mcp', { mcp: { ...source, list: async options => {
+      if (!options?.health) return { ...initial, servers: [{ ...initial.servers[0]!, state: 'checking', status: 'checking' }] };
+      signal = options.signal; return new Promise(resolve => { finish = resolve; });
+    } } });
+    const loading = mount(stalled.element); await settle(80);
+    expect(loading.frame()).toContain('checking'); expect(loading.frame()).toContain('files');
+    await loading.press(ESC, 80); expect(signal?.aborted).toBe(true);
+    finish?.(initial); await settle(); expect(stalled.calls.errors).toEqual([]);
+    const { element, calls } = panel('mcp', { mcp: source });
     const view = mount(element);
     await settle(80);
     expect(view.frame()).toContain('+ Add a server'); expect(view.frame()).toMatch(/files ›\s+trusted · 2 tools · sandbox · local/u);

@@ -5,10 +5,10 @@ import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters
 export class NativeWorkerBindingError extends Error {
   constructor() { super('WORKER_MODEL_BINDING_MISMATCH'); this.name = 'NativeWorkerBindingError'; }
 }
-const pinnedSchema = z.object({ schemaVersion: z.literal(2), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
+const pinnedSchema = z.looseObject({ schemaVersion: z.literal(2), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
-  model: z.object({ modelId: z.string() }).passthrough(), preflight: z.object({ discovery: z.string() }).passthrough().optional(),
-  checkout: z.unknown().optional() }).passthrough();
+  model: z.looseObject({ modelId: z.string() }), preflight: z.looseObject({ discovery: z.string() }).optional(),
+  checkout: z.unknown().optional() });
 const argvSchema = z.array(z.string()).min(1);
 const same = (left: readonly string[], right: readonly string[]) => left.length === right.length && left.every((value, index) => value === right[index]);
 

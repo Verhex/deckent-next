@@ -13,14 +13,21 @@ const CTRL: Readonly<Record<string, ComposerKey>> = {
   d: { type: 'eof' }, r: { type: 'search' },
   // T4: Ctrl+G opens the draft in the person's editor (Claude Code, Codex); a composer without an editor keeps it the Esc it was.
   g: { type: 'editor' },
+  // Ctrl+J is a bare "\n" in a legacy terminal; under the kitty keyboard protocol it arrives as the letter with Ctrl and stays a new line.
+  j: { type: 'newline' },
 };
 const META: Readonly<Record<string, ComposerKey>> = {
   b: { type: 'move', to: 'wordLeft' }, f: { type: 'move', to: 'wordRight' }, d: { type: 'delete', span: 'wordForward' },
 };
 
 export function composerKey(input: string, key: Key): ComposerKey | null {
+  // Ink 7.1.1 asks the terminal for the kitty keyboard protocol (CSI ? u) and its input handler also reads the answer (CSI ? flags u): an
+  // answer, never typed text.
+  if (/^\[\?\d*u$/u.test(input)) return null;
   const word = key.ctrl || key.meta;
-  if (key.return) return key.shift || key.meta ? { type: 'newline' } : { type: 'submit' };
+  // Owner S5: Ctrl+Enter (kitty keyboard protocol) adds the line to a running turn; Alt+Enter does the same where Ctrl+Enter is a plain Enter.
+  // Without a running turn the reducer keeps their old meaning: Ctrl+Enter sends, Alt+Enter is a new line.
+  if (key.return) return key.ctrl || (key.meta && !key.shift) ? { type: 'steer', via: key.ctrl ? 'ctrl' : 'alt' } : key.shift ? { type: 'newline' } : { type: 'submit' };
   // Ctrl+_ (0x1f; Ctrl+/ on many terminals) undoes the last unsent edit (harness gap 3).
   if (input === '\u001f' || (key.ctrl && (input === '_' || input === '/'))) return { type: 'undo' };
   if (input === '\n') return { type: 'newline' };

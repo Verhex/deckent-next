@@ -1,0 +1,5 @@
+{
+  "note": "Owner S4 / lead decision 4 (alpha.60): an unknown slash command suggests the one nearest English command by prefix, else by at most maxDistance edits and one edit per lettersPerEdit typed letters (so a short stray word gets none). Data, not code.",
+  "maxDistance": 2,
+  "lettersPerEdit": 3
+}

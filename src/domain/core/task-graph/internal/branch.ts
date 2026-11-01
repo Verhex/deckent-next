@@ -5,14 +5,14 @@ import { validateTaskGraph } from './graph.js';
 
 /** Admission-time choice only. The authenticated caller supplies a versioned boolean fact;
  * this is not verification of an external ERP fact or an executable expression language. */
-export const branchInputSchema = z.object({ schemaVersion: z.literal(1),
-  input: z.object({ id: identitySchema, revision: identitySchema, value: z.boolean() }).strict().readonly(),
+export const branchInputSchema = z.strictObject({ schemaVersion: z.literal(1),
+  input: z.strictObject({ id: identitySchema, revision: identitySchema, value: z.boolean() }).readonly(),
   whenTrue: identitySchema, whenFalse: identitySchema, join: identitySchema,
-}).strict().readonly();
-export const branchDecisionSchema = z.object({ schemaVersion: z.literal(1),
+}).readonly();
+export const branchDecisionSchema = z.strictObject({ schemaVersion: z.literal(1),
   request: branchInputSchema, sourceGraph: taskGraphSchema,
   selectedTaskId: identitySchema, notSelectedTaskId: identitySchema,
-}).strict().readonly();
+}).readonly();
 export type BranchDecision = z.infer<typeof branchDecisionSchema>;
 
 /** Compile one exclusive diamond into the ordinary DAG. Nonselected work is retained in the

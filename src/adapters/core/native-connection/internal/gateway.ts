@@ -7,6 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, projectNativeCredential, type NativeSubscription } from './credential.js';
 import { scrubWorkerEvent } from './event-guard.js';
+import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { secretValues, type QuotaPolicy } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { privateSocketDirectory, tunnelNativeConnect } from './egress.js';
@@ -54,10 +55,11 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     request.setEncoding('utf8');
     request.on('data', (part: string) => { received += Buffer.byteLength(part); if (received > limits.eventBatchBytes) request.destroy(); else body += part; });
     request.on('end', () => {
+      const packet = body.split('\n').filter(Boolean).map(line => { try { return JSON.parse(line) as unknown; } catch { return null; } });
+      if (!inputWithinValidationLimit(packet, INPUT_VALIDATION_LIMITS.worker)) { statistics.rejected++; response.writeHead(413).end(); return; }
       const accepted: WorkerEvent[] = []; let dropped = 0;
-      for (const line of body.split('\n')) {
-        if (!line) continue;
-        let parsed; try { parsed = workerEventSchema.safeParse(JSON.parse(line)); } catch { parsed = null; }
+      for (const value of packet) {
+        const parsed = workerEventSchema.safeParse(value);
         const event = parsed?.success ? scrubWorkerEvent(parsed.data, secrets) : null;
         const bytes = event ? Buffer.byteLength(JSON.stringify(event) + '\n') : 0;
         if (!parsed?.success || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }

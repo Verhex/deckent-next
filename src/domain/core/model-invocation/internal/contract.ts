@@ -27,66 +27,66 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const requestJsonSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const invocationEnvelopeSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const receiptEnvelopeSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_RECEIPT_JSON_LIMITS);
-const definitionSchema = z.unknown().transform((input, context): ModelBindingDefinition => {
+const definitionSchema = z.unknown().optional().transform((input, context): ModelBindingDefinition => {
   try { return parseModelBindingDefinition(input); }
   catch { context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_DEFINITION_INVALID' }); return z.NEVER; }
 });
 
-export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+export const modelInvocationCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, commandId: clientCommandIdSchema,
   scopeId: identitySchema, reference: modelReferenceSchema, catalogRevision: identitySchema,
-  expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).strict().readonly();
-export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(2), scopeId: identitySchema,
-  invocationId: identitySchema, reference: modelReferenceSchema, includeResponseContent: z.boolean().optional() }).strict().readonly();
+  expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).readonly();
+export const modelInvocationQuerySchema = z.strictObject({ get schemaVersion() { return z.literal(2); }, scopeId: identitySchema,
+  invocationId: identitySchema, reference: modelReferenceSchema, get includeResponseContent() { return z.boolean().optional(); } }).readonly();
 /** Internal/local read lookup by immutable command identity; it does not replay or invoke a model. */
-export const modelInvocationCommandQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  commandId: identitySchema, reference: modelReferenceSchema }).strict().readonly();
+export const modelInvocationCommandQuerySchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, scopeId: identitySchema,
+  commandId: identitySchema, reference: modelReferenceSchema }).readonly();
 export type ModelInvocationCommandQuery = Readonly<z.infer<typeof modelInvocationCommandQuerySchema>>;
-export const modelInvocationPurgeCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+export const modelInvocationPurgeCommandSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, commandId: clientCommandIdSchema,
   scopeId: identitySchema, invocationId: identitySchema, reference: modelReferenceSchema,
-  expectedContentDigest: digest }).strict().readonly();
-export const modelInvocationPurgeReceiptSchema = z.object({ schemaVersion: z.literal(1),
+  expectedContentDigest: digest }).readonly();
+export const modelInvocationPurgeReceiptSchema = z.strictObject({ get schemaVersion() { return z.literal(1); },
   command: modelInvocationPurgeCommandSchema, actor: modelActivationActorSchema,
-  authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema }).strict().readonly();
+  authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema }).readonly();
 /** Descriptor-safe wire ingress. Raw object schemas remain available for closed-world JSON-schema generation. */
 export const modelInvocationCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandSchema);
 export const modelInvocationCommandQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandQuerySchema);
 export const modelInvocationQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationQuerySchema);
 export const modelInvocationPurgeCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationPurgeCommandSchema);
-const profileShape = z.object({ id: identitySchema,
-  version: counterSchema.positive(), scopeId: identitySchema, reference: modelReferenceSchema, bindingDigest: digest,
-  protocol: z.object({ family: identitySchema, version: identitySchema }).strict().readonly(),
-  adapter: z.object({ id: identitySchema, version: counterSchema.positive(), definition: invocationEnvelopeSchema }).strict().readonly(),
+const profileShape = z.strictObject({ id: identitySchema,
+  get version() { return counterSchema.positive(); }, scopeId: identitySchema, reference: modelReferenceSchema, bindingDigest: digest,
+  get protocol() { return z.strictObject({ family: identitySchema, version: identitySchema }).readonly(); },
+  get adapter() { return z.strictObject({ id: identitySchema, version: counterSchema.positive(), definition: invocationEnvelopeSchema }).readonly(); },
   // maxCalls null = no lifetime total (explicit, audited profile choice; owner 2026-09-25); maxInFlight always bounds concurrency.
-  allocation: z.object({ id: identitySchema, maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive() }).strict().readonly(),
-  limits: z.object({ requestMaxBytes: counterSchema.positive(), responseMaxBytes: counterSchema.positive(),
-    timeoutMs: counterSchema.positive() }).strict().readonly(),
+  get allocation() { return z.strictObject({ id: identitySchema, maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive() }).readonly(); },
+  get limits() { return z.strictObject({ requestMaxBytes: counterSchema.positive(), responseMaxBytes: counterSchema.positive(),
+    timeoutMs: counterSchema.positive() }).readonly(); },
   // Context window this deployment serves (T-L5); the same model may be served at different lengths. Absent = the provider's report.
-  contextWindowTokens: counterSchema.positive().optional(),
-}).strict().readonly();
+  get contextWindowTokens() { return counterSchema.positive().optional(); },
+}).readonly();
 /** v1 is read byte-for-byte without defaults; v2 must explicitly select a billing path. */
 export const modelInvocationBillingAxisSchema = z.enum(['subscription', 'metered', 'local']);
 export type ModelInvocationBillingAxis = z.infer<typeof modelInvocationBillingAxisSchema>;
 export const modelInvocationProfileSchema = z.discriminatedUnion('schemaVersion', [
-  z.object({ schemaVersion: z.literal(1), ...profileShape.unwrap().shape }).strict(),
-  z.object({ schemaVersion: z.literal(2), billingAxis: modelInvocationBillingAxisSchema, ...profileShape.unwrap().shape }).strict(),
+  z.strictObject({ get schemaVersion() { return z.literal(1); }, ...profileShape.unwrap().shape }),
+  z.strictObject({ get schemaVersion() { return z.literal(2); }, billingAxis: modelInvocationBillingAxisSchema, ...profileShape.unwrap().shape }),
 ]).readonly();
 export const modelInvocationRequestEvidenceSchema = modelInvocationCommandSchema.unwrap().omit({ nativeRequest: true })
   .extend({ requestDigest: digest }).strict().readonly();
-export const modelInvocationClaimSchema = z.object({ scopeId: identitySchema, commandId: identitySchema,
-  invocationId: identitySchema, requestDigest: digest, profileDigest: digest }).strict().readonly();
-export const modelInvocationNativeResponseSchema = z.object({ schemaVersion: z.literal(1), native: requestJsonSchema,
-  usage: requestJsonSchema.nullable() }).strict().readonly();
+export const modelInvocationClaimSchema = z.strictObject({ scopeId: identitySchema, commandId: identitySchema,
+  invocationId: identitySchema, requestDigest: digest, profileDigest: digest }).readonly();
+export const modelInvocationNativeResponseSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, native: requestJsonSchema,
+  get usage() { return requestJsonSchema.nullable(); } }).readonly();
 export const modelInvocationContentDescriptorSchema = z.discriminatedUnion('kind', [
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('native-response'), encoding: z.literal('canonical-json'),
-    digest, byteLength: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('response-body'), encoding: z.literal('base64'),
-    digest, byteLength: counterSchema }).strict(),
+  z.strictObject({ get schemaVersion() { return z.literal(1); }, get kind() { return z.literal('native-response'); }, get encoding() { return z.literal('canonical-json'); },
+    digest, byteLength: counterSchema }),
+  z.strictObject({ get schemaVersion() { return z.literal(1); }, get kind() { return z.literal('response-body'); }, get encoding() { return z.literal('base64'); },
+    digest, byteLength: counterSchema }),
 ]).readonly();
 export const modelInvocationResponseContentSchema = z.discriminatedUnion('kind', [
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('native-response'), descriptor: modelInvocationContentDescriptorSchema,
-    response: modelInvocationNativeResponseSchema }).strict(),
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('response-body'), descriptor: modelInvocationContentDescriptorSchema,
-    data: z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict(),
+  z.strictObject({ get schemaVersion() { return z.literal(1); }, get kind() { return z.literal('native-response'); }, descriptor: modelInvocationContentDescriptorSchema,
+    response: modelInvocationNativeResponseSchema }),
+  z.strictObject({ get schemaVersion() { return z.literal(1); }, get kind() { return z.literal('response-body'); }, descriptor: modelInvocationContentDescriptorSchema,
+    get data() { return z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/); } }),
 ]).superRefine((value, context) => {
   const padding = value.kind === 'response-body' ? value.data.endsWith('==') ? 2 : value.data.endsWith('=') ? 1 : 0 : 0;
   if (value.descriptor.kind !== value.kind || (value.kind === 'response-body'
@@ -95,17 +95,17 @@ export const modelInvocationResponseContentSchema = z.discriminatedUnion('kind',
   }
 }).readonly();
 export const modelInvocationNativeResultSchema = z.union([modelInvocationNativeResponseSchema,
-  z.object({ kind: z.literal('rejected'), evidence: modelInvocationResponseEvidenceSchema }).strict().readonly()]);
+  z.strictObject({ get kind() { return z.literal('rejected'); }, evidence: modelInvocationResponseEvidenceSchema }).readonly()]);
 export type ModelInvocationNativeResult = z.infer<typeof modelInvocationNativeResultSchema>;
 export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
-  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('responded'), content: modelInvocationContentDescriptorSchema,
-    observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('unknown'), reason: z.literal('transport-error'),
-    evidence: modelInvocationResponseSummarySchema.nullable(), content: modelInvocationContentDescriptorSchema.nullable(), observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('rejected'),
-    evidence: modelInvocationResponseSummarySchema, content: modelInvocationContentDescriptorSchema, observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('not-sent'), reason: z.literal('cancelled-before-permission'),
-    cancellationCommandId: identitySchema, observedAtMs: counterSchema, content: z.null() }).strict(),
+  z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_OUTCOME_VERSION); }, get state() { return z.literal('responded'); }, content: modelInvocationContentDescriptorSchema,
+    observedAtMs: counterSchema }),
+  z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_OUTCOME_VERSION); }, get state() { return z.literal('unknown'); }, get reason() { return z.literal('transport-error'); },
+    get evidence() { return modelInvocationResponseSummarySchema.nullable(); }, get content() { return modelInvocationContentDescriptorSchema.nullable(); }, observedAtMs: counterSchema }),
+  z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_OUTCOME_VERSION); }, get state() { return z.literal('rejected'); },
+    evidence: modelInvocationResponseSummarySchema, content: modelInvocationContentDescriptorSchema, observedAtMs: counterSchema }),
+  z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_OUTCOME_VERSION); }, get state() { return z.literal('not-sent'); }, get reason() { return z.literal('cancelled-before-permission'); },
+    cancellationCommandId: identitySchema, observedAtMs: counterSchema, get content() { return z.null(); } }),
 ]).superRefine((outcome, context) => {
   const invalidKind = outcome.content && (outcome.state === 'responded'
     ? outcome.content.kind !== 'native-response' : outcome.content.kind !== 'response-body');
@@ -114,11 +114,11 @@ export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_COMPLETENESS_INVALID' });
   }
 }).readonly();
-export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(MODEL_INVOCATION_RECEIPT_VERSION), request: modelInvocationRequestEvidenceSchema,
+export const modelInvocationReceiptSchema = z.strictObject({ get schemaVersion() { return z.literal(MODEL_INVOCATION_RECEIPT_VERSION); }, request: modelInvocationRequestEvidenceSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: definitionSchema,
-  activationRevision: counterSchema.positive(), profile: modelInvocationProfileSchema, profileDigest: digest,
-  claim: modelInvocationClaimSchema, claimedAtMs: counterSchema, outcome: modelInvocationOutcomeSchema.nullable(),
-}).strict().superRefine((receipt, context) => {
+  get activationRevision() { return counterSchema.positive(); }, profile: modelInvocationProfileSchema, profileDigest: digest,
+  claim: modelInvocationClaimSchema, claimedAtMs: counterSchema, get outcome() { return modelInvocationOutcomeSchema.nullable(); },
+}).superRefine((receipt, context) => {
   const reference = receipt.request.reference, profile = receipt.profile, definition = receipt.definition;
   const mismatch = receipt.request.scopeId !== profile.scopeId || receipt.request.commandId !== receipt.claim.commandId
     || receipt.request.scopeId !== receipt.claim.scopeId || receipt.request.requestDigest !== receipt.claim.requestDigest

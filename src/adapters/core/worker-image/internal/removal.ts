@@ -1,11 +1,12 @@
+import { persistedString } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { EffectTargetError, type EffectTarget, type EffectApplyRequest } from '#engine/index.js';
 import { withWorkerBuilder } from './custody.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u), imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
-const receipt = z.object({ schemaVersion: z.literal(3), daemonId: z.string().min(1), recipeSha256: digest,
+const receipt = z.looseObject({ schemaVersion: z.literal(3), daemonId: persistedString(z.string().min(1)), recipeSha256: digest,
   lineage: z.literal('listed'), provenance: z.literal('built-from-current-sources'),
-  images: z.array(z.object({ imageId }).passthrough()).nonempty(), sources: z.record(digest) }).passthrough();
+  images: z.array(z.looseObject({ imageId })).nonempty(), sources: z.record(z.string(), digest) });
 export interface WorkerRemovalResource {
   readonly resourceId: string; readonly installationId: string; readonly imageId: string;
   readonly daemonId: string; readonly recipeDigest: string; readonly receiptDigest: string;

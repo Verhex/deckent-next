@@ -7,7 +7,7 @@
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { render } from 'ink';
-import { SettingsPanel } from '#surfaces/core/terminal-panels/index.js';
+import { SettingsPanel } from '#surfaces/core/terminal-provider/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { providerPanelPort, secretGrantCardPort } from '#surfaces/core/cli-terminal/index.js';
 import { terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';

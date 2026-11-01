@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-personas-1",
-  "limitsProfile": "b1-dogfood-provisional-2",
+  "revision": "b1-personas-3",
+  "limitsProfile": "b1-dogfood-provisional-3",
   "personas": [
     {
       "schemaVersion": 1,
@@ -40,7 +40,7 @@
       },
       "patience": {
         "maxSteps": 80,
-        "maxWaitMs": 20000
+        "maxWaitMs": 45000
       },
       "attentionMs": 60000
     },
@@ -81,7 +81,7 @@
       },
       "patience": {
         "maxSteps": 100,
-        "maxWaitMs": 10000
+        "maxWaitMs": 30000
       },
       "attentionMs": 30000
     },
@@ -295,6 +295,47 @@
       "patience": {
         "maxSteps": 100,
         "maxWaitMs": 20000
+      },
+      "attentionMs": 60000
+    },
+    {
+      "schemaVersion": 1,
+      "personaId": "zeynep",
+      "journeyId": "theme-light",
+      "language": "tr",
+      "role": "light-terminal-user",
+      "goals": [
+        "Açık zeminde ilk yanıtı oku; /theme ile tema seç; /mcp bağlantı durumlarını ayırt et"
+      ],
+      "knowledgeBoundary": [
+        "Yalnız ürünün gösterdiği rehberi bilirsin"
+      ],
+      "accessibility": [],
+      "initialKnowledge": [
+        "Bu atılabilir kurulumun kişisisin"
+      ],
+      "goal": "Açık zeminde yanıtı oku, /theme ile seçim yap ve /mcp durumlarını sözcük ve simgelerle ayırt et.",
+      "competency": {
+        "computer": 3,
+        "domain": 3,
+        "product": 0
+      },
+      "preferences": [
+        "Göz yormayan açık zemin",
+        "Okunur metin ve açık durum sözcükleri",
+        "VS Code/Cursor terminali; minimumContrastRatio 1"
+      ],
+      "riskAttitude": "Veri kaybında dur ve açıklama iste",
+      "surface": "terminal",
+      "organizationContext": {
+        "displayName": "Zeynep",
+        "mode": "personal",
+        "installationRole": "synthetic-person",
+        "scope": "own-disposable-installation"
+      },
+      "patience": {
+        "maxSteps": 80,
+        "maxWaitMs": 45000
       },
       "attentionMs": 60000
     }

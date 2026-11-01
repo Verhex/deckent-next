@@ -76,7 +76,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = context.locale ?? resolveLocale(undefined, context.env), shell: import('#surfaces/core/terminal-host/index.js').TerminalShell | null = null;
   try {
     assertErrorRegistry();
-    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams);
+    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }), context.helpParams, async (locale, query) => (await import('#surfaces/core/terminal-labels/index.js')).terminalCommandHelp(locale, query));
     if (help) {
       locale = help.locale; context.onLocale?.(locale);
       emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
@@ -90,7 +90,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     // A shell that cannot be drawn is no refusal: the launch goes on the earlier path.
     if (interactive && interactiveTerminal(context)) shell = await (await import('./launch-shell.js')).openLaunchShell(words, argv.at(-2) === '--lang' ? argv.at(-1) : undefined, context).catch(() => null);
     if (shell) context = { ...context, terminalShell: shell };
-    if (context.loadHost) context = { ...context, ...(await context.loadHost()) };
+    if (context.loadHost) context = { ...context, ...(await context.loadHost(shell ? () => shell!.host.flushed() : undefined)) };
+    await shell?.host.flushed(); // drain keys from the last import before identity/setup can replace the composer
     if (shell && !shell.host.open()) return 0; // Astra 2860 R1: the person closed the shell while the host loaded: the launch stops, nothing else runs
     context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and

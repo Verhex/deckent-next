@@ -128,10 +128,12 @@ describe('the model cannot reach a config write', () => {
       // (`configPersonWitness('workerImage')`); no SDK export, no MCP tool, no agent unit names it.
       'src/composition/core/toolchains/internal/consent.ts',
       'src/composition/core/toolchains/internal/refresh.ts',
+      'src/surfaces/core/cli-terminal/internal/beuser-panel.ts', // BS-B7: person-only /beuser preset/card, same ConfigApplication submit; no AI/MCP route
       'src/surfaces/core/cli-terminal/internal/cache-panel.ts', // CACHE-SLICE1 (34270fae): the terminal cache-choice window writes profiles through the same writer
       'src/surfaces/core/cli-terminal/internal/model-panel.ts',
       'src/surfaces/core/cli-terminal/internal/protocol-panel.ts', // OPENAI-RESPONSES: the terminal /model protocol-migration window writes profiles through the same governed writer (as cache-panel)
       'src/surfaces/core/cli-terminal/internal/terminal.ts',
+      'src/surfaces/core/cli-terminal/internal/theme-panel.ts', // TH-A L4: human /theme picker only, same principal/policy/approval/digest writer; no agent/MCP entry
       'src/surfaces/core/cli-terminal/internal/workspace-panel.ts', // W9-PROVIDER-ERRORS N13: the terminal /model workspace window writes the selected workspace through the same governed writer
       'src/surfaces/core/config/internal/command.ts', 'src/surfaces/core/config/internal/panel.ts',
       'src/surfaces/core/config/internal/records.ts', 'src/surfaces/core/monitor/internal/command.ts']); // records.ts: the /config window's selection-only record editors (8ce20e6f)
@@ -141,7 +143,9 @@ describe('the model cannot reach a config write', () => {
     expect(beuserSetup.indexOf("await configPersonWitness()('beuser setup')")).toBeLessThan(beuserSetup.indexOf('await snapshotConfiguredConfig('));
     expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
       .filter(path => /setupConfiguredBeuser|beuserSetup/.test(readFileSync(path, 'utf8')))).toEqual([]);
-    expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/setupConfiguredBeuser|beuserSetup/);
+    expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/setupConfiguredBeuser|beuserSetup|configuredBeuserPanelPort/);
+    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+      .filter(path => /configuredBeuserPanelPort|writeLimit/.test(readFileSync(path, 'utf8')))).toEqual([]);
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.
     expect(files('src').filter(path => /agent-turn|agent-tool/.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /connectConfiguredModel|connectModel|model-connect/.test(readFileSync(path, 'utf8')))).toEqual([]);

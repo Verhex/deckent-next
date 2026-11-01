@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { encodeCommandProjection } from '#domain/core/command/index.js';
 import { AgentCatalogError } from './contract.js';
 import limits from './limits.json' with { type: 'json' };
@@ -16,15 +16,15 @@ export const SIGNATURE_LABELS = Object.freeze({ catalogAction: 'catalog-action:1
   revocationFeed: 'revocation-feed:1', hubKeyHandover: 'hub-key-handover:1', publisherKeyRotation: 'publisher-key-rotation:1', hubKeyDelegation: 'hub-key-delegation:1',
   hubModeratorRoster: 'hub-moderator-roster:1', hubProfile: 'hub-profile:1', hubKeyProof: 'hub-key-proof:1', hubModerationLog: 'hub-moderation-log:1' } as const);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const ref = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
-const person = z.object({ issuer: identitySchema, subject: identitySchema, ai: z.literal(false) }).strict().readonly();
-const label = z.string().min(1).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+const ref = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
+const person = z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.literal(false) }).readonly();
+const label = persistedString(z.string().min(1)).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
   && new TextEncoder().encode(value).length <= limits.nameMaxBytes);
 export const signerPublicKeySchema = z.string().regex(/^[A-Za-z0-9+/]{59}=$/); // 44 bytes of SPKI DER
-export const signerKeySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, keyId: digest, algorithm: z.literal('ed25519'), publicKey: signerPublicKeySchema,
+export const signerKeySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, keyId: digest, algorithm: z.literal('ed25519'), publicKey: signerPublicKeySchema,
   purpose: z.enum(SIGNER_PURPOSES), boundPrincipal: ref.nullable(), custody: z.enum(['host', 'external']), label, state: z.enum(['active', 'revoked']),
   addedBy: person, atMs: counterSchema, commandId: identitySchema, revision: counterSchema.positive(),
-  revoked: z.object({ by: person, atMs: counterSchema, commandId: identitySchema, basis: z.enum(['person-card', 'revocation-log']) }).strict().readonly().optional() }).strict()
+  revoked: z.strictObject({ by: person, atMs: counterSchema, commandId: identitySchema, basis: z.enum(['person-card', 'revocation-log']) }).readonly().optional() })
   .refine(row => (row.purpose === 'action') === (row.boundPrincipal !== null) && (row.custody === 'external' || row.purpose === 'action')
     && (row.state === 'revoked') === (row.revoked !== undefined) && row.revision === (row.revoked ? 2 : 1)).readonly();
 export type SignerKey = z.infer<typeof signerKeySchema>;
@@ -59,12 +59,12 @@ export function requireActionSigner(row: SignerKey | null, scopeId: string, prin
 export const CATALOG_ACTIONS = ['define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow'] as const;
 /** `catalog-action:1`: the exact command a signature covers — built by the application from the typed command, never by the model (S8-3: a WorkClass or
  * lesson-audience suggestion names its `work-class` target). */
-export const catalogActionSchema = z.object({ scopeId: identitySchema, action: z.enum(CATALOG_ACTIONS),
-  target: z.object({ kind: z.enum(['agent', 'skill', 'work-class']), id: identitySchema, revision: counterSchema.positive(), workClass: identitySchema.optional() }).strict(),
+export const catalogActionSchema = z.strictObject({ scopeId: identitySchema, action: z.enum(CATALOG_ACTIONS),
+  target: z.strictObject({ kind: z.enum(['agent', 'skill', 'work-class']), id: identitySchema, revision: counterSchema.positive(), workClass: identitySchema.optional() }),
   expectedRevision: counterSchema.positive().nullable(), contentDigest: digest.nullable(), toStanding: identitySchema.nullable(), suggestionId: digest.nullable(),
-  commandId: identitySchema, principal: ref }).strict().readonly();
+  commandId: identitySchema, principal: ref }).readonly();
 export type CatalogAction = z.infer<typeof catalogActionSchema>;
 export const catalogActionBytes = (action: CatalogAction) => encodeCommandProjection(SIGNATURE_LABELS.catalogAction, catalogActionSchema.parse(action));
 /** The signature an AI/system catalog write carries (`signature`: base64 of 64 bytes). */
-export const catalogSignatureSchema = z.object({ keyId: digest, signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/) }).strict().readonly();
+export const catalogSignatureSchema = z.strictObject({ keyId: digest, signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/) }).readonly();
 export type CatalogSignature = z.infer<typeof catalogSignatureSchema>;

@@ -1,5 +1,5 @@
+import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, daySchema } from './catalog-values.js';
 import asset from '../../../../../assets/model-roles/model-roles.json' with { type: 'json' };
 import limits from './model-role-limits.json' with { type: 'json' };
@@ -18,8 +18,8 @@ export const MODEL_ROLE_LIMITS = Object.freeze({ ...limits });
 export type ModelTier = typeof MODEL_TIERS[number];
 const rank = (tier: ModelTier) => MODEL_TIERS.indexOf(tier);
 const tierSchema = z.enum(MODEL_TIERS);
-const version = z.number().int().positive().safe();
-const override = z.object({ previousVersion: version }).strict().readonly();
+const version = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const override = z.strictObject({ previousVersion: version }).readonly();
 const unique = (values: readonly string[]) => new Set(values).size === values.length;
 /** Days since 1970-01-01 of a validated UTC day (civil-calendar arithmetic; the domain reads no clock). */
 const dayNumber = (day: string) => {
@@ -27,28 +27,28 @@ const dayNumber = (day: string) => {
   const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1;
   return era * 146_097 + yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy - 719_468;
 };
-const roleSchema = z.union([z.object({ id: identitySchema, minimumTier: tierSchema }).strict(),
-  z.object({ id: identitySchema, admits: z.literal('connected') }).strict()]).readonly();
-const modelRowSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema, version, tier: tierSchema,
+const roleSchema = z.union([z.strictObject({ id: identitySchema, minimumTier: tierSchema }),
+  z.strictObject({ id: identitySchema, admits: z.literal('connected') })]).readonly();
+const modelRowSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, version, tier: tierSchema,
   roles: z.array(identitySchema).max(limits.rolesPerModel).readonly(),
   /** Evidence that this row was measured as the role's model (owner A3/H5): only a measured active row drops an exception. */
-  measured: z.object({ on: daySchema, source: identitySchema }).strict().readonly().optional(),
+  measured: z.strictObject({ on: daySchema, source: identitySchema }).readonly().optional(),
   override: override.optional(),
-}).strict().refine(row => unique(row.roles) && (row.override === undefined || row.override.previousVersion < row.version)).readonly();
-const exceptionSchema = z.object({ id: identitySchema, version, role: identitySchema, channelId: identitySchema, modelId: exactModelIdSchema,
+}).refine(row => unique(row.roles) && (row.override === undefined || row.override.previousVersion < row.version)).readonly();
+const exceptionSchema = z.strictObject({ id: identitySchema, version, role: identitySchema, channelId: identitySchema, modelId: exactModelIdSchema,
   source: identitySchema, declaredOn: daySchema, expiresOn: daySchema, override: override.optional(),
-}).strict().refine(row => dayNumber(row.declaredOn) <= dayNumber(row.expiresOn) && dayNumber(row.expiresOn) - dayNumber(row.declaredOn) <= limits.exceptionMaxDays
+}).refine(row => dayNumber(row.declaredOn) <= dayNumber(row.expiresOn) && dayNumber(row.expiresOn) - dayNumber(row.declaredOn) <= limits.exceptionMaxDays
   && (row.override === undefined || row.override.previousVersion < row.version)).readonly();
 export const roleModelKey = (target: Readonly<{ channelId: string; modelId: string }>) => JSON.stringify([target.channelId, target.modelId]);
-export const modelRoleRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
+export const modelRoleRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema,
   roles: z.array(roleSchema).max(limits.roles).readonly(),
   models: z.array(modelRowSchema).max(limits.models).readonly(),
   exceptions: z.array(exceptionSchema).max(limits.exceptions).readonly(),
-}).strict().refine(value => unique(value.roles.map(row => row.id)) && unique(value.models.map(roleModelKey)) && unique(value.exceptions.map(row => row.id))).readonly();
+}).refine(value => unique(value.roles.map(row => row.id)) && unique(value.models.map(roleModelKey)) && unique(value.exceptions.map(row => row.id))).readonly();
 export type ModelRoleRegistry = z.infer<typeof modelRoleRegistrySchema>;
 /** Config section `model_roles`: installation overlays over the Core seed, in precedence order. Absent = the Core seed alone; an empty object
  * is not a section, so a default-filled or healed configuration never synthesizes one (nor writes it into a project layer). */
-export const modelRoleConfigSchema = z.object({ schemaVersion: z.literal(1), overlays: z.array(modelRoleRegistrySchema).max(limits.overlays) }).strict();
+export const modelRoleConfigSchema = z.strictObject({ schemaVersion: z.literal(1), overlays: z.array(modelRoleRegistrySchema).max(limits.overlays) });
 export const CORE_MODEL_ROLES: ModelRoleRegistry = modelRoleRegistrySchema.parse(asset);
 export type ModelRoleErrorCode = 'MODEL_ROLE_OVERRIDE_DENIED' | 'MODEL_ROLE_NOT_REGISTERED' | 'MODEL_ROLE_TIER_INVALID' | 'MODEL_ROLE_REGISTRY_LIMIT' | 'MODEL_ROLE_REVISION_INVALID'
   /** M2 typed role admission: a model outside the scope's catalog, a malformed request or section, a card older than the registry. */

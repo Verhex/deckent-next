@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, rename, rm, symlink, lstat, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rename, rm, symlink, lstat, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -37,25 +37,27 @@ it('removes only the owner-named members of a cache, keeping same-user strays an
   // Astra 2862 R2: a compile-cache writer recorded in the witness directory still writes at its exit (here a late file at 400 ms, exit at 900 ms)
   // after its endpoint and ledger are gone, whatever the service descriptor said. Nothing is removed while it runs: an unreadable record and a
   // writer outliving the budget refuse; within the budget the removal waits for its exit, and the late write it saw changes the version (refused,
-  // never removed half); after the exit a fresh removal takes the cache and the records.
+  // never removed half); an existing fence others may read refuses; after the exit a fresh removal takes the cache and the records. Astra 2867 R2-b:
+  // the first removal renamed `writers` aside (the linearization point); every later run waits on the records of every such directory.
   const compile = join(root, 'compile'), version = join(compile, `v26.13.0-x64-0123abcd-${process.getuid?.() ?? 0}`), writers = join(compile, 'writers');
   for (const dir of [version, writers]) await mkdir(dir, { mode: 0o700, recursive: true }); await writeFile(join(version, 'code'), 'CODE', { mode: 0o600 });
   const witnessed = (budgetMs: number) => new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'compileCache', path: compile, ownershipDigest: 'b'.repeat(64),
-    members: ['^(?:v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+|writers)$'] }], [], { maxEntries: 20, maxDepth: 3 }, async work => work(), undefined,
+    members: ['^(?:v\\d+\\.\\d+\\.\\d+-[a-z0-9_]+-[0-9a-f]{8}-\\d+|writers(?:\\.[0-9a-f]{16})?)$'] }], [], { maxEntries: 20, maxDepth: 3 }, async work => work(), undefined,
   { resourceId: 'compileCache', directory: 'writers', fence: 'removing', budgetMs, pollMs: 20 });
   const remove = async (target: InstallationCacheRemovalTarget) => { const at = { kind: target.kind, id: 'compileCache' };
     return target.apply({ target: at, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'compile', expectedVersion: (await target.observe(at)).version, input: null }); };
   await writeFile(join(writers, '4242'), 'not a record', { mode: 0o600 });
   await expect(remove(witnessed(1000))).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); expect(await readFile(join(version, 'code'), 'utf8')).toBe('CODE');
-  await rm(join(writers, '4242'));
+  const moved = join(compile, (await readdir(compile)).find(name => /^writers\.[0-9a-f]{16}$/u.test(name))!); await rm(join(moved, '4242'));
   const late = spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(join(version, 'late'))}, 'LATE', { mode: 0o600 }), 400); setTimeout(() => {}, 900);`], { stdio: 'ignore' });
   const exited = new Promise(resolve => late.once('exit', resolve));
-  await writeFile(join(writers, `${late.pid}-1-a`), JSON.stringify({ schemaVersion: 1, pid: late.pid, startedAtMs: Date.now() }), { mode: 0o600 });
+  await writeFile(join(moved, `${late.pid}-1-a`), JSON.stringify({ schemaVersion: 1, pid: late.pid, startedAtMs: Date.now() }), { mode: 0o600 });
   await expect(remove(witnessed(50))).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); expect(await readFile(join(version, 'code'), 'utf8')).toBe('CODE');
   await expect(remove(witnessed(10_000))).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' }); await exited;
   expect(await readFile(join(version, 'code'), 'utf8')).toBe('CODE'); expect(await readFile(join(version, 'late'), 'utf8')).toBe('LATE');
   expect(await readFile(join(compile, 'removing'), 'utf8')).toBe('');   // refused: the fence stays, so no writer fills before the rerun
-  await remove(witnessed(1000)); for (const gone of [version, writers, join(compile, 'removing')]) await expect(lstat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
+  await chmod(join(compile, 'removing'), 0o640); await expect(remove(witnessed(1000))).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' }); await chmod(join(compile, 'removing'), 0o600);
+  await remove(witnessed(1000)); for (const gone of [version, writers, moved, join(compile, 'removing')]) await expect(lstat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it('removes cache members only through their pinned parent: a link planted after the scan touches nothing outside', async () => {

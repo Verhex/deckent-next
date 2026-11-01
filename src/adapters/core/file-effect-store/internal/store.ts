@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -9,7 +10,7 @@ import type { IntegrityAuthority } from '#platform/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 export interface FileEffectStoreBounds { readonly maxBytes: number; readonly maxRecords: number }
 const PRIVATE_PERMISSION_MASK = 0o077;
-const bodySchema = z.object({ schemaVersion: z.literal(1), revision: z.number().int().nonnegative().safe(), records: z.array(effectRecordSchema) }).strict();
+const bodySchema = z.strictObject({ schemaVersion: z.literal(1), revision: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), records: z.array(effectRecordSchema) });
 type Body = z.infer<typeof bodySchema>;
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 const fail = (): never => { throw new EffectError('EFFECT_CORRUPT'); };
@@ -48,7 +49,7 @@ export class FileEffectStore implements EffectStore {
       if (!before.isFile() || before.nlink !== 1 || before.uid !== process.getuid?.() || (before.mode & PRIVATE_PERMISSION_MASK) || before.size > this.bounds.maxBytes) fail();
       const bytes = Buffer.alloc(before.size + 1), { bytesRead } = await handle.read(bytes, 0, bytes.length, 0), after = await handle.stat();
       if (bytesRead !== before.size || after.size !== before.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) fail();
-      const sealed = z.object({ body: bodySchema, keyId: z.string(), mac: z.string() }).strict().parse(JSON.parse(bytes.subarray(0, bytesRead).toString('utf8')));
+      const sealed = z.strictObject({ body: bodySchema, keyId: z.string(), mac: z.string() }).parse(JSON.parse(bytes.subarray(0, bytesRead).toString('utf8')));
       if (!this.integrity.verify(JSON.stringify(sealed.body), sealed.mac, sealed.keyId) || sealed.body.records.length > this.bounds.maxRecords) fail();
       const commands = new Set<string>(), keys = new Set<string>();
       for (const record of sealed.body.records) {

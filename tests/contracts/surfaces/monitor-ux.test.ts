@@ -148,7 +148,7 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
     apply: 'restart' as const, redacted: false });
   const view = { schemaVersion: 1 as const, layer: 'project' as const, digest: null,
     fields: [field('projectName', 'project'), field('max_workers', 'global'), field('backup', 'default'), field('mcp', 'default', false), field('brand_new_field', 'env'),
-      field('inspection.workers.maxEntries', 'project')] };
+      field('inspection.workers.maxEntries', 'project'), field('beuser.limits.maxWallMs', 'project')] };
   const texts = (blocks: ReturnType<typeof surface.configMonitorBlocks>) => surface.flattenBlocks(blocks, 120, '…').map(entry => surface.lineText(entry.line)).join('\n');
   it('every declared config field has a section and a human name', () => {
     expect(configMonitorFieldKeys()).toEqual(expect.arrayContaining(Object.keys(CONFIG_FIELDS)));
@@ -159,6 +159,7 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
     // A section the view does not know is still headed (by its key) and sorts last; a nested key shows whole under its section's name.
     expect(changed).toMatch(/├─ brand_new_field ─/u); expect(changed.indexOf('├─ brand_new_field')).toBeGreaterThan(changed.indexOf('(max_workers)'));
     expect(changed).toMatch(locale === 'en' ? /├─ Inspection and monitor ─[^\n]*\n[^\n]*inspection\.workers\.maxEntries/u : /├─ İnceleme ve izleme ─[^\n]*\n[^\n]*inspection\.workers\.maxEntries/u);
+    expect(changed).toMatch(locale === 'en' ? /├─ BeUser monitor ─[^\n]*\n[^\n]*beuser\.limits\.maxWallMs/u : /├─ BeUser monitörü ─[^\n]*\n[^\n]*beuser\.limits\.maxWallMs/u);
     expect(changed).not.toContain('(backup)'); expect(changed).not.toContain('(mcp)');
     expect(changed).toMatch(locale === 'en' ? /├─ Worker ceiling ─/u : /├─ İşçi tavanı ─/u);
     expect(changed).toContain(locale === 'en' ? '1 setting(s) declared but read by no component' : '1 ayar tanımlı ama hiçbir bileşen okumuyor');
@@ -176,7 +177,7 @@ describe('Config tab: changed settings by section, a shows all, unread flagged',
       for (let i = 0; i < 100 && !frame.includes('Stuck or waiting'); i++) await new Promise(resolve => setTimeout(resolve, 10));
       await press('8');
       expect(frame).toContain('(max_workers)'); expect(frame).not.toContain('(backup)'); expect(frame).toContain('a all/changed');
-      await press('a'); expect(frame).toContain('(backup)'); expect(frame).toContain('Showing all 6 settings');
+      await press('a'); expect(frame).toContain('(backup)'); expect(frame).toContain('Showing all 7 settings');
       await press('/'); await press('backup'); await press('\r');
       expect(frame).toContain('(backup)'); expect(frame).not.toContain('(max_workers)');
       await press('\u001b'); await press('a'); expect(frame).not.toContain('(backup)');

@@ -3,7 +3,7 @@ import { prepareProductDirectory, getConfigKnownSecrets, redactForRecord, type C
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { applyConfirmedEffects } from '#composition/core/approvals/index.js';
-import { openHostProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY } from '#adapters/index.js';
+import { openHostProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY, legacyProjectInstructions } from '#adapters/index.js';
 import { createWorkspaceScope } from '#adapters/index.js';
 import { WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { ProjectInstructionPort, InstructionInitPreview } from '#engine/index.js';
@@ -13,7 +13,7 @@ import type { EffectCommand } from '#domain/index.js';
 async function initialize(root: string, preview: InstructionInitPreview, scopeId: string, options: ConfigLoadOptions) {
   // Reject forged previews as well as any content/path change between preview and confirmation.
   if (preview.schemaVersion !== 1 || instructionDigest(JSON.stringify(preview.changes)) !== preview.digest) throw new Error('unsafe');
-  const allowed = new Set([PROJECT_INSTRUCTION_REGISTRY.files[0], ...PROJECT_INSTRUCTION_REGISTRY.bridges.map(row => row.path)]);
+  const allowed = new Set([PROJECT_INSTRUCTION_REGISTRY.terminalFiles[0]]);
   if (new Set(preview.changes.map(change => change.path)).size !== preview.changes.length || preview.changes.some(change => !allowed.has(change.path))) throw new Error('unsafe');
   const context = await loadConfiguredScopeContext(root, scopeId, options, 'write'), { layout } = context;
   const scope = await createWorkspaceScope(root);
@@ -41,3 +41,5 @@ export async function configuredProjectInstructions(root: string, options: Confi
       return initialize(reader.root, preview, scope, options);
     } };
 }
+/** Owner S6 (2026-10-31): doctor's read-only legacy-instruction observation, bound through this unit (no adapter re-export across units). */
+export const inspectLegacyProjectInstructions = legacyProjectInstructions;

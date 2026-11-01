@@ -19,7 +19,7 @@ export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REV
 export class ModelCatalogError extends Error {
   constructor(readonly code: ModelCatalogErrorCode, readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
 }
-const catalogDocumentSchema = z.unknown().transform((input, context): ProviderCatalogDocument => {
+const catalogDocumentSchema = z.unknown().optional().transform((input, context): ProviderCatalogDocument => {
   try { return parseProviderCatalogDocument(input); }
   catch (error) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof ProviderCatalogError ? error.code : 'PROVIDER_CATALOG_INVALID' });
@@ -27,33 +27,33 @@ const catalogDocumentSchema = z.unknown().transform((input, context): ProviderCa
   }
 });
 const base = { schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), commandId: clientCommandIdSchema, scopeId: identitySchema };
-export const modelCatalogTargetSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema.nullable() }).strict().readonly();
+export const modelCatalogTargetSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema.nullable() }).readonly();
 /** Read query (WORKER-CURRENCY-2): the catalog as one scope sees it, optionally one channel. */
-export const modelCatalogQuerySchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
-  channelId: identitySchema.optional() }).strict().readonly();
+export const modelCatalogQuerySchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
+  channelId: identitySchema.optional() }).readonly();
 export type ModelCatalogQuery = Readonly<z.infer<typeof modelCatalogQuerySchema>>;
 export const modelCatalogCommandSchema = z.discriminatedUnion('action', [
-  z.object({ ...base, action: z.literal('register'), catalog: catalogDocumentSchema }).strict(),
-  z.object({ ...base, action: z.enum(['activate', 'deactivate']), channelId: identitySchema, modelId: exactModelIdSchema.nullable(),
-    expectedRevision: counterSchema }).strict(),
+  z.strictObject({ ...base, action: z.literal('register'), catalog: catalogDocumentSchema }),
+  z.strictObject({ ...base, action: z.enum(['activate', 'deactivate']), channelId: identitySchema, modelId: exactModelIdSchema.nullable(),
+    expectedRevision: counterSchema }),
 ]).readonly();
-export const modelCatalogChannelRecordSchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
+export const modelCatalogChannelRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
   revision: counterSchema.positive(), providerVersion: counterSchema.positive(), channel: catalogChannelSchema, catalogRevision: identitySchema,
-}).strict().readonly();
-export const modelCatalogModelRecordSchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
+}).readonly();
+export const modelCatalogModelRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), channelId: identitySchema,
   modelId: exactModelIdSchema, revision: counterSchema.positive(), providerVersion: counterSchema.positive(), model: catalogModelSchema,
-  catalogRevision: identitySchema }).strict().refine(record => record.model.nativeId === record.modelId).readonly();
-export const modelCatalogActivationRecordSchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
+  catalogRevision: identitySchema }).refine(record => record.model.nativeId === record.modelId).readonly();
+export const modelCatalogActivationRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
   channelId: identitySchema, modelId: exactModelIdSchema.nullable(), revision: counterSchema.positive(), state: z.enum(['active', 'inactive']),
-}).strict().readonly();
-const changeSchema = z.object({ kind: z.enum(['channel', 'model', 'activation']), channelId: identitySchema,
-  modelId: exactModelIdSchema.nullable(), revision: counterSchema.positive() }).strict().readonly();
-export const modelCatalogReceiptSchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION),
+}).readonly();
+const changeSchema = z.strictObject({ kind: z.enum(['channel', 'model', 'activation']), channelId: identitySchema,
+  modelId: exactModelIdSchema.nullable(), revision: counterSchema.positive() }).readonly();
+export const modelCatalogReceiptSchema = z.strictObject({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION),
   command: modelCatalogCommandSchema, actor: modelActivationActorSchema,
-  authorizations: z.array(z.object({ target: modelCatalogTargetSchema, action: z.enum(['activate', 'deactivate']),
-    level: z.enum(['installation', 'scope']), authorization: modelActivationAuthorizationSchema }).strict().readonly()).min(1).readonly(),
+  authorizations: z.array(z.strictObject({ target: modelCatalogTargetSchema, action: z.enum(['activate', 'deactivate']),
+    level: z.enum(['installation', 'scope']), authorization: modelActivationAuthorizationSchema }).readonly()).min(1).readonly(),
   changes: z.array(changeSchema).readonly(), admittedAtMs: counterSchema,
-}).strict().refine(receipt => receipt.authorizations.every(entry => entry.level === (receipt.command.action === 'register' ? 'installation' : 'scope'))).readonly();
+}).refine(receipt => receipt.authorizations.every(entry => entry.level === (receipt.command.action === 'register' ? 'installation' : 'scope'))).readonly();
 
 export type ModelCatalogCommand = Readonly<z.infer<typeof modelCatalogCommandSchema>>;
 export type ModelCatalogTarget = Readonly<z.infer<typeof modelCatalogTargetSchema>>;
@@ -82,7 +82,7 @@ export type ModelCatalogReceipt = Readonly<z.infer<typeof modelCatalogReceiptSch
 export type ModelCatalogChange = z.infer<typeof changeSchema>;
 
 const envelope = createImmutableJsonObjectSchema(PROVIDER_CATALOG_WIRE_LIMITS);
-function strict<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown, code: ModelCatalogErrorCode): T {
+function strict<T>(schema: z.ZodType<T, unknown>, input: unknown, code: ModelCatalogErrorCode): T {
   const copied = envelope.safeParse(input);
   const parsed = copied.success ? schema.safeParse(copied.data) : null;
   if (!parsed?.success) throw new ModelCatalogError(code);

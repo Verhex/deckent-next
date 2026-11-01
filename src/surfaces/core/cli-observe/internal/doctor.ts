@@ -40,6 +40,13 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   return {
     egress: await egressFacts(root, config, context, options),
     providerSpending, budgetPeriodText,
+    modelConnections: await Promise.all((((config as Record<string, unknown>)['provider_invocation_profiles'] as { profiles?: { id: string; scopeId: string; bindingDigest: string; reference: Parameters<NonNullable<KernelCommandContext['inspectModelBinding']>>[1]; protocol: { family: string; version: string } }[] } | undefined)?.profiles ?? [])
+      .filter(profile => profile.scopeId === scopeId && profile.protocol.family === 'openai-chat-completions').map(async profile => {
+        const binding = await context.inspectModelBinding?.(root, profile.reference, options).catch(() => null);
+        const capability = binding?.status === 'declared' ? binding.definition.model.protocols.find(protocol => protocol.family === profile.protocol.family && protocol.version === profile.protocol.version)?.capabilities.find(row => row.id === 'tool-calls' && row.version === 1) : null;
+        return { profile: profile.id, tools: capability?.state === 'supported' ? 'available' as const : capability?.state === 'unsupported' ? 'none' as const : 'unknown' as const,
+          stale: binding != null && (binding.status !== 'declared' || binding.binding.digest !== profile.bindingDigest) };
+      })),
     catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry }, // I-S7: the first-job steps doctor names
@@ -127,6 +134,8 @@ async function measure(call: KernelCall, context: KernelCommandContext) {
     ...(toolchains ? { toolchains } : {}), ...(imageBuilding ? { imageBuilding } : {}) };
   const facts = await checkFacts(root, config, context, options, args.toolchains, poolReadiness.status, locale);
   const checks = [...doctorChecks(data, facts, locale)];
+  if (await context.inspectLegacyProjectInstructions?.(root).catch(() => false)) checks.push({ group: 'setup', id: 'instructions.legacy', state: 'warning',
+    text: t('setup.instructions.legacy', {}, locale), next: t('setup.instructions.legacyNext', {}, locale) });
   // BeUser D-04/ZEY-02: missing founder cells are a warning with the card's exact command, never a green row (pool hold, operations need them).
   if (ownerBaseline && ['plan', 'current'].includes(ownerBaseline.status)) checks.push(ownerBaseline.missing ? { group: 'security', id: 'owner-baseline', state: 'warning',
     text: t('doctor.check.ownerBaseline.missing', { count: ownerBaseline.missing }, locale), next: t('doctor.check.ownerBaseline.next', { scope: policyScope! }, locale) }

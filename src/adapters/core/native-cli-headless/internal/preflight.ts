@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ProcessEvidence } from '#adapters/core/process-runner/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
@@ -8,8 +8,9 @@ import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type He
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation, type HeadlessIsolationSeal } from './realm.js';
 import { loginRecordPath } from './login-lock.js';
 
-/** What a passing preflight proved for one executable state; the call's init guard compares the reported CLI version with it. */
-export interface HeadlessPreflight { readonly version: string; readonly flagSetDigest: string; readonly runDir: string; readonly env: Readonly<Record<string, string>>;
+/** What a passing preflight proved for one executable state (S7: `executable` is the realpath the connected path resolved to now, the file every spawn
+ * binds); the call's init guard compares the reported CLI version with it. */
+export interface HeadlessPreflight { readonly executable: string; readonly version: string; readonly flagSetDigest: string; readonly runDir: string; readonly env: Readonly<Record<string, string>>;
   readonly isolation: HeadlessIsolationSeal }
 /** Per process (every service start re-runs it): keyed by the executable's realpath, size, mtime and inode, config dir, registry revision and the
  * realm's launcher (S3-5: a passing check is always an isolated one). */
@@ -57,8 +58,9 @@ export function headlessAuth(auth: HeadlessEntry['headless']['auth'], output: Re
 export async function headlessPreflight(entry: HeadlessEntry, definition: NativeCliHeadlessDefinition, now: () => number, isolation: HeadlessIsolation,
   signal?: AbortSignal): Promise<HeadlessPreflight> {
   if (process.getuid?.() !== definition.ownerUid) refuse('HEADLESS_OWNER_MISMATCH');
+  // S7 (owner 2026-10-31): the person's path is resolved on every call (a CLI that updates itself moves its realpath); the key below re-runs the check once.
   const executable = await realpath(definition.executable).catch(() => null), info = executable ? await stat(executable).catch(() => null) : null;
-  if (!executable || executable !== definition.executable || !info?.isFile() || (info.mode & 0o111) === 0) refuse('HEADLESS_CLI_UNAVAILABLE');
+  if (!executable || !info?.isFile() || (info.mode & 0o111) === 0) refuse('HEADLESS_CLI_UNAVAILABLE');
   const config = await stat(definition.configDir).catch(() => null);
   if (!config?.isDirectory() || config.uid !== definition.ownerUid) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
   const { headless, command } = entry, runDir = join(definition.stateDir, 'run'), flagSetDigest = headlessFlagSetDigest(entry);
@@ -108,8 +110,11 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     const auth = headlessAuth(headless.auth, await run(headless.preflight.authStatusArgs), definition.configDir);
     if (auth.state === 'signed-out') refuse('HEADLESS_LOGIN_REQUIRED');
     if (auth.state !== 'signed-in') refuse('HEADLESS_PREFLIGHT_FAILED', { check: auth.state === 'config-dir' ? 'config-dir' : 'auth-status' });
-    const sealed = Object.freeze({ version: version, flagSetDigest, runDir, env, isolation: isolated });
-    await record({ state: 'open', version, size: info.size, mtimeMs: info.mtimeMs, isolation: isolated,
+    const sealed = Object.freeze({ executable, version, flagSetDigest, runDir, env, isolation: isolated });
+    // S7: the version an earlier passing check of this connection proved, kept while it differs (the doctor's "CLI updated A → B" note).
+    const prior = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; version?: unknown; updatedFrom?: unknown }, () => null);
+    const updatedFrom = prior?.state === 'open' && typeof prior.version === 'string' && prior.version !== version ? prior.version : prior?.version === version && typeof prior.updatedFrom === 'string' ? prior.updatedFrom : null;
+    await record({ state: 'open', version, updatedFrom, size: info.size, mtimeMs: info.mtimeMs, isolation: isolated,
       auth: { authMethod: auth.authMethod, apiProvider: auth.apiProvider, subscriptionType: auth.subscriptionType } });
     passed.set(key, sealed); return sealed;
   } catch (error) { return closed(error); }

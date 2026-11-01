@@ -1,12 +1,12 @@
+import { persistedInteger, identitySchema, parseModelInvocationControlRecord } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { identitySchema, parseModelInvocationControlRecord } from '#domain/index.js';
 import { AttemptStoreError, verifyModelInvocationRecord } from '#engine/index.js';
 
 type Row = Readonly<Record<string, unknown>>;
-const counter = z.number().int().nonnegative().safe();
-const allocationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
-  maxCalls: counter.positive(), maxInFlight: counter.positive(), lifetimeCalls: counter, inFlight: counter }).strict()
+const counter = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const allocationSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
+  maxCalls: counter.positive(), maxInFlight: counter.positive(), lifetimeCalls: counter, inFlight: counter })
   .superRefine((value, context) => {
     if (value.inFlight > value.lifetimeCalls || value.lifetimeCalls > value.maxCalls || value.inFlight > value.maxInFlight) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_ALLOCATION_INVALID' });

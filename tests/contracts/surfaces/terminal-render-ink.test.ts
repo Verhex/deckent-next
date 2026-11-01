@@ -1,11 +1,12 @@
 import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
-import { render } from 'ink';
+import { Box, Text, render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AssistantLive, AssistantUnitRow, WorklineApp, renderAssistantStream, startAssistantStream, WorklinePaletteProvider, resolveWorklinePalette, type AssistantRenderLabels, type ColorTier,
+import { AssistantLive, AssistantUnitRow, WorklineApp, renderAssistantStream, startAssistantStream, streamStepEntries, WorklinePaletteProvider, resolveWorklinePalette, type AssistantRenderLabels, type ColorTier,
   type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import type { ToolUnit } from '#surfaces/core/terminal-render/index.js';
+import { LedgerEntryRow, stepSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
 const render_: AssistantRenderLabels = { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok',
@@ -59,6 +60,9 @@ describe('rendered assistant output in the Ink workline', () => {
     for (const expected of ['● bot', '  Plan', '  Use bold and npm test.', '  ╭─ ts', '  │ const answer = 42; // ok', '  ╰─', '  │ Step  │ Owner │', '  │ build │ ci    │'])
       expect(screen).toContain(expected);
     expect(screen).toMatch(/\n {2}\d+\.\ds\n/);
+    expect(screen).toMatch(/Plan\n[ \t]*\n {2}Use bold/);
+    expect(screen).toMatch(/npm test\.\n[ \t]*\n {2}╭─ ts/);
+    expect(screen).toMatch(/╰─\n[ \t]*\n {2}┌/);
     expect(screen).not.toContain('```'); expect(screen).not.toContain('**');
     expect(view.stdout.text).not.toMatch(COLOUR);
   });
@@ -177,6 +181,26 @@ describe('streaming live region', () => {
     expect(view.stdout.last).toContain('│ echo 12');
     expect(view.stdout.last).not.toContain('echo 11\n');
     expect(view.stdout.last).not.toContain('╰─');
+    // The live block and its settled ledger row keep exactly the same gap, even with the tool-step gap also set.
+    for (const source of ['# Başlık\nDevam', 'Prose\n```sh\nx', 'Prose\n\nYeni']) {
+      const cut = source.lastIndexOf('\n') + 1, pending = source.slice(cut);
+      let step = renderAssistantStream(startAssistantStream(0), { kind: 'text', text: source.slice(0, cut) }, 0);
+      step = renderAssistantStream(step.state, { kind: 'text', text: pending }, 1);
+      const live = mountElement(createElement(Box, { flexDirection: 'column' }, createElement(Text, null, 'ANCHOR'),
+        createElement(AssistantLive, { tail: step.liveTail, narration: null, labels: render_, lead: false, spaceBefore: true })));
+      await until(() => live.stdout.last.includes(pending), 'spaced live block');
+      const done = renderAssistantStream(step.state, { kind: 'done', finish: 'cancelled' }, 2);
+      const entry = streamStepEntries(done)[0]!;
+      const previous = { schemaVersion: 1 as const, kind: 'chat' as const, id: 'previous', role: 'assistant' as const, text: 'ANCHOR' };
+      const before = live.stdout.last;
+      live.rerender(createElement(Box, { flexDirection: 'column' }, createElement(Text, null, 'ANCHOR'),
+        createElement(LedgerEntryRow, { entry, labels: { runCard: 'run', workerCard: 'worker', chatUser: 'you', chatAssistant: 'bot', render: render_ },
+          spaceBefore: stepSpaceBefore(previous, entry) })));
+      await settle();
+      expect(live.stdout.last.trimEnd()).toBe(before.trimEnd());
+      expect(before).toMatch(/ANCHOR\n[ \t]*\n {2}/);
+      expect(before).not.toMatch(/\n[ \t]*\n[ \t]*\n/);
+    }
   });
 });
 

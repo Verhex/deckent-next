@@ -34,7 +34,7 @@ type Tariff = Readonly<{ modelId: string; source: Readonly<{ url: string; retrie
  * sealed with the row it came from (`source.catalog`); null when the row states none. Terms for another model or endpoint, or a malformed
  * document, are a typed refusal: a price is never guessed or completed.
  */
-function catalogTariff<T extends Tariff>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, row: ConnectCatalogRow | null | undefined, nativeId: string,
+function catalogTariff<T extends Tariff>(schema: z.ZodType<T, unknown>, row: ConnectCatalogRow | null | undefined, nativeId: string,
   endpoint?: string): T | null {
   const term = row && 'connect' in row.model ? row.model.connect?.tariff : undefined;
   if (term === undefined) return null;
@@ -67,7 +67,7 @@ function refuseUnusedTerm(row: ConnectCatalogRow | null | undefined, term: 'tari
   if (row && 'connect' in row.model && row.model.connect?.[term] !== undefined) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
 }
 /** A row's `connect.route` for exactly this model, parsed by the registry's own route schema (the model id is the row's). */
-function catalogRoute<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, row: ConnectCatalogRow | null | undefined, nativeId: string): T | undefined {
+function catalogRoute<T>(schema: z.ZodType<T, unknown>, row: ConnectCatalogRow | null | undefined, nativeId: string): T | undefined {
   const term = row && 'connect' in row.model ? row.model.connect?.route : undefined;
   if (term === undefined) return undefined;
   const parsed = schema.safeParse({ ...structuredClone(term), modelId: nativeId });

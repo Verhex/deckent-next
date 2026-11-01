@@ -1,4 +1,13 @@
 {
   "tuiqueue.shortcut": "Alt+Up  take the last queued message back to edit (empty line)",
-  "tuiqueue.withdrawn": "Taken back from the queue (it will not run): {text}"
+  "tuiqueue.steerShortcut": "Ctrl+Enter  add the line to the running turn at its next model call (Alt+Enter where Ctrl+Enter is a plain Enter)",
+  "tuiqueue.withdrawn": "Taken back from the queue (it will not run): {text}",
+  "tuiqueue.withdraw": "Alt+Up takes the last one back",
+  "tuiqueue.more": "+{count} more",
+  "tuiqueue.steered": "joins this turn at its next model call",
+  "tuiqueue.steerPlaceholder.kitty": "Enter queues for after this turn · Ctrl+Enter adds to it now",
+  "tuiqueue.steerPlaceholder.other": "Enter queues for after this turn · Alt+Enter adds to it now",
+  "tuiqueue.steerFull": "This turn takes at most {limit} added lines; queued for after it instead: {text}",
+  "tuiqueue.steerReturned": "The turn ended before the line was added; sent as the next message: {text}",
+  "tuiqueue.steerBack": "The turn stopped before the line was added; it is back in the input: {text}"
 }

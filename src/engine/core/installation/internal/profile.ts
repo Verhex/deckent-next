@@ -4,20 +4,20 @@ import { counterSchema, identitySchema, immutableJsonObjectSchema, policySchema 
 import { executionPoolSchema } from '#engine/core/runs/index.js';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const profileIdentitySchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly();
-const installationProfilePayloadObjectSchema = z.object({
+const profileIdentitySchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly();
+const installationProfilePayloadObjectSchema = z.strictObject({
   schemaVersion: z.literal(1),
   profile: profileIdentitySchema,
   scopeId: identitySchema,
   configuration: immutableJsonObjectSchema,
   policy: policySchema,
   pool: executionPoolSchema,
-  shutdown: z.object({ enabled: z.boolean() }).strict().readonly(),
-}).strict();
+  shutdown: z.strictObject({ enabled: z.boolean() }).readonly(),
+});
 export const installationProfilePayloadSchema = installationProfilePayloadObjectSchema.readonly();
 
 export const installationProfileSchema = installationProfilePayloadObjectSchema.extend({
-  profile: z.object({ id: identitySchema, version: counterSchema.positive(), digest: digestSchema }).strict().readonly(),
+  profile: z.strictObject({ id: identitySchema, version: counterSchema.positive(), digest: digestSchema }).readonly(),
 }).strict().readonly();
 
 export type InstallationProfilePayload = z.infer<typeof installationProfilePayloadSchema>;

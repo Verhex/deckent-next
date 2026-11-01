@@ -1,15 +1,15 @@
+import { persistedString, persistedInteger, attemptIdentitySchema, sameAttemptIdentity, AUDIT_TRACKED_PATHS_MAX, type AttemptIdentity } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { attemptIdentitySchema, sameAttemptIdentity, AUDIT_TRACKED_PATHS_MAX, type AttemptIdentity } from '#domain/index.js';
 import { AttemptStoreError, type AttemptStore } from '#engine/core/attempts/index.js';
 
 /** One lifted hit: the path, the rule it matched and the exact entry that lifted it (an `execution.secretGate` list entry or a declared dependency tree). */
-export const workerTreeExclusionSchema = z.object({ path: z.string().min(1).max(4096), rule: z.string().min(1).max(600),
-  by: z.string().regex(/^(?:allowPatternPaths|acknowledgedDenyPaths|dependencyTree):.{1,512}$/su) }).strict().readonly();
+export const workerTreeExclusionSchema = z.strictObject({ path: persistedString(z.string().min(1).max(4096)), rule: persistedString(z.string().min(1).max(600)),
+  by: z.string().regex(/^(?:allowPatternPaths|acknowledgedDenyPaths|dependencyTree):.{1,512}$/su) }).readonly();
 export type WorkerTreeExclusion = z.infer<typeof workerTreeExclusionSchema>;
 /** S6 (owner 2026-10-15): the dispatched attempt's config exclusions, kept in the attempt journal so every Run card can show them. */
-export const workerTreeExclusionRecordSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, count: z.number().int().positive().safe(),
-  entries: z.array(workerTreeExclusionSchema).min(1).max(AUDIT_TRACKED_PATHS_MAX).readonly() }).strict().readonly();
+export const workerTreeExclusionRecordSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, count: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  entries: z.array(workerTreeExclusionSchema).min(1).max(AUDIT_TRACKED_PATHS_MAX).readonly() }).readonly();
 export type WorkerTreeExclusionRecord = z.infer<typeof workerTreeExclusionRecordSchema>;
 export const workerTreeExclusionCommandId = (identity: AttemptIdentity) =>
   'worker-tree-excluded-' + createHash('sha256').update(JSON.stringify(attemptIdentitySchema.parse(identity))).digest('hex');

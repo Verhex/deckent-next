@@ -5,9 +5,9 @@ import limits from './work-class-limits.json' with { type: 'json' };
 /** Why a declared candidate was not chosen: the typed admission refusal its model would have received (catalog, scope activation,
  * lifecycle, channel/CLI match, CLI floor, effort support) or the tier/role refusal (M3). Bounded identifier; never free text. */
 const reasonSchema = z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/);
-export const assignmentPolicyReferenceSchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly();
+export const assignmentPolicyReferenceSchema = z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly();
 export const assignmentEffortSourceSchema = z.enum(['candidate', 'catalog', 'cli-default']);
-export const workerAssignmentSkipSchema = z.object({ index: counterSchema, channelId: identitySchema, modelId: exactModelIdSchema, reason: reasonSchema }).strict().readonly();
+export const workerAssignmentSkipSchema = z.strictObject({ index: counterSchema, channelId: identitySchema, modelId: exactModelIdSchema, reason: reasonSchema }).readonly();
 /**
  * ATAMA-1 seal (owner ASS1, A1, A5): how the system chose a task's worker when the work input left the model open. Frozen with the Run next to
  * the compiled profile, whose pin stays the execution truth; this record is the audit of the choice: the WorkClass and its policy revision, the
@@ -19,10 +19,10 @@ const sealShape = { workClass: identitySchema, workClassRevision: identitySchema
   candidatePolicy: assignmentPolicyReferenceSchema,
   candidateIndex: counterSchema, channelId: identitySchema, modelId: exactModelIdSchema,
   catalogRevision: identitySchema, modelRevision: counterSchema.positive(), activationRevision: counterSchema.positive(),
-  effort: z.object({ level: z.enum(REASONING_EFFORTS).nullable(), source: assignmentEffortSourceSchema }).strict().readonly() };
-const exactSealSchema = z.object({ schemaVersion: z.literal(1), ...sealShape,
+  effort: z.strictObject({ level: z.enum(REASONING_EFFORTS).nullable(), source: assignmentEffortSourceSchema }).readonly() };
+const exactSealSchema = z.strictObject({ schemaVersion: z.literal(1), ...sealShape,
   skipped: z.array(workerAssignmentSkipSchema).max(limits.candidatesPerPolicy).readonly(),
-}).strict().refine(value => value.candidateIndex < limits.candidatesPerPolicy && value.skipped.length === value.candidateIndex
+}).refine(value => value.candidateIndex < limits.candidatesPerPolicy && value.skipped.length === value.candidateIndex
   && value.skipped.every((row, index) => row.index === index)).readonly();
 /**
  * M3 seal v2: the choice was reached through a candidate SELECTOR (or after one). `candidateIndex` is the declared entry's position in the
@@ -32,11 +32,11 @@ const exactSealSchema = z.object({ schemaVersion: z.literal(1), ...sealShape,
  * expansion (selector, registry revision, ordered exact ids), so the choice is auditable without the live registry. A choice that never
  * met a selector keeps the v1 seal, byte-identical to alpha.54.
  */
-const selectorSealSchema = z.object({ schemaVersion: z.literal(2), ...sealShape,
-  selector: z.object({ roleRevision: identitySchema, expanded: counterSchema.positive().max(limits.expandedCandidatesPerPolicy), position: counterSchema,
-    expansionDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().refine(value => value.position < value.expanded).readonly().optional(),
+const selectorSealSchema = z.strictObject({ schemaVersion: z.literal(2), ...sealShape,
+  selector: z.strictObject({ roleRevision: identitySchema, expanded: counterSchema.positive().max(limits.expandedCandidatesPerPolicy), position: counterSchema,
+    expansionDigest: z.string().regex(/^[a-f0-9]{64}$/) }).refine(value => value.position < value.expanded).readonly().optional(),
   skipped: z.array(workerAssignmentSkipSchema).max(limits.candidatesPerPolicy + limits.expandedCandidatesPerPolicy).readonly(),
-}).strict().refine(value => value.candidateIndex < limits.candidatesPerPolicy
+}).refine(value => value.candidateIndex < limits.candidatesPerPolicy
   && value.skipped.every((row, index) => row.index <= value.candidateIndex && (index === 0 || value.skipped[index - 1]!.index <= row.index))
   && value.skipped.filter(row => row.index === value.candidateIndex).length === (value.selector?.position ?? 0)).readonly();
 /**

@@ -34,7 +34,8 @@ describe('MCP SDK ajv stub against the installed SDK', () => {
   it('bundles no ajv/fast-uri/cfworker with the stub; the stubbed bundle runs with Deckent\'s validator and fails closed without one', async () => {
     const { outdir, violations, hits } = await bundle(true);
     expect(violations).toEqual([]);
-    expect(Object.fromEntries(hits)).toMatchObject({ '@modelcontextprotocol/client/_shims': 1, '@modelcontextprotocol/server/_shims': expect.any(Number) });
+    // onResolve runs per importer; SDK chunk layout may change the count, but both packages must be stubbed.
+    for (const name of ['client', 'server']) expect(hits.get(`@modelcontextprotocol/${name}/_shims`)).toBeGreaterThan(0);
     const sdk = await import(pathToFileURL(join(outdir, 'stdin.js')).href) as Record<string, new (...args: unknown[]) => unknown>;
     expect(() => new sdk.Client!({ name: 't', version: '1' }, { jsonSchemaValidator: new sdk.DeckentJsonSchemaValidator!() })).not.toThrow();
     expect(() => new sdk.Server!({ name: 't', version: '1' }, { capabilities: { tools: {} }, jsonSchemaValidator: new sdk.DeckentJsonSchemaValidator!() })).not.toThrow();
@@ -45,13 +46,13 @@ describe('MCP SDK ajv stub against the installed SDK', () => {
   it('the guard sees the real provider when the stub is not applied (positive control)', async () => {
     const { violations } = await bundle(false);
     expect(violations).toEqual(expect.arrayContaining(['@modelcontextprotocol/client/_shims was bundled without the ajv stub',
-      '@modelcontextprotocol/server/_shims was bundled without the ajv stub', expect.stringMatching(/^embedded fast-uri@3\.1\.0 in @modelcontextprotocol\/client@/u),
+      '@modelcontextprotocol/server/_shims was bundled without the ajv stub', expect.stringMatching(/^embedded fast-uri@3\.1\.8 in @modelcontextprotocol\/client@/u),
       expect.stringMatching(/^bundle input node_modules\/@modelcontextprotocol\/server\/dist\/ajvProvider-/u)]));
   }, 60_000);
 
   it('the guard refuses the SDK\'s cf-worker provider if anything bundles it (installed SDK)', async () => {
     const { violations } = await bundle(true, `${ENTRY}\n${CF_WORKER}`);
     expect(violations).toEqual([expect.stringMatching(/^bundle input node_modules\/@modelcontextprotocol\/server\/dist\/cfWorkerProvider-/u),
-      expect.stringMatching(/^embedded @cfworker\/json-schema@4\.1\.1 in @modelcontextprotocol\/server@2\.3\.1/u)]);
+      expect.stringMatching(/^embedded @cfworker\/json-schema@4\.1\.1 in @modelcontextprotocol\/server@2\.4\.0/u)]);
   }, 60_000);
 });

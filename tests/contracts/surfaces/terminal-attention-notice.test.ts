@@ -1,7 +1,10 @@
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFocusTracker, mouseFilteredInput, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
-import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
+import { BACKGROUND_QUERY, createFocusTracker, mouseFilteredInput, takeFocusReports, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON } from '#surfaces/core/terminal-window/index.js';
+import { createElement, Fragment } from 'react';
+import { useInput } from 'ink';
+import { openTerminalHost } from '#surfaces/core/terminal-host/index.js';
+import { WorklineApp, runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, WORKLINE_TEST_LABELS, settle, until } from '../support/workline-harness.js';
 
 // T2 (alpha.54): the terminal is asked for focus reports (mode 1004) and rings BEL only while it reported that its window lost focus.
@@ -18,14 +21,101 @@ describe('focus reports', () => {
     tracker.report('out'); expect(tracker.source.state()).toBe('unfocused');
     tracker.report('in'); expect(tracker.source.state()).toBe('focused'); expect(heard).toEqual(['out', 'in']);
   });
-  it('the filtered input never hands a focus report to Ink and tracks the state', async () => {
+  it('the filtered input never hands a focus report or a terminal colour answer to Ink, cut at any byte; held bytes are bounded and Ctrl+C always passes', async () => {
     const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;
-    const filtered = mouseFilteredInput(real), seen: string[] = [];
+    const filtered = mouseFilteredInput(real), seen: string[] = [], queries: string[] = [], wheel: number[] = [];
     filtered.input.on('data', chunk => seen.push(String(chunk)));
+    filtered.wheel.subscribe(step => wheel.push(step));
     (real as unknown as PassThrough).write('x\u001b[Oy');
     await settle(20);
     expect(seen.join('')).toBe('xy'); expect(filtered.focus.state()).toBe('unfocused');
-    filtered.close();
+    const read = (bytes: string) => real.emit('data', Buffer.from(bytes)), ask = (limitMs: number) => filtered.background.ask(query => queries.push(query), limitMs);
+    // TEMA-OKUNURLUK §3.2: OSC 11 then DA1; keys typed before and after the answer reach Ink in order; the DA1 answer ends the probe.
+    let probe = ask(1_000);
+    read('a\u001b]11;rgb:f0f0/ecec/e5e5\u001b\\b'); read('\u001b[?62;22c');
+    expect(await probe).toBe('#F0ECE5'); expect(queries).toEqual([BACKGROUND_QUERY]);
+    probe = ask(1_000); read('\u001b[?1;2c'); expect(await probe).toBeNull();
+    // A late answer (after the limit; slow SSH) is taken out and not used; Ctrl+C ends a probe and still reaches Ink.
+    expect(await ask(10)).toBeNull(); read('\u001b]11;rgb:0000/0000/0000\u0007c\u001b]10;rgb:ff/ff/ff\u0007');
+    probe = ask(1_000); read('\u0003'); expect(await probe).toBeNull();
+    // Answers cut at a read boundary stay out; a cut `ESC [` still reaches the mouse filter whole; DEC 2031 notices are heard.
+    let notices = 0; filtered.background.onPaletteNotice(() => { notices++; });
+    read('\u001b]11;rgb:ff'); read('/ff/ff\u0007d'); read('\u001b['); read('?62c'); read('\u001b['); read('<65;1;1M'); read('\u001b[?997;2ne');
+    await settle(20);
+    expect(seen.join('')).toBe('xyabc\u0003de'); expect(wheel).toEqual([1]); expect(notices).toBe(1);
+    // Astra 2882 R1: every split of each answer (two reads at each position, then byte by byte) stays out, a lone ESC included, and is used.
+    const light = '\u001b]11;rgb:f0/ec/e5\u0007\u001b[?62;22c', lightSt = '\u001b]11;rgb:f0f0/ecec/e5e5\u001b\\\u001b[?62;22c';
+    for (const reply of [light, lightSt]) for (let at = 1; at <= reply.length; at++) {
+      probe = ask(1_000); const parts = at === reply.length ? [...reply] : [reply.slice(0, at), reply.slice(at)];
+      for (const part of parts) read(part);
+      expect(await probe, JSON.stringify(parts)).toBe('#F0ECE5');
+    }
+    for (let at = 1; at < 11; at++) { read('\u001b[?997;1n'.slice(0, at)); read('\u001b[?997;1n'.slice(at)); }
+    await settle(20);
+    expect(seen.join('')).toBe('xyabc\u0003de'); expect(notices).toBe(11);
+    // A lone ESC is the Escape key, held at most `answerHoldMs` (250) with or without a probe; a following key in time joins it (Alt+key, as terminals do).
+    seen.length = 0; read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(270); expect(seen.join('')).toBe('\u001b');
+    seen.length = 0; probe = ask(1_000); read('\u001b'); await settle(10); expect(seen.join('')).toBe(''); await settle(270); expect(seen.join('')).toBe('\u001b');
+    // F13: a recognised control frame never becomes keys at its size/time bound; Enter/Ctrl+C still break malformed frames immediately.
+    seen.length = 0; read('\u001b]11;rgb:ff'); read('ab\r'); read('\u001b]11;rgb:f'); read('\u0003'); expect(await probe).toBeNull();
+    probe = ask(1_000); read('\u001b['); read('99;5u'); expect(await probe).toBeNull();
+    read('\u001b]11;rgb:ff/'); await settle(280); read('ff/ff\u001b\\z');
+    read(`\u001b]11;rgb:${'f'.repeat(70)}`); read('y\u0007');
+    expect(seen.join('')).toBe('\r\u0003\u001b[99;5uz');
+    // R2: a plain CSI is still a possible key after 250 ms; only definite replies may drain on time.
+    vi.useFakeTimers();
+    try {
+      for (const [prefix, end] of [['\u001b[', 'A'], ['\u001b[1;5', 'C'], ['\u001b[99;5', 'u']]) {
+        seen.length = 0; read(prefix!); await vi.advanceTimersByTimeAsync(280); read(end!);
+        expect(seen.join('')).toBe(prefix! + end!);
+      }
+      // R1: incomplete strings must not swallow a fresh, possibly split kitty Ctrl+C, before/after either bound.
+      for (const frame of ['\u001b]11;rgb:ff', '\u001bP1$r']) for (const bound of ['none', 'time', 'size']) {
+        for (const kitty of ['\u001b[99;5u', '\u001b[99;5:1u']) for (let at = 1; at < kitty.length; at++) {
+          seen.length = 0; probe = ask(1_000); read(frame);
+          if (bound === 'time') await vi.advanceTimersByTimeAsync(280);
+          if (bound === 'size') read('f'.repeat(70));
+          read(kitty.slice(0, at)); read(kitty.slice(at));
+          expect(seen.join(''), `${JSON.stringify(frame)}/${bound}/${at}`).toBe(kitty);
+          expect(await probe).toBeNull();
+        }
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280); read('\u0003');
+        expect(seen.join('')).toBe('\u0003');
+        seen.length = 0; read(frame); read('\u001b'); read('\u0003'); expect(seen.join('')).toBe('\u0003');
+        // A new OSC replaces the broken string, whereas a late ST still terminates it without leaking an Escape.
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280);
+        read('\u001b'); read(']11;rgb:ff/ff/ff\u0007'); read('x'); expect(seen.join('')).toBe('x');
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280); read('\u001b'); read('\\y');
+        expect(seen.join('')).toBe('y');
+      }
+      for (const frame of ['\u001b[?', '\u001b[>', '\u001b[=', '\u001b]11;', '\u001bP1$r']) {
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280); read(frame.startsWith('\u001b[') ? '1;2c' : 'payload\u001b\\');
+        expect(seen.join(''), JSON.stringify(frame)).toBe('');
+      }
+      seen.length = 0; read(`\u001b[${'1'.repeat(70)}`); read('Az'); expect(seen.join('')).toBe('z');
+    } finally { vi.useRealTimers(); }
+    // All OSC/DCS and CSI replies, including secondary DA, are consumed at every split. Navigation, Alt keys and coalesced bursts survive.
+    for (const reply of ['\u001b]4;0;rgb:ff/ff/ff\u0007', '\u001bP1$r0m\u001b\\', '\u001b[>0;10;1c', '\u001b[0n', '\u001b[12;34R', '\u001b[4;600;800t', '\u001b[?2031;1$y']) {
+      seen.length = 0;
+      for (let at = 1; at < reply.length; at++) { read(reply.slice(0, at)); read(reply.slice(at)); }
+      for (const char of reply) read(char);
+      expect(seen.join(''), JSON.stringify(reply)).toBe('');
+    }
+    seen.length = 0; read('a\u001b[B\u001b[1;5A\u001b[200~paste\u001b[201~\u001bx\u001b\r');
+    expect(seen).toEqual(['a\u001b[B\u001b[1;5A\u001b[200~paste\u001b[201~\u001bx\u001b\r']);
+    // A delayed split after the initial ESC is the F13 PTY failure (80 ms). No response byte becomes Escape.
+    seen.length = 0; read('\u001b'); await settle(80); read(']11;rgb:f0/ec/e5\u001b\\'); expect(seen.join('')).toBe('');
+    // Astra 2886 R1: a new cut answer after a completed one gets its own window (t0 ESC, t40 answer + new cut answer, t60 its end: nothing leaks).
+    seen.length = 0; read('\u001b[?62c'); probe = ask(1_000); read('\u001b'); await settle(40);
+    read('\u001b]11;rgb:f0/ec/e5\u0007\u001b]11;rgb:1e/1e/'.slice(1)); await settle(20); read('1e\u0007\u001b[?62c');
+    expect(await probe).toBe('#1E1E1E'); await settle(60); expect(seen.join('')).toBe('');
+    // Astra 2886 R2: kitty's Ctrl+C (with and without an event type) cut at every byte still ends the probe and reaches Ink whole.
+    for (const kitty of ['\u001b[99;5u', '\u001b[99;5:1u']) for (let at = 1; at < kitty.length; at++) {
+      seen.length = 0; probe = ask(1_000); read(kitty.slice(0, at)); read(kitty.slice(at));
+      expect(await Promise.race([probe, settle(30).then(() => 'still open')]), `${at}`).toBeNull(); await settle(5); expect(seen.join('')).toBe(kitty);
+    }
+    read('\u001b[?62c'); filtered.close();
+    await kittyOpening();
   });
 });
 
@@ -111,3 +201,35 @@ describe('the terminal host', () => {
     await finish();
   });
 });
+
+/** R3: real host → Ink negotiation + useInput broadcast → onboarding automatic opening, with no composer dependency. */
+async function kittyOpening() {
+  const reply = '\u001b[?0u';
+  for (const fullscreen of [false, true]) for (const variant of ['whole', 'split', 'typed'] as const) {
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { output += String(chunk); done(); } }), { isTTY: true, columns: 80, rows: 24 });
+    let output = '', prepared!: (value: unknown) => void;
+    const opening = new Promise(resolve => { prepared = resolve; }), typed: string[] = [], shown: string[] = [];
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    function Observer() { useInput(input => { typed.push(input); }); return null; }
+    const host = await openTerminalHost({ palette: resolveWorklinePalette('none'), stdin: stdin as never, stdout: stdout as never, fullscreen,
+      view: context => createElement(Fragment, null, createElement(Observer), createElement(WorklineApp, {
+        context: { installationId: 'i', projectId: 'p', scopeId: 's' }, labels: WORKLINE_TEST_LABELS, target: 'scope', systemPrompt: 'S', historyMessages: 10, completeTurn: async () => 'x', errorText: String,
+        ...(context.handover ? { handover: context.handover } : {}),
+        onboarding: { opening, modelDraft: 'D', waiting: () => 'WAITING', open: async () => null } as never,
+      })) });
+    try {
+      await host.flushed(); await until(() => output.includes('READY') && output.includes('\u001b[?u'), 'first frame and negotiation');
+      if (variant === 'typed') { stdin.write('a'); await settle(30); expect(typed.join('')).toBe('a'); }
+      if (variant === 'whole') stdin.write(reply);
+      else for (const part of ['\u001b', '[?', '0', 'u']) { stdin.write(part); await settle(2); }
+      await until(() => output.includes('\u001b[>1u'), 'Ink enabled kitty');
+      // Every split, including a repeated late report after negotiation, stays out of every useInput subscriber.
+      for (let at = 1; at < reply.length; at++) { stdin.write(reply.slice(0, at)); stdin.write(reply.slice(at)); }
+      if (variant === 'typed') stdin.write(`x${reply}y`);
+      await settle(230); expect(typed.join(''), `${fullscreen}/${variant}`).toBe(variant === 'typed' ? 'axy' : '');
+      prepared({ total: 1, notice: null, show: async () => { shown.push('card'); return { intent: null, notice: { level: 'info', text: 'OPENED' } }; } });
+      await until(() => output.includes(variant === 'typed' ? 'WAITING' : 'OPENED'), 'automatic setup decision');
+      expect(shown).toEqual(variant === 'typed' ? [] : ['card']);
+    } finally { await host.close(); stdin.destroy(); stdout.destroy(); }
+  }
+}

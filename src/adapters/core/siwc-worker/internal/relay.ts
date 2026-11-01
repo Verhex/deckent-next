@@ -1,3 +1,4 @@
+import { persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns';
@@ -16,13 +17,13 @@ import { containerInitPeer } from './proc.js';
 import { siwcWorkerRequestBody, secretScrubber, type SiwcRelayRefusal } from './request.js';
 import { createAppServerTurn, type SiwcNativeApproval } from './client.js';
 
-const text = z.string().min(1).max(256), generation = z.number().int().nonnegative().safe();
+const text = persistedString(z.string().min(1).max(256)), generation = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 /** Nonsecret binding of one relay capability (U9 rev 6 §11.3): app, person, installation/company/scope, connection, Attempt/fence, generations, model. */
-export const siwcWorkerBindingSchema = z.object({ schemaVersion: z.literal(1), connectionId: z.string().uuid(), installationId: text, companyId: text,
-  person: z.object({ issuer: text, subject: text }).strict().readonly(), attempt: attemptIdentitySchema, model: text,
+export const siwcWorkerBindingSchema = z.strictObject({ schemaVersion: z.literal(1), connectionId: persistedUuid(), installationId: text, companyId: text,
+  person: z.strictObject({ issuer: text, subject: text }).readonly(), attempt: attemptIdentitySchema, model: text,
   /** U6 pin of this Attempt: the worker image id and the Codex CLI version its build receipt recorded. */
   imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), codexVersion: text,
-  generations: z.object({ connection: generation, custody: generation, consent: generation }).strict().readonly() }).strict().readonly();
+  generations: z.strictObject({ connection: generation, custody: generation, consent: generation }).readonly() }).readonly();
 export type SiwcWorkerBinding = z.infer<typeof siwcWorkerBindingSchema>;
 /** Container mount points of the relay channel and its pinned standalone programs (no credential path). */
 export const SIWC_WORKER_PATHS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs', hardening: '/run/deckent-hardening.node',

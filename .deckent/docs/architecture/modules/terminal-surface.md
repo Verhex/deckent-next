@@ -13,7 +13,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   run, worker and notice rows), single input owner, hints. **Events:** `slash`, `submit`, `cancel`, `exit`;
   the slash catalog is data (`slash-registry`). **Composer (P2):** the single input owner is a pure reducer plus a
   small Ink view (unit `surfaces/core/terminal-composer`): grapheme/cell-aware caret, readline editing and kill/yank, multiline
-  (Shift/Alt+Enter, Ctrl+J, trailing `\`), in-session history and Ctrl+R, atomic paste chips expanded on submit, a
+  (Shift+Enter, Ctrl+J, trailing `\`; Alt+Enter while no turn runs), in-session history and Ctrl+R, atomic paste chips expanded on submit, a
   slash palette (typing filters by prefix, then subsequence; Up/Down select; Enter runs the highlighted command — a command
   that takes an argument completes to `/name ` and waits, a fully typed name runs as typed; Tab completes; Esc closes until
   the text changes; Enter without suggestions sends the text), `?` shortcuts, and an `@file` picker (T-L5, protocol v15: typing
@@ -329,7 +329,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   truncates). Bare `/help` `/status` `/usage` `/doctor` `/scope` `/context` (SW-1) answer in information windows filled by terminal-admin
   (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
   whole registry under its groups and runs the picked command. `/reasoning`, `/scratch` and an unknown command (SW-3) open list windows; the
-  unknown window always ends with "All commands…", which opens `/help`. `/mode` opens the mode panel with a "Now:" header; `/resume` is a
+  unknown window says commands are English, offers at most one nearest command (`nearestSlashCommand`: prefix, else the edit distance in
+  `slash-suggest.json`; none for a tie or a non-English word) and always ends with "All commands…", which opens `/help`. `/mode` opens the mode panel with a "Now:" header; `/resume` is a
   picker; `/clear` erases the visible screen and the terminal's scrollback (home + ED 2 + ED 3, owner 2026-10-08; only on a TTY, never on TERM=dumb
   or to a non-TTY; NO_COLOR does not stop it: the composition's `clearScreen`) and starts a new `<Static>` epoch. Hosts: the panel controller keeps the job, approval,
   resume and settings windows; `useWindowSlot` (terminal) is the one local slot for information and list windows. Every window is a `Window`
@@ -339,7 +340,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (error tone, once per text, even with no watch window open) use it. **Typed arguments (owner I-1, Jev b1e8286f):** with window words (`WorklineLabels.windows`, absent on TERM=dumb) a slash command typed
   with an argument runs bare in every host (slot, panel controller, watch windows, `/config` included); the window it opens shows once "Typed
   arguments are not used in the terminal; choose in the window." (`WindowNoteContext`, consumed when that window closes, never on an approval
-  card); the typed text is never shown, and it is stripped before the queue, the "queued" notice and the composer's input history (recall and
+  card); the typed text is never shown, and it is stripped before the queue, the queued-lines list and the composer's input history (recall and
   the persistent port keep only `/command`; Astra 2456). Without window words SW-1/SW-3 keep the text command, SW-2 job windows open bare and `/monitor <args>`
   stays the text command. Line mode and the CLI keep arguments. Exceptions in the window: `/do <text>` and `/copy [n]` keep their typed
   argument (`src/surfaces/core/terminal/internal/workline.tsx:600`). **Opening (owner I-5, Jev 59f75361):** the first surface snapshot leaves one
@@ -422,6 +423,23 @@ The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08);
 ED 3 at the time; the Workline output adapter now removes ED 3 from Ink's overflow clear (see above). Proof:
 `/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
 
+**Theme set and background detection (TEMA-OKUNURLUK L1–L2, alpha.60; owner S2/S6/S8 A 2026-10-30).** `terminal.theme` takes the Claude
+Code set `auto|dark|light|dark-daltonized|light-daltonized|dark-ansi|light-ansi` plus `dark-high-contrast|light-high-contrast` (7:1) and
+the earlier `ansi` as an alias (the reported background's 16-colour theme). The token map adds `stateConnected`/`stateDisconnected`
+(`novaOrange`), the light reference backgrounds `#FAFAFA`, `#F6F2EA` and the owner's `#F0ECE5`, dark `#0C0C0C`; light 16-colour sets use no
+yellow and no bright `9x` on text; `ansiOnly` themes carry no hex. The contrast test holds text 4.5:1 (high contrast 7:1) in truecolor and
+256 colours. `auto` reads the terminal's OSC 11 answer (query + DA1 end marker, `backgroundProbeMs` 250 in `host-limits.json`, once per
+process, Codex `terminal_probe.rs`), then `COLORFGBG`; unknown draws `neutral-ansi` (foreground + attributes, colour only on status marks).
+The host probes before the first frame when given a theme request (`TerminalHostOptions.theme`, not at colour tier none), re-asks on DEC 2031
+notices and exposes `context.theme` (`background`, `apply`); the one stdin filter takes every OSC 10/11, DA1 and 2031 answer out of the input
+for the whole session (late answers are not applied). The filter uses `answerMaxBytes` 64 and `answerHoldMs` 250
+(`terminal-window/internal/answer-limits.json`): only a lone ESC expires into the Escape key. Definite replies (OSC/DCS and CSI starting
+with `?`, `>` or `=`) drain after the time or size bound without releasing payload as input. Plain CSI remains a possible keyboard
+sequence until its final byte, even after 250 ms, within the same size bound; oversized CSI drains until its final byte or a fresh ESC.
+Inside a broken OSC/DCS, ESC starts a fresh sequence (including a keyboard CSI or another OSC), while `ESC \` still terminates the old
+string; recovery also works after either bound. Ctrl+C (0x03 or kitty `CSI 99;5u`) always passes once and ends a probe. On a reported background a role below its minimum keeps only
+its attributes. Consumers move to `terminalPalette`/the theme request in L3. Proof is kept with the lead's package record (alpha.60 package 2, lane TH-A).
+
 **Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
 details heading. `/status`: one sentence (running or not read, version, model) then the host report and the service descriptor
 (instance, pid, build) as details. `/scope`: you, project (name and short id), company, mode, rule version, surface access in words,
@@ -485,6 +503,16 @@ clipboard (OSC 52); a blank line separates the person's own messages; `terminal.
 open conversation and `/resume` filters by typed text; Alt+Up takes the last queued message back into an empty draft
 (`src/surfaces/core/terminal-composer/internal/keys.ts:35`); Ctrl+G edits the draft in `$VISUAL`/`$EDITOR`. alpha.55 adds `/roles`, a
 read-only view of which exact catalog model holds which tier and roles (assigning stays `deckent models roles set`).
+
+**alpha.60 Workline (PAKET-2 WL, owner S4/S5).** `/uninstall` (registry `shellCommand`) opens an explanation window — removal runs in
+the shell with the service stopped and the person's confirmation — whose copy row sends exactly `deckent uninstall` (OSC 52); nothing is
+removed or stopped in the terminal. Lines sent while another runs are listed above the composer (`workline-queue.json` `visibleRows`, then
+`+n`) under the real reason (the opening's send gate, a running turn, an open window, another command), not as conversation notices.
+Ctrl+Enter (kitty keyboard protocol, which the host asks Ink to use on a TTY) — Alt+Enter where Ctrl+Enter is a plain Enter — adds the
+line to the running turn through protocol v30 `steerChatTurn`; the service joins it only at the next model-call boundary, never into an
+approval or witness wait, and a line it did not keep or returned becomes the next queued message (back into the input after a stop).
+Typed v30 `notices` are rendered by the composition's `renderMcpStartNotice` and said once per terminal per key (kind, server, code) as a
+system line after the answer; one fixed blank row separates the conversation from the bottom region (full window and inline).
 
 **alpha.59 additions (package 1, owner 2026-10-30).** Startup: `observeBootstrapState` reuses only the parse, schema and checksum verdict
 of identical journal bytes (one frozen entry keyed by content SHA-256); lstat/O_NOFOLLOW/fstat, private-file and changed-file checks run on

@@ -9,6 +9,7 @@ import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './fr
 import { assertSocketPublicationBudget, LocalRuntimeSocketError, releaseRuntimeSocketDirectory, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 import { acquireLedgerLock, type LedgerLock } from './ledger-lock.js';
+import { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/index.js';
 
 export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
   response: RuntimeServiceResponse;
@@ -47,7 +48,7 @@ function reply(value: RuntimeServiceHandlerReply) {
   return { response: runtimeServiceResponseSchema.parse(value), afterResponseOrDisconnect: undefined };
 }
 
-function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, handler: RuntimeServiceHandler, peer: LocalPeerIdentity): void {
+function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, handler: RuntimeServiceHandler, peer: LocalPeerIdentity, graphMaxNodes: number): void {
   const decoder = new ServiceFrameDecoder(options.inputMaxBytes);
   const headerTimer = setTimeout(() => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')),
     options.headerTimeoutMs);
@@ -75,6 +76,8 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     let request: RuntimeServiceRequest, replyVersion: number = RUNTIME_SERVICE_SCHEMA_VERSION;
     try {
       const raw = decoder.finish();
+      if (!inputWithinValidationLimit(raw, raw && typeof raw === 'object' && 'operation' in raw && (raw.operation === 'proposeRun' || raw.operation === 'createRun')
+        ? { maxNodes: graphMaxNodes } : INPUT_VALIDATION_LIMITS.ipc)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
       const current = runtimeServiceRequestSchema.safeParse(raw);
       if (current.success) request = current.data;
       else {
@@ -144,7 +147,9 @@ export interface LocalRuntimeSocketGuard {
   release(): Promise<void>;
 }
 
-export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions, ledgerLock?: string): Promise<LocalRuntimeSocketGuard> {
+export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions, ledgerLock?: string, graph?: Readonly<{ maxTasks: number; maxEdges: number; maxDepth: number }>): Promise<LocalRuntimeSocketGuard> {
+  const { maxNodes: graphMaxNodes } = graphInputValidationLimit(graph);
+  if (graphMaxNodes < 1) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_OPTIONS');
   const resolved = await resolveSocketOptions(options);
   assertSocketPublicationBudget(resolved.endpoint);
   const ledger = ledgerLock === undefined ? null : acquireLedgerLock(ledgerLock);
@@ -161,7 +166,7 @@ export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocket
     async start(handler: RuntimeServiceHandler) {
       if (state !== 'held') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
       state = 'started';
-      return await listenUnderGuard(resolved, guard, handler, ledger);
+      return await listenUnderGuard(resolved, guard, handler, ledger, graphMaxNodes);
     },
     async release() {
       if (state !== 'held') return;
@@ -177,12 +182,12 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
 }
 
 async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, guard: Server,
-  handler: RuntimeServiceHandler, ledger: LedgerLock | null): Promise<LocalRuntimeSocketServer> {
+  handler: RuntimeServiceHandler, ledger: LedgerLock | null, graphMaxNodes: number): Promise<LocalRuntimeSocketServer> {
   let endpoint: ReturnType<typeof listenWithPeerIdentity> | undefined;
   try {
     await removeOwnedSocket(resolved.endpoint, true);
     endpoint = listenWithPeerIdentity(resolved.endpoint, resolved.maxConnections,
-      (socket, peer) => accept(socket, resolved, handler, peer), resolved.acceptRetryDelayMs, resolved.acceptRetryLimit);
+      (socket, peer) => accept(socket, resolved, handler, peer, graphMaxNodes), resolved.acceptRetryDelayMs, resolved.acceptRetryLimit);
   } catch (error) {
     endpoint?.stopAccepting(); endpoint?.disconnectClients();
     try {

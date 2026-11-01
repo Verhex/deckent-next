@@ -5,8 +5,8 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import { DispatchError, verifyRetainedOutputEnvelope, type RunBoundDispatchStore, type DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { selectReservedTaskProfile, type RunStore } from '#engine/core/runs/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
-export const taskInputBindingSchema = z.object({ name: taskInputNameSchema,
-  sourceAttemptId: identitySchema, output: taskInputNameSchema.optional(), receipt: artifactReceiptSchema }).strict().readonly();
+export const taskInputBindingSchema = z.strictObject({ name: taskInputNameSchema,
+  sourceAttemptId: identitySchema, output: taskInputNameSchema.optional(), receipt: artifactReceiptSchema }).readonly();
 export type TaskInputBinding = z.infer<typeof taskInputBindingSchema>;
 /** Accepted direct dependencies only. Source content permission is independent of target execution. */
 export class TaskInputApplication {

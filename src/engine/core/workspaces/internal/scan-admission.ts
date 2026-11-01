@@ -81,7 +81,7 @@ export interface WorkerTreeTimeRefusalFile {
   read(): Promise<{ kind: 'absent' } | { kind: 'ready'; value: unknown } | { kind: 'corrupt' } | { kind: 'io' }>;
   write(value: unknown): Promise<void>; remove(): Promise<void>;
 }
-const refusalRecordSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, refusals: counterSchema }).strict();
+const refusalRecordSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, refusals: counterSchema });
 
 export interface AdmittedWorkerTreeGateInput<V extends WorkerTreeScanView> {
   /** Everything the worker receives (`workerTreeViews`); the view labelled '' is the attempt checkout. */

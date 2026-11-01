@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "b1-calibration-1",
+  "revision": "b1-calibration-2",
   "phase": "preparation-only",
   "calibrationClaim": "uncalibrated",
   "files": [
@@ -14,7 +14,7 @@
     }
   ],
   "blindSetDigest": "a8f6adc8d50472965b8cc2a321646f808ce50bbbfda9442862ade23ff6474530",
-  "limitsProfile": "b1-dogfood-provisional-2",
+  "limitsProfile": "b1-dogfood-provisional-3",
   "access": {
     "filesAndOracle": "deterministic-scorer-only",
     "modelInput": "presentation-only",
@@ -24,7 +24,7 @@
     "presentationOrder": "controller-pinned-mixed-order"
   },
   "calibration": {
-    "revision": "b1-calibration-1",
+    "revision": "b1-calibration-2",
     "cohort": "b1-preparation-unwalked",
     "trapHits": 0,
     "trapTotal": 0,
@@ -53,9 +53,45 @@
     "independence": "unknown"
   },
   "rerun": {
-    "boundsFrom": "b1-dogfood-provisional-2",
+    "boundsFrom": "b1-dogfood-provisional-3",
     "changedEligibleModelOrPersona": true,
     "lowCalibrationGreenIsEvidence": false,
     "differentCohortsAreIndependentSamples": false
-  }
+  },
+  "assetDigests": [
+    {
+      "fileName": "arrange.json",
+      "sha256": "d2e3202ea0c4718ced1a984ed90fe79809af20fa52ae28d68ac881ba4c51345a"
+    },
+    {
+      "fileName": "personas.json",
+      "sha256": "fe562a5a58ac8d70d9c49ad6a9d261c3eb2f0d2b74f1f6deef88ea8be2363952"
+    },
+    {
+      "fileName": "journeys/onboarding.json",
+      "sha256": "4ef37f1ec2dc019bbb3f1030b83674717794e548b30be415ff9ec0a6e6713a6d"
+    },
+    {
+      "fileName": "journeys/beuser-self.json",
+      "sha256": "1b23cbfe5bac60a4060868a7394176cd79915aab117cd8ba3d88fbc8e0ddfdc9"
+    },
+    {
+      "fileName": "journeys/uninstall-v2.json",
+      "sha256": "eb5eb49403c8fa707b4e7473b708af7d290a3e0cdf66d84f26c20baa65d15796"
+    },
+    {
+      "fileName": "journeys/theme-light.json",
+      "sha256": "a2df2eeafeca37f38b323bb876b55f37ed6ca852148da3f6a0ee1913a33fc04e"
+    },
+    {
+      "fileName": "model-fixture.json",
+      "sha256": "8014b002a8ca3487326fb2e5f331619ce0a7c473733186e1ece3b692860818de"
+    },
+    {
+      "fileName": "model-fixture.mjs",
+      "sha256": "853468ce33f22b2390c2c7c2c46b1e41e93c2e9de181867c0a4b8e41dd8f1cb5"
+    }
+  ],
+  "assetSetDigest": "a4a5009db8005aa1d5032d0e32cb2538bb9e74afaed4bcd5d90935ca45e6b05c",
+  "terminalMeasurementClaim": "uncalibrated-rendered-cells-not-model-hit-rates"
 }

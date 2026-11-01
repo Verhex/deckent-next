@@ -23,6 +23,13 @@ export function formatBeuserReport(input: unknown, options: { readonly json: boo
     rows.push(finding.reason === 'patience' ? t('beuser.report.patience', values, locale)
       : finding.reason === 'observing' ? t('beuser.report.observing', values, locale) : t('beuser.report.stuck', values, locale));
   }
+  const branches = new Set([...report.criticalCoverage.map(row => row.criterion), ...report.segments.map(row => row.segment),
+    ...report.unknown.map(row => row.branch), ...report.unwalked.map(row => row.branch)]);
+  for (const branch of branches) {
+    const finding = report.findings?.find(row => row.branch === branch), reason = report.unknown.find(row => row.branch === branch)?.reason ?? report.unwalked.find(row => row.branch === branch)?.reason;
+    rows.push(t('beuser.report.walker', { branch: safe(branch), outcome: finding?.outcome ?? (reason ? safe(reason) : unknown) }, locale),
+      t('beuser.report.judge', { branch: safe(branch), outcome: report.segments.find(row => row.segment === branch)?.verdict?.outcome ?? unknown }, locale));
+  }
   for (const segment of report.segments) {
     const verdict = segment.verdict;
     rows.push(t('beuser.report.segment', { segment: safe(segment.segment), outcome: verdict?.outcome ?? unknown,

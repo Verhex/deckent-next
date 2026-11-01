@@ -6,24 +6,24 @@ import { providerSpendBudgetSchema } from '#domain/core/provider-spend/index.js'
 import { taskGraphSchema, taskResourceSchema } from '#domain/core/task-graph/index.js';
 import { brainContributionSchema } from './brain.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const proposalActorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const proposalActorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 /** D2b (owner 2026-10-18): a human's per-Run delivery intent, approved with the Run. One Run, one target (the queue's target ref shape);
  * `enqueue-accepted` lets the service submit the Run's accepted Attempts to that target, re-queue a parked/expired ticket by typed cause
  * and start the bounded re-attempt. Publish/adopt remain the human's terminal cards. Additive and optional within proposal v1. */
-export const runDeliveryIntentSchema = z.object({ target: taskResourceSchema, mode: z.literal('enqueue-accepted') }).strict().readonly();
+export const runDeliveryIntentSchema = z.strictObject({ target: taskResourceSchema, mode: z.literal('enqueue-accepted') }).readonly();
 export type RunDeliveryIntent = z.infer<typeof runDeliveryIntentSchema>;
-export const proposalPermissionSchema = z.object({ kind: identitySchema, action: identitySchema, resourceId: identitySchema }).strict().readonly();
+export const proposalPermissionSchema = z.strictObject({ kind: identitySchema, action: identitySchema, resourceId: identitySchema }).readonly();
 /** Attribution is checked against the authenticated principal; a model receipt reference never grants authority. */
-export const runProposalSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+export const runProposalSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   proposalId: identitySchema, scopeId: identitySchema, runId: identitySchema, graph: taskGraphSchema,
-  budgetCeiling: providerSpendBudgetSchema.unwrap().innerType().pick({ currency: true, limitMinorUnits: true }).readonly(),
+  budgetCeiling: z.strictObject(providerSpendBudgetSchema.unwrap().shape).pick({ currency: true, limitMinorUnits: true }).readonly(),
   requiredPermissions: z.array(proposalPermissionSchema).max(256).readonly(),
   proposer: proposalActorSchema,
   delivery: runDeliveryIntentSchema.optional(),
-  source: z.discriminatedUnion('kind', [z.object({ kind: z.literal('human') }).strict(),
-    z.object({ kind: z.literal('model'), receipt: z.object({ commandId: clientCommandIdSchema, invocationId: identitySchema,
-      reference: modelReferenceSchema, responseDigest: digest }).strict().readonly(), contribution: brainContributionSchema.optional() }).strict()]).readonly(),
-}).strict().readonly();
+  source: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('human') }),
+    z.strictObject({ kind: z.literal('model'), receipt: z.strictObject({ commandId: clientCommandIdSchema, invocationId: identitySchema,
+      reference: modelReferenceSchema, responseDigest: digest }).readonly(), contribution: brainContributionSchema.optional() })]).readonly(),
+}).readonly();
 export type RunProposal = z.infer<typeof runProposalSchema>;
 export type ProposalPermission = z.infer<typeof proposalPermissionSchema>;
 /** What Run admission evaluates for a proposal, derived by the system from the validated graph and never from a proposer's list (live
@@ -43,17 +43,17 @@ export type ProposalPermissionCatalog = readonly Readonly<{ kind: string; action
 export const isRecognisedProposalPermission = (row: ProposalPermission, catalog: ProposalPermissionCatalog): boolean =>
   catalog.some(entry => entry.kind === row.kind && entry.actions.includes(row.action));
 /** Trusted deterministic admission basis, retained by the Run and its sealed decision. Never accepted by run create ingress. */
-export const runProposalBindingSchema = z.object({ schemaVersion: z.literal(1), proposalId: identitySchema, digest,
+export const runProposalBindingSchema = z.strictObject({ schemaVersion: z.literal(1), proposalId: identitySchema, digest,
   budgetCeiling: runProposalSchema.unwrap().shape.budgetCeiling,
   requiredPermissions: z.array(proposalPermissionSchema).max(256).readonly(),
   /** The approved intent and the human who granted it (the verified human proposer); the service acts as that human's service principal. */
   delivery: runDeliveryIntentSchema.unwrap().extend({ grantedBy: proposalActorSchema }).strict().readonly().optional(),
-  admission: z.object({ registryRevision: identitySchema, registryDigest: digest, standingAdmission: z.boolean(),
+  admission: z.strictObject({ registryRevision: identitySchema, registryDigest: digest, standingAdmission: z.boolean(),
     /** S8-1b: the agents the system selected when the proposal was recorded (re-derived at admission; a changed active agent needs the card). */
-    agents: z.array(z.object({ taskId: identitySchema, agentId: identitySchema, revision: counterSchema.positive(), standing: z.enum(['active', 'candidate']) }).strict().readonly()).max(256).readonly().optional(),
+    agents: z.array(z.strictObject({ taskId: identitySchema, agentId: identitySchema, revision: counterSchema.positive(), standing: z.enum(['active', 'candidate']) }).readonly()).max(256).readonly().optional(),
     budgetSemantics: z.enum(['admission-check-only', 'not-metered']).optional(), spendingDigest: digest.optional(),
-    budget: z.object({ budgetId: identitySchema, budgetRevision: counterSchema.positive(), checkpointDigest: digest,
-      remainingMinorUnits: counterSchema, checkedAt: counterSchema, source: z.literal('configured').optional() }).strict().readonly().nullable(),
-  }).strict().refine(value => (value.budgetSemantics === 'not-metered') === (value.budget === null)).readonly().nullable(),
-}).strict().readonly();
+    budget: z.strictObject({ budgetId: identitySchema, budgetRevision: counterSchema.positive(), checkpointDigest: digest,
+      remainingMinorUnits: counterSchema, checkedAt: counterSchema, source: z.literal('configured').optional() }).readonly().nullable(),
+  }).refine(value => (value.budgetSemantics === 'not-metered') === (value.budget === null)).readonly().nullable(),
+}).readonly();
 export type RunProposalBinding = z.infer<typeof runProposalBindingSchema>;
