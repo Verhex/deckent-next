@@ -1,5 +1,5 @@
 import './production-mode.js'; // First: NODE_ENV is settled before any module below loads React.
-import { main as runCli, resolveCliLocale } from '#surfaces/index.js';
+import { main as runCli, resolveCliLocale, prepareTerminalSurface } from '#surfaces/index.js';
 import { envValue, loadConfigLanguage, loadConfigAgentEnvironment, resolveProjectRoot, DeckentError, formatHumanError, exitCodeFor, type Locale, type ProjectRootResolution } from '#platform/index.js';
 /** L-KIT: the call's locale, resolved once here and handed to every command (`context.locale`): `--lang`, DECKENT_LANGUAGE/DECKENT_LANG,
  * config `language`, LC_ALL, LC_MESSAGES, LANG. Presentation only: a config that cannot be read falls back to the environment, never blocks. */
@@ -39,6 +39,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   const base = { root, rootResolution: resolution, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal };
   try { return await runCli(argv, { ...base, helpParams: async key => key !== 'cli.help.modelsConnect' ? {} : { kinds: (await import('./model-help.js')).modelConnectHelpKinds() },
     loadHost: async yieldToInput => {
+      if (yieldToInput) await prepareTerminalSurface(yieldToInput);
       // Evaluate existing host dependencies in pieces while the launch composer owns input.
       if (yieldToInput) for (const load of [() => import('#composition/core/query-errors/index.js'), () => import('#composition/core/scoped-request/index.js'),
         () => import('#composition/core/model-connect/index.js')]) { await load(); await yieldToInput(); }
