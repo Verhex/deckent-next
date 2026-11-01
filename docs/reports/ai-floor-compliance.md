@@ -2387,7 +2387,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `7b1caed16bde5e58724f1613234068f329eed79f59b2c9170522241359b226b8`
 - `src/domain/core/primitives/internal/installation-identity.ts`: `760e9602ec890d86933263bcb53ba171a21ed300eef3561b51cea81ee8692098`
 - `src/domain/core/primitives/internal/json.ts`: `b4c383524ec4c40ded45c55f1cfea53ed10e1b644038508075225d6edb5b0475`
-- `src/domain/core/primitives/internal/persisted-schema.ts`: `236c62686e7e58d38f4d728d6765be23c91ad549c1726fff8eba9896a7296280`
+- `src/domain/core/primitives/internal/persisted-schema.ts`: `276b4e071eac56978c3a0e2a08b771dcadffbb786088d41e502fcdf1012324a6`
 - `src/domain/core/primitives/internal/project-identity.ts`: `0694258226a60829c63baa856cc5bf20ad3d1eced65a50d24be0e272dcc4f903`
 - `src/domain/core/primitives/internal/rollout.ts`: `e0e11f641b0499d6c585b8469523f4fa5732b40bce7a1d21236c1437b1b39eca`
 - `src/domain/core/primitives/internal/values.ts`: `d368013bb7151b9c47908844d1e3e9d59cd88708dc1ea1f4693f1bd346bb944b`

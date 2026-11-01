@@ -22,13 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 import { z } from 'zod';
+import { $ZodCheck } from 'zod/v4/core';
 /** Zod 3 string bounds count UTF-16 units; clone checks to preserve order and native projection. */
 export function persistedString<T extends z.ZodString>(schema: T): T {
   const checks = (schema.def.checks ?? []).map(check => {
     if (!['min_length', 'max_length', 'length_equals'].includes(check._zod.def.check)) return check;
     const def = check._zod.def as z.core.$ZodCheckMinLengthDef | z.core.$ZodCheckMaxLengthDef | z.core.$ZodCheckLengthEqualsDef;
     const exact = def.check === 'length_equals', limit = 'minimum' in def ? def.minimum : 'maximum' in def ? def.maximum : def.length;
-    const legacy = new z.core.$ZodCheck({ ...def });
+    const legacy = new $ZodCheck({ ...def });
     legacy._zod.onattach = [...check._zod.onattach];
     legacy._zod.check = payload => {
       const size = (payload.value as string).length, small = size < limit;
