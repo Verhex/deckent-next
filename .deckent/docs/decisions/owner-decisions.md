@@ -1012,7 +1012,7 @@ Kaynak: dış `proof/ANALIZ-2026-10-29/RAPOR.md` (temiz bağlam kanun denetimi 2
 ## Owner kararları — 2026-10-29: beta envanteri R2 ve paket 1
 
 Kaynak: dış `proof/BETA-ISLER-2026-10-29/` (`PAKET-1/OWNER-DECISIONS.md`, Opus yan oturum 924cbc28'in dört sorusu); kökteki `beta-isler.md`
-ve `opus-beta-isler.md` Git'te izlenmez.
+ve `opus-beta-isler.md` Git'te izlenmezdi ve 2026-11-02'de depo dışına (`archive/root-2026-11-02/`) taşındı; birleşik envanter dış lead kaydı `proof/BETA-INVENTORY-2026-11-02/MERGED.md`.
 
 - **Yürütücü:** paketi bu yan oturum ayrı worktree/dallarda yürütür, hedefli testleri koşar ve lead'e devreder; push ve merge yok.
   2026-10-10 "lead tek geliştirme yetkilisi" kaydına yalnız bu paket için açık istisnadır. Birleştirme, Astra isteği ve canlı/N1 geçişi lead'de kalır.
@@ -1037,3 +1037,19 @@ Kaynak: dış `proof/ALPHA59/PAKET-1/CARD.md` (owner turları 1–4, kanun denet
 - **Araç çağrıları:** ardışık okuma çağrıları tek satır, ayrıntı fare tıklamasıyla açılır (Ctrl+O değil); hata, onay ve yazma ayrı satır.
   Fare olmayan satır içi düzende özetin altında çağrılar da görünür (kabul).
 - **Dependency watch:** günlük çalışır.
+
+## Owner kararları — 2026-10-31…2026-11-01: alpha.60 paket 2 ve alpha.61
+
+Kaynak: dış `proof/ALPHA60/PAKET-2/PLAN.md` (owner satırları; saatler lead'in yerel saatidir). 2026-11-02 için yeni owner kararı kayıtlı değil.
+
+- **Paket 2 sırası (2026-10-31):** P5b paketleme ve zod 4 (Z2) alpha.60'ta ve en sonda; Z2 kapsamında Standard Schema + JSON Schema sıkılık kanıtı kabul; Qwen (16) ve MCP 20c/20d alpha.60'a, Qwen canlı kabulü owner vLLM'i açınca.
+- **Bütçe:** başlangıçta adapters 40000 / composition 12250 / domain 11000, test 8000 + lead'de gerekçeli +25; sonra walk ön koşulları ve Z2 ile adapters 40500, composition 12500, domain 11250 (2026-11-01). Birim 2000 kalır; silinen test adıyla listelenir, hata yolu/güvenlik testi silinmez.
+- **Terminal girişi:** Ctrl+Enter çalışan tura satır ekler (kitty klavye protokolü; desteklemeyen terminalde Alt+Enter), Enter sıraya alır, ekleme onay/şahit kartını asla yanıtlamaz; `/uninstall` açıklama penceresi + kopyalanabilir `deckent uninstall`; bilinmeyen komutta en çok bir en yakın öneri, Türkçe takma ad yok.
+- **Talimat ve CLI yolu:** AGENTS.md, yoksa CLAUDE.md; `@` içe aktarma (göreli, en çok 5 derinlik, döngü engeli, depo dışı tek seferlik kişi kartı); DECKENT.md üretilmez. Kişinin verdiği CLI yolu saklanır, her çağrıda yeniden çözülür.
+- **BeUser:** persona sabrı Ayşe 45 sn, Mert 30 sn; `beuser.limits` yalnız daraltır (kişi kartı), journey profili v4 (v2/v3 okunur); tek komut yürüyüş; yürüyüş 4 yolculuk, Claude yargıç (`reduced` etiketi kabul), yürüyücü tavanı 4; walker ve yargıç her bağlı modeli kullanır.
+- **/provider:** ayrı Deckent giriş dizini varsayılan; system/ai ilk bağlantıda işaretsiz, MCP asla.
+- **Açılış ve tema:** yanıtsız terminalde ilk kare temayı en çok ~0,25 s bekler (ölçülen +0,24 s), nötr ilk kare önerisi reddedildi. WL (workline yük bölme) alpha.60'a girmişti, sonra tuş takılması alpha.61'e kaldı; Z2: ilk kare +46/+48 ms ve servis hazır +130/+273 ms kabul (güvenlik önceliği), uzunluk sarmalayıcı maliyeti alpha.61 açılış işine. Açılış kabul ölçümü (n=5): sıcak ilk kare 0,40 s, soğuk 0,41 s; sıcak <0,3 s hedefi ve tuş takılması alpha.61 ilk işi.
+- **Domain:** headless-rejection v4 `process-exit` varyantı onaylandı (ledger değişmez). zod 3 kabul kümesini koruyan doğrulayıcı `domain/core/primitives`'e taşınır, platform kendi kopyasını tutar, eşitlik testle korunur (mimari istisna yok).
+- **Z1 sınırı:** düğüm sınırı araç başına; plan araçları config admission.graph'tan hesaplanan sınır (~51k), diğerleri 4096; heap ölçülüp kayıtlı tavan.
+- **Bağımlılık:** fast-uri kabul edilmiş riski MCP SDK 2.4.0 taşıyıcılarına aynı bitişle (2026-11-21) taşındı; gerçek MCP istemci dumanı GREEN (2026-11-01), SDK 2.4.0 kalır.
+- **Kapsam (2026-11-01):** F11 (delegatedUse kişi şahidi) alpha.60'a; WALK22 sonrası ürün hataları (F12 `/help`, F13 beuser-self kartı) alpha.60'a; F14 Codex abonelik tek seferlik çağrı hatası ürün hatasıdır: önce hata metni kaydı, sonra owner onaylı tek kontrollü çağrı, sonra düzeltme (allowlist genişletmesi ayrı güvenlik kararı). 23:00: alpha.60 kapsamı dondu (yalnız güvenlik/veri kaybı istisna); owner terminal testi ve dört yolculuk yeniden yürüyüşü betadan önceye. 23:20: alpha.60 hemen canlı, alpha.61 3 saat içinde; alpha.61 kapsamı BeUser bitiş sinyali, değerlendirici girdi kırpma + hata kodu bölme, O-B1 yolculuğu; açılış/zod perf ve TL üreticileri alpha.61'e sığmazsa beta listesine.

@@ -159,7 +159,7 @@ node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push --scope <glob>.
 (`.claude/**`, `.cursor/**`, `.codex/**`, `.agents/skills/**`) is refused unless the lead adds `--allow-protected-paths`,
 and the scope must still name those paths. Host tooling under `.agents/refactor/` is an ordinary scoped path.
 
-[PLAN.md](../../../.deckent/docs/plan/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
+[PLAN.md](../../../.deckent/docs/archive/2026-11/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
 replay/failure checks and the owner test status.
 Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.
 
