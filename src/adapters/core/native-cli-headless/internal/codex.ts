@@ -13,7 +13,7 @@ const matches = (patterns: readonly string[], text: string) => patterns.some(pat
 /**
  * The `codex exec --json` turn (Codex headless, 2026-10-31): one thread, one turn, only the registry's allowed items (the answer and its reasoning).
  * Any tool item, a second thread or turn, any line after the completed turn, a usage record without valid counters, or an error line (except the
- * CLI's own counted reconnect notices, up to the registry bound) stops the process: an error's text maps to quota (providers.json patterns, the worker's
+ * CLI's own counted reconnect and fail-closed item notices, up to their registry bounds) stops the process: an error's text maps to quota (providers.json patterns, the worker's
  * own source) or login (registry patterns), otherwise invalid output. The answer is the last completed agent message (each completed message is
  * also a presentation delta). The stream names no model: the answer is attributed to the argv-pinned id (`modelEvidence: argv`).
  */
@@ -24,7 +24,7 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
   // OpenAI input totals include cache reads and writes (the worker normalizer's rule): a cache count above the input total is no valid record.
   const counters = (reported: unknown) => { const value = reportedCounters(reported, ['input_tokens', 'output_tokens'], ['cached_input_tokens', 'cache_write_input_tokens', 'reasoning_output_tokens']);
     return value && value.cached_input_tokens + value.cache_write_input_tokens <= value.input_tokens ? value : null; };
-  let thread = false, turns = 0, reconnects = 0, answer: string | null = null, usage: ReturnType<typeof counters> = null;
+  let thread = false, turns = 0, reconnects = 0, notices = 0, answer: string | null = null, usage: ReturnType<typeof counters> = null;
   const diagnostic = (refusal: ReturnType<typeof reject>, text: string | null): Refusal => ({ ...refusal,
     body: { ...refusal.body, schemaVersion: 5, ...errorDiagnostic(text, guards.errorAllow.rules, knownSecrets, guards.errorAllow.maxBytes) } });
   const failure = (text: string | null, subtype: string): Refusal => diagnostic(text !== null && matches(quotaPatterns, text) ? reject('http-status', { refusal: 'quota', status: null, resetsAtMs: null })
@@ -45,7 +45,12 @@ export function codexTurn(prepared: Prepared, preflight: HeadlessPreflight, _run
       if (type === 'error' || type === 'turn.failed') return failure(line.errorText, type);
       if (type.startsWith('item.')) {
         const kind = typeof item?.type === 'string' ? item.type : null;
-        if (kind === 'error') return failure(line.errorText, 'error');
+        if (kind === 'error') {
+          if (line.errorText !== null && guards.noticePatterns.some(pattern => new RegExp(pattern, 'u').test(line.errorText!))) {
+            return ++notices > guards.maxNotices ? diagnostic(reject('invalid-response', { refusal: 'invalid-output', subtype: 'notice-limit' }), line.errorText) : null;
+          }
+          return failure(line.errorText, 'error');
+        }
         if (kind === null || !guards.allowedItems.includes(kind)) return reject('invalid-response', { refusal: 'guard', field: kind !== null && TOOL_ITEMS.has(kind) ? `item.${kind}` : 'item' });
         if (turns === 0) return reject('invalid-response', { refusal: 'guard', field: 'turn' });
         if (type === 'item.completed' && kind === 'agent_message' && typeof item!.text === 'string') { answer = item!.text; if (answer) emitDelta(onDelta, answer); }

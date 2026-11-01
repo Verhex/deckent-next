@@ -110,9 +110,9 @@
       },
       "headless": {
         "schemaVersion": 1,
-        "revision": "codex-headless-2026-11-01-r3",
+        "revision": "codex-headless-2026-11-01-r4",
         "protocolFamily": "codex-jsonl",
-        "source": "Codex headless lane 2026-10-31 from the installed `codex exec --help` (codex-cli 0.166.0) and learn.chatgpt.com docs read 2026-10-31 (docs/non-interactive-mode, docs/developer-commands, docs/config-file/config-reference; the pages carry no date): one `codex exec` turn, read-only sandbox, approvals never, no persisted session, user config and execpolicy rules ignored, every documented tool switch off (shell, unified exec, web search, view_image, apps, multi-agent, remote plugins, hooks, memories, skills), built-in instructions replaced by the system prompt file. No toggle for apply_patch is documented: the line guard refuses any tool item, the sandbox is read-only and the realm writes only the run dir and the login dir. --strict-config is documented for config.toml fields only; the -c switches reduce, the line guard enforces. No model call was made. r2 (HL lane 2026-10-31, owner S12 probe: the exact argv, an empty CODEX_HOME, bwrap --unshare-net, no login): 0.166.0 --strict-config refused `tools.view_image` ('unknown configuration field `tools.view_image` in -c/--config override', exit 1, no JSON line: the WALK21 unknown calls); openai/codex rust-v0.166.0 codex-rs/core/config.schema.json ToolsToml has no view_image and codex-rs/features/src/lib.rs names the stable feature `view_image` (the config-reference page still lists tools.view_image), so the switch is features.view_image; every other -c key here was refused only for a bad value (known field).",
+        "source": "Codex headless lane 2026-10-31 from the installed `codex exec --help` (codex-cli 0.166.0) and learn.chatgpt.com docs read 2026-10-31 (docs/non-interactive-mode, docs/developer-commands, docs/config-file/config-reference; the pages carry no date): one `codex exec` turn, read-only sandbox, approvals never, no persisted session, user config and execpolicy rules ignored, every documented tool switch off (shell, unified exec, web search, view_image, apps, multi-agent, remote plugins, hooks, memories, skills), built-in instructions replaced by the system prompt file. No toggle for apply_patch is documented: the line guard refuses any tool item, the sandbox is read-only and the realm writes only the run dir and the login dir. --strict-config is documented for config.toml fields only; the -c switches reduce, the line guard enforces. No model call was made. r2 (HL lane 2026-10-31, owner S12 probe: the exact argv, an empty CODEX_HOME, bwrap --unshare-net, no login): 0.166.0 --strict-config refused `tools.view_image` ('unknown configuration field `tools.view_image` in -c/--config override', exit 1, no JSON line: the WALK21 unknown calls); openai/codex rust-v0.166.0 codex-rs/core/config.schema.json ToolsToml has no view_image and codex-rs/features/src/lib.rs names the stable feature `view_image` (the config-reference page still lists tools.view_image), so the switch is features.view_image; every other -c key here was refused only for a bad value (known field). r4 (F14 R2 2026-11-01, installed codex-cli 0.166.0): features.code_mode_host=false disables the tool host explicitly. The owner probe retained in REL/FIX/F14/probe-inspection.json saw the missing-host Code Mode fail-closed item before the turn; the lead empty-CODEX_HOME, no-login probe established that the disabled-host item is a startup notice followed by normal turn events. Only that anchored item-error notice is tolerated once by the registry guard; all other item errors refuse. CLI feature overrides: https://learn.chatgpt.com/docs/cli/reference (read 2026-11-01); key acceptance checked separately with the exact argv under --strict-config and bwrap --unshare-net, without login or model access.",
         "args": [
           "exec",
           "--json",
@@ -131,6 +131,8 @@
           "cli_auth_credentials_store=\"file\"",
           "-c",
           "forced_login_method=\"chatgpt\"",
+          "-c",
+          "features.code_mode_host=false",
           "-c",
           "features.shell_tool=false",
           "-c",
@@ -325,12 +327,17 @@
             ],
             "source": "F14 2026-11-01: diagnostic classes only, never permission to continue; retained WALK22-AC68/CODEX-UNKNOWN.md and F10 event shapes. Quota/login refusal mapping remains providers.json/loginPatterns; unmatched text is unclassified."
           },
+          "noticePatterns": [
+            "^Code Mode is unavailable because [^\\r\\n]+\\. Code mode will fail closed; enable `features\\.code_mode_host` and install `codex-code-mode-host`\\.$(?![\\s\\S])"
+          ],
+          "maxNotices": 1,
+          "noticeSource": "F14 R2 2026-11-01 CARD.md and retained owner/lead probes: only this complete, case-sensitive, single-line Code Mode fail-closed item error is a notice; one per invocation, never an answer or a completed turn. A second notice refuses as notice-limit; top-level error, turn.failed and all other item errors stay fatal.",
           "reconnectPatterns": [
             "^Reconnecting\\.\\.\\. [0-9]{1,3}/[0-9]{1,3}(?: |$)"
           ],
           "maxReconnects": 5,
           "reconnectSource": "HL lane 2026-10-31 (lead decision): `codex exec --json` reports the CLI's own stream retries as error lines 'Reconnecting... <n>/<max> (<cause>)' (owner S12 probe capture proof/ALPHA60/PAKET-2/HL/probe/2-without-tools-view-image.stdout.txt; openai/codex rust-v0.166.0 codex-rs/core/src/responses_retry.rs notify_stream_error, the first websocket retry hidden in release builds; codex-rs/model-provider-info/src/lib.rs DEFAULT_STREAM_MAX_RETRIES = 5). Such a line is a transient notice, counted up to maxReconnects (the CLI default; a WebSockets-to-HTTPS fallback restarts the CLI's count, so a longer run is refused); the unbounded 'Reconnecting... waiting for network' form, any other error line and turn.failed stay refusals.",
-          "source": "Codex headless lane 2026-10-31: item types from learn.chatgpt.com/docs/non-interactive-mode (agent messages, reasoning, command executions, file changes, MCP tool calls) and the pinned SDK items the worker normalizer reads (web_search, todo_list, error); only the answer and its reasoning are allowed. Login patterns are unsourced (fail-closed: an unmatched error item is invalid output); quota patterns are providers.json quotaPolicy.codexPatterns. The retained worker stream shows an error item about hook timeouts before the turn: hooks are off here, and any error item still refuses."
+          "source": "Codex headless lane 2026-10-31: item types from learn.chatgpt.com/docs/non-interactive-mode (agent messages, reasoning, command executions, file changes, MCP tool calls) and the pinned SDK items the worker normalizer reads (web_search, todo_list, error); only the answer and its reasoning are allowed. Login patterns are unsourced (fail-closed: an unmatched error item is invalid output); quota patterns are providers.json quotaPolicy.codexPatterns. The retained worker stream shows an error item about hook timeouts before the turn: hooks are off here, and any error item except the one bounded Code Mode fail-closed notice still refuses."
         },
         "limits": {
           "stdinMaxBytes": 10485760,
