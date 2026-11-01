@@ -8,10 +8,12 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID } from '#domain/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
+import { mcpProjectTrustDirectory } from '#adapters/core/mcp-trust/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
@@ -162,10 +164,13 @@ async function mcpProject() {
     new ModelBindingApplication({ async read() { return catalog; } }), async () => openSqliteModelActivationStore(ledger, sqlite), () => 1)
     .admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'catalog-1', expectedBinding: binding });
   const grant = (id: string, effect: string, actions: string[], kind: string, ids: string[] | 'all') => ({ id, effect, actions, scopes: ['scope'], principals: [me], resource: { kind, ids } });
-  await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
+  await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 2, revision: 'p1', separationOfDuties: [], restrictions: [],
+    roles: [{ id: INSTALLATION_OWNER_ROLE_ID, permissions: installationOwnerPermissions(getPolicyVocabulary().resources.map(resource => resource.kind)) }], grants: [
     grant('invoke', 'allow', ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], 'model-invocation', [modelInvocationTargetId(reference)]),
     grant('scope', 'allow', ['inspect'], 'scope', ['scope']), grant('decide', 'allow', ['inspect', 'decide'], 'approval', 'all'),
     grant('mcp-tool', 'allow', ['invoke'], 'mcp-server', ['fx']), grant('mcp-run', 'allow', ['execute'], 'operation', ['mcp.tool.call'])] }), { mode: 0o600 });
+  await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', modes: [],
+    bindings: [{ id: 'owner', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: ['scope'] }] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
   const started = () => readFileSync(log, 'utf8').split('\n').filter(line => line.includes('"start"')).length;
@@ -185,22 +190,29 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
       ['mcp_trust · mcp:fx · tools', ''], ['Enter confirm', '\u001b[6~\u001b[6~\u001b[6~', 'next'], ['echo', 'y', 'fresh'],
       // SLASH-WINDOWS I-1 (owner 2026-10-08): in the terminal a typed `/mcp list` opens the /mcp window with the one-time note (the CLI keeps `list`).
       ['Trusted turn done.', '/mcp list\r'],
-      ['Typed arguments are not used in the terminal', '\u001b'],
+      ['Typed arguments are not used in the terminal', ''],
+      ['connected · 1 tool · host · project', '\u001b'],
       ['Typed arguments are not used in the terminal', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     expect(run.output).toContain('MCP server fx (project scope'); expect(run.output).toContain('start it?');
     expect(run.output).toContain('trust it and pin these tools?'); expect(run.output).toContain('echo');
-    expect(run.output).toMatch(/fx › +trusted · 1 tool · [^ ]+ · project/u);
+    expect(run.output).toMatch(/fx › +connected · 1 tool · host · project/u);
+    const trust = join(await mcpProjectTrustDirectory(f.projectRoot, f.env.DECKENT_GLOBAL_HOME, false), 'mcp-trust.json');
+    expect(JSON.parse(readFileSync(trust, 'utf8'))).toMatchObject({ servers: [{ name: 'fx', scope: 'project', decision: 'trusted', tools: [{ name: 'echo' }] }] });
     expect(f.seen.tools[0]).toContain('mcp__fx__echo');
     expect(f.started()).toBeGreaterThan(0);
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try {
       const subjects = db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String((row as { record: string }).record)) as
         { event: { subject: Record<string, unknown> } }).event.subject);
-      // ONAY-URETICI D1 records the assurance-producer inventory before each composed decision; the trust itself is one event.
-      expect(subjects.filter(subject => subject['kind'] !== 'approval-assurance-registration')).toEqual([expect.objectContaining({ kind: 'mcp-trust', action: 'trust', scope: 'project', server: 'fx' })]);
+      // Trust and its governed policy grant are separate durable events; producer inventory is additive.
+      expect(subjects.filter(subject => subject['kind'] !== 'approval-assurance-registration')).toEqual([
+        expect.objectContaining({ kind: 'mcp-trust', action: 'trust', scope: 'project', server: 'fx' }),
+        expect.objectContaining({ kind: 'authority-change', operation: { id: 'policy.administer', version: 1 },
+          counts: { grantsAdded: 1, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } }),
+      ]);
     } finally { db.close(); }
   }, 180_000);
 });

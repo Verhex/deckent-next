@@ -140,7 +140,7 @@ describe('full-window Workline: fixed bar', () => {
       writeLimit: async (...args) => { writes.push(args); settings.values.maxWallMs = 900000; return { status: 'applied', lines: ['limit applied'], approvalId: null }; } }, 'en') } } });
     await until(() => monitor.stdout.frame.includes('READY'), 'beuser ready');
     const beforeMonitor = barRow(frameOf(monitor), 24);
-    monitor.stdin.write('/beuser\r'); await until(() => monitor.stdout.frame.includes('BeUser monitor'), '/beuser monitor');
+    monitor.stdin.write('/beuser\r'); await until(() => monitor.stdout.frame.includes('BeUser monitor') && monitor.stdout.frame.includes('3600000'), '/beuser limits loaded');
     expect(barRow(frameOf(monitor), 24)).toBe(beforeMonitor);
     expect(monitor.stdout.frame).toContain('3600000');
     monitor.stdin.write('l'); await until(() => monitor.stdout.frame.includes('Choose a smaller limit'), 'limit presets');
