@@ -62,6 +62,38 @@ describe('focus reports', () => {
     read('\u001b]11;rgb:ff/'); await settle(280); read('ff/ff\u001b\\z');
     read(`\u001b]11;rgb:${'f'.repeat(70)}`); read('y\u0007');
     expect(seen.join('')).toBe('\r\u0003\u001b[99;5uz');
+    // R2: a plain CSI is still a possible key after 250 ms; only definite replies may drain on time.
+    vi.useFakeTimers();
+    try {
+      for (const [prefix, end] of [['\u001b[', 'A'], ['\u001b[1;5', 'C'], ['\u001b[99;5', 'u']]) {
+        seen.length = 0; read(prefix!); await vi.advanceTimersByTimeAsync(280); read(end!);
+        expect(seen.join('')).toBe(prefix! + end!);
+      }
+      // R1: incomplete strings must not swallow a fresh, possibly split kitty Ctrl+C, before/after either bound.
+      for (const frame of ['\u001b]11;rgb:ff', '\u001bP1$r']) for (const bound of ['none', 'time', 'size']) {
+        for (const kitty of ['\u001b[99;5u', '\u001b[99;5:1u']) for (let at = 1; at < kitty.length; at++) {
+          seen.length = 0; probe = ask(1_000); read(frame);
+          if (bound === 'time') await vi.advanceTimersByTimeAsync(280);
+          if (bound === 'size') read('f'.repeat(70));
+          read(kitty.slice(0, at)); read(kitty.slice(at));
+          expect(seen.join(''), `${JSON.stringify(frame)}/${bound}/${at}`).toBe(kitty);
+          expect(await probe).toBeNull();
+        }
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280); read('\u0003');
+        expect(seen.join('')).toBe('\u0003');
+        seen.length = 0; read(frame); read('\u001b'); read('\u0003'); expect(seen.join('')).toBe('\u0003');
+        // A new OSC replaces the broken string, whereas a late ST still terminates it without leaking an Escape.
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280);
+        read('\u001b'); read(']11;rgb:ff/ff/ff\u0007'); read('x'); expect(seen.join('')).toBe('x');
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280); read('\u001b'); read('\\y');
+        expect(seen.join('')).toBe('y');
+      }
+      for (const frame of ['\u001b[?', '\u001b[>', '\u001b[=', '\u001b]11;', '\u001bP1$r']) {
+        seen.length = 0; read(frame); await vi.advanceTimersByTimeAsync(280); read(frame.startsWith('\u001b[') ? '1;2c' : 'payload\u001b\\');
+        expect(seen.join(''), JSON.stringify(frame)).toBe('');
+      }
+      seen.length = 0; read(`\u001b[${'1'.repeat(70)}`); read('Az'); expect(seen.join('')).toBe('z');
+    } finally { vi.useRealTimers(); }
     // All OSC/DCS and CSI replies, including secondary DA, are consumed at every split. Navigation, Alt keys and coalesced bursts survive.
     for (const reply of ['\u001b]4;0;rgb:ff/ff/ff\u0007', '\u001bP1$r0m\u001b\\', '\u001b[>0;10;1c', '\u001b[0n', '\u001b[12;34R', '\u001b[4;600;800t', '\u001b[?2031;1$y']) {
       seen.length = 0;
