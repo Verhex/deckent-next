@@ -1,7 +1,7 @@
 import { pendingBrainFixture } from '../support/brain-proposal.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
-import { nearestSlashCommand, RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
+import { nearestSlashCommand, RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY, slashSearchKey, searchSlashCommands } from '#surfaces/core/terminal-kit/index.js';
 import { paletteCommand } from '#surfaces/core/terminal-composer/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
@@ -47,6 +47,17 @@ describe('terminal slash registry', () => {
     expect(WORKLINE_SLASH_COMMANDS.find(cmd => cmd.name === 'uninstall')).toMatchObject({ shellCommand: 'deckent uninstall' });
     for (const typed of ['unistall', 'unintsall', 'uni', 'UNINSTAL']) expect(nearestSlashCommand(typed)?.name, typed).toBe('uninstall');
     for (const typed of ['kaldır', 'kaldir', 'xyzzy', 'zz', 're']) expect(nearestSlashCommand(typed), typed).toBeNull();
+    for (const [locale, words] of [['tr', ['kaldır', 'KALDIR', 'kaldir', 'sil']], ['en', ['remove', 'uninstall', 'delete']]] as const) {
+      const labels = terminalComposerLabels(locale).slash;
+      for (const word of words) {
+        expect(searchSlashCommands(word, labels)[0]?.name, word).toBe('uninstall');
+        expect(nearestSlashCommand(word, WORKLINE_SLASH_COMMANDS, labels)?.name, word).toBe('uninstall');
+      }
+      expect(searchSlashCommands('no-such-command', labels)).toEqual([]);
+      expect(nearestSlashCommand('xyzzy', WORKLINE_SLASH_COMMANDS, labels)).toBeNull();
+      const synthetic = [{ name: 'one', descriptionKey: 'one' }, { name: 'two', descriptionKey: 'two' }];
+      expect(nearestSlashCommand('erase', synthetic, { 'command.search.one': 'erase', 'command.search.two': 'erase' })).toBeNull();
+    }
   });
 
   it('reserves no name now that /copy and /rename are registered', () => {
@@ -56,7 +67,7 @@ describe('terminal slash registry', () => {
 
   it.each(['en', 'tr'] as const)('%s labels cover exactly the registry description and argument keys, including mcp/config', locale => {
     const labels = terminalComposerLabels(locale).slash;
-    const keys = [...new Set([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY])];
+    const keys = [...new Set([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : []), ...(command.name === 'uninstall' ? [slashSearchKey(command.name)] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY])];
     expect(Object.keys(labels).sort()).toEqual(keys.sort());
     for (const key of keys) {
       expect(labels[key]).toBe(t(key, {}, locale));

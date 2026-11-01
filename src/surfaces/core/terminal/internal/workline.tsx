@@ -352,7 +352,7 @@ export function WorklineApp(props: WorklineProps) {
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
-  const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
+  const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, picker: labels.windows?.picker, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices), later = useRef(props.opening?.notices), tools = useRef(props.modelTools);
@@ -553,15 +553,15 @@ export function WorklineApp(props: WorklineProps) {
     const rich = labels.windows;
     if (slash.command === 'uninstall') { await uninstallWindow(); return true; }
     if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
-      const typed = slash.command, nearest = nearestSlashCommand(typed); // owner S4: one nearest English command, never a guess
+      const typed = slash.command, nearest = nearestSlashCommand(typed, WORKLINE_SLASH_COMMANDS, labels.composer.slash); // owner S4: one nearest English command, never a guess
       const choice = await windows.ask(unknownCommandSpec(rich, typed, nearest ? [nearest] : [], command => labels.composer.slash[command.descriptionKey] ?? ''));
       if (choice !== null && !execution.signal.aborted) return performRef.current(`/${choice}`, [], execution);
       return true;
     }
     // SW-1 info windows; SLASH-WINDOWS D1 (integration): the rich terminal ignores a typed argument and opens the window, as every other slash
     // command there does; without window words (TERM=dumb) a typed argument keeps the text command.
-    if (props.info && (rich || !slash.args) && INFO_WINDOW_COMMANDS.has(slash.command)) {
-      const shown = await infoWindow.run(slash.command, execution);
+    if (props.info && (rich || !slash.args || slash.command === 'help') && INFO_WINDOW_COMMANDS.has(slash.command)) {
+      const shown = await infoWindow.run(slash.command, execution, slash.args);
       if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
     }
     if (slash.command === 'reasoning') {
@@ -628,7 +628,7 @@ export function WorklineApp(props: WorklineProps) {
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs, ...(ledger?.followEvents ? { followDelivery: pushMode } : {}) });
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs, ...(ledger?.followEvents ? { followDelivery: pushMode } : {}) }, slash.args);
     // Close the controller before exit so queued work cannot dispatch.
     if (action?.exit) { panel.close(); exit(); return false; }
     if (action) {

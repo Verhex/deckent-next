@@ -2,7 +2,7 @@ import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ConversationSessionLabels, WorklineLabels } from '#surfaces/core/terminal/index.js';
-import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS, slashSearchKey, slashHelpText, searchSlashCommands } from '#surfaces/core/terminal-kit/index.js';
 
 /** Catalog strings of the rendered answer (terminal.render.*): narration, footer, tool lines, context, compaction. */
 export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
@@ -50,7 +50,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: composerShortcuts(locale),
     placeholder: t('terminal.workline.placeholder', {}, locale), stashed: t('terminal.composer.stashed', {}, locale),
     steerPlaceholder: { kitty: t('tuiqueue.steerPlaceholder.kitty', {}, locale), other: t('tuiqueue.steerPlaceholder.other', {}, locale) },
-    slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
+    slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : []), ...(catalog[slashSearchKey(command.name)] ? [slashSearchKey(command.name)] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
       .map(key => [key, catalog[key] ?? key])) };
 }
 
@@ -81,4 +81,10 @@ export function terminalSessionLabels(locale: Locale): ConversationSessionLabels
     view: { bar: t('terminal.context.bar', {}, locale), threshold: t('terminal.context.threshold', {}, locale), split: t('terminal.context.split', {}, locale),
       compacted: t('terminal.context.compacted', {}, locale), compactedNone: t('terminal.context.compactedNone', {}, locale), largest: t('terminal.context.largest', {}, locale),
       suggestNew: t('terminal.context.suggestNew', {}, locale), suggestTools: t('terminal.context.suggestTools', {}, locale) } };
+}
+
+/** CLI twin of the Terminal command browser: one registry and localized search vocabulary. */
+export function terminalCommandHelp(locale: Locale, query = ''): string {
+  const labels = terminalComposerLabels(locale).slash, commands = searchSlashCommands(query, labels);
+  return commands.length ? slashHelpText(labels, commands) : `${labels[SLASH_HELP_TITLE_KEY]}\n${t('tui.picker.no_matches', {}, locale)}`;
 }
