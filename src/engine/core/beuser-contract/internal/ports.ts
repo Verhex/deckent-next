@@ -16,11 +16,12 @@ export function pinBeuserWalkerSummary(input: unknown): BeuserWalkerSummary {
 }
 /** Issued by admission, never deserialized from a client request. Every port must recheck this exact binding. */
 export interface BeuserContext { readonly binding: BeuserBinding; readonly principal: VerifiedPrincipal; readonly limits: BeuserLimits; readonly signal: AbortSignal }
-/** Wire ingress may select only an already admitted binding and action; no principal, path or verdict. */
+/** Wire ingress may select only an already admitted binding and action; a finish is persona testimony, never a verdict. */
 export const beuserSurfaceCommandSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
   action: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('look') }),
     z.strictObject({ kind: z.literal('type'), text: z.string() }), z.strictObject({ kind: z.literal('press'), key: persistedString(z.string().min(1)) }),
-    z.strictObject({ kind: z.literal('wait'), ms: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })]),
+    z.strictObject({ kind: z.literal('wait'), ms: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }),
+    z.strictObject({ kind: z.literal('finish'), outcome: z.enum(['reached', 'gave-up']), reason: persistedString(z.string().trim().min(1)) })]),
 }).readonly();
 export type BeuserSurfaceCommand = z.infer<typeof beuserSurfaceCommandSchema>;
 /** Key names a walker may press (a single printable character presses itself); screen hint spellings name the same keys. Terminal vocabulary,

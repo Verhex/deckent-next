@@ -120,8 +120,14 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
         const artifactRef = await retainBeuserJson(artifacts, context, row);
         trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef });
       },
-      async finished() {
-        if (lastEvent?.process?.state !== 'eof') return false;
+      async finished(screen: import('#engine/index.js').BeuserScreen, finish?: Extract<import('#engine/index.js').BeuserSurfaceCommand['action'], { kind: 'finish' }>) {
+        if (!finish && lastEvent?.process?.state !== 'eof') return false;
+        if (finish) {
+          const row = recorder.append(context, { binding: context.binding, kind: 'action', evidenceRef: `${context.binding.transcriptId}:finish`,
+            atMs: Math.floor(performance.now() - started), text: JSON.stringify({ action: finish, screenRef: `${context.binding.transcriptId}:${screen.sequence}` }) });
+          const artifactRef = await retainBeuserJson(artifacts, context, row);
+          trace.push({ evidenceRef: row.entry.evidenceRef, kind: row.entry.kind, artifactRef });
+        }
         const readback = await probe(); readbacks.push(readback);
         recorder.append(context, { binding: context.binding, kind: 'readback', evidenceRef: readback.evidenceRef, atMs: readback.atMs, text: JSON.stringify(readback.summary) });
         return true;
