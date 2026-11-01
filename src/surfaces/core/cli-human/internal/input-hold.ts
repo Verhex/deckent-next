@@ -11,16 +11,15 @@ const holds = new WeakMap<object, Hold>();
  */
 export function holdTerminalInput(stdin: HeldInput): () => void {
   if (!stdin.isTTY || typeof stdin.setRawMode !== 'function' || holds.has(stdin)) return () => undefined;
-  // Paused mode ('readable'), as Ink reads: a stream once switched to flowing ('data') and paused never wakes a later 'readable' reader.
-  const discard = () => {
-    let interrupt = false;
-    for (let chunk = stdin.read(); chunk !== null; chunk = stdin.read()) interrupt ||= String(chunk).includes('\u0003');
-    if (!interrupt || stdin.listenerCount('readable') > 1 || stdin.listenerCount('data') > 0) return;
+  // The host reads a filtered stream; keep the real TTY flowing between hosts too.
+  const discard = (chunk: unknown) => {
+    if (!String(chunk).includes('\u0003') || stdin.listenerCount('readable') > 0 || stdin.listenerCount('data') > 1) return;
     release(); process.kill(process.pid, 'SIGINT');
   };
   const hold: Hold = { lent: false,
-    attach: () => { stdin.setRawMode!(true); stdin.on('readable', discard); stdin.unref?.(); },
-    detach: () => { stdin.off('readable', discard); } };
+    attach: () => { stdin.setRawMode!(true); stdin.on('data', discard); stdin.resume(); stdin.unref?.(); },
+    // Keep bytes queued until the borrower attaches its reader and resumes.
+    detach: () => { stdin.off('data', discard); stdin.pause(); } };
   const release = () => {
     if (holds.get(stdin) !== hold) return;
     holds.delete(stdin);
