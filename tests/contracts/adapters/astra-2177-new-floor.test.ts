@@ -374,7 +374,7 @@ describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start
   }, 60_000);
   it('a command that exists nowhere is "not found", not a sandbox problem; a package runner that fails in the view is named as one', async () => {
     const f = setup();
-    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'command not found' });
+    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'ENOENT (PATH)' });
     expect(await open(f, 'npx', ['-y', 'some-mcp-server'])).toMatchObject({ ok: false, reason: 'sandbox-unreachable', diagnosis: { kind: 'package-runner', runner: 'npx' } });
   }, 60_000);
 });

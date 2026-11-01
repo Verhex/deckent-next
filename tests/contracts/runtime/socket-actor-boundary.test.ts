@@ -168,9 +168,15 @@ describe.skipIf(process.platform !== 'linux')('SEC-1: an agent shell cannot reac
     const resolution = resolveShellRealm('prefer-sandbox', { platform: 'linux', bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi: landlockAbi } },
       [landlockShellSandbox({ project: await createWorkspaceScope(project), scratchDir: scratch })]);
     if (!resolution.ok || resolution.realm.kind !== 'landlock') throw new Error('landlock realm expected');
-    const ran = await resolution.realm.run({ command: `python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.connect('${endpoint}'); print('connected')"`,
+    // Keep the success marker off failing source lines: newer Python tracebacks echo those lines.
+    const ran = await resolution.realm.run({ command: `python3 -c "import socket
+s = socket.socket(socket.AF_UNIX)
+s.connect('${endpoint}')
+print('connected')"`,
       cwd: project, environment: { PATH: '/usr/bin:/bin' } });
     // The refusal is the kernel's (seccomp refuses AF_UNIX in this realm), not a missing interpreter.
+    expect(ran.status, ran.output).toBe('exited');
+    expect(ran.exitCode, ran.output).not.toBe(0);
     expect(ran.output).toMatch(/PermissionError|Operation not permitted|Permission denied/u);
     expect(ran.output).not.toContain('connected');
     expect(seen).toEqual([]);
