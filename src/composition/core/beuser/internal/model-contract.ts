@@ -28,6 +28,8 @@ export function decodeBeuserWalkerOutput(value: ModelInvocationResult, binding: 
   return parsed.data;
 }
 const experienceSchema = z.strictObject({ verdict: z.enum(['pass', 'friction', 'fail', 'unknown']), evidenceRefs: z.array(z.string()) });
+/** Astra 2970 R1: a bounded evaluator input that lost observation text cannot carry a positive verdict. */
+export const beuserEvaluatorInputLossy = (messages: readonly { content: string }[]) => messages.some(message => message.content.includes('"textTruncated":true'));
 export function decodeBeuserEvaluatorOutput(value: ModelInvocationResult, evidenceRefs: readonly string[]) {
   const parsed = experienceSchema.safeParse(modelJson(value));
   if (!parsed.success || !parsed.data.evidenceRefs.every(ref => evidenceRefs.includes(ref))) throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID');

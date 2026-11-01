@@ -6,5 +6,5 @@ export { configuredBeuserModels } from './internal/models.js';
 export { setupConfiguredBeuser, type BeuserSetupInput } from './internal/setup.js';
 export { listConfiguredBeuserJourneys } from './internal/journeys.js';
 export { inspectConfiguredBeuserMonitor } from './internal/monitor.js';
-export { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput } from './internal/model-contract.js';
+export { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput, beuserEvaluatorInputLossy } from './internal/model-contract.js';
 export { beuserEvaluatorEvidence } from './internal/evaluator-input.js';

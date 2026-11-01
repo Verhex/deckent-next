@@ -12,7 +12,7 @@ import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { createServer } from 'node:http';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
-import { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput, configuredBeuserModels, beuserEvaluatorEvidence } from '#composition/core/beuser/index.js';
+import { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput, configuredBeuserModels, beuserEvaluatorEvidence, beuserEvaluatorInputLossy } from '#composition/core/beuser/index.js';
 
 const mocks = vi.hoisted(() => ({ scope: vi.fn(), catalog: vi.fn(), activation: vi.fn(), command: vi.fn(), prepare: vi.fn(), invoke: vi.fn() }));
 vi.mock('#composition/core/scoped-request/index.js', () => ({ loadConfiguredScopeContext: mocks.scope }));
@@ -380,6 +380,12 @@ it('keeps sealed evaluator evidence bounded with cells summarized, repeated scre
   expect(excerpt.transcript[0]).toMatchObject({ textTruncated: true, entry: { evidenceRef: 'screen-0', digest: long.transcript[0]!.entry.digest } });
   expect(excerpt.transcript[0].text).toContain('FIRST'); expect(excerpt.transcript[0].textTail).toContain('LAST');
   expect(excerpt.transcript[0].text + excerpt.transcript[0].textTail).not.toContain('�');
+  // Astra 2970 R1: a refusal in the clipped middle never reaches the model, so the input is lossy and a positive verdict is not accepted
+  // (application: lossy + pass -> deterministic unknown); a complete input is not lossy.
+  const middle = snapshot([JSON.stringify({ screen: { ...screen, cells: undefined, text: 'FIRST' + 'x'.repeat(150000) + 'REFUSED: BEUSER_TARGET_NOT_SANDBOX' + 'y'.repeat(150000) + 'LAST' } })]);
+  const lossy = beuserModelMessages('beuser-evaluator', { transcriptDigest: middle.transcriptDigest }, beuserEvaluatorEvidence(middle, {}));
+  expect(lossy[1]!.content).not.toContain('REFUSED'); expect(beuserEvaluatorInputLossy(lossy)).toBe(true);
+  expect(beuserEvaluatorInputLossy(delivered)).toBe(false);
   expect(() => beuserModelMessages('beuser-evaluator', {}, beuserEvaluatorEvidence(long, { criterion: 'x'.repeat(300000) }))).toThrow('BEUSER_EVALUATOR_INPUT_TOO_LARGE');
   expect(mocks.invoke).toHaveBeenCalledTimes(1);
 

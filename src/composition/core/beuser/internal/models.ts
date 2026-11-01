@@ -7,12 +7,12 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { modelInvocationCommandSchema, openAiChatUsageSchema } from '#domain/index.js';
 import { currencyAmountText } from '#platform/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { beuserModelMessages, decodeBeuserWalkerOutput } from './model-contract.js';
+import { beuserEvaluatorInputLossy, beuserModelMessages, decodeBeuserWalkerOutput } from './model-contract.js';
 
 /** Role/activation/catalog and invocation authority are re-read for every call. No host fallback or hidden model substitution. */
 export function configuredBeuserModels(root: string, options: ConfigLoadOptions, context: BeuserContext,
   choices: BeuserModelComposition['choices'], contributorModels: readonly unknown[], budget: BeuserCallBudget, completionTokens: number,
-  evaluatorInput: () => unknown) {
+  evaluatorInput: () => unknown, onEvaluatorInput: (lossy: boolean) => void = () => {}) {
   const pins = new Map<string, Awaited<ReturnType<typeof prepareConfiguredModelAs>>>();
   // How each admitted call's token reservation was sized; retained with the walk's diagnostic and shown in the report.
   const reservations = { providerCount: 0, estimated: 0 };
@@ -27,8 +27,10 @@ export function configuredBeuserModels(root: string, options: ConfigLoadOptions,
       } }, profiles: c.config['provider_invocation_profiles'], catalog };
     },
     async prepare(ctx, role, reference, input, remaining, catalogModel) {
+      const messages = beuserModelMessages(role, input, role === 'beuser-evaluator' ? evaluatorInput() : undefined);
+      if (role === 'beuser-evaluator') onEvaluatorInput(beuserEvaluatorInputLossy(messages));
       const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: ctx.binding.identity.scopeId, options,
-        messages: beuserModelMessages(role, input, role === 'beuser-evaluator' ? evaluatorInput() : undefined) }, false, reference, { maxCompletionTokens: completionTokens, jsonOutput: 'if-supported' });
+        messages }, false, reference, { maxCompletionTokens: completionTokens, jsonOutput: 'if-supported' });
       const pinned = await prepareConfiguredModelAs(root, prepared.command, ctx.principal, options, ctx.signal);
       const profile = pinned.profile;
       const spending = pinned.spending;
