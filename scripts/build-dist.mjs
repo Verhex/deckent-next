@@ -1,9 +1,8 @@
 // build-dist (DEPS-DIST, owner 2026-09-29): the publishable package. Runtime dependencies are bundled into the package itself, so npm, pnpm,
 // Yarn and Bun install exactly the code this build produced (nothing is resolved at install time) and an air-gapped install is one tarball.
-// Shape (measured choice, see proof DEPS-DIST-2026-09-29): Deckent's own compiled files keep the tsc `dist` layout byte-for-byte in module
-// structure — every file is its own entry and its relative/#imports stay external — so import.meta.url-relative paths (native addon, sandbox
-// helpers, spawned entries, build identity, package root) resolve exactly as in the tested dist. Only third-party code moves: esbuild inlines
-// it (code splitting, so lazy import() stays lazy and React/zod exist once) into `dist/vendor/` chunks. Type declarations: only what a consumer
+// P5b (owner 2026-11-01): public/process entries share one split graph, including our code. Source import.meta.url locations are restored
+// after chunk names are known (dist-own.mjs), keeping native addons, spawned entries, build identity and package roots relocatable.
+// Code splitting keeps lazy import() lazy and distribution registries singletons across extensions/CLI/SDK. Type declarations: only what a consumer
 // reaches from the types entry, third-party ones vendored into `dist/vendor/types/` (scripts/dist-types.mjs, DEPS-TYPES).
 // FASTURI-OUT (owner 2026-09-29): the MCP SDK's own bundled ajv + fast-uri (default validator) is replaced by a throwing stub and the build fails
 // if ajv/fast-uri still reach the bundle (metafile inputs, shipped packages, sourcemap-embedded components). MCP-SCHEMA-VALIDATOR: Deckent ships its
@@ -25,6 +24,7 @@ import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, 
 import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
 import { loadRegistry } from './dependencies.mjs';
 import { vendorDeclarations } from './dist-types.mjs';
+import { ownEntries, ownModulePlugin, restoreOwnUrls } from './dist-own.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 /** Optional peers that stay external: loaded only on paths that already tolerate their absence (ink DEV devtools, ws native accelerators). */
@@ -146,20 +146,18 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   rmSync(out, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
 
   const files = walk(dist), stubHits = new Map();
-  const own = { name: 'deckent-own-modules', setup(builder) {
-    // Deckent's own modules stay separate files: a relative or #import from a dist file is external (import attributes are preserved).
-    builder.onResolve({ filter: /^[.#]/ /* Go RE2 syntax: no flags */ }, args => args.kind !== 'entry-point' && args.importer.startsWith(dist + '/') ? { path: args.path, external: true } : undefined);
-  } };
   const standalone = STANDALONE_ENTRIES.map(entry => join(dist, entry));
   for (const entry of standalone) if (!files.includes(entry)) throw new Error(`standalone entry ${relative(dist, entry)} missing from dist`);
   // FIX8a R27: the package is a production build; React/scheduler/reconciler pick their builds by NODE_ENV, which a customer's shell rarely sets.
   const common = { absWorkingDir: root, outbase: dist, outdir: join(stage, 'dist'), bundle: true, format: 'esm', platform: 'node', target: 'node24',
-    define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] };
-  const split = await build({ ...common, entryPoints: files.filter(file => file.endsWith('.js') && !standalone.includes(file)), splitting: true,
+    tsconfigRaw: {}, // #imports must resolve to the built dist, never the source-mode aliases in tsconfig.json.
+    define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [ajvStubPlugin(stubHits)] };
+  const split = await build({ ...common, plugins: [...common.plugins, ownModulePlugin(dist)], entryPoints: ownEntries(dist, source), splitting: true,
     chunkNames: 'vendor/[name]-[hash]' });
-  // Unsplit: one output file per entry, nothing shared with the split build. Same plugins, so a relative import stays external and is refused below.
+  // Unsplit: one output per mounted entry; any import besides a node: builtin is refused below.
   const alone = await build({ ...common, entryPoints: standalone, splitting: false });
   const result = { metafile: { inputs: { ...split.metafile.inputs, ...alone.metafile.inputs }, outputs: { ...split.metafile.outputs, ...alone.metafile.outputs } } };
+  if (Object.keys(result.metafile.inputs).some(path => path.replaceAll('\\', '/').startsWith('src/'))) throw new Error('build-dist must bundle the verified dist, not source aliases');
   const standaloneProblems = standalone.flatMap(entry => {
     const label = relative(dist, entry), key = relative(root, join(stage, 'dist', label)).replaceAll('\\', '/');
     const output = Object.entries(alone.metafile.outputs).find(([path]) => path.replaceAll('\\', '/') === key)?.[1];
@@ -167,10 +165,13 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   });
   const patched = [];
   for (const output of Object.keys(result.metafile.outputs)) {
-    const path = join(root, output), code = readFileSync(path, 'utf8');
-    if (!code.includes(REQUIRE_SHIM)) continue;
-    const lines = code.split('\n'); lines.splice(lines[0].startsWith('#!') ? 1 : 0, 0, REQUIRE_BANNER);
-    writeFileSync(path, lines.join('\n')); patched.push(relative(stage, path));
+    const path = join(root, output), original = readFileSync(path, 'utf8');
+    let code = restoreOwnUrls(original, path, join(stage, 'dist'));
+    if (code.includes(REQUIRE_SHIM)) {
+      const lines = code.split('\n'); lines.splice(lines[0].startsWith('#!') ? 1 : 0, 0, REQUIRE_BANNER);
+      code = lines.join('\n'); patched.push(relative(stage, path));
+    }
+    if (code !== original) writeFileSync(path, code);
   }
   // Everything that is not a compiled module or a declaration ships unchanged: JSON assets, native addon and helper binaries, build identity.
   // Declarations: only the closure a consumer's type checker reaches from the types entry, third-party ones vendored (scripts/dist-types.mjs).

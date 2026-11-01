@@ -18,7 +18,7 @@
 // Usage: node scripts/pack-smoke.mjs <tarball> [--node /abs/node] [--root <installed package root>] [--types <ts dir>[,<ts dir>]]
 //        [--types-root <dir holding @types/node>] [--keep] [--only a,b]
 // Prints a JSON report; exit 1 when any check fails. The tarball path (install, runtime, client, --types) runs per supported Node before a
-// release; the fast --root subset (version,mcp,native,lazy,imports,bootstrap,terminal) runs in every verify via tests/contracts/tooling/pack-smoke-dist.test.ts.
+// release; the --root gate also checks extensions, including its negative controls, via tests/contracts/tooling/pack-smoke-dist.test.ts.
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { builtinModules } from 'node:module';
@@ -260,8 +260,10 @@ if (want('lazy') && report.checks.install?.ok !== false) {
       for (const match of code.matchAll(STATIC)) { const next = target(file, match[1] ?? match[2]); if (next) stack.push(next); } }
     return { files: seen.size, heavy: [...heavy].sort() }; };
   const cli = reach(join(root, manifest.bin.deckent)), mcp = reach(join(root, manifest.bin['deckent-mcp'])), extensions = reach(join(root, manifest.exports['./extensions'].import));
-  record('lazy', cli.heavy.length === 0 && extensions.heavy.length === 0 && mcp.heavy.every(name => name.startsWith('@modelcontextprotocol/server') || name === '@modelcontextprotocol/core'),
-    { cli, mcp, extensions });
+  const bin = join(root, manifest.bin.deckent), mainImport = /import\(\s*["']([^"']*cli-main[^"']*)["']\s*\)/u.exec(readFileSync(bin, 'utf8'))?.[1];
+  const main = mainImport ? reach(resolve(dirname(bin), mainImport)) : null, sdk = reach(join(root, manifest.exports['.'].import));
+  record('lazy', cli.heavy.length === 0 && main !== null && main.heavy.length === 0 && sdk.heavy.length === 0 && extensions.heavy.length === 0
+    && mcp.heavy.every(name => name.startsWith('@modelcontextprotocol/server') || name === '@modelcontextprotocol/core'), { cli, main, sdk, mcp, extensions });
 }
 
 if (want('imports') && report.checks.install?.ok !== false) {
