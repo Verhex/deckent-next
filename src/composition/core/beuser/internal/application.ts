@@ -19,6 +19,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createBeuserChannel, retainBeuserJson } from '#adapters/index.js';
 import { openConfiguredBeuserRealmOwner } from '#composition/core/supervisors/index.js';
 import { decodeBeuserEvaluatorOutput } from './model-contract.js';
+import { beuserEvaluatorEvidence } from './evaluator-input.js';
 import { configuredBeuserModels } from './models.js';
 import { beuserJourneyLaunch } from './launch.js';
 
@@ -58,7 +59,7 @@ export async function createConfiguredBeuserHarness(root: string, context: Beuse
     argv: (ctx, command) => safeScreen(() => getSurface().argv(ctx, command)),
   };
   const model = configuredBeuserModels(root, options, context, data.choices, data.contributorModels, new BeuserCallBudget(context.limits), data.completionTokens,
-    () => ({ transcript: recorder.finalize(context), rubric: data.rubric }));
+    () => beuserEvaluatorEvidence(recorder.finalize(context), data.rubric));
   const walkerMakers: (string | null)[] = [];
   const models = { ...model.models, async walker(...args: Parameters<typeof model.models.walker>) { const answer = await model.models.walker(...args);
     if (answer.state === 'invoked') walkerMakers.push(answer.receipt.maker); return answer; } };

@@ -7,3 +7,4 @@ export { setupConfiguredBeuser, type BeuserSetupInput } from './internal/setup.j
 export { listConfiguredBeuserJourneys } from './internal/journeys.js';
 export { inspectConfiguredBeuserMonitor } from './internal/monitor.js';
 export { beuserModelMessages, decodeBeuserWalkerOutput, decodeBeuserEvaluatorOutput } from './internal/model-contract.js';
+export { beuserEvaluatorEvidence } from './internal/evaluator-input.js';

@@ -107,7 +107,8 @@ export async function correctBeuserModelOutput<T>(context: BeuserContext, patien
     try { return await work(invalid?.code as BeuserCorrection | undefined); }
     catch (error) {
       if (error instanceof BeuserContractError && (error.code === 'BEUSER_MODEL_OUTPUT_INVALID' || error.code === 'BEUSER_ACTION_INVALID')) invalid = error;
-      else if (invalid && (error instanceof BeuserContractError && error.code === 'BEUSER_LIMITS_UNAVAILABLE'
+      else if (invalid && (error instanceof BeuserContractError && ['BEUSER_LIMITS_UNAVAILABLE', 'BEUSER_CALL_BUDGET_EXCEEDED', 'BEUSER_EVALUATOR_INPUT_TOO_LARGE',
+        'BEUSER_MODEL_INPUT_TOO_LARGE', 'BEUSER_MODEL_PROFILE_LIMIT', 'BEUSER_SPEND_UNAVAILABLE'].includes(error.code)
         || error instanceof BeuserWalkStopped && error.reason === 'bound')) throw invalid;
       else throw error;
     }

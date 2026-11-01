@@ -527,4 +527,9 @@ it('bounds evaluator format corrections by admitted calls and preserves cancella
   const refused = vi.fn(async () => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); });
   await expect(correctBeuserModelOutput(ctx, summary.patience, refused)).rejects.toThrow('BEUSER_TARGET_NOT_SANDBOX');
   expect(refused).toHaveBeenCalledOnce();
+  for (const code of ['BEUSER_CALL_BUDGET_EXCEEDED', 'BEUSER_EVALUATOR_INPUT_TOO_LARGE', 'BEUSER_MODEL_PROFILE_LIMIT', 'BEUSER_SPEND_UNAVAILABLE'] as const) {
+    const exhausted = vi.fn().mockRejectedValueOnce(new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID')).mockRejectedValueOnce(new BeuserContractError(code));
+    await expect(correctBeuserModelOutput(ctx, summary.patience, exhausted)).rejects.toThrow('BEUSER_MODEL_OUTPUT_INVALID');
+    expect(exhausted).toHaveBeenCalledTimes(2);
+  }
 });
