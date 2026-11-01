@@ -6,7 +6,7 @@ export function errorDiagnostic(text: string | null, rules: readonly Readonly<{ 
   let safe = redactForRecord(text ?? '', known);
   safe = safe.replace(/\b(?:Basic|Bearer)\s+\S+/giu, '[REDACTED]')
     .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*/gu, '[REDACTED]')
-    .replace(/(?<![\w-])((?:["']?[\w-]*(?:password|passwd|pwd|token|secret|api[_-]?key|private[_-]?key|credentials?)["']?|["']?(?:authorization|cookie)["']?)\s*[:=]\s*)(?:"(?:[^"\\\r\n]|\\.)*(?:"|$)|'(?:[^'\\\r\n]|\\.)*(?:'|$)|[^\s,;}]+)/gimu, '$1[REDACTED]')
+    .replace(/(?<![\w-])((?:["']?[\w-]*(?:password|passwd|pwd|token|secret|api[_-]?key|private[_-]?key|credentials?)["']?|["']?(?:authorization|cookie)["']?)\s*[:=]\s*)(?:"(?:[^"\\\r\n]|\\.?)*(?:"|$)|'(?:[^'\\\r\n]|\\.?)*(?:'|$)|[^\s,;}]+)/gimu, '$1[REDACTED]')
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"'`]+/giu, value => value.replace(/(\/\/)[^/?#]*@/u, '$1[REDACTED]@').replace(/[?#].*$/u, '?[REDACTED]'))
     .replace(/(?<![\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-])[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+/giu, '[REDACTED]')
     .replace(/[A-Za-z0-9_+/.=-]{24,}/gu, '[REDACTED]');
