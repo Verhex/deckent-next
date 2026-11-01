@@ -19,7 +19,14 @@ const execute = promisify(execFile);
 const SOCKET = '/var/run/docker.sock';
 const reachable = await access(SOCKET, constants.R_OK | constants.W_OK).then(() => true, () => false);
 const measured = await measureTestShellHost();
-const PING = `python3 -c 'import socket; s=socket.socket(socket.AF_UNIX); s.connect("${SOCKET}"); s.sendall(b"GET /_ping HTTP/1.0\\r\\nHost: d\\r\\n\\r\\n"); print("REACHED", s.recv(64))'`;
+// Separate source lines keep a Python traceback from echoing a success marker that never ran.
+const PROBE = `import socket
+s=socket.socket(socket.AF_UNIX)
+s.connect("${SOCKET}")
+print("REACHED", flush=True)
+s.sendall(b"GET /_ping HTTP/1.0\\r\\nHost: d\\r\\n\\r\\n")
+print(s.recv(64))`;
+const PING = `python3 -c '${PROBE}'`;
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
@@ -40,7 +47,7 @@ async function shell(provider: 'bubblewrap' | 'landlock', open: boolean) {
 
 describe.skipIf(process.platform !== 'linux' || !reachable)('I-D2 cond. 5: a docker group member\'s agent shell cannot reach docker.sock', () => {
   it('positive control: this user reaches the real Docker socket outside the sandbox', async () => {
-    const { stdout } = await execute('python3', ['-c', `import socket; s=socket.socket(socket.AF_UNIX); s.connect("${SOCKET}"); s.sendall(b"GET /_ping HTTP/1.0\\r\\nHost: d\\r\\n\\r\\n"); print("REACHED", s.recv(64))`]);
+    const { stdout } = await execute('python3', ['-c', PROBE]);
     expect(stdout).toContain('REACHED');
   });
   for (const [provider, open] of [['bubblewrap', false], ['bubblewrap', true], ['landlock', false], ['landlock', true]] as const) {
