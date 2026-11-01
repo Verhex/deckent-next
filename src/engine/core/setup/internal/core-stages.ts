@@ -105,7 +105,7 @@ function sandbox({ facts }: CoreStageInput): CoreStageResult {
   // Chat and read-only tools stay available; only approved edits and shell commands need the sandbox.
   return result({ state: 'blocked', reason: reason(usernsRestricted ? 'setup.reason.usernsRestricted' : 'setup.reason.sandboxUnavailable'), cli: ['deckent', 'doctor'] });
 }
-const connection = z.object({ connection: identitySchema, model: identitySchema }).strict();
+const connection = z.strictObject({ connection: identitySchema, model: identitySchema });
 function model(input: CoreStageInput): CoreStageResult {
   const connections = input.facts.model.connections;
   if (connections > 0) return result({ state: 'done', reason: reason('setup.reason.modelConnected', { count: connections }) });

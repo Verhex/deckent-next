@@ -1,11 +1,12 @@
+import { persistedInteger, criterionDefinitionSchema, evaluatorDefinitionSchema, processExitCauseSchema, type CriterionDefinition, type EvaluatorDefinition } from '#domain/index.js';
 import { z } from 'zod';
-import { criterionDefinitionSchema, evaluatorDefinitionSchema, processExitCauseSchema, type CriterionDefinition, type EvaluatorDefinition } from '#domain/index.js';
+
 
 export const PROCESS_EXIT_EVALUATOR = Object.freeze({ id: 'process-exit', version: 1,
   implementation: Object.freeze({ id: 'process-exit', version: 1 }) });
-export const processExitParametersSchema = z.object({
-  acceptedExitCodes: z.array(z.number().int().safe()).min(1).refine(values => new Set(values).size === values.length, 'PROCESS_EXIT_CODES_DUPLICATE'),
-}).strict().readonly();
+export const processExitParametersSchema = z.strictObject({
+  acceptedExitCodes: z.array(persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER)).min(1).refine(values => new Set(values).size === values.length, 'PROCESS_EXIT_CODES_DUPLICATE'),
+}).readonly();
 const parametersSchema = processExitParametersSchema;
 export type ProcessExitParameters = z.infer<typeof parametersSchema>;
 

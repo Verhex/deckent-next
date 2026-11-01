@@ -5,12 +5,12 @@ import { parseProviderCatalog, PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogErro
 export const MODEL_BINDING_ENCODING_VERSION = 1;
 export const MODEL_BINDING_PREFIX = 'deckent.model-binding.v1\n';
 
-export const modelReferenceSchema = z.object({
+export const modelReferenceSchema = z.strictObject({
   providerId: identitySchema,
   providerVersion: counterSchema.positive(),
   modelId: identitySchema,
   modelVersion: counterSchema.positive(),
-}).strict();
+});
 
 export type ModelReference = Readonly<z.infer<typeof modelReferenceSchema>>;
 export type ModelBindingDefinition = Readonly<{
@@ -44,11 +44,11 @@ function canonicalJson(value: unknown): string {
   return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`;
 }
 
-const definitionShape = z.object({
+const definitionShape = z.strictObject({
   encodingVersion: z.literal(MODEL_BINDING_ENCODING_VERSION),
-  provider: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(),
-  model: z.unknown(),
-}).strict();
+  provider: z.strictObject({ id: identitySchema, version: counterSchema.positive() }),
+  model: z.unknown().optional(),
+});
 const definitionEnvelopeSchema = createImmutableJsonObjectSchema(PROVIDER_CATALOG_WIRE_LIMITS);
 const MODEL_BINDING_DEFINITION_REVISION = 'model-binding-definition';
 

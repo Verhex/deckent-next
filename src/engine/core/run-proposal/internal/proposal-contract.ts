@@ -1,27 +1,27 @@
 import { z } from 'zod';
-import { authorityAdmissionSchema, counterSchema, identitySchema, brainPlanCommandSchema, runProposalSchema, runProposalBindingSchema,
+import { persistedString, authorityAdmissionSchema, counterSchema, identitySchema, brainPlanCommandSchema, runProposalSchema, runProposalBindingSchema,
   encodeCommandProjection, type RunProposal } from '#domain/index.js';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
-export const runProposalQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema, commandId: identitySchema }).strict().readonly();
-const plannedV1 = z.object({ schemaVersion: z.literal(1), proposal: runProposalSchema,
+export const runProposalQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema, commandId: identitySchema }).readonly();
+const plannedV1 = z.strictObject({ schemaVersion: z.literal(1), proposal: runProposalSchema,
   digest: z.string().regex(/^[a-f0-9]{64}$/), revision: counterSchema, recordedAt: counterSchema,
   status: z.enum(['recorded', 'pending', 'accepted', 'rejected', 'parked']),
   binding: runProposalBindingSchema,
-  reason: identitySchema.nullable(), approval: z.object({ approvalId: identitySchema, expiresAt: counterSchema,
-    decisionRecordId: identitySchema }).strict().readonly().nullable(),
+  reason: identitySchema.nullable(), approval: z.strictObject({ approvalId: identitySchema, expiresAt: counterSchema,
+    decisionRecordId: identitySchema }).readonly().nullable(),
   authority: authorityAdmissionSchema.nullable(),
-}).strict().readonly();
+}).readonly();
 export type RunProposalQuery = z.infer<typeof runProposalQuerySchema>;
-export const setupIntentFactSchema = z.object({ id: identitySchema, revision: counterSchema, basis: z.string().regex(/^[a-f0-9]{64}$/),
+export const setupIntentFactSchema = z.strictObject({ id: identitySchema, revision: counterSchema, basis: z.string().regex(/^[a-f0-9]{64}$/),
   ready: z.boolean(), reason: z.enum(['WORKER_SETUP_PENDING', 'WORKER_IMAGE_BUILD_FAILED', 'WORKER_IMAGE_BUILD_INTERRUPTED', 'WORKER_IMAGE_DECLINED']),
-  params: z.record(z.string(), z.union([z.string().max(512), z.number().finite()])) }).strict().readonly();
+  params: z.record(z.string(), z.union([persistedString(z.string().max(512)), z.number().finite()])) }).readonly();
 export type SetupIntentFact = z.infer<typeof setupIntentFactSchema>;
-export const runIntentRecordSchema = z.object({ schemaVersion: z.literal(2), kind: z.literal('intent'),
+export const runIntentRecordSchema = z.strictObject({ schemaVersion: z.literal(2), kind: z.literal('intent'),
   command: brainPlanCommandSchema, proposer: runProposalSchema.unwrap().shape.proposer, proposalId: identitySchema, runId: identitySchema,
   digest: z.string().regex(/^[a-f0-9]{64}$/), revision: counterSchema, recordedAt: counterSchema,
   status: z.enum(['parked', 'released', 'starting', 'cancelled']), fact: setupIntentFactSchema,
-  transitions: z.array(z.object({ commandId: identitySchema, action: z.enum(['release', 'cancel', 'start', 'fact']),
-    revision: counterSchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).max(256) }).strict().readonly();
+  transitions: z.array(z.strictObject({ commandId: identitySchema, action: z.enum(['release', 'cancel', 'start', 'fact']),
+    revision: counterSchema, digest: z.string().regex(/^[a-f0-9]{64}$/) })).max(256) }).readonly();
 export type RunIntentRecord = z.infer<typeof runIntentRecordSchema>;
 const plannedV2 = plannedV1.unwrap().extend({ schemaVersion: z.literal(2), kind: z.literal('planned'), origin: runIntentRecordSchema.nullable() }).strict().readonly();
 export const runProposalRecordSchema = z.union([plannedV1, plannedV2]);

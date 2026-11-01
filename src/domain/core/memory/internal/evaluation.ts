@@ -11,11 +11,11 @@ import type { MemoryAutomation } from './automation.js';
  * verification basis. Storage-neutral JSON like the journal.
  */
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const actor = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 /** One model as the catalog names it, with its canonical maker (`null`: unknown — provider-chosen, no metadata or not in the catalog). */
-export const memoryModelRefSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema, maker: identitySchema.nullable() }).strict().readonly();
+export const memoryModelRefSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, maker: identitySchema.nullable() }).readonly();
 export type MemoryModelRef = z.infer<typeof memoryModelRefSchema>;
-const attemptRefSchema = z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).strict().readonly();
+const attemptRefSchema = z.strictObject({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).readonly();
 export const MEMORY_EVALUATION_VERDICTS = Object.freeze(['pass', 'fail', 'unknown'] as const);
 /** A shadow record is rollout evidence only; a live one may be a verification basis. */
 export const MEMORY_EVALUATION_MODES = Object.freeze(['shadow', 'live'] as const);
@@ -23,16 +23,16 @@ export type MemoryEvaluationVerdict = typeof MEMORY_EVALUATION_VERDICTS[number];
 /** What the call cost, exactly as the spend ledger settled it; `none`: no money moved (a subscription or local channel, or nothing sent);
  * `unknown`: not settled or unreadable — the evaluator then stops for the day (fail closed). */
 export const memoryEvaluationSpendSchema = z.discriminatedUnion('state', [
-  z.object({ state: z.literal('settled'), minorUnits: counterSchema, currency: z.string().regex(/^[A-Z]{3}$/) }).strict(),
-  z.object({ state: z.literal('none') }).strict(), z.object({ state: z.literal('unknown') }).strict()]).readonly();
+  z.strictObject({ state: z.literal('settled'), minorUnits: counterSchema, currency: z.string().regex(/^[A-Z]{3}$/) }),
+  z.strictObject({ state: z.literal('none') }), z.strictObject({ state: z.literal('unknown') })]).readonly();
 export type MemoryEvaluationSpend = z.infer<typeof memoryEvaluationSpendSchema>;
 const list = (max: number) => z.array(identitySchema).max(max).refine(values => new Set(values).size === values.length).readonly();
-export const memoryEvaluationRecordSchema = z.object({ schemaVersion: z.literal(1), recordId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
+export const memoryEvaluationRecordSchema = z.strictObject({ schemaVersion: z.literal(1), recordId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
   entryRevision: counterSchema.positive(), subjectDigest: digest, mode: z.enum(MEMORY_EVALUATION_MODES), method: z.literal('model-review'), evaluator: actor,
   evaluatorModel: memoryModelRefSchema, sourceModels: z.array(memoryModelRefSchema).min(1).max(64).readonly(), sourceAttempts: z.array(attemptRefSchema).min(1).max(64).readonly(),
-  sourceEvaluationIds: list(64), template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), registryRevision: identitySchema,
+  sourceEvaluationIds: list(64), template: z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly(), registryRevision: identitySchema,
   inputDigest: digest, outputDigest: digest.nullable(), invocationId: identitySchema.nullable(), spend: memoryEvaluationSpendSchema,
-  verdict: z.enum(MEMORY_EVALUATION_VERDICTS), reasonCodes: list(32), conflicts: list(32), failure: identitySchema.nullable(), atMs: counterSchema }).strict()
+  verdict: z.enum(MEMORY_EVALUATION_VERDICTS), reasonCodes: list(32), conflicts: list(32), failure: identitySchema.nullable(), atMs: counterSchema })
   .refine(record => record.verdict === 'unknown' ? record.conflicts.length === 0 && record.failure !== null : record.failure === null).readonly();
 export type MemoryEvaluationRecord = z.infer<typeof memoryEvaluationRecordSchema>;
 export const parseMemoryEvaluationRecord = (value: unknown): MemoryEvaluationRecord => {
@@ -41,14 +41,14 @@ export const parseMemoryEvaluationRecord = (value: unknown): MemoryEvaluationRec
   return parsed.data;
 };
 /** S4B-3 A9: a contest withdraws a verified entry from model context until a person resolves it (S4B-4); it changes no entry state. */
-export const memoryContestSchema = z.object({ schemaVersion: z.literal(1), contestId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
-  candidateEntryId: identitySchema, evaluationRecordId: identitySchema, evaluationDigest: digest, openedBy: actor, reasonCode: identitySchema, openedAtMs: counterSchema }).strict().readonly();
+export const memoryContestSchema = z.strictObject({ schemaVersion: z.literal(1), contestId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
+  candidateEntryId: identitySchema, evaluationRecordId: identitySchema, evaluationDigest: digest, openedBy: actor, reasonCode: identitySchema, openedAtMs: counterSchema }).readonly();
 export type MemoryContest = z.infer<typeof memoryContestSchema>;
 
 /** The evaluator's whole answer: exactly this object, nothing else (`evaluate@1`). */
-const answerSchema = (automation: MemoryAutomation, offered: readonly string[]) => z.object({ schemaVersion: z.literal(1), entryId: identitySchema, subjectDigest: digest,
+const answerSchema = (automation: MemoryAutomation, offered: readonly string[]) => z.strictObject({ schemaVersion: z.literal(1), entryId: identitySchema, subjectDigest: digest,
   verdict: z.enum(MEMORY_EVALUATION_VERDICTS), reasonCodes: list(automation.evaluation.reasonCodesMax).refine(codes => codes.every(code => automation.reasonCodes.includes(code))),
-  conflicts: list(automation.evaluation.conflictsMax).refine(ids => ids.every(id => offered.includes(id))) }).strict();
+  conflicts: list(automation.evaluation.conflictsMax).refine(ids => ids.every(id => offered.includes(id))) });
 export type MemoryEvaluatorAnswer = { readonly verdict: MemoryEvaluationVerdict; readonly reasonCodes: readonly string[]; readonly conflicts: readonly string[]; readonly failure: string | null };
 const unknown = (failure: string): MemoryEvaluatorAnswer => Object.freeze({ verdict: 'unknown', reasonCodes: [], conflicts: [], failure });
 /**

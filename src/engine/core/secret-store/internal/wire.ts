@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
+import { persistedString, persistedInteger, identitySchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { z } from 'zod';
 import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
 
 /**
@@ -9,12 +9,12 @@ import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, i
  * bound and emptiness are the application's typed `SECRET_VALUE_INVALID`. A schema failure never echoes the value (the protocol collapses it).
  */
 const name = z.string().regex(SECRET_NAME_PATTERN);
-export const secretSetCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, name,
-  value: z.string().min(1).max(SECRET_VALUE_MAX_BYTES) }).strict().readonly();
-export const secretDeleteCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, name }).strict().readonly();
+export const secretSetCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name,
+  value: persistedString(z.string().min(1).max(SECRET_VALUE_MAX_BYTES)) }).readonly();
+export const secretDeleteCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name }).readonly();
 /** The answer: which backend changed; `removed` is whether a delete found the secret (null for a set). Never a value. */
-export const secretChangeResultSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, name, action: z.enum(['set', 'delete']),
-  backend: z.string().min(1).max(128), removed: z.boolean().nullable() }).strict().readonly();
+export const secretChangeResultSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, name, action: z.enum(['set', 'delete']),
+  backend: persistedString(z.string().min(1).max(128)), removed: z.boolean().nullable() }).readonly();
 export type SecretSetCommand = z.infer<typeof secretSetCommandSchema>;
 export type SecretDeleteCommand = z.infer<typeof secretDeleteCommandSchema>;
 export type SecretChangeResult = z.infer<typeof secretChangeResultSchema>;
@@ -36,12 +36,12 @@ export function acceptSecretChangeResult(operation: 'setSecret' | 'deleteSecret'
 
 /** SECRET-STORE-SWITCH (owner 2026-10-08; runtime protocol v24): move every secret into another registered store
  * and select it; no actor field. */
-const storeId = z.string().max(128).regex(SECRET_STORE_ID_PATTERN);
-export const secretStoreSwitchCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
-  confirmDowngrade: z.boolean(), confirmEnvMissing: z.boolean().optional() }).strict().readonly();
+const storeId = persistedString(z.string().max(128)).regex(SECRET_STORE_ID_PATTERN);
+export const secretStoreSwitchCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
+  confirmDowngrade: z.boolean(), confirmEnvMissing: z.boolean().optional() }).readonly();
 /** The answer names stores and counts only: never a secret name or value. */
-export const secretStoreSwitchResultSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, status: z.enum(['switched', 'current']),
-  from: storeId, to: storeId, entries: z.number().int().nonnegative().safe(), downgrade: z.boolean(), cleaned: z.boolean() }).strict().readonly();
+export const secretStoreSwitchResultSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, status: z.enum(['switched', 'current']),
+  from: storeId, to: storeId, entries: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), downgrade: z.boolean(), cleaned: z.boolean() }).readonly();
 export type SecretStoreSwitchCommand = z.infer<typeof secretStoreSwitchCommandSchema>;
 /** An answer is trusted only for the switch that was asked (same scope and target); anything else is null (a transport fault). */
 export function acceptSecretStoreSwitchResult(command: SecretStoreSwitchCommand, answer: unknown) {

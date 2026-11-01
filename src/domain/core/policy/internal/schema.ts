@@ -2,13 +2,13 @@ import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 
 const selection = z.union([z.literal('all'), z.array(identitySchema).min(1).readonly()]);
-const principalRef = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
-const resource = z.object({ kind: identitySchema, ids: selection }).strict().readonly();
+const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
+const resource = z.strictObject({ kind: identitySchema, ids: selection }).readonly();
 const effect = z.enum(['allow', 'deny', 'require-approval']);
 const matchShape = { id: identitySchema, actions: selection, scopes: selection,
   principals: z.union([z.literal('all'), z.array(principalRef).min(1).readonly()]), resource };
-const grant = z.object({ ...matchShape, effect }).strict().readonly();
-const restriction = z.object(matchShape).strict().readonly();
+const grant = z.strictObject({ ...matchShape, effect }).readonly();
+const restriction = z.strictObject(matchShape).readonly();
 /**
  * Terminal permission modes (T-L4 slice 4a, owner 2026-09-27 q2): a v2 company rule may mark its `require-approval` as
  * mode-eligible. The mark lowers nothing by itself; only a person's mode (bindings) may lower exactly such a rule, and only on a
@@ -16,7 +16,7 @@ const restriction = z.object(matchShape).strict().readonly();
  */
 const modeEligible = { modeEligible: z.boolean().optional() };
 const eligibleOnlyOnApproval = (rule: { readonly effect: string; readonly modeEligible?: boolean | undefined }) => rule.modeEligible !== true || rule.effect === 'require-approval';
-const markedGrant = z.object({ ...matchShape, effect, ...modeEligible }).strict().refine(eligibleOnlyOnApproval, 'POLICY_MODE_ELIGIBLE').readonly();
+const markedGrant = z.strictObject({ ...matchShape, effect, ...modeEligible }).refine(eligibleOnlyOnApproval, 'POLICY_MODE_ELIGIBLE').readonly();
 /** A v2 company grant as `policy.administer` changes carry it (same schema as in policy.json). */
 export const policyGrantSchema = markedGrant;
 export type PolicyRule = z.infer<typeof restriction>;
@@ -32,8 +32,8 @@ function unique(context: z.RefinementCtx, ids: readonly string[], message: strin
 }
 
 /** v1: trusted grants may allow; overlays only restrict. A project/user overlay cannot create authority. */
-const grantPolicySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
-  grants: z.array(grant).readonly(), restrictions: z.array(restriction).readonly() }).strict().superRefine((policy, context) => {
+const grantPolicySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema,
+  grants: z.array(grant).readonly(), restrictions: z.array(restriction).readonly() }).superRefine((policy, context) => {
     unique(context, [...policy.grants, ...policy.restrictions].map(rule => rule.id), 'POLICY_DUPLICATE_RULE');
   }).readonly();
 
@@ -41,13 +41,13 @@ const grantPolicySchema = z.object({ schemaVersion: z.literal(1), revision: iden
 const localId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,62}$/);
 /** Each v2 revision is at most 127 characters so the effective `policy+bindings` revision stays one identity. */
 const revision = identitySchema.refine(value => value.length <= 127);
-const permission = z.object({ id: localId, effect, actions: selection, resource, ...modeEligible }).strict().refine(eligibleOnlyOnApproval, 'POLICY_MODE_ELIGIBLE').readonly();
-const role = z.object({ id: localId, permissions: z.array(permission).min(1).readonly() }).strict().readonly();
+const permission = z.strictObject({ id: localId, effect, actions: selection, resource, ...modeEligible }).refine(eligibleOnlyOnApproval, 'POLICY_MODE_ELIGIBLE').readonly();
+const role = z.strictObject({ id: localId, permissions: z.array(permission).min(1).readonly() }).readonly();
 export const policyRoleSchema = role;
 /** Separation of duties is organization policy data (C12 Q6); the rule vocabulary is versioned code. */
-const duty = z.object({ id: identitySchema, rule: z.literal('requester-cannot-approve'), scopes: selection }).strict().readonly();
-const binding = z.object({ id: localId, principals: z.array(principalRef).min(1).readonly(), roles: z.array(localId).min(1).readonly(),
-  scopes: selection }).strict().readonly();
+const duty = z.strictObject({ id: identitySchema, rule: z.literal('requester-cannot-approve'), scopes: selection }).readonly();
+const binding = z.strictObject({ id: localId, principals: z.array(principalRef).min(1).readonly(), roles: z.array(localId).min(1).readonly(),
+  scopes: selection }).readonly();
 /** A role binding as `policy.administer` changes carry it (same schema as in bindings.json). */
 export const policyBindingSchema = binding;
 export type PolicyBinding = z.infer<typeof binding>;
@@ -57,8 +57,8 @@ export type PolicyBinding = z.infer<typeof binding>;
  * raise it; a level nobody can attest is unsatisfiable (allow refused). The level vocabulary is versioned code (and its registry), not this data.
  * `config-change` (T3 L2, lead 2026-10-07): a company raises the assurance of config approvals the same way (an earlier build refuses such a policy).
  */
-const assuranceRule = z.object({ id: identitySchema, scopes: selection, subject: z.enum(['task', 'agent-tool-call', 'operation', 'config-change', 'run-create']), cells: z.array(localId).min(1).readonly().optional(),
-  effectClasses: z.array(z.enum(['read', 'write', 'irreversible'])).min(1).readonly().optional(), authority: z.literal(true).optional(), minimum: localId }).strict().readonly();
+const assuranceRule = z.strictObject({ id: identitySchema, scopes: selection, subject: z.enum(['task', 'agent-tool-call', 'operation', 'config-change', 'run-create']), cells: z.array(localId).min(1).readonly().optional(),
+  effectClasses: z.array(z.enum(['read', 'write', 'irreversible'])).min(1).readonly().optional(), authority: z.literal(true).optional(), minimum: localId }).readonly();
 export type ApprovalAssuranceRule = z.infer<typeof assuranceRule>;
 const v2Shape = { roles: z.array(role).readonly(), grants: z.array(markedGrant).readonly(), restrictions: z.array(restriction).readonly(),
   separationOfDuties: z.array(duty).readonly(), approvalAssurance: z.array(assuranceRule).readonly().optional() };
@@ -74,8 +74,8 @@ export type PermissionMode = typeof PERMISSION_MODES[number];
 const LEGACY_V2_MODES = ['ask', 'auto-edit', 'full-auto'] as const;
 const entryShape = { id: localId, principal: principalRef, scopes: z.array(identitySchema).min(1).readonly() };
 /** bindings v3 entry: one principal, explicit scopes, one mode, and the person's own "ask for edits too" preference (`askEdits`, not a mode). */
-const modeEntry = z.object({ ...entryShape, mode: z.enum(PERMISSION_MODES), askEdits: z.literal(true).optional() }).strict().readonly();
-const legacyModeEntry = z.object({ ...entryShape, mode: z.enum(LEGACY_V2_MODES) }).strict().readonly();
+const modeEntry = z.strictObject({ ...entryShape, mode: z.enum(PERMISSION_MODES), askEdits: z.literal(true).optional() }).readonly();
+const legacyModeEntry = z.strictObject({ ...entryShape, mode: z.enum(LEGACY_V2_MODES) }).readonly();
 export type PermissionModeEntry = z.infer<typeof modeEntry>;
 type V2Body = { readonly roles: readonly z.infer<typeof role>[]; readonly grants: readonly z.infer<typeof markedGrant>[]; readonly restrictions: readonly PolicyRule[];
   readonly separationOfDuties: readonly z.infer<typeof duty>[]; readonly approvalAssurance?: readonly ApprovalAssuranceRule[] | undefined };
@@ -91,15 +91,15 @@ function checkBindings(entries: readonly z.infer<typeof binding>[], context: z.R
   for (const value of modes) unique(context, value.scopes, 'POLICY_DUPLICATE_BINDING');
 }
 /** policy.json v2: roles are data; bindings never live here (separate `bindings` resource). */
-const rolePolicyFileSchema = z.object({ schemaVersion: z.literal(2), revision, ...v2Shape }).strict().superRefine(checkV2).readonly();
+const rolePolicyFileSchema = z.strictObject({ schemaVersion: z.literal(2), revision, ...v2Shape }).superRefine(checkV2).readonly();
 /** bindings.json: principals → roles at scopes. A binding only references a policy role; it creates no authority of its own.
  * v2 (T-L4 slice 4a) added the persons' terminal permission `modes`; v3 (MODES-3) renames them (`standart | full-auto | full-access`) and adds
  * `askEdits`. v1 and v2 stay readable (v2 mapped on read); every write is v3; an older reader refuses v3 as a whole (strict schemas). */
-const roleBindingsSchema = z.object({ schemaVersion: z.literal(1), revision, bindings: z.array(binding).readonly() }).strict()
+const roleBindingsSchema = z.strictObject({ schemaVersion: z.literal(1), revision, bindings: z.array(binding).readonly() })
   .superRefine((value, context) => checkBindings(value.bindings, context)).readonly();
-const legacyModeBindingsSchema = z.object({ schemaVersion: z.literal(2), revision, bindings: z.array(binding).readonly(), modes: z.array(legacyModeEntry).readonly() }).strict()
+const legacyModeBindingsSchema = z.strictObject({ schemaVersion: z.literal(2), revision, bindings: z.array(binding).readonly(), modes: z.array(legacyModeEntry).readonly() })
   .superRefine((value, context) => checkBindings(value.bindings, context, value.modes)).readonly();
-const modeBindingsSchema = z.object({ schemaVersion: z.literal(3), revision, bindings: z.array(binding).readonly(), modes: z.array(modeEntry).readonly() }).strict()
+const modeBindingsSchema = z.strictObject({ schemaVersion: z.literal(3), revision, bindings: z.array(binding).readonly(), modes: z.array(modeEntry).readonly() })
   .superRefine((value, context) => checkBindings(value.bindings, context, value.modes)).readonly();
 export const bindingsFileSchema = z.union([roleBindingsSchema, legacyModeBindingsSchema, modeBindingsSchema]);
 export type BindingsFile = z.infer<typeof bindingsFileSchema>;
@@ -119,8 +119,8 @@ export function upgradeBindingsDocument(input: unknown): BindingsV3 {
   return modeBindingsSchema.parse({ schemaVersion: 3, revision: value.revision, bindings: value.bindings, modes });
 }
 /** The evaluator's v2 input: one trusted snapshot of policy + bindings, produced only by `resolvePolicyBindings`. */
-const resolvedRolePolicySchema = z.object({ schemaVersion: z.literal(2), revision: identitySchema, policyRevision: revision, ...v2Shape,
-  bindings: z.object({ revision, entries: z.array(binding).readonly(), modes: z.array(modeEntry).readonly().optional() }).strict().readonly() }).strict().superRefine((policy, context) => {
+const resolvedRolePolicySchema = z.strictObject({ schemaVersion: z.literal(2), revision: identitySchema, policyRevision: revision, ...v2Shape,
+  bindings: z.strictObject({ revision, entries: z.array(binding).readonly(), modes: z.array(modeEntry).readonly().optional() }).readonly() }).superRefine((policy, context) => {
     checkV2(policy, context); checkBindings(policy.bindings.entries, context, policy.bindings.modes);
     if (policy.revision !== `${policy.policyRevision}+${policy.bindings.revision}`) context.addIssue({ code: z.ZodIssueCode.custom, message: 'POLICY_REVISION' });
     const roles = new Set(policy.roles.map(value => value.id));

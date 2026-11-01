@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { ErrorRegistry } from '#platform/index.js';
+import { persistedString, ErrorRegistry } from '#platform/index.js';
 import { layeredWorkerRecipeSchema } from '#engine/index.js';
 import { runNodeProcess } from '#adapters/core/process-runner/index.js';
 import type { WorkerImageBuildRunner } from './build.js';
@@ -29,7 +29,7 @@ export async function inspectWorkerImageChoices(input: { packageRoot: string; ho
     if (result.reason !== 'exit' || result.exitCode !== 0 || result.stdoutTruncated) throw ErrorRegistry.createError('WORKER_IMAGE_DOCKER_WAITING');
     return Buffer.from(result.stdoutBase64, 'base64').toString('utf8').trim();
   };
-  const endpoint = z.string().min(1).parse(JSON.parse(await command(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'])));
+  const endpoint = persistedString(z.string().min(1)).parse(JSON.parse(await command(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'])));
   if (!endpoint.startsWith('unix:///') || endpoint.includes('\0')) throw ErrorRegistry.createError('WORKER_IMAGE_DOCKER_WAITING');
   // Explicit endpoint and no conflicting inherited context/TLS selectors, as in the builder.
   for (const key of ['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']) delete env[key];
@@ -47,7 +47,7 @@ export async function inspectWorkerImageChoices(input: { packageRoot: string; ho
   };
   const choices: WorkerImageChoice[] = [];
   for (const raw of tags) {
-    const row = z.object({ ID: z.string().regex(/^sha256:[a-f0-9]{64}$/u), Repository: z.literal(recipe.repository), Tag: z.string().max(128) }).parse(JSON.parse(raw));
+    const row = z.object({ ID: z.string().regex(/^sha256:[a-f0-9]{64}$/u), Repository: z.literal(recipe.repository), Tag: persistedString(z.string().max(128)) }).parse(JSON.parse(raw));
     if (choices.some(choice => choice.imageId === row.ID)) continue;
     const image = imageSchema.parse(JSON.parse(await docker(['image', 'inspect', row.ID]))[0]);
     if (image.Id !== row.ID) throw ErrorRegistry.createError('WORKER_IMAGE_ID_MISMATCH');

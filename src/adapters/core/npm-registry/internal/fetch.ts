@@ -1,3 +1,4 @@
+import { persistedInteger, persistedUrl } from '#platform/index.js';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { z } from 'zod';
@@ -8,10 +9,10 @@ export type NpmRegistryErrorCode = 'NPM_REGISTRY_ENDPOINT_INVALID' | 'NPM_REGIST
 export class NpmRegistryError extends Error {
   constructor(readonly code: NpmRegistryErrorCode, readonly status?: number) { super(code); this.name = 'NpmRegistryError'; }
 }
-const inputSchema = z.object({ endpoint: z.string().url(), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), responseMaxBytes: z.number().int().positive().safe() }).strict();
+const inputSchema = z.strictObject({ endpoint: persistedUrl(), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/),
+  timeoutMs: persistedInteger().positive().max(2_147_483_647), responseMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type NpmLatestVersionInput = z.infer<typeof inputSchema>;
-const latestSchema = z.object({ version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/) }).passthrough();
+const latestSchema = z.looseObject({ version: z.string().regex(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/) });
 export type NpmLatestVersion = Readonly<{ version: string; source: string; observedAt: string }>;
 
 /** Reads `<endpoint>/<package>/latest` with a timeout and response cap; no credentials, no redirects, no retries.

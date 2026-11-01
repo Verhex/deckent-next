@@ -1,29 +1,28 @@
+import { persistedInteger, persistedUuid, AUDIT_EVENT_SCHEMA_VERSION, DISPATCH_PREPARATION_PHASES, attemptIdentitySchema, counterSchema, identitySchema, sameAttemptIdentity, type AttemptIdentity, type AuditEvent, type RunSnapshot } from '#domain/index.js';
+import { ErrorRegistry, type JsonRecordFile } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AUDIT_EVENT_SCHEMA_VERSION, DISPATCH_PREPARATION_PHASES, attemptIdentitySchema, counterSchema, identitySchema, sameAttemptIdentity,
-  type AttemptIdentity, type AuditEvent, type RunSnapshot } from '#domain/index.js';
-import { ErrorRegistry, type JsonRecordFile } from '#platform/index.js';
 import { DispatchError } from './port.js';
 
 export type DispatchPreparationPhase = (typeof DISPATCH_PREPARATION_PHASES)[number];
-const phaseSchema = z.enum(DISPATCH_PREPARATION_PHASES), instanceSchema = z.object({ id: z.string().uuid(), pid: counterSchema, startedAt: counterSchema }).strict();
+const phaseSchema = z.enum(DISPATCH_PREPARATION_PHASES), instanceSchema = z.strictObject({ id: persistedUuid(), pid: counterSchema, startedAt: counterSchema });
 /** v1 per-Attempt dispatch preparation record: one product-directory file written atomically before workspace acquisition (no ledger table,
  * no migration). Present without `park` = a preparation began in `instance` and was not settled. `park` holds this Attempt at the bound until
  * a resume is observed: `own` names the progression park command this guard sent, `joined` the Run revision at which another Attempt's
  * breaker park was found holding the Run. `starts` and `lastAbort` are evidence only. */
-export const dispatchPreparationRecordSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, instance: instanceSchema,
+export const dispatchPreparationRecordSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, instance: instanceSchema,
   starts: counterSchema, aborts: counterSchema, phase: phaseSchema, at: counterSchema,
-  lastAbort: z.object({ phase: phaseSchema.nullable(), instanceId: z.string().uuid().nullable(), at: counterSchema }).strict().nullable(),
-  park: z.discriminatedUnion('kind', [z.object({ kind: z.literal('own'), commandId: identitySchema, at: counterSchema }).strict(),
-    z.object({ kind: z.literal('joined'), revision: counterSchema, at: counterSchema }).strict()]).nullable() }).strict();
+  lastAbort: z.strictObject({ phase: phaseSchema.nullable(), instanceId: persistedUuid().nullable(), at: counterSchema }).nullable(),
+  park: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('own'), commandId: identitySchema, at: counterSchema }),
+    z.strictObject({ kind: z.literal('joined'), revision: counterSchema, at: counterSchema })]).nullable() });
 export type DispatchPreparationRecord = z.infer<typeof dispatchPreparationRecordSchema>;
 /** S6R-1 (design §2 F6) v1 launcher evidence: what a claimed settle found before clearing the preparation record — the launcher instance and
  * phase a process left while its worker ran (`record`), or an unreadable/foreign record (`unreadable`). Written once per Attempt in its own
  * product-directory record (no ledger); evidence only: it never decides liveness, fencing or release (the S6R-2 detector does). */
-export const dispatchLauncherEvidenceSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
-  launcher: z.discriminatedUnion('kind', [z.object({ kind: z.literal('record'), instance: instanceSchema, phase: phaseSchema, at: counterSchema,
-    starts: counterSchema, aborts: counterSchema }).strict(), z.object({ kind: z.literal('unreadable') }).strict()]),
-  capturedBy: instanceSchema, capturedAt: counterSchema }).strict();
+export const dispatchLauncherEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+  launcher: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('record'), instance: instanceSchema, phase: phaseSchema, at: counterSchema,
+    starts: counterSchema, aborts: counterSchema }), z.strictObject({ kind: z.literal('unreadable') })]),
+  capturedBy: instanceSchema, capturedAt: counterSchema });
 export type DispatchLauncherEvidence = z.infer<typeof dispatchLauncherEvidenceSchema>;
 const recordName = (identity: AttemptIdentity) => createHash('sha256').update(JSON.stringify(attemptIdentitySchema.parse(identity))).digest('hex');
 /** The captured launcher evidence of one Attempt, or null when none was captured. An unparsable or foreign record is refused, never empty. */
@@ -86,7 +85,7 @@ export class DispatchPreparationGuard {
   private readonly instance: DispatchPreparationInstance;
   private current: DispatchPreparationRecord | null = null;
   constructor(records: (name: string) => JsonRecordFile, private readonly context: DispatchPreparationContext) {
-    z.number().int().positive().safe().parse(context.bound);
+    persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).parse(context.bound);
     this.file = records(recordName(context.identity)); this.launcher = context.launchers(recordName(context.identity));
     this.instance = context.instance ?? DISPATCH_PREPARATION_INSTANCE;
   }

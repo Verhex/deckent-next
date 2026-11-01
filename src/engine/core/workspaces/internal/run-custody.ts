@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/index.js';
 
-export const workspaceSourceSchema = z.object({ schemaVersion: z.literal(1),
-  adapter: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
+export const workspaceSourceSchema = z.strictObject({ schemaVersion: z.literal(1),
+  adapter: z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly(),
   sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-}).strict().readonly();
-export const runWorkspaceCustodySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema,
-  source: workspaceSourceSchema, baseRevision: z.string().trim().min(1),
-}).strict().readonly();
+}).readonly();
+export const runWorkspaceCustodySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema,
+  source: workspaceSourceSchema, baseRevision: persistedString(z.string().trim().min(1)),
+}).readonly();
 export type WorkspaceSource = z.infer<typeof workspaceSourceSchema>;
 export type RunWorkspaceCustody = z.infer<typeof runWorkspaceCustodySchema>;
 export interface RunWorkspaceCustodyStore {

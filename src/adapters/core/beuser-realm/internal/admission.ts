@@ -1,6 +1,6 @@
+import { persistedNumber, persistedInteger, sha256 } from '#platform/index.js';
 import { stat } from 'node:fs/promises';
 import { z } from 'zod';
-import { sha256 } from '#platform/index.js';
 import { BEUSER_GENESIS_PATH, beuserBindingDigest, createBeuserRealmSeal, type BeuserRealmHandle, type BeuserRealmReadback } from '#engine/index.js';
 import type { BeuserContext } from '#engine/index.js';
 import { BEUSER_REALM_RECIPE as recipe, checkHandle, NANOSECONDS_PER_SECOND, namespaceReadback, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
@@ -15,16 +15,16 @@ const mounts=text('/proc/self/mountinfo'),ptsDevice=String(fs.statSync('/dev/pts
 const cgroup={memory:text('/sys/fs/cgroup/memory.max').trim(),pids:text('/sys/fs/cgroup/pids.max').trim(),cpu:text('/sys/fs/cgroup/cpu.max').trim()};
 console.log(JSON.stringify({uid:process.getuid(),gid:process.getgid(),status,ns,mounts,ptsDevice,cgroup,net:Object.keys(os.networkInterfaces()),genesis:JSON.parse(text('${BEUSER_GENESIS_PATH}'))}));`;
 const mount = z.object({ Type: z.string(), Source: z.string(), Destination: z.string(), RW: z.boolean(), Propagation: z.string().optional() });
-const inspectSchema = z.array(z.object({ Id: z.string(), Image: z.string(), State: z.object({ Running: z.boolean(), Pid: z.number().int(), StartedAt: z.string() }),
-  Config: z.object({ User: z.string(), Labels: z.record(z.string()).nullable(), Env: z.array(z.string()) }),
+const inspectSchema = z.array(z.object({ Id: z.string(), Image: z.string(), State: z.object({ Running: z.boolean(), Pid: persistedInteger(), StartedAt: z.string() }),
+  Config: z.object({ User: z.string(), Labels: z.record(z.string(), z.string()).nullable(), Env: z.array(z.string()) }),
   HostConfig: z.object({ NetworkMode: z.string(), Privileged: z.boolean(), ReadonlyRootfs: z.boolean(), CapAdd: z.array(z.string()).nullable(),
     CapDrop: z.array(z.string()).nullable(), SecurityOpt: z.array(z.string()).nullable(), PidMode: z.string(), IpcMode: z.string(), UTSMode: z.string(),
-    CgroupnsMode: z.string(), Memory: z.number(), MemorySwap: z.number(), NanoCpus: z.number(), PidsLimit: z.number(),
-    Devices: z.array(z.unknown()).nullable(), Binds: z.array(z.string()).nullable(), Tmpfs: z.record(z.string()) }),
-  Mounts: z.array(mount), NetworkSettings: z.object({ Networks: z.record(z.unknown()), Ports: z.record(z.unknown()).nullable() }),
+    CgroupnsMode: z.string(), Memory: persistedNumber(z.number()), MemorySwap: persistedNumber(z.number()), NanoCpus: persistedNumber(z.number()), PidsLimit: persistedNumber(z.number()),
+    Devices: z.array(z.unknown().optional()).nullable(), Binds: z.array(z.string()).nullable(), Tmpfs: z.record(z.string(), z.string()) }),
+  Mounts: z.array(mount), NetworkSettings: z.object({ Networks: z.record(z.string(), z.unknown().optional()), Ports: z.record(z.string(), z.unknown().optional()).nullable() }),
 })).length(1);
-const probeSchema = z.object({ uid: z.number(), gid: z.number(), status: z.record(z.string()), ns: z.record(z.string()), mounts: z.string(), ptsDevice: z.string(),
-  cgroup: z.object({ memory: z.string(), pids: z.string(), cpu: z.string() }), net: z.array(z.string()), genesis: z.unknown() }).strict();
+const probeSchema = z.strictObject({ uid: persistedNumber(z.number()), gid: persistedNumber(z.number()), status: z.record(z.string(), z.string()), ns: z.record(z.string(), z.string()), mounts: z.string(), ptsDevice: z.string(),
+  cgroup: z.object({ memory: z.string(), pids: z.string(), cpu: z.string() }), net: z.array(z.string()), genesis: z.unknown().optional() });
 export interface BeuserRealmEvidence {
   readonly kind: 'containment' | 'kernel'; readonly bindingDigest: string; readonly incarnation: string;
   readonly digest: string; readonly value: string;

@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import BINARIES from './dependency-binaries.json' with { type: 'json' };
@@ -5,8 +6,8 @@ import { embeddedArchive } from './embedded-archive.js';
 
 const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
-const cacheSchema = z.object({ schemaVersion: z.literal(1), scope: digestSchema,
-  files: z.record(z.string().min(1).max(BINARIES.maxCachePathLength), z.tuple([digestSchema, z.string().min(1).max(600).nullable()])) }).strict();
+const cacheSchema = z.strictObject({ schemaVersion: z.literal(1), scope: digestSchema,
+  files: z.record(persistedString(z.string().min(1).max(BINARIES.maxCachePathLength)), z.tuple([digestSchema, persistedString(z.string().min(1).max(600)).nullable()])) });
 const signatures = BINARIES.signatures.map(row => ({ kind: row.kind, bytes: Buffer.from(row.hex, 'hex') }));
 /** The lifting entry of every exception a declared dependency tree records: `dependencyTree:<container target>`. */
 export const dependencyTreeLifting = (target: string) => `dependencyTree:${target}`;

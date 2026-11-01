@@ -1,7 +1,7 @@
+import { persistedInteger, canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
+import { ed25519KeyId, sha256, signatureMessage } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
-import { ed25519KeyId, sha256, signatureMessage } from '#platform/index.js';
 import { delegatedHubKey } from '#engine/core/hub/index.js';
 import { HubRevocationApplication } from './revocations.js';
 import { HubServerError, type HubServerContext, type HubServerTransaction, type HubServerPorts } from './ports.js';
@@ -82,7 +82,7 @@ export class HubServiceBase extends HubRevocationApplication {
   }
   limit(tx: HubServerTransaction, actor: string, action: string, max: number, windowMs: number) {
     const data = this.data(tx), now = this.clock(), bucket = Math.floor(now / windowMs), id = sha256(canonicalHubJson({ actor, action, bucket }));
-    const schema = z.object({ count: z.number().int().nonnegative(), expiresAtMs: z.number().int().nonnegative() }).strict();
+    const schema = z.strictObject({ count: persistedInteger().nonnegative(), expiresAtMs: persistedInteger().nonnegative() });
     const current = data.get('rates', id), count = current ? schema.parse(current).count : 0;
     if (count >= max) throw new HubServerError('HUB_RATE_REFUSED');
     data.put('rates', id, { count: count + 1, expiresAtMs: (bucket + 1) * windowMs });
@@ -104,8 +104,8 @@ export class HubServiceBase extends HubRevocationApplication {
     for (;;) {
       const page = data.auditPage(after, HUB_LIMITS.searchPageMax, this.service.integrity);
       for (const row of page) {
-        const entry = z.object({ record: z.object({ sequence: z.number().int().positive(), action: z.string(), resource: z.string(),
-          actor: z.string(), atMs: z.number().int().safe().nonnegative() }).passthrough() }).passthrough().parse(row).record;
+        const entry = z.looseObject({ record: z.looseObject({ sequence: persistedInteger().positive(), action: z.string(), resource: z.string(),
+          actor: z.string(), atMs: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative() }) }).parse(row).record;
         after = entry.sequence;
         if (entry.action === 'profile-create' && entry.resource === profile.id) {
           const record = hubMembershipConsentSchema.parse({ schemaVersion: 1, profileId: profile.id, createdAtMs: entry.atMs,

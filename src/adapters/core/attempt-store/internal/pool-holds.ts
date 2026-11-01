@@ -1,3 +1,4 @@
+import { persistedString } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
@@ -5,8 +6,7 @@ import { sqliteFailure, ledgerTransaction } from '#adapters/core/sqlite-ledger/i
 import { AttemptStoreError, decidePoolHold, poolHoldReceiptSchema, RunStoreError, type AuditStore, type PoolHoldReceipt, type PoolHoldTransition,
   type PoolHoldWrite } from '#engine/index.js';
 import { SqliteExecutionPools } from './pools.js';
-
-const receiptRecordSchema = z.object({ schemaVersion: z.literal(1), fingerprint: z.string().min(1), receipt: poolHoldReceiptSchema }).strict();
+const receiptRecordSchema = z.strictObject({ schemaVersion: z.literal(1), fingerprint: persistedString(z.string().min(1)), receipt: poolHoldReceiptSchema });
 const fingerprint = (write: PoolHoldWrite) => JSON.stringify({ command: write.command, actor: write.actor });
 
 /**

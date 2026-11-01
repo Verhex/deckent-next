@@ -1,9 +1,8 @@
 import { z } from 'zod';
 import { HUB_LIMITS, canonicalHubJson, hubPackageIdSchema, hubVersionSchema } from '#domain/index.js';
 import { HubServerError, type HubModeratedApplication, type HubServerContext, type HubServerPeer } from '#engine/index.js';
-import { t, type Locale } from '#platform/index.js';
+import { t, type Locale, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { executeHubService } from './service-methods.js';
-import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 
 export interface HubServiceHttpOptions {
   readonly endpoint: string; readonly locale?: Locale;
@@ -71,14 +70,14 @@ export function createHubServiceHttpHandler(app: HubModeratedApplication, option
         const input: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8')); signal.throwIfAborted();
         if (!inputWithinValidationLimit(input, INPUT_VALIDATION_LIMITS.hubService)) return new Response(null, { status: 413, headers });
         if (url.pathname === '/api/login/begin') {
-          const p = z.object({ providerId: z.string() }).strict().parse(input); return json(await app.accounts.begin(p.providerId, addressId));
+          const p = z.strictObject({ providerId: z.string() }).parse(input); return json(await app.accounts.begin(p.providerId, addressId));
         }
         if (url.pathname === '/api/login') {
-          const p = z.object({ challengeId: z.string(), identity: z.unknown() }).strict().parse(input); return json(await app.accounts.login(p.challengeId, p.identity, signal));
+          const p = z.strictObject({ challengeId: z.string(), identity: z.unknown().optional() }).parse(input); return json(await app.accounts.login(p.challengeId, p.identity, signal));
         }
         const token = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('authorization') ?? '')?.[1];
         if (!token) return new Response(null, { status: 401, headers });
-        const p = z.object({ operation: z.string(), input: z.unknown() }).strict().parse(input);
+        const p = z.strictObject({ operation: z.string(), input: z.unknown().optional() }).parse(input);
         const context = await app.session(token, p.operation === 'report.create');
         if (url.pathname !== '/api/service') return new Response(null, { status: 404, headers });
         return json(await executeHubService(app, context, p.operation, p.input, signal));

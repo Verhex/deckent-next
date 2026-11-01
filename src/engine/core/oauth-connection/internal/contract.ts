@@ -1,3 +1,4 @@
+import { persistedString, persistedInteger, persistedUrl, persistedUuid } from '#platform/index.js';
 import type { PersonalCustodyRefusal } from '#engine/core/secret-store/index.js';
 import { z } from 'zod';
 import type { SecretChangeAudit, SecretChangeAuthorization, SecretCustody, SecretStore } from '#engine/core/secret-store/index.js';
@@ -10,23 +11,23 @@ export type OAuthConnectionCode = 'OAUTH_CONNECTION_INVALID' | 'OAUTH_CONNECTION
 export class OAuthConnectionError extends Error {
   constructor(readonly code: OAuthConnectionCode, readonly reason?: PersonalCustodyRefusal) { super(code); this.name = 'OAuthConnectionError'; }
 }
-const text = z.string().min(1).max(256), time = z.number().int().nonnegative().safe();
-export const oauthConnectionOwnerSchema = z.object({ installationId: text, companyId: text, scopeId: text,
-  principal: z.object({ issuer: text, subject: text }).strict().readonly() }).strict().readonly();
+const text = persistedString(z.string().min(1).max(256)), time = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+export const oauthConnectionOwnerSchema = z.strictObject({ installationId: text, companyId: text, scopeId: text,
+  get principal() { return z.strictObject({ issuer: text, subject: text }).readonly(); } }).readonly();
 export type OAuthConnectionOwner = z.infer<typeof oauthConnectionOwnerSchema>;
-export const oauthConnectionConnectSchema = z.object({ connectionId: z.string().uuid().optional(), planUse: z.boolean(),
-  enablePlanUse: z.boolean().optional() }).strict().refine(value => !value.enablePlanUse || value.planUse);
-const identity = z.object({ issuer: z.string().url(), subject: text, email: z.string().max(256).nullable() }).strict().readonly();
-export const oauthTokenSetSchema = z.object({ accessToken: z.string().min(1).nullable(), refreshToken: z.string().min(1).nullable(),
-  idToken: z.string().min(1).nullable(), scopes: z.array(text).max(64).readonly(), expiresAtMs: time.nullable(),
-  earliestRefreshAtMs: time.nullable() }).strict().readonly();
+export const oauthConnectionConnectSchema = z.strictObject({ get connectionId() { return persistedUuid().optional(); }, get planUse() { return z.boolean(); },
+  get enablePlanUse() { return z.boolean().optional(); } }).refine(value => !value.enablePlanUse || value.planUse);
+const identity = z.strictObject({ get issuer() { return persistedUrl(); }, subject: text, get email() { return persistedString(z.string().max(256)).nullable(); } }).readonly();
+export const oauthTokenSetSchema = z.strictObject({ get accessToken() { return persistedString(z.string().min(1)).nullable(); }, get refreshToken() { return persistedString(z.string().min(1)).nullable(); },
+  get idToken() { return persistedString(z.string().min(1)).nullable(); }, get scopes() { return z.array(text).max(64).readonly(); }, get expiresAtMs() { return time.nullable(); },
+  get earliestRefreshAtMs() { return time.nullable(); } }).readonly();
 export type OAuthTokenSet = z.infer<typeof oauthTokenSetSchema>;
-const legacyRecordSchema = z.object({ schemaVersion: z.literal(1), connectionId: z.string().uuid(), owner: oauthConnectionOwnerSchema,
-  clientId: text, identity: identity.nullable(), generation: time, planUseEnabled: z.boolean(),
-  state: z.enum(['registration', 'connected', 'refresh-pending', 'refresh-unknown', 'revoked', 'disconnecting', 'disconnected']),
-  remoteRevocation: z.enum(['not-attempted', 'confirmed', 'unconfirmed']), tokens: oauthTokenSetSchema.nullable() }).strict().readonly();
+const legacyRecordSchema = z.strictObject({ get schemaVersion() { return z.literal(1); }, get connectionId() { return persistedUuid(); }, owner: oauthConnectionOwnerSchema,
+  clientId: text, get identity() { return identity.nullable(); }, generation: time, get planUseEnabled() { return z.boolean(); },
+  get state() { return z.enum(['registration', 'connected', 'refresh-pending', 'refresh-unknown', 'revoked', 'disconnecting', 'disconnected']); },
+  get remoteRevocation() { return z.enum(['not-attempted', 'confirmed', 'unconfirmed']); }, get tokens() { return oauthTokenSetSchema.nullable(); } }).readonly();
 export const oauthConnectionRecordSchema = z.union([legacyRecordSchema, legacyRecordSchema.unwrap().extend({ schemaVersion: z.literal(2),
-  custody: z.object({ bindingId: z.string().uuid(), generation: time }).strict().readonly() }).strict().readonly()]);
+  custody: z.strictObject({ get bindingId() { return persistedUuid(); }, generation: time }).readonly() }).strict().readonly()]);
 export type OAuthConnectionRecord = z.infer<typeof oauthConnectionRecordSchema>;
 export type OAuthConnectionView = Readonly<{ schemaVersion: 1; connectionId: string; generation: number; email: string | null;
   state: OAuthConnectionRecord['state'] | 'identity-only' | 'expired'; planUse: boolean; remoteRevocation: OAuthConnectionRecord['remoteRevocation'] }>;

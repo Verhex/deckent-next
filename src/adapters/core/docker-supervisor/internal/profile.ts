@@ -1,14 +1,14 @@
+import { persistedInteger, identitySchema, workerIsolationSchema, type WorkerIsolation } from '#domain/index.js';
 import { hostname, platform, arch, userInfo } from 'node:os';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { supervisorProfileSchema, SupervisorError, type SupervisorProfile } from '#engine/index.js';
-import { identitySchema, workerIsolationSchema, type WorkerIsolation } from '#domain/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
-const originSchema = z.object({ hostname: identitySchema, platform: identitySchema, architecture: identitySchema,
-  uid: z.number().int().nonnegative(), gid: z.number().int().nonnegative(), daemonId: identitySchema,
-}).strict().readonly();
+const originSchema = z.strictObject({ hostname: identitySchema, platform: identitySchema, architecture: identitySchema,
+  uid: persistedInteger().nonnegative(), gid: persistedInteger().nonnegative(), daemonId: identitySchema,
+}).readonly();
 export const dockerEndpointSchema = z.string().refine(value => value.startsWith('unix:///') && value.length > 8 && !value.includes(String.fromCharCode(0)));
-const legacyParametersSchema = z.object({ endpoint: dockerEndpointSchema, options: dockerSupervisorOptionsSchema, origin: originSchema }).strict().readonly();
+const legacyParametersSchema = z.strictObject({ endpoint: dockerEndpointSchema, options: dockerSupervisorOptionsSchema, origin: originSchema }).readonly();
 /** v3 (alpha.56 D2): the same, plus the worker's isolation block; `execute` starts a container only once its realised network mode matches it. */
 const parametersSchema = legacyParametersSchema.unwrap().extend({ isolation: workerIsolationSchema }).strict().readonly();
 /** The one network mode this adapter creates workers with (no route at all). */

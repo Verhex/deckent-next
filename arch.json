@@ -188,7 +188,8 @@
     "src/adapters/core/file-policy": {
       "dependencies": [
         "src/domain/core/policy",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/platform/core/validate"
       ],
       "plan": "SECURITY"
     },
@@ -227,14 +228,16 @@
     },
     "src/adapters/core/process-runner": {
       "dependencies": [
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/validate"
       ],
       "plan": "ISOLATION"
     },
     "src/adapters/core/process-supervisor": {
       "dependencies": [
         "src/engine/core/supervisor",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/validate"
       ],
       "plan": "ISOLATION"
     },
@@ -972,14 +975,16 @@
         "src/platform/core/i18n",
         "src/platform/core/output",
         "src/platform/core/utils",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/validate"
       ],
       "plan": "FOUNDATION"
     },
     "src/platform/core/config-fields": {
       "dependencies": [
         "src/platform/core/common",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/validate"
       ],
       "plan": "FOUNDATION"
     },
@@ -1582,13 +1587,15 @@
         "src/composition/core/approvals",
         "src/adapters/core/git-workspace",
         "src/engine/core/policy",
-        "src/engine/core/system-policy-rows"
+        "src/engine/core/system-policy-rows",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
     "src/platform/core/bootstrap-state": {
       "dependencies": [
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -1661,7 +1668,8 @@
       "dependencies": [
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/agent-tool",
-        "src/engine/core/agent-turn"
+        "src/engine/core/agent-turn",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2245,7 +2253,8 @@
         "src/platform/core/managed-files",
         "src/domain/core/agent-turn",
         "src/platform/core/i18n",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2278,7 +2287,8 @@
         "src/domain/core/agent-tool",
         "src/domain/core/effect",
         "src/engine/core/effect",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2455,11 +2465,15 @@
       "plan": "PROVIDERS"
     },
     "src/adapters/core/npm-registry": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/validate"
+      ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/inference-metrics": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/validate"
+      ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/terminal-history": {
@@ -2468,7 +2482,8 @@
         "src/domain/core/agent-turn",
         "src/adapters/core/native-connection",
         "src/platform/core/redaction",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2481,7 +2496,8 @@
     "src/adapters/core/runtime-launcher": {
       "dependencies": [
         "src/platform/core/host",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2524,7 +2540,8 @@
         "src/adapters/core/npm-registry",
         "src/platform/core/utils",
         "src/adapters/core/local-runtime-socket",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/platform/core/validate"
       ],
       "plan": "PROVIDERS"
     },
@@ -2545,7 +2562,8 @@
         "src/platform/core/host",
         "src/domain/core/model-invocation",
         "src/platform/core/i18n",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2574,7 +2592,8 @@
         "src/domain/core/adapter-registry",
         "src/domain/core/effect",
         "src/engine/core/adapter-registry",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/platform/core/validate"
       ],
       "plan": "EXECUTION"
     },
@@ -2602,7 +2621,9 @@
       "plan": "EXECUTION"
     },
     "src/domain/core/agent-tool": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
       "plan": "CONTRACT"
     },
     "src/domain/core/agent-turn": {
@@ -2616,7 +2637,8 @@
     },
     "src/domain/core/worker-event": {
       "dependencies": [
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/primitives"
       ],
       "plan": "CONTRACT"
     },
@@ -2679,7 +2701,8 @@
       "dependencies": [
         "src/adapters/core/native-connection",
         "src/domain/core/agent-tool",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2761,7 +2784,8 @@
         "src/platform/core/utils",
         "src/platform/core/host",
         "src/domain/core/model-invocation",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/platform/core/validate"
       ],
       "plan": "SECURITY"
     },
@@ -2804,7 +2828,8 @@
         "src/domain/core/work-cost",
         "src/engine/core/resource-observation",
         "src/domain/core/policy",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/platform/core/validate"
       ],
       "plan": "MONITOR"
     },
@@ -2846,7 +2871,8 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/local-keyring",
         "src/adapters/core/recovery-case-store",
-        "src/domain/core/recovery"
+        "src/domain/core/recovery",
+        "src/platform/core/validate"
       ],
       "plan": "MONITOR"
     },
@@ -2951,7 +2977,8 @@
         "src/platform/core/errors",
         "src/domain/core/approval",
         "src/domain/core/command",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/platform/core/validate"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3136,7 +3163,8 @@
         "src/platform/core/integrity",
         "src/domain/core/effect",
         "src/engine/core/effect",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3187,7 +3215,8 @@
         "src/domain/core/policy",
         "src/domain/core/audit",
         "src/domain/core/principal",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -3253,7 +3282,8 @@
         "src/domain/core/principal",
         "src/engine/core/beuser-realm",
         "src/platform/core/errors",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3270,7 +3300,8 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/integrity",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3324,7 +3355,8 @@
         "src/platform/core/errors",
         "src/platform/core/redaction",
         "src/platform/core/integrity",
-        "src/capabilities/core/evaluation-evidence"
+        "src/capabilities/core/evaluation-evidence",
+        "src/platform/core/validate"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3416,14 +3448,16 @@
         "src/domain/core/attempt",
         "src/engine/core/resource-observation",
         "src/platform/core/config",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/platform/core/validate"
       ],
       "plan": "KAYNAK-KALITE"
     },
     "src/adapters/core/autonomy-shadow": {
       "dependencies": [
         "src/engine/core/delivery-summary",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/platform/core/validate"
       ],
       "plan": "CONTRACT"
     },
@@ -3462,7 +3496,8 @@
       "dependencies": [
         "src/domain/core/audit",
         "src/domain/core/model-invocation",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/platform/core/validate"
       ],
       "plan": "PROVIDERS"
     },
@@ -3476,7 +3511,8 @@
         "src/adapters/core/provider-http-json",
         "src/platform/core/config",
         "src/adapters/core/native-cli-registry",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/validate"
       ],
       "plan": "PROVIDERS"
     },
@@ -3715,7 +3751,8 @@
         "src/platform/core/errors",
         "src/domain/core/provider-catalog",
         "src/platform/core/config-fields",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3723,7 +3760,8 @@
       "dependencies": [
         "src/engine/core/setup",
         "src/engine/core/worker-setup",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3742,7 +3780,8 @@
         "src/adapters/core/worker-tree-gate",
         "src/engine/core/effect",
         "src/platform/core/integrity",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3751,7 +3790,8 @@
         "src/platform/core/i18n",
         "src/platform/core/output",
         "src/platform/core/host",
-        "src/adapters/core/setup-detect-execution"
+        "src/adapters/core/setup-detect-execution",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -3845,7 +3885,8 @@
         "src/platform/core/errors",
         "src/platform/core/config",
         "src/platform/core/redaction",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/platform/core/validate"
       ],
       "plan": "SECURITY"
     },
@@ -4224,7 +4265,8 @@
       "dependencies": [
         "src/domain/core/run",
         "src/domain/core/command",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/platform/core/validate"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -4471,7 +4513,8 @@
         "src/engine/core/secret-store",
         "src/engine/core/workspace-patch",
         "src/adapters/core/git-workspace",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -4480,7 +4523,8 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/platform/core/integrity",
-        "src/adapters/core/local-runtime-socket"
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/validate"
       ],
       "plan": "INSTALLATION"
     },
@@ -4541,7 +4585,8 @@
         "src/domain/core/audit",
         "src/domain/core/model-invocation",
         "src/engine/core/supervisor",
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/validate"
       ],
       "plan": "PROVIDERS"
     },
@@ -4649,7 +4694,8 @@
         "src/platform/core/config",
         "src/platform/core/integrity",
         "src/platform/core/redaction",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/validate"
       ],
       "plan": "ISOLATION"
     },
@@ -4721,7 +4767,8 @@
         "src/composition/core/installation",
         "src/engine/core/model-activation",
         "src/platform/core/config-fields",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/validate"
       ],
       "plan": "EXECUTION"
     },
@@ -4742,7 +4789,8 @@
         "src/platform/core/host",
         "src/platform/core/integrity",
         "src/platform/core/managed-files",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/platform/core/validate"
       ],
       "plan": "EXECUTION"
     },
@@ -4750,7 +4798,8 @@
       "dependencies": [
         "src/platform/core/config",
         "src/adapters/core/mcp-trust",
-        "src/domain/core/agent-tool"
+        "src/domain/core/agent-tool",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -4828,7 +4877,7 @@
     "maxLinesPerFile": 1500,
     "packageLines": {
       "platform": 25000,
-      "domain": 11000,
+      "domain": 11250,
       "capabilities": 25000,
       "engine": 60000,
       "adapters": 40500,

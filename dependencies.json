@@ -302,7 +302,7 @@
     },
     "zod": {
       "kind": "runtime",
-      "reviewedVersion": "3.25.76",
+      "reviewedVersion": "4.6.7",
       "owners": [
         "src/platform",
         "src/domain",
@@ -317,9 +317,10 @@
       ],
       "purpose": "Contract language: runtime schemas for domain records, config, ledger rows, provider wire shapes and MCP tool input.",
       "features": [
-        "z (object/strict/passthrough, discriminatedUnion, default, superRefine, safe/int, uuid, url, record)",
+        "strictObject/looseObject, prefault, superRefine, explicit-key record and compatibility-preserved scalar checks",
         "ZodError",
-        "~standard (Standard Schema v1) exposed by 3.25"
+        "Standard Schema v1 and Standard JSON Schema",
+        "Native z.toJSONSchema with the retained draft-07 input contract"
       ],
       "criticality": "P0",
       "alternatives": [
@@ -328,7 +329,7 @@
           "package": "zod",
           "version": "4.6.7",
           "date": "2026-10-12",
-          "note": "Planned migration (owner 2026-09-29): config equivalence tests first (17 .default({}) -> .prefault), +27 ms CLI cold start, dedupes the SDK's zod 4 copies. Floor >=4.6.6 (GHSA-mrhx-c7xc-m3w5); 4.6.7 preferred (its notes record the 2026-09-21 compromised-identity commits, reverted and never published)."
+          "note": "Superseded by Z2 (zod 4.6.7, alpha.60, owner 2026-11-01): Planned migration (owner 2026-09-29): config equivalence tests first (17 .default({}) -> .prefault), +27 ms CLI cold start, dedupes the SDK's zod 4 copies. Floor >=4.6.6 (GHSA-mrhx-c7xc-m3w5); 4.6.7 preferred (its notes record the 2026-09-21 compromised-identity commits, reverted and never published)."
         },
         {
           "name": "valibot",
@@ -354,42 +355,14 @@
       ],
       "ownSolution": "Public contracts move to the Standard Schema interface (vendored types, DEPS-SCHEMA) so Enterprise/ERP adapters do not bind to a zod major; internals keep zod.",
       "watch": [
-        "3.x line receives no releases; 131 published .d.ts import zod until DEPS-SCHEMA.",
-        "Owners are package-wide for the contract layers; narrow after the zod 4 migration.",
-        "GHSA-mrhx-c7xc-m3w5 / CVE-2023-54404 (high, 2026-10-01): oversized constrained collections exhaust memory, range <4.6.6 (formally covers 3.25.76; the fix is v4 code and no 3.x release exists). Mitigation until Z2 (zod 4.6.7, alpha.60): Z1 bounded JSON gates (bytes, nodes, depth) run before zod on every external input path; the SDK nested copies are overridden to 4.6.7."
+        "Superseded by Z2 (zod 4.6.7, alpha.60): 3.x line receives no releases; 131 published .d.ts import zod until DEPS-SCHEMA.",
+        "Superseded by Z2 (zod 4.6.7, alpha.60): Owners are package-wide for the contract layers; narrow after the zod 4 migration.",
+        "Superseded by Z2 (zod 4.6.7, alpha.60): GHSA-mrhx-c7xc-m3w5 / CVE-2023-54404 (high, 2026-10-01): oversized constrained collections exhaust memory, range <4.6.6 (formally covers 3.25.76; the fix is v4 code and no 3.x release exists). Mitigation until Z2 (zod 4.6.7, alpha.60): Z1 bounded JSON gates (bytes, nodes, depth) run before zod on every external input path; the SDK nested copies are overridden to 4.6.7.",
+        "Z2 (alpha.60) closes GHSA-mrhx-c7xc-m3w5 with one zod@4.6.7 copy (the SDK copies dedupe); Z1 byte/node/depth gates stay before zod; persisted values keep the zod 3.25.76 acceptance set (domain/core/primitives + platform copy, equality-tested). Owner 2026-11-01 accepted the measured cost: first frame +21/+23 ms, service ready +114/+232 ms (loaded host, n=7).",
+        "Historical zod-to-json-schema removal: native z.toJSONSchema now carries the retained draft-07 input projection; earlier watch: Unmaintained since November 2025 (README); single maintainer, no provenance; latest 3.25.2 (2026-03-27)."
       ],
-      "lastReview": "2026-10-31",
+      "lastReview": "2026-11-01",
       "nextReview": "2026-11-14"
-    },
-    "zod-to-json-schema": {
-      "kind": "runtime",
-      "reviewedVersion": "3.25.0",
-      "owners": [
-        "src/surfaces/core/mcp",
-        "src/engine/core/config",
-        "src/capabilities/core/run-planner",
-        "src/surfaces/core/hub-mcp"
-      ],
-      "purpose": "Converts existing Zod schemas to JSON Schema (draft-07) for MCP tools/list, config descriptions and the governed Brain proposal prompt; no separately maintained proposal schema.",
-      "features": [
-        "zodToJsonSchema(schema, { $refStrategy: 'none' })"
-      ],
-      "criticality": "P1",
-      "alternatives": [
-        {
-          "name": "zod 4 z.toJSONSchema",
-          "package": "zod",
-          "version": "4.6.5",
-          "date": "2026-09-13",
-          "note": "Built in; emits JSON Schema 2020-12 (MCP 2026-07-28 RECOMMENDED dialect); arrives with the zod 4 migration."
-        }
-      ],
-      "ownSolution": "Removed by the zod 4 migration; nothing to own.",
-      "watch": [
-        "Unmaintained since November 2025 (README); single maintainer, no provenance; latest 3.25.2 (2026-03-27)."
-      ],
-      "lastReview": "2026-09-29",
-      "nextReview": "2026-11-28"
     },
     "typescript": {
       "kind": "dev",

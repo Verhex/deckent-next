@@ -1,3 +1,4 @@
+import { persistedString, persistedInteger, persistedUuid } from '#platform/index.js';
 import { lstat, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -7,12 +8,12 @@ import type { JsonRecordFile } from '#platform/index.js';
 import { BeuserContainerMissing, canonicalRealmPath, dockerRealmCommand, namespaceReadback, refuseRealm, type BeuserRealmOptions, type BeuserRealmCommand } from './realm.js';
 import { retainBeuserJson } from './records.js';
 
-const fields = { bindingDigest: z.string(), incarnation: z.string().uuid(), containerId: z.string(),
-  pid: z.number().int().positive(), start: z.string().regex(/^\d+$/u), cgroup: z.string() };
+const fields = { bindingDigest: z.string(), incarnation: persistedUuid(), containerId: z.string(),
+  pid: persistedInteger().positive(), start: z.string().regex(/^\d+$/u), cgroup: z.string() };
 const snapshotSchema = z.union([
-  z.object({ ...fields, schemaVersion: z.literal(2), mergedRoot: z.string().nullable(), daemonId: z.string().min(1).nullable(),
-    namespaces: z.record(z.string(), z.string()) }).strict(),
-  z.object({ ...fields, mergedRoot: z.string() }).strict(),
+  z.strictObject({ ...fields, schemaVersion: z.literal(2), mergedRoot: z.string().nullable(), daemonId: persistedString(z.string().min(1)).nullable(),
+    namespaces: z.record(z.string(), z.string()) }),
+  z.strictObject({ ...fields, mergedRoot: z.string() }),
 ]);
 const absent = async (path: string) => lstat(path).then(() => false, error => { if (error.code === 'ENOENT') return true; throw error; });
 const startTime = async (pid: number) => (await readFile(`/proc/${pid}/stat`, 'utf8')).split(') ').at(-1)!.split(' ')[19]!;

@@ -11,7 +11,7 @@ import { BeuserApplication, beuserWalkSandboxResult, correctBeuserModelOutput, B
   beuserDiagnosticSchema, beuserFilesystemProofSchema, type BeuserDiagnostic, pinBeuserWalkerSummary, createBeuserTranscript, createBeuserEvidencePort, collectBeuserReadback,
   DispatchApplication, DispatchPolicyAuthorization, RunPolicyAuthorization, beuserReportSchema, assertBeuserAccess, beuserBindingDigest, selectReservedTaskProfile,
   readBeuserControllerAudit, verifyApproval, beuserArrangePlan, type BeuserArrangement, type BeuserControllerValidity, type BeuserContext, type BeuserReport, type SandboxRequest, type ExecutionSupervisor, type SupervisorProfile } from '#engine/index.js';
-import { sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
+import { persistedString, sha256, prepareProductDirectory, inspectProductDirectory, getConfigKnownSecrets,
   redactForRecord, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -158,7 +158,7 @@ export async function executeConfiguredBeuserAttempt(root: string, request: Sand
     if (!lease?.handle) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); return `beuser-${lease.handle.incarnation}`; };
   const readTerminal = async () => {
     const read = await terminal.read(); if (read.kind !== 'ready') return null;
-    const record = z.object({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), judgeFailure: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: z.unknown().nullable(), diagnostic: beuserDiagnosticSchema.optional() }).strict().parse(read.value);
+    const record = z.strictObject({ binding: beuserBindingSchema, result: sandboxResultSchema.nullable(), reason: z.string().nullable().optional(), judgeFailure: z.string().nullable().optional(), cleanup: z.enum(['destroyed', 'quarantined', 'unknown']).optional(), filesystemProof: beuserFilesystemProofSchema.optional(), evidence: z.unknown().optional().nullable(), diagnostic: beuserDiagnosticSchema.optional() }).parse(read.value);
     if (beuserBindingDigest(record.binding) !== beuserBindingDigest(context.binding)) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return record;
   };
@@ -224,13 +224,13 @@ export async function readConfiguredBeuserReport(root: string, scopeId: string, 
       const latest = await directory(sha256(JSON.stringify([scopeId, c.principal.issuer, c.principal.subject]))).read();
       if (latest.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
       if (latest.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-      runId = z.object({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.string().min(1) }).strict().parse(latest.value).runId;
+      runId = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: persistedString(z.string().min(1)) }).parse(latest.value).runId;
     }
     await new RunPolicyAuthorization(createLayoutPolicySource(c.layout, userInfo().uid, c.config.inspection.policyMaxBytes)).authorize('inspect', { scopeId, runId }, c.principal);
     const read = await directory(sha256(JSON.stringify([scopeId, runId]))).read();
     if (read.kind === 'absent') throw new BeuserContractError('BEUSER_REPORT_NOT_FOUND');
     if (read.kind !== 'ready') throw new BeuserContractError('BEUSER_INPUT_INVALID');
-    const envelope = z.object({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.literal(runId), report: beuserReportSchema }).strict().parse(read.value);
+    const envelope = z.strictObject({ schemaVersion: z.literal(1), scopeId: z.literal(scopeId), runId: z.literal(runId), report: beuserReportSchema }).parse(read.value);
     const report = envelope.report;
     if (report.segments.some(segment => segment.verdict && (segment.verdict.binding.identity.scopeId !== scopeId || segment.verdict.binding.identity.runId !== runId))) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
     return report;

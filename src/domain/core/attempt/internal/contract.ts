@@ -1,13 +1,14 @@
+import { persistedInteger, identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { quotaExhaustedSchema } from '#domain/core/worker-event/index.js';
 import { workerEffortSchema } from '#domain/core/provider-catalog/index.js';
-import { identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
 
-export const processExitCauseShape = { exitCode: z.number().int().safe().nullable(), signal: identity.optional() };
+
+export const processExitCauseShape = { exitCode: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), signal: identity.optional() };
 export function isValidExitCause(value: { exitCode: number | null; signal?: string | undefined }): boolean {
   return (value.exitCode === null) === (value.signal !== undefined);
 }
-export const processExitCauseSchema = z.object(processExitCauseShape).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID');
+export const processExitCauseSchema = z.strictObject(processExitCauseShape).refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID');
 export type ProcessExitCause = z.infer<typeof processExitCauseSchema>;
 
 export const ATTEMPT_PROTOCOL_VERSION = 1;
@@ -18,26 +19,26 @@ export const ENVIRONMENT_UNCERTAIN_CODE = 'EXECUTION_ENVIRONMENT_UNCERTAIN';
 /** E1: a probe its own deadline stopped (container proven gone) gave no answer. Never recorded on an attempt: the Run is held through the
  * existing progression park with this code, and the operator re-runs it explicitly; an exit or missing answer stays ENVIRONMENT_NOT_READY. */
 export const ENVIRONMENT_TIMED_OUT_CODE = 'EXECUTION_ENVIRONMENT_TIMED_OUT';
-export const attemptIdentitySchema = z.object({
+export const attemptIdentitySchema = z.strictObject({
   runId: identity, taskId: identity, attemptId: identity,
   scopeId: identity, layoutRevision: identity, generation: counter.positive(),
-}).strict().readonly();
-export const attemptObservationSchema = z.object({
+}).readonly();
+export const attemptObservationSchema = z.strictObject({
   protocolVersion: z.literal(ATTEMPT_PROTOCOL_VERSION),
   identity: attemptIdentitySchema,
   sequence: counter.positive(),
   eventId: identity,
   result: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('started') }).strict(),
-    z.object({ kind: z.literal('handoff-refused'), code: z.enum(['HANDOFF_PATCH_UNAPPLICABLE', 'HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_SOURCE_NOT_ACCEPTED', 'HANDOFF_LIMIT_EXCEEDED', 'HANDOFF_INVALID']) }).strict(),
-    z.object({ kind: z.literal('quota-exhausted'), ...processExitCauseShape, quota: quotaExhaustedSchema, resetBoundExceeded: z.boolean().optional(), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
-    z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
-    z.object({ kind: z.literal('cancelled') }).strict(),
-    z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
+    z.strictObject({ kind: z.literal('started') }),
+    z.strictObject({ kind: z.literal('handoff-refused'), code: z.enum(['HANDOFF_PATCH_UNAPPLICABLE', 'HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_SOURCE_NOT_ACCEPTED', 'HANDOFF_LIMIT_EXCEEDED', 'HANDOFF_INVALID']) }),
+    z.strictObject({ kind: z.literal('quota-exhausted'), ...processExitCauseShape, quota: quotaExhaustedSchema, resetBoundExceeded: z.boolean().optional(), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }),
+    z.strictObject({ kind: z.literal('exited'), ...processExitCauseShape }),
+    z.strictObject({ kind: z.literal('cancelled') }),
+    z.strictObject({ kind: z.literal('unknown'), reasonCode: identity }),
     // Typed refusal before any dispatch claim (no launch, no effect); `code` is the refusing error code, open to adapter checks.
     // `requirement` (PRE-7) is the id of the unmet declared environment requirement, present exactly with ENVIRONMENT_NOT_READY_CODE.
     // REVISE 2693: `probe` names the container whose end the preflight could not prove; present exactly with ENVIRONMENT_UNCERTAIN_CODE.
-    z.object({ kind: z.literal('launch-refused'), code: identity, requirement: identity.optional(), probe: identity.optional() }).strict(),
+    z.strictObject({ kind: z.literal('launch-refused'), code: identity, requirement: identity.optional(), probe: identity.optional() }),
   ]).superRefine((result, context) => {
     if ((result.kind === 'exited' || result.kind === 'quota-exhausted') && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
@@ -47,15 +48,15 @@ export const attemptObservationSchema = z.object({
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_REFUSAL_INVALID' });
     }
   }).readonly(),
-}).strict().readonly();
-export const attemptSnapshotSchema = z.object({
+}).readonly();
+export const attemptSnapshotSchema = z.strictObject({
   schemaVersion: z.literal(ATTEMPT_PROTOCOL_VERSION),
   identity: attemptIdentitySchema,
   revision: counter,
   reasoningEffort: workerEffortSchema.optional(),
   cancelRequested: z.boolean(),
   lastObservation: attemptObservationSchema.nullable(),
-}).strict().superRefine((state, context) => {
+}).superRefine((state, context) => {
   const observation = state.lastObservation;
   if (observation && (!sameAttemptIdentity(observation.identity, state.identity) || observation.sequence > state.revision)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_SNAPSHOT_INCONSISTENT' });

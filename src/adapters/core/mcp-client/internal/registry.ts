@@ -1,8 +1,9 @@
+import { persistedString, persistedInteger } from '#domain/index.js';
+import { DECKENT_DIR, type KnownSecretSnapshot } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { DECKENT_DIR, type KnownSecretSnapshot } from '#platform/index.js';
 import { MCP_PROJECT_VARIABLES, MCP_SCOPES as TRUST_SCOPES, MCP_SERVER_NAME as TRUST_SERVER_NAME, mcpLaunchTextValid, mcpProjectValueRefused } from '#adapters/core/mcp-trust/index.js';
 
 /**
@@ -29,30 +30,30 @@ const headerValue = (text: string) => [...text].every(char => { const code = cha
 /** A remote server over Streamable HTTP (MCP 2026-07-28; the SDK falls back to the 2025-11-25 shape): no local process, so no realm or env. */
 const httpEntryFields = z.object({
   type: z.literal('http'),
-  url: z.string().min(1).max(4_096).refine(mcpLaunchTextValid),
-  headers: z.record(z.string().regex(HEADER_NAME), z.string().max(8_192).refine(headerValue)).refine(headers => Object.keys(headers).length <= 64, 'MCP_HEADERS_TOO_MANY').optional(),
+  url: persistedString(z.string().min(1).max(4_096)).refine(mcpLaunchTextValid),
+  headers: z.record(z.string().regex(HEADER_NAME), persistedString(z.string().max(8_192)).refine(headerValue)).refine(headers => Object.keys(headers).length <= 64, 'MCP_HEADERS_TOO_MANY').optional(),
 });
 /** One server as a registry file declares it: stdio (`type` absent or `stdio`; Claude-compatible shape, `realm` and `timeoutMs` are Deckent's) or
  * Streamable HTTP (`type: http`, the same `timeoutMs`). SSE and WebSocket are not transports of this client (SSE is deprecated since 2025-03-26;
  * neither is a standard transport of 2026-07-28). */
-export const mcpServerEntrySchema = (stdio => z.union([stdio, httpEntryFields.extend({ timeoutMs: stdio.shape.timeoutMs }).strict()]))(z.object({
+export const mcpServerEntrySchema = (stdio => z.union([stdio, httpEntryFields.extend({ timeoutMs: stdio.shape.timeoutMs }).strict()]))(z.strictObject({
   type: z.literal('stdio').optional(),
-  command: z.string().min(1).max(4_096).refine(mcpLaunchTextValid),
-  args: z.array(z.string().max(4_096).refine(mcpLaunchTextValid)).max(64).optional(),
-  env: z.record(z.string().regex(ENV_NAME), z.string().max(4_096)).refine(env => Object.keys(env).length <= 64, 'MCP_ENV_TOO_MANY').optional(),
+  command: persistedString(z.string().min(1).max(4_096)).refine(mcpLaunchTextValid),
+  args: z.array(persistedString(z.string().max(4_096)).refine(mcpLaunchTextValid)).max(64).optional(),
+  env: z.record(z.string().regex(ENV_NAME), persistedString(z.string().max(4_096))).refine(env => Object.keys(env).length <= 64, 'MCP_ENV_TOO_MANY').optional(),
   realm: z.enum(['sandbox-net', 'require-sandbox', 'prefer-sandbox', 'host']).optional(),
-  timeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
-}).strict());
+  timeoutMs: persistedInteger().min(1_000).max(3_600_000).optional(),
+}));
 export type McpServerEntry = z.infer<typeof mcpServerEntrySchema>;
 export type McpStdioEntry = Exclude<McpServerEntry, { readonly type: 'http' }>;
 export type McpHttpEntry = Extract<McpServerEntry, { readonly type: 'http' }>;
 export const isMcpHttpEntry = (entry: McpServerEntry): entry is McpHttpEntry => entry.type === 'http';
 /** Transports other clients write that this one does not speak (named as such, not as a malformed entry). */
 const UNSUPPORTED_TRANSPORTS: ReadonlySet<unknown> = new Set(['sse', 'ws', 'streamable-http']);
-const servers = z.record(z.string(), z.unknown());
-const projectFileSchema = z.object({ schemaVersion: z.literal(1).optional(), mcpServers: servers.optional() }).strict();
-const personalFileSchema = z.object({ schemaVersion: z.literal(1).optional(), mcpServers: servers.optional(),
-  projects: z.record(z.string(), z.object({ mcpServers: servers.optional() }).strict()).optional() }).strict();
+const servers = z.record(z.string(), z.unknown().optional());
+const projectFileSchema = z.strictObject({ schemaVersion: z.literal(1).optional(), mcpServers: servers.optional() });
+const personalFileSchema = z.strictObject({ schemaVersion: z.literal(1).optional(), mcpServers: servers.optional(),
+  projects: z.record(z.string(), z.strictObject({ mcpServers: servers.optional() })).optional() });
 
 /** The company's MCP policy as Core reads it (written by POLICY-ADMIN through `policy.administer`; no Core source yet). */
 export interface ManagedMcpPolicy {

@@ -2,11 +2,13 @@ import { z } from 'zod';
 import type { Environment } from '#platform/core/host/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { CORE_SCHEMA, type ConfigFieldMetadata } from '#platform/core/config-fields/index.js';
+import { persistedString, isStandardSchemaV1, type StandardSchemaV1, type StandardJSONSchemaV1 } from '#platform/core/validate/index.js';
+import { isRecord } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA } from '#platform/core/config-fields/index.js';
 
 export type CoreConfig = z.infer<typeof CORE_SCHEMA>;
 /** `terminal.scopeId` (and `--scope`): one rule for the registered terminal section and the launch shell that reads it before registration. */
-export const TERMINAL_SCOPE_ID_SCHEMA = z.string().min(1).max(128);
+export const TERMINAL_SCOPE_ID_SCHEMA = persistedString(z.string().min(1).max(128));
 export type DeckentConfig = CoreConfig & Record<string, unknown>;
 export interface ConfigSectionOptions {
   /** Called on the authored global/project layers before they are merged. */
@@ -27,16 +29,22 @@ function validMetadata(metadata: ConfigFieldMetadata): boolean {
     && binding.consumers.every(unit => typeof unit === 'string' && unit.length > 0)
     : false;
 }
-type Section = { schema: z.AnyZodObject; options: ConfigSectionOptions };
+export type ConfigSectionSchema = StandardSchemaV1 & StandardJSONSchemaV1;
+type Section = { schema: ConfigSectionSchema; options: ConfigSectionOptions };
 const sections = new Map<string, Section>();
 let generation = 0;
 export function configRegistryGeneration(): number { return generation; }
-export function registerConfigSection(name: string, schema: z.AnyZodObject, options: ConfigSectionOptions = {}): void {
+export function registerConfigSection(name: string, schema: ConfigSectionSchema, options: ConfigSectionOptions = {}): void {
   if (!/^[a-z][a-z0-9_]*$/.test(name) || Object.hasOwn(CORE_SCHEMA.shape, name) || sections.has(name)
     || ['__proto__', 'constructor', 'prototype'].includes(name)) {
     throw ErrorRegistry.createError('CONFIG_SECTION_DUPLICATE', { params: { section: name } });
   }
-  if (!(schema instanceof z.ZodObject) || schema._def.unknownKeys !== 'strict'
+  let strict = false;
+  try {
+    const input = schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
+    strict = input['type'] === 'object' && input['additionalProperties'] === false && isRecord(input['properties']);
+  } catch { /* An unavailable projection cannot establish a closed section. */ }
+  if (!isStandardSchemaV1(schema) || !strict
     || (options.secretReferences !== undefined && !['allow', 'forbid'].includes(options.secretReferences))
     || !options.metadata || !validMetadata(options.metadata)
     || (options.validateValue !== undefined && typeof options.validateValue !== 'function')) {

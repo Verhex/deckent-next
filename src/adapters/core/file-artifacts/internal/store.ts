@@ -4,9 +4,9 @@ import { link, lstat, mkdir, open, readdir, realpath, unlink } from 'node:fs/pro
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
+import { persistedString, identitySchema } from '#domain/index.js';
 import { ArtifactError, artifactReceiptSchema, type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
-const optionsSchema = ARTIFACT_STORAGE_LIMITS.extend({ root: z.string().min(1) }).strict();
+const optionsSchema = ARTIFACT_STORAGE_LIMITS.extend({ root: persistedString(z.string().min(1)) }).strict();
 export type FileArtifactOptions = z.infer<typeof optionsSchema>;
 function digest(bytes: Uint8Array | string) { return createHash('sha256').update(bytes).digest('hex'); }
 function missing(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'; }

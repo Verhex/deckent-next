@@ -1,14 +1,13 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { clientCommandIdSchema, branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
-import { branchInputSchema, resolveAdmissionBranch, identitySchema, taskGraphSchema, hasConflictEdges, withConflictEdges, TaskGraphError, type RunProposalBinding, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { runWorkspaceCustodySchema, type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/core/workspaces/index.js';
 import { runCreateSchema, RunStoreError, type RunStore, type RunCreate, type RunReceipt } from './store.js';
 import { RunCreationAuthority, type RunAdmissionEvaluation } from './authority.js';
 import { projectRunView } from './view.js';
-export const runAdmissionSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
-  scopeId: identitySchema, runId: identitySchema, graph: taskGraphSchema, branch: branchInputSchema.optional() }).strict();
+export const runAdmissionSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+  scopeId: identitySchema, runId: identitySchema, graph: taskGraphSchema, branch: branchInputSchema.optional() });
 export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 /** Engine-only deterministic provenance, never an ingress field of run create. */
 export type BoundRunAdmission = RunAdmission & { readonly proposal?: RunProposalBinding };

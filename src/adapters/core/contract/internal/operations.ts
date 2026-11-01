@@ -14,10 +14,10 @@ const registry = AdapterRegistry.create([httpConditionalAdapterModule, coreWorks
 export function registerOperationAdapterModule(registration: AdapterModuleRegistration): void { registry.register(registration); }
 /** Operation catalog and effect targets are business policy data. Empty by default: no operation can run until an operator
  * declares it. `targets[].adapter` names a registry entry (Core `http-conditional` or a registered module adapter), never a literal. */
-const operationsSectionSchema = z.object({
-  catalog: z.array(operationDescriptorSchema).max(1024).default([]),
-  targets: z.array(z.object({ adapter: identitySchema, options: z.unknown() }).strict()).max(64).default([]),
-}).strict();
+const operationsSectionSchema = z.strictObject({
+  catalog: z.array(operationDescriptorSchema).max(1024).prefault([]),
+  targets: z.array(z.strictObject({ adapter: identitySchema, options: z.unknown().optional() })).max(64).prefault([]),
+});
 export const operationsConfigSchema = operationsSectionSchema.superRefine((value, context) => {
   const operations = new Set<string>(), kinds = new Set<string>();
   for (const target of value.targets) {

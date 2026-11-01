@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { criterionDefinitionSchema } from './criteria.js';
 import { workInputSchema } from './work-input.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
@@ -11,8 +11,8 @@ export const TASK_GRAPH_SCHEMA_VERSION = 4;
 /** v5 (alpha.47 R4, owner D7a), additive: the system's `origin: 'scope-conflict'` order edge and a task's declared record `resources`.
  * v2–v4 read unchanged; authors write v4 (v5 only to declare `resources`); the system raises a graph to v5 only when it inserts an edge. */
 export const TASK_GRAPH_RESOURCE_SCHEMA_VERSION = 5;
-export const taskDependencySchema = z.union([identity, z.object({ taskId: identity, startFrom: z.literal('accepted-patch').optional(),
-  origin: z.literal('scope-conflict').optional() }).strict().refine(edge => !edge.origin || edge.startFrom === 'accepted-patch').readonly()]);
+export const taskDependencySchema = z.union([identity, z.strictObject({ taskId: identity, get startFrom() { return z.literal('accepted-patch').optional(); },
+  get origin() { return z.literal('scope-conflict').optional(); } }).refine(edge => !edge.origin || edge.startFrom === 'accepted-patch').readonly()]);
 export type TaskDependency = z.infer<typeof taskDependencySchema>;
 export function dependencyTaskId(edge: TaskDependency): string { return typeof edge === 'string' ? edge : edge.taskId; }
 export function taskDependencyIds(task: { readonly dependencies: readonly TaskDependency[] }): readonly string[] { return task.dependencies.map(dependencyTaskId); }
@@ -23,27 +23,27 @@ export function blockingDependencyIds(task: { readonly dependencies: readonly Ta
   return task.dependencies.filter(edge => !isConflictEdge(edge)).map(dependencyTaskId);
 }
 /** One business record a task declares it changes (ERP/CRM kind + id; same shape as an effect target ref). Orders work only (v5). */
-export const taskResourceSchema = z.object({ kind: identity, id: z.string().min(1).max(512)
-  .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) }).strict().readonly();
+export const taskResourceSchema = z.strictObject({ kind: identity, get id() { return persistedString(z.string().min(1).max(512))
+  .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)); } }).readonly();
 
 export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 
-export const taskDefinitionSchema = z.object({
+export const taskDefinitionSchema = z.strictObject({
   id: identity,
   kind: identity,
-  workClass: identity.optional(),
-  dependencies: z.array(taskDependencySchema).readonly(),
-  acceptanceCriteria: z.array(identity).min(1).readonly().describe('Only criterionDefinitions ids, never descriptions or sentences.'),
-  inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),
-  workInput: workInputSchema.optional(),
-  resources: z.array(taskResourceSchema).min(1).max(64).readonly().optional(),
-}).strict().readonly();
-export const taskGraphSchema = z.object({
-  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(TASK_GRAPH_SCHEMA_VERSION), z.literal(TASK_GRAPH_RESOURCE_SCHEMA_VERSION)]),
-  revision: counterSchema.positive(),
-  tasks: z.array(taskDefinitionSchema).min(1).readonly(),
-  criterionDefinitions: z.array(criterionDefinitionSchema).readonly(),
-}).strict().superRefine((graph, context) => {
+  get workClass() { return identity.optional(); },
+  get dependencies() { return z.array(taskDependencySchema).readonly(); },
+  get acceptanceCriteria() { return z.array(identity).min(1).readonly().describe('Only criterionDefinitions ids, never descriptions or sentences.'); },
+  get inputs() { return z.array(z.strictObject({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).readonly()).readonly().optional(); },
+  get workInput() { return workInputSchema.optional(); },
+  get resources() { return z.array(taskResourceSchema).min(1).max(64).readonly().optional(); },
+}).readonly();
+export const taskGraphSchema = z.strictObject({
+  get schemaVersion() { return z.union([z.literal(2), z.literal(3), z.literal(TASK_GRAPH_SCHEMA_VERSION), z.literal(TASK_GRAPH_RESOURCE_SCHEMA_VERSION)]); },
+  get revision() { return counterSchema.positive(); },
+  get tasks() { return z.array(taskDefinitionSchema).min(1).readonly(); },
+  get criterionDefinitions() { return z.array(criterionDefinitionSchema).readonly(); },
+}).superRefine((graph, context) => {
   graph.tasks.forEach((task, index) => {
     if (graph.schemaVersion < TASK_GRAPH_SCHEMA_VERSION && task.dependencies.some(edge => typeof edge !== 'string')) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'dependencies'], message: 'TASK_GRAPH_VERSION' });
     if (graph.schemaVersion < TASK_GRAPH_RESOURCE_SCHEMA_VERSION && (task.resources !== undefined || task.dependencies.some(isConflictEdge))) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index], message: 'TASK_GRAPH_VERSION' });
@@ -52,8 +52,8 @@ export const taskGraphSchema = z.object({
   });
 }).readonly();
 export const taskEligibilitySchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('immediate') }).strict(),
-  z.object({ kind: z.literal('not-before'), at: counterSchema }).strict(),
+  z.strictObject({ get kind() { return z.literal('immediate'); } }),
+  z.strictObject({ get kind() { return z.literal('not-before'); }, at: counterSchema }),
 ]).readonly();
 /** Typed causes of a failed Task (additive literals). `report-missing`/`report-invalid` (R5, owner D5a): a work task ended without a valid
  * structured result report; `declared-check-not-passed`: its report's acceptance check did not pass; `worker-stalled` (R3): the
@@ -61,36 +61,36 @@ export const taskEligibilitySchema = z.discriminatedUnion('kind', [
  * claim, not an environment verdict). Only report-missing/report-invalid are retried by the run recovery owner (R3). */
 export const TASK_NOT_ACCEPTED_REASONS = ['no-change-produced', 'report-missing', 'report-invalid', 'declared-check-not-passed', 'worker-stalled', 'acceptance-check-not-run'] as const;
 export type TaskNotAcceptedReason = typeof TASK_NOT_ACCEPTED_REASONS[number];
-export const taskProgressSchema = z.object({
+export const taskProgressSchema = z.strictObject({
   taskId: identity,
-  phase: z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling', 'skipped', 'awaiting-decision']),
-  skippedReason: z.enum(['dependency-failed', 'dependency-cancelled']).optional(),
-  decision: z.object({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready', 'needs-input']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional(),
+  get phase() { return z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling', 'skipped', 'awaiting-decision']); },
+  get skippedReason() { return z.enum(['dependency-failed', 'dependency-cancelled']).optional(); },
+  get decision() { return z.strictObject({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready', 'needs-input']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional(),
     question: workerNeedsInputSchema.unwrap().shape.question.optional(),
-    evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional() }).strict().readonly().optional(),
-  notAcceptedReason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional(),
-  acceptedEvidence: z.literal('model-unverified').optional(),
-  inputAnswer: z.object({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
-    answer: z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars) }).strict().readonly().optional(),
-  workerCustody: z.object({ schemaVersion: z.literal(1), state: z.enum(['held', 'released']),
+    evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional() }).readonly().optional(); },
+  get notAcceptedReason() { return z.enum(TASK_NOT_ACCEPTED_REASONS).optional(); },
+  get acceptedEvidence() { return z.literal('model-unverified').optional(); },
+  get inputAnswer() { return z.strictObject({ schemaVersion: z.literal(1), source: attemptIdentitySchema, question: workerNeedsInputSchema.unwrap().shape.question,
+    answer: persistedString(z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars)) }).readonly().optional(); },
+  get workerCustody() { return z.strictObject({ schemaVersion: z.literal(1), state: z.enum(['held', 'released']),
     basis: z.enum(['termination-proof', 'manual-decision']), fenceReceiptId: identity,
     proofReceiptId: identity.optional(), decisionReceiptId: identity.optional(),
-  }).strict().refine(value => value.basis === 'termination-proof' ? value.proofReceiptId !== undefined && value.decisionReceiptId === undefined
-    : value.decisionReceiptId !== undefined && value.proofReceiptId === undefined).readonly().optional(),
-  unresolvedEffects: z.boolean(),
+  }).refine(value => value.basis === 'termination-proof' ? value.proofReceiptId !== undefined && value.decisionReceiptId === undefined
+    : value.decisionReceiptId !== undefined && value.proofReceiptId === undefined).readonly().optional(); },
+  get unresolvedEffects() { return z.boolean(); },
   eligibility: taskEligibilitySchema,
-}).strict().superRefine((state, context) => {
+}).superRefine((state, context) => {
   if (state.decision && ((state.decision.reason === 'needs-input') !== (state.decision.question !== undefined))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_PROGRESS_STATE_INCONSISTENT' });
   if ((state.notAcceptedReason !== undefined && state.phase !== 'failed') || (state.phase === 'skipped') !== (state.skippedReason !== undefined) || (state.phase === 'awaiting-decision') !== (state.decision !== undefined) || (state.acceptedEvidence !== undefined && state.phase !== 'accepted') || (state.decision && state.decision.deadline <= state.decision.since)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_PROGRESS_STATE_INCONSISTENT' });
   if (['accepted', 'skipped', 'awaiting-decision'].includes(state.phase) && state.unresolvedEffects) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_ACCEPTED_WITH_UNRESOLVED_EFFECT' });
   }
 }).readonly();
-export const readinessInputSchema = z.object({
-  graphRevision: counterSchema.positive(),
+export const readinessInputSchema = z.strictObject({
+  get graphRevision() { return counterSchema.positive(); },
   now: counterSchema,
-  progress: z.array(taskProgressSchema).readonly(),
-}).strict().readonly();
+  get progress() { return z.array(taskProgressSchema).readonly(); },
+}).readonly();
 export type TaskDefinition = z.infer<typeof taskDefinitionSchema>;
 export type TaskGraph = z.infer<typeof taskGraphSchema>;
 export type TaskProgress = z.infer<typeof taskProgressSchema>;

@@ -1,17 +1,17 @@
+import { persistedInteger, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { assertBackupCoverage, backupCoverageManifestSchema, type BackupCoverageManifest, type BackupContributionOwner } from '#engine/index.js';
-import { sha256 } from '#platform/index.js';
 import { verifyBackupSet } from './set.js';
 import type { BackupLimits } from './archive.js';
 import { encryptBackupContribution, decryptBackupContribution } from './crypto.js';
 import { inside, readPrivate, safePath, writePrivate, refuse } from './files.js';
 import policyData from './coverage-limits.json' with { type: 'json' };
-const coverageLimits = z.object({ schemaVersion: z.literal(1), encryptedJsonExpansion: z.number().int().positive().safe() }).strict().parse(policyData);
-const payloadSchema = z.object({ schemaVersion: z.literal(1), manifest: backupCoverageManifestSchema,
+const coverageLimits = z.strictObject({ schemaVersion: z.literal(1), encryptedJsonExpansion: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).parse(policyData);
+const payloadSchema = z.strictObject({ schemaVersion: z.literal(1), manifest: backupCoverageManifestSchema,
   ledgerDigest: z.string().regex(/^[a-f0-9]{64}$/u), setDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  entries: z.array(z.object({ resourceId: z.string(), content: z.string(), digest: z.string() }).strict()) }).strict();
+  entries: z.array(z.strictObject({ resourceId: z.string(), content: z.string(), digest: z.string() })) });
 export interface BackupCoverageRequest {
   readonly set: string; readonly companion: string; readonly manifest: BackupCoverageManifest;
   readonly deletionRoots: readonly string[];

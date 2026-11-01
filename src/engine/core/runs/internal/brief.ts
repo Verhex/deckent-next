@@ -1,35 +1,36 @@
-import { z } from 'zod';
-import { readWorkerModelPin, workerModelPinSchema, workerFinalReportResultSchema, TASK_NOT_ACCEPTED_REASONS, type RunSnapshot, type WorkerFinalReportResult } from '#domain/index.js';
+import { persistedInteger, readWorkerModelPin, workerModelPinSchema, workerFinalReportResultSchema, TASK_NOT_ACCEPTED_REASONS, type RunSnapshot, type WorkerFinalReportResult } from '#domain/index.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
+import { z } from 'zod';
+
 const text = z.string();
 const safe = (value: string) => redactSensitive(terminalSafeText(value));
-const profileSchema = z.object({ id: text, version: z.number().int().positive() }).strict().readonly();
-const contextRefSchema = z.object({ id: text, version: z.number().int().positive(), sha256: text.regex(/^[a-f0-9]{64}$/) }).strict().readonly();
+const profileSchema = z.strictObject({ id: text, version: persistedInteger().positive() }).readonly();
+const contextRefSchema = z.strictObject({ id: text, version: persistedInteger().positive(), sha256: text.regex(/^[a-f0-9]{64}$/) }).readonly();
 /** Human read projections only. No prompt parsing, live catalog lookup, inferred business purpose or transition authority. */
 /** `title`: the Brain-authored work-input title (M1, ≤240 bytes), present only when the task carries one; the strip and windows prefer it. */
-export const taskBriefSchema = z.object({ schemaVersion: z.literal(1), task: text.nullable(), title: text.optional(), scopePaths: z.array(text).readonly().nullable(),
-  acceptance: text.nullable(), criteria: z.array(z.object({ id: text, description: text, evaluator: profileSchema }).strict().readonly()).readonly(),
+export const taskBriefSchema = z.strictObject({ schemaVersion: z.literal(1), task: text.nullable(), title: text.optional(), scopePaths: z.array(text).readonly().nullable(),
+  acceptance: text.nullable(), criteria: z.array(z.strictObject({ id: text, description: text, evaluator: profileSchema }).readonly()).readonly(),
   profile: profileSchema.nullable(), model: workerModelPinSchema.nullable(), effort: text.nullable(), contextRefs: z.array(contextRefSchema).readonly(),
-}).strict().readonly();
+}).readonly();
 export type TaskBrief = z.infer<typeof taskBriefSchema>;
-export const briefEvaluationSchema = z.object({ verdict: z.enum(['accepted', 'accepted-unverified', 'rejected', 'unknown', 'pending']).nullable(),
-  reason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional() }).strict().readonly();
-const deliveryReceiptSchema = z.object({ state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
+export const briefEvaluationSchema = z.strictObject({ verdict: z.enum(['accepted', 'accepted-unverified', 'rejected', 'unknown', 'pending']).nullable(),
+  reason: z.enum(TASK_NOT_ACCEPTED_REASONS).optional() }).readonly();
+const deliveryReceiptSchema = z.strictObject({ state: z.enum(['integrating', 'integrated', 'delivering', 'delivered', 'adopting', 'adopted', 'rolling-back', 'rolled-back']),
   commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional(),
-}).strict().readonly();
+}).readonly();
 export const briefDeliverySchema = deliveryReceiptSchema.unwrap().extend({ receipts: z.array(deliveryReceiptSchema).readonly().optional() }).strict().readonly();
 /** Failed tests of a failed verification attempt, read from its retained output under the read-output decision: the true count and the first names only. */
-export const briefFailedTestsSchema = z.object({ count: z.number().int().nonnegative(), names: z.array(text).readonly(), truncated: z.boolean() }).strict().readonly();
+export const briefFailedTestsSchema = z.strictObject({ count: persistedInteger().nonnegative(), names: z.array(text).readonly(), truncated: z.boolean() }).readonly();
 /** What a terminal accepted Run still owes its delivery when no integration/delivery/adoption receipt exists: no patch needed, a patch that was never prepared, or a prepared patch awaiting delivery. */
 export const briefDeliveryOutlookSchema = z.enum(['none', 'patch-not-prepared', 'awaiting-delivery']);
-export const resultBriefSchema = z.object({ schemaVersion: z.literal(1), attemptId: text.nullable(), claimLabel: z.literal('CLAIM'),
+export const resultBriefSchema = z.strictObject({ schemaVersion: z.literal(1), attemptId: text.nullable(), claimLabel: z.literal('CLAIM'),
   report: workerFinalReportResultSchema.nullable(), evaluation: briefEvaluationSchema,
   /** This receipt belongs to the Run; it does not prove this individual worker patch landed. */
   runDelivery: briefDeliverySchema.nullable(), openIssues: z.array(text).readonly().nullable(),
   failedTests: briefFailedTestsSchema.optional(), deliveryOutlook: briefDeliveryOutlookSchema.optional(),
   /** BeUser M-33 (additive; the outlook keeps its wire values): a person set this awaiting patch aside, or the set-aside records could not be read (typed code). */
   setAside: z.literal(true).optional(), dismissalUnread: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/u).optional(),
-}).strict().readonly();
+}).readonly();
 export type ResultBrief = z.infer<typeof resultBriefSchema>;
 export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
   const definition = run.graph.tasks.find(task => task.id === taskId)!;
@@ -37,7 +38,7 @@ export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
   const parameters = profile?.parameters as { nativeSubscription?: { promptDelivery?: { schemaVersion?: number; segments?: unknown[] } } } | undefined;
   const delivery = parameters?.nativeSubscription?.promptDelivery;
   const refs = delivery?.schemaVersion === 1 && Array.isArray(delivery.segments) ? delivery.segments.flatMap(segment => {
-    const part = z.object({ kind: z.literal('context'), ...contextRefSchema.unwrap().shape }).passthrough().safeParse(segment);
+    const part = z.looseObject({ kind: z.literal('context'), ...contextRefSchema.unwrap().shape }).safeParse(segment);
     return part.success ? [{ id: safe(part.data.id), version: part.data.version, sha256: part.data.sha256 }] : [];
   }) : [];
   const pin = profile ? readWorkerModelPin(profile.parameters)?.pin : null;

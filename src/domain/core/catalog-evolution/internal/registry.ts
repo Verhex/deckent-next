@@ -1,5 +1,5 @@
+import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
 import seed from '../../../../../assets/catalog-evolution/registry.json' with { type: 'json' };
 
 /**
@@ -8,28 +8,28 @@ import seed from '../../../../../assets/catalog-evolution/registry.json' with { 
  * overlay write (protected config `catalogEvolution.overlay`, no AI writes it) may replace a rule row (next version) or mark it `calibrated`, and
  * it may only lower a resource bound. Rates and thresholds are integer micro-units (1 = 1 000 000), so every statistic is byte-reproducible.
  */
-const positive = z.number().int().positive().safe();
-const micro = z.number().int().nonnegative().safe();
-const statsSchema = z.object({ zMicro: positive, windowTasks: positive, durationPercentileMicro: positive, windowMaxDays: positive, periodDays: positive, modelMixMax: positive,
-  excludeUnknownEvidence: z.boolean(), readRowsMax: positive }).strict();
-const passSchema = z.object({ passPageRows: positive, maxKeysPerPass: positive }).strict();
-const suggestionsSchema = z.object({ maxOpenSuggestions: positive, suggestionTtlDays: positive, cooldownTasks: positive }).strict();
-const rule = <K extends string, P extends z.ZodRawShape>(kind: K, params: P) => z.object({ id: identitySchema, version: positive, kind: z.literal(kind),
-  status: z.enum(['provisional', 'calibrated']), params: z.object(params).strict().readonly() }).strict().readonly();
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const micro = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const statsSchema = z.strictObject({ zMicro: positive, windowTasks: positive, durationPercentileMicro: positive, windowMaxDays: positive, periodDays: positive, modelMixMax: positive,
+  excludeUnknownEvidence: z.boolean(), readRowsMax: positive });
+const passSchema = z.strictObject({ passPageRows: positive, maxKeysPerPass: positive });
+const suggestionsSchema = z.strictObject({ maxOpenSuggestions: positive, suggestionTtlDays: positive, cooldownTasks: positive });
+const rule = <K extends string, P extends z.ZodRawShape>(kind: K, params: P) => z.strictObject({ id: identitySchema, version: positive, kind: z.literal(kind),
+  status: z.enum(['provisional', 'calibrated']), params: z.strictObject(params).readonly() }).readonly();
 /** The five rule kinds (§6); S8-3 evaluates them, S8-2 only carries and validates them. */
 const ruleSchema = z.union([
   rule('promote-agent', { minSamples: positive, lowerBoundMicro: micro, minModels: positive, minPeriods: positive, maxNonAttributableShareMicro: micro }),
   rule('redesign-agent', { minSamples: positive, upperBoundMicro: micro }),
   rule('revise-agent', { minSamples: positive, effortRatioMicro: positive, windows: positive }),
   rule('propose-agent', { minTasks: positive }), rule('propose-skill', { minLessons: positive })]);
-const registrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'calibrated']),
+const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'calibrated']),
   stats: statsSchema.readonly(), pass: passSchema.readonly(),
   suggestions: suggestionsSchema.readonly(),
-  inherit: z.object({ recheckMinSamples: positive }).strict().readonly(),
-  rollout: z.object({ minSuggestions: positive, minAgreementMicro: micro, maxReversalRateMicro: micro, minShadowNarrowings: positive }).strict().readonly(),
-  rules: z.array(ruleSchema).min(1).readonly() }).strict().refine(value => new Set(value.rules.map(row => row.id)).size === value.rules.length).readonly();
-export const catalogEvolutionOverlaySchema = z.object({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
-  rules: z.array(ruleSchema).optional() }).strict().readonly();
+  inherit: z.strictObject({ recheckMinSamples: positive }).readonly(),
+  rollout: z.strictObject({ minSuggestions: positive, minAgreementMicro: micro, maxReversalRateMicro: micro, minShadowNarrowings: positive }).readonly(),
+  rules: z.array(ruleSchema).min(1).readonly() }).refine(value => new Set(value.rules.map(row => row.id)).size === value.rules.length).readonly();
+export const catalogEvolutionOverlaySchema = z.strictObject({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
+  rules: z.array(ruleSchema).optional() }).readonly();
 export type CatalogEvolutionRegistry = z.infer<typeof registrySchema>;
 export type CatalogEvolutionRule = CatalogEvolutionRegistry['rules'][number];
 export class CatalogEvolutionError extends Error {

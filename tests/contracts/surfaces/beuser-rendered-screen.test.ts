@@ -17,6 +17,7 @@ it('the emitted screen code loads in real Node ESM with the exact CommonJS depen
     { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
   const input = 'data:text/javascript;base64,' + Buffer.from(await compile('input')).toString('base64');
   const measurement = (await compile('measurement')).replace("from './input.js'", `from ${JSON.stringify(input)}`)
+    .replace("from '#platform/index.js'", `from ${JSON.stringify(pathToFileURL(require.resolve('#platform/index.js')).href)}`)
     .replace("from 'zod'", `from ${JSON.stringify(pathToFileURL(require.resolve('zod')).href)}`);
   const measurementUrl = 'data:text/javascript;base64,' + Buffer.from(measurement).toString('base64');
   const screen = (await compile('screen')).replace(/from '(@xterm\/[^']+)'/gu, (_match, spec: string) => `from ${JSON.stringify(pathToFileURL(require.resolve(spec)).href)}`)

@@ -2,13 +2,12 @@ import { z } from 'zod';
 import { advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from './period.js';
 import { ceilProviderSpendExactMinorUnits } from './exact.js';
 import { nativeCliIdSchema, type ModelInvocationBillingAxis, type ModelInvocationProfile, type ExecutionProfileDefinition } from '#domain/index.js';
-import { providerSpendEvidenceDigest } from './account.js';
-import { createProviderSpendAccount, parseProviderSpendAccount, type ProviderSpendAccount } from './account.js';
+import { providerSpendEvidenceDigest, createProviderSpendAccount, parseProviderSpendAccount, type ProviderSpendAccount } from './account.js';
 import { createProviderSpendCheckpoint } from './checkpoint.js';
 import type { ProviderSpendBudget } from '#domain/index.js';
 import { providerSpendLocalZeroTariffProfile } from './no-charge.js';
 export type WorkSpending = 'metered' | 'not-metered';
-const subscription = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema }).passthrough();
+const subscription = z.looseObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema });
 /** Trusted selected bindings only; never a model-authored billing claim. Unknown bindings stay metered. */
 export function classifyWorkSpending(input: Readonly<{ kind: 'model'; profile: ModelInvocationProfile | null }>
   | Readonly<{ kind: 'worker'; profile: ExecutionProfileDefinition | null }>): WorkSpending {

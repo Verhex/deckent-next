@@ -4,17 +4,17 @@ import { taskDependencyIds, TaskGraphError, type TaskGraph, type TaskProgress } 
 import { validateTaskGraphStructure } from './graph.js';
 
 /** Measured size of a task graph: tasks, dependency edges (inputs are not edges) and depth (tasks on the longest dependency chain). */
-export const taskGraphShapeSchema = z.object({ tasks: counterSchema, edges: counterSchema, depth: counterSchema }).strict().readonly();
+export const taskGraphShapeSchema = z.strictObject({ tasks: counterSchema, edges: counterSchema, depth: counterSchema }).readonly();
 export type TaskGraphShape = z.infer<typeof taskGraphShapeSchema>;
 /** PARALLEL-S3: one typed DAG summary for every surface (run inspect, monitor). `pending` = pending; `running` = active + evaluating;
  * `attention` = awaiting-decision + reconciling; `stopped` = cancelled + skipped. The buckets always add up to `total`.
  * `criticalPath` is the longest dependency chain of still-open Tasks (root first), ties broken by graph order; empty when none is open.
  * Observation only: it never orders, admits or accepts work. */
-export const taskGraphSummarySchema = z.object({ schemaVersion: z.literal(1), shape: taskGraphShapeSchema,
-  counts: z.object({ pending: counterSchema, running: counterSchema, attention: counterSchema, accepted: counterSchema, failed: counterSchema,
-    stopped: counterSchema, total: counterSchema }).strict().readonly(),
+export const taskGraphSummarySchema = z.strictObject({ schemaVersion: z.literal(1), shape: taskGraphShapeSchema,
+  counts: z.strictObject({ pending: counterSchema, running: counterSchema, attention: counterSchema, accepted: counterSchema, failed: counterSchema,
+    stopped: counterSchema, total: counterSchema }).readonly(),
   criticalPath: z.array(identitySchema).readonly(),
-}).strict().readonly();
+}).readonly();
 export type TaskGraphSummary = z.infer<typeof taskGraphSummarySchema>;
 type Bucket = Exclude<keyof TaskGraphSummary['counts'], 'total'>;
 const BUCKET: Readonly<Record<TaskProgress['phase'], Bucket>> = Object.freeze({ pending: 'pending', active: 'running', evaluating: 'running',

@@ -7,15 +7,15 @@ import type { RunReceipt } from '#engine/core/runs/index.js';
  * The dispatch is the exact record whose retained output the application verified.
  * Persistence rechecks it under the same transaction as the Run revision fence.
  */
-export const taskEvaluationCommitSchema = z.object({
+export const taskEvaluationCommitSchema = z.strictObject({
   commandId: identitySchema,
-  actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict(),
+  actor: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }),
   expectedRevision: counterSchema,
   evaluation: taskEvaluationSchema,
   dispatch: dispatchRecordSchema,
   unknownDisposition: z.literal('fail').optional(),
   now: counterSchema.optional(), timeoutMs: counterSchema.positive().optional(),
-}).strict().refine(value => value.commandId === value.evaluation.evaluationId, 'TASK_EVALUATION_INVALID')
+}).refine(value => value.commandId === value.evaluation.evaluationId, 'TASK_EVALUATION_INVALID')
   .transform(value => ({ ...value, evaluation: taskEvaluationSchema.parse({ ...value.evaluation,
     criteria: [...value.evaluation.criteria].sort((a, b) => a.criterionId < b.criterionId ? -1 : a.criterionId > b.criterionId ? 1 : 0)
       .map(criterion => ({ ...criterion, evidenceIds: [...criterion.evidenceIds].sort() })),

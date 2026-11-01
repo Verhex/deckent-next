@@ -16,12 +16,12 @@ import { ModelInvocationStoreError } from './port.js';
 const envelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxDepth + 2,
   maxNodes: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxNodes * 3, maxCodeUnits: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxCodeUnits * 3 });
 const statusSchema = z.enum(['retained', 'not-captured', 'purged']);
-const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), response: z.unknown().nullable(),
-  contentStatus: statusSchema, purge: z.unknown().nullable() }).strict();
-const inspectionSchema = z.object({ schemaVersion: z.literal(7), historyIntegrity: z.literal('not-recorded'), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
-  invocation: z.unknown().nullable(), control: z.unknown().nullable(), spending: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
-  responseContent: z.unknown().optional(), planUsage: z.unknown().optional() }).strict();
-const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown() }).strict();
+const resultSchema = z.strictObject({ replayed: z.boolean(), receipt: z.unknown().optional(), response: z.unknown().optional().nullable(),
+  contentStatus: statusSchema, purge: z.unknown().optional().nullable() });
+const inspectionSchema = z.strictObject({ schemaVersion: z.literal(7), historyIntegrity: z.literal('not-recorded'), scopeId: z.string(), invocationId: z.string(), reference: z.unknown().optional(),
+  invocation: z.unknown().optional().nullable(), control: z.unknown().optional().nullable(), spending: z.unknown().optional().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().optional().nullable(),
+  responseContent: z.unknown().optional(), planUsage: z.unknown().optional() });
+const purgeResultSchema = z.strictObject({ replayed: z.boolean(), receipt: z.unknown().optional() });
 const same = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
 function corrupt(): never { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 function expectedStatus(receipt: ReturnType<typeof verifyModelInvocationReceipt>, purge: ModelInvocationPurgeReceipt | null) {

@@ -1,23 +1,24 @@
+import { persistedString, persistedInteger } from '#platform/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { agentToolDiagnosticSchema } from '#domain/index.js';
 import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, agentTurnInterruptedNote, agentTurnSteerRecordSchema, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
-const id = z.string().min(1).max(256), count = z.number().int().nonnegative().safe(), digest = z.string().regex(/^[a-f0-9]{64}$/);
-const outcomeSchema = z.object({ finish: z.enum(['stop', 'length', 'cancelled', 'error']), note: z.string().max(4096).nullable(), rounds: count, toolCalls: count,
+const id = persistedString(z.string().min(1).max(256)), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest = z.string().regex(/^[a-f0-9]{64}$/);
+const outcomeSchema = z.strictObject({ finish: z.enum(['stop', 'length', 'cancelled', 'error']), note: persistedString(z.string().max(4096)).nullable(), rounds: count, toolCalls: count,
   // v30 (additive, optional): a turn that accepted steered lines keeps their ids; rows without it stay byte-identical.
-  answer: z.string().nullable(), answerBytes: count, appendedDigest: digest.nullable(), steer: agentTurnSteerRecordSchema.optional() }).strict()
+  answer: z.string().nullable(), answerBytes: count, appendedDigest: digest.nullable(), steer: agentTurnSteerRecordSchema.optional() })
   .refine(outcome => outcome.answer === null ? outcome.answerBytes === 0 || outcome.answerBytes > AGENT_TURN_ANSWER_MAX_BYTES
     : Buffer.byteLength(outcome.answer, 'utf8') === outcome.answerBytes && outcome.answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES);
-const turnSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: id, principalKey: id, requestDigest: digest, claimedAtMs: count,
-  finishedAtMs: count.nullable(), outcome: outcomeSchema.nullable() }).strict()
+const turnSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: id, turnId: id, principalKey: id, requestDigest: digest, claimedAtMs: count,
+  finishedAtMs: count.nullable(), outcome: outcomeSchema.nullable() })
   .refine(turn => (turn.finishedAtMs === null) === (turn.outcome === null));
-const callSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: id, round: z.number().int().positive().safe(), index: count,
-  callId: id, tool: z.string().min(1).max(64), toolVersion: count, argsDigest: digest.nullable(), target: z.string().max(4096).nullable(),
+const callSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: id, turnId: id, round: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), index: count,
+  callId: id, tool: persistedString(z.string().min(1).max(64)), toolVersion: count, argsDigest: digest.nullable(), target: persistedString(z.string().max(4096)).nullable(),
   status: z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']), bytes: count, resultDigest: digest, atMs: count,
   // B4 (additive, optional): the row is JSON and is parsed only when written (reads count rows), so a build without the field is unaffected.
-  diagnostic: agentToolDiagnosticSchema.optional() }).strict();
+  diagnostic: agentToolDiagnosticSchema.optional() });
 type Turn = z.infer<typeof turnSchema>;
 
 /** SQLite agent turn store (ledger v37). Every transition is one transaction; rows are validated when read and written. */

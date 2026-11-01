@@ -1,5 +1,4 @@
-import { z } from 'zod';
-import { runSnapshotSchema, type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
+import { persistedInteger, runSnapshotSchema, type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import { runQuerySchema, projectRunView, RunStoreError, type RunQuery, type RunReservationCommand } from '#engine/core/runs/index.js';
 import type { TaskEvaluationCommand } from '#engine/core/task-evaluation/index.js';
 
@@ -30,7 +29,7 @@ export function reservationRefusalOutcome(code: string): 'changed' | 'waiting' |
   if (code === 'RUN_STORE_CONFLICT') return 'changed';
   return code === 'RUN_CAPACITY_OR_ORDER' || code === 'RUN_POOL_FULL' || code === 'RUN_POOL_HELD' ? 'waiting' : null;
 }
-const concurrencySchema = z.number().int().positive().safe();
+const concurrencySchema = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 
 /** One finite, completion-driven advancement turn. Scheduler, launch and acceptance remain with existing owners.
  * No automatic retries, background intent or new Run state. A host must explicitly admit each turn.

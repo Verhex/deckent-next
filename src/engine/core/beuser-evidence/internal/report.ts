@@ -1,26 +1,25 @@
 import { z } from 'zod';
-import { identitySchema as id, counterSchema } from '#domain/index.js';
-import { beuserVerdictSchema, type BeuserVerdict } from '#domain/index.js';
+import { identitySchema as id, counterSchema, beuserVerdictSchema, type BeuserVerdict } from '#domain/index.js';
 import { beuserCalibrationSchema } from '#capabilities/index.js';
 import { beuserStuckFindingSchema, beuserFilesystemProofSchema, BEUSER_UNREACHABLE_REASONS } from '#engine/core/beuser-contract/index.js';
 const measured = z.number().finite().nonnegative().nullable();
-export const beuserReportSchema = z.object({ schemaVersion: z.literal(1), simulated: z.literal(true), calibrationClaim: z.literal('uncalibrated'),
+export const beuserReportSchema = z.strictObject({ schemaVersion: z.literal(1), simulated: z.literal(true), calibrationClaim: z.literal('uncalibrated'),
   cohort: id, calibration: beuserCalibrationSchema,
-  counts: z.object({ defined: counterSchema, selected: counterSchema, walked: counterSchema, concurrent: counterSchema }).strict(),
-  cleanup: z.array(z.object({ branch: id, state: z.enum(['destroyed', 'quarantined', 'unknown']), filesystemProof: beuserFilesystemProofSchema }).strict()).optional(),
+  counts: z.strictObject({ defined: counterSchema, selected: counterSchema, walked: counterSchema, concurrent: counterSchema }),
+  cleanup: z.array(z.strictObject({ branch: id, state: z.enum(['destroyed', 'quarantined', 'unknown']), filesystemProof: beuserFilesystemProofSchema })).optional(),
   findings: z.array(beuserStuckFindingSchema).optional(),
   // Every start state of a branch the harness did not arrange, by name: typed unknown (the branch never started) or the persona's own act.
-  unarranged: z.array(z.object({ branch: id, state: id, reason: z.enum([...BEUSER_UNREACHABLE_REASONS, 'persona']) }).strict()).optional(),
-  segments: z.array(z.object({ segment: id, verdict: beuserVerdictSchema.nullable(),
-    broken: z.array(id), friction: z.array(id), delight: z.array(id), evidenceRefs: z.array(id), nextOwner: id }).strict()),
-  unwalked: z.array(z.object({ branch: id, reason: id }).strict()), unknown: z.array(z.object({ branch: id, reason: id }).strict()),
-  criticalCoverage: z.array(z.object({ criterion: id, walked: counterSchema, valid: counterSchema, invalid: counterSchema, unknown: counterSchema }).strict()
+  unarranged: z.array(z.strictObject({ branch: id, state: id, reason: z.enum([...BEUSER_UNREACHABLE_REASONS, 'persona']) })).optional(),
+  segments: z.array(z.strictObject({ segment: id, verdict: beuserVerdictSchema.nullable(),
+    broken: z.array(id), friction: z.array(id), delight: z.array(id), evidenceRefs: z.array(id), nextOwner: id })),
+  unwalked: z.array(z.strictObject({ branch: id, reason: id })), unknown: z.array(z.strictObject({ branch: id, reason: id })),
+  criticalCoverage: z.array(z.strictObject({ criterion: id, walked: counterSchema, valid: counterSchema, invalid: counterSchema, unknown: counterSchema })
     .refine(v => v.valid + v.invalid <= v.walked && v.walked <= v.valid + v.invalid + v.unknown)),
-  reliability: z.object({ completed: counterSchema, attempted: counterSchema }).strict(),
+  reliability: z.strictObject({ completed: counterSchema, attempted: counterSchema }),
   /** Owner 2026-10-31: model calls whose token reservation was a provider count or a transport's byte estimate (absent: an older report). */
-  reservation: z.object({ providerCount: counterSchema, estimated: counterSchema }).strict().optional(),
+  reservation: z.strictObject({ providerCount: counterSchema, estimated: counterSchema }).optional(),
   cost: measured, currency: id, elapsedMs: measured,
-}).strict().refine(v => v.counts.concurrent <= v.counts.walked && v.counts.walked <= v.counts.selected && v.counts.selected <= v.counts.defined
+}).refine(v => v.counts.concurrent <= v.counts.walked && v.counts.walked <= v.counts.selected && v.counts.selected <= v.counts.defined
   && v.reliability.completed <= v.reliability.attempted && v.calibration.cohort === v.cohort
   && new Set(v.segments.map(s => s.segment)).size === v.segments.length
   && new Set(v.criticalCoverage.map(c => c.criterion)).size === v.criticalCoverage.length

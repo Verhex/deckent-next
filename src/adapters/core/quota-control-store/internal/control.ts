@@ -5,7 +5,7 @@ import { AttemptStoreError, executionPoolSchema, runExecutionPolicySchema, quota
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
-const recordSchema = z.object({ fingerprint: z.string(), receipt: quotaReleaseReceiptSchema }).strict();
+const recordSchema = z.strictObject({ fingerprint: z.string(), receipt: quotaReleaseReceiptSchema });
 type ReleaseInput = Omit<QuotaReleaseWrite, 'authorizedPoolIds'>;
 function priorReceipt(db: DatabaseSync, write: ReleaseInput) {
   const prior = db.prepare('SELECT record FROM quota_release_receipts WHERE scope_id=? AND command_id=?').get(write.command.scopeId, write.command.commandId);

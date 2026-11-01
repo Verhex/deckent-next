@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { ConfigSchemaNode } from './schema-node.js';
 import { DeckentError, ErrorRegistry, type Params } from '#platform/index.js';
 import type { ApprovalSubject, AuditEvent, VerifiedPrincipal } from '#domain/index.js';
 import type { DeckentConfig } from '#platform/index.js';
@@ -74,5 +74,5 @@ export class ConfigApplicationError extends DeckentError {
     this.name = 'ConfigApplicationError';
   }
 }
-export interface ConfigDefinition { readonly schema: z.ZodTypeAny; readonly descriptionKey: string;
+export interface ConfigDefinition { readonly schema: ConfigSchemaNode; readonly descriptionKey: string;
   readonly binding: ConfigFieldView['binding']; readonly apply: ConfigFieldView['apply'] }

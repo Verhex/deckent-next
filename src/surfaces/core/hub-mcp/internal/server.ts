@@ -2,14 +2,14 @@ import { Server, ProtocolError, type ServerContext } from '@modelcontextprotocol
 import { z } from 'zod';
 import { HUB_LIMITS, canonicalHubJson, type HubSkillItem } from '#domain/index.js';
 import { HubServerError, type HubServerApplication, type HubServerContext, type HubSkillRef, type HubStoredVersion } from '#engine/index.js';
-import { sha256, PACKAGE_NAME, PACKAGE_VERSION, DeckentJsonSchemaValidator } from '#platform/index.js';
+import { persistedString, sha256, PACKAGE_NAME, PACKAGE_VERSION, DeckentJsonSchemaValidator } from '#platform/index.js';
 import { registerHubMethods, type HubMcpOptions } from './methods.js';
 
 const extension = 'io.modelcontextprotocol/skills'; // Standard extension id, not a mutable Deckent domain.
 const cache = { resultType: 'complete' as const, ttlMs: 0, cacheScope: 'private' as const };
-const meta = z.object({ _meta: z.record(z.unknown()).optional() });
-const listParams = meta.extend({ cursor: z.string().max(HUB_LIMITS.packageMaxBytes).optional() }).strict();
-const getParams = meta.extend({ uri: z.string().max(HUB_LIMITS.packageMaxBytes) }).strict();
+const meta = z.object({ _meta: z.record(z.string(), z.unknown().optional()).optional() });
+const listParams = meta.extend({ cursor: persistedString(z.string().max(HUB_LIMITS.packageMaxBytes)).optional() }).strict();
+const getParams = meta.extend({ uri: persistedString(z.string().max(HUB_LIMITS.packageMaxBytes)) }).strict();
 const encoded = (value: string) => encodeURIComponent(value);
 const resourcePath = (path: string) => path.split('/').map(encoded).join('/');
 function skillRoot(row: HubStoredVersion, skill: HubSkillItem) {

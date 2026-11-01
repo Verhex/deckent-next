@@ -1,4 +1,5 @@
+import { persistedString } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-export const quotaExhaustedSchema = z.object({ window: z.string().max(32).optional(), resetsAtMs: z.number().int().nonnegative().safe().nullable(),
-  source: z.enum(['claude-rate-limit', 'codex-text', 'exit-text']) }).strict().readonly();
+export const quotaExhaustedSchema = z.strictObject({ window: persistedString(z.string().max(32)).optional(), resetsAtMs: z.number().refine(Number.isInteger, { params: { legacyCode: 'invalid_type' } }).meta({ type: 'integer' }).nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
+  source: z.enum(['claude-rate-limit', 'codex-text', 'exit-text']) }).readonly();
 export type QuotaExhausted = z.infer<typeof quotaExhaustedSchema>;

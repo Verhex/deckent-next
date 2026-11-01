@@ -2,14 +2,15 @@
 interface MeasuredCell { getFgColor(): number; getBgColor(): number; isFgRGB(): boolean; isBgRGB(): boolean; isFgPalette(): boolean; isBgPalette(): boolean;
   isInverse(): number; isDim(): number; isInvisible(): number; isBold(): number; getChars(): string; getWidth(): number }
 import { z } from 'zod';
+import { persistedInteger } from '#platform/index.js';
 import { BeuserSurfaceError } from './input.js';
 
 // WCAG 2.2 contrast formula invariant, not mutable policy.
 const WCAG_OFFSET = 0.05;
 const hex = z.string().regex(/^#[\da-f]{6}$/iu);
-export const beuserTerminalFixtureSchema = z.object({ foreground: hex, background: hex,
-  ansi: z.array(hex).length(16), osc11: z.object({ reply: z.boolean(), delayMs: z.number().int().min(0).safe(), digits: z.number().int().min(1).max(4) }).strict(),
-  colorTier: z.enum(['truecolor', 'none']), colorfgbg: z.string().regex(/^\d+;\d+$/u).optional() }).strict();
+export const beuserTerminalFixtureSchema = z.strictObject({ foreground: hex, background: hex,
+  ansi: z.array(hex).length(16), osc11: z.strictObject({ reply: z.boolean(), delayMs: persistedInteger().min(0).min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digits: persistedInteger().min(1).max(4) }),
+  colorTier: z.enum(['truecolor', 'none']), colorfgbg: z.string().regex(/^\d+;\d+$/u).optional() });
 export type BeuserTerminalFixture = z.infer<typeof beuserTerminalFixtureSchema>;
 export interface CellRun { x: number; y: number; text: string; width: number; foreground: string; background: string;
   contrast: number | null; dim: boolean; invisible: boolean; bold: boolean; inverse: boolean }
@@ -17,7 +18,7 @@ export interface CellRun { x: number; y: number; text: string; width: number; fo
 /** Fixture configuration is sealed rubric data, never persona input or executable authority. */
 export function beuserTerminalFixture(parameters: Readonly<Record<string, unknown>>, states: readonly string[]): BeuserTerminalFixture | undefined {
   if (parameters['terminalFixtures'] === undefined) return undefined;
-  const rows = z.array(z.object({ state: z.string(), settings: beuserTerminalFixtureSchema }).strict()).safeParse(parameters['terminalFixtures']);
+  const rows = z.array(z.strictObject({ state: z.string(), settings: beuserTerminalFixtureSchema })).safeParse(parameters['terminalFixtures']);
   if (!rows.success) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');
   const selected = rows.data.filter(row => states.includes(row.state));
   if (selected.length !== 1) throw new BeuserSurfaceError('BEUSER_SURFACE_INVALID');

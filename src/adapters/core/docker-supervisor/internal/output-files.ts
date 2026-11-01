@@ -1,14 +1,15 @@
+import { persistedString, persistedInteger } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { open, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { outputFileNameSchema, type CollectedOutputFile } from '#engine/index.js';
-const budget = z.number().int().positive().safe();
-const pathSchema = z.string().min(1).refine(path => !path.includes('\\') && !path.includes(String.fromCharCode(0))
+const budget = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const pathSchema = persistedString(z.string().min(1)).refine(path => !path.includes('\\') && !path.includes(String.fromCharCode(0))
   && !isAbsolute(path) && path.split('/').every(part => part !== '' && part !== '.' && part !== '..'));
-export const dockerOutputFilesSchema = z.object({ maxBytes: budget, maxFiles: budget,
-  files: z.array(z.object({ name: outputFileNameSchema, path: pathSchema, maxBytes: budget }).strict()).min(1),
-}).strict().refine(value => value.files.length <= value.maxFiles
+export const dockerOutputFilesSchema = z.strictObject({ maxBytes: budget, maxFiles: budget,
+  files: z.array(z.strictObject({ name: outputFileNameSchema, path: pathSchema, maxBytes: budget })).min(1),
+}).refine(value => value.files.length <= value.maxFiles
   && new Set(value.files.map(file => file.name)).size === value.files.length
   && value.files.reduce((remaining, file) => remaining - file.maxBytes, value.maxBytes) >= 0).readonly();
 /** Linux descriptor-relative traversal: never follow worker-controlled symlinks or block on a FIFO.

@@ -1,14 +1,15 @@
+import { persistedNumber } from '#domain/index.js';
 import { z } from 'zod';
 import pricing from './pricing.json' with { type: 'json' };
 import { anthropicTariffSchema, type AnthropicPublishedTariff } from './contract.js';
 
 const rates = { input: z.string(), cacheWrite5m: z.string(), cacheWrite1h: z.string(), cacheRead: z.string(), output: z.string() };
-const sourceSchema = z.object({ url: z.string(), retrievedAt: z.string() }).strict();
+const sourceSchema = z.strictObject({ url: z.string(), retrievedAt: z.string() });
 /** Registry v2 (2026-10-08): optional per-row `promptTiers` and `source`. Values are checked by the tariff schema each row becomes. */
-const registrySchema = z.object({ schemaVersion: z.literal(2), currency: z.literal('USD'), unit: z.string(), source: sourceSchema,
+const registrySchema = z.strictObject({ schemaVersion: z.literal(2), currency: z.literal('USD'), unit: z.string(), source: sourceSchema,
   promptTokenBasis: z.literal('input+cache-write+cache-read'), note: z.string(),
-  models: z.array(z.object({ modelId: z.string(), ...rates, promptTiers: z.array(z.object({ aboveTokens: z.number(), ...rates }).strict()).min(1).optional(),
-    source: sourceSchema.optional() }).strict()).min(1) }).strict()
+  models: z.array(z.strictObject({ modelId: z.string(), ...rates, promptTiers: z.array(z.strictObject({ aboveTokens: persistedNumber(z.number()), ...rates })).min(1).optional(),
+    source: sourceSchema.optional() })).min(1) })
   .refine(registry => new Set(registry.models.map(row => row.modelId)).size === registry.models.length);
 
 /** Old/missing shapes fail with ZodError at load; the shipped file is one versioned document, never silently defaulted. */

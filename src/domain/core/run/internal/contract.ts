@@ -3,26 +3,26 @@ import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { runProposalBindingSchema } from './proposal.js';
 import { authorityAdmissionSchema, runSafetyHoldSourceSchema } from '#domain/core/audit/index.js';
-import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { persistedString, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { recoveryEffectGateSchema, recoveryNoteCodeSchema } from '#domain/core/recovery/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
 import { workerReportLimits } from '#domain/core/worker-event/index.js';
 import environmentLimits from './environment-requirements.json' with { type: 'json' };
-export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).strict().readonly();
+export const runIdentitySchema = z.strictObject({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).readonly();
 /** R3 (owner D4a/D5a): why a superseded Attempt was retried by the bounded stall recovery; only on a `stalled` previous binding. */
 export const STALL_CAUSES = ['inactivity', 'report-missing', 'report-invalid'] as const;
-export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
+export const runBindingSchema = z.strictObject({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'stalled', 'lost']).nullable(),
   stallCause: z.enum(STALL_CAUSES).optional(),
   // S6R-4: the sealed recovery decision that continued a lost Attempt's task in a new one; only on a `lost` previous binding.
   recoveryDecisionId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   // S6R-5: what the next Attempt learns of the lost one — the decision's registry note code and the settled task-idempotent work the gate saw
   // (bounded by the frozen `settledFacts`); present only on a `lost` binding with a note or a fact, never free model text.
-  recoveryContext: z.object({ note: recoveryNoteCodeSchema.nullable(), facts: recoveryEffectGateSchema.unwrap().shape.facts }).strict().readonly().optional(),
+  recoveryContext: z.strictObject({ note: recoveryNoteCodeSchema.nullable(), facts: recoveryEffectGateSchema.unwrap().shape.facts }).readonly().optional(),
   // REVISE 2695: the environment probes this unobserved attempt's custody covers (written before the first probe container can start).
   probes: z.array(identitySchema).max(environmentLimits.limits.requirements).readonly().optional(),
-}).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.observedKind === 'lost') === (value.recoveryDecisionId !== undefined)
+}).refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.observedKind === 'lost') === (value.recoveryDecisionId !== undefined)
   && (value.recoveryContext === undefined || value.observedKind === 'lost') && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
 /** S5b (Auditor owner decision 6): who placed a hold. `operator` is the public Run control and is never written, so earlier releases read every
  * operator hold; each safety source (Nervous pause, Auditor park) is resumed only by a person at a terminal (Y4 floor, ai-floor.ts). */
@@ -31,22 +31,22 @@ export const safetyHoldSourceSchema = runSafetyHoldSourceSchema;
 export type RunHoldSource = typeof RUN_HOLD_SOURCES[number];
 export type SafetyHoldSource = z.infer<typeof safetyHoldSourceSchema>;
 export const runStateSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('running') }).strict(),
-  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready']),
-    failureCode: identitySchema.optional(), operatorHold: z.object({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars),
-      source: safetyHoldSourceSchema.optional() }).strict().optional(),
-    note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), holdSource: safetyHoldSourceSchema.optional(), since: counterSchema, deadline: counterSchema }).strict(),
-  z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
+  z.strictObject({ kind: z.literal('running') }),
+  z.strictObject({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready']),
+    failureCode: identitySchema.optional(), operatorHold: z.strictObject({ schemaVersion: z.literal(1), note: persistedString(z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars)),
+      source: safetyHoldSourceSchema.optional() }).optional(),
+    note: persistedString(z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars)).optional(), holdSource: safetyHoldSourceSchema.optional(), since: counterSchema, deadline: counterSchema }),
+  z.strictObject({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }),
 ]).readonly();
-export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identity: runIdentitySchema, revision: counterSchema,
+export const runSnapshotSchema = z.strictObject({ schemaVersion: z.literal(4), identity: runIdentitySchema, revision: counterSchema,
   proposal: runProposalBindingSchema.optional(),
   authority: authorityAdmissionSchema.optional(),
   state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
-  quotaWaits: z.array(z.object({ identity: attemptIdentitySchema, channelId: z.string().min(1).max(256), quota: quotaExhaustedSchema,
+  quotaWaits: z.array(z.strictObject({ identity: attemptIdentitySchema, channelId: persistedString(z.string().min(1).max(256)), quota: quotaExhaustedSchema,
     evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema, resetBoundExceeded: z.boolean().optional(), releasedAtMs: counterSchema.optional(),
-    /* S9: how many times a person chose to keep waiting after the ask; absent on every earlier record. */ rewaits: counterSchema.optional() }).strict().readonly()).readonly().optional(),
+    /* S9: how many times a person chose to keep waiting after the ask; absent on every earlier record. */ rewaits: counterSchema.optional() }).readonly()).readonly().optional(),
   previousBindings: z.array(runBindingSchema).readonly().optional(),
-}).strict().superRefine((run, context) => {
+}).superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });
   try { inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now: 0, progress: run.progress }); } catch { invalid(); return; }
   if (run.branch) { try { assertAdmissionBranch(run.graph, run.branch); } catch { invalid(); return; } }

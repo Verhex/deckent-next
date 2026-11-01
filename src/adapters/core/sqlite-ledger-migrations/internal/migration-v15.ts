@@ -1,6 +1,6 @@
+import { persistedInteger, identitySchema } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
 import { AttemptStoreError } from '#engine/index.js';
 import { migrateInvocationReceiptContent } from './migration-invocation-content.js';
 
@@ -18,9 +18,9 @@ function exact(value: Record<string, unknown>, keys: readonly string[]): void {
   const actual = Object.keys(value).sort(), expected = [...keys].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) invalid();
 }
-const allocationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
-  maxCalls: z.number().int().positive().safe(), maxInFlight: z.number().int().positive().safe(),
-  lifetimeCalls: z.number().int().nonnegative().safe(), inFlight: z.number().int().nonnegative().safe() }).strict()
+const allocationSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
+  maxCalls: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxInFlight: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  lifetimeCalls: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlight: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })
   .superRefine((value, context) => {
     if (value.inFlight > value.lifetimeCalls || value.lifetimeCalls > value.maxCalls || value.inFlight > value.maxInFlight) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_ALLOCATION_INVALID' });

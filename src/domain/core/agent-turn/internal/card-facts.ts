@@ -1,3 +1,4 @@
+import { persistedString, persistedInteger } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 
 /**
@@ -23,12 +24,12 @@ export interface McpToolChangeHints { readonly readOnly?: boolean | undefined; r
  * realm adds its id without editing Core; a surface without a name for it shows the id). `project`/`git` mirror the realm's write view;
  * `network` says whether the call can reach a network; `passedOver` names preferred realms that could not be used.
  */
-export const agentShellPostureSchema = z.object({ realm: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/), containment: z.enum(['sandbox', 'degraded', 'host']),
+export const agentShellPostureSchema = z.strictObject({ realm: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/), containment: z.enum(['sandbox', 'degraded', 'host']),
   project: z.enum(['writable', 'writable-except-floor', 'read-only', 'write-set']), git: z.enum(['writable', 'read-only']), network: z.enum(['reachable', 'closed']),
-  passedOver: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).max(8).readonly() }).strict().readonly();
+  passedOver: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).max(8).readonly() }).readonly();
 export type AgentShellPosture = z.infer<typeof agentShellPostureSchema>;
 
-const count = z.number().int().nonnegative().safe();
+const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 /**
  * Astra 2431 (L1 D4 for good): what a tool-call card shows as fields comes from the producer as data, never parsed out of the preview text — a
  * shell command's own lines may look like any metadata. `shell`: the whole command (never cut; the preview text may be) and the classifier's
@@ -36,13 +37,13 @@ const count = z.number().int().nonnegative().safe();
  * server and tool (the arguments stay in the preview).
  */
 export const agentToolCardCallSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('shell'), command: z.string().min(1).max(65_536), tier: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), reason: z.string().max(1_024) }).strict(),
-  z.object({ kind: z.literal('edit'), path: z.string().min(1).max(4_096), added: count, removed: count }).strict(),
-  z.object({ kind: z.literal('fetch'), url: z.string().min(1).max(8_192), host: z.string().min(1).max(253), listed: z.boolean() }).strict(),
-  z.object({ kind: z.literal('mcp'), server: z.string().min(1).max(64), tool: z.string().min(1).max(256) }).strict(),
+  z.strictObject({ kind: z.literal('shell'), command: persistedString(z.string().min(1).max(65_536)), tier: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), reason: persistedString(z.string().max(1_024)) }),
+  z.strictObject({ kind: z.literal('edit'), path: persistedString(z.string().min(1).max(4_096)), added: count, removed: count }),
+  z.strictObject({ kind: z.literal('fetch'), url: persistedString(z.string().min(1).max(8_192)), host: persistedString(z.string().min(1).max(253)), listed: z.boolean() }),
+  z.strictObject({ kind: z.literal('mcp'), server: persistedString(z.string().min(1).max(64)), tool: persistedString(z.string().min(1).max(256)) }),
 ]);
 export type AgentToolCardCall = z.infer<typeof agentToolCardCallSchema>;
 /** A cut preview's facts (the marker line states the same): lines and bytes shown of the whole, its sha256 and where the whole is kept. */
-export const approvalPreviewCutSchema = z.object({ shown: count, total: count, bytes: count, totalBytes: count, digest: z.string().regex(/^[0-9a-f]{64}$/),
-  kept: z.string().min(1).max(4_096).nullable() }).strict().readonly();
+export const approvalPreviewCutSchema = z.strictObject({ shown: count, total: count, bytes: count, totalBytes: count, digest: z.string().regex(/^[0-9a-f]{64}$/),
+  kept: persistedString(z.string().min(1).max(4_096)).nullable() }).readonly();
 export type ApprovalPreviewCutFacts = z.infer<typeof approvalPreviewCutSchema>;

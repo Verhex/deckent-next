@@ -1,11 +1,11 @@
+import { persistedInteger, identitySchema, attemptIdentitySchema, type AttemptIdentity, type WorkerActivityPhase, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
 import { z } from 'zod';
 import { artifactReceiptSchema } from '#capabilities/index.js';
-import { identitySchema, attemptIdentitySchema, type AttemptIdentity, type WorkerActivityPhase, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
 import type { DispatchTerminal } from '#engine/core/dispatch/index.js';
-export const workerObservationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  source: identitySchema.optional(), after: identitySchema.nullable().default(null), limit: z.number().int().positive().optional(),
+export const workerObservationQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  source: identitySchema.optional(), after: identitySchema.nullable().prefault(null), limit: persistedInteger().positive().optional(),
   /** MONITOR-DATA opt-in: only attempts without a ledger terminal get Docker/sidecar inspection; finished ones carry ledger facts only. */
-  open: z.boolean().optional() }).strict();
+  open: z.boolean().optional() });
 export type WorkerObservationQuery = z.input<typeof workerObservationQuerySchema>;
 export interface ObservationLimits { readonly maxFileBytes: number; readonly maxEntries: number; readonly staleMs: number }
 export type WorkerProcessState = 'running' | 'paused' | 'created' | 'exited' | 'missing' | 'unknown' | 'present-unverified' | 'absent-unverified' | 'denied';
@@ -61,10 +61,10 @@ export class WorkerObservationError extends Error {
   constructor(readonly code: 'WORKER_OBSERVATION_INVALID' | 'WORKER_OBSERVATION_UNAVAILABLE') { super(code); this.name = 'WorkerObservationError'; }
 }
 /** Sealed worker-reported events of one attempt: the redacted event log artifact; the summary is always recomputed from it. */
-export const workerEventLogSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,
-  eventCount: z.number().int().nonnegative().safe(), sealedAt: z.number().int().nonnegative().safe(),
+export const workerEventLogSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,
+  eventCount: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), sealedAt: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   /** 'partial' when the live worker.events projection failed to write some events; the sealed artifact is built from all received events. */
-  projection: z.enum(['complete', 'partial']).optional() }).strict().readonly();
+  projection: z.enum(['complete', 'partial']).optional() }).readonly();
 export type WorkerEventLog = z.infer<typeof workerEventLogSchema>;
 export interface WorkerEventLogStore {
   saveWorkerEventLog(record: WorkerEventLog): Promise<WorkerEventLog>;

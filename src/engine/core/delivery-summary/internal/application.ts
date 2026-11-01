@@ -1,6 +1,5 @@
+import { persistedString, persistedInteger, attemptIdentitySchema, identitySchema, readWorkerFinalReport, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal, type WorkerFinalReportResult } from '#domain/index.js';
 import { z } from 'zod';
-import { attemptIdentitySchema, identitySchema, readWorkerFinalReport, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type VerifiedPrincipal,
-  type WorkerFinalReportResult } from '#domain/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { parseRetainedOutputEnvelope, type DispatchIdentityAuthorization, type RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
 import { describeAttemptWorkerModels, WorkerObservationError, type WorkerEventArtifacts, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
@@ -9,11 +8,11 @@ import { deliverySummaryOperationSchema, type DeliveryChangeFacts, type Delivery
 import { projectDeliverySummary } from './projector.js';
 
 /** What the caller already knows about the card: operation, the target as its adapter registered it, and the system verification Run if any. */
-export const deliverySummaryRequestSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, operation: deliverySummaryOperationSchema,
-  target: z.object({ id: z.string().min(1).max(4096), protected: z.boolean().nullable() }).strict().nullable(),
-  verificationRunId: identitySchema.nullable(), topPaths: z.number().int().nonnegative().safe().optional(),
+export const deliverySummaryRequestSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, operation: deliverySummaryOperationSchema,
+  target: z.strictObject({ id: persistedString(z.string().min(1).max(4096)), protected: z.boolean().nullable() }).nullable(),
+  verificationRunId: identitySchema.nullable(), topPaths: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
   /** A queue ticket's command id: the host derives its verification Run id (surfaces never load the queue naming code). */
-  ticketCommandId: identitySchema.optional() }).strict().readonly();
+  ticketCommandId: identitySchema.optional() }).readonly();
 export type DeliverySummaryRequest = z.infer<typeof deliverySummaryRequestSchema>;
 /** The target adapter's change filler; null = no change evidence. A policy refusal it throws becomes `withheld`. */
 export type DeliveryChangeSource = (identity: AttemptIdentity, principal: VerifiedPrincipal) => Promise<DeliveryChangeFacts | null>;

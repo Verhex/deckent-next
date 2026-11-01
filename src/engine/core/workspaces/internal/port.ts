@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/index.js';
-export const workspaceRequestSchema = z.object({
+export const workspaceRequestSchema = z.strictObject({
   schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   baseCommit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-}).strict().readonly();
+}).readonly();
 export type WorkspaceRequest = z.infer<typeof workspaceRequestSchema>;
 export interface WorkspaceLease {
   readonly schemaVersion: 1; readonly id: string; readonly workspace: string;

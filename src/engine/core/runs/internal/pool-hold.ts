@@ -1,7 +1,6 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { persistedString, clientCommandIdSchema, AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { assertPoolControlAllowed, type PoolControlAuthorization, type PoolControlDecision } from '#engine/core/policy/index.js';
@@ -14,21 +13,21 @@ import { RunStoreError } from './store.js';
  * installation-wide, so the hold is too (one row per pool, ledger v44); `drained` is the typed "held and nothing left" status the
  * operator release or restart sequence waits on before it replaces the installation.
  */
-const reasonSchema = z.string().min(1).max(256).regex(/^[^\p{Cc}]+$/u);
-const actorSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const reasonSchema = persistedString(z.string().min(1).max(256)).regex(/^[^\p{Cc}]+$/u);
+const actorSchema = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
 const poolStateSchema = z.enum(['held', 'open']);
 /** `poolId` defaults to the installation's configured admission pool. `reason` is the operator's short note, kept in the hold record. */
-export const poolHoldCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema,
-  action: z.enum(['hold', 'resume']), poolId: identitySchema.optional(), reason: reasonSchema.optional() }).strict();
-export const poolHoldQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, poolId: identitySchema.optional() }).strict();
+export const poolHoldCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: clientCommandIdSchema,
+  action: z.enum(['hold', 'resume']), poolId: identitySchema.optional(), reason: reasonSchema.optional() });
+export const poolHoldQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, poolId: identitySchema.optional() });
 /** The durable hold row: the last state change of one pool (no row = open, never held). */
-export const poolHoldRecordSchema = z.object({ schemaVersion: z.literal(1), poolId: identitySchema, state: poolStateSchema,
+export const poolHoldRecordSchema = z.strictObject({ schemaVersion: z.literal(1), poolId: identitySchema, state: poolStateSchema,
   revision: counterSchema.positive(), changedBy: actorSchema, changedAtMs: counterSchema, scopeId: identitySchema, commandId: identitySchema,
-  reason: reasonSchema.nullable() }).strict().readonly();
-export const poolOccupancySchema = z.object({ execution: counterSchema, inFlight: counterSchema }).strict().readonly();
+  reason: reasonSchema.nullable() }).readonly();
+export const poolOccupancySchema = z.strictObject({ execution: counterSchema, inFlight: counterSchema }).readonly();
 /** One applied command; a replay of the same (scope, command) returns it unchanged. `changed` false = idempotent no-op. */
-export const poolHoldReceiptSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema,
-  poolId: identitySchema, action: z.enum(['hold', 'resume']), changed: z.boolean(), state: poolStateSchema, hold: poolHoldRecordSchema.nullable() }).strict().readonly();
+export const poolHoldReceiptSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema,
+  poolId: identitySchema, action: z.enum(['hold', 'resume']), changed: z.boolean(), state: poolStateSchema, hold: poolHoldRecordSchema.nullable() }).readonly();
 export type PoolHoldCommand = z.infer<typeof poolHoldCommandSchema>;
 export type PoolHoldQuery = z.infer<typeof poolHoldQuerySchema>;
 export type PoolHoldRecord = z.infer<typeof poolHoldRecordSchema>;

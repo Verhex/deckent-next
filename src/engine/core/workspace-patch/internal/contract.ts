@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { attemptIdentitySchema } from '#domain/index.js';
+import { persistedString, attemptIdentitySchema } from '#domain/index.js';
 import { workspaceSourceSchema } from '#engine/core/workspaces/index.js';
 import rules from './rules.json' with { type: 'json' };
 /** Bounded reason for PATCH_LIMIT: which configured budget or Git output bound was exceeded. Never carries paths or content. */
@@ -25,11 +25,11 @@ export function isPatchExcluded(path: string) {
 }
 /** A well-formed repository-relative path (no traversal, separators or control characters). History written by others is read with this:
  * it may name paths a patch may never write (e.g. tracked `.deckent/docs`), which are only "touched". */
-export const historyPathSchema = z.string().min(1).refine(path => !path.includes('\\') && [...path].every(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
+export const historyPathSchema = persistedString(z.string().min(1)).refine(path => !path.includes('\\') && [...path].every(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
   && path.split('/').every(part => part !== '' && part !== '.' && part !== '..'));
 /** A path the patch itself may write: well formed AND outside every exclusion. */
 export const patchPathSchema = historyPathSchema.refine(path => !isPatchExcluded(path));
-const fileSchema = z.object({ mode: z.enum(['100644', '100755']), text: z.string(), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
+const fileSchema = z.strictObject({ mode: z.enum(['100644', '100755']), text: z.string(), digest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly();
 export type PatchFile = z.infer<typeof fileSchema>;
 export function patchFile(bytes: Uint8Array, mode: PatchFile['mode']): PatchFile {
   let text: string;
@@ -37,12 +37,12 @@ export function patchFile(bytes: Uint8Array, mode: PatchFile['mode']): PatchFile
   if (text.includes('\0')) throw new WorkspacePatchError('PATCH_UNSUPPORTED');
   return Object.freeze({ mode, text, digest: patchDigest(bytes) });
 }
-export const workspacePatchSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('workspace-patch'),
+export const workspacePatchSchema = z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('workspace-patch'),
   identity: attemptIdentitySchema, source: workspaceSourceSchema, baseCommit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
   snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  exclusions: z.object({ excludedSegments: z.array(z.string()), excludedPrefixes: z.array(z.string()) }).strict(),
-  changes: z.array(z.object({ path: patchPathSchema, before: fileSchema.nullable(), after: fileSchema.nullable() }).strict().readonly()),
-}).strict().superRefine((patch, context) => {
+  exclusions: z.strictObject({ excludedSegments: z.array(z.string()), excludedPrefixes: z.array(z.string()) }),
+  changes: z.array(z.strictObject({ path: patchPathSchema, before: fileSchema.nullable(), after: fileSchema.nullable() }).readonly()),
+}).superRefine((patch, context) => {
   let previous = '';
   const invalid = () => context.addIssue({ code: 'custom', message: 'PATCH_CORRUPT' });
   if (JSON.stringify(patch.exclusions) !== JSON.stringify(rules)) invalid();

@@ -5,7 +5,7 @@ import { type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js
 import { ErrorRegistry, type KnownSecretSnapshot, type Ed25519Signer } from '#platform/index.js';
 import type { HubVerificationKey } from '#engine/core/hub/index.js';
 
-export const hubActorSchema = z.object({ id: identitySchema, kind: z.enum(['person', 'ai', 'system']) }).strict().readonly();
+export const hubActorSchema = z.strictObject({ id: identitySchema, kind: z.enum(['person', 'ai', 'system']) }).readonly();
 export type HubActor = z.infer<typeof hubActorSchema>;
 export interface HubServerPeer { readonly address: string }
 export interface HubServerContext { readonly scopeId: string; readonly principal: HubActor; readonly sessionId?: string }
@@ -14,9 +14,9 @@ export type HubServerAction = 'publish' | 'review' | 'read' | 'register' | 'yank
 export interface HubServerAuthority {
   require(context: HubServerContext, action: HubServerAction, resource: string, digest: string): HubAwaitable<void>;
 }
-export const hubRegisteredKeySchema = z.object({ keyId: z.string().regex(/^[a-f0-9]{64}$/), publicKey: z.string(),
+export const hubRegisteredKeySchema = z.strictObject({ keyId: z.string().regex(/^[a-f0-9]{64}$/), publicKey: z.string(),
   role: z.enum(['publisher', 'reviewer']), active: z.boolean(), principal: hubActorSchema,
-  publisherId: identitySchema.optional(), trustedAiReviewer: z.boolean() }).strict().readonly();
+  publisherId: identitySchema.optional(), trustedAiReviewer: z.boolean() }).readonly();
 export type HubRegisteredKey = z.infer<typeof hubRegisteredKeySchema>;
 export interface HubStoredVersion {
   readonly manifest: HubPackage; readonly envelope: HubEnvelope; readonly revision: number;

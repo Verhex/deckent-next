@@ -7,3 +7,5 @@ export { DeckentJsonSchemaValidator, JsonSchemaRefusal, JSON_SCHEMA_LIMITS, JSON
 export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSchemaResult, JsonSchemaValidatorOptions } from './internal/json-schema.js';
 export { compilePattern, PatternRefusal, StepBudgetExceeded } from './internal/linear-regex.js';
 export type { LinearPattern, PatternLimits, PatternRefusalReason, StepBudget } from './internal/linear-regex.js';
+export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode } from './internal/persisted-schema.js';
+export { toInputJsonSchema } from './internal/input-json-schema.js';

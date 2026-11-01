@@ -5,7 +5,7 @@ import { providerSpendExactAccountQuerySchema } from './contract.js';
 
 const checkpointDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
-export const providerSpendAuditCommandSchema = providerSpendExactAccountQuerySchema.unwrap().innerType().omit({ holds: true }).extend({ schemaVersion: z.literal(1),
+export const providerSpendAuditCommandSchema = z.strictObject(providerSpendExactAccountQuerySchema.unwrap().shape).omit({ holds: true }).extend({ schemaVersion: z.literal(1),
   commandId: clientCommandIdSchema, expectedCheckpointDigest: checkpointDigestSchema,
 }).strict().readonly();
 

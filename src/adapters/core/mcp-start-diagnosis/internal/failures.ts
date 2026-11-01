@@ -1,8 +1,8 @@
+import { persistedString, persistedInteger, withConfigWriteLock } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { withConfigWriteLock } from '#platform/index.js';
 import { MCP_SCOPES, MCP_SERVER_NAME } from '#adapters/core/mcp-trust/index.js';
 import { modelTextPrefix } from '#domain/index.js';
 
@@ -16,18 +16,18 @@ import { modelTextPrefix } from '#domain/index.js';
  */
 export const MCP_START_FAILURES_FILE = 'mcp-start-failures.json';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const text = (max: number) => z.string().max(max);
+const text = (max: number) => persistedString(z.string().max(max));
 const diagnosisSchema = z.union([
-  z.object({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: z.number().int().min(-1).max(1_024), path: text(4_096),
-    target: text(4_096).optional() }).strict(),
-  z.object({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }).strict(),
+  z.strictObject({ kind: z.literal('path-hidden'), role: z.enum(['command', 'argument']), index: persistedInteger().min(-1).max(1_024), path: text(4_096),
+    target: text(4_096).optional() }),
+  z.strictObject({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }),
 ]);
-export const mcpStartFailureSchema = z.object({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest, clientIdentity: digest.optional(),
+export const mcpStartFailureSchema = z.strictObject({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest, clientIdentity: digest.optional(),
   /** `launch`: the first-use card's yes could not start it; `trusted`: a trusted server did not start; `tools` (MCP-VISIBILITY): it started but pinned
    * tools were withheld (drifted, missing or unmappable); `detail` is their count. `decision`: a trust/secret refusal, never a trust decision. */
-  phase: z.enum(['launch', 'trusted', 'tools', 'decision']), atMs: z.number().int().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() }).strict();
+  phase: z.enum(['launch', 'trusted', 'tools', 'decision']), atMs: persistedInteger().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() });
 export type McpStartFailure = z.infer<typeof mcpStartFailureSchema>;
-const fileSchema = z.object({ schemaVersion: z.literal(1), failures: z.array(mcpStartFailureSchema).max(256) }).strict();
+const fileSchema = z.strictObject({ schemaVersion: z.literal(1), failures: z.array(mcpStartFailureSchema).max(256) });
 const matches = (failure: McpStartFailure, key: { readonly scope: string; readonly name: string }) => failure.scope === key.scope && failure.name === key.name;
 
 /** The recorded failures; absent, unsafe or invalid reads as none (advisory: the worst case is asking a card again). */

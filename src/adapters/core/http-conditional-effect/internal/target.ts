@@ -1,3 +1,4 @@
+import { persistedString, persistedInteger, persistedUrl } from '#platform/index.js';
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { z } from 'zod';
@@ -6,10 +7,10 @@ import type { EffectTargetRef } from '#domain/index.js';
 
 const loopback = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 /** One configured record service. `http` is accepted only on loopback; credentials are not supported in this slice. */
-export const httpConditionalEffectOptionsSchema = z.object({
-  kind: z.string().min(1).max(64), baseUrl: z.string().url(), timeoutMs: z.number().int().positive().max(120_000),
-  responseMaxBytes: z.number().int().positive().max(16_777_216), idempotencyLookup: z.boolean(),
-}).strict().superRefine((value, context) => {
+export const httpConditionalEffectOptionsSchema = z.strictObject({
+  kind: persistedString(z.string().min(1).max(64)), baseUrl: persistedUrl(), timeoutMs: persistedInteger().positive().max(120_000),
+  responseMaxBytes: persistedInteger().positive().max(16_777_216), idempotencyLookup: z.boolean(),
+}).superRefine((value, context) => {
   const url = new URL(value.baseUrl);
   if (url.username || url.password || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback.has(url.hostname)))) {
     context.addIssue({ code: 'custom', message: 'EFFECT_TARGET_URL_INVALID' });
@@ -86,7 +87,7 @@ export class HttpConditionalEffectTarget implements EffectTarget {
     const response = await this.send('GET', this.url(`idempotency/${encodeURIComponent(idempotencyKey)}`), {});
     if (response.status === 404) return { status: 'absent' as const };
     if (response.status !== 200) return null;
-    const parsed = z.object({ status: z.literal('applied'), version: z.string().min(1).max(256).nullable() }).strict().safeParse(JSON.parse(response.body.toString('utf8')));
+    const parsed = z.strictObject({ status: z.literal('applied'), version: persistedString(z.string().min(1).max(256)).nullable() }).safeParse(JSON.parse(response.body.toString('utf8')));
     return parsed.success ? { status: 'applied' as const, version: parsed.data.version } : null;
   }
 }

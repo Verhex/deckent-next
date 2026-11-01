@@ -33,6 +33,9 @@
     "retention": 7,
     "schedule": "off"
   },
+  "beuser": {
+    "limits": {}
+  },
   "brain_planner": {
     "context": {
       "maxBytes": 49152,

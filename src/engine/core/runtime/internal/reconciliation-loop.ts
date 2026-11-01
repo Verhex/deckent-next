@@ -1,10 +1,10 @@
+import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
 import type { ReconciliationRecoveryCommand, ReconciliationRecoveryPage } from './reconciliation-recovery.js';
 import { ScopedRuntimeLoop, type ScopedRuntimeLoopClock, type ScopedRuntimeLoopWait } from './scoped-loop.js';
 
-const optionsSchema = z.object({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: z.number().int().positive().safe(),
-  failureBackoffMs: z.number().int().positive().safe() }).strict();
+const optionsSchema = z.strictObject({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  failureBackoffMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type ReconciliationRuntimeLoopOptions = Readonly<z.infer<typeof optionsSchema>>;
 export type ReconciliationRecoveryDrain = (command: ReconciliationRecoveryCommand) => Promise<ReconciliationRecoveryPage>;
 export interface ReconciliationRuntimeLoopObserver {

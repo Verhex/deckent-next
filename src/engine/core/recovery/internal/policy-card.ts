@@ -11,8 +11,8 @@ import { RECOVERY_CONTINUE_ACTION } from './approval.js';
 export type RecoveryPolicyRow = Readonly<{ kind: 'action' | 'rule'; id: string; managed: 'none' | 'granted' | 'conflict'; effective: 'allowed' | 'denied'; available: boolean;
   exits: boolean | null }>;
 export type RecoveryPolicyView = Readonly<{ schemaVersion: 1; scopeId: string; revision: string; rows: readonly RecoveryPolicyRow[]; rollout: RecoveryRolloutView }>;
-export const recoveryPolicyCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, kind: z.enum(['action', 'rule']), id: identitySchema,
-  action: z.enum(['grant', 'revoke']), expectedRevision: identitySchema }).strict().readonly();
+export const recoveryPolicyCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, kind: z.enum(['action', 'rule']), id: identitySchema,
+  action: z.enum(['grant', 'revoke']), expectedRevision: identitySchema }).readonly();
 export type RecoveryPolicyCommand = z.infer<typeof recoveryPolicyCommandSchema>;
 /** What the card reads besides the policy: the measured rollout view (re-read inside a change) and the stop actions with an executor. */
 export type RecoveryPolicyPorts = Readonly<{ rollout: (scopeId: string) => Promise<RecoveryRolloutView>; executable: readonly string[] }>;

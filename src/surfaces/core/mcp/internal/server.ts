@@ -1,16 +1,11 @@
+import { persistedString, toInputJsonSchema, persistedInteger, INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit, PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { hubToolDefinitions } from './hub-tools.js';
 import type { HubOperationHandler } from '#engine/index.js';
-import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList } from '#engine/index.js';
-import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification } from '#domain/index.js';
-import { runProposalSchema, type RunProposal } from '#domain/index.js';
-import { brainPlanCommandSchema, type BrainPlanCommand } from '#domain/index.js';
-import { runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
-import { AuditError, providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
+import { queueQuerySchema, queueListSchema, type QueueQuery, type QueueList, runProposalQuerySchema, type RunProposalQuery, approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection, quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView, decisionQuerySchema, type DecisionQuery, type DecisionInspection, memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection, policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus, modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
+import { auditVerifyQuerySchema, type AuditVerifyQuery, type AuditVerification, runProposalSchema, type RunProposal, brainPlanCommandSchema, type BrainPlanCommand, AuditError, providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand, attemptIdentitySchema, modelConnectCommandSchema, modelReferenceSchema, type ModelConnectCommand, type ModelConnectResult, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import type { ProviderSpendManagementResult } from '#engine/index.js';
 import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
-import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
-import { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/index.js';
 import { operationToolDefinitions } from './operation-tools.js';
 import { rootObjectSchema } from './input-schema.js';
 import { mcpMonitorQuerySchema, monitorCollectionQuery, projectMonitorForMcp } from './monitor-page.js';
@@ -18,25 +13,17 @@ import { isMcpWithheldTool } from './tool-inventory.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendExactAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult, ModelCatalogInspection, ModelCatalogResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
-import { attemptIdentitySchema, modelConnectCommandSchema, modelReferenceSchema, type ModelConnectCommand, type ModelConnectResult, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult, type RequestId } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, ErrorRegistry, queryErrorClientParams, redactSensitive, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
-import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
-import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
-import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection } from '#engine/index.js';
 import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, skillInspectQuerySchema, type AgentListQuery, type AgentListing, type AgentInspectQuery,
   type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection, agentStatsQuerySchema, type AgentStatsQuery, type AgentStatsView,
   suggestionListQuerySchema, suggestionInspectQuerySchema, agentDefineCommandSchema, skillDefineCommandSchema, skillImportCommandSchema, standingChangeCommandSchema, suggestionDismissCommandSchema,
   type CatalogSuggestionListing, type CatalogSuggestionInspection } from '#engine/index.js';
-import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
-import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
   executeHub?: HubOperationHandler;
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
@@ -115,7 +102,7 @@ export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: numbe
 /** Local protocol surface. Injected applications own identity, policy and data access.
  * Mutators are advertised only when composition explicitly supplies their application handler. */
 export function createMcpServer(applications: McpApplications, limits: McpLimits, locale: Locale) {
-  z.object({ maxConcurrentCalls: z.number().int().positive().safe(), responseMaxBytes: z.number().int().positive().safe(), graph: z.object({ maxTasks: z.number().int().positive().safe(), maxEdges: z.number().int().positive().safe(), maxDepth: z.number().int().positive().safe() }).strict().optional() }).strict().parse(limits);
+  z.strictObject({ maxConcurrentCalls: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), responseMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), graph: z.strictObject({ maxTasks: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxEdges: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxDepth: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).optional() }).parse(limits);
   // idempotent: true only when engine/adapter code proves a commandId-keyed (or identity-keyed) durable
   // replay returns the prior result without a second effect; evidence is file:line-cited per tool in
   // proof/D03-MCP-IDEMPOTENT-2026-09-27/review.md. No default — every entry states it explicitly.
@@ -124,8 +111,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       invoke: (input: unknown) => applications.inspectRun(runQuerySchema.parse(input)) },
     { readOnly: true, destructive: false, idempotent: true, name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
       invoke: (input: unknown) => applications.inspectInventory(dispatchInventoryInputSchema.parse(input)) },
-    { readOnly: true, destructive: false, idempotent: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
-      invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
+    { readOnly: true, destructive: false, idempotent: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.strictObject({}),
+      invoke: async (input: unknown) => { z.strictObject({}).parse(input); return getPolicyVocabulary(); } },
   ];
   definitions.push(...hubToolDefinitions(applications.executeHub, locale));
   if (applications.inspectTargetQueue) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_delivery_queue', description: t('mcp.tool.inspectTargetQueue', {}, locale), schema: queueQuerySchema,
@@ -187,18 +174,18 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     invoke: (input, delivery) => inspectApproval.call(applications, approvalQuerySchema.parse(input), delivery) });
   const inspectDeclaredModels = applications.inspectDeclaredModels;
   if (inspectDeclaredModels) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'list_declared_models',
-    description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.object({}).strict(),
-    invoke: async (input: unknown) => { z.object({}).strict().parse(input); return inspectDeclaredModels.call(applications); } });
+    description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.strictObject({}),
+    invoke: async (input: unknown) => { z.strictObject({}).parse(input); return inspectDeclaredModels.call(applications); } });
   const inspectModelBinding = applications.inspectModelBinding;
   if (inspectModelBinding) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_binding',
     description: t('mcp.tool.inspectModelBinding', {}, locale), schema: modelReferenceSchema,
     invoke: (input: unknown) => inspectModelBinding.call(applications, modelReferenceSchema.parse(input)) });
   const inspectToolchainCurrency = applications.inspectToolchainCurrency;
   if (inspectToolchainCurrency) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: true, name: 'inspect_toolchain_currency',
-    description: t('mcp.tool.inspectToolchainCurrency', {}, locale), schema: z.object({}).strict(),
-    invoke: async (input: unknown) => { z.object({}).strict().parse(input); return inspectToolchainCurrency.call(applications); } });
+    description: t('mcp.tool.inspectToolchainCurrency', {}, locale), schema: z.strictObject({}),
+    invoke: async (input: unknown) => { z.strictObject({}).parse(input); return inspectToolchainCurrency.call(applications); } });
   const updateToolchains = applications.updateToolchains;
-  const updateToolchainsSchema = z.object({ apply: z.boolean().optional() }).strict();
+  const updateToolchainsSchema = z.strictObject({ apply: z.boolean().optional() });
   // No commandId; a repeat apply plans/builds again and the receipt write uses O_EXCL (composition/core/toolchains/internal/update.ts:32), so a same-input replay is not a persisted no-op.
   if (updateToolchains) definitions.push({ readOnly: false, destructive: true, idempotent: false, openWorld: true, name: 'update_toolchains',
     description: t('mcp.tool.updateToolchains', {}, locale), schema: updateToolchainsSchema,
@@ -243,8 +230,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     schema: taskEvaluationCommandSchema, invoke: (input: unknown) => evaluateTask.call(applications, taskEvaluationCommandSchema.parse(input)) });
   const describeService = applications.describeService;
   if (describeService) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'runtime_service_descriptor',
-    description: t('mcp.tool.runtimeServiceDescriptor', {}, locale), schema: z.object({}).strict(),
-    invoke: async (input: unknown) => { z.object({}).strict().parse(input); return runtimeServiceDescriptorSchema.parse(await describeService.call(applications)); } });
+    description: t('mcp.tool.runtimeServiceDescriptor', {}, locale), schema: z.strictObject({}),
+    invoke: async (input: unknown) => { z.strictObject({}).parse(input); return runtimeServiceDescriptorSchema.parse(await describeService.call(applications)); } });
   const shutdownService = applications.shutdownService;
   // Intent recording alone is replay-guarded, but the effect this tool names (service shutdown) happens outside this call and cannot be re-verified as a no-op; destructive default applies.
   if (shutdownService) definitions.push({ readOnly: false, destructive: true, idempotent: false, name: 'shutdown_runtime_service',
@@ -324,7 +311,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (cancelInvocation) definitions.push({ readOnly: false, destructive: true, idempotent: false, openWorld: false, name: 'cancel_model_invocation',
     description: t('mcp.tool.cancelModelInvocation', {}, locale), schema: modelInvocationCancellationCommandSchema, modelDelivery: true,
     invoke: (input, delivery) => cancelInvocation.call(applications, modelInvocationCancellationCommandSchema.parse(input), delivery) });
-  const inferenceInput = z.object({ profileId: z.string().min(1).optional() }).strict();
+  const inferenceInput = z.strictObject({ profileId: persistedString(z.string().min(1)).optional() });
   const inferencePlan = applications.inferencePlan;
   if (inferencePlan) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inference_plan',
     description: t('mcp.tool.inferencePlan', {}, locale), schema: inferenceInput,
@@ -357,7 +344,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: await Promise.all(definitions.map(async tool => ({ name: tool.name, ...(tool.description ? { description: tool.description } : {}),
     // MCP requires an object root even when a native command is an object-only discriminated union.
-    inputSchema: await projectModelIngressSchema(rootObjectSchema({ ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' }),
+    inputSchema: await projectModelIngressSchema(rootObjectSchema({ ...toInputJsonSchema(tool.schema), type: 'object' }),
       notice => applications.recordModelIngress ? applications.recordModelIngress(notice, {}) : Promise.reject(new AuditError('AUDIT_UNAVAILABLE'))) as Tool['inputSchema'],
     annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: tool.idempotent, openWorldHint: tool.openWorld ?? false },
   }))) }));

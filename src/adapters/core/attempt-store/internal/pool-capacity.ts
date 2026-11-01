@@ -4,7 +4,7 @@ import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { AttemptStoreError, decidePoolCapacity, poolCapacityReceiptSchema, RunStoreError, type AuditStore, type PoolCapacityReceipt, type PoolCapacityWrite } from '#engine/index.js';
 import { SqliteExecutionPools } from './pools.js';
-const recordSchema = z.object({ fingerprint: z.string(), receipt: poolCapacityReceiptSchema }).strict();
+const recordSchema = z.strictObject({ fingerprint: z.string(), receipt: poolCapacityReceiptSchema });
 /** One capacity writer; occupancy, replay, override, immutable receipt and sealed audit commit together. */
 export class SqlitePoolCapacityJournal {
   constructor(private readonly db: DatabaseSync) {}

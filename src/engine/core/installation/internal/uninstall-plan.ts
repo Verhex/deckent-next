@@ -1,13 +1,13 @@
+import { persistedInteger, operationDescriptorSchema, type OperationDescriptor } from '#domain/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, relative, resolve, parse, sep } from 'node:path';
 import { z } from 'zod';
-import { operationDescriptorSchema, type OperationDescriptor } from '#domain/index.js';
-import { ErrorRegistry } from '#platform/index.js';
 import data from './uninstall-resources.json' with { type: 'json' };
 import { UninstallError, UNINSTALL_TIERS, uninstallInstallationSchema, uninstallPlanQuerySchema, uninstallResourceSchema, uninstallWorkSchema, uninstallServiceSchema,
   type UninstallPlan, type UninstallResource, type UninstallItem, type UninstallInstallation, type UninstallTier, type UninstallWork, type UninstallService } from './uninstall-contract.js';
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
-const contribution = z.object({ id, owner: id, kind: z.enum(['service', 'image', 'path']), removeFrom: z.enum(UNINSTALL_TIERS), operation: id, targetKind: id, after: z.array(id) }).strict();
+const contribution = z.strictObject({ id, owner: id, kind: z.enum(['service', 'image', 'path']), removeFrom: z.enum(UNINSTALL_TIERS), operation: id, targetKind: id, after: z.array(id) });
 export type UninstallContribution = z.infer<typeof contribution>;
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
@@ -15,7 +15,7 @@ const freeze = <T>(value: T): T => { if (value && typeof value === 'object') { O
 const within = (parent: string, child: string) => { const path = relative(parent, child); return !path || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path)); };
 /** Contributions are sealed once; an extension cannot replace a Core owner's retention policy. */
 export function uninstallRegistry(extensions: readonly UninstallContribution[] = []) {
-  const base = z.object({ schemaVersion: z.literal(1), inputMaxBytes: z.number().int().positive().safe(), waitPollMs: z.number().int().positive().safe(), contributions: z.array(contribution) }).strict().parse(data);
+  const base = z.strictObject({ schemaVersion: z.literal(1), inputMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), waitPollMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), contributions: z.array(contribution) }).parse(data);
   const entries = [...base.contributions, ...extensions.map(value => contribution.parse(value))].sort((a, b) => compare(a.id, b.id));
   const ids = new Set<string>();
   for (const entry of entries) {

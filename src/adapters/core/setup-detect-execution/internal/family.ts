@@ -1,3 +1,4 @@
+import { persistedString } from '#platform/index.js';
 import { z } from 'zod';
 import { workerFactsSchema, workerSetupStages, type SetupDecision, type SetupFamilyPackage, type SetupOperation, type SetupStageContext } from '#engine/index.js';
 import { WORKER_IMAGE_ESTIMATED_GB } from './estimate.js';
@@ -5,13 +6,13 @@ import { WORKER_IMAGE_ESTIMATED_GB } from './estimate.js';
 const version = z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable();
 /** One registry entry as detected. `daemon`: reachable | unreachable (stopped, socket missing) | no-permission (this user may not open the
  * socket) | unknown (no answer in time) | not-run. `group` only with no-permission: member | relogin | not-member | unknown. */
-export const runtimeFactsSchema = z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), label: z.string().min(1).max(64), support: z.enum(['supported', 'unsupported']),
-  cli: z.enum(['found', 'absent', 'unknown']), path: z.string().min(1).max(4096).nullable(), version,
+export const runtimeFactsSchema = z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), label: persistedString(z.string().min(1).max(64)), support: z.enum(['supported', 'unsupported']),
+  cli: z.enum(['found', 'absent', 'unknown']), path: persistedString(z.string().min(1).max(4096)).nullable(), version,
   daemon: z.enum(['reachable', 'unreachable', 'no-permission', 'unknown', 'not-run']), serverVersion: version,
   kind: z.enum(['engine', 'desktop', 'rootless', 'unknown']).nullable(), endpoint: z.enum(['system', 'user', 'remote']).nullable(),
-  group: z.enum(['member', 'relogin', 'not-member', 'unknown']).nullable() }).strict();
+  group: z.enum(['member', 'relogin', 'not-member', 'unknown']).nullable() });
 /** The execution-environment family's facts (I-S2): one row per registry entry, in registry order; locale-free and secret-free. */
-export const executionFactsSchema = z.object({ schemaVersion: z.literal(1), runtimes: z.array(runtimeFactsSchema).max(16), worker: workerFactsSchema.optional() }).strict();
+export const executionFactsSchema = z.strictObject({ schemaVersion: z.literal(1), runtimes: z.array(runtimeFactsSchema).max(16), worker: workerFactsSchema.optional() });
 export type RuntimeFacts = z.infer<typeof runtimeFactsSchema>;
 export type ExecutionFacts = z.infer<typeof executionFactsSchema>;
 /** I-D2's seam: an install offer for a machine without a supported runtime (its own operation, question and command; keys under

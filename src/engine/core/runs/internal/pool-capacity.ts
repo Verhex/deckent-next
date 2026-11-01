@@ -1,7 +1,6 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { clientCommandIdSchema, AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { AUDIT_EVENT_SCHEMA_VERSION, counterSchema, identitySchema, type AuditEvent } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { assertPoolControlAllowed, type PoolControlAuthorization, type PoolControlDecision } from '#engine/core/policy/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
@@ -9,11 +8,11 @@ import { RunStoreError } from './store.js';
 import { poolHoldQuerySchema, poolOccupancySchema, type PoolHoldAuditRecorder, type PoolHoldStore } from './pool-hold.js';
 
 // The pool's existing counter bound is Number.MAX_SAFE_INTEGER; no new product ceiling.
-export const poolCapacitySchema = z.object({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }).strict().readonly();
+export const poolCapacitySchema = z.strictObject({ executionSlots: counterSchema.positive(), inFlightSlots: counterSchema.positive() }).readonly();
 export const poolCapacityCommandSchema = poolHoldQuerySchema.extend({ commandId: clientCommandIdSchema, capacity: poolCapacitySchema }).strict();
-export const poolCapacityReceiptSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema, poolId: identitySchema,
-  actor: z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly(), atMs: counterSchema, changed: z.boolean(),
-  previous: poolCapacitySchema.unwrap().extend({ executionSlots: counterSchema, inFlightSlots: counterSchema }).readonly(), next: poolCapacitySchema }).strict().readonly();
+export const poolCapacityReceiptSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema, poolId: identitySchema,
+  actor: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(), atMs: counterSchema, changed: z.boolean(),
+  previous: poolCapacitySchema.unwrap().extend({ executionSlots: counterSchema, inFlightSlots: counterSchema }).readonly(), next: poolCapacitySchema }).readonly();
 export type PoolCapacity = z.infer<typeof poolCapacitySchema>;
 export type PoolCapacityCommand = z.infer<typeof poolCapacityCommandSchema>;
 export type PoolCapacityReceipt = z.infer<typeof poolCapacityReceiptSchema>;

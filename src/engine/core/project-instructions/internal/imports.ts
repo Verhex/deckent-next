@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { persistedInteger } from '#platform/index.js';
 /** Only relative @ paths outside Markdown code are imports; email addresses and quoted mentions stay literal. */
 export function instructionImports(text: string): readonly string[] {
   let fence = '';
@@ -9,7 +9,7 @@ export function instructionImports(text: string): readonly string[] {
     return [...line.replace(/(`+)[\s\S]*?\1/gu, '').matchAll(/(?:^|\s)@((?:\\ |[^\s`"'<>])+)/gu)].map(match => match[1]!.replace(/\\ /gu, ' '));
   });
 }
-const instructionDepthSchema = z.number().int().min(0).max(5);
+const instructionDepthSchema = persistedInteger().min(0).max(5);
 export interface InstructionImportFile { readonly path: string; readonly text: string; readonly bytes: number; readonly binding: string; readonly external: boolean }
 /** Port-driven, deterministic graph expansion. No filesystem or trust authority; the caller masks the completed snapshot. */
 export async function expandInstructionImports(first: InstructionImportFile, limits: Readonly<{ maxDepth: number; maxBytes: number }>,

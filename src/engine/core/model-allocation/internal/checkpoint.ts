@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { identitySchema, counterSchema, immutableJsonObjectSchema } from '#domain/index.js';
 import { ModelInvocationStoreError } from '#engine/core/model-invocation/index.js';
 
-const allocationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
-  maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive(), lifetimeCalls: counterSchema, inFlight: counterSchema }).strict().readonly();
+const allocationSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
+  maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive(), lifetimeCalls: counterSchema, inFlight: counterSchema }).readonly();
 export type ModelAllocation = z.infer<typeof allocationSchema>;
 export interface ModelAllocationCheckpoint {
   readonly schemaVersion: 1;
@@ -12,8 +12,8 @@ export interface ModelAllocationCheckpoint {
   readonly allocation: ModelAllocation;
   readonly digest: string;
 }
-const checkpointSchema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.literal(1), revision: counterSchema.positive(),
-  allocation: allocationSchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict());
+const checkpointSchema = immutableJsonObjectSchema.pipe(z.strictObject({ schemaVersion: z.literal(1), revision: counterSchema.positive(),
+  allocation: allocationSchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }));
 export function parseModelAllocation(input: unknown): ModelAllocation {
   const copied = immutableJsonObjectSchema.safeParse(input), parsed = copied.success && allocationSchema.safeParse(copied.data);
   if (!parsed || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');

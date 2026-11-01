@@ -1,5 +1,5 @@
+import { persistedNumber, persistedInteger, AGENT_CATALOG_LIMITS, catalogIdSchema, identitySchema, type DeckentMetrics, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
-import { AGENT_CATALOG_LIMITS, catalogIdSchema, identitySchema, type DeckentMetrics, type VerifiedPrincipal } from '#domain/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AgentCatalogStore, CatalogSuggestion } from '#engine/core/agent-catalog/index.js';
 import type { CatalogLessonSource } from './rules.js';
@@ -7,9 +7,9 @@ import type { CatalogLessonSource } from './rules.js';
 /** One current metrics row as the ledger holds it: its row position, the record digest it was sealed with and the sealed time of the producer
  * command that wrote it (`null` when the producer recorded none: such a row never enters an age-bounded window). */
 export type CatalogEvolutionRow = Readonly<{ position: number; digest: string; atMs: number | null; metric: DeckentMetrics }>;
-const wilson = z.object({ lowerMicro: z.number().int(), upperMicro: z.number().int() }).strict().nullable();
-const keyRecord = z.object({ kind: z.enum(['agent', 'work-class']), agentId: z.string().optional(), revision: z.number().int().positive().optional(), workClass: z.string(),
-  decided: z.number().int().nonnegative(), n: z.number().int().nonnegative(), successes: z.number().int().nonnegative(), wilson, inputDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+const wilson = z.strictObject({ lowerMicro: persistedInteger(), upperMicro: persistedInteger() }).nullable();
+const keyRecord = z.strictObject({ kind: z.enum(['agent', 'work-class']), agentId: z.string().optional(), revision: persistedInteger().positive().optional(), workClass: z.string(),
+  decided: persistedInteger().nonnegative(), n: persistedInteger().nonnegative(), successes: persistedInteger().nonnegative(), wilson, inputDigest: z.string().regex(/^[a-f0-9]{64}$/) });
 /**
  * S8-2 aggregator pass record (rebuildable state, never authority): the durable position after which the next pass reads, and the statistics of the
  * keys this pass touched, each citing its window by the digest of its ordered (position, record digest) list. `shadow` and `on` write the same
@@ -17,22 +17,22 @@ const keyRecord = z.object({ kind: z.enum(['agent', 'work-class']), agentId: z.s
  */
 /** The pass modes that write a record (`catalogEvolution.mode` off writes nothing). */
 export const CATALOG_EVOLUTION_PASS_MODES = Object.freeze(['shadow', 'on'] as const);
-const count = z.number().int().nonnegative();
-export const catalogEvolutionPassSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, mode: z.enum(CATALOG_EVOLUTION_PASS_MODES),
-  previousPosition: count, position: z.number().int().positive(), asOfMs: count,
-  registry: z.object({ revision: z.string(), digest: z.string() }).strict(), rowsRead: count, truncated: z.boolean(),
+const count = persistedInteger().nonnegative();
+export const catalogEvolutionPassSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, mode: z.enum(CATALOG_EVOLUTION_PASS_MODES),
+  previousPosition: count, position: persistedInteger().positive(), asOfMs: count,
+  registry: z.strictObject({ revision: z.string(), digest: z.string() }), rowsRead: count, truncated: z.boolean(),
   keys: z.array(keyRecord).readonly(), skippedKeys: count,
   /** S8-3: what this pass wrote (signed by the aggregator's key) and how many candidates the open-suggestion bound held back. */
-  suggestions: z.object({ written: count, superseded: count, narrowed: count, skipped: count }).strict().optional() }).strict().readonly();
+  suggestions: z.strictObject({ written: count, superseded: count, narrowed: count, skipped: count }).optional() }).readonly();
 /** S8-3 incremental pass: one key's kept window rows (`keepWindow`), rebuildable cache, never authority; `registryDigest` null = invalid (rebuilt on next use). */
-const entry = z.object({ position: z.number().int().positive(), digest: z.string(), atMs: z.number().int().nullable(), task: z.string(), sequence: z.number().int().positive(),
-  workClass: z.string().nullable(), agent: z.object({ agentId: z.string(), revision: z.number().int().positive() }).strict().nullable(), status: z.enum(['accepted', 'failed', 'awaiting-decision']),
-  cause: z.string().optional(), legacy: z.boolean(), durationMs: z.number().nullable(), cost: z.string().nullable(), model: z.object({ channelId: z.string(), modelId: z.string() }).strict().nullable(),
-  effort: z.string().nullable(), human: z.boolean(), assigned: z.boolean(), kinds: z.array(z.string()) }).strict();
-const event = z.object({ position: z.number().int().positive(), atMs: z.number().int().nullable(), workClass: z.string().nullable(),
-  agent: z.object({ agentId: z.string(), revision: z.number().int().positive() }).strict().nullable(), kind: z.enum(['quota-park', 'run-incomplete']) }).strict();
-export const catalogEvolutionWindowSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, keyDigest: z.string().regex(/^[a-f0-9]{64}$/), registryDigest: z.string().nullable(),
-  position: count, tasks: z.array(entry), events: z.array(event) }).strict().readonly();
+const entry = z.strictObject({ position: persistedInteger().positive(), digest: z.string(), atMs: persistedInteger().nullable(), task: z.string(), sequence: persistedInteger().positive(),
+  workClass: z.string().nullable(), agent: z.strictObject({ agentId: z.string(), revision: persistedInteger().positive() }).nullable(), status: z.enum(['accepted', 'failed', 'awaiting-decision']),
+  cause: z.string().optional(), legacy: z.boolean(), durationMs: persistedNumber(z.number()).nullable(), cost: z.string().nullable(), model: z.strictObject({ channelId: z.string(), modelId: z.string() }).nullable(),
+  effort: z.string().nullable(), human: z.boolean(), assigned: z.boolean(), kinds: z.array(z.string()) });
+const event = z.strictObject({ position: persistedInteger().positive(), atMs: persistedInteger().nullable(), workClass: z.string().nullable(),
+  agent: z.strictObject({ agentId: z.string(), revision: persistedInteger().positive() }).nullable(), kind: z.enum(['quota-park', 'run-incomplete']) });
+export const catalogEvolutionWindowSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, keyDigest: z.string().regex(/^[a-f0-9]{64}$/), registryDigest: z.string().nullable(),
+  position: count, tasks: z.array(entry), events: z.array(event) }).readonly();
 export type CatalogEvolutionWindow = z.infer<typeof catalogEvolutionWindowSchema>;
 export type CatalogEvolutionPass = z.infer<typeof catalogEvolutionPassSchema>;
 export type CatalogEvolutionKeyRecord = CatalogEvolutionPass['keys'][number];
@@ -70,8 +70,8 @@ export interface CatalogEvolutionDependencies {
   readonly mode: 'off' | 'shadow' | 'on';
   readonly now: () => number;
 }
-export const agentStatsQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, agentId: catalogIdSchema.optional(),
-  limit: z.number().int().positive().max(AGENT_CATALOG_LIMITS.pageMax).optional() }).strict();
+export const agentStatsQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, agentId: catalogIdSchema.optional(),
+  limit: persistedInteger().positive().max(AGENT_CATALOG_LIMITS.pageMax).optional() });
 export type AgentStatsQuery = z.infer<typeof agentStatsQuerySchema>;
 /** Statistics of one key over its window (S8-DESIGN §4). `n` = accepted + attributable failures only; every other outcome is counted apart. */
 export type KeyStats = Readonly<{

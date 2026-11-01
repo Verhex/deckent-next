@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-vi.mock('zod-to-json-schema', { spy: true });
+import { toInputJsonSchema } from '#platform/core/validate/index.js';
+vi.mock('#platform/core/validate/internal/input-json-schema.js', { spy: true });
 import { ConfigApplication } from '#engine/index.js';
 import { createDefaultConfig, registerConfigSection } from '#platform/index.js';
 it('never prints a secret-like schema default in inspect or explain JSON', async () => {
@@ -80,7 +80,7 @@ it('masks token content and URL passwords through the real application in all co
 
 
 it('converts schemas once per registry generation and remasks changing provenance after cache hits', async () => {
-  const spy = vi.mocked(zodToJsonSchema); spy.mockClear();
+  const spy = vi.mocked(toInputJsonSchema); spy.mockClear();
   registerConfigSection('cache_initial_fixture', z.object({ value: z.string().default('SCHEMA_CACHE_CANARY') }).strict(), {
     metadata: { descriptionKey: 'config.field.projectName', tier: 'custom', since: '1', binding: { state: 'bound', consumers: ['src/engine/core/config'] }, apply: 'live' },
   });

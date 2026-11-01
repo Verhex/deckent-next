@@ -1,25 +1,25 @@
+import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
 import { policyGrantSchema, type PolicyGrant } from './schema.js';
 import type { PolicyChange } from './administer.js';
 
 const AVAILABILITY = ['default', 'opt-in'] as const;
 const selection = z.union([z.literal('all'), z.array(identitySchema).min(1).max(32).readonly()]);
 /** Mutable capability policy is catalog data. Installation cells explicitly cover all scopes; a scope selection never disguises them. */
-const cells = z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,47}$/u), tools: z.record(identitySchema, z.array(identitySchema).min(1).max(16).readonly()).readonly(), actions: z.array(identitySchema).min(1).max(16).readonly(),
-  resource: z.object({ kind: identitySchema, ids: selection }).strict().readonly(), scope: z.enum(['selected', 'installation']),
-  source: z.enum(['literal', 'owned-pools', 'configured-target', 'registered-operations']).default('literal') }).strict()
+const cells = z.array(z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,47}$/u), tools: z.record(identitySchema, z.array(identitySchema).min(1).max(16).readonly()).readonly(), actions: z.array(identitySchema).min(1).max(16).readonly(),
+  resource: z.strictObject({ kind: identitySchema, ids: selection }).readonly(), scope: z.enum(['selected', 'installation']),
+  source: z.enum(['literal', 'owned-pools', 'configured-target', 'registered-operations']).prefault('literal') })
   .refine(cell => Object.keys(cell.tools).length > 0 && cell.actions.every(action => Object.values(cell.tools).some(actions => actions.includes(action)))
     && Object.values(cell.tools).every(actions => actions.every(action => cell.actions.includes(action)))).readonly()).max(32).readonly()
   .refine(rows => new Set(rows.map(cell => cell.id)).size === rows.length);
 const groupShape = { id: z.string().regex(/^[a-z][a-z0-9.-]{0,47}$/u),
-  version: z.number().int().positive().safe(), labelKey: identitySchema, noteKey: identitySchema, cells: cells.refine(rows => rows.length > 0),
-  supersedes: z.array(z.object({ version: z.number().int().positive().safe(), cells }).strict().readonly()).readonly().default([]),
+  version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), labelKey: identitySchema, noteKey: identitySchema, cells: cells.refine(rows => rows.length > 0),
+  supersedes: z.array(z.strictObject({ version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), cells }).readonly()).readonly().prefault([]),
 };
 /** v1 extensions remain readable; availability is display/config data, never a permission grant. */
 export const mcpCapabilityGroupSchema = z.union([
-  z.object({ ...groupShape, schemaVersion: z.literal(2), availability: z.enum(AVAILABILITY) }).strict(),
-  z.object({ ...groupShape, schemaVersion: z.literal(1), proposed: z.boolean().default(false) }).strict()
+  z.strictObject({ ...groupShape, schemaVersion: z.literal(2), availability: z.enum(AVAILABILITY) }),
+  z.strictObject({ ...groupShape, schemaVersion: z.literal(1), proposed: z.boolean().prefault(false) })
     .transform(({ proposed, ...group }) => ({ ...group, schemaVersion: 2 as const, availability: proposed ? 'opt-in' as const : 'default' as const })),
 ]).readonly();
 export type McpCapabilityGroupInput = z.input<typeof mcpCapabilityGroupSchema>;

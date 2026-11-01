@@ -4,7 +4,7 @@ import { DockerCommandFailure, runNodeDockerCommand, type DockerCommandRunner } 
 import type { WorkerRemovalDriver, WorkerRemovalObservation, WorkerRemovalResource } from './removal.js';
 import limits from './limits.json' with { type: 'json' };
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const image = z.object({ Id: z.string(), RepoTags: z.array(z.string()).nullable(), RepoDigests: z.array(z.string()).nullable() }).passthrough();
+const image = z.looseObject({ Id: z.string(), RepoTags: z.array(z.string()).nullable(), RepoDigests: z.array(z.string()).nullable() });
 export interface WorkerReferenceOwner {
   /** The authoritative installation registry, never a list of just the current project or monitor's selected folders. */
   inventory(): Promise<{ readonly daemonId: string; readonly installationIds: readonly string[]; readonly revision: string } | null>;
@@ -59,7 +59,7 @@ export function nativeWorkerRemovalDriver(input: NativeWorkerRemovalInput, runne
       const ids = (await command(['container', 'ls', '--all', '--quiet', '--no-trunc'])).stdout.trim().split('\n').filter(Boolean), containers = [];
       for (const id of ids) {
         if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
-        const observed = z.array(z.object({ Id: z.string(), Image: z.string() }).passthrough()).length(1)
+        const observed = z.array(z.looseObject({ Id: z.string(), Image: z.string() })).length(1)
           .parse(JSON.parse((await command(['container', 'inspect', '--', id])).stdout))[0]!;
         if (observed.Id !== id) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
         if (observed.Image === resource.imageId) containers.push(id);

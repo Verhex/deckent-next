@@ -1,7 +1,8 @@
+import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
-export const artifactReceiptSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  digest: z.string().regex(/^[a-f0-9]{64}$/), byteLength: z.number().int().nonnegative().safe() }).strict().readonly();
+
+export const artifactReceiptSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  digest: z.string().regex(/^[a-f0-9]{64}$/), byteLength: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export type ArtifactReceipt = z.infer<typeof artifactReceiptSchema>;
 /** Byte storage does not grant access: authenticated application policy must admit every operation.
  * Receipts identify immutable scoped content, never a caller-selected filesystem path.

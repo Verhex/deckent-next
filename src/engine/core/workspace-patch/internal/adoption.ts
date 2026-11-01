@@ -1,10 +1,9 @@
+import { persistedInteger, clientCommandIdSchema, identitySchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
+import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot, type TrustedClock } from '#platform/index.js';
 import type { EffectConfirmation } from '#engine/core/effect/index.js';
 import { unconfirmedEffect } from './confirmation-default.js';
 import { deliverySummary } from './effect-summary.js';
-import { clientCommandIdSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
-import { EMPTY_KNOWN_SECRETS, type KnownSecretSnapshot, type TrustedClock } from '#platform/index.js';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { IntegrationDeliveryPlan, IntegrationDeliveryRecord, IntegrationDeliveryTarget } from './delivery.js';
@@ -23,26 +22,26 @@ export async function requireDelivered(store: Pick<IntegrationAdoptionStore, 'fi
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const adoptionTargetRefSchema = z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/);
 /** v2 (B06-2b): an adoption may name the verification Run of the delivered commit and the task kind it verifies — both or neither. */
-export const integrationAdoptionCommandSchema = z.object({ schemaVersion: z.literal(2), commandId: clientCommandIdSchema,
+export const integrationAdoptionCommandSchema = z.strictObject({ schemaVersion: z.literal(2), commandId: clientCommandIdSchema,
   identity: attemptIdentitySchema, deliveryCommandId: identitySchema, targetRef: adoptionTargetRefSchema,
-  verificationRunId: identitySchema.optional(), verificationKind: identitySchema.optional() }).strict()
+  verificationRunId: identitySchema.optional(), verificationKind: identitySchema.optional() })
   .refine(command => (command.verificationRunId === undefined) === (command.verificationKind === undefined), 'ADOPTION_VERIFICATION_INCOMPLETE').readonly();
 export type IntegrationAdoptionCommand = z.infer<typeof integrationAdoptionCommandSchema>;
-export const integrationRollbackCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
-  identity: attemptIdentitySchema, adoptionCommandId: identitySchema }).strict().readonly();
+export const integrationRollbackCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+  identity: attemptIdentitySchema, adoptionCommandId: identitySchema }).readonly();
 export type IntegrationRollbackCommand = z.infer<typeof integrationRollbackCommandSchema>;
-const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();
+const actorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema });
 /** Evidence basis of an adoption. `task-acceptance` = the attempt's recorded Task acceptance (process-exit criteria today);
  * it is not a verification run of the adopted commit. Verification is the separate, optional `verification` binding (v2). */
 export const adoptionBasisSchema = z.literal('task-acceptance');
 const move = { targetRef: adoptionTargetRefSchema, fromCommit: oid, toCommit: oid };
 export const integrationAdoptionIntentSchema = z.discriminatedUnion('kind', [
-  z.object({ schemaVersion: z.literal(2), kind: z.literal('adopt'), command: integrationAdoptionCommandSchema, ...move,
+  z.strictObject({ schemaVersion: z.literal(2), kind: z.literal('adopt'), command: integrationAdoptionCommandSchema, ...move,
     deliveryRef: z.string().regex(/^refs\/deckent\/deliveries\/[a-f0-9]{64}$/), basis: adoptionBasisSchema,
-    acceptance: z.object({ runRevision: z.number().int().nonnegative() }).strict(), verification: adoptionVerificationSchema.nullable(),
-    actor: actorSchema }).strict(),
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('rollback'), command: integrationRollbackCommandSchema, ...move,
-    actor: actorSchema }).strict(),
+    acceptance: z.strictObject({ runRevision: persistedInteger().nonnegative() }), verification: adoptionVerificationSchema.nullable(),
+    actor: actorSchema }),
+  z.strictObject({ schemaVersion: z.literal(1), kind: z.literal('rollback'), command: integrationRollbackCommandSchema, ...move,
+    actor: actorSchema }),
 ]).refine(intent => intent.kind === 'rollback' || (intent.verification === null ? intent.command.verificationRunId === undefined
   : intent.verification.runId === intent.command.verificationRunId && intent.verification.kind === intent.command.verificationKind
     && intent.verification.commit === intent.toCommit), 'ADOPTION_VERIFICATION_INCONSISTENT').readonly();

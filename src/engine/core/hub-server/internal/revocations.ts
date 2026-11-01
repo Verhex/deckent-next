@@ -67,7 +67,7 @@ export class HubRevocationApplication extends HubServerApplication {
   }
   /** Cursor pins immutable history; page production sequences never advance the client's completed snapshot watermark. */
   async revocations(context: HubServerContext, input: unknown = {}, signal?: AbortSignal) {
-    const query = z.object({ afterSequence: counterSchema.default(0), continuation: hubRevocationCursorSchema.optional() }).strict().parse(input);
+    const query = z.strictObject({ afterSequence: counterSchema.prefault(0), continuation: hubRevocationCursorSchema.optional() }).parse(input);
     return this.ports.store.transaction(async store => {
       signal?.throwIfAborted();
       await this.authorize(context, 'read', 'revocations', '');

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { toInputJsonSchema } from '#platform/core/validate/index.js';
 import { ErrorRegistry, clearConfigCache, exitCodeFor, getConfigFieldDefault, resolveGlobalConfigPaths, validateConfig, snapshotKnownSecrets, type Locale } from '../../../src/platform/index.js';
 import { commandLocale, resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { projectInputSchema } from '#engine/core/config/index.js';
@@ -342,7 +342,7 @@ describe('--schema and acceptance wording', () => {
   it('prints the projected input contract as JSON', () => {
     expect(schemaRequested(['run', 'create', '--schema'])).toBe(true);
     expect(schemaRequested(['run', 'create'])).toBe(false);
-    const projected = zodToJsonSchema(z.object({ scopeId: z.string().min(1) }).strict(), { $refStrategy: 'none' });
+    const projected = toInputJsonSchema(z.strictObject({ scopeId: z.string().min(1) }));
     expect(JSON.parse(renderInputSchema(projected))).toMatchObject({ type: 'object', required: ['scopeId'], additionalProperties: false });
     // J1 option B: the engine's one projection helper gives the MCP tool list's exact JSON Schema (one contract, no new owner).
     expect(projectInputSchema(z.object({ scopeId: z.string().min(1) }).strict())).toEqual(projected);

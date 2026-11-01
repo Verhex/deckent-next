@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import type { ProgressionCursor } from './journal.js';
+import { persistedInteger } from '#domain/index.js';
 import { ErrorRegistry, getConfigFieldDefault } from '#platform/index.js';
+import type { ProgressionCursor } from './journal.js';
 import { RunProgressionFailure, type RunProgressionTurn } from './turn.js';
 type Page = Readonly<{ items: readonly ProgressionCursor[]; next: ProgressionCursor | null }>;
 /** A scope the discovery left out because it is not this installation's own (pinned to another company, or not registered). */
@@ -32,8 +32,8 @@ export class RunLifecycleRuntimeLoop {
   private readonly notedScopes = new Set<string>();
   constructor(private readonly operations: RunLifecycleRuntimeOperations, private readonly observer: RunLifecycleRuntimeObserver,
     private readonly settings: { pollIntervalMs: number; failureBackoffMs: number; maxConcurrentRuns?: number; maxConsecutiveFailures?: number }, private readonly now: () => number = Date.now) {
-    this.failureLimit = z.number().int().positive().safe().parse(settings.maxConsecutiveFailures ?? getConfigFieldDefault('runRuntime').maxConsecutiveFailures);
-    this.concurrency = z.number().int().positive().safe().parse(settings.maxConcurrentRuns ?? 1);
+    this.failureLimit = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).parse(settings.maxConsecutiveFailures ?? getConfigFieldDefault('runRuntime').maxConsecutiveFailures);
+    this.concurrency = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).parse(settings.maxConcurrentRuns ?? 1);
   }
   private key(query: ProgressionCursor) { return JSON.stringify([query.scopeId, query.runId]); }
   private async report(query: ProgressionCursor | null, error: unknown) {

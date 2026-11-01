@@ -13,12 +13,12 @@ import type { VerifiedPrincipal } from '#domain/core/principal/index.js';
  * modes are `standart | full-auto | full-access` (`full-access` is stored only as the person's start mode), and `askEdits` (absent = keep)
  * sets the person's "ask for edits too" preference. v21 (FA-SESSION): `session` switches full access on for the terminal session only.
  */
-export const permissionModeQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().readonly();
-export const permissionModeCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, mode: z.enum(PERMISSION_MODES),
+export const permissionModeQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema }).readonly();
+export const permissionModeCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, mode: z.enum(PERMISSION_MODES),
   askEdits: z.boolean().optional(), expectedRevision: identitySchema,
   /** v21 FA-SESSION (owner 2026-10-07): full access for this terminal session only — the grant is decided and audited, nothing is stored, so
    * the next launch starts in the person's last stored mode. `sessionId`: the terminal's conversation (null: none yet). Only with full access. */
-  session: z.object({ sessionId: identitySchema.nullable() }).strict().optional() }).strict()
+  session: z.strictObject({ sessionId: identitySchema.nullable() }).optional() })
   .refine(command => command.session === undefined || (command.mode === 'full-access' && command.askEdits === undefined), { path: ['session'], message: 'PERMISSION_MODE_SESSION_FULL_ACCESS_ONLY' })
   .readonly();
 const viewShape = { schemaVersion: z.literal(1), scopeId: identitySchema,
@@ -33,8 +33,8 @@ const viewShape = { schemaVersion: z.literal(1), scopeId: identitySchema,
    * skips it otherwise; the service still decides every set). Every v21 service sends it; optional in the schema, and a view without it
    * offers full-auto and lets the service answer. */
   fullAuto: z.boolean().optional() };
-export const permissionModeViewSchema = z.object(viewShape).strict().readonly();
-export const permissionModeChangeSchema = z.object({ ...viewShape, previous: z.enum(PERMISSION_MODES), changed: z.boolean() }).strict().readonly();
+export const permissionModeViewSchema = z.strictObject(viewShape).readonly();
+export const permissionModeChangeSchema = z.strictObject({ ...viewShape, previous: z.enum(PERMISSION_MODES), changed: z.boolean() }).readonly();
 export type PermissionModeQuery = z.infer<typeof permissionModeQuerySchema>;
 export type PermissionModeCommand = z.infer<typeof permissionModeCommandSchema>;
 export type PermissionModeView = z.infer<typeof permissionModeViewSchema>;

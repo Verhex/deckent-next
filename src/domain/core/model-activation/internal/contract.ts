@@ -9,8 +9,8 @@ export const MODEL_ACTIVATION_SCHEMA_VERSION = 1;
 export const MODEL_ACTIVATION_TARGET_ENCODING_VERSION = 1;
 export const MODEL_ACTIVATION_TARGET_PREFIX = 'deckent.model-activation-target.v1\n';
 
-export const modelActivationBindingSchema = z.object({ encodingVersion: z.literal(1), algorithm: z.literal('sha256'),
-  digest: z.string().regex(/^[a-f0-9]{64}$/), }).strict().readonly();
+export const modelActivationBindingSchema = z.strictObject({ encodingVersion: z.literal(1), algorithm: z.literal('sha256'),
+  digest: z.string().regex(/^[a-f0-9]{64}$/), }).readonly();
 export const modelActivationActorSchema = verifiedPrincipalSchema.unwrap()
   .pick({ id: true, issuer: true, subject: true, assurance: true }).strict().readonly();
 
@@ -22,7 +22,7 @@ export const modelActivationCommandSchema = z.discriminatedUnion('action', [
   baseCommand.extend({ action: z.literal('deactivate'), expectedRevision: counterSchema.positive() }).strict(),
 ]).readonly();
 
-const definitionSchema = z.unknown().transform((input, context): ModelBindingDefinition => {
+const definitionSchema = z.unknown().optional().transform((input, context): ModelBindingDefinition => {
   try {
     return parseModelBindingDefinition(input);
   } catch {
@@ -30,21 +30,21 @@ const definitionSchema = z.unknown().transform((input, context): ModelBindingDef
     return z.NEVER;
   }
 });
-export const modelActivationRecordSchema = z.object({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION),
+export const modelActivationRecordSchema = z.strictObject({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION),
   scopeId: identitySchema, reference: modelReferenceSchema, revision: counterSchema.positive(), state: z.enum(['active', 'inactive']),
   catalogRevision: identitySchema, definition: definitionSchema, binding: modelActivationBindingSchema,
-}).strict().superRefine((record, context) => {
+}).superRefine((record, context) => {
   if (record.definition.provider.id !== record.reference.providerId || record.definition.provider.version !== record.reference.providerVersion
     || record.definition.model.id !== record.reference.modelId || record.definition.model.version !== record.reference.modelVersion) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_ACTIVATION_REFERENCE_MISMATCH' });
   }
 }).readonly();
 
-export const modelActivationAuthorizationSchema = z.object({ revision: identitySchema, ruleId: identitySchema }).strict().readonly();
-export const modelActivationReceiptSchema = z.object({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION),
+export const modelActivationAuthorizationSchema = z.strictObject({ revision: identitySchema, ruleId: identitySchema }).readonly();
+export const modelActivationReceiptSchema = z.strictObject({ schemaVersion: z.literal(MODEL_ACTIVATION_SCHEMA_VERSION),
   command: modelActivationCommandSchema, actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema,
   previousRevision: counterSchema.positive().nullable(), record: modelActivationRecordSchema, admittedAtMs: counterSchema,
-}).strict().superRefine((receipt, context) => {
+}).superRefine((receipt, context) => {
   if (receipt.command.scopeId !== receipt.record.scopeId || JSON.stringify(receipt.command.reference) !== JSON.stringify(receipt.record.reference)
     || receipt.command.expectedBinding.digest !== receipt.record.binding.digest
     || receipt.command.expectedBinding.algorithm !== receipt.record.binding.algorithm

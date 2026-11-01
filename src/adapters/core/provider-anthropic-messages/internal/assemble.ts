@@ -1,16 +1,17 @@
+import { persistedInteger } from '#domain/index.js';
 import { z } from 'zod';
 import type { JsonObject, ModelInvocationRejectionReason } from '#domain/index.js';
 import { checkedToolCalls, openAiChatUsageSchema, openAiChatWireObjectSchema, type OpenAiChatHttpLimits,
   type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { rememberAnthropicContent, type AnthropicContentBlock, type AnthropicContinuationScope } from './continuation.js';
 
-const count = z.number().int().nonnegative().safe();
+const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 const nullableCount = count.nullable().optional();
 /** Cumulative usage of one message: the input side arrives in `message_start`, `message_delta` restates it with the final output. */
-export const anthropicUsageSchema = z.object({ input_tokens: nullableCount, cache_creation_input_tokens: nullableCount,
+export const anthropicUsageSchema = z.looseObject({ input_tokens: nullableCount, cache_creation_input_tokens: nullableCount,
   cache_read_input_tokens: nullableCount, output_tokens: count.optional(),
-  cache_creation: z.object({ ephemeral_5m_input_tokens: count, ephemeral_1h_input_tokens: count }).passthrough().nullable().optional(),
-  output_tokens_details: z.object({ thinking_tokens: count }).passthrough().nullable().optional() }).passthrough();
+  cache_creation: z.looseObject({ ephemeral_5m_input_tokens: count, ephemeral_1h_input_tokens: count }).nullable().optional(),
+  output_tokens_details: z.looseObject({ thinking_tokens: count }).nullable().optional() });
 export type AnthropicUsage = z.infer<typeof anthropicUsageSchema>;
 export const anthropicStopReasons = ['end_turn', 'max_tokens', 'stop_sequence', 'tool_use', 'pause_turn', 'refusal', 'model_context_window_exceeded'] as const;
 export const stopReasonSchema = z.enum(anthropicStopReasons);

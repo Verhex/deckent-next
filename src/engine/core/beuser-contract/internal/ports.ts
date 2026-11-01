@@ -1,9 +1,6 @@
-import { z } from 'zod';
+import { persistedString, persistedInteger, beuserWalkerSummarySchema, beuserBindingSchema, type BeuserBinding, type BeuserWalkerSummary, type BeuserTranscriptEntry, type BeuserVerdict, sameAttemptIdentity, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, type VerifiedPrincipal, aiAuthorityFloor } from '#domain/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/index.js';
-import { beuserWalkerSummarySchema, beuserBindingSchema, type BeuserBinding, type BeuserWalkerSummary, type BeuserTranscriptEntry, type BeuserVerdict } from '#domain/index.js';
-import { sameAttemptIdentity } from '#domain/index.js';
-import { verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, type VerifiedPrincipal } from '#domain/index.js';
-import { aiAuthorityFloor } from '#domain/index.js';
+import { z } from 'zod';
 import type { AuditEvent } from '#domain/index.js';
 import type { TaskEvaluationApplication, TaskEvaluationCommand } from '#engine/core/task-evaluation/index.js';
 import type { RoleModelRefusal } from '#domain/index.js';
@@ -20,11 +17,11 @@ export function pinBeuserWalkerSummary(input: unknown): BeuserWalkerSummary {
 /** Issued by admission, never deserialized from a client request. Every port must recheck this exact binding. */
 export interface BeuserContext { readonly binding: BeuserBinding; readonly principal: VerifiedPrincipal; readonly limits: BeuserLimits; readonly signal: AbortSignal }
 /** Wire ingress may select only an already admitted binding and action; no principal, path or verdict. */
-export const beuserSurfaceCommandSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
-  action: z.discriminatedUnion('kind', [z.object({ kind: z.literal('look') }).strict(),
-    z.object({ kind: z.literal('type'), text: z.string() }).strict(), z.object({ kind: z.literal('press'), key: z.string().min(1) }).strict(),
-    z.object({ kind: z.literal('wait'), ms: z.number().int().positive().safe() }).strict()]),
-}).strict().readonly();
+export const beuserSurfaceCommandSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
+  action: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('look') }),
+    z.strictObject({ kind: z.literal('type'), text: z.string() }), z.strictObject({ kind: z.literal('press'), key: persistedString(z.string().min(1)) }),
+    z.strictObject({ kind: z.literal('wait'), ms: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })]),
+}).readonly();
 export type BeuserSurfaceCommand = z.infer<typeof beuserSurfaceCommandSchema>;
 /** Key names a walker may press (a single printable character presses itself); screen hint spellings name the same keys. Terminal vocabulary,
  * not policy: the surface maps each name to its bytes and the walker receives this list. */
@@ -47,9 +44,9 @@ export function assertBeuserAccess(admitted: BeuserContext, requested: unknown, 
     || resource.kind === 'beuser-transcript' && resource.id !== own.transcriptId
     || resource.kind === 'beuser-sandbox' && resource.id !== own.realmId) throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX');
 }
-export const beuserFilesystemProofSchema = z.object({ schemaVersion: z.literal(1),
+export const beuserFilesystemProofSchema = z.strictObject({ schemaVersion: z.literal(1),
   source: z.enum(['kernel-proven', 'daemon-attested', 'unknown']),
-}).strict().readonly();
+}).readonly();
 export type BeuserFilesystemProof = z.infer<typeof beuserFilesystemProofSchema>;
 export interface BeuserRealmObservation {
   readonly binding: BeuserBinding;

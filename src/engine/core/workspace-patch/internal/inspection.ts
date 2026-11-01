@@ -5,8 +5,8 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { integrationManifestSchema, type IntegrationRecord, type IntegrationManifest } from './integration.js';
 import { WorkspacePatchError } from './contract.js';
-export const integrationQuerySchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
-  commandId: identitySchema }).strict().readonly();
+export const integrationQuerySchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+  commandId: identitySchema }).readonly();
 export type IntegrationQuery = z.infer<typeof integrationQuerySchema>;
 export interface IntegrationReader { loadIntegration(query: IntegrationQuery): Promise<IntegrationRecord | null> }
 /** Historical custody inspection only: no Git, candidate writes or current-file verification. */

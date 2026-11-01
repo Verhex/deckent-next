@@ -1,8 +1,8 @@
+import { persistedString, persistedInteger } from '#platform/index.js';
 import type { Readable, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
-import { beuserBindingSchema, type BeuserBinding } from '#domain/index.js';
-import { verifiedPrincipalSchema } from '#domain/index.js';
+import { beuserBindingSchema, type BeuserBinding, verifiedPrincipalSchema } from '#domain/index.js';
 import { BEUSER_KEY_ALIASES, assertBeuserAccess, pinBeuserLimits, type BeuserContext, type BeuserScreen, type SurfacePort } from '#engine/index.js';
 import { catalogCommand, type SurfaceCommand } from './argv.js';
 import { SurfaceCapture, surfaceDigest, type HarnessAction, type HarnessProcess, type HarnessSink } from './capture.js';
@@ -32,10 +32,10 @@ export interface BeuserRealmChannel {
 export interface SurfaceBounds {
   readonly quietMs: number; readonly inactivityMs: number; readonly maxInputBytes: number;
 }
-const replySchema = z.object({ id: z.number().int().positive().safe(), data: z.string(),
+const replySchema = z.strictObject({ id: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), data: z.string(),
   state: z.enum(['ready', 'eof', 'secret', 'unavailable', 'invalid', 'limit', 'timeout']),
-  terminalExchange: z.array(z.object({ query: z.enum(['osc11', 'da1']), request: z.string().max(32), response: z.string().max(80).nullable(), atMs: z.number().int().min(0) }).strict()).optional(),
-  exitCode: z.number().int().nullable(), columns: z.number().int().positive(), rows: z.number().int().positive() }).strict();
+  terminalExchange: z.array(z.strictObject({ query: z.enum(['osc11', 'da1']), request: persistedString(z.string().max(32)), response: persistedString(z.string().max(80)).nullable(), atMs: persistedInteger().min(0) })).optional(),
+  exitCode: persistedInteger().nullable(), columns: persistedInteger().positive(), rows: persistedInteger().positive() });
 type DriverReply = z.infer<typeof replySchema>;
 
 class DriverProtocol {

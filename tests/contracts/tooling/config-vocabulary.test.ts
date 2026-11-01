@@ -30,8 +30,8 @@ describe('source-derived config vocabulary gate', () => {
   });
   it('detects duplicated defaults, field assignments and enum schemas but allows semantics and registry access', async () => {
     const root = await fixture(), file = join(root, 'src/probe.ts');
-    await writeFile(file, "const output_mode = 'json'; const opts = {output_mode: 'standard'}; const x = z.enum(['explanatory']); const y = settings.output_mode ?? 'verbose';");
-    expect(check(root, file)).toHaveLength(4);
+    await writeFile(file, "const output_mode = 'json'; const opts = {output_mode: 'standard'}; const x = z.enum(['explanatory']); const y = settings.output_mode ?? 'verbose'; const next = z.string().prefault('standard');");
+    expect(check(root, file)).toHaveLength(5);
     await writeFile(file, "const output_mode = getConfigFieldDefault('output_mode'); if (output_mode === 'standard') consume(); type X = 'json';");
     expect(check(root, file)).toEqual([]);
   });

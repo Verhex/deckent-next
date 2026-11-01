@@ -1,7 +1,6 @@
+import { persistedString, persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { createImmutableJsonObjectSchema, type JsonObject } from '#domain/core/primitives/index.js';
 import { MODEL_INVOCATION_NATIVE_JSON_LIMITS } from './contract.js';
-
 export type OpenAiChatHttpErrorCode = 'OPENAI_CHAT_DEFINITION_INVALID' | 'OPENAI_CHAT_REQUEST_INVALID'
   | 'OPENAI_CHAT_REQUEST_TOO_LARGE' | 'OPENAI_CHAT_RESPONSE_TOO_LARGE' | 'OPENAI_CHAT_TIMEOUT'
   | 'OPENAI_CHAT_CANCELLED' | 'OPENAI_CHAT_TRANSPORT_UNKNOWN'
@@ -30,30 +29,30 @@ export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly
 /** Tool names follow the agent tool contract; ids are the provider's opaque correlation strings. */
 export const OPENAI_CHAT_TOOL_NAME = /^[a-z][a-z0-9_]{1,63}$/;
 export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
-const positive = z.number().int().positive().safe();
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 export const openAiReasoningEffortSchema = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 const reasoningEffortSchema = openAiReasoningEffortSchema;
-const toolCallSchema = z.object({ id: z.string().min(1).max(256), type: z.literal('function'),
-  function: z.object({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME), arguments: z.string() }).strict() }).strict();
+const toolCallSchema = z.strictObject({ id: persistedString(z.string().min(1).max(256)), type: z.literal('function'),
+  function: z.strictObject({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME), arguments: z.string() }) });
 const messageSchema = z.union([
-  z.object({ role: z.enum(['developer', 'system', 'user']), content: z.string().min(1) }).strict(),
-  z.object({ role: z.literal('assistant'), content: z.string().nullable(), tool_calls: z.array(toolCallSchema).min(1).max(OPENAI_CHAT_MAX_TOOL_CALLS).optional(),
-    reasoning_content: z.string().nullable().optional(), reasoning_details: z.array(createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS)).optional() }).strict()
+  z.strictObject({ role: z.enum(['developer', 'system', 'user']), content: persistedString(z.string().min(1)) }),
+  z.strictObject({ role: z.literal('assistant'), content: z.string().nullable(), tool_calls: z.array(toolCallSchema).min(1).max(OPENAI_CHAT_MAX_TOOL_CALLS).optional(),
+    reasoning_content: z.string().nullable().optional(), reasoning_details: z.array(createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS)).optional() })
     .refine(message => (message.content !== null && message.content.length > 0) || message.tool_calls !== undefined),
-  z.object({ role: z.literal('tool'), tool_call_id: z.string().min(1).max(256), content: z.string() }).strict(),
+  z.strictObject({ role: z.literal('tool'), tool_call_id: persistedString(z.string().min(1).max(256)), content: z.string() }),
 ]);
-const toolSchema = z.object({ type: z.literal('function'), function: z.object({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME),
-  description: z.string().max(4096).optional(), parameters: z.record(z.string(), z.unknown()) }).strict() }).strict();
-const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z.array(messageSchema).min(1).max(100_000),
+const toolSchema = z.strictObject({ type: z.literal('function'), function: z.strictObject({ name: z.string().regex(OPENAI_CHAT_TOOL_NAME),
+  description: persistedString(z.string().max(4096)).optional(), parameters: z.record(z.string(), z.unknown().optional()) }) });
+const requestSchema = z.strictObject({ model: persistedString(z.string().min(1).max(1024)), messages: z.array(messageSchema).min(1).max(100_000),
   max_completion_tokens: positive, stream: z.boolean().optional(),
-  stream_options: z.object({ include_usage: z.literal(true) }).strict().optional(),
+  stream_options: z.strictObject({ include_usage: z.literal(true) }).optional(),
   n: z.literal(1).optional(), tools: z.array(toolSchema).min(1).max(OPENAI_CHAT_MAX_TOOLS).optional(),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   tool_choice: z.union([z.literal('auto'), z.literal('none'), z.literal('required')]).optional(),
-  chat_template_kwargs: z.object({ enable_thinking: z.boolean() }).strict().optional(), reasoning_effort: reasoningEffortSchema.optional(),
-  response_format: z.object({ type: z.literal('json_object') }).strict().optional(),
+  chat_template_kwargs: z.strictObject({ enable_thinking: z.boolean() }).optional(), reasoning_effort: reasoningEffortSchema.optional(),
+  response_format: z.strictObject({ type: z.literal('json_object') }).optional(),
   // Vendor wire vocabulary; these are protocol literals, not Deckent config choices.
-  service_tier: z.union([z.literal('auto'), z.literal('default'), z.literal('flex'), z.literal('priority')]).optional() }).strict()
+  service_tier: z.union([z.literal('auto'), z.literal('default'), z.literal('flex'), z.literal('priority')]).optional() })
   .refine(value => (value.stream === true) === (value.stream_options !== undefined))
   .refine(value => value.tool_choice === undefined || value.tools !== undefined)
   .refine(value => value.tools === undefined || new Set(value.tools.map(tool => tool.function.name)).size === value.tools.length)
@@ -100,14 +99,14 @@ export const OPENAI_CHAT_ENABLE_THINKING_CAPABILITY = 'chat-template-enable-thin
  * data declares this capability; a server that does not know the field is never sent it.
  */
 export const OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY = 'prefix-cache-salt';
-export const openAiChatUsageSchema = z.object({ prompt_tokens: z.number().int().nonnegative().safe(),
-  completion_tokens: z.number().int().nonnegative().safe(), total_tokens: z.number().int().nonnegative().safe() }).passthrough()
+export const openAiChatUsageSchema = z.looseObject({ prompt_tokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  completion_tokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), total_tokens: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })
   .superRefine((usage, context) => { if (usage.total_tokens < usage.prompt_tokens + usage.completion_tokens) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'USAGE_TOTAL_INVALID' });
   } });
 
-const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
-  timeoutMs: positive.max(2_147_483_647) }).strict();
+const limitsSchema = z.strictObject({ requestMaxBytes: positive, responseMaxBytes: positive,
+  timeoutMs: positive.max(2_147_483_647) });
 export function parseOpenAiChatHttpLimits(input: unknown): OpenAiChatHttpLimits {
   const copied = openAiChatWireObjectSchema.safeParse(input), parsed = copied.success && limitsSchema.safeParse(copied.data);
   if (!parsed || !parsed.success) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
@@ -125,13 +124,13 @@ export type OpenAiChatDialect = Readonly<{ tokenLimitField: 'max_tokens' | 'max_
   finishReasons?: readonly ('sensitive' | 'model_context_window_exceeded' | 'network_error' | 'insufficient_system_resource' | 'aborted')[] | undefined;
   /** v6 keeps the typed chat facade but speaks Responses on the wire. Model effort support is registry data. */
   protocol?: 'responses' | undefined; reasoningEfforts?: readonly OpenAiReasoningEffort[] | undefined; reasoningEffort?: OpenAiReasoningEffort | undefined }>;
-export const openAiChatDialectSchema = z.object({ tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), streamUsage: z.enum(['include', 'omit']),
+export const openAiChatDialectSchema = z.strictObject({ tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), streamUsage: z.enum(['include', 'omit']),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   toolChoice: z.array(z.union([z.literal('auto'), z.literal('none'), z.literal('required')])).min(1).max(3)
     .refine(values => new Set(values).size === values.length), finalUsageChoice: z.literal('repeat-finish').optional(), responseObject: z.literal('optional').optional(),
   finishReasons: z.array(z.enum(['sensitive', 'model_context_window_exceeded', 'network_error', 'insufficient_system_resource', 'aborted'])).max(5).optional(),
   protocol: z.literal('responses').optional(), reasoningEfforts: z.array(reasoningEffortSchema).min(1).max(7)
-    .refine(values => new Set(values).size === values.length).readonly().optional(), reasoningEffort: reasoningEffortSchema.optional() }).strict()
+    .refine(values => new Set(values).size === values.length).readonly().optional(), reasoningEffort: reasoningEffortSchema.optional() })
   .refine(d => d.protocol === 'responses' ? d.reasoningEfforts !== undefined && d.reasoningEffort !== undefined && d.reasoningEfforts.includes(d.reasoningEffort)
     && d.finalUsageChoice === undefined : d.reasoningEfforts === undefined && d.reasoningEffort === undefined);
 /** The OpenAI wire itself: what a v4 profile (no dialect) is sent. */

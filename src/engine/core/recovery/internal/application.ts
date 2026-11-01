@@ -9,7 +9,7 @@ import { recoveryContinuationApprovalSchema } from './approval.js';
 import type { RecoveryStore } from './port.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const assessSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, caseId: digest }).strict();
+const assessSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, caseId: digest });
 const continueSchema = assessSchema.extend({ evidenceDigest: digest, causeClass: z.enum(RECOVERY_CAUSE_CLASSES), note: recoveryNoteCodeSchema.nullable().optional() }).strict();
 const escalateSchema = assessSchema.extend({ evidenceDigest: digest, code: z.enum(RECOVERY_ESCALATION_CODES) }).strict();
 /** The id of the one live decision of a case (its continuation's `recoveryDecisionId`) and of its one model call; a shadow decision has its own. */

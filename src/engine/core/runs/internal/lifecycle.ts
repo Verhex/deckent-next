@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { persistedString, clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerRunQuotaWrite, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
@@ -12,8 +12,8 @@ import { RunStoreError, type RunReceipt, type RunStore } from './store.js';
 const base = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema });
 /** Human-only decisions. Timing, actor, evaluation and evidence never come from the caller. */
-const holdReason = z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars);
-const answer = z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars);
+const holdReason = persistedString(z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars));
+const answer = persistedString(z.string().trim().min(1).max(workerReportLimits.handoffSummaryChars));
 /** Policy-gated Run controls, also exposed by MCP. Human input decisions are separate. */
 export const runControlCommandSchema = z.discriminatedUnion('action', [
   base.extend({ action: z.literal('hold'), holdReason }).strict(),
@@ -36,10 +36,10 @@ export type RunLifecycleCommand = z.infer<typeof runLifecycleCommandSchema>;
 export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'resume', 'hold', 'answer', 'expire', 'park-task', 'park-progression', 'accept', 'reject', 'quota-answer']),
   holdReason: holdReason.optional(), holdSource: safetyHoldSourceSchema.optional(), answer: answer.optional(), failureCode: identitySchema.optional(),
   ...quotaAnswerFields, taskId: identitySchema.optional(), reason: z.enum(['evaluation-unknown', 'evaluation-not-ready']).optional(),
-  actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema,
-    assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }).strict(),
-  decision: z.object({ schemaVersion: z.literal(1), deciderClass: deciderClassSchema, policyRevision: identitySchema,
-    step: z.enum(['operator-control', 'human-step']).optional(), ruleId: identitySchema.optional(), approvalId: identitySchema.optional() }).strict().optional(),
+  actor: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema,
+    assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }),
+  decision: z.strictObject({ schemaVersion: z.literal(1), deciderClass: deciderClassSchema, policyRevision: identitySchema,
+    step: z.enum(['operator-control', 'human-step']).optional(), ruleId: identitySchema.optional(), approvalId: identitySchema.optional() }).optional(),
   now: counterSchema, timeoutMs: counterSchema.positive(),
 }).strict().superRefine((value, context) => {
   if ((['accept', 'reject', 'answer', 'park-task'].includes(value.action) !== (value.taskId !== undefined))

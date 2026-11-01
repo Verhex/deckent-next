@@ -1,5 +1,5 @@
+import { persistedString, persistedDateTime, persistedInteger, identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
 import type { ProfileRevisionProposal } from './update.js';
 import type { ToolchainCurrencyReport } from './contract.js';
 
@@ -62,13 +62,13 @@ export function registryLayerHold(layers: Readonly<{ global: unknown; project: u
   return registryOf(layers.project) === undefined ? 'TOOLCHAIN_REGISTRY_NOT_IN_PROJECT' : null;
 }
 
-const isoTime = z.string().datetime();
+const isoTime = persistedDateTime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
-export const toolchainRefreshStateSchema = z.object({ schemaVersion: z.literal(1), phase: z.enum(['updating', 'current', 'failed', 'unverified']),
+export const toolchainRefreshStateSchema = z.strictObject({ schemaVersion: z.literal(1), phase: z.enum(['updating', 'current', 'failed', 'unverified']),
   trigger: z.enum(['startup', 'interval']), startedAt: isoTime, finishedAt: isoTime.nullable(), expiresAt: isoTime,
   imageVersion: z.string().nullable(), imageId: imageDigest.nullable(), staleProviders: z.array(identitySchema).readonly(),
-  appliedProfiles: z.number().int().min(0).safe(), reason: z.string().max(128).nullable() }).strict().readonly();
+  appliedProfiles: persistedInteger().min(0).min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), reason: persistedString(z.string().max(128)).nullable() }).readonly();
 export type ToolchainRefreshState = z.infer<typeof toolchainRefreshStateSchema>;
 export type ToolchainRefreshStatus = 'updating' | 'current' | 'failed' | 'unknown';
 

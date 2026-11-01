@@ -43,7 +43,7 @@ export function projectVocabulary(root) {
       const key = node.name.getText().replace(/^['"]|['"]$/g, '');
       const values = new Set();
       function schema(n) {
-        if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && ['enum', 'literal', 'default'].includes(n.expression.name.text)) {
+        if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && ['enum', 'literal', 'default', 'prefault'].includes(n.expression.name.text)) {
           strings(n.arguments[0]).forEach(value => values.add(value));
         }
         ts.forEachChild(n, schema);
@@ -90,7 +90,7 @@ export function lintConfigVocabulary(root, files, fail) {
           if ((ts.isPropertyAssignment(ancestor) || ts.isVariableDeclaration(ancestor) || ts.isParameter(ancestor)) && ancestor.initializer && fieldNames.has(nameOf(ancestor.name))) violation = true;
           if (ts.isBinaryExpression(ancestor) && ancestor.operatorToken.kind === ts.SyntaxKind.EqualsToken && fieldNames.has(nameOf(ancestor.left))) violation = true;
           if (ts.isBinaryExpression(ancestor) && [ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken].includes(ancestor.operatorToken.kind) && fieldNames.has(nameOf(ancestor.left))) violation = true;
-          if (ts.isCallExpression(ancestor) && ts.isPropertyAccessExpression(ancestor.expression) && ['enum', 'default'].includes(ancestor.expression.name.text)) violation = true;
+          if (ts.isCallExpression(ancestor) && ts.isPropertyAccessExpression(ancestor.expression) && ['enum', 'default', 'prefault'].includes(ancestor.expression.name.text)) violation = true;
           ancestor = ancestor.parent;
         }
         if (violation) fail('config-literal', `${rel}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`, `config value ${JSON.stringify(node.text)} must come from the registry`);

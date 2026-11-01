@@ -1,14 +1,13 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { persistedString, persistedInteger, clientCommandIdSchema, counterSchema, identitySchema, isMcpPrincipal, verifiedPrincipalSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema, isMcpPrincipal, verifiedPrincipalSchema } from '#domain/index.js';
 
-const reasonSchema = z.string().max(1024).refine(value => value.trim().length > 0, 'SHUTDOWN_REASON_BLANK');
-const peerEvidenceSchema = z.object({
+const reasonSchema = persistedString(z.string().max(1024)).refine(value => value.trim().length > 0, 'SHUTDOWN_REASON_BLANK');
+const peerEvidenceSchema = z.strictObject({
   method: z.literal('os-peer'),
-  pid: z.number().int().positive().safe(),
+  pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   uid: counterSchema,
   gid: counterSchema,
-}).strict().readonly();
+}).readonly();
 
 const serviceIdentityShape = {
   scopeId: identitySchema,
@@ -16,22 +15,22 @@ const serviceIdentityShape = {
 } as const;
 const serviceInstanceShape = { ...serviceIdentityShape, instanceId: identitySchema } as const;
 
-export const serviceIdentitySchema = z.object(serviceIdentityShape).strict().readonly();
+export const serviceIdentitySchema = z.strictObject(serviceIdentityShape).readonly();
 
-export const serviceInstanceSchema = z.object(serviceInstanceShape).strict().readonly();
+export const serviceInstanceSchema = z.strictObject(serviceInstanceShape).readonly();
 
-export const shutdownCommandSchema = z.object({
+export const shutdownCommandSchema = z.strictObject({
   schemaVersion: z.literal(1),
   commandId: clientCommandIdSchema,
   serviceId: identitySchema,
   instanceId: identitySchema,
   reason: reasonSchema,
-}).strict().readonly();
+}).readonly();
 
-export const serviceActorSchema = z.object({
+export const serviceActorSchema = z.strictObject({
   principal: verifiedPrincipalSchema,
   evidence: peerEvidenceSchema,
-}).strict().superRefine((actor, context) => {
+}).superRefine((actor, context) => {
   // Structural consistency only; the transport verifier must still supply the actual kernel evidence. The local MCP actor (MCP-AI-AKTOR) is the
   // same OS peer with workload assurance: it stays a separate, policy-governed principal, never refused here as a different identity.
   const mcpActor = isMcpPrincipal(actor.principal) && actor.principal.assurance === 'workload-verified';
@@ -40,16 +39,16 @@ export const serviceActorSchema = z.object({
   }
 }).readonly();
 
-export const shutdownAdmissionSchema = z.object({
+export const shutdownAdmissionSchema = z.strictObject({
   schemaVersion: z.literal(1),
   scopeId: identitySchema,
   command: shutdownCommandSchema,
   actor: serviceActorSchema,
-  authorization: z.object({ revision: identitySchema, ruleId: identitySchema }).strict().readonly(),
+  authorization: z.strictObject({ revision: identitySchema, ruleId: identitySchema }).readonly(),
   admittedAtMs: counterSchema,
-}).strict().readonly();
+}).readonly();
 
-export const shutdownOutcomeSchema = z.object({
+export const shutdownOutcomeSchema = z.strictObject({
   schemaVersion: z.literal(1),
   scopeId: identitySchema,
   serviceId: identitySchema,
@@ -59,7 +58,7 @@ export const shutdownOutcomeSchema = z.object({
   remainingRequests: counterSchema,
   recoveryPending: z.boolean(),
   observedAtMs: counterSchema,
-}).strict().superRefine((outcome, context) => {
+}).superRefine((outcome, context) => {
   if (outcome.state === 'clean' && (outcome.remainingRequests !== 0 || outcome.recoveryPending)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'SHUTDOWN_CLEAN_INVARIANT' });
   }
@@ -67,22 +66,22 @@ export const shutdownOutcomeSchema = z.object({
 
 // Unconfigured installations expose no invented service/scope identity or implied shutdown grant.
 /** Source build the service runs from (absent when started from source or from a build before this field). */
-export const serviceBuildSchema = z.object({ sourceTreeSha256: z.string().regex(/^[0-9a-f]{64}$/),
-  sourceCommit: z.string().regex(/^[0-9a-f]{40,64}$/).nullable() }).strict().readonly();
+export const serviceBuildSchema = z.strictObject({ sourceTreeSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceCommit: z.string().regex(/^[0-9a-f]{40,64}$/).nullable() }).readonly();
 /** `processId` lets a launcher tell its own process from a concurrent winner on the same endpoint (Astra 2054 R2). */
-const processIdSchema = z.number().int().positive().optional();
+const processIdSchema = persistedInteger().positive().optional();
 /** Restart-apply configuration fingerprint (`restartConfigDigest`), whether this service was started automatically by a terminal, and its
  * idle stop period (K6 = A). Absent from a service built before these fields: observers report unknown, never stale. */
 const configDigestSchema = z.string().regex(/^[0-9a-f]{64}$/).optional();
 const autoStartedSchema = z.boolean().optional();
-const idleStopMsSchema = z.number().int().positive().safe().nullable().optional();
+const idleStopMsSchema = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable().optional();
 export const runtimeServiceDescriptorSchema = z.discriminatedUnion('shutdownAvailable', [
-  z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
+  z.strictObject({ schemaVersion: z.literal(1), instanceId: identitySchema,
     shutdownAvailable: z.literal(false), identity: z.null(), build: serviceBuildSchema.optional(), processId: processIdSchema,
-    configDigest: configDigestSchema, autoStarted: autoStartedSchema, idleStopMs: idleStopMsSchema }).strict(),
-  z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
+    configDigest: configDigestSchema, autoStarted: autoStartedSchema, idleStopMs: idleStopMsSchema }),
+  z.strictObject({ schemaVersion: z.literal(1), instanceId: identitySchema,
     shutdownAvailable: z.literal(true), identity: serviceIdentitySchema, build: serviceBuildSchema.optional(), processId: processIdSchema,
-    configDigest: configDigestSchema, autoStarted: autoStartedSchema, idleStopMs: idleStopMsSchema }).strict(),
+    configDigest: configDigestSchema, autoStarted: autoStartedSchema, idleStopMs: idleStopMsSchema }),
 ]).readonly();
 
 export type ServiceIdentity = z.infer<typeof serviceIdentitySchema>;

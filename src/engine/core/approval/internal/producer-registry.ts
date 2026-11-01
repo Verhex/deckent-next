@@ -1,12 +1,12 @@
+import { persistedInteger, APPROVAL_ASSURANCE, AUDIT_EVENT_SCHEMA_VERSION, ApprovalError, RegistryError, approvalAssuranceSchema, identitySchema, type AuditEvent } from '#domain/index.js';
+import { CORE_TURN_ASSURANCE_REFERENCE } from '#platform/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { APPROVAL_ASSURANCE, AUDIT_EVENT_SCHEMA_VERSION, ApprovalError, RegistryError, approvalAssuranceSchema, identitySchema, type AuditEvent } from '#domain/index.js';
-import { CORE_TURN_ASSURANCE_REFERENCE } from '#platform/index.js';
 import type { ApprovalAssuranceEvidence, ApprovalAssuranceProducer } from '#engine/core/authentication/index.js';
 import type { TurnDecisionCapabilities } from './assurance.js';
 
-const manifestSchema = z.object({ schemaVersion: z.literal(1), id: identitySchema, version: z.number().int().positive().safe(),
-  level: approvalAssuranceSchema, rank: z.number().int().positive().safe() }).strict().readonly();
+const manifestSchema = z.strictObject({ schemaVersion: z.literal(1), id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  level: approvalAssuranceSchema, rank: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export type ApprovalAssuranceProducerManifest = z.infer<typeof manifestSchema>;
 /** Trusted distribution code, never client input. Implementations attest service-held, scope/approval/principal-bound evidence. */
 export interface ApprovalAssuranceAttester {

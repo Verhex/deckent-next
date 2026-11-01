@@ -45,7 +45,7 @@ export { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern,
 export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, TERMINAL_SCOPE_ID_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
-export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
+export type { DeckentConfig, CoreConfig, ConfigSectionOptions, ConfigSectionSchema } from '#platform/core/config/index.js';
 export { createDefaultConfig, mergeConfigLayers } from '#platform/core/config/index.js';
 export { ConfigValidationError, configIssue } from '#platform/core/config/index.js';
 export type { ConfigWarning } from '#platform/core/config/index.js';
@@ -103,3 +103,4 @@ export { unifiedDiff } from '#platform/core/common/index.js';
 
 export { workerImageConsentSchema, type WorkerImageConsent } from '#platform/core/config-fields/index.js';
 export { INPUT_VALIDATION_LIMITS, graphInputValidationLimit, inputWithinValidationLimit } from '#platform/core/common/index.js';
+export { persistedString, persistedDateTime, persistedUuid, persistedEmail, persistedUrl, persistedInteger, persistedNumber, persistedIssueCode, toInputJsonSchema } from '#platform/core/validate/index.js';

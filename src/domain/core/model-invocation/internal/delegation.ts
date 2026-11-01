@@ -9,8 +9,8 @@ export type DelegationPrincipalClass = typeof DELEGATION_PRINCIPAL_CLASSES[numbe
  * The connection's delegated-use consent (S3-DESIGN §10, SIWC3): explicit, recorded and revocable, written only by the person through the connect
  * path (S3-3), on the invocation profile's adapter definition as `delegatedUse`. `classes` names who besides the person may spend it.
  */
-export const delegatedUseConsentSchema = z.object({ consentedBy: z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly(), atMs: counterSchema,
-  classes: z.array(z.enum(['ai', 'system'])).min(1).max(2).readonly() }).strict().readonly();
+export const delegatedUseConsentSchema = z.strictObject({ consentedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(), atMs: counterSchema,
+  classes: z.array(z.enum(['ai', 'system'])).min(1).max(2).readonly() }).readonly();
 export type DelegatedUseConsent = z.infer<typeof delegatedUseConsentSchema>;
 /** The consent an invocation profile's adapter definition carries (`null`: none, or not an object). Read only; the shape is checked by the rule. */
 export function delegatedUseOf(definition: unknown): unknown {

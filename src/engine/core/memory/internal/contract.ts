@@ -1,24 +1,22 @@
-import { z } from 'zod';
-import { clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES,
-  MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef,
-  type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
+import { persistedString, persistedInteger, clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES, MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
 import { MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
+import { z } from 'zod';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 
 const scoped = { schemaVersion: z.literal(1), scopeId: identitySchema };
 const states = z.array(z.enum(MEMORY_STATES)).min(1).max(MEMORY_STATES.length).readonly().optional();
-const limit = z.number().int().min(1).max(MEMORY_LIMITS.pageMax);
-export const memoryProposeCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, content: memoryContentSchema, origin: memoryOriginSchema }).strict();
-export const memoryVerifyCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
-  basis: memoryVerificationBasisSchema }).strict();
-export const memoryRetireCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
-  reason: z.string().min(1), supersededBy: identitySchema.nullable() }).strict();
+const limit = persistedInteger().min(1).max(MEMORY_LIMITS.pageMax);
+export const memoryProposeCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, content: memoryContentSchema, origin: memoryOriginSchema });
+export const memoryVerifyCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
+  basis: memoryVerificationBasisSchema });
+export const memoryRetireCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
+  reason: persistedString(z.string().min(1)), supersededBy: identitySchema.nullable() });
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const attemptRefSchema = z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).strict().readonly();
+const attemptRefSchema = z.strictObject({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).readonly();
 /** S4B-1 (§4.3): one system candidate from one sealed source (the distiller only). Its id and support row are derived, never client-chosen. */
-export const memoryExtractCommandSchema = z.object({ ...scoped, source: attemptRefSchema, ruleId: identitySchema, ruleVersion: counterSchema.positive(), claimIndex: counterSchema,
-  content: memoryContentSchema, audience: memoryAudienceSchema, support: z.object({ producer: z.enum(['rule', 'worker-claim']), evaluationId: identitySchema,
-    evaluationDigest: digestSchema, reportDigest: digestSchema.nullable() }).strict().readonly() }).strict();
+export const memoryExtractCommandSchema = z.strictObject({ ...scoped, source: attemptRefSchema, ruleId: identitySchema, ruleVersion: counterSchema.positive(), claimIndex: counterSchema,
+  content: memoryContentSchema, audience: memoryAudienceSchema, support: z.strictObject({ producer: z.enum(['rule', 'worker-claim']), evaluationId: identitySchema,
+    evaluationDigest: digestSchema, reportDigest: digestSchema.nullable() }).readonly() });
 export type MemoryExtractCommand = z.infer<typeof memoryExtractCommandSchema>;
 /** One piece of evidence behind a system entry (append-only; `supportId` = the extraction command id, so a replay adds nothing). Never read for
  * model independence: S4B-3 re-derives the worker model from the sealed Run. */
@@ -34,23 +32,23 @@ export type MemoryDistilOutcome = { readonly schemaVersion: 1; readonly status: 
   readonly refused: MemoryExtractionReceipt['refused']; readonly alerts: readonly { readonly key: MemoryAlertKey; readonly scopeId: string; readonly count: number }[] }
   | { readonly schemaVersion: 1; readonly status: 'replayed'; readonly receipt: MemoryExtractionReceipt }
   | { readonly schemaVersion: 1; readonly status: 'skipped'; readonly reason: 'work-class' | 'not-accepted' };
-export const memoryInspectQuerySchema = z.object({ ...scoped, entryId: identitySchema }).strict();
+export const memoryInspectQuerySchema = z.strictObject({ ...scoped, entryId: identitySchema });
 /** Default states: candidate and verified (retired entries are shown only when asked for). */
-export const memoryListQuerySchema = z.object({ ...scoped, states, limit }).strict();
-export const memorySearchQuerySchema = z.object({ ...scoped, query: z.string(), states, limit }).strict();
+export const memoryListQuerySchema = z.strictObject({ ...scoped, states, limit });
+export const memorySearchQuerySchema = z.strictObject({ ...scoped, query: z.string(), states, limit });
 /** S4B-4 (§6.6, A11): a person's purge of one entry at the revision the card showed. */
-export const memoryPurgeCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
-  reasonCode: z.enum(MEMORY_PURGE_REASONS) }).strict();
+export const memoryPurgeCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
+  reasonCode: z.enum(MEMORY_PURGE_REASONS) });
 /** S4B-4 (§6.5, A9): a person's decision on one open contest. */
-export const memoryContestResolveCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, contestId: identitySchema,
-  decision: z.enum(MEMORY_CONTEST_DECISIONS) }).strict();
+export const memoryContestResolveCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, contestId: identitySchema,
+  decision: z.enum(MEMORY_CONTEST_DECISIONS) });
 /** S4B-4 review card: candidates, contested and stale entries of the scope with their evidence and evaluator verdicts (bounded page). */
-export const memoryReviewQuerySchema = z.object({ ...scoped, limit }).strict();
+export const memoryReviewQuerySchema = z.strictObject({ ...scoped, limit });
 /** S4B-4 (§6.5 bulk response): the entries derived from one Run (or one Attempt of it), for `retire --source` and `purge --source`. */
 /** S4B-7: the rollout status of one scope under the installation's current switch modes (trusted composition reads them from config). */
 const rolloutMode = z.enum(MEMORY_AUTOMATION_MODES);
-export const memoryRolloutQuerySchema = z.object({ ...scoped, modes: z.object({ extraction: rolloutMode, verification: rolloutMode, context: rolloutMode }).strict() }).strict();
-export const memorySourceQuerySchema = z.object({ ...scoped, source: z.object({ runId: identitySchema, attemptId: identitySchema.nullable() }).strict(), limit }).strict();
+export const memoryRolloutQuerySchema = z.strictObject({ ...scoped, modes: z.strictObject({ extraction: rolloutMode, verification: rolloutMode, context: rolloutMode }) });
+export const memorySourceQuerySchema = z.strictObject({ ...scoped, source: z.strictObject({ runId: identitySchema, attemptId: identitySchema.nullable() }), limit });
 export type MemoryPurgeCommand = z.infer<typeof memoryPurgeCommandSchema>;
 export type MemoryContestResolveCommand = z.infer<typeof memoryContestResolveCommandSchema>;
 export type MemoryReviewQuery = z.infer<typeof memoryReviewQuerySchema>;

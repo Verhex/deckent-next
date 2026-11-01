@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, attemptIdentitySchema, sameAttemptIdentity, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema, operationEvidenceBindingReason,
+import { persistedString, counterSchema, attemptIdentitySchema, sameAttemptIdentity, criterionDefinitionSchema, evaluatorDefinitionSchema, identitySchema, operationEvidenceBindingReason,
   type OperationEvidenceBinding,
   type AttemptIdentity, type CriterionDefinition, type EvaluatorDefinition, type TaskEvaluation } from '#domain/index.js';
 import { PROCESS_EXIT_EVALUATOR, processExitParametersSchema, processExitTerminalEvaluator, validateInstalledProcessExitEvaluator, validateProcessExitCriterion } from './process-exit.js';
@@ -9,7 +9,7 @@ import { BEUSER_EVALUATOR, beuserParametersSchema, validateInstalledBeuserEvalua
 
 export const OPERATION_EVIDENCE_EVALUATOR = Object.freeze({ id: 'operation-evidence', version: 1,
   implementation: Object.freeze({ id: 'operation-evidence', version: 1 }) });
-const parametersSchema = z.object({ commandId: identitySchema }).strict().readonly();
+const parametersSchema = z.strictObject({ commandId: identitySchema }).readonly();
 /** Planner metadata comes from the same installed parameter schemas that admission validates. */
 export function installedEvaluatorParameters(evaluator: EvaluatorDefinition) {
   validateInstalledEvaluator(evaluator);
@@ -26,10 +26,10 @@ export interface OperationEvidenceReader {
 const operation = z.object({ id: identitySchema, version: counterSchema.positive() });
 const projectionSchema = z.object({ sequence: counterSchema.positive(), state: z.enum(['settled', 'claimed', 'unknown', 'refused']),
   intent: z.object({ command: z.object({ scopeId: identitySchema, commandId: identitySchema, operation,
-    target: z.object({ kind: identitySchema, id: z.string().min(1).max(512) }), compensates: identitySchema.optional() }),
+    target: z.object({ kind: identitySchema, id: persistedString(z.string().min(1).max(512)) }), compensates: identitySchema.optional() }),
     descriptor: z.object({ compensation: operation.nullable() }), inputDigest: z.string().regex(/^[a-f0-9]{64}$/),
-    actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict() }),
-  evidence: z.object({ kind: z.enum(['idempotency-record', 'fence']), version: z.string().min(1).max(256).nullable(), observedAt: counterSchema }).strict().nullable(),
+    actor: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }) }),
+  evidence: z.strictObject({ kind: z.enum(['idempotency-record', 'fence']), version: persistedString(z.string().min(1).max(256)).nullable(), observedAt: counterSchema }).nullable(),
   refusal: z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']).nullable(),
 }).refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));
 export type OperationSettlementReference = Readonly<{ kind: 'operation-settlement'; scopeId: string; commandId: string;

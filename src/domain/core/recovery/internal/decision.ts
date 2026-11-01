@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { persistedString, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import seed from '../../../../../assets/recovery/decision.json' with { type: 'json' };
 import { RECOVERY_CAUSE_CLASSES, recoveryNoteCodeSchema } from './case.js';
 
@@ -15,15 +15,15 @@ const positive = counterSchema.positive();
  * `maxCasesPerWindow` model calls in `windowMs`, or `scanLimit` decision seals in the window without reaching it: escalate without a call); `pass` the
  * detection page one pass reads and the most cases it keeps waiting for their release. No model, provider or vendor name is data here.
  */
-export const recoveryDecisionRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
-  template: z.object({ id: identitySchema, version: positive }).strict().readonly(),
-  templates: z.array(z.object({ id: identitySchema, version: positive, text: z.string().min(1).max(8192) }).strict().readonly()).min(1).max(32).readonly(),
-  noteCodes: z.array(z.object({ code: recoveryNoteCodeSchema, text: z.string().min(1).max(512) }).strict().readonly()).min(1).max(64).readonly(),
-  answer: z.object({ maxBytes: positive, rationaleMaxChars: positive }).strict().readonly(),
-  call: z.object({ maxCompletionTokens: positive }).strict().readonly(),
-  breaker: z.object({ maxCasesPerWindow: counterSchema, windowMs: positive, scanLimit: positive }).strict().readonly(),
-  pass: z.object({ pageSize: positive, maxPending: positive }).strict().readonly(),
-}).strict().superRefine((value, context) => {
+export const recoveryDecisionRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
+  template: z.strictObject({ id: identitySchema, version: positive }).readonly(),
+  templates: z.array(z.strictObject({ id: identitySchema, version: positive, text: persistedString(z.string().min(1).max(8192)) }).readonly()).min(1).max(32).readonly(),
+  noteCodes: z.array(z.strictObject({ code: recoveryNoteCodeSchema, text: persistedString(z.string().min(1).max(512)) }).readonly()).min(1).max(64).readonly(),
+  answer: z.strictObject({ maxBytes: positive, rationaleMaxChars: positive }).readonly(),
+  call: z.strictObject({ maxCompletionTokens: positive }).readonly(),
+  breaker: z.strictObject({ maxCasesPerWindow: counterSchema, windowMs: positive, scanLimit: positive }).readonly(),
+  pass: z.strictObject({ pageSize: positive, maxPending: positive }).readonly(),
+}).superRefine((value, context) => {
   if (!value.templates.some(row => row.id === value.template.id && row.version === value.template.version)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['template'], message: 'RECOVERY_TEMPLATE_UNKNOWN' });
   if (new Set(value.templates.map(row => `${row.id}@${row.version}`)).size !== value.templates.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ['templates'], message: 'RECOVERY_TEMPLATE_DUPLICATE' });
   if (new Set(value.noteCodes.map(row => row.code)).size !== value.noteCodes.length) context.addIssue({ code: z.ZodIssueCode.custom, path: ['noteCodes'], message: 'RECOVERY_NOTE_DUPLICATE' });
@@ -59,8 +59,8 @@ export function readRecoveryDecisionAnswer(text: string, expected: Readonly<{ ca
   if (new TextEncoder().encode(text).length > registry.answer.maxBytes) return fail('answer-too-large');
   let value: unknown;
   try { value = JSON.parse(text.trim()); } catch { return fail('answer-invalid'); }
-  const parsed = z.object({ schemaVersion: z.literal(1), caseId: digest, evidenceDigest: digest, action: z.enum(RECOVERY_DECISION_ACTIONS), causeClass: z.enum(RECOVERY_CAUSE_CLASSES),
-    rationale: z.string().max(registry.answer.rationaleMaxChars), nextAttemptNote: z.string().nullable() }).strict().safeParse(value);
+  const parsed = z.strictObject({ schemaVersion: z.literal(1), caseId: digest, evidenceDigest: digest, action: z.enum(RECOVERY_DECISION_ACTIONS), causeClass: z.enum(RECOVERY_CAUSE_CLASSES),
+    rationale: persistedString(z.string().max(registry.answer.rationaleMaxChars)), nextAttemptNote: z.string().nullable() }).safeParse(value);
   if (!parsed.success) return fail('answer-invalid');
   const answer = parsed.data;
   if (answer.caseId !== expected.caseId || answer.evidenceDigest !== expected.evidenceDigest) return fail('echo-mismatch');

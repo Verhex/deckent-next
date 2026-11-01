@@ -13,13 +13,12 @@ import settings from './model-role-admission.json' with { type: 'json' };
  * config application audits it as a sealed `config-change`. Overlays it does not own are never edited.
  */
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
-export const modelRoleQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, channelId: identitySchema.optional(), modelId: exactModelIdSchema.optional() })
-  .strict().readonly();
+export const modelRoleQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, channelId: identitySchema.optional(), modelId: exactModelIdSchema.optional() }).readonly();
 export type ModelRoleQuery = z.infer<typeof modelRoleQuerySchema>;
-export const modelRoleAssignCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, channelId: identitySchema,
+export const modelRoleAssignCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, channelId: identitySchema,
   modelId: exactModelIdSchema, tier: z.enum(MODEL_TIERS), roles: z.array(identitySchema).max(limits.rolesPerModel).refine(roles => new Set(roles).size === roles.length).readonly(),
   /** The global layer digest the card showed (null: no global configuration file yet). */
-  expect: digestSchema.nullable() }).strict().readonly();
+  expect: digestSchema.nullable() }).readonly();
 export type ModelRoleAssignCommand = z.infer<typeof modelRoleAssignCommandSchema>;
 
 /** What the catalog row says of a model: its name, canonical maker and price evidence (never a tier or role). */

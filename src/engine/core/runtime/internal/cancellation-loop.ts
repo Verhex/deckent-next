@@ -1,10 +1,10 @@
+import { persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
 import type { CancellationRecoveryCommand } from '#engine/core/runs/index.js';
 import { ScopedRuntimeLoop } from './scoped-loop.js';
 
-const loopOptionsSchema = z.object({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: z.number().int().positive().safe(),
-  failureBackoffMs: z.number().int().positive().safe() }).strict();
+const loopOptionsSchema = z.strictObject({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  failureBackoffMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type CancellationRuntimeLoopOptions = Readonly<z.infer<typeof loopOptionsSchema>>;
 export type CancellationRecoveryPageResult = Readonly<{ nextAfterAttemptId: string | null;
   outcomes?: readonly Readonly<{ outcome: Readonly<{ status: string }> }>[] }>;

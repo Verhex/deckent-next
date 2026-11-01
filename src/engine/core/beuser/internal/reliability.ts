@@ -1,14 +1,13 @@
+import { persistedInteger, identitySchema, beuserVerdictSchema, type BeuserVerdict } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
-import { beuserVerdictSchema, type BeuserVerdict } from '#domain/index.js';
 import { BeuserContractError, type BeuserLimits } from '#engine/core/beuser-contract/index.js';
 import { beuserBounded, type BeuserExecutionBudget } from './controller.js';
 
-const count = z.number().int().nonnegative().safe(), rate = z.number().min(0).max(1).finite();
-export const beuserCalibrationSchema = z.object({ revision: identitySchema, blindSetDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  bad: count.positive(), hits: count, good: count.positive(), falseReds: count }).strict()
+const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), rate = z.number().min(0).max(1).finite();
+export const beuserCalibrationSchema = z.strictObject({ revision: identitySchema, blindSetDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  bad: count.positive(), hits: count, good: count.positive(), falseReds: count })
   .refine(row => row.hits <= row.bad && row.falseReds <= row.good).readonly();
-export const beuserReliabilityPolicySchema = z.object({ revision: identitySchema, minHitRate: rate, maxFalseRedRate: rate }).strict().readonly();
+export const beuserReliabilityPolicySchema = z.strictObject({ revision: identitySchema, minHitRate: rate, maxFalseRedRate: rate }).readonly();
 export type BeuserCalibration = z.infer<typeof beuserCalibrationSchema>;
 export interface BeuserReliabilitySample {
   readonly verdict: BeuserVerdict;

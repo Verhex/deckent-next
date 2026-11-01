@@ -1,11 +1,11 @@
-import { displayAddress } from '#platform/index.js';
+import { persistedString, displayAddress } from '#platform/index.js';
 import { ProviderModelListError, readProviderPart, providerListHttpError } from './failure.js';
 import { z } from 'zod';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, parseAnthropicMessagesDefinition } from '#adapters/core/provider-anthropic-messages/index.js';
 import { PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LIMITS, type ProviderConnectKind } from './registry.js';
 import type { ProviderProbeOptions } from './probe.js';
-const workspace = z.object({ id: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u), name: z.string().min(1).max(256), archived_at: z.string().nullable() });
+const workspace = z.object({ id: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u), name: persistedString(z.string().min(1).max(256)), archived_at: z.string().nullable() });
 const page = z.object({ data: z.array(workspace), has_more: z.boolean(), last_id: z.string().nullable() });
 export type ProviderWorkspace = Readonly<{ id: string; name: string }>;
 /** Registry-pinned free metadata read. Redirects, incomplete pagination, invalid data and excess bytes fail closed. */

@@ -4,9 +4,9 @@ import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engi
 import defaults from './work.json' with { type: 'json' };
 
 /** The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
-export const workFactsSchema = z.object({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), pendingProvider: z.string().optional(),
+export const workFactsSchema = z.strictObject({ execution: z.boolean(), registry: z.boolean(), pool: z.boolean(), pendingProvider: z.string().optional(),
   providers: z.array(z.string()).max(16).optional(), kinds: z.array(z.string()).max(256).optional(),
-  images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional() }).strict();
+  images: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/u)).optional() });
 export const WORK_KIND_STAGE_ID = 'work:kind', WORK_POOL_STAGE_ID = 'work:pool';
 /** The coding CLIs a first work kind may run on: the native CLI registry, in its order (the window's choices). */
 export const WORK_PROVIDERS: readonly string[] = nativeCliIds;

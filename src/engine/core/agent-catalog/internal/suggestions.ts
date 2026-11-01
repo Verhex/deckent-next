@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { AGENT_CATALOG_LIMITS, AgentCatalogError, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, encodeCommandProjection, identitySchema, type AgentStanding,
-  type AuditEvent, type CatalogAction, type SignerKey } from '#domain/index.js';
+import { persistedInteger, AGENT_CATALOG_LIMITS, AgentCatalogError, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, encodeCommandProjection, identitySchema, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
+import { z } from 'zod';
+
 
 /**
  * S8-3 `catalog-suggestion v1` (S8-DESIGN §6, §11): one sealed "consider this" record of the catalog aggregator. It changes nothing by itself; a person's
@@ -15,29 +15,29 @@ export const CATALOG_SUGGESTION_STATES = ['open', 'decided', 'dismissed', 'super
 /** The aggregator modes that write a suggestion (`catalogEvolution.mode` off writes nothing); `shadow` rows are records only, never a card. */
 export const CATALOG_SUGGESTION_MODES = Object.freeze(['shadow', 'on'] as const);
 export const catalogSuggestionKeySchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('agent'), agentId: catalogIdSchema, revision: positive, workClass: identitySchema }).strict(),
-  z.object({ kind: z.literal('work-class'), workClass: identitySchema }).strict(),
+  z.strictObject({ kind: z.literal('agent'), agentId: catalogIdSchema, revision: positive, workClass: identitySchema }),
+  z.strictObject({ kind: z.literal('work-class'), workClass: identitySchema }),
   /** A lesson audience (S4B §4.3): the WorkClass family and work target; `null` family = a person's scope-wide entries. */
-  z.object({ kind: z.literal('audience'), workClassFamily: identitySchema.nullable(), workTargetId: identitySchema.nullable() }).strict()]);
-export const catalogLessonRefSchema = z.object({ entryId: identitySchema, revision: positive, contentDigest: digest }).strict();
-const stats = z.record(z.string(), z.unknown());
-export const catalogSuggestionSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, suggestionId: digest, kind: z.enum(CATALOG_SUGGESTION_KINDS),
-  mode: z.enum(CATALOG_SUGGESTION_MODES), key: catalogSuggestionKeySchema, keyDigest: digest, rule: z.object({ id: identitySchema, version: positive, status: z.enum(['provisional', 'calibrated']) }).strict(),
-  registry: z.object({ revision: z.string(), digest }).strict(),
-  window: z.object({ after: counterSchema, firstPosition: counterSchema.nullable(), lastPosition: counterSchema.nullable(), tasks: counterSchema, n: counterSchema, inputDigest: digest }).strict(),
-  stats: stats.nullable(), baseline: stats.nullable(), active: z.object({ agentId: catalogIdSchema, revision: positive, stats }).strict().nullable(), effortRatioMicro: counterSchema.nullable(),
-  proposed: z.discriminatedUnion('kind', [z.object({ kind: z.literal('standing'), to: z.enum(['active', 'redesign-required']) }).strict(), z.object({ kind: z.literal('revise') }).strict(),
-    z.object({ kind: z.literal('agent-draft'), template: identitySchema }).strict(),
-    z.object({ kind: z.literal('skill-draft'), template: identitySchema, lessons: z.array(catalogLessonRefSchema).min(1).max(AGENT_CATALOG_LIMITS.pageMax), lessonSetDigest: digest }).strict()]),
-  producer: z.object({ issuer: identitySchema, subject: identitySchema }).strict(), asOfMs: counterSchema, expiresAtMs: counterSchema }).strict().readonly();
+  z.strictObject({ kind: z.literal('audience'), workClassFamily: identitySchema.nullable(), workTargetId: identitySchema.nullable() })]);
+export const catalogLessonRefSchema = z.strictObject({ entryId: identitySchema, revision: positive, contentDigest: digest });
+const stats = z.record(z.string(), z.unknown().optional());
+export const catalogSuggestionSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, suggestionId: digest, kind: z.enum(CATALOG_SUGGESTION_KINDS),
+  mode: z.enum(CATALOG_SUGGESTION_MODES), key: catalogSuggestionKeySchema, keyDigest: digest, rule: z.strictObject({ id: identitySchema, version: positive, status: z.enum(['provisional', 'calibrated']) }),
+  registry: z.strictObject({ revision: z.string(), digest }),
+  window: z.strictObject({ after: counterSchema, firstPosition: counterSchema.nullable(), lastPosition: counterSchema.nullable(), tasks: counterSchema, n: counterSchema, inputDigest: digest }),
+  stats: stats.nullable(), baseline: stats.nullable(), active: z.strictObject({ agentId: catalogIdSchema, revision: positive, stats }).nullable(), effortRatioMicro: counterSchema.nullable(),
+  proposed: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('standing'), to: z.enum(['active', 'redesign-required']) }), z.strictObject({ kind: z.literal('revise') }),
+    z.strictObject({ kind: z.literal('agent-draft'), template: identitySchema }),
+    z.strictObject({ kind: z.literal('skill-draft'), template: identitySchema, lessons: z.array(catalogLessonRefSchema).min(1).max(AGENT_CATALOG_LIMITS.pageMax), lessonSetDigest: digest })]),
+  producer: z.strictObject({ issuer: identitySchema, subject: identitySchema }), asOfMs: counterSchema, expiresAtMs: counterSchema }).readonly();
 export type CatalogSuggestion = z.infer<typeof catalogSuggestionSchema>;
 export type CatalogSuggestionKey = z.infer<typeof catalogSuggestionKeySchema>;
 export type CatalogLessonRef = z.infer<typeof catalogLessonRefSchema>;
-const actor = z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict();
+const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() });
 /** One state of a suggestion (kept history; `open` → decided | dismissed | superseded once; expiry is read-time: open past `expiresAtMs`). */
-export const catalogSuggestionStateSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, suggestionId: digest, state: z.enum(CATALOG_SUGGESTION_STATES),
+export const catalogSuggestionStateSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, suggestionId: digest, state: z.enum(CATALOG_SUGGESTION_STATES),
   revision: positive, by: actor, atMs: counterSchema, commandId: identitySchema.nullable(), decision: identitySchema.nullable(), supersededBy: digest.nullable(),
-  signed: z.object({ keyId: digest, signatureDigest: digest }).strict().optional() }).strict().readonly();
+  signed: z.strictObject({ keyId: digest, signatureDigest: digest }).optional() }).readonly();
 export type CatalogSuggestionState = z.infer<typeof catalogSuggestionStateSchema>;
 export type StoredCatalogSuggestion = Readonly<{ record: CatalogSuggestion; state: CatalogSuggestionState }>;
 /** Whether an open suggestion's producer key (the key that signed its open state; none or another row: `null`) is no longer active — it reads `superseded` (§8). */
@@ -70,18 +70,18 @@ const scoped = { schemaVersion: z.literal(1), scopeId: identitySchema };
 const signed = catalogSignatureSchema.optional();
 const target = { agentId: catalogIdSchema, revision: positive, workClass: identitySchema, expectedStandingRevision: positive };
 /** S8-4 standing card (a person's terminal act) or a signed, WorkClass-granted AI command; `suggestionId` names the suggestion it decides (null: none). */
-export const standingChangeCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, action: z.enum(['promote', 'demote', 'restore', 'retire']), ...target,
-  suggestionId: digest.nullable(), signed }).strict();
-export const suggestionDismissCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, suggestionId: digest, expectedStateRevision: positive, signed }).strict();
+export const standingChangeCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, action: z.enum(['promote', 'demote', 'restore', 'retire']), ...target,
+  suggestionId: digest.nullable(), signed });
+export const suggestionDismissCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, suggestionId: digest, expectedStateRevision: positive, signed });
 /** A person's bulk card: `reset` (every promoted or narrowed current revision of one WorkClass back to candidate) or, on a revoke card, the one-step
  * demote of every promotion the revoked key signed. `targets` are exactly the rows the card showed (compare-and-set on each). */
-export const standingBulkCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema,
-  reason: z.discriminatedUnion('kind', [z.object({ kind: z.literal('reset'), workClass: identitySchema }).strict(), z.object({ kind: z.literal('signer-revoked'), keyId: digest }).strict()]),
-  targets: z.array(z.object(target).strict()).min(1).max(AGENT_CATALOG_LIMITS.agentsPerScopeMax) }).strict();
-export const suggestionListQuerySchema = z.object({ ...scoped, open: z.boolean().optional(), limit: z.number().int().min(1).max(AGENT_CATALOG_LIMITS.pageMax) }).strict();
-export const suggestionInspectQuerySchema = z.object({ ...scoped, suggestionId: digest }).strict();
+export const standingBulkCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema,
+  reason: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('reset'), workClass: identitySchema }), z.strictObject({ kind: z.literal('signer-revoked'), keyId: digest })]),
+  targets: z.array(z.strictObject(target)).min(1).max(AGENT_CATALOG_LIMITS.agentsPerScopeMax) });
+export const suggestionListQuerySchema = z.strictObject({ ...scoped, open: z.boolean().optional(), limit: persistedInteger().min(1).max(AGENT_CATALOG_LIMITS.pageMax) });
+export const suggestionInspectQuerySchema = z.strictObject({ ...scoped, suggestionId: digest });
 /** The promotions a revoked key signed that are still in effect (`keyId`: only that key's). */
-export const revokedPromotionsQuerySchema = z.object({ ...scoped, keyId: digest.optional() }).strict();
+export const revokedPromotionsQuerySchema = z.strictObject({ ...scoped, keyId: digest.optional() });
 export type StandingChangeCommand = z.infer<typeof standingChangeCommandSchema>;
 export type SuggestionDismissCommand = z.infer<typeof suggestionDismissCommandSchema>;
 export type StandingBulkCommand = z.infer<typeof standingBulkCommandSchema>;

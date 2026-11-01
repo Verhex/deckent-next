@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { attemptIdentitySchema, counterSchema, identitySchema, type AttemptIdentity } from '#domain/index.js';
 
-export const cancellationRecoveryQuerySchema = z.object({
+export const cancellationRecoveryQuerySchema = z.strictObject({
   scopeId: identitySchema, afterAttemptId: identitySchema.nullable(), limit: counterSchema.positive(), now: counterSchema,
-}).strict().readonly();
-export const cancellationRecoveryPageSchema = z.object({
+}).readonly();
+export const cancellationRecoveryPageSchema = z.strictObject({
   identities: z.array(attemptIdentitySchema).readonly(), nextAfterAttemptId: identitySchema.nullable(),
-}).strict().readonly();
+}).readonly();
 export type CancellationRecoveryQuery = z.infer<typeof cancellationRecoveryQuerySchema>;
 export type CancellationRecoveryPage = z.infer<typeof cancellationRecoveryPageSchema>;
 export interface CancellationRecoveryQueryStore {

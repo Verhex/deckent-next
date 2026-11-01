@@ -542,7 +542,7 @@ function hardcodeInventory(sources, sourceChecker, policy) {
     function schema(node) {
       if (!node || seen.has(node)) return;
       seen.add(node); schemas.add(node);
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'default') defaultLeaves(node.arguments[0]);
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && ['default', 'prefault'].includes(node.expression.name.text)) defaultLeaves(node.arguments[0]);
       const resolved = resolveValue(node);
       if (resolved !== node) schema(resolved);
       ts.forEachChild(node, schema);
