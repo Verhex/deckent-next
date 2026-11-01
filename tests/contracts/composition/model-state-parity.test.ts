@@ -51,7 +51,8 @@ async function parity(f: Fixture, locale: 'en' | 'tr') {
     expect(rendered).toContain(word);
     const row = model.choices.find(choice => JSON.stringify(choice.reference) === JSON.stringify(reference))!;
     // The /model row leads with its own On/Off activation word (U2 one active; this host has no activation reader, so Off), then the shared decision.
-    expect(row.blocked).toBe(state.invocable ? null : word); expect(row.detail).toBe(`${t('tui.model.state.off', {}, locale)} · ${word}`);
+    expect(row.blocked).toBe(state.invocable ? null : word);
+    expect(row.detail).toBe(`${t('tui.model.state.off', {}, locale)} · ${word} · ${t('terminal.admin.model.toolsSupported', {}, locale)}`);
     expect(provider.invocableModels!.find(item => JSON.stringify(item.reference) === JSON.stringify(reference))!.availability).toEqual(state);
     // FIX9 N2: the note names the connection kind (none registered here, so the provider id) and the model's native id, then the shared decision.
     expect(provider.notes).toContain(`${reference.providerId} / ${entry.nativeId}: ${word}`);

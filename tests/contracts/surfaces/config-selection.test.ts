@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
-import { configDefinitions } from '#engine/core/config/index.js';
+import { configDefinitions, projectInputSchema } from '#engine/core/config/index.js';
 import { configValueModel } from '#surfaces/core/config/index.js';
 import { configChoiceDeclaration, configEntryAllowed, configStepper, stepConfigNumber, configNumberText } from '#platform/index.js';
 import { composeCore } from '#composition/core/root/index.js';
@@ -10,17 +9,17 @@ const field = (key: string, schema: unknown, value: unknown = null): ConfigField
 describe('CS-1 registry coverage and selection contract', () => {
   it('every registered settable leaf, including representative dynamic records, declares a choice source', () => {
     composeCore(); const missing: string[] = [];
-    function visit(schema: z.ZodTypeAny, path: string) {
-      if (schema instanceof z.ZodDefault) return visit(schema._def.innerType, path);
-      if (schema instanceof z.ZodNullable || schema instanceof z.ZodOptional || schema instanceof z.ZodReadonly) return visit(schema.unwrap(), path);
-      if (schema instanceof z.ZodEffects) return visit(schema.innerType(), path);
-      if (schema instanceof z.ZodUnion || schema instanceof z.ZodDiscriminatedUnion) { for (const option of schema.options) visit(option, path); return; }
-      if (schema instanceof z.ZodObject) { for (const [key, child] of Object.entries(schema.shape)) visit(child as z.ZodTypeAny, `${path}.${key}`); return; }
+    type Schema = { $ref?: string; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[]; properties?: Record<string, Schema>; items?: Schema; additionalProperties?: boolean | Schema };
+    function visit(schema: Schema, path: string) {
+      expect(schema.$ref, `unvisited schema reference at ${path}`).toBeUndefined();
+      const options = schema.anyOf ?? schema.oneOf ?? schema.allOf;
+      if (options) { for (const option of options) visit(option, path); return; }
+      if (schema.properties) { for (const [key, child] of Object.entries(schema.properties)) visit(child, `${path}.${key}`); return; }
       if (!configChoiceDeclaration(path) && !configEntryAllowed(path)) missing.push(path);
-      if (schema instanceof z.ZodArray) visit(schema.element, `${path}.0`);
-      if (schema instanceof z.ZodRecord) visit(schema.valueSchema, `${path}.sample`);
+      if (schema.items) visit(schema.items, `${path}.0`);
+      if (typeof schema.additionalProperties === 'object') visit(schema.additionalProperties, `${path}.sample`);
     }
-    for (const [key, definition] of configDefinitions()) visit(definition.schema, key);
+    for (const [key, definition] of configDefinitions()) visit(projectInputSchema(definition.schema), key);
     expect([...new Set(missing)]).toEqual([]);
   });
   it('nullable fields select null; max_workers selects auto; literals and structured descendants are hidden', async () => {

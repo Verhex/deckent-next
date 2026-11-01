@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MODEL_INVOCATION_DELTA_TEXT_MAX, modelInvocationDeltaSchema, splitModelInvocationDelta } from '#domain/index.js';
+import { MODEL_INVOCATION_DELTA_TEXT_MAX, modelInvocationDeltaSchema, sanitizeIssues, splitModelInvocationDelta } from '#domain/index.js';
 
 describe('model invocation delta edges', () => {
   it('accepts text of exactly 1 and exactly the maximum length', () => {
     expect(modelInvocationDeltaSchema.safeParse({ kind: 'text', text: 'a' }).success).toBe(true);
     expect(modelInvocationDeltaSchema.safeParse({ kind: 'reasoning', text: 'a'.repeat(MODEL_INVOCATION_DELTA_TEXT_MAX) }).success).toBe(true);
+    expect(modelInvocationDeltaSchema.safeParse({ kind: 'text', text: '😀'.repeat(MODEL_INVOCATION_DELTA_TEXT_MAX / 2) }).success).toBe(true);
   });
 
   it('refuses empty text with a too_small issue on the text path', () => {
@@ -17,12 +18,13 @@ describe('model invocation delta edges', () => {
     const result = modelInvocationDeltaSchema.safeParse({ kind: 'reasoning', text: 'a'.repeat(MODEL_INVOCATION_DELTA_TEXT_MAX + 1) });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]).toMatchObject({ code: 'too_big', path: ['text'] });
+    expect(modelInvocationDeltaSchema.safeParse({ kind: 'text', text: `${'😀'.repeat(MODEL_INVOCATION_DELTA_TEXT_MAX / 2)}x` }).success).toBe(false);
   });
 
   it('refuses an unknown kind with an invalid_union_discriminator issue', () => {
     const result = modelInvocationDeltaSchema.safeParse({ kind: 'answer', text: 'x' });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]).toMatchObject({ code: 'invalid_union_discriminator', path: ['kind'] });
+    expect(sanitizeIssues(result.error!.issues)[0]).toEqual({ code: 'invalid_union_discriminator', path: ['kind'] });
   });
 
   it('refuses unknown extra keys (strict) and missing text', () => {
