@@ -987,7 +987,7 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     expect(attempts).toBe(refusedAttempts);
   }
 
-  let read = 0;
+  let read = 0, complete: ((value: Awaited<ReturnType<NonNullable<ProviderWindowPort['inspectCustody']>>>) => void) | undefined;
   const preflight = providerPanelPort('/fixture', 'scope', {
     providerConnect: { kinds: [{ id: 'fixture-plan', labelKey: 'siwc.card.title', available: true, endpointDefault: null,
       endpointEditable: false, keyRequired: false, secretName: null, probePath: null, endpointChoices: [] }],
@@ -996,7 +996,18 @@ it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and 
     inspectSecretStore: async () => { read++; return { schemaVersion: 1, backend: 'core.secret-store.encrypted-file@1', writable: true, enumerable: true, status: 'ready', code: null, personalCustody: { status: 'refused', reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } }; },
   }, {}, 'en', error => String(error));
   const known = await preflight.inspect();
-  expect(read).toBe(1); expect(known.kinds[0]?.blocked).toContain('/tmp (mode 1777)'); expect(known.notes).toContain(known.kinds[0]?.blocked);
-  expect(providerPanelTree(known, terminalPanelLabels('en').provider, false, preflight.siwc?.connection).items[0]?.children).toBeUndefined();
+  expect(read).toBe(0); expect(known.kinds[0]?.blocked).toBeNull();
+  const refusal = await preflight.inspectCustody!();
+  expect(read).toBe(1); expect(refusal?.reason).toContain('/tmp (mode 1777)');
+  const ui = mount(panel('provider', { provider: { ...preflight, inspectCustody: () => new Promise(resolve => { complete = resolve; }) } }).element);
+  await until(() => ui.frame().includes('ChatGPT'), 'choices before custody inspection completes');
+  expect(ui.frame()).not.toContain('Loading');
+  complete!(refusal);
+  await until(() => ui.frame().includes('/tmp (mode 1777)'), 'known custody refusal on the row');
+  expect(ui.frame()).toContain('[blocked]');
+  const stalled = providerPanelPort('/fixture', 'scope', { providerConnect: { kinds: [], endpoint: () => ({ ok: false, reason: 'unused' }),
+    probe: async () => { throw new Error('must not probe'); } }, siwc: { connection: 'fixture-plan', execute: async () => { throw new Error('must not sign in'); } },
+    inspectSecretStore: () => new Promise(() => undefined) }, {}, 'en', String);
+  expect(await stalled.inspectCustody!()).toBeNull();
 
 });

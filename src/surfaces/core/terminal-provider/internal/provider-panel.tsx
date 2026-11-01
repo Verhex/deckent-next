@@ -64,6 +64,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
   const [problem, setProblem] = useState<string | null>(null), [refusals, setRefusals] = useState<Readonly<Record<string, string>>>({});
+  const [custody, setCustody] = useState<Readonly<{ id: string; reason: string }> | null>(null);
   const connecting = useRef<string | null>(null);
   // Stage 1: the scope budget row (create / change) above the kinds; a budget read failure only hides the row.
   const [budget, setBudget] = useState<BudgetPanelView | null>(null);
@@ -74,12 +75,17 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
   useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
+  useEffect(() => {
+    let active = true;
+    port.inspectCustody?.().then(result => { if (active) setCustody(result); }).catch(() => {});
+    return () => { active = false; };
+  }, [port]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };
   // A refused connection belongs beside the alternatives, not in the onboarding host's fatal-error path.
   const failed = (error: unknown) => {
-    const typed = error as { code?: string; params?: Readonly<Record<string, string | number>> }, locale = port.siwc?.locale;
-    const message = (locale && typed?.code ? ErrorRegistry.get(typed.code, locale, typed.params)?.message : null) ?? errorText?.(error)
-      ?? (error instanceof Error ? error.message : String(error));
+    const typed = error as { code?: string; params?: Readonly<Record<string, string | number>> }, locale = port.locale ?? port.siwc?.locale;
+    const entry = typed?.code ? ErrorRegistry.get(typed.code, locale, typed.params) : undefined;
+    const message = [errorText?.(error) ?? entry?.message ?? (error instanceof Error ? error.message : String(error)), entry?.suggestion].filter(Boolean).join('\n');
     setProblem(message);
     const id = connecting.current;
     if (id) setRefusals(previous => ({ ...previous, [id]: message }));
@@ -243,11 +249,11 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     }
     if (target.endpointEditable) setStep({ kind: 'endpoint', target }); else beginConnection(target, null);
   };
-  const body = [...(problem ? [{ spans: [span(problem, { role: 'warning' as const })] }] : []), ...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
+  const body = [...(problem ? [{ spans: [span(problem, { role: 'warning' as const })] }] : []), ...(custody ? [{ spans: [span(custody.reason, { role: 'warning' as const })] }] : []), ...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
-  const tree = withRows(providerPanelTree({ ...view, kinds: view.kinds.map(kind => refusals[kind.id] ? { ...kind, blocked: refusals[kind.id]! } : kind) }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
+  const tree = withRows(providerPanelTree({ ...view, kinds: view.kinds.map(kind => refusals[kind.id] || custody?.id === kind.id ? { ...kind, blocked: refusals[kind.id] ?? custody!.reason } : kind) }, words, Boolean(port.connectModel), port.siwc?.connection, port.subscription && { kinds: port.subscription.kinds, action: port.subscription.words.action }),
     budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache));
   // PV 2a: Enter on a CLI subscription this host cannot run opens its refusal card, which lists the rows that can be used here.
   const refused = (outcome: PickerOutcome) => {
@@ -255,7 +261,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     if (!row || !card?.kinds.includes(row.id)) return;
     setStep({ kind: 'refusal', ...card.refusal(row.id, view.kinds.filter(kind => !kind.blocked && !kind.legacy).map(kind => kind.label)) });
   };
-  return <PickerWindow title={title(view.title)} body={body} bodyRows={problem || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
+  return <PickerWindow title={title(view.title)} body={body} bodyRows={problem || custody || view.notes.length ? REFUSAL_BODY_ROWS : BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
     tree={laterLabel ? { ...tree, items: [...tree.items.slice(0, 1), { id: LATER, label: laterLabel }, ...tree.items.slice(1)] } : tree} onResult={result => chosen(result, state)} onOutcome={refused} />;
 }
 /** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
