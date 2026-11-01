@@ -10,8 +10,8 @@ import { encodeLostDispatchWrite, type LostDispatchStore, dispatchReleaseReceipt
 import { assertDispatchFenceCommand } from './fence.js';
 import { assessLostDispatch, dispatchFenceReceiptId } from './loss.js';
 
-const commandSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
-  expectedRunRevision: counterSchema, expectedAttemptRevision: counterSchema }).strict();
+const commandSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+  expectedRunRevision: counterSchema, expectedAttemptRevision: counterSchema });
 /** Trusted observer resolves the stored supervisor profile and exact request. It never launches a worker. */
 export interface LostDispatchObserver {
   observe(record: DispatchRecord): ReturnType<ExecutionSupervisor['observe']>;

@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { finishReasonAccepted, reasoningDetailsSchema } from './response-dialect.js';
@@ -18,14 +19,14 @@ import { checkedToolCalls, couldBeDeclaredTool } from './tool-calls.js';
 export const OPENAI_CHAT_STREAM_WIRE_FACTOR = 16;
 export const OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES = 1024;
 
-const deltaSchema = z.object({ role: z.literal('assistant').optional(), content: z.string().nullable().optional(),
+const deltaSchema = z.looseObject({ role: z.literal('assistant').optional(), content: z.string().nullable().optional(),
   reasoning: z.string().nullable().optional(), reasoning_content: z.string().nullable().optional(),
-  refusal: z.string().nullable().optional() }).passthrough();
-const choiceSchema = z.object({ index: z.literal(0), delta: deltaSchema,
-  finish_reason: z.string().nullable().optional() }).passthrough();
-const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion.chunk').optional(),
-  created: z.number().int().nonnegative().safe(), model: z.string().min(1), choices: z.array(choiceSchema).max(1),
-  usage: z.unknown().optional(), system_fingerprint: z.unknown().optional() }).passthrough();
+  refusal: z.string().nullable().optional() });
+const choiceSchema = z.looseObject({ index: z.literal(0), delta: deltaSchema,
+  finish_reason: z.string().nullable().optional() });
+const chunkSchema = z.looseObject({ id: z.string().min(1), object: z.literal('chat.completion.chunk').optional(),
+  created: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), model: z.string().min(1), choices: z.array(choiceSchema).max(1),
+  usage: z.unknown().optional(), system_fingerprint: z.unknown().optional() });
 
 type NativeReasoning = { content: string | null; contentSeen: boolean; details: JsonObject[]; detailsSeen: boolean };
 /** Keep exact native continuation separately from presentation; null signals malformed structured data. */

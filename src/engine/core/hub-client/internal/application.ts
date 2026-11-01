@@ -1,7 +1,6 @@
-import { z } from 'zod';
-import { AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema, type HubRevocationFeed,
-  type VerifiedPrincipal } from '#domain/index.js';
+import { persistedInteger, AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
 import { ed25519KeyId, sha256, t, type Locale } from '#platform/index.js';
+import { z } from 'zod';
 import { verifyHubRevocationFeed, hubRevocationWatermark, requireHubRevocationContinuation } from '#engine/core/hub/index.js';
 import { canSignCatalogActions } from '#engine/core/agent-catalog/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
@@ -10,9 +9,9 @@ import { HubClientError, hubClientCommandSchema, hubInstallCommandSchema, hubSou
 import { decodeHubBundle, encodeHubBundle } from './bundle.js';
 import { acceptClientFeed, clientFeedKey, localRevokedKeyIds, verifyClientBundle } from './verification.js';
 import { installClientBundles, retireClientInstall, verifyInstalledClientBundle } from './install.js';
-const sourceCommand = hubClientCommandSchema.extend({ expectedRevision: z.number().int().positive().nullable(), publicKey: signerPublicKeySchema,
-  endpoint: z.string().min(1).max(2048), local: z.boolean().default(false), label: z.string().min(1).max(256),
-  trustPolicy: z.string().default(HUB_TRUST_POLICIES.addedSourceDefault) }).strict();
+const sourceCommand = hubClientCommandSchema.extend({ expectedRevision: persistedInteger().positive().nullable(), publicKey: signerPublicKeySchema,
+  endpoint: z.string().min(1).max(2048), local: z.boolean().prefault(false), label: z.string().min(1).max(256),
+  trustPolicy: z.string().prefault(HUB_TRUST_POLICIES.addedSourceDefault) }).strict();
 const packageQuery = hubClientCommandSchema.omit({ commandId: true }).extend({ packageId: z.string().min(1).max(256), version: z.string().optional() }).strict();
 const ref = (principal: VerifiedPrincipal) => ({ issuer: principal.issuer, subject: principal.subject });
 /** Offline client transition owner. Network fetch/serve and CLI/MCP commands are deliberately separate slices. */
@@ -28,8 +27,8 @@ export class HubClientApplication {
     try { return await work(store, principal); } finally { store.close(); }
   }
   async revocationCards(input: unknown, credential?: unknown, locale?: Locale) {
-    const query = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, after: z.number().int().safe().nonnegative().default(0),
-      limit: z.number().int().min(1).max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax) }).strict().parse(input);
+    const query = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, after: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative().prefault(0),
+      limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax) }).parse(input);
     const messages = { withdrawn: t('hub.revocation.withdrawn', {}, locale), restored: t('hub.revocation.restored', {}, locale),
       revoked: t('hub.revocation.revoked', {}, locale), yanked: t('hub.revocation.yanked', {}, locale) };
     return this.read(query.scopeId, credential, async (store, principal) => {
@@ -54,7 +53,7 @@ export class HubClientApplication {
   }
   /** Scheduled/offline tick: record withdrawal even when transport fails. No network path is created here. */
   async refreshRevocations(input: unknown, credential?: unknown, signal: AbortSignal = new AbortController().signal) {
-    const command = hubClientCommandSchema.extend({ force: z.boolean().default(false) }).strict().parse(input);
+    const command = hubClientCommandSchema.extend({ force: z.boolean().prefault(false) }).strict().parse(input);
     await this.admit('refresh', command.scopeId, credential);
     const state = await this.read(command.scopeId, credential, async store => ({ source: await this.source(store, command.scopeId, command.hubId), feed: await store.feed(command.scopeId, command.hubId) }));
     const due = command.force || !state.feed || state.feed.catchup?.complete === false || this.deps.catalog.now() >= state.feed.issuedAtMs + HUB_REVOCATION_REFRESH_MS
@@ -129,7 +128,7 @@ export class HubClientApplication {
     return principal;
   }
   async listSources(input: unknown, credential?: unknown): Promise<readonly HubSource[]> {
-    const query = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().parse(input);
+    const query = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema }).parse(input);
     return this.read(query.scopeId, credential, store => store.sources(query.scopeId));
   }
   private async source(store: HubClientStore, scopeId: string, hubId: string) {
@@ -179,7 +178,7 @@ export class HubClientApplication {
     });
   }
   async removeSource(input: unknown, credential?: unknown) {
-    const command = hubClientCommandSchema.extend({ expectedRevision: z.number().int().positive() }).strict().parse(input);
+    const command = hubClientCommandSchema.extend({ expectedRevision: persistedInteger().positive() }).strict().parse(input);
     return this.write('sources.remove', command, credential, async store => {
       const previous = await this.source(store, command.scopeId, command.hubId);
       if (previous.revision !== command.expectedRevision) throw new HubClientError('HUB_INSTALL_CONFLICT');
@@ -216,7 +215,7 @@ export class HubClientApplication {
   installFile(input: unknown, credential?: unknown) { return this.install(input, credential, false); }
   updateFile(input: unknown, credential?: unknown) { return this.install(input, credential, true); }
   async uninstall(input: unknown, credential?: unknown) {
-    const command = hubClientCommandSchema.extend({ packageId: z.string().min(1).max(256), expectedRevision: z.number().int().positive() }).strict().parse(input);
+    const command = hubClientCommandSchema.extend({ packageId: z.string().min(1).max(256), expectedRevision: persistedInteger().positive() }).strict().parse(input);
     return this.write('uninstall', command, credential, async (store, principal) => {
       const installed = await store.install(command.scopeId, command.hubId, command.packageId);
       if (!installed || installed.state !== 'installed' || installed.revision !== command.expectedRevision) throw new HubClientError('HUB_INSTALL_CONFLICT');

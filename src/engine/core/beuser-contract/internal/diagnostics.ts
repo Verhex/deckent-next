@@ -3,19 +3,19 @@ import { identitySchema as id, counterSchema, beuserBindingSchema, beuserTranscr
 
 /** Diagnostic observation, never a replacement for acceptance, calibration or cleanup evidence. Walk20: a persona out of wait patience
  * is `persona-patience` (reason `patience`); a loop or only observing is `persona-stuck`. */
-export const beuserStuckFindingSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
+export const beuserStuckFindingSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
   branch: id, persona: id, code: z.enum(['persona-stuck', 'persona-patience']), reason: z.enum(['loop', 'observing', 'patience']), outcome: z.literal('RED'),
   screen: z.string(), screenRef: id, screenDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   evidenceRefs: z.array(z.string().regex(/^sha256:[a-f0-9]{64}$/u)).min(1),
   controllerValidity: z.enum(['valid', 'invalid', 'unknown']),
-}).strict().refine(v => v.branch === v.binding.identity.taskId && (v.code === 'persona-patience') === (v.reason === 'patience')).readonly();
-export const beuserDiagnosticSchema = z.object({ schemaVersion: z.literal(1),
-  trace: z.array(z.object({ evidenceRef: id, kind: beuserTranscriptEntrySchema.unwrap().shape.kind,
-    artifactRef: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict().readonly()),
+}).refine(v => v.branch === v.binding.identity.taskId && (v.code === 'persona-patience') === (v.reason === 'patience')).readonly();
+export const beuserDiagnosticSchema = z.strictObject({ schemaVersion: z.literal(1),
+  trace: z.array(z.strictObject({ evidenceRef: id, kind: beuserTranscriptEntrySchema.unwrap().shape.kind,
+    artifactRef: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).readonly()),
   finding: beuserStuckFindingSchema.nullable(),
   /** Owner 2026-10-31: how many model calls reserved tokens on a provider count and how many on a transport's byte estimate (absent: older record). */
-  reservation: z.object({ providerCount: counterSchema, estimated: counterSchema }).strict().readonly().optional(),
-}).strict().refine(v => new Set(v.trace.map(row => row.evidenceRef)).size === v.trace.length
+  reservation: z.strictObject({ providerCount: counterSchema, estimated: counterSchema }).readonly().optional(),
+}).refine(v => new Set(v.trace.map(row => row.evidenceRef)).size === v.trace.length
   && (!v.finding || v.trace.some(row => row.kind === 'screen' && row.evidenceRef === v.finding!.screenRef)
     && v.finding.evidenceRefs.every(ref => v.trace.some(row => row.artifactRef === ref)))).readonly();
 export type BeuserDiagnostic = z.infer<typeof beuserDiagnosticSchema>;

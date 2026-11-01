@@ -9,10 +9,10 @@ import { ProviderSpendError } from './error.js';
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const actorSchema = verifiedPrincipalSchema.unwrap().pick({ id: true, issuer: true, subject: true,
   assurance: true }).strict().readonly();
-const authorizationSchema = z.object({ revision: identitySchema, ruleId: identitySchema }).strict().readonly();
-const receiptSchema = z.object({ schemaVersion: z.literal(1), command: providerSpendAuditCommandSchema,
-  actor: actorSchema, authorization: authorizationSchema, examinedCheckpoint: z.unknown(),
-  startedAtMs: counterSchema, completedAtMs: counterSchema, digest: digestSchema }).strict().readonly();
+const authorizationSchema = z.strictObject({ revision: identitySchema, ruleId: identitySchema }).readonly();
+const receiptSchema = z.strictObject({ schemaVersion: z.literal(1), command: providerSpendAuditCommandSchema,
+  actor: actorSchema, authorization: authorizationSchema, examinedCheckpoint: z.unknown().optional(),
+  startedAtMs: counterSchema, completedAtMs: counterSchema, digest: digestSchema }).readonly();
 
 export interface ProviderSpendAuditReceiptInput {
   readonly command: ProviderSpendAuditCommand;

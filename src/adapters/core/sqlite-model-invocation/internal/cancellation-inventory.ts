@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
@@ -7,7 +8,7 @@ import { modelInvocationCancellationInventoryQuerySchema, ModelInvocationStoreEr
 import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationControl, invocationControlSelect } from './control.js';
 
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
+const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647) });
 type Row = Readonly<Record<string, unknown>>;
 const select = `SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,
     ${invocationControlSelect}

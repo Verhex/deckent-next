@@ -7,8 +7,8 @@ import { HandoffError, patchDigest, workspacePatchSchema, type AcceptedPredecess
 import { GitWorkspaceBroker, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { completeHiddenBase, diffAgainstBase, hashAlgorithmOf, listBase, readWorkspace, snapshotDigest, SnapshotBudget, type Snapshot } from './snapshot.js';
 import { applyWorkspacePatchChanges } from './patch-apply.js';
-const recordSchema = z.object({ schemaVersion: z.literal(1), state: z.enum(['applying', 'ready']),
-  bindingDigest: z.string().regex(/^[a-f0-9]{64}$/), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+const recordSchema = z.strictObject({ schemaVersion: z.literal(1), state: z.enum(['applying', 'ready']),
+  bindingDigest: z.string().regex(/^[a-f0-9]{64}$/), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/) });
 async function durable(path: string, value: z.infer<typeof recordSchema>) {
   const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try { await file.writeFile(JSON.stringify(value)); await file.sync(); } finally { await file.close(); }

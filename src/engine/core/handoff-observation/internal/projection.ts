@@ -3,10 +3,10 @@ import { attemptIdentitySchema, sameAttemptIdentity, taskDependencyIds, type Run
 import { handoffStartRecordSchema, type HandoffStartRecord } from './receipt.js';
 /** One engine projection shared by Run/Task inspection and monitor; a dependency alone never proves delivery. */
 // Older views omit kind; every fresh projection identifies the evidence without rewriting its stored receipt.
-export const handoffReceiptViewSchema = z.object({ kind: z.enum(['handoff-received', 'workspace-started-from-patch']).optional(),
+export const handoffReceiptViewSchema = z.strictObject({ kind: z.enum(['handoff-received', 'workspace-started-from-patch']).optional(),
   source: attemptIdentitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/),
   bindingDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/).optional()
-}).strict().superRefine((event, ctx) => {
+}).superRefine((event, ctx) => {
   if (!handoffStartRecordSchema.safeParse({ schemaVersion: 1, identity: event.source,
     events: [{ ...event, kind: event.kind ?? 'handoff-received' }] }).success)
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid handoff evidence' });

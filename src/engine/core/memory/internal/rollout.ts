@@ -1,9 +1,8 @@
+import { persistedInteger, assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
+import { MEMORY_AUTOMATION_MODES } from '#platform/index.js';
 import { z } from 'zod';
 import rolloutSeed from '../../../../../assets/memory/rollout.json' with { type: 'json' };
 import corpusSeed from '../../../../../assets/memory/injection-corpus.json' with { type: 'json' };
-import { assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation,
-  type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
-import { MEMORY_AUTOMATION_MODES } from '#platform/index.js';
 import { MemoryJournalError, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
 import { screenMemoryCandidate } from './distil.js';
 import { rederiveMemorySourceModels } from './evaluate.js';
@@ -21,23 +20,23 @@ export const MEMORY_ROLLOUT_SECTIONS = Object.freeze(['extraction', 'verificatio
 export type MemoryRolloutSection = typeof MEMORY_ROLLOUT_SECTIONS[number];
 export type MemoryRolloutModes = Readonly<Record<MemoryRolloutSection, typeof MEMORY_AUTOMATION_MODES[number]>>;
 const PER_MILLE = 1000;
-const count = z.number().int().nonnegative().safe(), perMille = z.number().int().min(0).max(PER_MILLE);
-const criterionSchema = z.object({ id: identitySchema, metric: z.enum(MEMORY_ROLLOUT_METRICS), minSample: count.optional(), minPerMille: perMille.optional(),
-  maxPerMille: perMille.optional(), maxCount: count.optional() }).strict().readonly();
-const phaseSchema = z.object({ phase: count, section: z.enum(MEMORY_ROLLOUT_SECTIONS), set: z.enum(MEMORY_AUTOMATION_MODES), reached: z.array(z.enum(MEMORY_AUTOMATION_MODES)).min(1).readonly(),
-  criteria: z.array(identitySchema).max(32).readonly() }).strict().refine(phase => phase.reached.includes(phase.set)).readonly();
-const registrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
+const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), perMille = persistedInteger().min(0).max(PER_MILLE);
+const criterionSchema = z.strictObject({ id: identitySchema, metric: z.enum(MEMORY_ROLLOUT_METRICS), minSample: count.optional(), minPerMille: perMille.optional(),
+  maxPerMille: perMille.optional(), maxCount: count.optional() }).readonly();
+const phaseSchema = z.strictObject({ phase: count, section: z.enum(MEMORY_ROLLOUT_SECTIONS), set: z.enum(MEMORY_AUTOMATION_MODES), reached: z.array(z.enum(MEMORY_AUTOMATION_MODES)).min(1).readonly(),
+  criteria: z.array(identitySchema).max(32).readonly() }).refine(phase => phase.reached.includes(phase.set)).readonly();
+const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
   /** The newest sealed records read per source (an audit page and the store reads are bounded; `complete` false when more exist). */
-  scan: z.object({ evaluations: count.positive(), contextEvents: count.positive(), candidates: count.positive() }).strict().readonly(),
-  phases: z.array(phaseSchema).min(1).max(16).readonly(), criteria: z.array(criterionSchema).min(1).max(32).readonly() }).strict()
+  scan: z.strictObject({ evaluations: count.positive(), contextEvents: count.positive(), candidates: count.positive() }).readonly(),
+  phases: z.array(phaseSchema).min(1).max(16).readonly(), criteria: z.array(criterionSchema).min(1).max(32).readonly() })
   .refine(registry => registry.phases.every((phase, index) => index === 0 || phase.phase > registry.phases[index - 1]!.phase)
     && new Set(registry.criteria.map(row => row.id)).size === registry.criteria.length
     && registry.phases.every(phase => phase.criteria.every(id => registry.criteria.some(row => row.id === id)))).readonly();
 export type MemoryRolloutRegistry = z.infer<typeof registrySchema>;
 export type MemoryRolloutCriterion = MemoryRolloutRegistry['criteria'][number];
 export const MEMORY_ROLLOUT: MemoryRolloutRegistry = Object.freeze(registrySchema.parse(rolloutSeed));
-const corpusSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, note: z.string(), items: z.array(z.object({ id: identitySchema, kind: identitySchema,
-  title: z.string().min(1), body: z.string().min(1) }).strict().readonly()).min(1).max(256).readonly() }).strict().readonly();
+const corpusSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, note: z.string(), items: z.array(z.strictObject({ id: identitySchema, kind: identitySchema,
+  title: z.string().min(1), body: z.string().min(1) }).readonly()).min(1).max(256).readonly() }).readonly();
 /** N28 (§8): the versioned poisoning corpus; the phase 4 gate counts its items' shadow evaluations on the installation. */
 export const MEMORY_INJECTION_CORPUS = Object.freeze(corpusSchema.parse(corpusSeed));
 /** One corpus item as the distiller writes a worker `fact` claim (rule E3): the content whose keyed digest a shadow record names. */

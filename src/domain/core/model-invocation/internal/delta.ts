@@ -9,8 +9,8 @@ export const MODEL_INVOCATION_DELTA_TEXT_MAX = 16_384;
  * thinking text and is never the answer.
  */
 export const modelInvocationDeltaSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('text'), text: z.string().min(1).max(MODEL_INVOCATION_DELTA_TEXT_MAX) }).strict(),
-  z.object({ kind: z.literal('reasoning'), text: z.string().min(1).max(MODEL_INVOCATION_DELTA_TEXT_MAX) }).strict(),
+  z.strictObject({ kind: z.literal('text'), text: z.string().min(1).max(MODEL_INVOCATION_DELTA_TEXT_MAX) }),
+  z.strictObject({ kind: z.literal('reasoning'), text: z.string().min(1).max(MODEL_INVOCATION_DELTA_TEXT_MAX) }),
 ]).readonly();
 export type ModelInvocationDelta = z.infer<typeof modelInvocationDeltaSchema>;
 /** Receives deltas in wire order; it must not throw or block. */

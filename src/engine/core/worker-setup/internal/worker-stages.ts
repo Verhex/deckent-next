@@ -5,12 +5,12 @@ import type { SetupDecision, SetupStageContext } from '#engine/core/setup/index.
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 /** BR1: the worker image as composition observes it (configuration, this installation's newest receipt, a read-only `image inspect` of the
  * configured image or else the receipt's, the Git path from coding detection). Absent until an installation can be read. */
-export const workerFactsSchema = z.object({ configured: imageId.nullable(), receipt: z.object({ imageId, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
+export const workerFactsSchema = z.strictObject({ configured: imageId.nullable(), receipt: z.strictObject({ imageId, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
   // A v3 receipt's build duration (`timings.totalMs`), as the receipt view reports it for the consent card's estimate.
   durationMs: z.number().nonnegative().finite().optional(),
-  images: z.array(z.object({ imageId, providers: z.array(z.string()), tagVersion: z.string().regex(/^r[1-9][0-9]*(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u).nullable().optional() }).passthrough()).optional() }).strict().nullable(),
+  images: z.array(z.looseObject({ imageId, providers: z.array(z.string()), tagVersion: z.string().regex(/^r[1-9][0-9]*(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u).nullable().optional() })).optional() }).nullable(),
   provider: z.string().optional(), providerPending: z.boolean().optional(), acquisition: workerImageStateSchema.nullable().optional(),
-  image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: z.string().min(1).max(4096).nullable() }).strict();
+  image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: z.string().min(1).max(4096).nullable() });
 type WorkerFacts = z.infer<typeof workerFactsSchema>;
 /** The part of the execution family's facts these stages read (the family validates the whole shape with its own schema). */
 type Facts = Readonly<{ runtimes: readonly Readonly<{ id: string; support: string; daemon: string; path: string | null }>[]; worker?: WorkerFacts }>;

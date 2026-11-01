@@ -1,7 +1,6 @@
+import { persistedInteger, evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema, type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema,
-  type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
 import type { ExecutionPool } from '#engine/core/runs/index.js';
 import { hashInstallationProfilePayload, installationProfileSchema, profilePayload, type InstallationProfile } from './profile.js';
 
@@ -16,23 +15,22 @@ export class InstallationProfileError extends Error {
   constructor(readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }
 }
 
-const choicesSchema = z.object({
-  principal: z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly(),
+const choicesSchema = z.strictObject({ principal: z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly(),
   allowShutdown: z.boolean(),
-}).strict().readonly();
-const neededConfigSchema = z.object({
-  execution: z.object({}).passthrough(),
-  admission: z.object({ registry: z.unknown(), poolId: identitySchema,
-    executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
-  }).passthrough().nullable(),
-  service: z.object({ identity: z.object({ scopeId: identitySchema, serviceId: identitySchema }).strict().nullable() }).passthrough(),
-}).passthrough();
-const resolvedPathsSchema = z.object({
+}).readonly();
+const neededConfigSchema = z.looseObject({
+  execution: z.looseObject({}),
+  admission: z.looseObject({ registry: z.unknown().optional(), poolId: identitySchema,
+    executionSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlightSlots: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  }).nullable(),
+  service: z.looseObject({ identity: z.strictObject({ scopeId: identitySchema, serviceId: identitySchema }).nullable() }),
+});
+const resolvedPathsSchema = z.strictObject({
   config: immutableJsonObjectSchema,
-  layout: z.object({ schemaVersion: z.number().int().positive().safe(), revision: identitySchema,
-    root: z.string().min(1), bootstrapConfigPath: z.string().min(1) }).strict().readonly(),
-  paths: z.record(z.string().min(1)).readonly(),
-}).strict().readonly();
+  layout: z.strictObject({ schemaVersion: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), revision: identitySchema,
+    root: z.string().min(1), bootstrapConfigPath: z.string().min(1) }).readonly(),
+  paths: z.record(z.string(), z.string().min(1)).readonly(),
+}).readonly();
 
 export interface InstallationPreviewPorts {
   resolvePaths(projectRoot: string, authoredConfig: JsonObject): Promise<{ readonly config: JsonObject;

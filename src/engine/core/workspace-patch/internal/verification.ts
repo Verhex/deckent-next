@@ -8,8 +8,8 @@ import { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from './adopt
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** What a verified adoption binds (B06-2b): one Task of the named kind, run on this exact commit with the installation's current
  * profile for that kind, accepted by its recorded criteria. Not independent review, live activation or product acceptance. */
-export const adoptionVerificationSchema = z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, kind: identitySchema,
-  runRevision: counterSchema, commit: oid, profileFingerprint: digest, criteria: z.array(digest).min(1).readonly() }).strict().readonly();
+export const adoptionVerificationSchema = z.strictObject({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, kind: identitySchema,
+  runRevision: counterSchema, commit: oid, profileFingerprint: digest, criteria: z.array(digest).min(1).readonly() }).readonly();
 export type AdoptionVerification = z.infer<typeof adoptionVerificationSchema>;
 
 /** Design §5.4: only `accepted` verifies; an unfinished, uncertain or cancelled verification is never acceptance. */

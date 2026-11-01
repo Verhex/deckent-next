@@ -11,10 +11,10 @@ const path = z.string().min(1).max(4096).refine(value => isAbsolute(value) && !v
  * this connection's private state directory (run dir `<stateDir>/run`, preflight record), the catalog row's minimum CLI version, and the
  * delegated-use consent (enforced by S3-3; recorded here so the profile digest seals it). Deckent never opens the config directory's files.
  */
-export const nativeCliHeadlessDefinitionSchema = z.object({ schemaVersion: z.literal(1), executable: path, configDir: path, stateDir: path,
+export const nativeCliHeadlessDefinitionSchema = z.strictObject({ schemaVersion: z.literal(1), executable: path, configDir: path, stateDir: path,
   ownerUid: counterSchema, minCliVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   delegatedUse: delegatedUseConsentSchema.nullable(),
-}).strict().readonly();
+}).readonly();
 export type NativeCliHeadlessDefinition = z.infer<typeof nativeCliHeadlessDefinitionSchema>;
 export const isNativeCliHeadlessAdapter = (adapter: Readonly<{ id: string; version: number }>) =>
   adapter.id === NATIVE_CLI_HEADLESS_ADAPTER.id && adapter.version === NATIVE_CLI_HEADLESS_ADAPTER.version;

@@ -3,26 +3,26 @@ import { containerEvidenceSchema } from './container.js';
 import type { CollectedOutputFile } from './output-files.js';
 import { attemptIdentitySchema, sameAttemptIdentity, identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
 
-export const sandboxRequestSchema = z.object({
+export const sandboxRequestSchema = z.strictObject({
   protocolVersion: z.literal(1), identity: attemptIdentitySchema,
   workspace: z.string().min(1), argv: z.array(z.string()).min(1).readonly(),
-}).strict().readonly();
+}).readonly();
 export type SandboxRequest = z.infer<typeof sandboxRequestSchema>;
-export const workerIncarnationSchema = z.object({ kind: z.literal('container'), id: z.string().regex(/^[a-f0-9]{64}$/), startedAt: z.string().min(1).max(40).refine(value => Number.isFinite(Date.parse(value)) && !value.startsWith('0001-')) }).strict().readonly();
+export const workerIncarnationSchema = z.strictObject({ kind: z.literal('container'), id: z.string().regex(/^[a-f0-9]{64}$/), startedAt: z.string().min(1).max(40).refine(value => Number.isFinite(Date.parse(value)) && !value.startsWith('0001-')) }).readonly();
 const supervisorResultSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
-  z.object({ kind: z.literal('unknown'), reasonCode: identitySchema }).strict(),
+  z.strictObject({ kind: z.literal('exited'), ...processExitCauseShape }),
+  z.strictObject({ kind: z.literal('unknown'), reasonCode: identitySchema }),
 ]).superRefine((result, context) => {
   if (result.kind === 'exited' && !isValidExitCause(result)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
   }
 });
-export const sandboxObservationSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional() }).strict().readonly();
-export const sandboxOutputSchema = z.object({ stdout: z.string(), stderr: z.string(), completeness: z.literal('partial') }).strict().readonly();
-export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional(),
+export const sandboxObservationSchema = z.strictObject({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional() }).readonly();
+export const sandboxOutputSchema = z.strictObject({ stdout: z.string(), stderr: z.string(), completeness: z.literal('partial') }).readonly();
+export const sandboxResultSchema = z.strictObject({ handle: identitySchema, result: supervisorResultSchema, worker: workerIncarnationSchema.optional(), container: containerEvidenceSchema.optional(),
   outputCompleteness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string(), interrupted: z.boolean(),
   interruptCause: z.enum(['deadline', 'inactivity', 'cancel']).optional(),
-}).strict().readonly();
+}).readonly();
 export type SandboxResult = z.infer<typeof sandboxResultSchema>;
 /** R3 (Astra 2642 F1): the one mapping of the FIRST stop the supervisor saw (its own deadline, or the execute signal with its reason) to
  * the recorded cause. Supervisors call it where they decide to stop, before any cleanup, so a later abort can never relabel the stop. */

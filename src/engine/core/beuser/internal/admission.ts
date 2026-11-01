@@ -1,13 +1,12 @@
-import { z } from 'zod';
-import { identitySchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection } from '#domain/index.js';
+import { persistedInteger, identitySchema, beuserEvaluatorPrincipalRef, verifiedPrincipalSchema, isBeuserEvaluatorPrincipal, sameAttemptIdentity, encodeCommandProjection, acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
-import { acceptanceSubjectSchema, beuserBindingSchema, beuserSealedRubricSchema, type BeuserBinding } from '#domain/index.js';
+import { z } from 'zod';
 import { BeuserContractError, pinBeuserLimits, pinBeuserWalkerSummary, assertBeuserAccess, type BeuserContext } from '#engine/core/beuser-contract/index.js';
 import { runAdmissionSchema, runReservationCommandSchema, type RunAdmissionApplication, type RunReservationApplication } from '#engine/core/runs/index.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-const cellSchema = z.object({ taskId: identitySchema, branchId: identitySchema, journeyDigest: digest, repeat: z.number().int().positive().safe(), summary: z.unknown() }).strict();
-const campaignSchema = z.object({ run: runAdmissionSchema, candidate: acceptanceSubjectSchema, candidateDigest: digest, cells: z.array(cellSchema).min(1), limits: z.unknown(), rubric: beuserSealedRubricSchema }).strict();
+const cellSchema = z.strictObject({ taskId: identitySchema, branchId: identitySchema, journeyDigest: digest, repeat: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), summary: z.unknown().optional() });
+const campaignSchema = z.strictObject({ run: runAdmissionSchema, candidate: acceptanceSubjectSchema, candidateDigest: digest, cells: z.array(cellSchema).min(1), limits: z.unknown().optional(), rubric: beuserSealedRubricSchema });
 export type BeuserCampaign = ReturnType<typeof pinBeuserCampaign>;
 export interface BeuserExecutionProfile { readonly taskKind: string; readonly evaluator: { readonly id: string; readonly version: number } }
 export function pinBeuserCampaign(input: unknown, profile: BeuserExecutionProfile) {

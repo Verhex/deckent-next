@@ -1,9 +1,8 @@
+import { persistedInteger, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { DISPATCH_PREPARATION_PHASES, NERVOUS_ACTIVITY_STATES } from '#domain/core/audit/index.js';
 import { RecoveryError, recoveryEffectGateSchema, type RecoveryErrorCode } from './gate.js';
-
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** S6R-DESIGN §12: a recovery case moves only forward — `open` (reserved for S6R-5's model call in flight), `gated` (gate computed), `decided`
  * (reserved: S6R-5's sealed model decision before its apply), then one final state, `applied` or `escalated`. */
@@ -31,10 +30,10 @@ const ESCALATIONS: Readonly<Partial<Record<RecoveryErrorCode, RecoveryEscalation
 export function recoveryEscalationCode(error: unknown): RecoveryEscalationCode | null { return error instanceof RecoveryError ? ESCALATIONS[error.code] ?? null : null; }
 
 export const recoveryDecisionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('continue-new-attempt'), decisionId: digest, causeClass: z.enum(RECOVERY_CAUSE_CLASSES), signature: digest, standingRef: identitySchema,
+  z.strictObject({ action: z.literal('continue-new-attempt'), decisionId: digest, causeClass: z.enum(RECOVERY_CAUSE_CLASSES), signature: digest, standingRef: identitySchema,
     /** S6R-5: the registry note code the decision passes to the next Attempt (absent: none). */
-    note: recoveryNoteCodeSchema.optional() }).strict(),
-  z.object({ action: z.literal('escalate-human'), code: z.enum(RECOVERY_ESCALATION_CODES) }).strict(),
+    note: recoveryNoteCodeSchema.optional() }),
+  z.strictObject({ action: z.literal('escalate-human'), code: z.enum(RECOVERY_ESCALATION_CODES) }),
 ]).readonly();
 export type RecoveryDecision = z.infer<typeof recoveryDecisionSchema>;
 /**
@@ -43,14 +42,14 @@ export type RecoveryDecision = z.infer<typeof recoveryDecisionSchema>;
  * alpha.56 G1: `basis: 'would-stop'` is the shadow input of a detection whose stop step did not run — its termination is the hypothetical one a
  * live stop would yield (no receipt). Such a case is only decided in shadow and never stored, held or applied.
  */
-export const recoveryCaseSchema = z.object({ schemaVersion: z.literal(1), caseId: digest, revision: counterSchema.positive(), state: z.enum(RECOVERY_CASE_STATES),
+export const recoveryCaseSchema = z.strictObject({ schemaVersion: z.literal(1), caseId: digest, revision: counterSchema.positive(), state: z.enum(RECOVERY_CASE_STATES),
   identity: attemptIdentitySchema,
-  detection: z.object({ eventId: identitySchema, ruleId: identitySchema, ruleVersion: counterSchema.positive(), registryRevision: identitySchema, evidenceDigest: digest,
-    activity: z.enum(NERVOUS_ACTIVITY_STATES).nullable(), launcherPhase: z.enum(DISPATCH_PREPARATION_PHASES).nullable() }).strict().readonly(),
+  detection: z.strictObject({ eventId: identitySchema, ruleId: identitySchema, ruleVersion: counterSchema.positive(), registryRevision: identitySchema, evidenceDigest: digest,
+    activity: z.enum(NERVOUS_ACTIVITY_STATES).nullable(), launcherPhase: z.enum(DISPATCH_PREPARATION_PHASES).nullable() }).readonly(),
   basis: z.literal('would-stop').optional(),
-  termination: z.object({ receiptId: identitySchema.nullable(), kind: z.enum(['worker-absent', 'supervisor-exit', 'created-container-absent']), exitCode: z.number().int().safe().nullable() }).strict().readonly(),
+  termination: z.strictObject({ receiptId: identitySchema.nullable(), kind: z.enum(['worker-absent', 'supervisor-exit', 'created-container-absent']), exitCode: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable() }).readonly(),
   gate: recoveryEffectGateSchema, evidenceDigest: digest, decision: recoveryDecisionSchema.optional(), openedAtMs: counterSchema, updatedAtMs: counterSchema,
-}).strict().superRefine((value, context) => {
+}).superRefine((value, context) => {
   const kind = value.decision?.action;
   if ((value.state === 'applied') !== (kind === 'continue-new-attempt') || (value.state === 'escalated') !== (kind === 'escalate-human') || value.updatedAtMs < value.openedAtMs
     || (value.termination.receiptId === null) !== (value.basis === 'would-stop'))

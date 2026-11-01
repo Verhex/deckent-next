@@ -1,32 +1,33 @@
+import { persistedInteger } from '#domain/index.js';
 import { z } from 'zod';
 import type { JsonObject } from '#domain/index.js';
 import type { NativeJsonHttpParsed } from '#adapters/core/provider-http-json/index.js';
 import { openAiChatWireObjectSchema, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
 import { checkedToolCalls } from './tool-calls.js';
 
-const count = z.number().int().nonnegative().safe();
-const usageSchema = z.object({ input_tokens: count, output_tokens: count, total_tokens: count,
-  input_tokens_details: z.object({ cached_tokens: count, cache_write_tokens: count.optional() }).passthrough(),
-  output_tokens_details: z.object({ reasoning_tokens: count }).passthrough() }).passthrough()
+const count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const usageSchema = z.looseObject({ input_tokens: count, output_tokens: count, total_tokens: count,
+  input_tokens_details: z.looseObject({ cached_tokens: count, cache_write_tokens: count.optional() }),
+  output_tokens_details: z.looseObject({ reasoning_tokens: count }) })
   .refine(u => u.total_tokens === u.input_tokens + u.output_tokens && u.input_tokens_details.cached_tokens <= u.input_tokens
     && (u.input_tokens_details.cache_write_tokens ?? 0) <= u.input_tokens - u.input_tokens_details.cached_tokens
     && u.output_tokens_details.reasoning_tokens <= u.output_tokens);
 const part = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('output_text'), text: z.string() }).passthrough(),
-  z.object({ type: z.literal('refusal'), refusal: z.string() }).passthrough(),
+  z.looseObject({ type: z.literal('output_text'), text: z.string() }),
+  z.looseObject({ type: z.literal('refusal'), refusal: z.string() }),
 ]);
 export const responsesOutputItemSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('message'), id: z.string().min(1), role: z.literal('assistant'), content: z.array(part),
-    status: z.enum(['completed', 'in_progress', 'incomplete']).optional() }).passthrough(),
-  z.object({ type: z.literal('function_call'), id: z.string().min(1), call_id: z.string().min(1), name: z.string().min(1), arguments: z.string(),
-    status: z.enum(['completed', 'in_progress', 'incomplete']).optional() }).passthrough(),
-  z.object({ type: z.literal('reasoning'), id: z.string().min(1), encrypted_content: z.string().nullable().optional(),
-    summary: z.array(z.object({ type: z.literal('summary_text'), text: z.string() }).passthrough()) }).passthrough(),
+  z.looseObject({ type: z.literal('message'), id: z.string().min(1), role: z.literal('assistant'), content: z.array(part),
+    status: z.enum(['completed', 'in_progress', 'incomplete']).optional() }),
+  z.looseObject({ type: z.literal('function_call'), id: z.string().min(1), call_id: z.string().min(1), name: z.string().min(1), arguments: z.string(),
+    status: z.enum(['completed', 'in_progress', 'incomplete']).optional() }),
+  z.looseObject({ type: z.literal('reasoning'), id: z.string().min(1), encrypted_content: z.string().nullable().optional(),
+    summary: z.array(z.looseObject({ type: z.literal('summary_text'), text: z.string() })) }),
 ]);
-const responseSchema = z.object({ id: z.string().min(1), object: z.literal('response'), created_at: count, model: z.string().min(1),
+const responseSchema = z.looseObject({ id: z.string().min(1), object: z.literal('response'), created_at: count, model: z.string().min(1),
   status: z.enum(['completed', 'incomplete', 'failed']), output: z.array(responsesOutputItemSchema),
   usage: usageSchema.nullable(), error: z.unknown().optional(), incomplete_details: z.unknown().optional(),
-  service_tier: z.string().optional().nullable() }).passthrough();
+  service_tier: z.string().optional().nullable() });
 
 /** Validate the final provider object, then project onto the existing typed facade. Reasoning is a subset of output, never charged twice. */
 export function parseResponsesResponse(raw: unknown, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, enforceOutputLimit = true, functionNamespace?: string): NativeJsonHttpParsed {

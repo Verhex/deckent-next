@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open, opendir, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -5,12 +6,12 @@ import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { resourceSampleSchema, type ResourceSample } from '#engine/index.js';
 import type { ResourceObservationSettings } from '#platform/index.js';
-export const trimSchema = z.object({ identity: attemptIdentitySchema, throughMs: z.number().int().nonnegative().safe() }).strict();
+export const trimSchema = z.strictObject({ identity: attemptIdentitySchema, throughMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type Trim = z.infer<typeof trimSchema>;
-const legacySchema = z.object({ schemaVersion: z.literal(1), trimmedBeforeMs: z.number().int().nonnegative().safe().nullable(),
-  lastTrim: trimSchema.nullable().optional(), samples: z.array(resourceSampleSchema) }).strict();
-const headerSchema = z.object({ schemaVersion: z.literal(2), createdAtMs: z.number().int().nonnegative().safe() }).strict();
-const checkpointSchema = z.object({ schemaVersion: z.literal(2), lastTrim: trimSchema.nullable() }).strict();
+const legacySchema = z.strictObject({ schemaVersion: z.literal(1), trimmedBeforeMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
+  lastTrim: trimSchema.nullable().optional(), samples: z.array(resourceSampleSchema) });
+const headerSchema = z.strictObject({ schemaVersion: z.literal(2), createdAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
+const checkpointSchema = z.strictObject({ schemaVersion: z.literal(2), lastTrim: trimSchema.nullable() });
 export interface Segment { path: string; name: string; bytes: number; dev: number; ino: number; createdAtMs: number;
   samples: ResourceSample[]; damaged: boolean; legacy: boolean; lastTrim: Trim | null }
 export async function privateFile(path: string, writable = false): Promise<FileHandle> {

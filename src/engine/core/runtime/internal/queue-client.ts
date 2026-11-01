@@ -42,7 +42,7 @@ export function runtimeTargetQueueTerminal(call: RuntimeValidationCall, interact
     return result;
   };
   const answer = async (input: QueueAnswer) => {
-    const command = queueAnswerSchema.parse(input), result = z.object({ schemaVersion: z.literal(1), digest: z.literal(command.digest), allowed: z.literal(true) }).strict().parse(await call('answerTargetQueue', command)); return result;
+    const command = queueAnswerSchema.parse(input), result = z.strictObject({ schemaVersion: z.literal(1), digest: z.literal(command.digest), allowed: z.literal(true) }).parse(await call('answerTargetQueue', command)); return result;
   };
   const execute = async (input: QueueExecute) => queueExecutionSchema.parse(await call('executeTargetQueue', queueExecuteSchema.parse(input)));
   return async (input: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => {

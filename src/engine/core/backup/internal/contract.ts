@@ -5,9 +5,9 @@ const path = z.string().min(1).max(4096).refine(value => Array.from(value).every
 const common = { schemaVersion: z.literal(1), scopeId: z.string().min(1).max(256), set: path };
 /** Passphrases are a separate credential argument, never part of a command, decision, receipt or audit event. */
 export const backupCommandSchema = z.discriminatedUnion('action', [
-  z.object({ ...common, action: z.literal('create') }).strict(),
-  z.object({ ...common, action: z.literal('verify') }).strict(),
-  z.object({ ...common, action: z.literal('restore'), target: path, confirmTarget: path.optional() }).strict(),
+  z.strictObject({ ...common, action: z.literal('create') }),
+  z.strictObject({ ...common, action: z.literal('verify') }),
+  z.strictObject({ ...common, action: z.literal('restore'), target: path, confirmTarget: path.optional() }),
 ]);
 export type BackupCommand = z.infer<typeof backupCommandSchema>;
 export interface BackupResult {

@@ -1,17 +1,17 @@
+import { persistedInteger, withConfigWriteLock } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open, rename, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { autonomyShadowDigest, autonomyShadowRecordSchema, sameAutonomyShadowTicket, type AutonomyShadowRecord, type AutonomyShadowStore } from '#engine/index.js';
-import { withConfigWriteLock } from '#platform/index.js';
 import limits from './limits.json' with { type: 'json' };
 
 /** Store bounds (data, not code): one active file plus one rotated predecessor, so the store never exceeds two files of `maxFileBytes`. */
-export const autonomyShadowStoreLimitsSchema = z.object({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: z.number().int().positive().safe(),
-  maxFileBytes: z.number().int().positive().safe(), maxFileEntries: z.number().int().positive().safe(), lockTimeoutMs: z.number().int().positive().safe() }).strict().readonly();
+export const autonomyShadowStoreLimitsSchema = z.strictObject({ fileName: z.string().regex(/^[a-z0-9.-]{1,64}$/u), maxLineBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  maxFileBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxFileEntries: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), lockTimeoutMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export type AutonomyShadowStoreLimits = z.infer<typeof autonomyShadowStoreLimitsSchema>;
 export const AUTONOMY_SHADOW_STORE_LIMITS: AutonomyShadowStoreLimits = autonomyShadowStoreLimitsSchema.parse(limits);
-const lineSchema = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/u), record: z.unknown() }).strict();
+const lineSchema = z.strictObject({ sha256: z.string().regex(/^[a-f0-9]{64}$/u), record: z.unknown().optional() });
 
 type Read = { records: AutonomyShadowRecord[]; entries: number; bytes: number; endsWithNewline: boolean };
 /** Reads one store file without following a link; bytes past the bound and every line whose digest or schema fails are skipped, never trusted. */

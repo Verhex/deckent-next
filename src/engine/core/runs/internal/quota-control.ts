@@ -7,8 +7,8 @@ import type { AuditStore } from '#engine/core/audit/index.js';
 import type { PoolHoldAuditRecorder } from './pool-hold.js';
 import { RunStoreError } from './store.js';
 
-export const quotaReleaseCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  commandId: clientCommandIdSchema, poolId: identitySchema.optional(), channelId: z.string().min(1).max(256) }).strict();
+export const quotaReleaseCommandSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  commandId: clientCommandIdSchema, poolId: identitySchema.optional(), channelId: z.string().min(1).max(256) });
 export const quotaReleaseReceiptSchema = quotaReleaseCommandSchema.extend({ poolId: identitySchema, poolIds: z.array(identitySchema).readonly(), released: counterSchema, atMs: counterSchema }).strict().readonly();
 export type QuotaReleaseCommand = z.infer<typeof quotaReleaseCommandSchema>;
 export type QuotaReleaseReceipt = z.infer<typeof quotaReleaseReceiptSchema>;

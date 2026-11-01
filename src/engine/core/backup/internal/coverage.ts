@@ -1,9 +1,9 @@
 import { z } from 'zod';
 const id = z.string().min(1).max(256), digest = z.string().regex(/^[a-f0-9]{64}$/u);
-export const backupCoverageResourceSchema = z.object({ resourceId: id, owner: id, version: id,
-  transfer: z.enum(['portable', 'protected-renewable-session', 'non-exportable', 'shared']) }).strict().readonly();
-export const backupCoverageManifestSchema = z.object({ schemaVersion: z.literal(1), installationId: id, generation: id,
-  planDigest: digest, resources: z.array(backupCoverageResourceSchema).max(10000) }).strict().readonly();
+export const backupCoverageResourceSchema = z.strictObject({ resourceId: id, owner: id, version: id,
+  transfer: z.enum(['portable', 'protected-renewable-session', 'non-exportable', 'shared']) }).readonly();
+export const backupCoverageManifestSchema = z.strictObject({ schemaVersion: z.literal(1), installationId: id, generation: id,
+  planDigest: digest, resources: z.array(backupCoverageResourceSchema).max(10000) }).readonly();
 export type BackupCoverageResource = z.infer<typeof backupCoverageResourceSchema>;
 export type BackupCoverageManifest = z.infer<typeof backupCoverageManifestSchema>;
 /** Trusted owner contribution, never request-supplied executable code. Protected sessions use their existing logout/revoke owner. */

@@ -31,8 +31,8 @@ export function siwcResponsesBody(input: unknown) {
 /** Account-specific catalog; preserve server ordering and exact slugs, with no inferred capability or alias. */
 export function parseSiwcModels(input: unknown): readonly Readonly<{ slug: string; display_name: string }>[] {
   const copied = openAiChatWireObjectSchema.safeParse(input);
-  const parsed = copied.success && z.object({ models: z.array(z.object({ slug: z.string().min(1).max(I.modelFieldMaxChars),
-    display_name: z.string().min(1).max(I.modelFieldMaxChars), visibility: z.string().min(1) }).passthrough()).max(I.modelsMaxEntries) }).passthrough().safeParse(copied.data);
+  const parsed = copied.success && z.looseObject({ models: z.array(z.looseObject({ slug: z.string().min(1).max(I.modelFieldMaxChars),
+    display_name: z.string().min(1).max(I.modelFieldMaxChars), visibility: z.string().min(1) })).max(I.modelsMaxEntries) }).safeParse(copied.data);
   if (!parsed || !parsed.success || Buffer.byteLength(JSON.stringify(copied.data)) > I.modelsMaxBytes
     || new Set(parsed.data.models.map(model => model.slug)).size !== parsed.data.models.length) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   return Object.freeze(parsed.data.models.filter(model => model.visibility === I.visibility)

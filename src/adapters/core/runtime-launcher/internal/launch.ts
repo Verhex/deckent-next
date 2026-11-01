@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { callerEnvironment } from '#platform/index.js';
 
 const path = z.string().min(1).refine(value => !value.includes('\0') && isAbsolute(value));
-const inputSchema = z.object({ executable: path, entry: path, cwd: path, logPath: path, env: z.record(z.string(), z.string()) }).strict();
+const inputSchema = z.strictObject({ executable: path, entry: path, cwd: path, logPath: path, env: z.record(z.string(), z.string()) });
 export type DetachedRuntimeLaunchInput = z.infer<typeof inputSchema>;
 export type RuntimeLauncherErrorCode = 'RUNTIME_LAUNCH_INVALID' | 'RUNTIME_LAUNCH_FAILED' | 'RUNTIME_LAUNCH_UNSUPPORTED';
 export class RuntimeLauncherError extends Error {

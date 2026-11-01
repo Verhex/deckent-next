@@ -6,8 +6,8 @@ import { counterSchema, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE
   parseModelInvocationCancellationCommand, parseModelInvocationCancellationReceipt } from '#domain/index.js';
 import { ModelInvocationStoreError, type ModelInvocationCancellationAdmission, type ModelInvocationCancellationStore, type ModelInvocationCancellationResult } from './port.js';
 const envelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
-const admission = z.object({ command: modelInvocationCancellationCommandSchema, actor: modelActivationActorSchema,
-  authorization: modelActivationAuthorizationSchema, requestedAtMs: counterSchema }).strict().readonly();
+const admission = z.strictObject({ command: modelInvocationCancellationCommandSchema, actor: modelActivationActorSchema,
+  authorization: modelActivationAuthorizationSchema, requestedAtMs: counterSchema }).readonly();
 export function parseModelInvocationCancellationAdmission(input: unknown): ModelInvocationCancellationAdmission {
   try { return admission.parse(envelope.parse(input)); }
   catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }

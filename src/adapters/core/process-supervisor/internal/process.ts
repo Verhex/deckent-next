@@ -1,15 +1,15 @@
+import { persistedInteger, callerEnvironment } from '#platform/index.js';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { supervisorCommandSchema, validateSupervisorReply, SupervisorError,
   type SupervisorCommand, type SupervisorReply, type SandboxRequest, type ExecutionSupervisor } from '#engine/index.js';
-import { callerEnvironment } from '#platform/index.js';
 const processString = z.string().refine(value => !value.includes('\0'));
-const optionsSchema = z.object({ executable: processString.pipe(z.string().min(1)), args: z.array(processString).readonly(),
-  cwd: processString.pipe(z.string().min(1)), timeoutMs: z.number().int().positive().max(2_147_483_647),
-  maxInputBytes: z.number().int().positive().safe(), maxOutputBytes: z.number().int().positive().safe(),
-}).strict().readonly();
+const optionsSchema = z.strictObject({ executable: processString.pipe(z.string().min(1)), args: z.array(processString).readonly(),
+  cwd: processString.pipe(z.string().min(1)), timeoutMs: persistedInteger().positive().max(2_147_483_647),
+  maxInputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxOutputBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+}).readonly();
 export type ProcessSupervisorOptions = z.infer<typeof optionsSchema>;
 /** Internal trusted worker-control subprocess; not a public execution or authorization endpoint.
  * One bounded command per process. Transport loss never proves worker termination and never retries.

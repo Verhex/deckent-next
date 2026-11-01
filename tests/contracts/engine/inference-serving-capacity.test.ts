@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InferenceServingProfile } from '#domain/index.js';
+import { inferenceServingConfigSchema, parseInferenceServingConfig, type InferenceServingProfile } from '#domain/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceTokenBudget, loopbackMetricsUrl, previewEmptyInferenceSlot, roleContextCeiling } from '#engine/index.js';
 
 const profile: InferenceServingProfile = {
@@ -36,6 +36,16 @@ describe('inference serving capacity', () => {
     expect(capacity.maxNumSeqs).toBeLessThanOrEqual(profile.calibration.computeCap);
     expect(capacity.totalTokenBudget).toBeGreaterThan(0);
     expect(roleContextCeiling(profile, 'worker')).toBe(65536);
+    // A valid JSON exponent can overflow the host number while reading a retained config.
+    const overflow = JSON.parse('1e309') as number;
+    const section = (row: InferenceServingProfile) => ({ schemaVersion: 1, activeProfileId: row.id, profiles: [row] });
+    const retained = section({ ...profile, hardware: { ...profile.hardware, vramGbPerGpu: overflow } });
+    expect(parseInferenceServingConfig(retained).profiles[0]?.hardware.vramGbPerGpu).toBe(Infinity);
+    expect(inferenceServingConfigSchema.safeParse(section({ ...profile, model: { ...profile.model, deltaNetStateGbPerSeq: overflow } })).success).toBe(true);
+    expect(inferenceServingConfigSchema.safeParse(section({ ...profile, hardware: { ...profile.hardware, vramGbPerGpu: -Infinity } })).success).toBe(false);
+    expect(inferenceServingConfigSchema.safeParse(section({ ...profile, model: { ...profile.model, weightGb: NaN } })).success).toBe(false);
+    expect(inferenceServingConfigSchema.safeParse(section({ ...profile, hardware: { ...profile.hardware, gpus: overflow } })).success).toBe(false);
+    expect(inferenceServingConfigSchema.safeParse(section({ ...profile, serving: { ...profile.serving, gpuMemUtil: overflow } })).success).toBe(false);
   });
 
   it('builds docker launcher argv without latest tag drift', () => {

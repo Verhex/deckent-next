@@ -1,5 +1,5 @@
+import { persistedNumber, canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
 import { z } from 'zod';
-import { canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { HubServerError, type HubServerContext } from './ports.js';
 import { hubInvitationSchema, hubAccountSchema, hubChallengeSchema, hubPersonalSchema, hubSessionSchema } from './service-contract.js';
@@ -69,7 +69,7 @@ export class HubAccounts {
       }
       for (const area of ['sessions', 'challenges', 'rates'] as const) for (const row of app.rows(data, area)) {
         const expires = area === 'sessions' ? hubSessionSchema.parse(row.value).expiresAtMs : area === 'challenges' ? hubChallengeSchema.parse(row.value).expiresAtMs
-          : z.object({ expiresAtMs: z.number() }).parse(row.value).expiresAtMs;
+          : z.object({ expiresAtMs: persistedNumber(z.number()) }).parse(row.value).expiresAtMs;
         if (expires <= now) data.remove(area, row.id);
       }
       for (const row of app.rows(data, 'invitations')) {

@@ -1,5 +1,6 @@
-import { z } from 'zod';
+import { persistedInteger, persistedUrl } from '#domain/index.js';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
+import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
 import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/index.js';
 /**
@@ -19,43 +20,43 @@ const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 const routePathSchema = z.string().max(128).regex(/^(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$/u);
 /** One model's Responses wire route (path under the endpoint, documented dialect, source). The registry's shipped rows and (M4) a registered
  * catalog row's `connect.route` (the model id then comes from the row) are parsed by this one schema. */
-export const providerProtocolRouteSchema = z.object({ modelId: z.string().min(1), path: routePathSchema,
+export const providerProtocolRouteSchema = z.strictObject({ modelId: z.string().min(1), path: routePathSchema,
   dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
-  source: z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict() }).strict();
+  source: z.strictObject({ url: persistedUrl().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }) });
 /** One metadata-priced model's verified first-party endpoint tag and token field (shipped rows and, M4, a catalog row's `connect.route`). */
-export const providerMetadataRouteSchema = z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
-  tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: z.string().url().startsWith('https:'),
-  observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict();
-const kindSchema = z.object({
+export const providerMetadataRouteSchema = z.strictObject({ modelId: z.string().min(1), endpointTag: z.string().min(1),
+  tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: persistedUrl().startsWith('https:'),
+  observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) });
+const kindSchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u),
   /** The catalog key of the kind's name (a surface resolves it in the person's language). */
   labelKey: z.string().regex(/^tui\.provider\.kind\.[A-Za-z]+$/u),
   available: z.boolean(),
   /** İ-12 (owner 2026-10-25, v3): what using the kind costs — a subscription, a local server, or metered API money. Surfaces list the no-spend
    * classes first (`PROVIDER_CONNECT_BILLING` order). A row that names none is treated as metered (the class that needs a budget). */
-  billing: z.enum(PROVIDER_CONNECT_BILLING).default('metered'),
+  billing: z.enum(PROVIDER_CONNECT_BILLING).prefault('metered'),
   /** `choices`: known addresses offered as a list (owner 2026-10-08: values are chosen; a typed address is the last row's narrow exception). */
-  endpoint: z.object({ default: z.string().url().startsWith('https://').nullable(), editable: z.boolean(),
-    choices: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u), labelKey: z.string().regex(/^tui\.provider\.endpoint\.choice\.[A-Za-z]+$/u),
+  endpoint: z.strictObject({ default: persistedUrl().startsWith('https://').nullable(), editable: z.boolean(),
+    choices: z.array(z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u), labelKey: z.string().regex(/^tui\.provider\.endpoint\.choice\.[A-Za-z]+$/u),
       // Every listed address passes the same rule as a typed one (https, or plain http only to this machine).
-      url: z.string().url().refine(url => providerEndpoint(url).ok) }).strict().readonly()).readonly().default([]) }).strict(),
-  probe: z.object({ path: z.string().startsWith('/').max(128), auth: z.discriminatedUnion('type', [z.object({ type: z.literal('bearer') }).strict(),
-    z.object({ type: z.literal('header'), name: header }).strict()]), headers: z.record(header, z.string().max(128)), listsModels: z.boolean(), page: z.object({ limitParam: z.string().regex(/^[a-z_]+$/u), max: positiveLimit() }).strict().optional() }).strict().nullable(),
+      url: persistedUrl().refine(url => providerEndpoint(url).ok) }).readonly()).readonly().prefault([]) }),
+  probe: z.strictObject({ path: z.string().startsWith('/').max(128), auth: z.discriminatedUnion('type', [z.strictObject({ type: z.literal('bearer') }),
+    z.strictObject({ type: z.literal('header'), name: header })]), headers: z.record(header, z.string().max(128)), listsModels: z.boolean(), page: z.strictObject({ limitParam: z.string().regex(/^[a-z_]+$/u), max: positiveLimit() }).optional() }).nullable(),
   /** The secret-store name of the key: fixed per vendor row, or (the generic row, Jev da5312fb) derived per connection from the endpoint's host. */
-  key: z.object({ required: z.boolean(), secretName: secretNameSchema.nullable(),
-    derive: z.object({ from: z.literal('endpoint-host'), prefix: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}_$/u) }).strict().optional() }).strict()
+  key: z.strictObject({ required: z.boolean(), secretName: secretNameSchema.nullable(),
+    derive: z.strictObject({ from: z.literal('endpoint-host'), prefix: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}_$/u) }).optional() })
     .refine(key => (key.secretName === null) === (key.derive !== undefined)).nullable(),
   /** `models connect`: adapter, chat path and seed (seed null: bounded endpoint model discovery or an already declared exact reference).
    * Connect null: the kind stores a key but cannot bind a model. */
-  connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
+  connect: z.strictObject({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
     /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
      * adapter connects only where its isolation realm is usable, on every installation alike. */
-    catalogOnly: z.boolean().default(false), protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
+    catalogOnly: z.boolean().prefault(false), protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().prefault(false),
     /** Codex headless (owner 2026-10-31): a worker CLI kind that also writes a headless invocation profile per connected model (its CLI registry entry
      * declares the headless step for `protocolFamily`); the worker image gate and worker activation stay as they are. */
-    headless: z.boolean().default(false),
-    rawUse: z.literal('person').optional(), preview: z.boolean().default(false),
-    pull: z.enum(['available', 'pick']).default('available'),
+    headless: z.boolean().prefault(false),
+    rawUse: z.literal('person').optional(), preview: z.boolean().prefault(false),
+    pull: z.enum(['available', 'pick']).prefault('available'),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
     tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),
@@ -64,19 +65,19 @@ const kindSchema = z.object({
     cacheDefault: z.enum(['none', '5m']).optional(),
     /** Owner W5: an unpriced remote model is refused with MODEL_CONNECT_PRICE_REQUIRED; loopback and verified published rows remain allowed.
      * A user price-declaration path needs its own owner decision. */
-    priceRequired: z.boolean().default(false),
+    priceRequired: z.boolean().prefault(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
     dialect: openAiChatDialectSchema.optional(),
     rejectionCodes: z.record(z.string(), z.enum(['spend-limit', 'rate-limit'])).optional(),
-    workspaceList: z.object({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit(),
-      requiredError: z.object({ type: z.string().min(1), messagePrefix: z.string().min(1) }).strict() }).strict().optional(),
+    workspaceList: z.strictObject({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit(),
+      requiredError: z.strictObject({ type: z.string().min(1), messagePrefix: z.string().min(1) }) }).optional(),
     /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
     protocolRoutes: z.array(providerProtocolRouteSchema)
       .min(1).refine(rows => new Set(rows.map(row => row.modelId)).size === rows.length).readonly().optional(),
     /** Verified first-party endpoint tags and token fields for metadata-priced chat; no provider/model guessing in code. */
-    metadataPricing: z.object({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
+    metadataPricing: z.strictObject({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
       routes: z.array(providerMetadataRouteSchema).min(1)
-        .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
+        .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).optional() })
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
     .refine(connect => ['native-cli-headless', 'native-cli-worker'].includes(connect.adapter)
       ? connect.chatPath === null && connect.protocolFamily !== undefined
@@ -87,22 +88,22 @@ const kindSchema = z.object({
     .refine(connect => !connect.headless || (connect.catalogOnly && connect.personOnly && connect.protocolFamily !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
-    .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),
-}).strict().readonly();
-function positiveLimit() { return z.number().int().positive().safe(); }
-const positive = z.number().int().positive().safe();
-const registrySchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).transform(() => 4 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
-  limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive,
-    modelListBytes: positive.default(asset.limits.modelListBytes), modelListCount: positive.default(asset.limits.modelListCount) }).strict(),
-  toolRejection: z.object({ parameters: z.array(z.string().min(1)).min(1), messagePatterns: z.array(z.string().min(1)).min(1), note: z.string(),
-    sources: z.array(z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict()).min(1) }).strict().default(asset.toolRejection),
+    .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().prefault(null),
+}).readonly();
+function positiveLimit() { return persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER); }
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const registrySchema = z.strictObject({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).transform(() => 4 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
+  limits: z.strictObject({ timeoutMs: positive, bodyPrefixBytes: positive,
+    modelListBytes: positive.prefault(asset.limits.modelListBytes), modelListCount: positive.prefault(asset.limits.modelListCount) }),
+  toolRejection: z.strictObject({ parameters: z.array(z.string().min(1)).min(1), messagePatterns: z.array(z.string().min(1)).min(1), note: z.string(),
+    sources: z.array(z.strictObject({ url: persistedUrl().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) })).min(1) }).prefault(asset.toolRejection),
   /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
-  legacyKeys: z.array(z.object({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) }).strict()).max(16).readonly().default([]),
+  legacyKeys: z.array(z.strictObject({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) })).max(16).readonly().prefault([]),
   /** What a connected model's invocation profile starts with (data; the person can change the written profile on the governed config path). */
-  profileDefaults: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
-    maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u), deliveryHeadroomBytes: positive }).strict(),
-  billingOrder: z.array(z.enum(PROVIDER_CONNECT_BILLING)).length(PROVIDER_CONNECT_BILLING.length).refine(rows => new Set(rows).size === rows.length).default(asset.billingOrder as (typeof PROVIDER_CONNECT_BILLING[number])[]),
-  kinds: z.array(kindSchema).min(1).readonly() }).strict().readonly();
+  profileDefaults: z.strictObject({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
+    maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u), deliveryHeadroomBytes: positive }),
+  billingOrder: z.array(z.enum(PROVIDER_CONNECT_BILLING)).length(PROVIDER_CONNECT_BILLING.length).refine(rows => new Set(rows).size === rows.length).prefault(asset.billingOrder as (typeof PROVIDER_CONNECT_BILLING[number])[]),
+  kinds: z.array(kindSchema).min(1).readonly() }).readonly();
 export type ProviderConnectKind = z.infer<typeof kindSchema>;
 export type ProviderConnectRegistry = z.infer<typeof registrySchema>;
 export const PROVIDER_CONNECT_REGISTRY_VERSION = 4;

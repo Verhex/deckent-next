@@ -8,10 +8,10 @@ import limits from './limits.json' with { type: 'json' };
 import stageTable from './stages.json' with { type: 'json' };
 
 /** The stage table (U3-1a registry data): every Core stage has its phase; a family stage's row wins over its descriptor and its anchor. */
-const STAGE_TABLE = z.object({ $comment: z.string().optional(), schemaVersion: z.literal(1), unattendedProfile: identitySchema,
+const STAGE_TABLE = z.strictObject({ $comment: z.string().optional(), schemaVersion: z.literal(1), unattendedProfile: identitySchema,
   unattendedFamilyStages: z.array(z.string().regex(/^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/)).refine(ids => new Set(ids).size === ids.length),
   order: z.array(z.string()).refine(ids => new Set(ids).size === ids.length && CORE_SETUP_STAGES.every(id => ids.includes(id))),
-  phases: z.record(z.string(), z.enum(SETUP_PHASES)).refine(phases => CORE_SETUP_STAGES.every(stage => phases[stage] !== undefined)) }).strict().parse(stageTable);
+  phases: z.record(z.string(), z.enum(SETUP_PHASES)).refine(phases => CORE_SETUP_STAGES.every(stage => phases[stage] !== undefined)) }).parse(stageTable);
 
 export type SetupFamilyStage = Readonly<{ id: string; namespace: string; after: CoreSetupStageId; title: string; phase: SetupPhase;
   evaluate: (context: SetupStageContext) => SetupDecision }>;

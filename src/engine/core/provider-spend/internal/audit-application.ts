@@ -1,6 +1,6 @@
+import { persistedInteger, parseProviderSpendAuditCommand, type ProviderSpendAuditCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
-import { parseProviderSpendAuditCommand, type ProviderSpendAuditCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { createProviderSpendAuditReceipt, parseProviderSpendAuditReceipt, type ProviderSpendAuditReceipt } from './audit-receipt.js';
 import { parseProviderSpendCheckpoint } from './checkpoint.js';
@@ -19,9 +19,9 @@ export interface ProviderSpendAuditStore {
   record(receipt: ProviderSpendAuditReceipt, signal?: AbortSignal): Promise<ProviderSpendAuditResult>;
   close(): void;
 }
-export const providerSpendAuditWorkLimitsSchema = z.object({ pageSize: z.number().int().positive().max(PROVIDER_SPEND_INTEGRITY_PAGE_MAX),
-  maxReservations: z.number().int().positive().safe(), timeoutMs: z.number().int().positive().max(2_147_483_647) }).strict();
-const limitsSchema = providerSpendAuditWorkLimitsSchema.extend({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
+export const providerSpendAuditWorkLimitsSchema = z.strictObject({ pageSize: persistedInteger().positive().max(PROVIDER_SPEND_INTEGRITY_PAGE_MAX),
+  maxReservations: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), timeoutMs: persistedInteger().positive().max(2_147_483_647) });
+const limitsSchema = providerSpendAuditWorkLimitsSchema.extend({ maxResultBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).strict().readonly();
 export type ProviderSpendAuditLimits = z.infer<typeof limitsSchema>;
 function correlated(receiptInput: unknown, command: ProviderSpendAuditCommand, principal: VerifiedPrincipal) {
   const receipt = parseProviderSpendAuditReceipt(receiptInput), actor = receipt.actor;

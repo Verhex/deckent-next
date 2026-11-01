@@ -7,17 +7,17 @@ import { AttemptStoreError, createProviderSpendCheckpoint, parseProviderSpendAcc
 
 type Row = Readonly<Record<string, unknown>>;
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const oldAccountSchema = z.object({ schemaVersion: z.literal(1), budget: providerSpendBudgetSchema,
-  reservedMinorUnits: counterSchema, settledMinorUnits: counterSchema, frozen: z.boolean() }).strict().readonly();
+const oldAccountSchema = z.strictObject({ schemaVersion: z.literal(1), budget: providerSpendBudgetSchema,
+  reservedMinorUnits: counterSchema, settledMinorUnits: counterSchema, frozen: z.boolean() }).readonly();
 const oldDispositionSchema = z.discriminatedUnion('state', [
-  z.object({ state: z.literal('reserved') }).strict(),
-  z.object({ state: z.literal('released-not-sent'), evidenceDigest: digestSchema }).strict(),
-  z.object({ state: z.literal('settled-local'), amountMinorUnits: counterSchema, evidenceDigest: digestSchema }).strict(),
-  z.object({ state: z.literal('held'), reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']),
-    observedMinorUnits: counterSchema.nullable(), evidenceDigest: digestSchema }).strict(),
+  z.strictObject({ state: z.literal('reserved') }),
+  z.strictObject({ state: z.literal('released-not-sent'), evidenceDigest: digestSchema }),
+  z.strictObject({ state: z.literal('settled-local'), amountMinorUnits: counterSchema, evidenceDigest: digestSchema }),
+  z.strictObject({ state: z.literal('held'), reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']),
+    observedMinorUnits: counterSchema.nullable(), evidenceDigest: digestSchema }),
 ]).readonly();
-const oldReservationSchema = z.object({ schemaVersion: z.literal(1), descriptor: providerSpendReservationDescriptorSchema,
-  disposition: oldDispositionSchema }).strict().readonly();
+const oldReservationSchema = z.strictObject({ schemaVersion: z.literal(1), descriptor: providerSpendReservationDescriptorSchema,
+  disposition: oldDispositionSchema }).readonly();
 
 function invalid(): never { throw new AttemptStoreError('LEDGER_MIGRATION_EVIDENCE_REQUIRED'); }
 function decode(input: unknown): unknown {

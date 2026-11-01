@@ -1,5 +1,5 @@
+import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, MODEL_TIERS, REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import asset from '../../../../../assets/native-coding/work-classes.json' with { type: 'json' };
 import limits from './work-class-limits.json' with { type: 'json' };
@@ -10,50 +10,50 @@ export const coreEvidenceTypeSchema = z.enum(['retained-artifact', 'verification
 export const evidenceTypeSchema = z.union([coreEvidenceTypeSchema, z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)]);
 const scoreSchema = z.number().finite().min(0).max(1);
 const unique = (values: readonly string[]) => new Set(values).size === values.length;
-export const workClassAcceptanceProfileSchema = z.object({ schemaVersion: z.literal(1), version: z.number().int().positive().safe(),
+export const workClassAcceptanceProfileSchema = z.strictObject({ schemaVersion: z.literal(1), version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   criterionTypes: z.array(criterionTypeSchema).min(1).max(4).readonly(),
   evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
-  rubric: z.array(z.object({ criterionType: criterionTypeSchema, evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
+  rubric: z.array(z.strictObject({ criterionType: criterionTypeSchema, evidenceTypes: z.array(evidenceTypeSchema).min(1).max(256).readonly(),
     weight: scoreSchema.refine(value => value > 0),
-  }).strict().readonly()).min(1).max(4).readonly(),
-  ceilingRules: z.array(z.object({ when: z.enum(['missing-evidence', 'unsettled-effect', 'missing-approval']),
+  }).readonly()).min(1).max(4).readonly(),
+  ceilingRules: z.array(z.strictObject({ when: z.enum(['missing-evidence', 'unsettled-effect', 'missing-approval']),
     maxScore: scoreSchema,
-  }).strict().readonly()).max(3).readonly(),
-  decisionThresholds: z.object({ rejectBelow: scoreSchema, acceptAt: scoreSchema }).strict().readonly(),
-}).strict().refine(value => unique(value.criterionTypes) && unique(value.evidenceTypes)
+  }).readonly()).max(3).readonly(),
+  decisionThresholds: z.strictObject({ rejectBelow: scoreSchema, acceptAt: scoreSchema }).readonly(),
+}).refine(value => unique(value.criterionTypes) && unique(value.evidenceTypes)
   && unique(value.rubric.map(row => row.criterionType)) && unique(value.ceilingRules.map(row => row.when))
   && value.criterionTypes.every(kind => value.rubric.some(row => row.criterionType === kind))
   && value.rubric.every(row => value.criterionTypes.includes(row.criterionType) && unique(row.evidenceTypes)
     && row.evidenceTypes.every(kind => value.evidenceTypes.includes(kind)))
   && value.evidenceTypes.every(kind => value.rubric.some(row => row.evidenceTypes.includes(kind)))
   && value.decisionThresholds.rejectBelow <= value.decisionThresholds.acceptAt).readonly();
-const classSchema = z.object({ id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS) }).strict().readonly();
+const classSchema = z.strictObject({ id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS) }).readonly();
 /** Trusted registry policy only; absence never means standing admission. No parent inherits this grant. */
-const proposalAdmission = z.object({ risk: z.enum(['low', 'normal', 'high']), standingAdmission: z.boolean() }).strict()
+const proposalAdmission = z.strictObject({ risk: z.enum(['low', 'normal', 'high']), standingAdmission: z.boolean() })
   .refine(value => !value.standingAdmission || value.risk === 'low').readonly();
-const proposalPermissions = z.array(z.object({ kind: identitySchema, actions: z.array(identitySchema).min(1).max(256).readonly() }).strict().readonly()).max(256).readonly();
-const bindingSchema = z.object({ kind: identitySchema, classId: identitySchema }).strict().readonly();
-const legacyRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
+const proposalPermissions = z.array(z.strictObject({ kind: identitySchema, actions: z.array(identitySchema).min(1).max(256).readonly() }).readonly()).max(256).readonly();
+const bindingSchema = z.strictObject({ kind: identitySchema, classId: identitySchema }).readonly();
+const legacyRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema,
   classes: z.array(classSchema).min(1).max(256).readonly(),
   bindings: z.array(bindingSchema).max(1024).readonly(),
-}).strict();
+});
 const currentClassShape = { id: identitySchema, defaultEffort: z.enum(REASONING_EFFORTS),
   parentClassId: identitySchema.optional(), acceptanceProfile: workClassAcceptanceProfileSchema, proposalAdmission: proposalAdmission.optional(),
   /** R3 (owner D4a): this class's silence policy, over the installation default; admission refuses it unless it stops before the deadline. */
-  inactivity: z.object({ warnAfterMs: z.number().int().positive().safe(), stopAfterMs: z.number().int().positive().safe() }).strict()
+  inactivity: z.strictObject({ warnAfterMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), stopAfterMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })
     .refine(value => value.warnAfterMs < value.stopAfterMs).readonly().optional() };
-const currentBindingsSchema = z.array(z.object({ kind: identitySchema, classId: identitySchema,
-  override: z.object({ previousClassId: identitySchema }).strict().readonly().optional(),
-}).strict().readonly()).max(1024).readonly();
-const currentRegistrySchema = z.object({ schemaVersion: z.literal(2), revision: identitySchema,
-  classes: z.array(z.object(currentClassShape).strict().readonly()).min(1).max(256).readonly(),
+const currentBindingsSchema = z.array(z.strictObject({ kind: identitySchema, classId: identitySchema,
+  override: z.strictObject({ previousClassId: identitySchema }).readonly().optional(),
+}).readonly()).max(1024).readonly();
+const currentRegistrySchema = z.strictObject({ schemaVersion: z.literal(2), revision: identitySchema,
+  classes: z.array(z.strictObject(currentClassShape).readonly()).min(1).max(256).readonly(),
   bindings: currentBindingsSchema,
   proposalPermissions: proposalPermissions.optional(),
-}).strict();
-export const evidenceExtensionSchema = z.object({ id: z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
-  version: z.number().int().positive().safe(), mapsTo: coreEvidenceTypeSchema,
-  label: z.object({ en: identitySchema, tr: identitySchema }).strict().readonly(),
-}).strict().readonly();
+});
+export const evidenceExtensionSchema = z.strictObject({ id: z.string().regex(/^ext:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
+  version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), mapsTo: coreEvidenceTypeSchema,
+  label: z.strictObject({ en: identitySchema, tr: identitySchema }).readonly(),
+}).readonly();
 const extendedRegistrySchema = currentRegistrySchema.extend({ schemaVersion: z.literal(3),
   evidenceExtensions: z.array(evidenceExtensionSchema).max(256).readonly(),
 });
@@ -61,7 +61,7 @@ const extendedRegistrySchema = currentRegistrySchema.extend({ schemaVersion: z.l
  * scope may use and seals the choice; nothing outside the list is ever chosen. `effort` is the class's deviation from the catalog's vendor
  * default; absent = the vendor default (or the CLI's own default when the catalog declares none). An overlay replaces a Core list only by a
  * compare-and-set against its version, never implicitly. */
-const exactCandidateSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema, effort: z.enum(REASONING_EFFORTS).optional() }).strict().readonly();
+const exactCandidateSchema = z.strictObject({ channelId: identitySchema, modelId: exactModelIdSchema, effort: z.enum(REASONING_EFFORTS).optional() }).readonly();
 const tierRank = (tier: typeof MODEL_TIERS[number]) => MODEL_TIERS.indexOf(tier);
 const selectorList = (max: number) => z.array(identitySchema).min(1).max(max).readonly().refine(unique);
 /** M3 (MODEL-INDEPENDENCE-AUDIT, owner 2026-10-23 "model bağımsız"): a candidate SELECTOR names no model. Assignment expands it, in the tier/role
@@ -69,19 +69,19 @@ const selectorList = (max: number) => z.array(identitySchema).min(1).max(max).re
  * (canonical, via the maker registry) and channel filters, are in the scope's catalog and active there; each expanded model then goes through
  * the same admission check as an exact candidate and the seal records the concrete id plus the expansion digest. A model that is new data
  * (catalog row + role row + activation) thus joins a list with no list or code edit. A maker filter never matches an unknown maker. */
-export const candidateSelectorSchema = z.object({ role: identitySchema, minTier: z.enum(MODEL_TIERS).optional(), maxTier: z.enum(MODEL_TIERS).optional(),
+export const candidateSelectorSchema = z.strictObject({ role: identitySchema, minTier: z.enum(MODEL_TIERS).optional(), maxTier: z.enum(MODEL_TIERS).optional(),
   makerIn: selectorList(limits.selectorMakers).optional(), makerNotIn: selectorList(limits.selectorMakers).optional(),
   channelIn: selectorList(limits.selectorChannels).optional(), effort: z.enum(REASONING_EFFORTS).optional(),
-}).strict().refine(value => (value.makerIn === undefined || value.makerNotIn === undefined)
+}).refine(value => (value.makerIn === undefined || value.makerNotIn === undefined)
   && (value.minTier === undefined || value.maxTier === undefined || tierRank(value.minTier) <= tierRank(value.maxTier))).readonly();
 export type CandidateSelector = z.infer<typeof candidateSelectorSchema>;
 export type ExactCandidate = z.infer<typeof exactCandidateSchema>;
 export const isCandidateSelector = (entry: ExactCandidate | CandidateSelector): entry is CandidateSelector => 'role' in entry;
 const candidateKey = (entry: ExactCandidate | CandidateSelector) => isCandidateSelector(entry) ? JSON.stringify(entry) : JSON.stringify([entry.channelId, entry.modelId]);
-const policyShape = <T extends z.ZodTypeAny>(candidate: T) => z.object({ id: identitySchema, version: z.number().int().positive().safe(),
+const policyShape = <T extends z.ZodTypeAny>(candidate: T) => z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   candidates: z.array(candidate).min(1).max(limits.candidatesPerPolicy).readonly(),
-  override: z.object({ previousVersion: z.number().int().positive().safe() }).strict().readonly().optional(),
-}).strict().refine(value => unique((value.candidates as readonly (ExactCandidate | CandidateSelector)[]).map(candidateKey))
+  override: z.strictObject({ previousVersion: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly().optional(),
+}).refine(value => unique((value.candidates as readonly (ExactCandidate | CandidateSelector)[]).map(candidateKey))
   && (value.override === undefined || value.override.previousVersion < value.version)).readonly();
 /** Registry v4 lists: exact candidates only (kept readable unchanged). */
 const exactCandidatePolicySchema = policyShape(exactCandidateSchema);
@@ -93,7 +93,7 @@ export const WORK_CLASS_WORKER_ROLE: string = identitySchema.parse(assignmentDat
 /** Bounds of candidate lists and their selector expansion (`work-class-limits.json`). */
 export const WORK_CLASS_LIMITS = Object.freeze({ ...limits });
 const assignedRegistrySchema = extendedRegistrySchema.extend({ schemaVersion: z.literal(4),
-  classes: z.array(z.object({ ...currentClassShape, candidatePolicyId: identitySchema.optional() }).strict().readonly()).min(1).max(256).readonly(),
+  classes: z.array(z.strictObject({ ...currentClassShape, candidatePolicyId: identitySchema.optional() }).readonly()).min(1).max(256).readonly(),
   candidatePolicies: z.array(exactCandidatePolicySchema).max(limits.candidatePolicies).readonly(),
 });
 const selectorRegistrySchema = assignedRegistrySchema.extend({ schemaVersion: z.literal(5),

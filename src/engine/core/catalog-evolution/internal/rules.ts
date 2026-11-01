@@ -1,7 +1,6 @@
-import { z } from 'zod';
-import { AGENT_CATALOG_LIMITS, STATS_MICRO, attributableFailure, encodeCommandProjection, identitySchema, wilsonIntervalMicro, type AgentStanding, type CatalogEvolutionRegistry,
-  type CatalogEvolutionRule } from '#domain/index.js';
+import { persistedInteger, AGENT_CATALOG_LIMITS, STATS_MICRO, attributableFailure, encodeCommandProjection, identitySchema, wilsonIntervalMicro, type AgentStanding, type CatalogEvolutionRegistry, type CatalogEvolutionRule } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
+import { z } from 'zod';
 import { catalogSuggestionIdOf, catalogSuggestionKeyDigest, catalogSuggestionSchema, type CatalogLessonRef, type CatalogSuggestion, type CatalogSuggestionKey } from '#engine/core/agent-catalog/index.js';
 import templatesSeed from '../../../../../assets/catalog-evolution/templates.json' with { type: 'json' };
 import { effortRatioMicro, keyStats, windowRows, type CatalogEntries } from './aggregate.js';
@@ -14,8 +13,8 @@ import type { KeyStats, ModelFacts } from './contract.js';
  * or restored window the same key re-opens only with `cooldownTasks` new counted Tasks. Statistics are associations ("ilişki, nedensellik değil").
  */
 const DAY_MS = 86_400_000;
-export const catalogDraftTemplatesSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.object({ id: identitySchema, version: z.number().int().positive(),
-  kind: z.enum(['propose-agent', 'propose-skill']), name: z.string().min(1), text: z.string().min(1), item: z.string().min(1).optional() }).strict()).min(1) }).strict().readonly();
+export const catalogDraftTemplatesSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.strictObject({ id: identitySchema, version: persistedInteger().positive(),
+  kind: z.enum(['propose-agent', 'propose-skill']), name: z.string().min(1), text: z.string().min(1), item: z.string().min(1).optional() })).min(1) }).readonly();
 /** The versioned draft templates (`agent-draft@1`, `skill-draft@1`): Core seed data, never literals; the latest version of a kind is the one used. */
 export const CATALOG_DRAFT_TEMPLATES = catalogDraftTemplatesSchema.parse(templatesSeed);
 export const catalogDraftTemplate = (kind: 'propose-agent' | 'propose-skill', ref?: string) => {

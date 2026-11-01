@@ -1,10 +1,11 @@
+import { persistedInteger, TargetQueueError, identitySchema, type TargetQueueRecord } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { TargetQueueError, identitySchema, type TargetQueueRecord } from '#domain/index.js';
+
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const queueGenerationRef = (target: string) => `refs/deckent/queue-generations/${digest(target)}`;
-export const queueGenerationSchema = z.object({ schemaVersion: z.literal(1), key: z.string().regex(/^[a-f0-9]{64}$/),
-  owner: identitySchema, epoch: z.number().int().positive().safe() }).strict();
+export const queueGenerationSchema = z.strictObject({ schemaVersion: z.literal(1), key: z.string().regex(/^[a-f0-9]{64}$/),
+  owner: identitySchema, epoch: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export interface GitQueueFence { readonly ref: string; readonly value: string }
 /** Versioned names, derived from durable ticket identity. No clock/random input on replay. */
 export function queueCommandIds(record: Pick<TargetQueueRecord, 'request'>) { return queueTicketCommandIds(record.request.identity.scopeId, record.request.commandId); }

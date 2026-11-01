@@ -1,27 +1,28 @@
+import { persistedInteger, persistedUuid } from '#platform/index.js';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 // OS argv/environment cannot represent NUL or unpaired UTF-16 surrogates losslessly.
 const scalar = z.string().refine(value => !value.includes('\0') && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value));
 const base64 = z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)
   .refine(value => Buffer.from(value, 'base64').toString('base64') === value);
-const positive = z.number().int().positive().safe();
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 /** v2 (S3-2, additive): bounded stdin bytes, a separate stderr bound, a line bound for the line callback, and a graceful stop — timeout and
  * cancellation send SIGINT to the process group and SIGKILL only after `interruptGraceMs`. v1 keeps closed stdin and immediate SIGKILL. */
 export const processCommandSchema = (<S extends z.ZodRawShape & { timeoutMs: z.ZodNumber }>(shape: S) => z.discriminatedUnion('schemaVersion', [
-  z.object({ schemaVersion: z.literal(1), ...shape }).strict(),
-  z.object({ schemaVersion: z.literal(2), ...shape, stdinBase64: base64.optional(), stderrBytes: positive.optional(), maxLineBytes: positive.optional(),
-    interruptGraceMs: shape.timeoutMs.optional() }).strict()]).readonly())({ requestId: z.string().uuid(),
+  z.strictObject({ schemaVersion: z.literal(1), ...shape }),
+  z.strictObject({ schemaVersion: z.literal(2), ...shape, stdinBase64: base64.optional(), stderrBytes: positive.optional(), maxLineBytes: positive.optional(),
+    interruptGraceMs: shape.timeoutMs.optional() })]).readonly())({ requestId: persistedUuid(),
   executable: scalar.refine(isAbsolute), args: z.array(scalar).readonly(), cwd: scalar.refine(isAbsolute),
   env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), scalar).readonly(),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: positive });
+  timeoutMs: persistedInteger().positive().max(2_147_483_647), outputBytes: positive });
 export type ProcessCommand = z.infer<typeof processCommandSchema>;
-export const processEvidenceSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(), started: z.boolean(),
+export const processEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), requestId: persistedUuid(), started: z.boolean(),
   // `stopped`: the v2 line consumer ended the process; `line-limit`: one stdout line exceeded the command's line bound.
   reason: z.enum(['exit', 'signal', 'timeout', 'cancelled', 'output-limit', 'start-failed', 'stopped', 'line-limit']),
-  exitCode: z.number().int().nonnegative().safe().nullable(), signal: scalar.pipe(z.string().min(1)).nullable(),
+  exitCode: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), signal: scalar.pipe(z.string().min(1)).nullable(),
   stdoutBase64: base64, stderrBase64: base64, stdoutTruncated: z.boolean(), stderrTruncated: z.boolean(),
   durationMs: z.number().nonnegative().finite(),
-}).strict().superRefine((value, context) => {
+}).superRefine((value, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'PROCESS_RUNNER_RESPONSE_INVALID' });
   if (!value.started) {
     if (!['start-failed', 'cancelled'].includes(value.reason) || value.exitCode !== null || value.signal !== null

@@ -178,7 +178,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - Target responsibility layers: platform, domain, capabilities, engine, adapters, surfaces. Domain is pure:
   it can depend on pure contracts/types, never config/filesystem/database drivers. Engine owns application
   transitions and ports; adapters implement ports. An explicit composition root imports and wires adapters.
-  Existing kernel/providers/runtime/orchestration packages migrate only after a reviewed mapping and stable WIP.
+  Existing kernel/providers/runtime/orchestration packages migrate only after a reviewed mapping and stable WIP. Owner 2026-11-01, Z2: legacy persisted scalar acceptance lives in pure `domain/core/primitives`; platform keeps an identical local copy in `platform/core/validate`. Existing dependency boundaries select the copy; a contract test pins the source expressions and acceptance table. Input JSON Schema conversion remains in platform. This placement grants no architecture exception.
 - Tiers (core/base/enterprise/custom/user) describe distribution and extension; they do not grant authority.
   Security policy can narrow permissions; a user override cannot relax a mandatory organization deny.
 - Every transition has one owner. Existing shared legacy services are port inputs, not presumed absent.
@@ -1114,10 +1114,10 @@ arm64 runtime or full-matrix PASS (main CI run 36884716187: Linux 24/26 success,
 **SDK surface (DEPS-TYPES, owner 2026-09-29 DEPS-SCHEMA C2-b).** `src/index.ts` is an explicit export list; no layer barrel is re-exported
 wholesale. The reviewed inventory `tests/contracts/composition/sdk-public-exports.json` (TypeScript checker over `src/index.ts`, names with
 value/type kind) is the contract; a change needs `node scripts/sdk-exports.mjs --write` and, for a removal, a CHANGELOG BREAKING line. Live
-schema-library objects are never SDK values: callers get derived data types and Standard Schema contracts, not zod objects. Open:
-`registerConfigSection` still takes a zod object (C1) — in the zero-dependency package a consumer's own zod schema is refused both by the type
-checker (vendored zod types are nominally distinct: private `_cached`) and at runtime (`instanceof` against the bundled zod), so third-party
-config sections wait for C1.
+schema-library objects are never SDK values: callers get derived data types and Standard Schema contracts, not zod objects. C1-b:
+`registerConfigSection` accepts `StandardSchemaV1 & StandardJSONSchemaV1`; registration requires a closed object input projection.
+Defaults and effective config use the synchronous section validator; JSON Schema supplies field navigation and display. Compatible issue
+codes are retained; foreign issues without a code become `SECTION_INVALID`, and asynchronous validation is refused.
 
 ## Testing policy
 

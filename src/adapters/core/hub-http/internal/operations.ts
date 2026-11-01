@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import { HUB_LIMITS, canonicalHubJson, requireBoundedHubJson } from '#domain/index.js';
-import { DeckentJsonSchemaValidator } from '#platform/index.js';
+import { DeckentJsonSchemaValidator, INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 import { type HubOperationPorts } from '#engine/index.js';
 import { createGovernedHubFetch, type HubFetchDependencies } from './client.js';
 import { HubNetworkError } from './listener.js';
-import { INPUT_VALIDATION_LIMITS, inputWithinValidationLimit } from '#platform/index.js';
 
 /** H7 bridge to H3/H5 over H4. Extension identity is registry input; connecting still requires the exact durable first-use person decision. */
 export function governedHubOperations(deps: HubFetchDependencies, extensionId: string): NonNullable<HubOperationPorts['remote']> {
@@ -45,17 +44,17 @@ export function governedHubOperations(deps: HubFetchDependencies, extensionId: s
     try {
       await client.connect(transport, { signal: bounded, timeout: HUB_LIMITS.fetchTimeoutMs });
       if (request.operation === 'hub.search') {
-        return boundedResponse((await client.request({ method: 'hub/packages/list', params: { after: request.input.after, limit: request.input.limit } }, z.object({ value: z.unknown() }),
+        return boundedResponse((await client.request({ method: 'hub/packages/list', params: { after: request.input.after, limit: request.input.limit } }, z.object({ value: z.unknown().optional() }),
           { signal: bounded, timeout: HUB_LIMITS.fetchTimeoutMs })).value);
       }
       if (request.operation === 'hub.inspect') {
-        return boundedResponse((await client.request({ method: 'hub/packages/get', params: { packageId: request.input.packageId, version: request.input.version } }, z.object({ value: z.unknown() }),
+        return boundedResponse((await client.request({ method: 'hub/packages/get', params: { packageId: request.input.packageId, version: request.input.version } }, z.object({ value: z.unknown().optional() }),
           { signal: bounded, timeout: HUB_LIMITS.fetchTimeoutMs })).value);
       }
       const toolInput = 'input' in snapshot ? snapshot.input : {};
       const args = request.operation === 'hub.publish' ? toolInput : { input: toolInput };
       const result = boundedResponse(await client.request({ method: 'tools/call', params: { name: request.operation.replace('.', '_'), arguments: args } },
-        z.object({}).passthrough(), { signal: bounded, timeout: HUB_LIMITS.fetchTimeoutMs }));
+        z.looseObject({}), { signal: bounded, timeout: HUB_LIMITS.fetchTimeoutMs }));
       if (!isCallToolResult(result)) throw new HubNetworkError('HUB_NETWORK_INVALID');
       if (result.isError) throw new HubNetworkError('HUB_NETWORK_FAILED');
       return boundedResponse(result.structuredContent ?? result.content);

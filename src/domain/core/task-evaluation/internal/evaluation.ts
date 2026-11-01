@@ -12,32 +12,32 @@ const modelText = z.string().min(1).max(256);
  * evaluation; present exactly when the Run's frozen profile pins a model. The verdict is the host-sealed comparison of worker-reported usage
  * with the pin (not provider attestation); `absent` evidence means no sealed log. Tasks without a pin carry no field (bytes unchanged).
  */
-const legacyTaskEvaluationModelSchema = z.object({ provider: workerProviderSchema, requested: workerModelPinSchema,
+const legacyTaskEvaluationModelSchema = z.strictObject({ provider: workerProviderSchema, requested: workerModelPinSchema,
   init: modelText.nullable(), usage: z.array(modelText).max(16).readonly().nullable(),
   // The two session-start-name verdicts (owner K1/K2 2026-10-22) appear only on records of a `session-start-name` provider, the two
   // client-reported verdicts (owner Q4 2026-10-23) only on records of a `client-reported` provider.
   verdict: z.enum(['verified', 'substituted', 'unverified', 'start-name-matched', 'provider-chosen', 'client-reported', 'client-reported-mismatch']),
-  unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) }).strict();
+  unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) });
 /** Additive evidence contract. Missing capability is migrated only while reading pre-stamping records. */
 export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend({ evidenceCapability: modelUsageEvidenceSchema.optional() }).transform(model =>
   Object.freeze({ ...model, evidenceCapability: model.evidenceCapability ?? readLegacyModelUsageEvidence(model.provider) }));
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
-export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
-  quota: z.object({ signal: quotaExhaustedSchema, channelId: modelText, evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), maxResumes: counterSchema, maxWaitMs: counterSchema.positive().optional() }).strict().optional(),
+export const taskEvaluationSchema = z.strictObject({ schemaVersion: z.literal(1), evaluationId: identitySchema,
+  quota: z.strictObject({ signal: quotaExhaustedSchema, channelId: modelText, evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), maxResumes: counterSchema, maxWaitMs: counterSchema.positive().optional() }).optional(),
   workerExit: workerNeedsInputSchema.optional(), acceptance: evaluationAcceptanceSchema.optional(),
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
-  sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
-  handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
+  sharedNotes: z.strictObject({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).optional(),
+  handoff: z.discriminatedUnion('status', [z.strictObject({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }), z.strictObject({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) })]).optional(),
   criteria: z.array(evaluationCriterionSchema).min(1).readonly(),
   /** Host-verified retained patch, not the worker's changedFiles report. The frozen workInput owns no-change policy. */
-  workspaceChange: z.object({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).strict().readonly().optional(), model: taskEvaluationModelSchema.optional(),
+  workspaceChange: z.strictObject({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).readonly().optional(), model: taskEvaluationModelSchema.optional(),
   /** R5 (owner D5a): host-read report status of a work task's clean exit; absent on legacy records, needs-input, quota and other exits. */
   report: workerReportEvidenceSchema.optional(),
   /** R3 (owner D4a/D5a): the application proved this Attempt retryable (settled, workspace-only); the run owner retries or fails it. */
-  stall: z.object({ cause: z.enum(STALL_CAUSES), backoffMs: counterSchema }).strict().readonly().optional(),
+  stall: z.strictObject({ cause: z.enum(STALL_CAUSES), backoffMs: counterSchema }).readonly().optional(),
   evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(4).readonly().optional(),
-  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
-}).strict().readonly();
+  returnEvidence: z.strictObject({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly().optional(),
+}).readonly();
 /** Acceptance consequence: an undeclared model fails the attempt; an attempt with session-event model usage without a sealed
  * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified.
  * Session-start-name evidence (owner K1/K2 2026-10-22): a matched start name or a provider-chosen entry is accepted by its criteria with the

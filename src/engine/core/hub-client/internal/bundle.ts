@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { HUB_LIMITS, HubError, canonicalHubJson, hubEnvelopeSchema, hubFilePathSchema, hubKeyDelegationSchema, hubPackageSchema, requireBoundedHubJson } from '#domain/index.js';
 import { verifyHubPackageFiles } from '#engine/core/hub/index.js';
 import type { HubBundle } from './contract.js';
-const bundleSchema = z.object({ manifest: hubPackageSchema, envelope: hubEnvelopeSchema,
-  files: z.array(z.object({ path: hubFilePathSchema, base64: z.string().max(HUB_LIMITS.packageMaxBytes) }).strict()).max(HUB_LIMITS.packageMaxFiles),
-  delegation: hubKeyDelegationSchema.optional() }).strict();
+const bundleSchema = z.strictObject({ manifest: hubPackageSchema, envelope: hubEnvelopeSchema,
+  files: z.array(z.strictObject({ path: hubFilePathSchema, base64: z.string().max(HUB_LIMITS.packageMaxBytes) })).max(HUB_LIMITS.packageMaxFiles),
+  delegation: hubKeyDelegationSchema.optional() });
 /** File transport only; never discovers sources, opens paths or performs network I/O. */
 export function decodeHubBundle(bytes: Uint8Array): HubBundle {
   if (bytes.byteLength > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');

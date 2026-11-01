@@ -1,22 +1,37 @@
+import { ProjectedConfigNode, type ConfigSchemaNode } from './schema-node.js';
 import { z } from 'zod';
 import { ConfigValidationError, configIssue, assertSafeKeys, isRecord, assertConfigSecretPolicies } from '#platform/index.js';
 import { configDefinitions } from './registry.js';
 /** Validate only authored overlay members against the original registry nodes; merged semantics remain in validateConfig. */
 export function validateAuthoredConfigOverlay(document: Record<string, unknown>): void {
   assertSafeKeys(document); assertConfigSecretPolicies(document);
-  function visit(schema: z.ZodTypeAny, value: unknown, path: string[]) {
+  function visit(schema: ConfigSchemaNode, value: unknown, path: string[]) {
     let inner = schema;
-    while (inner instanceof z.ZodDefault || inner instanceof z.ZodOptional || inner instanceof z.ZodNullable || inner instanceof z.ZodReadonly || inner instanceof z.ZodEffects) {
-      if (inner instanceof z.ZodDefault) inner = inner._def.innerType;
-      else if (inner instanceof z.ZodEffects) inner = inner.innerType(); else inner = inner.unwrap();
+    while (inner instanceof z.ZodDefault || inner instanceof z.ZodOptional || inner instanceof z.ZodNullable || inner instanceof z.ZodReadonly || inner instanceof z.ZodPrefault || inner instanceof z.ZodPipe) {
+      if (inner instanceof z.ZodPipe) inner = inner.in as z.ZodType; else inner = inner.unwrap() as z.ZodType;
+    }
+    if (inner instanceof ProjectedConfigNode) {
+      if (inner.options.length && isRecord(value)) {
+        let first: ConfigValidationError | undefined;
+        for (const option of inner.options) { try { visit(option, value, path); return; } catch (error) { if (!(error instanceof ConfigValidationError)) throw error; first ??= error; } }
+        throw first;
+      }
+      if (isRecord(value) && (inner.properties || inner.entry)) {
+        for (const [key, child] of Object.entries(value)) {
+          const member = inner.child(key);
+          if (!member) throw new ConfigValidationError([{ path: [...path, key].join('.'), reason: 'unrecognized_keys' }]);
+          visit(member, child, [...path, key]);
+        }
+        return;
+      }
     }
     if ((inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) && isRecord(value)) {
-      const discriminator = inner instanceof z.ZodDiscriminatedUnion ? inner.discriminator : null;
+      const discriminator = inner instanceof z.ZodDiscriminatedUnion ? inner.def.discriminator : null;
       const candidates = [...inner.options].filter(option => discriminator === null || !Object.hasOwn(value, discriminator) ||
-        (option as z.AnyZodObject).shape[discriminator]?.safeParse(value[discriminator]).success);
+        (option as z.ZodObject).shape[discriminator]?.safeParse(value[discriminator]).success);
       if (!candidates.length) throw new ConfigValidationError([{ path: [...path, discriminator ?? ''].join('.'), reason: 'invalid_union_discriminator' }]);
       let first: ConfigValidationError | undefined;
-      for (const candidate of candidates) { try { visit(candidate, value, path); return; } catch (error) {
+      for (const candidate of candidates) { try { visit(candidate as z.ZodType, value, path); return; } catch (error) {
         if (!(error instanceof ConfigValidationError)) throw error; first ??= error;
       } }
       throw first;
@@ -30,9 +45,9 @@ export function validateAuthoredConfigOverlay(document: Record<string, unknown>)
       return;
     }
     if (inner instanceof z.ZodRecord && isRecord(value)) {
-      for (const [key, child] of Object.entries(value)) { const checked = inner.keySchema.safeParse(key);
+      for (const [key, child] of Object.entries(value)) { const checked = z.safeParse(inner.keyType, key);
         if (!checked.success) throw new ConfigValidationError([{ path: [...path, key].join('.'), reason: 'invalid_key' }]);
-        visit(inner.valueSchema, child, [...path, key]);
+        visit(inner.valueType as z.ZodType, child, [...path, key]);
       }
       return;
     }

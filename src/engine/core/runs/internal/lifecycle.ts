@@ -36,10 +36,10 @@ export type RunLifecycleCommand = z.infer<typeof runLifecycleCommandSchema>;
 export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'resume', 'hold', 'answer', 'expire', 'park-task', 'park-progression', 'accept', 'reject', 'quota-answer']),
   holdReason: holdReason.optional(), holdSource: safetyHoldSourceSchema.optional(), answer: answer.optional(), failureCode: identitySchema.optional(),
   ...quotaAnswerFields, taskId: identitySchema.optional(), reason: z.enum(['evaluation-unknown', 'evaluation-not-ready']).optional(),
-  actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema,
-    assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }).strict(),
-  decision: z.object({ schemaVersion: z.literal(1), deciderClass: deciderClassSchema, policyRevision: identitySchema,
-    step: z.enum(['operator-control', 'human-step']).optional(), ruleId: identitySchema.optional(), approvalId: identitySchema.optional() }).strict().optional(),
+  actor: z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema,
+    assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }),
+  decision: z.strictObject({ schemaVersion: z.literal(1), deciderClass: deciderClassSchema, policyRevision: identitySchema,
+    step: z.enum(['operator-control', 'human-step']).optional(), ruleId: identitySchema.optional(), approvalId: identitySchema.optional() }).optional(),
   now: counterSchema, timeoutMs: counterSchema.positive(),
 }).strict().superRefine((value, context) => {
   if ((['accept', 'reject', 'answer', 'park-task'].includes(value.action) !== (value.taskId !== undefined))

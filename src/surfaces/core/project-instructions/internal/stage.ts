@@ -11,7 +11,7 @@ const isFacts = (value: unknown): value is ProjectInstructionFacts => {
 };
 // The registry takes a zod schema and this unit is not a zod owner (dependencies registry): the setup contract's own family-facts schema,
 // narrowed by the guard above, validates the facts (I-S4; delta/I-S4-dependencies.md names the clean placement for the lead).
-const facts = setupObservationSchema.shape.families.removeDefault().refine(isFacts).optional();
+const facts = setupObservationSchema.shape.families.unwrap().refine(isFacts).optional();
 
 export function projectInstructionFacts(preview: InstructionInitPreview): ProjectInstructionFacts {
   // `preview([])` lists a change only for a missing standard instruction file.

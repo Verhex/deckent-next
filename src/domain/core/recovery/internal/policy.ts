@@ -9,8 +9,8 @@ import seed from './policy.json' with { type: 'json' };
  * may weigh (more reads as open, fail-closed); `settledFacts` the count and bytes of settled task-idempotent work a new Attempt may receive.
  */
 const bounds = { maxLostContinuationsPerTask: counterSchema, maxRecoveryActionsPerRun: counterSchema, maxAttemptsPerTask: counterSchema.positive(),
-  maxGateIntents: counterSchema.positive(), settledFacts: z.object({ maxCount: counterSchema, maxBytes: counterSchema.positive() }).strict() };
-export const recoveryPolicyRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), ...bounds }).strict().readonly();
+  maxGateIntents: counterSchema.positive(), settledFacts: z.strictObject({ maxCount: counterSchema, maxBytes: counterSchema.positive() }) };
+export const recoveryPolicyRegistrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), ...bounds }).readonly();
 export type RecoveryPolicyRegistry = z.infer<typeof recoveryPolicyRegistrySchema>;
 /** S6R-5 (lead on s6r4 Q1): the protected `runRuntime.recovery.mode` a Run froze at admission. `shadow` seals what a decision would do and changes
  * nothing; `live` may continue. `off` freezes no recovery section at all. The stricter of the frozen and the current mode applies. */
@@ -19,8 +19,8 @@ export type RecoveryRunMode = typeof RECOVERY_RUN_MODES[number];
 /** The bounds a Run freezes at admission (like `stall`) with its recovery mode. Absent on a Run (admitted before the switch, or with recovery off): no
  * continuation ever. alpha.56 G6 (owner Q-A3): `lowRiskTaskIds`, the tasks whose WorkClass the registry marks `proposalAdmission.risk: low`; only
  * they may continue (absent: a Run admitted before the field, none). */
-export const runRecoveryPolicySchema = z.object({ schemaVersion: z.literal(1), registryRevision: identitySchema, mode: z.enum(RECOVERY_RUN_MODES), ...bounds,
-  lowRiskTaskIds: z.array(identitySchema).max(1024).readonly().optional() }).strict().readonly();
+export const runRecoveryPolicySchema = z.strictObject({ schemaVersion: z.literal(1), registryRevision: identitySchema, mode: z.enum(RECOVERY_RUN_MODES), ...bounds,
+  lowRiskTaskIds: z.array(identitySchema).max(1024).readonly().optional() }).readonly();
 export type RunRecoveryPolicy = z.infer<typeof runRecoveryPolicySchema>;
 export const RECOVERY_POLICY_SEED: unknown = Object.freeze(seed);
 export function loadRecoveryPolicy(input: unknown): RecoveryPolicyRegistry { return recoveryPolicyRegistrySchema.parse(input); }

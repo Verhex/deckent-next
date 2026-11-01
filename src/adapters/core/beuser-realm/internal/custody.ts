@@ -1,3 +1,4 @@
+import { persistedUuid, jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { lstat, mkdir } from 'node:fs/promises';
@@ -12,15 +13,14 @@ import { pinBeuserDriverBoot, BeuserSurfaceError, type BeuserDriverBoot, type Be
 import { BeuserRealmApplication, BeuserContractError, assertBeuserAccess, beuserBindingDigest, sameSandboxRequest,
   type BeuserContext, type BeuserRealmCustody, type BeuserRealmLease, type BeuserRealmHandle, type DispatchStore,
   type SandboxRequest, type BeuserArrangePort, type BeuserArrangeStep, beuserFilesystemProofSchema } from '#engine/index.js';
-import { jsonRecordDirectory, withConfigWriteLock, sha256 } from '#platform/index.js';
 import { createBeuserRemovalReadback } from './removal.js';
 import { retainBeuserJson } from './records.js';
 import type { ArtifactStore } from '#capabilities/index.js';
 
-const observationSchema = z.object({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)), filesystemProof: beuserFilesystemProofSchema.optional() }).strict();
-const handleSchema = z.object({ binding: beuserBindingSchema, incarnation: z.string().uuid(), containerId: z.string(), controlDirectory: z.string(), controlIdentity: z.string() }).strict();
-const recordSchema = z.object({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
-  lease: z.object({ handle: handleSchema.nullable(), observation: observationSchema }).strict() }).strict();
+const observationSchema = z.strictObject({ binding: beuserBindingSchema, state: z.enum(['created', 'admitted', 'destroyed', 'quarantined', 'unknown']), evidenceRefs: z.array(z.string().min(1)), filesystemProof: beuserFilesystemProofSchema.optional() });
+const handleSchema = z.strictObject({ binding: beuserBindingSchema, incarnation: persistedUuid(), containerId: z.string(), controlDirectory: z.string(), controlIdentity: z.string() });
+const recordSchema = z.strictObject({ schemaVersion: z.literal(1), principal: verifiedPrincipalSchema, binding: beuserBindingSchema,
+  lease: z.strictObject({ handle: handleSchema.nullable(), observation: observationSchema }) });
 const refuse = (): never => { throw new BeuserContractError('BEUSER_TARGET_NOT_SANDBOX'); };
 /** The supervisor's per-Attempt custody file is never a scheduler or a launch grant. Dispatch remains the owner. */
 export async function createBeuserRealmCustody(input: { readonly context: BeuserContext; readonly request: SandboxRequest;

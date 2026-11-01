@@ -1,5 +1,5 @@
+import { persistedDateTime, persistedInteger, ErrorRegistry, sha256, workerImageConsentSchema, type WorkerImageConsent } from '#platform/index.js';
 import { z } from 'zod';
-import { ErrorRegistry, sha256, workerImageConsentSchema, type WorkerImageConsent } from '#platform/index.js';
 import { layeredWorkerRecipeSchema, workerSourceUrl, type WorkerImageSources } from '#engine/core/toolchain-currency/index.js';
 /** The budget is one base build plus each selected image, with the existing cleanup/marker grace. */
 export const WORKER_IMAGE_GRACE_MS = 60_000;
@@ -28,12 +28,12 @@ export function matchingWorkerConsent(records: readonly unknown[], binding: Work
     && same([...new Set(eligible.flatMap(record => record.sources))], binding.sources)) return eligible.at(-1)!;
   throw ErrorRegistry.createError('WORKER_IMAGE_CONSENT_MISSING');
 }
-const pin = z.object({ consentId: z.string().min(1), daemonId: z.string().min(1), recipeDigest: z.string().regex(/^[a-f0-9]{64}$/u), provider: z.string().min(1), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), imageVersion: z.string(), tagVersion: z.string(), receiptPath: z.string() }).strict();
-export const workerImageStateSchema = z.object({ schemaVersion: z.literal(1), revision: z.number().int().positive().safe(), instanceId: z.string().min(1),
+const pin = z.strictObject({ consentId: z.string().min(1), daemonId: z.string().min(1), recipeDigest: z.string().regex(/^[a-f0-9]{64}$/u), provider: z.string().min(1), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), imageVersion: z.string(), tagVersion: z.string(), receiptPath: z.string() });
+export const workerImageStateSchema = z.strictObject({ schemaVersion: z.literal(1), revision: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), instanceId: z.string().min(1),
   consentId: z.string().min(1), phase: z.enum(['requested', 'waiting-docker', 'acquiring', 'ready', 'failed', 'declined']),
-  step: z.string().nullable(), startedAt: z.string().datetime(), lastProgressAt: z.string().datetime(), expiresAt: z.string().datetime(),
+  step: z.string().nullable(), startedAt: persistedDateTime(), lastProgressAt: persistedDateTime(), expiresAt: persistedDateTime(),
   daemonId: z.string().nullable(), code: z.string().nullable(), images: z.array(pin).max(64), context: z.string().nullable(),
-}).strict();
+});
 export type WorkerImageState = z.infer<typeof workerImageStateSchema>;
 /** A marker describes work; it never admits it. Restart does not retry an uncertain build. */
 export function interruptedWorkerImage(state: WorkerImageState, instanceId: string, now: string): WorkerImageState {

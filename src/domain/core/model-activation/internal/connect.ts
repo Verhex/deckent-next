@@ -1,5 +1,5 @@
+import { persistedUuid, clientCommandIdSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { clientCommandIdSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 
 /**
@@ -16,23 +16,23 @@ export const MODEL_CONNECT_SCHEMA_VERSION = 1;
 /** Leaves room for the derived step ids (`<commandId>.profile.global` …) inside the identity bound. */
 const commandIdSchema = clientCommandIdSchema.refine(value => value.length <= 192);
 const absolutePath = z.string().min(2).max(4096).refine(value => value.startsWith('/') && !value.includes('\0'));
-export const modelConnectCommandSchema = z.object({
+export const modelConnectCommandSchema = z.strictObject({
   schemaVersion: z.literal(MODEL_CONNECT_SCHEMA_VERSION),
   commandId: commandIdSchema,
   scopeId: identitySchema,
   /** The registry kind id (`anthropic-api`, `openai-compatible`, …): data, never a free vendor name. */
   connection: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u),
   /** The address, only where the kind takes one (a chosen list row or a validated new address); null = the kind's own. */
-  endpoint: z.string().min(1).max(2048).nullable().default(null),
+  endpoint: z.string().min(1).max(2048).nullable().prefault(null),
   /** An exact API id from the kind's seed or freshly read endpoint list, or a previously declared exact catalog reference. */
-  model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict(), z.object({ pull: z.literal('available') }).strict()]),
-  subscription: z.object({ newAccount: z.boolean().optional(), connectionId: z.string().uuid().optional(), apiContinuation: modelReferenceSchema.nullable().optional() }).strict().readonly().optional(),
+  model: z.union([z.strictObject({ nativeId: exactModelIdSchema }), z.strictObject({ reference: modelReferenceSchema }), z.strictObject({ pull: z.literal('available') })]),
+  subscription: z.strictObject({ newAccount: z.boolean().optional(), connectionId: persistedUuid().optional(), apiContinuation: modelReferenceSchema.nullable().optional() }).readonly().optional(),
   workspaceId: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u).optional(),
   /** S3-3, a CLI kind only (additive): the absolute executable and login directory (absent: the first in PATH; s3c the Brain's own login dir). */
-  cli: z.object({ executable: absolutePath.optional(), configDir: absolutePath.optional() }).strict().readonly().optional(),
+  cli: z.strictObject({ executable: absolutePath.optional(), configDir: absolutePath.optional() }).readonly().optional(),
   /** S3-3 delegated-use consent (owner Q-H3), written only by the person: who besides them may spend the login. Absent keeps it; [] withdraws it. */
   delegate: z.array(z.enum(['ai', 'system'])).max(2).readonly().optional(),
-}).strict().readonly();
+}).readonly();
 export type ModelConnectCommand = z.infer<typeof modelConnectCommandSchema>;
 
 export type ModelConnectStepState = 'written' | 'present' | 'skipped';

@@ -5,12 +5,12 @@ import { collectedOutputFileSchema, outputFileNameSchema, outputFileFailureSchem
 import type { SandboxRequest, SandboxResult } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord } from './port.js';
 const retainedFileSchema = z.discriminatedUnion('status', [
-  z.object({ name: outputFileNameSchema, status: z.literal('collected'), receipt: artifactReceiptSchema }).strict(),
-  z.object({ name: outputFileNameSchema, status: z.literal('unavailable'), reason: outputFileFailureSchema }).strict(),
+  z.strictObject({ name: outputFileNameSchema, status: z.literal('collected'), receipt: artifactReceiptSchema }),
+  z.strictObject({ name: outputFileNameSchema, status: z.literal('unavailable'), reason: outputFileFailureSchema }),
 ]);
-const outputSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+const outputSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   completeness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string(),
-  files: z.array(retainedFileSchema).optional() }).strict();
+  files: z.array(retainedFileSchema).optional() });
 export function parseRetainedOutputEnvelope(bytes: Uint8Array, identity: unknown) {
   const expected = attemptIdentitySchema.safeParse(identity); let output;
   try { output = outputSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))); }

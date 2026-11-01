@@ -1,8 +1,8 @@
+import { persistedInteger, productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { existsSync } from 'node:fs';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
-import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, lineCut, fileDigest, privateLocationSafe, pathWithin as inside, ErrorRegistry, normalizeGlobalScopePlatform, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import { verifyAuditRecord, idleAttemptWorkspace, PROJECT_VAULT, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { PROJECT_INSTRUCTION_REGISTRY, folderTrustRecords, instructionTrustDirectory } from '#adapters/core/project-instructions/index.js';
@@ -14,16 +14,16 @@ import { GitWorkspaceBroker, resolveGitWorkTarget } from '#adapters/core/git-wor
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
 export const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
-export const removalRegistry = z.object({ schemaVersion: z.literal(6), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
-  recoveryRoot: z.record(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.object({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) }).strict()),
+export const removalRegistry = z.strictObject({ schemaVersion: z.literal(6), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
+  recoveryRoot: z.partialRecord(z.enum(['linux', 'wsl', 'darwin', 'win32']), z.strictObject({ environment: z.string().nullable(), fallback: z.string().min(1), path: z.string().min(1) })),
   systemctl: z.array(z.string().refine(isAbsolute)).min(1), busctl: z.array(z.string().refine(isAbsolute)).min(1), git: z.array(z.string().refine(isAbsolute)).min(1),
-  archive: z.object({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.object({ pattern: z.string(), lease: z.string() }).strict(), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }).strict(),
-  purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
+  archive: z.strictObject({ conversation: z.array(z.string()), conversationFiles: z.array(z.string()), workspace: z.strictObject({ pattern: z.string(), lease: z.string() }), members: z.array(z.string()), transient: z.array(z.string()), companionSuffix: z.string().min(1), manifestSuffix: z.string().min(1), owner: z.string().min(1) }),
+  purgeMembers: z.record(z.string(), z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
   // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
-  treeMembers: z.record(z.object({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }).strict())
+  treeMembers: z.record(z.string(), z.strictObject({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }))
     .refine(value => Object.keys(value).every(name => restorable.includes(name))),
-  cacheWriterWitness: z.object({ $comment: z.string().optional(), resourceId: z.string().min(1), budgetMs: z.number().int().positive(), pollMs: z.number().int().positive() }).strict(),
-  cacheMembers: z.record(z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
+  cacheWriterWitness: z.strictObject({ $comment: z.string().optional(), resourceId: z.string().min(1), budgetMs: persistedInteger().positive(), pollMs: persistedInteger().positive() }),
+  cacheMembers: z.record(z.string(), z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).parse(paths);
 const registry = removalRegistry;
 export function assertNativeUninstallSupport(platform: string) { if (platform !== 'linux') throw ErrorRegistry.createError('UNINSTALL_NATIVE_UNSUPPORTED', { params: { platform } }); }
 /** §5.5: one person-private recovery root from the registry (XDG state on Linux), one directory per installation; the alpha.56 one beside the data root only while it alone exists. */

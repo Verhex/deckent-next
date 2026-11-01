@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/core/validate/index.js';
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
@@ -7,18 +8,18 @@ import { productResourcePath, resolveProductLayout } from '#platform/core/host/i
 
 export const BOOTSTRAP_JOURNAL_MAX_BYTES = 262_144;
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
-const resource = z.object({
+const resource = z.strictObject({
   resource: z.string().min(1).max(256),
   path: z.string().min(1).max(4096).refine(value => isAbsolute(value) && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)),
   preimageDigest: hex.nullable(),
   targetDigest: hex,
   state: z.enum(['pending', 'published']),
-}).strict().readonly();
+}).readonly();
 const journalShape = {
   schemaVersion: z.literal(2), transactionId: z.string().min(1).max(256), planDigest: hex, profileDigest: hex,
-  phase: z.enum(['pending', 'committed']), createdAtMs: z.number().int().nonnegative().safe(),
-  updatedAtMs: z.number().int().nonnegative().safe(), resources: z.array(resource).min(1).max(1024).readonly(),
-  blockers: z.array(z.string().min(1).max(256)).max(1024).readonly(), recovery: z.unknown().transform((input, context) => {
+  phase: z.enum(['pending', 'committed']), createdAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  updatedAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), resources: z.array(resource).min(1).max(1024).readonly(),
+  blockers: z.array(z.string().min(1).max(256)).max(1024).readonly(), recovery: z.unknown().optional().transform((input, context) => {
     try {
       const parsed = JSON.parse(canonical(input)) as unknown;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('RECOVERY_INVALID');
@@ -38,8 +39,8 @@ function journalRules(value: z.infer<z.ZodObject<typeof journalShape>>, context:
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['phase'], message: 'COMMIT_INCOMPLETE' });
   }
 }
-const journalPayloadSchema = z.object(journalShape).strict().superRefine(journalRules).readonly();
-export const bootstrapJournalSchema = z.object({ ...journalShape, checksum: hex }).strict().superRefine(journalRules).readonly();
+const journalPayloadSchema = z.strictObject(journalShape).superRefine(journalRules).readonly();
+export const bootstrapJournalSchema = z.strictObject({ ...journalShape, checksum: hex }).superRefine(journalRules).readonly();
 export type BootstrapJournalPayload = z.infer<typeof journalPayloadSchema>;
 export type BootstrapJournal = z.infer<typeof bootstrapJournalSchema>;
 export interface BootstrapObservation { readonly generation: string; readonly record: BootstrapJournal | null }

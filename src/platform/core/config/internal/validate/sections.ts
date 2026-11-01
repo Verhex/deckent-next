@@ -1,9 +1,10 @@
 import { assertNoRetiredConfigFields } from './version.js';
 import { CORE_SCHEMA, configSections, type DeckentConfig } from '../schema.js';
-import { ConfigValidationError, configIssue, type ConfigIssue, type ConfigWarning } from './issues.js';
+import { ConfigValidationError, configIssues, type ConfigIssue, type ConfigWarning } from './issues.js';
 import { isRecord, assertSafeKeys } from '#platform/core/utils/index.js';
 import { type Locale } from '#platform/core/i18n/index.js';
 import { assertConfigSecretPolicies, assertHostLeavingSecretReferences } from './secret-policy.js';
+import { validateStandardSchemaSync } from '#platform/core/validate/index.js';
 
 export function validateConfig(input: unknown, locale: Locale = 'en'): { config: DeckentConfig; warnings: ConfigWarning[] } {
   if (!isRecord(input)) throw new ConfigValidationError([{ path: '$', reason: 'OBJECT_REQUIRED' }], locale);
@@ -18,7 +19,7 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
   if (result.success && (!isRecord(input['runRuntime']) || input['runRuntime']['maxConcurrentRuns'] === undefined)) {
     result.data.runRuntime.maxConcurrentRuns = result.data.service.maxConcurrentExecutions;
   }
-  if (!result.success) issues.push(...result.error.issues.map(i => configIssue([], i)));
+  if (!result.success) issues.push(...configIssues([], CORE_SCHEMA, result.error.issues, core));
   const config = structuredClone(input);
   if (result.success) Object.assign(config, result.data);
   const sections = configSections();
@@ -26,16 +27,18 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
     if (Object.hasOwn(CORE_SCHEMA.shape, key)) continue;
     const schema = sections.get(key)?.schema;
     if (schema) {
-      const parsed = schema.safeParse(value);
-      if (!parsed.success) issues.push(...parsed.error.issues.map(i => configIssue([key], i)));
-      else config[key] = parsed.data;
+      const parsed = validateStandardSchemaSync(schema, value);
+      if (parsed.status === 'invalid') issues.push(...configIssues([key], schema, parsed.issues, value));
+      else if (parsed.status === 'async') issues.push({ path: key, reason: 'SECTION_INVALID' });
+      else config[key] = parsed.value;
     } else issues.push({ path: key, reason: 'unrecognized_keys' });
   }
   for (const [key, { schema, options }] of sections) {
     if (Object.hasOwn(input, key) || options.optional) continue;
-    const parsed = schema.safeParse({});
-    if (!parsed.success) issues.push(...parsed.error.issues.map(i => configIssue([key], i)));
-    else config[key] = parsed.data;
+    const parsed = validateStandardSchemaSync(schema, {});
+    if (parsed.status === 'invalid') issues.push(...configIssues([key], schema, parsed.issues, {}));
+    else if (parsed.status === 'async') issues.push({ path: key, reason: 'SECTION_INVALID' });
+    else config[key] = parsed.value;
   }
   if (issues.length) throw new ConfigValidationError(issues, locale);
   for (const [key, section] of sections) {

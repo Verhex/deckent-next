@@ -1,3 +1,4 @@
+import { persistedInteger, persistedUrl } from '#platform/index.js';
 import { request as httpRequest, type ClientRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
 import { isIPv4, isIPv6 } from 'node:net';
@@ -12,11 +13,11 @@ export class InferenceMetricsError extends Error {
   constructor(readonly code: InferenceMetricsErrorCode, readonly status?: number) { super(code); this.name = 'InferenceMetricsError'; }
 }
 
-const inputSchema = z.object({
-  url: z.string().url(),
-  timeoutMs: z.number().int().positive().max(2_147_483_647),
-  responseMaxBytes: z.number().int().positive().safe(),
-}).strict();
+const inputSchema = z.strictObject({
+  url: persistedUrl(),
+  timeoutMs: persistedInteger().positive().max(2_147_483_647),
+  responseMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+});
 export type InferenceMetricsReadInput = z.infer<typeof inputSchema>;
 export type InferenceMetricsBody = Readonly<{ body: string }>;
 

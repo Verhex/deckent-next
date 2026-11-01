@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { executionProfileDefinitionSchema } from '#domain/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError } from '#adapters/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-const requestSchema = z.object({ schemaVersion: z.literal(1), template: executionProfileDefinitionSchema,
-  invocation: nativeCodingInvocationSchema }).strict();
+const requestSchema = z.strictObject({ schemaVersion: z.literal(1), template: executionProfileDefinitionSchema,
+  invocation: nativeCodingInvocationSchema });
 /** Local authoring only: no config write, login, process launch or admission. */
 export function prepareNativeCodingProfile(input: unknown) {
   const request = requestSchema.safeParse(input);

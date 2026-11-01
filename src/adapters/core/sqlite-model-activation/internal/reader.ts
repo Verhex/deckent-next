@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { ModelActivationStoreError, type ModelActivationReader } from '#engine/i
 import { MODEL_ACTIVATION_LEDGER_VERSION, requireLedgerVersion, sqliteFailure, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { activationFailure, loadActivationRecord } from './read.js';
 
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
+const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647) });
 class SqliteModelActivationReader implements ModelActivationReader {
   constructor(private readonly db: DatabaseSync) {}
   async loadRecord(scopeId: string, reference: ModelReference) { return loadActivationRecord(this.db, scopeId, reference); }

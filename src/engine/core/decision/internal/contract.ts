@@ -1,23 +1,20 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { persistedDateTime, persistedInteger, clientCommandIdSchema, createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema, modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
-import { createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, decisionPolicySchema, decisionAdviceSchema, decisionRecordSchema,
-  modelReferenceSchema, modelActivationBindingSchema, verifiedPrincipalSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS,
-  type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import listBounds from './decision-list.json' with { type: 'json' };
 const ingress = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const target = {schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema};
 const digest=z.string().regex(/^[a-f0-9]{64}$/);
-export const decisionPrepareInputSchema=ingress.pipe(z.object({schemaVersion:z.literal(1),case:decisionCaseSchema}).strict());
-export const decisionAskCommandSchema=ingress.pipe(z.object({schemaVersion:z.literal(1),commandId: clientCommandIdSchema,scopeId:identitySchema,case:decisionCaseSchema,
-  invocation:z.object({reference:modelReferenceSchema,catalogRevision:identitySchema,expectedBinding:modelActivationBindingSchema}).strict()}).strict());
-export const decisionQuerySchema=ingress.pipe(z.object(target).strict());
+export const decisionPrepareInputSchema=ingress.pipe(z.strictObject({schemaVersion:z.literal(1),case:decisionCaseSchema}));
+export const decisionAskCommandSchema=ingress.pipe(z.strictObject({schemaVersion:z.literal(1),commandId: clientCommandIdSchema,scopeId:identitySchema,case:decisionCaseSchema,
+  invocation:z.strictObject({reference:modelReferenceSchema,catalogRevision:identitySchema,expectedBinding:modelActivationBindingSchema})}));
+export const decisionQuerySchema=ingress.pipe(z.strictObject(target));
 /** Recent decisions of one scope (C-APPROVE `deckent decide`): the page bound is protocol data (`decision-list.json`), not configurable policy. */
-export const decisionListQuerySchema=z.object({schemaVersion:z.literal(1),scopeId:identitySchema,limit:z.number().int().min(1).max(listBounds.pageMax)}).strict();
-export const decisionRecordCommandSchema=ingress.pipe(z.object({...target,commandId: clientCommandIdSchema,selectedOption:identitySchema,rationale:z.string().min(1)}).strict());
-export const decisionOutcomeCommandSchema=ingress.pipe(z.object({...target,commandId: clientCommandIdSchema,
-  outcome:z.object({observedAt:z.string().datetime({offset:true}),observation:z.string().min(1)}).strict()}).strict());
+export const decisionListQuerySchema=z.strictObject({schemaVersion:z.literal(1),scopeId:identitySchema,limit:persistedInteger().min(1).max(listBounds.pageMax)});
+export const decisionRecordCommandSchema=ingress.pipe(z.strictObject({...target,commandId: clientCommandIdSchema,selectedOption:identitySchema,rationale:z.string().min(1)}));
+export const decisionOutcomeCommandSchema=ingress.pipe(z.strictObject({...target,commandId: clientCommandIdSchema,
+  outcome:z.strictObject({observedAt:persistedDateTime({offset:true}),observation:z.string().min(1)})}));
 export type DecisionPrepareInput=z.infer<typeof decisionPrepareInputSchema>;
 export type DecisionAskCommand=z.infer<typeof decisionAskCommandSchema>;
 export type DecisionQuery=z.infer<typeof decisionQuerySchema>;
@@ -25,10 +22,10 @@ export type DecisionListQuery=z.infer<typeof decisionListQuerySchema>;
 export type DecisionRecordCommand=z.infer<typeof decisionRecordCommandSchema>;
 export type DecisionOutcomeCommand=z.infer<typeof decisionOutcomeCommandSchema>;
 export type DecisionStatus='advised'|'below-threshold'|'unknown'|'cancelled'|'unavailable';
-export const decisionSnapshotSchema=z.object({schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema,
+export const decisionSnapshotSchema=z.strictObject({schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema,
   command:decisionAskCommandSchema,requestDigest:digest,caseDigest:digest,policy:decisionPolicySchema,principal:verifiedPrincipalSchema,
-  policyRevision:identitySchema,claimedAtMs:z.number().int().nonnegative(),status:z.enum(['pending','advised','below-threshold','unknown','cancelled','unavailable']),
-  advice:decisionAdviceSchema.nullable(),adviceDigest:digest.nullable(),invocationId:identitySchema.nullable(),record:decisionRecordSchema.nullable()}).strict();
+  policyRevision:identitySchema,claimedAtMs:persistedInteger().nonnegative(),status:z.enum(['pending','advised','below-threshold','unknown','cancelled','unavailable']),
+  advice:decisionAdviceSchema.nullable(),adviceDigest:digest.nullable(),invocationId:identitySchema.nullable(),record:decisionRecordSchema.nullable()});
 export type DecisionSnapshot=z.infer<typeof decisionSnapshotSchema>;
 export interface DecisionPrepareResult {readonly schemaVersion:1;readonly case:DecisionCase;readonly caseDigest:string;readonly thresholds:DecisionPolicy['thresholds']}
 export interface DecisionAskResult {readonly schemaVersion:1;readonly status:DecisionStatus;readonly decisionId:string;readonly caseDigest:string;

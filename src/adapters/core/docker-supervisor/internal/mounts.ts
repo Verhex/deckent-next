@@ -15,13 +15,13 @@ export const dockerMountTargetSchema = z.string().max(512).refine(value => value
   && posix.normalize(value) === value && !value.endsWith('/') && !RESERVED_TARGETS.some(reserved => value === reserved || value.startsWith(reserved + '/')));
 const uniqueTargets = (mounts: readonly { readonly target: string }[]) => new Set(mounts.map(mount => mount.target)).size === mounts.length;
 /** S6 dependency class (owner 2026-10-17): the bind is a third-party dependency tree installed from `lockfile`, a path inside the bind. */
-const dependencyTree = z.object({ lockfile: sourceSchema }).strict().readonly().optional();
+const dependencyTree = z.strictObject({ lockfile: sourceSchema }).readonly().optional();
 /** Task profile data (pinned with the Run, part of its profile fingerprint). There is no writable form: every bind is read-only. */
-export const dockerReadOnlyMountsSchema = z.array(z.object({ source: sourceSchema, target: dockerMountTargetSchema, dependencyTree }).strict().readonly())
+export const dockerReadOnlyMountsSchema = z.array(z.strictObject({ source: sourceSchema, target: dockerMountTargetSchema, dependencyTree }).readonly())
   .max(8).refine(uniqueTargets).readonly();
 /** Supervisor option: the same binds with sources resolved by trusted composition to real absolute host directories. */
-export const dockerResolvedMountsSchema = z.array(z.object({ source: z.string().min(1).max(4096).refine(value => isAbsolute(value) && !unsafe.test(value)),
-  target: dockerMountTargetSchema, dependencyTree }).strict().readonly()).max(8).refine(uniqueTargets).readonly();
+export const dockerResolvedMountsSchema = z.array(z.strictObject({ source: z.string().min(1).max(4096).refine(value => isAbsolute(value) && !unsafe.test(value)),
+  target: dockerMountTargetSchema, dependencyTree }).readonly()).max(8).refine(uniqueTargets).readonly();
 export type DockerReadOnlyMount = z.infer<typeof dockerReadOnlyMountsSchema>[number];
 
 const inside = (parent: string, child: string) => { const path = relative(parent, child); return path === '' || (path !== '..' && !path.startsWith('..' + sep) && !isAbsolute(path)); };

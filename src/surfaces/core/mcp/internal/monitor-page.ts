@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/index.js';
 import { z } from 'zod';
 import { monitorQuerySchema, type MonitorInstall, type MonitorQuery, type MonitorSnapshot } from '#engine/index.js';
 
@@ -16,8 +17,8 @@ const TERMINAL = new Set(['accepted', 'failed', 'cancelled']);
  * No section = a bounded summary; a list section is paged; `snapshot` is the whole v1 snapshot (bounded only by `mcp.responseMaxBytes`). */
 export const mcpMonitorQuerySchema = monitorQuerySchema.extend({
   section: z.enum(['summary', ...LIST_SECTIONS, 'snapshot']).optional(),
-  page: z.number().int().nonnegative().safe().optional(),
-  pageSize: z.number().int().positive().max(100).optional(),
+  page: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
+  pageSize: persistedInteger().positive().max(100).optional(),
 }).strict();
 export type McpMonitorQuery = z.infer<typeof mcpMonitorQuerySchema>;
 export const monitorCollectionQuery = (query: McpMonitorQuery): MonitorQuery => ({ schemaVersion: 1, ...(query.install ? { install: query.install } : {}) });

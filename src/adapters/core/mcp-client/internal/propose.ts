@@ -16,13 +16,13 @@ import { isMcpHttpEntry, mcpEndpointRefusal, mcpServerEntrySchema, MCP_DEFAULT_R
 export const PROPOSE_MCP_SERVER_TOOL = 'propose_mcp_server';
 const text = (max: number) => z.string().min(1).max(max);
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u, HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/u;
-const proposalSchema = z.object({
+const proposalSchema = z.strictObject({
   name: text(32), transport: z.enum(['stdio', 'http']), reason: text(1_000),
   command: text(4_096).optional(), args: z.array(z.string().max(4_096)).max(64).optional(), url: text(4_096).optional(),
   realm: z.enum(['sandbox-net', 'require-sandbox', 'prefer-sandbox', 'host']).optional(),
   /** The names of the settings a person must bind after adding (env variables of a stdio server, headers of an HTTP server) — never a value. */
   requiredSettings: z.array(z.string().max(128)).max(64).optional(),
-}).strict();
+});
 export type McpProposal = z.infer<typeof proposalSchema>;
 export const MCP_PROPOSAL_SECRETS_REFUSED = 'secrets-bound-by-person';
 export const PROPOSE_MCP_SERVER_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: PROPOSE_MCP_SERVER_TOOL, version: 1, toolClass: 'read',

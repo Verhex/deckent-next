@@ -1,9 +1,9 @@
+import { persistedInteger, OWNER_BASELINE_FAMILY_REGISTRY, HUB_LIMITS, hubDigestSchema, hubPackageIdSchema, hubVersionSchema, hubRevocationFeedSchema, hubRevocationEntrySchema, hubFeedSignatureSchema, identitySchema, signerPublicKeySchema, HUB_TRUST_POLICIES } from '#domain/index.js';
 import { z } from 'zod';
-import { OWNER_BASELINE_FAMILY_REGISTRY, HUB_LIMITS, hubDigestSchema, hubPackageIdSchema, hubVersionSchema, hubRevocationFeedSchema, hubRevocationEntrySchema, hubFeedSignatureSchema, identitySchema, signerPublicKeySchema, HUB_TRUST_POLICIES } from '#domain/index.js';
 import { hubClientCommandSchema, type HubClientApplication, type HubSource } from '#engine/core/hub-client/index.js';
 import type { Locale, KnownSecretSnapshot } from '#platform/index.js';
 
-const scoped = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict();
+const scoped = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema });
 const source = scoped.extend({ hubId: hubDigestSchema });
 const command = hubClientCommandSchema;
 const packageQuery = source.extend({ packageId: hubPackageIdSchema, version: hubVersionSchema.optional() });
@@ -14,34 +14,34 @@ const searchCursor = z.string().max(HUB_LIMITS.packageMaxBytes).refine(value => 
 });
 const bundle = z.string().min(1).max(HUB_LIMITS.httpMaxBytes);
 const install = command.extend({ bundles: z.array(bundle).min(1).max(HUB_LIMITS.dependenciesMax + 1), feed: hubRevocationFeedSchema,
-  feeds: z.record(hubDigestSchema, hubRevocationFeedSchema).default({}), workClassMapping: z.record(z.string(), identitySchema).default({}) });
+  feeds: z.record(hubDigestSchema, hubRevocationFeedSchema).prefault({}), workClassMapping: z.record(z.string(), identitySchema).prefault({}) });
 const withdrawal = command.extend({ input: hubRevocationEntrySchema.unwrap().omit({ atMs: true, severity: true }).extend({ schemaVersion: z.literal(1), commandId: identitySchema,
   authority: z.enum(['publisher', 'operator']), keyId: hubDigestSchema.optional(), signature: hubFeedSignatureSchema.unwrap().shape.value.optional() }).strict() });
 /** Wire-safe schemas shared by SDK, CLI, terminal and MCP. Bundles are canonical base64 of .deckentpkg bytes, never host paths. */
 export const hubOperationSchemas = {
   'hub.sources.list': scoped,
-  'hub.sources.add': command.extend({ expectedRevision: z.number().int().positive().nullable(), publicKey: signerPublicKeySchema,
-    endpoint: z.string().min(1).max(2048), local: z.boolean().default(false), label: z.string().min(1).max(256),
-    trustPolicy: z.string().default(HUB_TRUST_POLICIES.addedSourceDefault) }),
-  'hub.sources.remove': command.extend({ expectedRevision: z.number().int().positive() }),
-  'hub.search': source.extend({ after: searchCursor.default(''), limit: z.number().int().min(1).max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax) }),
-  'hub.inspect': packageQuery.extend({ location: z.enum(['installed', 'source']).default('installed') }).refine(value => value.location !== 'source' || value.version !== undefined),
+  'hub.sources.add': command.extend({ expectedRevision: persistedInteger().positive().nullable(), publicKey: signerPublicKeySchema,
+    endpoint: z.string().min(1).max(2048), local: z.boolean().prefault(false), label: z.string().min(1).max(256),
+    trustPolicy: z.string().prefault(HUB_TRUST_POLICIES.addedSourceDefault) }),
+  'hub.sources.remove': command.extend({ expectedRevision: persistedInteger().positive() }),
+  'hub.search': source.extend({ after: searchCursor.prefault(''), limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax) }),
+  'hub.inspect': packageQuery.extend({ location: z.enum(['installed', 'source']).prefault('installed') }).refine(value => value.location !== 'source' || value.version !== undefined),
   'hub.install': install,
   'hub.update': install,
-  'hub.uninstall': command.extend({ packageId: hubPackageIdSchema, expectedRevision: z.number().int().positive() }),
+  'hub.uninstall': command.extend({ packageId: hubPackageIdSchema, expectedRevision: persistedInteger().positive() }),
   'hub.verify': packageQuery,
   'hub.export': packageQuery,
   'hub.refresh': command.extend({ feed: hubRevocationFeedSchema }),
-  'hub.cards': scoped.extend({ after: z.number().int().safe().nonnegative().default(0), limit: z.number().int().min(1).max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax) }),
-  'hub.publish': command.extend({ input: z.object({ bundle: z.unknown() }).strict() }),
+  'hub.cards': scoped.extend({ after: persistedInteger().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nonnegative().prefault(0), limit: persistedInteger().min(1).max(HUB_LIMITS.searchPageMax).prefault(HUB_LIMITS.searchPageMax) }),
+  'hub.publish': command.extend({ input: z.strictObject({ bundle: z.unknown().optional() }) }),
   'hub.yank': withdrawal,
   'hub.revoke': withdrawal,
 } as const;
 export type HubOperationName = keyof typeof hubOperationSchemas;
 export type HubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.input<typeof hubOperationSchemas[K]> }> }[HubOperationName];
 export type ParsedHubOperation = { [K in HubOperationName]: Readonly<{ operation: K; input: z.output<typeof hubOperationSchemas[K]> }> }[HubOperationName];
-export const hubOperationSchema = z.discriminatedUnion('operation', Object.entries(hubOperationSchemas).map(([operation, input]) =>
-  z.object({ operation: z.literal(operation), input }).strict()) as unknown as [z.ZodDiscriminatedUnionOption<'operation'>, z.ZodDiscriminatedUnionOption<'operation'>, ...z.ZodDiscriminatedUnionOption<'operation'>[]]);
+const hubEnvelopes = Object.entries(hubOperationSchemas).map(([operation, input]) => z.strictObject({ operation: z.literal(operation), input }));
+export const hubOperationSchema = z.discriminatedUnion('operation', [hubEnvelopes[0]!, ...hubEnvelopes.slice(1)]);
 export function parseHubOperation(input: unknown): ParsedHubOperation { return hubOperationSchema.parse(input) as ParsedHubOperation; }
 export const hubOperationWrites = (name: HubOperationName): boolean => !['hub.sources.list', 'hub.search', 'hub.inspect', 'hub.verify', 'hub.export', 'hub.cards'].includes(name);
 export const hubPersonOnlyOperation = (name: HubOperationName): boolean => name === 'hub.sources.add' || name === 'hub.sources.remove' || name === 'hub.cards';

@@ -16,47 +16,47 @@ export const MEMORY_ORIGINS = Object.freeze(['human', 'run', 'model', 'import'] 
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 const text = (max: number) => z.string().min(1).refine(value => value.trim() === value && bytes(value) <= max);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const actor = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
-export const memoryLessonSchema = z.object({ source: text(limits.lessonFieldMaxBytes), cause: text(limits.lessonFieldMaxBytes),
-  correction: text(limits.lessonFieldMaxBytes), evidence: text(limits.lessonFieldMaxBytes) }).strict().readonly();
-export const memoryContentSchema = z.object({ kind: z.enum(MEMORY_KINDS), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes),
-  tags: z.array(text(limits.tagMaxBytes)).max(limits.tagsMax).readonly(), lesson: memoryLessonSchema.nullable() }).strict()
+const actor = z.strictObject({ issuer: identitySchema, subject: identitySchema }).readonly();
+export const memoryLessonSchema = z.strictObject({ source: text(limits.lessonFieldMaxBytes), cause: text(limits.lessonFieldMaxBytes),
+  correction: text(limits.lessonFieldMaxBytes), evidence: text(limits.lessonFieldMaxBytes) }).readonly();
+export const memoryContentSchema = z.strictObject({ kind: z.enum(MEMORY_KINDS), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes),
+  tags: z.array(text(limits.tagMaxBytes)).max(limits.tagsMax).readonly(), lesson: memoryLessonSchema.nullable() })
   .refine(value => (value.kind === 'lesson') === (value.lesson !== null) && new Set(value.tags).size === value.tags.length).readonly();
 /** S4B-1 entry v2 (§4.3): who a system entry may serve inside its scope — the source Task's WorkClass family (root of the parent chain) and the
  * Run's work target (`null`: a Run without one). A person's entry has `audience: null` (scope-wide, as authored). */
-export const memoryAudienceSchema = z.object({ workClassFamily: identitySchema, workTargetId: identitySchema.nullable() }).strict().readonly();
+export const memoryAudienceSchema = z.strictObject({ workClassFamily: identitySchema, workTargetId: identitySchema.nullable() }).readonly();
 /** S4B-1 (§4.4): one worker `lessons` claim (S4B-2 carries it in the final report). Claims only; a lesson needs its cause and correction. */
 export const memoryLessonClaimSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('fact'), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes) }).strict(),
-  z.object({ kind: z.literal('lesson'), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes), cause: text(limits.lessonFieldMaxBytes),
-    correction: text(limits.lessonFieldMaxBytes) }).strict(),
+  z.strictObject({ kind: z.literal('fact'), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes) }),
+  z.strictObject({ kind: z.literal('lesson'), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes), cause: text(limits.lessonFieldMaxBytes),
+    correction: text(limits.lessonFieldMaxBytes) }),
 ]);
 /** S4B-4 (§6.6, A11, owner S-M12): what a purge leaves of an entry's content in every revision — the keyed content digest (it blocks a
  * re-proposal and reveals nothing), the purge record id and its reason code. No title, body, tag or lesson field survives. */
-export const memoryTombstoneSchema = z.object({ purged: z.literal(true), contentDigest: digest, digestKind: z.literal('keyed'), purgeRecordId: identitySchema,
-  reasonCode: identitySchema }).strict().readonly();
-export const memoryOriginSchema = z.object({ kind: z.enum(MEMORY_ORIGINS), ref: text(limits.originRefMaxBytes).nullable() }).strict().readonly();
+export const memoryTombstoneSchema = z.strictObject({ purged: z.literal(true), contentDigest: digest, digestKind: z.literal('keyed'), purgeRecordId: identitySchema,
+  reasonCode: identitySchema }).readonly();
+export const memoryOriginSchema = z.strictObject({ kind: z.enum(MEMORY_ORIGINS), ref: text(limits.originRefMaxBytes).nullable() }).readonly();
 /** A reference to an evaluation record the engine resolves through its port (task evaluation, auditor verdict, ...): kind + id + digest. */
-export const memoryEvaluationRefSchema = z.object({ kind: identitySchema, id: identitySchema, digest }).strict().readonly();
+export const memoryEvaluationRefSchema = z.strictObject({ kind: identitySchema, id: identitySchema, digest }).readonly();
 export const memoryVerificationBasisSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('human-review'), note: text(limits.noteMaxBytes) }).strict(),
-  z.object({ kind: z.literal('independent-evaluation'), record: memoryEvaluationRefSchema }).strict(),
+  z.strictObject({ kind: z.literal('human-review'), note: text(limits.noteMaxBytes) }),
+  z.strictObject({ kind: z.literal('independent-evaluation'), record: memoryEvaluationRefSchema }),
 ]);
 const verificationSchema = z.discriminatedUnion('basis', [
-  z.object({ basis: z.literal('human-review'), reviewer: actor, note: z.string(), verifiedAtMs: counterSchema }).strict(),
-  z.object({ basis: z.literal('independent-evaluation'), evaluator: actor, record: memoryEvaluationRefSchema, verifiedAtMs: counterSchema }).strict(),
+  z.strictObject({ basis: z.literal('human-review'), reviewer: actor, note: z.string(), verifiedAtMs: counterSchema }),
+  z.strictObject({ basis: z.literal('independent-evaluation'), evaluator: actor, record: memoryEvaluationRefSchema, verifiedAtMs: counterSchema }),
 ]);
-export const memoryEntrySchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(MEMORY_SCHEMA_VERSION)]), scopeId: identitySchema, entryId: identitySchema,
+export const memoryEntrySchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(MEMORY_SCHEMA_VERSION)]), scopeId: identitySchema, entryId: identitySchema,
   revision: counterSchema.positive(), state: z.enum(MEMORY_STATES), content: z.union([memoryContentSchema, memoryTombstoneSchema]), contentDigest: digest,
-  provenance: z.object({ author: z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly(), origin: memoryOriginSchema,
-    proposedAtMs: counterSchema, commandId: identitySchema }).strict().readonly(),
+  provenance: z.strictObject({ author: z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).readonly(), origin: memoryOriginSchema,
+    proposedAtMs: counterSchema, commandId: identitySchema }).readonly(),
   verification: verificationSchema.nullable(),
-  retirement: z.object({ by: z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly(), reason: z.string().min(1),
-    supersededBy: identitySchema.nullable(), retiredAtMs: counterSchema }).strict().readonly().nullable(),
+  retirement: z.strictObject({ by: z.strictObject({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).readonly(), reason: z.string().min(1),
+    supersededBy: identitySchema.nullable(), retiredAtMs: counterSchema }).readonly().nullable(),
   updatedAtMs: counterSchema,
   /** v2 only (a v1 row has no such key and is read unchanged). */
   audience: memoryAudienceSchema.nullable().optional(),
-}).strict().superRefine((entry, context) => {
+}).superRefine((entry, context) => {
   if ((entry.schemaVersion === 1) !== (entry.audience === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'MEMORY_ENTRY_INVALID' });
   const consistent = entry.state === 'candidate' ? entry.verification === null && entry.retirement === null
     : entry.state === 'verified' ? entry.verification !== null && entry.retirement === null : entry.retirement !== null;

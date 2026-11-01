@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/core/validate/index.js';
 import { z } from 'zod';
 
 /**
@@ -10,16 +11,16 @@ export const agentToolClassSchema = z.enum(['read', 'edit', 'shell', 'deckent', 
 export type AgentToolClass = z.infer<typeof agentToolClassSchema>;
 
 /** A JSON Schema object subset as sent to the model; validated as plain data here, interpreted by the tool. */
-const jsonSchemaObject = z.object({ type: z.literal('object'), properties: z.record(z.string(), z.unknown()),
-  required: z.array(z.string()).optional() }).passthrough();
+const jsonSchemaObject = z.looseObject({ type: z.literal('object'), properties: z.record(z.string(), z.unknown().optional()),
+  required: z.array(z.string()).optional() });
 
-export const agentToolSpecSchema = z.object({
+export const agentToolSpecSchema = z.strictObject({
   name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
-  version: z.number().int().positive().safe(),
+  version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
   toolClass: agentToolClassSchema,
   description: z.string().min(1).max(2000),
   inputSchema: jsonSchemaObject,
-}).strict().readonly();
+}).readonly();
 export type AgentToolSpec = z.infer<typeof agentToolSpecSchema>;
 
 /**
@@ -35,19 +36,19 @@ export type AgentToolCleanup = z.infer<typeof agentToolCleanupSchema>;
  * Where a workspace path failed (B4 diagnosis, owner terminal test 2026-10-07): the step (`realpath`, `open:<segment>`, `verify:<segment>`,
  * `stat`) and the system error code when one was raised. Short and secret-free: no path, no content. Optional everywhere it travels.
  */
-export const agentToolDiagnosticSchema = z.object({
+export const agentToolDiagnosticSchema = z.strictObject({
   step: z.string().regex(/^[a-z]+(?::\d{1,3})?$/u).max(16),
   errno: z.string().regex(/^E[A-Z0-9]{1,15}$/u).optional(),
-}).strict().readonly();
+}).readonly();
 export type AgentToolDiagnostic = z.infer<typeof agentToolDiagnosticSchema>;
 
 /** What a tool returns to the loop: model-facing text (bounded by the tool) and whether it succeeded. */
-export const agentToolOutcomeSchema = z.object({
+export const agentToolOutcomeSchema = z.strictObject({
   status: z.enum(['ok', 'error']),
   text: z.string(),
   cleanup: agentToolCleanupSchema.optional(),
   diagnostic: agentToolDiagnosticSchema.optional(),
-}).strict().readonly();
+}).readonly();
 export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
 
 /**
@@ -55,9 +56,9 @@ export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
  * arguments text. Native details (OpenAI tool_call_id shapes, Anthropic block ids/signatures) stay in the adapter's native
  * result. Invalid JSON arguments are answered with a typed tool error; a call from an interrupted response is never executed.
  */
-export const agentToolCallSchema = z.object({
+export const agentToolCallSchema = z.strictObject({
   id: z.string().min(1).max(256),
   name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
   argumentsJson: z.string(),
-}).strict().readonly();
+}).readonly();
 export type AgentToolCall = z.infer<typeof agentToolCallSchema>;

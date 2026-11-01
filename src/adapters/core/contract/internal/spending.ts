@@ -4,8 +4,8 @@ import { parseProviderSpendBudget, providerSpendBudgetSchema } from '#domain/ind
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
 import { ProviderSpendError, providerSpendPeriodRegistry } from '#engine/index.js';
 
-export const providerSpendingSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]),
-  budgets: z.array(providerSpendBudgetSchema).readonly() }).strict();
+export const providerSpendingSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  budgets: z.array(providerSpendBudgetSchema).readonly() });
 
 function invalid(): never {
   throw new ConfigValidationError([{ path: 'provider_spending', reason: 'POLICY_AUTHORITY_INVALID' }]);

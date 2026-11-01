@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
+import * as domainScalars from '#domain/core/primitives/index.js';
+import * as platformScalars from '#platform/core/validate/index.js';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { agentToolSpecSchema, effectCommandSchema, identitySchema, immutableJsonObjectSchema, operationDescriptorSchema, sanitizeIssues } from '#domain/index.js';
-import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, runtimeServiceLifecycleRequestSchema } from '#engine/index.js';
-import { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
+import { ConfigApplication, parseConfigInput, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, runtimeServiceLifecycleRequestSchema } from '#engine/index.js';
+import { CORE_SCHEMA, registerConfigSection, createDefaultConfig, validateConfig } from '#platform/core/config/index.js';
 import { operationsConfigSchema, registerProviderConfig } from '#adapters/core/contract/index.js';
 import { nativeCodingInvocationSchema } from '#adapters/core/native-coding/index.js';
 import { processCommandSchema } from '#adapters/core/process-runner/index.js';
@@ -21,7 +24,7 @@ registerProviderConfig();
  *   strictness check reads `_def.unknownKeys`);
  * - `z.uuid()` "validates more strictly against RFC 9562/4122" (observed: a version-9 UUID is accepted by 3.25.76, refused by 4.6.5);
  * - observed: `.readonly().default(...)` returns a frozen default on v3, an unfrozen one on v4.
- * Rows marked EXPECTED-TO-CHANGE pin a v3 laxness the migration will change on purpose; they flip only in a reviewed commit.
+ * The migration retains these acceptance sets, including the historical non-RFC UUID version nibble.
  */
 const command = { schemaVersion: 1, commandId: 'c', scopeId: 's', operation: { id: 'post-order', version: 1 }, target: { kind: 'records', id: 'r' },
   idempotencyKey: 'k', expectedVersion: null };
@@ -94,10 +97,35 @@ describe('unknown-key policy: strict, passthrough', () => {
     expect(spec.inputSchema).toEqual({ type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false, $schema: 'x' });
   });
 
-  it('config sections must be strict objects: strip and passthrough objects are refused at registration', () => {
+  it('config sections must be strict objects: strip and passthrough objects are refused at registration', async () => {
     expect(() => registerConfigSection('zod4_prep_strip', z.object({ a: z.number() }), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
     expect(() => registerConfigSection('zod4_prep_loose', z.object({ a: z.number() }).passthrough(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
     expect(Object.hasOwn(CORE_SCHEMA.shape, 'zod4_prep_strip')).toBe(false);
+    const projection = { type: 'object', properties: { value: { type: 'integer', minimum: 0, maximum: 10 } }, additionalProperties: false };
+    const foreign = { '~standard': { version: 1 as const, vendor: 'non-zod-fixture',
+      validate: (input: unknown) => {
+        const row = input as { value?: unknown } | null;
+        return row && typeof row === 'object' && !Array.isArray(row) && Object.keys(row).every(key => key === 'value')
+          && (row.value === undefined || typeof row.value === 'number' && Number.isInteger(row.value) && row.value >= 0 && row.value <= 10)
+          ? { value: { value: row.value ?? 1 } } : { issues: [{ message: 'invalid section', path: ['value'] }] };
+      }, jsonSchema: { input: (options: { target: string }) => { expect(options.target).toBe('draft-2020-12'); return projection; }, output: () => projection } } };
+    const metadata = { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound' as const, consumers: ['src/platform/core/config'] }, apply: 'live' as const };
+    registerConfigSection('zod4_prep_foreign', foreign, { metadata });
+    expect(createDefaultConfig()['zod4_prep_foreign']).toEqual({ value: 1 });
+    const effective = createDefaultConfig();
+    const app = new ConfigApplication({ snapshot: async () => ({ document: {}, global: {}, project: {}, effective, digest: null, layer: 'project', env: {} }), publish: async () => { throw Error('read only'); } },
+      { authorize: async () => { throw Error('read only'); }, audit: async () => { throw Error('read only'); } });
+    expect(await app.explain({ keyPath: 'zod4_prep_foreign.value' })).toMatchObject({ key: 'zod4_prep_foreign.value', value: 1, defaultValue: 1, schema: { type: 'integer', minimum: 0, maximum: 10 } });
+    expect(parseConfigInput('zod4_prep_foreign.value', '3')).toEqual({ ok: true, value: 3 });
+    expect(parseConfigInput('zod4_prep_foreign.value', '-1')).toEqual({ ok: false });
+    expect(validateConfig({ zod4_prep_foreign: { value: 3 } }).config['zod4_prep_foreign']).toEqual({ value: 3 });
+    expect(() => validateConfig({ zod4_prep_foreign: { value: -1 } })).toThrow(expect.objectContaining({ issues: [{ path: 'zod4_prep_foreign.value', reason: 'SECTION_INVALID' }] }));
+    expect(() => registerConfigSection('zod4_prep_foreign_loose', { '~standard': { ...foreign['~standard'], jsonSchema: { input: () => ({ ...projection, additionalProperties: true }), output: () => projection } } }, { metadata }))
+      .toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
+    registerConfigSection('zod4_prep_foreign_empty', { '~standard': { ...foreign['~standard'], validate: () => ({ issues: [] }) } }, { metadata, optional: true });
+    expect(() => validateConfig({ zod4_prep_foreign_empty: {} })).toThrow(expect.objectContaining({ issues: [{ path: 'zod4_prep_foreign_empty', reason: 'SECTION_INVALID' }] }));
+    registerConfigSection('zod4_prep_foreign_async', { '~standard': { ...foreign['~standard'], validate: async () => ({ value: { value: 1 } }) } }, { metadata, optional: true });
+    expect(() => validateConfig({ zod4_prep_foreign_async: {} })).toThrow(expect.objectContaining({ issues: [{ path: 'zod4_prep_foreign_async', reason: 'SECTION_INVALID' }] }));
   });
 });
 
@@ -117,7 +145,25 @@ describe('readonly defaults and string formats', () => {
     expect(['registry.npmjs.org', 'https://', 'https://exa mple.com', 'http://localhost:4873'].map(endpoint)).toEqual([false, false, false, false]);
   });
 
-  it('process command uuid: generated ids pass; EXPECTED-TO-CHANGE: a non-RFC version nibble passes today', () => {
+  it('process command uuid: generated ids and the persisted non-RFC version nibble remain valid', () => {
+    expect(readFileSync(new URL('../../../src/domain/core/primitives/internal/persisted-schema.ts', import.meta.url), 'utf8'))
+      .toBe(readFileSync(new URL('../../../src/platform/core/validate/internal/persisted-schema.ts', import.meta.url), 'utf8'));
+    const scalarCases: readonly [z.ZodType, z.ZodType, readonly unknown[], readonly boolean[]][] = [
+      [domainScalars.persistedDateTime({ offset: true }), platformScalars.persistedDateTime({ offset: true }), ['2026-01-01T00:00Z', '2026-01-01T00:00:00+0100', '2026-02-30T00:00Z', 1], [true, true, false, false]],
+      [domainScalars.persistedUuid(), platformScalars.persistedUuid(), ['123e4567-e89b-92d3-a456-426614174000', 'not-a-uuid'], [true, false]],
+      [domainScalars.persistedEmail(), platformScalars.persistedEmail(), ['a@example.test', '.a@example.test'], [true, false]],
+      [domainScalars.persistedUrl(), platformScalars.persistedUrl(), ['https://example.test', 'mailto:a@example.test', 'not-a-url'], [true, true, false]],
+      [domainScalars.persistedInteger(), platformScalars.persistedInteger(), [2 ** 53, 1.5, Infinity, '1'], [true, false, false, false]],
+      [domainScalars.persistedNumber(z.number().min(0)), platformScalars.persistedNumber(z.number().min(0)), [Infinity, 0, -Infinity, NaN, '1'], [true, true, false, false, false]],
+    ];
+    for (const [domain, platform, inputs, expected] of scalarCases) {
+      expect(inputs.map(input => domain.safeParse(input).success)).toEqual(expected);
+      expect(inputs.map(input => platform.safeParse(input).success)).toEqual(expected);
+      for (const input of inputs) expect(domain.safeParse(input)).toEqual(platform.safeParse(input));
+    }
+    const issues = [{ code: 'invalid_format' }, { code: 'invalid_value', values: ['x'] }, { code: 'custom', params: { legacyCode: 'invalid_type' } }];
+    expect(issues.map(domainScalars.persistedIssueCode)).toEqual(['invalid_string', 'invalid_literal', 'invalid_type']);
+    expect(issues.map(platformScalars.persistedIssueCode)).toEqual(['invalid_string', 'invalid_literal', 'invalid_type']);
     const base = { schemaVersion: 1, executable: '/bin/true', args: [], cwd: '/', env: {}, timeoutMs: 1, outputBytes: 1 };
     expect(processCommandSchema.safeParse({ ...base, requestId: randomUUID() }).success).toBe(true);
     expect(processCommandSchema.safeParse({ ...base, requestId: '123e4567-e89b-92d3-a456-426614174000' }).success).toBe(true);

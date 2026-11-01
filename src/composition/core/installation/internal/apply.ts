@@ -1,3 +1,4 @@
+import { persistedInteger, bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { lstat } from 'node:fs/promises';
 import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
@@ -6,13 +7,12 @@ import { z } from 'zod';
 import { attestLocalInteractiveTerminal, ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, localPrincipalChannel, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { assertAuthorityWitness, InstallationPublicationApplication, InstallationPublicationError, suppliedPolicyWithinTemplate, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
-import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
-const choicesSchema = z.object({ allowShutdown: z.boolean(), dockerExecutable: z.string().min(1).refine(isAbsolute),
-  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/), acceptCustom: z.literal(true) }).strict().readonly();
+const choicesSchema = z.strictObject({ allowShutdown: z.boolean(), dockerExecutable: z.string().min(1).refine(isAbsolute),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/), acceptCustom: z.literal(true) }).readonly();
 export type InstallationApplyChoices = z.infer<typeof choicesSchema>;
 function choices(input: unknown): InstallationApplyChoices {
   const safe = immutableJsonObjectSchema.safeParse(input), parsed = safe.success ? choicesSchema.safeParse(safe.data) : null;
@@ -22,9 +22,9 @@ function choices(input: unknown): InstallationApplyChoices {
 function retained(observed: BootstrapObservation): InstallationRecovery | null {
   if (!observed.record) return null;
   // Structural read only: the engine cross-validates recovery against preparation and current identity before publication.
-  const schema = z.object({ material: z.object({ authoredProfile: immutableJsonObjectSchema,
-    configuration: immutableJsonObjectSchema, allowShutdown: z.boolean() }).passthrough(),
-    consent: z.object({ id: z.string().min(1), atMs: z.number().int().nonnegative().safe() }).passthrough() }).passthrough();
+  const schema = z.looseObject({ material: z.looseObject({ authoredProfile: immutableJsonObjectSchema,
+    configuration: immutableJsonObjectSchema, allowShutdown: z.boolean() }),
+    consent: z.looseObject({ id: z.string().min(1), atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }) });
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }

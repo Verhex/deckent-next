@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { ModelInvocationDelta } from '#domain/index.js';
@@ -14,21 +15,21 @@ import type { AnthropicContentBlock, AnthropicContinuationScope } from './contin
 export const ANTHROPIC_STREAM_WIRE_FACTOR = 16;
 export const ANTHROPIC_STREAM_TOKEN_WIRE_BYTES = 1024;
 
-const start = z.object({ type: z.literal('message_start'), message: z.object({ id: z.string().min(1), type: z.literal('message'), role: z.literal('assistant'),
-  model: z.string().min(1), usage: anthropicUsageSchema }).passthrough() }).passthrough();
-const startBlock = z.discriminatedUnion('type', [z.object({ type: z.literal('text') }).passthrough(), z.object({ type: z.literal('thinking') }).passthrough(),
-  z.object({ type: z.literal('redacted_thinking'), data: z.string() }).passthrough(),
-  z.object({ type: z.literal('tool_use'), id: z.string().min(1).max(256), name: z.string() }).passthrough()]);
-const blockStart = z.object({ type: z.literal('content_block_start'), index: z.number().int().nonnegative(), content_block: startBlock }).passthrough();
-const delta = z.discriminatedUnion('type', [z.object({ type: z.literal('text_delta'), text: z.string() }).passthrough(),
-  z.object({ type: z.literal('thinking_delta'), thinking: z.string() }).passthrough(),
-  z.object({ type: z.literal('signature_delta'), signature: z.string() }).passthrough(),
-  z.object({ type: z.literal('input_json_delta'), partial_json: z.string() }).passthrough()]);
-const blockDelta = z.object({ type: z.literal('content_block_delta'), index: z.number().int().nonnegative(), delta }).passthrough();
-const blockStop = z.object({ type: z.literal('content_block_stop'), index: z.number().int().nonnegative() }).passthrough();
-const messageDelta = z.object({ type: z.literal('message_delta'), delta: z.object({ stop_reason: stopReasonSchema.nullable() }).passthrough(),
-  usage: anthropicUsageSchema }).passthrough();
-const simple = z.object({ type: z.enum(['message_stop', 'ping', 'error']) }).passthrough();
+const start = z.looseObject({ type: z.literal('message_start'), message: z.looseObject({ id: z.string().min(1), type: z.literal('message'), role: z.literal('assistant'),
+  model: z.string().min(1), usage: anthropicUsageSchema }) });
+const startBlock = z.discriminatedUnion('type', [z.looseObject({ type: z.literal('text') }), z.looseObject({ type: z.literal('thinking') }),
+  z.looseObject({ type: z.literal('redacted_thinking'), data: z.string() }),
+  z.looseObject({ type: z.literal('tool_use'), id: z.string().min(1).max(256), name: z.string() })]);
+const blockStart = z.looseObject({ type: z.literal('content_block_start'), index: persistedInteger().nonnegative(), content_block: startBlock });
+const delta = z.discriminatedUnion('type', [z.looseObject({ type: z.literal('text_delta'), text: z.string() }),
+  z.looseObject({ type: z.literal('thinking_delta'), thinking: z.string() }),
+  z.looseObject({ type: z.literal('signature_delta'), signature: z.string() }),
+  z.looseObject({ type: z.literal('input_json_delta'), partial_json: z.string() })]);
+const blockDelta = z.looseObject({ type: z.literal('content_block_delta'), index: persistedInteger().nonnegative(), delta });
+const blockStop = z.looseObject({ type: z.literal('content_block_stop'), index: persistedInteger().nonnegative() });
+const messageDelta = z.looseObject({ type: z.literal('message_delta'), delta: z.looseObject({ stop_reason: stopReasonSchema.nullable() }),
+  usage: anthropicUsageSchema });
+const simple = z.looseObject({ type: z.enum(['message_stop', 'ping', 'error']) });
 type Open = { type: string; index: number; text: string; signature: string; json: string; id: string; name: string; data: string };
 
 /**

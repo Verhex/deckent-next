@@ -10,18 +10,18 @@ import { NervousError, type NervousRule, type NervousRules } from './rules.js';
  * names another instance whose process is gone; `alive`/`same-process` never fire; `none`/`unreadable` prove nothing). `fenced` (S6R-3): the
  * dispatch already carries a fence, so its signal only re-applies a sealed case (stop issued, proof pending; a crash between seal and effect).
  */
-export const nervousAttemptSignalSchema = z.object({ identity: attemptIdentitySchema, activity: z.enum(NERVOUS_ACTIVITY_STATES),
-  launcher: z.object({ basis: z.enum(NERVOUS_LAUNCHER_BASES), phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable() }).strict(),
-  containerRecorded: z.boolean(), workerRecorded: z.boolean(), fenced: z.boolean().optional() }).strict().readonly();
+export const nervousAttemptSignalSchema = z.strictObject({ identity: attemptIdentitySchema, activity: z.enum(NERVOUS_ACTIVITY_STATES),
+  launcher: z.strictObject({ basis: z.enum(NERVOUS_LAUNCHER_BASES), phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable() }),
+  containerRecorded: z.boolean(), workerRecorded: z.boolean(), fenced: z.boolean().optional() }).readonly();
 export type NervousAttemptSignal = z.infer<typeof nervousAttemptSignalSchema>;
 export type NervousEvidence = z.infer<typeof recoveryEvidenceSchema>;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** One typed proposal: the rule that fired, the one K-B action it names and what it names it for (an Attempt, a task's Attempt from an audit event, or the scope). */
-export const nervousProposalSchema = z.object({ schemaVersion: z.literal(1), caseId: digest, scopeId: identitySchema,
-  rule: z.object({ id: identitySchema, version: counterSchema.positive(), status: z.enum(NERVOUS_RULE_STATUSES) }).strict(), registryRevision: identitySchema,
-  action: recoveryActionSchema, target: z.discriminatedUnion('kind', [z.object({ kind: z.literal('attempt'), identity: attemptIdentitySchema }).strict(),
-    z.object({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).strict(), z.object({ kind: z.literal('scope') }).strict()]),
-  evidence: recoveryEvidenceSchema, evidenceDigest: digest }).strict().readonly();
+export const nervousProposalSchema = z.strictObject({ schemaVersion: z.literal(1), caseId: digest, scopeId: identitySchema,
+  rule: z.strictObject({ id: identitySchema, version: counterSchema.positive(), status: z.enum(NERVOUS_RULE_STATUSES) }), registryRevision: identitySchema,
+  action: recoveryActionSchema, target: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('attempt'), identity: attemptIdentitySchema }),
+    z.strictObject({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }), z.strictObject({ kind: z.literal('scope') })]),
+  evidence: recoveryEvidenceSchema, evidenceDigest: digest }).readonly();
 export type NervousProposal = z.infer<typeof nervousProposalSchema>;
 export type NervousTarget = NervousProposal['target'];
 /** Per-process series of absent samples of one Attempt (memory only: a restart starts it again, which only delays a fire). */

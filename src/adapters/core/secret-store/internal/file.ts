@@ -12,8 +12,8 @@ export const FILE_SECRET_STORE_NAME = 'secrets.json';
 /** The one bound of the store document, in UTF-8 bytes of its JSON text: the reader refuses a larger document and the writer never produces one. */
 export const FILE_SECRET_STORE_MAX_BYTES = 1_048_576;
 /** Store document v1: names in the `$DECK` grammar, bounded non-empty values; nothing else. */
-const documentSchema = z.object({ schemaVersion: z.literal(1),
-  secrets: z.record(z.string().regex(SECRET_NAME_PATTERN), z.string().min(1).max(SECRET_VALUE_MAX_BYTES)) }).strict();
+const documentSchema = z.strictObject({ schemaVersion: z.literal(1),
+  secrets: z.record(z.string().regex(SECRET_NAME_PATTERN), z.string().min(1).max(SECRET_VALUE_MAX_BYTES)) });
 
 export interface FileSecretStoreOptions {
   /** The installation (global) root; null when none resolves (no HOME and no override): the store is then unavailable. */

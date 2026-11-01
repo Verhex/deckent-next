@@ -6,10 +6,10 @@ import { migrateLedger, CURRENT_LEDGER_VERSION, sqliteLedgerOptionsSchema, type 
 import { SqliteExecutionPools } from './pools.js';
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
-const ownershipSchema = z.object({
+const ownershipSchema = z.strictObject({
   schemaVersion: z.literal(1), transactionId: z.string().min(1).max(256),
   planDigest: hex, profileDigest: hex, proposalDigest: hex,
-}).strict().readonly();
+}).readonly();
 export type InstallationLedgerOwnership = z.infer<typeof ownershipSchema>;
 export type InstallationLedgerErrorCode = 'INSTALLATION_LEDGER_INVALID' | 'INSTALLATION_LEDGER_CONFLICT'
   | 'INSTALLATION_LEDGER_CORRUPT' | 'INSTALLATION_LEDGER_UNAVAILABLE' | 'INSTALLATION_LEDGER_OUTCOME_UNKNOWN';
@@ -22,8 +22,8 @@ function record(ownership: InstallationLedgerOwnership, pool: ExecutionPool): st
 }
 function inputs(ownershipInput: unknown, poolInput: unknown) {
   const copiedOwnership = immutableJsonObjectSchema.safeParse(ownershipInput), copiedPool = immutableJsonObjectSchema.safeParse(poolInput);
-  const parsedOwnership = copiedOwnership.success ? ownershipSchema.safeParse(copiedOwnership.data) : copiedOwnership;
-  const parsedPool = copiedPool.success ? executionPoolSchema.safeParse(copiedPool.data) : copiedPool;
+  if (!copiedOwnership.success || !copiedPool.success) throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
+  const parsedOwnership = ownershipSchema.safeParse(copiedOwnership.data), parsedPool = executionPoolSchema.safeParse(copiedPool.data);
   if (!parsedOwnership.success || !parsedPool.success) throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
   return { ownership: parsedOwnership.data, pool: parsedPool.data, encoded: record(parsedOwnership.data, parsedPool.data) };
 }
@@ -45,7 +45,8 @@ function exactReplay(db: DatabaseSync, expected: string, pool: ExecutionPool): v
 /** Installer-only ledger initialization. Filesystem path custody and permissions remain composition's responsibility. */
 export async function initializeInstallationLedger(path: string, options: SqliteLedgerOptions, ownershipInput: unknown, poolInput: unknown) {
   const copiedOptions = immutableJsonObjectSchema.safeParse(options);
-  const parsedOptions = copiedOptions.success ? sqliteLedgerOptionsSchema.safeParse(copiedOptions.data) : copiedOptions;
+  if (!copiedOptions.success) throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
+  const parsedOptions = sqliteLedgerOptionsSchema.safeParse(copiedOptions.data);
   if (typeof path !== 'string' || !path || !parsedOptions.success) {
     throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
   }

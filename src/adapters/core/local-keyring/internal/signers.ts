@@ -1,8 +1,8 @@
+import { persistedInteger, catalogActionBytes, encodeCommandProjection, identitySchema, SIGNATURE_LABELS } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { open, rename, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { catalogActionBytes, encodeCommandProjection, identitySchema, SIGNATURE_LABELS } from '#domain/index.js';
 import { AgentCatalogStoreError, type SignerKeyCustody, type SignerRevocation, type SignerRevocationLog } from '#engine/index.js';
 import { ED25519_PKCS8_BYTES, ed25519KeyId, ed25519Signer, generateEd25519Pair, inspectProductDirectory, prepareProductDirectory, signatureMessage, withConfigWriteLock,
   type IntegrityAuthority, type ProductLayout } from '#platform/index.js';
@@ -41,9 +41,9 @@ export function localSignerKeyCustody(layout: ProductLayout): SignerKeyCustody {
   });
 }
 
-const entrySchema = z.object({ scopeId: identitySchema, keyId: z.string().regex(/^[a-f0-9]{64}$/), by: z.object({ issuer: identitySchema, subject: identitySchema }).strict(),
-  atMs: z.number().int().nonnegative().safe(), commandId: identitySchema }).strict();
-const lineSchema = z.object({ entry: z.unknown(), prev: z.string().regex(/^[a-f0-9]{64}$/), keyId: z.string().min(1), mac: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+const entrySchema = z.strictObject({ scopeId: identitySchema, keyId: z.string().regex(/^[a-f0-9]{64}$/), by: z.strictObject({ issuer: identitySchema, subject: identitySchema }),
+  atMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), commandId: identitySchema });
+const lineSchema = z.strictObject({ entry: z.unknown().optional(), prev: z.string().regex(/^[a-f0-9]{64}$/), keyId: z.string().min(1), mac: z.string().regex(/^[a-f0-9]{64}$/) });
 const GENESIS = '0'.repeat(64), SEAL = 'signer-revocations:1';
 /**
  * S8-5 revocation log `signers/revocations.log`: append-only JSONL, each line sealed with the installation integrity key over (entry, MAC of the

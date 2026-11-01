@@ -3,7 +3,7 @@ import { evaluatePolicy, identitySchema, matchFirstRunPolicyTemplate, policySche
 import type { PolicySource } from './authorize.js';
 import { PolicyAuthorizationError } from './authorize.js';
 
-export const policyAdministrationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().readonly();
+export const policyAdministrationQuerySchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema }).readonly();
 export type PolicyAdministrationQuery = z.infer<typeof policyAdministrationQuerySchema>;
 export interface PolicyAdministrationStatus {
   readonly schemaVersion: 1; readonly scopeId: string; readonly revision: string;

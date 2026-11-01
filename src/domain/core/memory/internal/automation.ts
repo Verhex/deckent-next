@@ -1,36 +1,35 @@
+import { persistedInteger, counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import automationSeed from '../../../../../assets/memory/automation.json' with { type: 'json' };
 import extractorsSeed from '../../../../../assets/memory/extractors.json' with { type: 'json' };
 import templatesSeed from '../../../../../assets/memory/templates.json' with { type: 'json' };
 import { CORE_WORK_CLASSES, mergeWorkClassRegistries, type WorkClassRegistry } from '#domain/core/run/index.js';
 import { AUDIT_MEMORY_CONTEXT_ENTRIES_MAX } from '#domain/core/audit/index.js';
 import { MEMORY_LIMITS, MemoryError, memoryLessonClaimSchema } from './contract.js';
-
 /**
  * S4B-1 memory automation registries (S4B-DESIGN §4.1, §4.2, §4.4, §10; owner S-M1/S-M11 2026-10-23). Versioned Core seeds (`assets/memory`); every
  * bound is provisional until measured on a real installation (K-F S8). The installation overlay lives only under the protected config subtree `memory.automation`
  * (A10: no AI writes it) and may only narrow: lower a bound, add a WorkClass row, or switch a seed row's extraction off / shorten its retention.
  */
-const positive = z.number().int().positive().safe();
-const workClassRowSchema = z.object({ workClassId: identitySchema, retentionProfile: z.object({ id: identitySchema, entryMaxAgeMs: positive }).strict().readonly(),
-  personalData: z.enum(['none', 'possible']), extraction: z.boolean() }).strict().readonly();
-const boundsSchema = z.object({ perAttempt: positive, perRun: positive, perScopePerDay: positive, supportPerEntry: positive, loopPage: positive }).strict();
+const positive = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const workClassRowSchema = z.strictObject({ workClassId: identitySchema, retentionProfile: z.strictObject({ id: identitySchema, entryMaxAgeMs: positive }).readonly(),
+  personalData: z.enum(['none', 'possible']), extraction: z.boolean() }).readonly();
+const boundsSchema = z.strictObject({ perAttempt: positive, perRun: positive, perScopePerDay: positive, supportPerEntry: positive, loopPage: positive });
 /** S4B-5 §7.1: entries and bytes per worker part, sources checked per entry; `candidatePool` verified entries read per admission (most recently
  * changed first) and `termsMax` work-input words used to rank them. `maxEntries` never exceeds what one sealed `memory-context` event can name. */
-const contextSchema = z.object({ maxEntries: positive.max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), maxBytes: positive, maxSourcesChecked: positive, candidatePool: positive,
-  termsMax: positive }).strict();
+const contextSchema = z.strictObject({ maxEntries: positive.max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), maxBytes: positive, maxSourcesChecked: positive, candidatePool: positive,
+  termsMax: positive });
 /** S4B-3 (§6.2, §10, owner S-M5/S-M10): evaluator calls, contests, unknown answers (the circuit breaker) and settled spend (minor units of the
  * scope's spend currency) per scope per UTC day; the answer's token and byte caps; how many verified titles are offered for conflicts. */
-const evaluationSchema = z.object({ perScopePerDay: positive, contestsPerScopePerDay: positive, unknownPerScopePerDay: positive, spendMinorUnitsPerScopePerDay: positive,
+const evaluationSchema = z.strictObject({ perScopePerDay: positive, contestsPerScopePerDay: positive, unknownPerScopePerDay: positive, spendMinorUnitsPerScopePerDay: positive,
   maxCompletionTokens: positive, outputMaxBytes: positive, conflictTitles: positive, conflictsMax: positive, reasonCodesMax: positive,
-  /** The least time between two evaluator passes of one scope (the reconciliation loop polls far more often). */ passIntervalMs: positive }).strict();
-const automationSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), bounds: boundsSchema.readonly(),
+  /** The least time between two evaluator passes of one scope (the reconciliation loop polls far more often). */ passIntervalMs: positive });
+const automationSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), bounds: boundsSchema.readonly(),
   context: contextSchema.readonly(), evaluation: evaluationSchema.readonly(),
   /** The evaluator's answer vocabulary (versioned Core data; no overlay changes it). */ reasonCodes: z.array(identitySchema).min(1).max(32).readonly(),
-  workClasses: z.array(workClassRowSchema).max(256).readonly() }).strict().readonly();
-export const memoryAutomationOverlaySchema = z.object({ bounds: boundsSchema.partial().optional(), context: contextSchema.partial().optional(),
-  evaluation: evaluationSchema.partial().optional(), workClasses: z.array(workClassRowSchema).max(256).readonly().optional() }).strict().readonly();
+  workClasses: z.array(workClassRowSchema).max(256).readonly() }).readonly();
+export const memoryAutomationOverlaySchema = z.strictObject({ bounds: boundsSchema.partial().optional(), context: contextSchema.partial().optional(),
+  evaluation: evaluationSchema.partial().optional(), workClasses: z.array(workClassRowSchema).max(256).readonly().optional() }).readonly();
 export type MemoryAutomation = z.infer<typeof automationSchema>;
 export type MemoryWorkClassRow = z.infer<typeof workClassRowSchema>;
 const invalid = () => new MemoryError('MEMORY_AUTOMATION_INVALID');
@@ -80,11 +79,11 @@ export function memoryWorkClassIn(byId: ReadonlyMap<string, WorkClassRow>, class
   const risk = 'proposalAdmission' in start && start.proposalAdmission ? start.proposalAdmission.risk : 'normal';
   return { id: start.id, family: root.id, risk };
 }
-const extractorSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, rules: z.array(z.object({ id: z.enum(['E1', 'E2', 'E3']), version: positive,
-  kind: z.enum(['human-answer', 'failure-fix', 'worker-claim']), enabled: z.boolean() }).strict().readonly()).min(1).max(16).readonly() }).strict().readonly();
+const extractorSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, rules: z.array(z.strictObject({ id: z.enum(['E1', 'E2', 'E3']), version: positive,
+  kind: z.enum(['human-answer', 'failure-fix', 'worker-claim']), enabled: z.boolean() }).readonly()).min(1).max(16).readonly() }).readonly();
 export const MEMORY_EXTRACTORS = Object.freeze(extractorSchema.parse(extractorsSeed));
-const templatesSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.object({ id: identitySchema, version: positive,
-  text: z.string().min(1).max(MEMORY_LIMITS.bodyMaxBytes) }).strict().readonly()).min(1).max(32).readonly() }).strict().readonly();
+const templatesSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, templates: z.array(z.strictObject({ id: identitySchema, version: positive,
+  text: z.string().min(1).max(MEMORY_LIMITS.bodyMaxBytes) }).readonly()).min(1).max(32).readonly() }).readonly();
 /** Model-facing texts (worker report sentence, context header, evaluator prompt): versioned data, never literals in code; `id@version` is sealed. */
 export const MEMORY_TEMPLATES = Object.freeze(templatesSchema.parse(templatesSeed));
 export function memoryTemplate(id: string, version: number): string {
@@ -94,15 +93,15 @@ export function memoryTemplate(id: string, version: number): string {
 }
 
 /** One sealed source the distiller reads (built by an adapter from sealed ledger records only; never a live workspace). */
-export const memoryExtractionSourceSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema, taskId: identitySchema,
+export const memoryExtractionSourceSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema, taskId: identitySchema,
   attemptId: identitySchema, generation: counterSchema.positive(),
-  workClass: z.object({ id: identitySchema, family: identitySchema, risk: z.enum(['low', 'normal', 'high']) }).strict().readonly().nullable(),
-  workTargetId: identitySchema.nullable(), evaluation: z.object({ id: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly(),
+  workClass: z.strictObject({ id: identitySchema, family: identitySchema, risk: z.enum(['low', 'normal', 'high']) }).readonly().nullable(),
+  workTargetId: identitySchema.nullable(), evaluation: z.strictObject({ id: identitySchema, digest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly(),
   /** Task phase accepted and the canonical evaluation accepted. */ accepted: z.boolean(),
   /** No unresolved effect and the Task not reopened. */ settled: z.boolean(),
-  inputAnswer: z.object({ question: z.string().min(1), answer: z.string().min(1) }).strict().readonly().nullable(),
-  earlierFailure: z.object({ reasonCode: identitySchema, checkIds: z.array(identitySchema).max(16).readonly() }).strict().readonly().nullable(),
-  lessons: z.array(z.unknown()).max(64).readonly().nullable(), reportDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable() }).strict().readonly();
+  inputAnswer: z.strictObject({ question: z.string().min(1), answer: z.string().min(1) }).readonly().nullable(),
+  earlierFailure: z.strictObject({ reasonCode: identitySchema, checkIds: z.array(identitySchema).max(16).readonly() }).readonly().nullable(),
+  lessons: z.array(z.unknown().optional()).max(64).readonly().nullable(), reportDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable() }).readonly();
 export type MemoryExtractionSource = z.infer<typeof memoryExtractionSourceSchema>;
 export interface MemoryCandidate { readonly ruleId: 'E1' | 'E2' | 'E3'; readonly ruleVersion: number; readonly claimIndex: number; readonly producer: 'rule' | 'worker-claim';
   readonly content: unknown }

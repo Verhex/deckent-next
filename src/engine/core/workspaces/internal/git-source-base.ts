@@ -5,11 +5,11 @@ import { isAbsolute, resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
-export const gitSourcePreimageSchema = z.object({ schemaVersion: z.literal(1), sourceRoot: z.string().min(1), repositoryRoot: z.string().min(1) }).strict().readonly();
-export const gitSourceBaseSchema = z.object({ schemaVersion: z.literal(1), adapter: z.object({ id: z.literal('git'), version: z.literal(1) }).strict().readonly(),
+export const gitSourcePreimageSchema = z.strictObject({ schemaVersion: z.literal(1), sourceRoot: z.string().min(1), repositoryRoot: z.string().min(1) }).readonly();
+export const gitSourceBaseSchema = z.strictObject({ schemaVersion: z.literal(1), adapter: z.strictObject({ id: z.literal('git'), version: z.literal(1) }).readonly(),
   sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/), source: gitSourcePreimageSchema,
   baseCommit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-}).strict().readonly();
+}).readonly();
 export type GitSourcePreimage = z.infer<typeof gitSourcePreimageSchema>;
 export type GitSourceBase = z.infer<typeof gitSourceBaseSchema>;
 export function fingerprintGitSource(input: GitSourcePreimage) {
@@ -21,8 +21,8 @@ export function fingerprintGitSource(input: GitSourcePreimage) {
 export const gitWorkspaceOptionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1),
   baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/).optional() }).strict().readonly();
 export type GitWorkspaceOptions = z.infer<typeof gitWorkspaceOptionsSchema>;
-export const gitWorkspaceRecordSchema = z.object({ schemaVersion: z.literal(2), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  request: workspaceRequestSchema, sourceBase: gitSourceBaseSchema, status: z.enum(['allocating', 'ready']) }).strict();
+export const gitWorkspaceRecordSchema = z.strictObject({ schemaVersion: z.literal(2), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  request: workspaceRequestSchema, sourceBase: gitSourceBaseSchema, status: z.enum(['allocating', 'ready']) });
 export function gitWorkspaceFingerprint(request: WorkspaceRequest, sourceBase: GitSourceBase, options: GitWorkspaceOptions, privateSource?: Readonly<{ repositoryRoot: string; baseCommit: string }>) {
   return createHash('sha256').update(JSON.stringify({ request, sourceBase, options, ...(privateSource ? { privateSource } : {}) })).digest('hex');
 }

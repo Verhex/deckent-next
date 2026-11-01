@@ -3,15 +3,15 @@ import { z } from 'zod';
 import { attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
 import { AttemptStoreError, type AttemptStore } from '#engine/core/attempts/index.js';
 import { HandoffError } from './validation.js';
-const eventSchema = z.object({ kind: z.enum(['handoff-received', 'workspace-started-from-patch']), source: attemptIdentitySchema,
+const eventSchema = z.strictObject({ kind: z.enum(['handoff-received', 'workspace-started-from-patch']), source: attemptIdentitySchema,
   digest: z.string().regex(/^[a-f0-9]{64}$/), bindingDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict().superRefine((event, ctx) => {
+  snapshotDigest: z.string().regex(/^[a-f0-9]{64}$/).optional() }).superRefine((event, ctx) => {
   if ((event.bindingDigest === undefined) !== (event.snapshotDigest === undefined)
     || (event.kind !== 'workspace-started-from-patch' && event.bindingDigest !== undefined))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid patch start digest pair' });
 }).readonly();
-export const handoffStartRecordSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
-  events: z.array(eventSchema).readonly() }).strict().superRefine((record, ctx) => {
+export const handoffStartRecordSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+  events: z.array(eventSchema).readonly() }).superRefine((record, ctx) => {
   const patches = record.events.filter(event => event.kind === 'workspace-started-from-patch');
   if (patches.some(event => event.bindingDigest !== patches[0]?.bindingDigest || event.snapshotDigest !== patches[0]?.snapshotDigest))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Inconsistent patch start digests' });

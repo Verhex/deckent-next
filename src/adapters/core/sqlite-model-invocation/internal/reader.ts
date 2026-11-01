@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { readInvocationPlanUsage } from './plan-usage.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 import { createRequire } from 'node:module';
@@ -8,7 +9,7 @@ import { MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, require
 import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationCommandRecord, loadInvocationRecord } from './read.js';
 import { decodeInvocationControl } from './control.js';
 
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
+const optionsSchema = z.strictObject({ busyTimeoutMs: persistedInteger().nonnegative().max(2_147_483_647) });
 export type ModelInvocationReader = Pick<ModelInvocationStore, 'loadInvocation' | 'loadReceipt' | 'close'> & ModelInvocationInspectionReader;
 class SqliteModelInvocationReader implements ModelInvocationReader {
   constructor(private readonly db: DatabaseSync) {}

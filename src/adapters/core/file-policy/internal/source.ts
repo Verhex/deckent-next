@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open, realpath, rename, unlink } from 'node:fs/promises';
@@ -7,10 +8,10 @@ import { bindingsFileSchema, policyFileSchema, resolvePolicyBindings, type Admin
 import { AuthorityChangeError, PermissionModeError, validateAuthorityWrite, type AuthorityDocumentStore, type AuthorityLookup, type AuthorityWrite, type AuthorityRevision, type PermissionModeBindingsStore,
   type PermissionModeSnapshot, type PolicySource } from '#engine/index.js';
 import { AuthorityArchive, archiveKeyName } from './archive.js';
-const optionsSchema = z.object({ path: z.string().min(1), bindingsPath: z.string().min(1).optional(),
+const optionsSchema = z.strictObject({ path: z.string().min(1), bindingsPath: z.string().min(1).optional(),
   /** Authority revision archive directory (POLICY-ADMIN P2); absent = writes are not archived and keyed writes are refused. */
   archivePath: z.string().min(1).optional(),
-  ownerUid: z.number().int().nonnegative().safe(), maxBytes: z.number().int().positive().safe() }).strict();
+  ownerUid: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 export type FilePolicyOptions = z.infer<typeof optionsSchema>;
 type PolicyFileResource = 'policy' | 'bindings' | 'archive';
 export class PolicyFileError extends Error {

@@ -1,17 +1,17 @@
+import { persistedInteger, memoryTemplate, workerReportLimits } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { memoryTemplate, workerReportLimits } from '#domain/index.js';
 import core from './worker-core.json' with { type: 'json' };
 import limits from './prompt-limits.json' with { type: 'json' };
 export const NATIVE_PROMPT_LIMITS /* data; the agent catalog's define-time bound (S8-1a) */ = Object.freeze({ ...limits });
 
 const text = z.string().min(1).refine(value => value.trim().length > 0 && !value.includes('\0') && Buffer.byteLength(value) <= 16384);
 /** One explicitly selected, versioned prompt part (core, persona, skill or context). */
-export const promptPartSchema = z.object({ id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/), version: z.number().int().positive().safe(), text }).strict().readonly();
-export const nativePromptCompositionSchema = z.object({ schemaVersion: z.literal(1), core: promptPartSchema.optional(),
-  persona: promptPartSchema.optional(), skills: z.array(promptPartSchema).max(16).default([]), context: z.array(promptPartSchema).max(8).default([]),
+export const promptPartSchema = z.strictObject({ id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/), version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), text }).readonly();
+export const nativePromptCompositionSchema = z.strictObject({ schemaVersion: z.literal(1), core: promptPartSchema.optional(),
+  persona: promptPartSchema.optional(), skills: z.array(promptPartSchema).max(16).prefault([]), context: z.array(promptPartSchema).max(8).prefault([]),
   task: text, scope: text, acceptance: text,
-}).strict().superRefine((value, ctx) => {
+}).superRefine((value, ctx) => {
   const ids = [...(value.persona ? [value.persona.id] : []), ...value.skills.map(p => p.id)];
   if (new Set(ids).size !== ids.length || new Set(value.context.map(p => p.id)).size !== value.context.length)
     ctx.addIssue({ code: 'custom', message: 'Duplicate prompt selection' });

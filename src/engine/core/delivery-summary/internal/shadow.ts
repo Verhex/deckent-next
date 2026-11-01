@@ -1,6 +1,6 @@
+import { persistedInteger, counterSchema, identitySchema } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { counterSchema, identitySchema } from '#domain/index.js';
 import { AUTONOMY_HOLD_REASONS, autonomyFacts, canonical, evaluateAutonomy } from './rule.js';
 import type { DeliverySummary } from './contract.js';
 
@@ -18,10 +18,10 @@ const legacyAutonomyShadowId = (commandId: string, revision: number) => `autonom
 /** True when two records describe the same ticket revision; stores deduplicate by these fields, never by the id text. */
 export const sameAutonomyShadowTicket = (left: AutonomyShadowRecord, right: AutonomyShadowRecord) =>
   left.scopeId === right.scopeId && left.commandId === right.commandId && left.revision === right.revision;
-export const autonomyShadowRecordSchema = z.object({ schemaVersion: z.literal(1), id: z.string().min(1), at: counterSchema, actor: z.literal('system'),
+export const autonomyShadowRecordSchema = z.strictObject({ schemaVersion: z.literal(1), id: z.string().min(1), at: counterSchema, actor: z.literal('system'),
   scopeId: identitySchema, commandId: identitySchema, revision: counterSchema,
-  rule: z.object({ id: identitySchema, version: z.number().int().positive().safe(), digest }).strict(),
-  verdict: z.enum(['would-deliver', 'would-hold']), reasons: z.array(z.enum(AUTONOMY_HOLD_REASONS)).max(AUTONOMY_HOLD_REASONS.length), summaryDigest: digest }).strict()
+  rule: z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), digest }),
+  verdict: z.enum(['would-deliver', 'would-hold']), reasons: z.array(z.enum(AUTONOMY_HOLD_REASONS)).max(AUTONOMY_HOLD_REASONS.length), summaryDigest: digest })
   .refine(value => (value.id === autonomyShadowId(value.scopeId, value.commandId, value.revision) || value.id === legacyAutonomyShadowId(value.commandId, value.revision)) && new Set(value.reasons).size === value.reasons.length
     && (value.verdict === 'would-deliver') === (value.reasons.length === 0)).readonly();
 export type AutonomyShadowRecord = z.infer<typeof autonomyShadowRecordSchema>;

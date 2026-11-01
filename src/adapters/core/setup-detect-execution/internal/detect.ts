@@ -8,15 +8,15 @@ import registryData from './runtimes.json' with { type: 'json' };
 import limits from './limits.json' with { type: 'json' };
 
 const argv = z.array(z.string().min(1).max(256)).max(16), name = z.string().regex(/^[A-Za-z0-9._-]{1,64}$/);
-const runtimeEntry = z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), label: z.string().min(1).max(64), support: z.enum(['supported', 'unsupported']),
+const runtimeEntry = z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), label: z.string().min(1).max(64), support: z.enum(['supported', 'unsupported']),
   executable: name, versionArgs: argv.optional(), endpointArgs: argv.optional(), infoArgs: argv.optional(), groupArgs: argv.optional(), groupExecutable: name.optional(),
-  userSocketPrefix: z.string().startsWith('/').optional(), rootless: z.object({ securityOptions: z.array(z.string()).max(8) }).strict().optional(),
-  desktop: z.object({ operatingSystem: z.array(z.string()).max(8), cliPrefixes: z.array(z.string().startsWith('/')).max(8) }).strict().optional() }).strict()
+  userSocketPrefix: z.string().startsWith('/').optional(), rootless: z.strictObject({ securityOptions: z.array(z.string()).max(8) }).optional(),
+  desktop: z.strictObject({ operatingSystem: z.array(z.string()).max(8), cliPrefixes: z.array(z.string().startsWith('/')).max(8) }).optional() })
   .refine(entry => entry.support === 'unsupported' || (entry.versionArgs && entry.endpointArgs && entry.infoArgs));
 export type ExecutionRuntimeEntry = z.infer<typeof runtimeEntry>;
 /** The versioned execution-environment registry (data, not code): Docker is the only supported entry today; later runtimes are entries here. */
 export const parseExecutionRuntimes = (input: unknown): readonly ExecutionRuntimeEntry[] =>
-  z.object({ $comment: z.string().optional(), schemaVersion: z.literal(1), runtimes: z.array(runtimeEntry).min(1).max(limits.runtimes) }).strict().parse(input).runtimes;
+  z.strictObject({ $comment: z.string().optional(), schemaVersion: z.literal(1), runtimes: z.array(runtimeEntry).min(1).max(limits.runtimes) }).parse(input).runtimes;
 export const EXECUTION_RUNTIMES = parseExecutionRuntimes(registryData);
 
 type SocketState = Readonly<{ state: 'missing' | 'accessible' | 'denied' | 'unknown'; gid: number | null }>;

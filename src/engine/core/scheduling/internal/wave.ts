@@ -1,13 +1,14 @@
+import { persistedInteger, identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness, excludeConflicting } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness, excludeConflicting } from '#domain/index.js';
-const schedulingInputSchema = z.object({
+
+const schedulingInputSchema = z.strictObject({
   schemaVersion: z.literal(2),
-  capacity: z.object({ executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe() }).strict(),
+  capacity: z.strictObject({ executionSlots: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), inFlightSlots: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }),
   /** Complete ordering supplied by scheduling policy, never inferred from task kind or model name. */
   ordering: z.array(identitySchema),
   excludedTaskIds: z.array(identitySchema).optional(),
   snapshot: readinessInputSchema,
-}).strict();
+});
 export class SchedulingError extends Error {
   constructor(readonly code: 'SCHEDULING_INPUT_INVALID' | 'SCHEDULING_ORDER_INVALID') { super(code); this.name = 'SchedulingError'; }
 }

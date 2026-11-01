@@ -18,7 +18,7 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
 export const agentMcpEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-mcp-effect:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 
-const inputSchema = z.object({ server: z.string().min(1), tool: z.string().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/), arguments: z.record(z.string(), z.unknown()) }).strict();
+const inputSchema = z.strictObject({ server: z.string().min(1), tool: z.string().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/), arguments: z.record(z.string(), z.unknown().optional()) });
 /**
  * One MCP tool call as a C11 effect target. Each call is its own record and is never repeated (`lookup` is always unknown). Nothing sent
  * (not connected, the pin no longer matches, its pinned outputSchema cannot be compiled, cancelled first, or — MCP-REVOKE — the current

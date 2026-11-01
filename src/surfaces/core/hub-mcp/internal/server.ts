@@ -7,7 +7,7 @@ import { registerHubMethods, type HubMcpOptions } from './methods.js';
 
 const extension = 'io.modelcontextprotocol/skills'; // Standard extension id, not a mutable Deckent domain.
 const cache = { resultType: 'complete' as const, ttlMs: 0, cacheScope: 'private' as const };
-const meta = z.object({ _meta: z.record(z.unknown()).optional() });
+const meta = z.object({ _meta: z.record(z.string(), z.unknown().optional()).optional() });
 const listParams = meta.extend({ cursor: z.string().max(HUB_LIMITS.packageMaxBytes).optional() }).strict();
 const getParams = meta.extend({ uri: z.string().max(HUB_LIMITS.packageMaxBytes) }).strict();
 const encoded = (value: string) => encodeURIComponent(value);

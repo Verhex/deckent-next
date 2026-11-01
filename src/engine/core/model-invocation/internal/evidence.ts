@@ -10,11 +10,11 @@ import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port
 import { verifyModelActivationRecord } from '#engine/core/model-activation/index.js';
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
-const admissionSchema = z.object({ command: modelInvocationCommandSchema, requestDigest: hex,
-  actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: z.unknown(),
-  activation: z.unknown(), profile: modelInvocationProfileSchema, profileDigest: hex,
+const admissionSchema = z.strictObject({ command: modelInvocationCommandSchema, requestDigest: hex,
+  actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: z.unknown().optional(),
+  activation: z.unknown().optional(), profile: modelInvocationProfileSchema, profileDigest: hex,
   invocationId: identitySchema, claimedAtMs: counterSchema,
-  spending: z.object({ budget: providerSpendBudgetSchema, quote: providerSpendQuoteSchema }).strict().readonly().optional() }).strict();
+  spending: z.strictObject({ budget: providerSpendBudgetSchema, quote: providerSpendQuoteSchema }).readonly().optional() });
 const admissionEnvelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 export function modelInvocationRequestDigest(input: unknown): string {
   return createHash('sha256').update(encodeModelInvocationRequest(input), 'utf8').digest('hex');

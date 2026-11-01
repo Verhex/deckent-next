@@ -1,8 +1,8 @@
+import { persistedInteger, ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
 import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
 import REGISTRY from './registry.json' with { type: 'json' };
 
 /**
@@ -20,17 +20,17 @@ export const MCP_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 export const MCP_SERVER_NAME = /^(?=.{1,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const scope = z.enum(MCP_SCOPES);
-export const mcpTrustRecordSchema = z.object({
+export const mcpTrustRecordSchema = z.strictObject({
   scope, name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest,
-  tools: z.array(z.object({ name: z.string().min(1).max(128), digest, alwaysAsk: z.boolean() }).strict()).max(512),
+  tools: z.array(z.strictObject({ name: z.string().min(1).max(128), digest, alwaysAsk: z.boolean() })).max(512),
   /** `trusted`: offered; `declined`: the owner said no for this definition (not asked again until it changes or is reset). */
   decision: z.enum(['trusted', 'declined']),
   /** Bumped by `/mcp reconnect`: the service replaces the running process on its next use. */
-  reconnect: z.number().int().nonnegative(),
-  approvedAtMs: z.number().int().nonnegative(), principal: z.object({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }).strict(),
-}).strict();
+  reconnect: persistedInteger().nonnegative(),
+  approvedAtMs: persistedInteger().nonnegative(), principal: z.strictObject({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }),
+});
 export type McpTrustRecord = z.infer<typeof mcpTrustRecordSchema>;
-const fileSchema = z.object({ schemaVersion: z.literal(1), revision: z.number().int().nonnegative(), servers: z.array(mcpTrustRecordSchema).max(256) }).strict();
+const fileSchema = z.strictObject({ schemaVersion: z.literal(1), revision: persistedInteger().nonnegative(), servers: z.array(mcpTrustRecordSchema).max(256) });
 export type McpTrustState = z.infer<typeof fileSchema>;
 const EMPTY: McpTrustState = Object.freeze({ schemaVersion: 1, revision: 0, servers: [] });
 

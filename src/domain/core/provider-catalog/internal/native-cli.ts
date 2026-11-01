@@ -12,8 +12,8 @@ export class NativeCliRegistryError extends Error {
   readonly code = 'NATIVE_CLI_REGISTRY_INVALID';
   constructor() { super('NATIVE_CLI_REGISTRY_INVALID'); this.name = 'NativeCliRegistryError'; }
 }
-const vocabularyEnvelope = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.unknown())
-  .refine(value => Object.keys(value).length > 0), instructionSurface: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict() }).strict();
+const vocabularyEnvelope = z.strictObject({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.unknown().optional())
+  .refine(value => Object.keys(value).length > 0), instructionSurface: z.strictObject({ hiddenPaths: workspaceHiddenPathsSchema }) });
 export function nativeCliVocabulary(input: unknown): readonly string[] {
   const parsed = vocabularyEnvelope.safeParse(input);
   if (!parsed.success) throw new NativeCliRegistryError();
@@ -29,7 +29,7 @@ export const nativeCliIdSchema = providerIdSchema(nativeCliIds);
  * template names its own set, and delivery refuses a change inside it that the task scope does not name explicitly, for every provider.
  */
 export const INSTRUCTION_SURFACE_PATHS: WorkspaceHiddenPaths = vocabularyEnvelope.parse(registry).instructionSurface.hiddenPaths;
-const frozenCheckoutSchema = z.object({ nativeSubscription: z.object({ checkout: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).passthrough() }).passthrough() }).passthrough();
+const frozenCheckoutSchema = z.looseObject({ nativeSubscription: z.looseObject({ checkout: z.looseObject({ hiddenPaths: workspaceHiddenPathsSchema }) }) });
 /** The one reader of a frozen profile's checkout shaping (the C2 checkout the native compiler froze for its discovery mode; a U9-7 relay worker
  * keeps its native profile's, so it hides exactly what the native worker would); null = full checkout. Checkout shaping (allocation,
  * predecessor patches) and the delivery floor both read it, so they can never use different lists. */

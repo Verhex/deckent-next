@@ -1,34 +1,33 @@
+import { persistedInteger, runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { toInputJsonSchema, ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
-import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import templates from './internal/templates.json' with { type: 'json' };
-const selected = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict();
+const selected = z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) });
 /** `modelAssignment: 'system'` (ATAMA-1, owner ASS1): the plan names tasks and WorkClasses only; the worker comes from the WorkClass candidate
  * list at admission. Absent = the earlier contract, where the plan pinned a worker model (v1/v2 rows keep their bytes and digest). */
-const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: z.number().int().min(1).max(1024),
+const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: persistedInteger().min(1).max(1024),
   modelAssignment: z.enum(['brain', 'system']).optional(),
   /** S4B-6: the planning context version the template is written for. Absent = 2 (v1–v3 rows keep their bytes and digest); 3 adds `memory`. */
   contextVersion: z.literal(3).optional() }).strict();
 type BrainReasoning = 'model-default' | 'off';
 const reasoning = z.enum(templates.reasoningModes as [BrainReasoning, ...BrainReasoning[]]);
-export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).default(1),
-  selected: selected.default(templates.selected), templates: z.array(template).min(1).max(256).default(z.array(template).parse(templates.templates)),
-  maxCompletionTokens: z.number().int().positive().safe().nullable().default(templates.maxCompletionTokens),
-  reasoning: reasoning.default(reasoning.parse(templates.reasoning)),
-  context: z.object({ maxKinds: z.number().int().positive().safe(), maxModels: z.number().int().positive().safe(),
-    maxEvaluators: z.number().int().positive().safe(), maxBytes: z.number().int().positive().safe(),
-    requestMaxBytes: z.number().int().positive().safe(), tokenFramingAllowance: z.number().int().nonnegative().safe(),
-  }).strict().default(templates.context),
+export const brainPlannerConfigSchema = z.strictObject({ schemaVersion: z.literal(1).prefault(1),
+  selected: selected.prefault(templates.selected), templates: z.array(template).min(1).max(256).prefault(z.array(template).parse(templates.templates)),
+  maxCompletionTokens: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable().prefault(templates.maxCompletionTokens),
+  reasoning: reasoning.prefault(reasoning.parse(templates.reasoning)),
+  context: z.strictObject({ maxKinds: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxModels: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    maxEvaluators: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), maxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    requestMaxBytes: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), tokenFramingAllowance: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  }).prefault(templates.context),
   /** f3 (owner Q-H4): a planning call the subscription refuses for quota waits visibly until the known reset plus `marginMs` only when that is at
    * most `maxWaitMs` away, and plans again as a new derived attempt; `maxAttempts` counts the first call. 0 ms or 1 attempt: never wait. A short
    * wait by definition: both times stay within the registry ceiling (which also keeps one timer delay inside its limit). */
-  quotaWait: z.object({ maxWaitMs: z.number().int().nonnegative().max(templates.quotaWaitCeilingMs), marginMs: z.number().int().nonnegative().max(templates.quotaWaitCeilingMs),
-    maxAttempts: z.number().int().positive().safe() }).strict().default(templates.quotaWait),
+  quotaWait: z.strictObject({ maxWaitMs: persistedInteger().nonnegative().max(templates.quotaWaitCeilingMs), marginMs: persistedInteger().nonnegative().max(templates.quotaWaitCeilingMs),
+    maxAttempts: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).prefault(templates.quotaWait),
   /** D-02 (lead GO 2026-10-28, Jev c97aa511): corrective re-plans after a correctable validation refusal (0 disables; registry ceiling). */
-  correctionRetries: z.number().int().min(0).max(templates.correctionRetriesCeiling).default(templates.correctionRetries),
-}).strict();
+  correctionRetries: persistedInteger().min(0).max(templates.correctionRetriesCeiling).prefault(templates.correctionRetries),
+});
 /** D-02: the model-facing correction text (registry data): `{error}` the refusal, `{answer}` the previous answer, `{kinds}` the registered kinds. */
 export const BRAIN_CORRECTION_TEMPLATE: string = templates.correction;
 export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
@@ -36,7 +35,7 @@ export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, b
 export { boundBrainContext } from './internal/context.js';
 export type { BrainRegistryContext, BrainMemoryContext, BrainMemoryEntry } from './internal/context.js';
 export type BrainDraft = z.infer<typeof brainDraftSchema>;
-export const prepareBrainEvaluatorParameters = (evaluator: EvaluatorDefinition) => zodToJsonSchema(installedEvaluatorParameters(evaluator), { $refStrategy: 'none' });
+export const prepareBrainEvaluatorParameters = (evaluator: EvaluatorDefinition) => toInputJsonSchema(installedEvaluatorParameters(evaluator));
 function redactJson(input: unknown, known?: KnownSecretSnapshot): unknown {
   if (typeof input === 'string') return redactForRecord(input, known);
   if (Array.isArray(input)) return input.map(value => redactJson(value, known));
@@ -49,7 +48,7 @@ export function brainInputDigest(command: BrainPlanCommand, known?: KnownSecretS
 /** The draft schema shown to the model. The graph contract still reads older versions (stored proposals), but a NEW plan must use the
  * current graph version: an older one cannot carry typed work input (live /do 2026-10-13: a v2 plan with workInput was refused). */
 function brainDraftJsonSchema(turnLimit: boolean, systemAssignment: boolean) {
-  const schema = zodToJsonSchema(brainDraftSchema, { $refStrategy: 'none' }) as { properties?: { graph?: { properties?: Record<string, unknown> } } };
+  const schema = toInputJsonSchema(brainDraftSchema) as { properties?: { graph?: { properties?: Record<string, unknown> } } };
   const graph = schema.properties?.graph?.properties;
   if (graph) graph['schemaVersion'] = { type: 'number', const: TASK_GRAPH_SCHEMA_VERSION };
   // ATAMA-1: the model is offered only the work input version that leaves the worker to the system, without model or effort fields.

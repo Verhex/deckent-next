@@ -1,19 +1,19 @@
+import { persistedNumber, persistedInteger, identitySchema } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
 import asset from '../../../../../assets/beuser/limits.json' with { type: 'json' };
 
-const bound = z.number().int().positive().safe();
+const bound = persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
 /** An admission ceiling is not a spend-account grant; no implicit or unbounded defaults. */
-export const beuserLimitsSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, source: identitySchema,
+export const beuserLimitsSchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, source: identitySchema,
   provisional: z.boolean(), maxSteps: bound, maxWallMs: bound, maxWaitMs: bound, maxCalls: bound, maxTokens: bound,
   maxCost: z.number().positive().finite(), currency: identitySchema, maxReruns: bound, maxTranscriptBytes: bound,
   maxArtifactBytes: bound, cleanupDeadlineMs: bound, criticalRepetitions: bound,
-}).strict().refine(value => value.maxWaitMs <= value.maxWallMs && value.cleanupDeadlineMs <= value.maxWallMs, 'BEUSER_LIMITS_INVALID').readonly();
+}).refine(value => value.maxWaitMs <= value.maxWallMs && value.cleanupDeadlineMs <= value.maxWallMs, 'BEUSER_LIMITS_INVALID').readonly();
 export type BeuserLimits = z.infer<typeof beuserLimitsSchema>;
 /** Walk-wide stuck rules (walk17/18): the Nth identical action on one (digit-masked) screen is a loop, the Nth consecutive look/wait on one is `observing`;
  * (walk19R) on a screen unchanged since the last action either holds only once that screen has stayed unchanged for `settleMs`. */
-const walkRulesSchema = z.object({ loopStop: bound.min(2), observeStop: bound.min(2), settleMs: bound }).strict().readonly();
-const registrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, walk: walkRulesSchema, profiles: z.array(beuserLimitsSchema).readonly() }).strict()
+const walkRulesSchema = z.strictObject({ loopStop: bound.min(2), observeStop: bound.min(2), settleMs: bound }).readonly();
+const registrySchema = z.strictObject({ schemaVersion: z.literal(1), revision: identitySchema, walk: walkRulesSchema, profiles: z.array(beuserLimitsSchema).readonly() })
   .refine(value => new Set(value.profiles.map(profile => profile.revision)).size === value.profiles.length).readonly();
 export const BEUSER_LIMITS_REGISTRY = registrySchema.parse(asset);
 export const BEUSER_WALK_RULES = BEUSER_LIMITS_REGISTRY.walk;
@@ -63,7 +63,7 @@ export function narrowBeuserLimits(data: LimitProfile, overrides: BeuserLimitOve
 export function pinBeuserProfile<T extends LimitProfile>(data: T, overrides: BeuserLimitOverrides): Omit<T, 'schemaVersion' | 'limits'> & { schemaVersion: typeof BEUSER_JOURNEY_PROFILE_VERSION; limits: BeuserLimits } {
   return { ...data, schemaVersion: BEUSER_JOURNEY_PROFILE_VERSION, limits: narrowBeuserLimits(data, overrides) };
 }
-const monitorModel = z.object({ channelId: z.string(), modelId: z.string() }).strict();
+const monitorModel = z.strictObject({ channelId: z.string(), modelId: z.string() });
 /** Read-only observation snapshot; not authority or process liveness. Optional limits preserve old monitor records. */
-export const beuserMonitorRecord = z.object({ schemaVersion: z.literal(1), runId: z.string(), journey: z.string(), startedAt: z.number(),
-  walkers: z.array(z.object({ id: z.string(), walker: monitorModel, judge: monitorModel, limitsRevision: z.string(), limits: beuserLimitsSchema.optional() }).strict()) }).strict();
+export const beuserMonitorRecord = z.strictObject({ schemaVersion: z.literal(1), runId: z.string(), journey: z.string(), startedAt: persistedNumber(z.number()),
+  walkers: z.array(z.strictObject({ id: z.string(), walker: monitorModel, judge: monitorModel, limitsRevision: z.string(), limits: beuserLimitsSchema.optional() })) });

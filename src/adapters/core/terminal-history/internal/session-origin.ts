@@ -3,8 +3,8 @@ import { link, open, unlink } from 'node:fs/promises';
 import { z } from 'zod';
 import limits from './session-title-limits.json' with { type: 'json' };
 
-const originSchema = z.object({ schemaVersion: z.literal(1), principal: z.object({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }).strict(),
-  folder: z.string().max(4096).refine(value => value === '' || (!value.startsWith('/') && !value.includes('\\') && value.split('/').every(part => part && part !== '.' && part !== '..'))) }).strict();
+const originSchema = z.strictObject({ schemaVersion: z.literal(1), principal: z.strictObject({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }),
+  folder: z.string().max(4096).refine(value => value === '' || (!value.startsWith('/') && !value.includes('\\') && value.split('/').every(part => part && part !== '.' && part !== '..'))) });
 export type TerminalSessionOrigin = z.infer<typeof originSchema>;
 export type TerminalSessionFilter = Readonly<{ principal?: TerminalSessionOrigin['principal']; folder?: string; allFolders?: boolean }>;
 

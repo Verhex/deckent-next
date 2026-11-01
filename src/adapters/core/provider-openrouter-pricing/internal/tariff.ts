@@ -1,25 +1,25 @@
+import { persistedInteger, createImmutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { createImmutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
 import { maxRate } from './decimal.js';
 import { chargeDimensions, endpointRates, type TariffRates } from './rates.js';
 import { OpenRouterPricingError } from './error.js';
 import PRIVACY_LIMITS from './privacy-limits.json' with { type: 'json' };
 export const OPENROUTER_TARIFF_VERSION = 2 as const;
 const boundedMetadata = createImmutableJsonObjectSchema({ maxDepth: 16, maxNodes: 65_536, maxCodeUnits: 1_048_576 });
-const identity = z.string().min(1).max(1024), integer = z.number().int().nonnegative().safe();
-const selectionSchema = z.object({ modelId: identity, endpointTag: identity,
-  fetchedAtMs: integer, expiresAtMs: integer }).strict();
-const endpointSchema = z.object({ model_id: identity, tag: identity, provider_name: identity,
+const identity = z.string().min(1).max(1024), integer = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const selectionSchema = z.strictObject({ modelId: identity, endpointTag: identity,
+  fetchedAtMs: integer, expiresAtMs: integer });
+const endpointSchema = z.looseObject({ model_id: identity, tag: identity, provider_name: identity,
   context_length: integer.positive(), max_prompt_tokens: integer.positive().nullable(),
-  max_completion_tokens: integer.positive().nullable(), status: z.number().int(),
+  max_completion_tokens: integer.positive().nullable(), status: persistedInteger(),
   supported_parameters: z.array(identity),
-  supports_tool_choice: z.object({ auto: z.boolean().optional(), none: z.boolean().optional(), required: z.boolean().optional() }).passthrough().optional(),
-  data_policy: z.object({ training: z.boolean().optional(), retainsPrompts: z.boolean().optional() }).passthrough().nullish(),
+  supports_tool_choice: z.looseObject({ auto: z.boolean().optional(), none: z.boolean().optional(), required: z.boolean().optional() }).optional(),
+  data_policy: z.looseObject({ training: z.boolean().optional(), retainsPrompts: z.boolean().optional() }).nullish(),
   // Already descriptor-copied as bounded JSON. Do not rebuild this with z.record: it can discard
   // prototype-named keys before the pricing allowlist sees them.
-  pricing: z.custom<JsonObject>(value => value !== null && typeof value === 'object' && !Array.isArray(value)) }).passthrough();
-const metadataSchema = z.object({ data: z.object({ id: identity, endpoints: z.array(endpointSchema) }).passthrough() }).passthrough();
+  pricing: z.custom<JsonObject>(value => value !== null && typeof value === 'object' && !Array.isArray(value)) });
+const metadataSchema = z.looseObject({ data: z.looseObject({ id: identity, endpoints: z.array(endpointSchema) }) });
 export interface OpenRouterTariffSelection {
   readonly modelId: string; readonly endpointTag: string; readonly fetchedAtMs: number; readonly expiresAtMs: number;
 }

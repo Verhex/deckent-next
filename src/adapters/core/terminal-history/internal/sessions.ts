@@ -1,5 +1,5 @@
+import { persistedInteger, ManagedFileError, redactForRecord, terminalSafeText, type KnownSecretSnapshot } from '#platform/index.js';
 import { constants } from 'node:fs';
-import { ManagedFileError, redactForRecord, terminalSafeText, type KnownSecretSnapshot } from '#platform/index.js';
 import { open, readdir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -10,8 +10,8 @@ import { sessionOriginMatches, writeSessionOrigin, type TerminalSessionFilter, t
 
 export const TERMINAL_SESSION_LIMITS = Object.freeze({ maxSessions: 50, maxFileBytes: 16 * 1024 * 1024, previewChars: 120 });
 const sessionIdSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-const snapshotSchema = z.object({ schemaVersion: z.literal(1), sessionId: sessionIdSchema, scopeId: z.string().min(1).max(256),
-  updatedAtMs: z.number().int().nonnegative().safe(), messages: z.array(agentTurnMessageSchema).max(100_000) }).strict();
+const snapshotSchema = z.strictObject({ schemaVersion: z.literal(1), sessionId: sessionIdSchema, scopeId: z.string().min(1).max(256),
+  updatedAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), messages: z.array(agentTurnMessageSchema).max(100_000) });
 export type TerminalSessionSnapshot = z.infer<typeof snapshotSchema>;
 export interface TerminalSessionSummary {
   readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string;

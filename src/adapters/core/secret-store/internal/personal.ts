@@ -1,9 +1,9 @@
+import { persistedInteger, persistedUuid, serializeJsonDocument, writeTextAtomic } from '#platform/index.js';
 import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { serializeJsonDocument, writeTextAtomic } from '#platform/index.js';
 import { delegationOwner, delegationPrincipalClass, type VerifiedPrincipal } from '#domain/index.js';
 import { personalCustodyEvidenceSchema, PersonalCustodyError, RENEWABLE_SECRET_PREFIX,
   type PersonalCustodyOwner, type SecretStore, type SecretStoreContext, type SecretStoreDescriptor } from '#engine/index.js';
@@ -26,11 +26,11 @@ export interface PersonalStoreContext {
   /** Explicit witnessed reconnect may adopt identical-owner token-free registration history; never a renewable session. */
   reconnect?: boolean;
 }
-const hash = z.string().regex(/^[a-f0-9]{64}$/u), text = z.string().min(1).max(256), count = z.number().int().nonnegative().safe();
-const bindingSchema = z.object({ schemaVersion: z.literal(1), bindingId: z.string().uuid(), generation: count,
-  uid: count, installationId: text, principal: z.object({ issuer: text, subject: text }).strict(),
+const hash = z.string().regex(/^[a-f0-9]{64}$/u), text = z.string().min(1).max(256), count = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const bindingSchema = z.strictObject({ schemaVersion: z.literal(1), bindingId: persistedUuid(), generation: count,
+  uid: count, installationId: text, principal: z.strictObject({ issuer: text, subject: text }),
   locationDigest: hash, installationLocationDigest: hash, keyIdentityDigest: hash,
-  cleanup: z.object({ state: z.literal('complete'), revision: count }).strict() }).strict();
+  cleanup: z.strictObject({ state: z.literal('complete'), revision: count }) });
 /** The installation's existing custody lock owns this record. Host observation injection is a code-only test seam. */
 export function personalStoreAssertion(root: string | null, context: PersonalStoreContext,
   selected: () => Promise<{ store: string | null; digest: string | null }>,
@@ -70,7 +70,7 @@ export function personalStoreAssertion(root: string | null, context: PersonalSto
           let record: unknown;
           try { record = JSON.parse(await known.store.get(name) ?? ''); } catch { throw new PersonalCustodyError('cleanup-pending'); }
           // Old registration is history only. No old token is reused or erased and no other person's history is rebound.
-          const parsed = z.object({ owner: z.unknown(), tokens: z.null(), state: z.enum(['registration', 'disconnected']) }).passthrough().safeParse(record);
+          const parsed = z.looseObject({ owner: z.unknown().optional(), tokens: z.null(), state: z.enum(['registration', 'disconnected']) }).safeParse(record);
           if (!parsed.success || !isDeepStrictEqual(parsed.data.owner, owner)) throw new PersonalCustodyError('cleanup-pending');
         }
       }

@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { modelInvocationProfileSchema, parseModelInvocationProfile } from '#domain/index.js';
 import { ConfigValidationError, registerConfigSection, CONFIG_CONTRACT_SINCE } from '#platform/index.js';
 
-export const invocationProfilesSchema = z.object({
+export const invocationProfilesSchema = z.strictObject({
   schemaVersion: z.literal(1),
   profiles: z.array(modelInvocationProfileSchema).readonly(),
-}).strict();
+});
 function invalid(): never {
   throw new ConfigValidationError([{ path: 'provider_invocation_profiles', reason: 'POLICY_AUTHORITY_INVALID' }]);
 }

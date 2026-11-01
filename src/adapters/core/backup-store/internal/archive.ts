@@ -1,21 +1,21 @@
+import { persistedDateTime, configSections, deepMerge, isRecord, productResourcePath, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { z } from 'zod';
 import { lstat, opendir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { configSections, deepMerge, isRecord, productResourcePath, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { readPrivate, refuse } from './files.js';
 /** Logical resources, never paths selected by an archive. Worker clones, provider sessions and plaintext approval keys are excluded. */
 export const BACKUP_RESOURCES = ['config', 'installationIdentity', 'projectIdentity', 'policy', 'bindings', 'audit', 'artifacts'] as const;
 const resource = z.enum(BACKUP_RESOURCES);
-const entry = z.object({ resource, path: z.string().max(4096).refine(value => value === '' || value.split('/').every(part =>
-  /^[^\\:]+$/.test(part) && Array.from(part).every(char => char.charCodeAt(0) > 31) && part !== '.' && part !== '..' && !part.endsWith('.') && !part.endsWith(' '))), content: z.string() }).strict();
-const stateFields = { createdAt: z.string().datetime(), installationId: z.string().min(1),
-  projectRoot: z.string().min(1), layoutRoot: z.string().min(1), resources: z.record(z.string()), keyFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
+const entry = z.strictObject({ resource, path: z.string().max(4096).refine(value => value === '' || value.split('/').every(part =>
+  /^[^\\:]+$/.test(part) && Array.from(part).every(char => char.charCodeAt(0) > 31) && part !== '.' && part !== '..' && !part.endsWith('.') && !part.endsWith(' '))), content: z.string() });
+const stateFields = { createdAt: persistedDateTime(), installationId: z.string().min(1),
+  projectRoot: z.string().min(1), layoutRoot: z.string().min(1), resources: z.record(z.string(), z.string()), keyFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/),
   entries: z.array(entry) };
 /** v1 (alpha.18): `config` is the merged global+project document. v2 (S1 D1): `config` is the project layer alone; `globalConfig` the
  * authored global layer (base64 JSON, null when absent). Both stay readable; the restore splits a v1 document (see `splitArchivedConfig`). */
-export const stateSchema = z.discriminatedUnion('schemaVersion', [z.object({ schemaVersion: z.literal(1), ...stateFields }).strict(),
-  z.object({ schemaVersion: z.literal(2), ...stateFields, globalConfig: z.string().nullable() }).strict()]);
+export const stateSchema = z.discriminatedUnion('schemaVersion', [z.strictObject({ schemaVersion: z.literal(1), ...stateFields }),
+  z.strictObject({ schemaVersion: z.literal(2), ...stateFields, globalConfig: z.string().nullable() })]);
 export type BackupState = z.infer<typeof stateSchema>;
 export interface BackupLimits { readonly maxFiles: number; readonly maxFileBytes: number; readonly maxTotalBytes: number; readonly maxDepth: number }
 export async function archiveState(layout: ProductLayout, projectRoot: string, installationId: string, keyFile: string,

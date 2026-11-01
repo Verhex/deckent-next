@@ -6,9 +6,9 @@ import type { NervousProposal } from './detect.js';
  * The owner's K-B standing approval record (S6R-3: derived from the owner's policy grant, `nervousStandingApproval`): which standing-list actions
  * the broker may apply, in which scopes, under which owner decision. An AI-authored, foreign-scope or unreadable record is no approval.
  */
-export const nervousStandingApprovalSchema = z.object({ schemaVersion: z.literal(1), decisionRef: identitySchema,
-  approvedBy: z.object({ issuer: identitySchema, subject: identitySchema, assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }).strict(),
-  approvedAtMs: counterSchema, scopeIds: z.array(identitySchema).min(1).max(1024), actions: z.array(recoveryActionSchema).min(1).max(RECOVERY_ACTIONS.length) }).strict().readonly();
+export const nervousStandingApprovalSchema = z.strictObject({ schemaVersion: z.literal(1), decisionRef: identitySchema,
+  approvedBy: z.strictObject({ issuer: identitySchema, subject: identitySchema, assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }),
+  approvedAtMs: counterSchema, scopeIds: z.array(identitySchema).min(1).max(1024), actions: z.array(recoveryActionSchema).min(1).max(RECOVERY_ACTIONS.length) }).readonly();
 export type NervousStandingApproval = z.infer<typeof nervousStandingApprovalSchema>;
 /** One executor per standing-list action, each an existing application (S6R-3 wires them); a proposal never reaches the raw adapter. */
 export type NervousExecutors = Readonly<Partial<Record<(typeof RECOVERY_ACTIONS)[number], (proposal: NervousProposal, options?: Readonly<{ last: boolean }>) => Promise<unknown>>>>;

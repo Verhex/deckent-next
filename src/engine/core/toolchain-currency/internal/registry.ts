@@ -1,3 +1,4 @@
+import { persistedNumber } from '#domain/index.js';
 import { z } from 'zod';
 import { admittedToolchainSchema, toolchainCatalog, type AdmittedToolchain } from './contract.js';
 import type { AffectedProfile } from './update.js';
@@ -5,13 +6,13 @@ import type { AffectedProfile } from './update.js';
 /** What both derivations read from the installed configuration: its admission registry (an unreadable registry admits nothing). */
 export type ToolchainAdmissionSource = Readonly<{ admission?: Readonly<{ registry?: unknown }> | null | undefined }>;
 
-const pinSchema = z.object({ provider: z.string(), preflight: z.object({ cliVersion: z.string() }).passthrough().optional() }).passthrough();
-const nativeProfileSchema = z.object({ id: z.string(), version: z.number(), parameters: z.object({ imageId: z.string().optional(),
-  nativeSubscription: pinSchema.optional() }).passthrough() }).passthrough();
+const pinSchema = z.looseObject({ provider: z.string(), preflight: z.looseObject({ cliVersion: z.string() }).optional() });
+const nativeProfileSchema = z.looseObject({ id: z.string(), version: persistedNumber(z.number()), parameters: z.looseObject({ imageId: z.string().optional(),
+  nativeSubscription: pinSchema.optional() }) });
 /** K3 coding templates (adapter `native-coding-template`) pin their CLI in the invocation and their image in the Docker part. */
-const templateProfileSchema = z.object({ id: z.string(), version: z.number(), adapter: z.object({ id: z.literal('native-coding-template') }).passthrough(),
-  parameters: z.object({ docker: z.object({ imageId: z.string().optional() }).passthrough(), invocation: z.object({ provider: z.string(), cliVersion: z.string() }).passthrough() }).passthrough() }).passthrough();
-const registrySchema = z.object({ profiles: z.array(z.unknown()), kinds: z.array(z.object({ profile: z.object({ id: z.string(), version: z.number() }).passthrough() }).passthrough()).optional() }).passthrough();
+const templateProfileSchema = z.looseObject({ id: z.string(), version: persistedNumber(z.number()), adapter: z.looseObject({ id: z.literal('native-coding-template') }),
+  parameters: z.looseObject({ docker: z.looseObject({ imageId: z.string().optional() }), invocation: z.looseObject({ provider: z.string(), cliVersion: z.string() }) }) });
+const registrySchema = z.looseObject({ profiles: z.array(z.unknown().optional()), kinds: z.array(z.looseObject({ profile: z.looseObject({ id: z.string(), version: persistedNumber(z.number()) }) })).optional() });
 
 /** The CLI pin of a prepared native profile or of a coding template, with its image id as written (null when none). */
 function nativePins(config: ToolchainAdmissionSource) {

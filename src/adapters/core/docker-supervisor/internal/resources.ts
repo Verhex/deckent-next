@@ -1,3 +1,4 @@
+import { persistedInteger } from '#domain/index.js';
 import { request as httpRequest } from 'node:http';
 import { open, readFile, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -8,8 +9,8 @@ import { resourceGap, resourceSampleSchema, sameResourceWorker, workerIncarnatio
 import type { WorkerIncarnation } from '#domain/index.js';
 import type { ResourceObservationSettings } from '#platform/index.js';
 import { dockerEndpointSchema } from './profile.js';
-const counter = z.number().int().nonnegative().safe();
-const inspection = z.object({ Id: z.string(), Config: z.object({ Labels: z.record(z.string()).nullable() }),
+const counter = persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER);
+const inspection = z.object({ Id: z.string(), Config: z.object({ Labels: z.record(z.string(), z.string()).nullable() }),
   State: z.object({ Status: z.string(), StartedAt: z.string(), Pid: counter.optional() }) });
 // Older Engine one-shot replies omit id (Moby #51302). Custody comes from the full-id request
 // bracketed by matching inspections; a supplied contradictory id still refuses the sample.

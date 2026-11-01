@@ -3,43 +3,42 @@ import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchem
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { taskQuotaHoldSchema } from './pool-observation.js';
+import { taskQuotaHoldSchema, runPoolObservationSchema } from './pool-observation.js';
 import { workCostReportSchema, runProposalBindingSchema, authorityAdmissionSchema, acceptanceViewSchema, deriveAcceptanceView, summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema, RECOVERY_RUN_MODES } from '#domain/index.js';
-import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 import { workerTreeExclusionSchema, type WorkerTreeExclusionRecord } from '#engine/core/workspaces/index.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
-export const runViewSchema = z.object({
-  targetQueue: z.object({ records: z.array(targetQueueViewSchema), truncated: z.boolean() }).strict().optional(),
+export const runViewSchema = z.strictObject({
+  targetQueue: z.strictObject({ records: z.array(targetQueueViewSchema), truncated: z.boolean() }).optional(),
   costReport: workCostReportSchema.optional(),
   authority: authorityAdmissionSchema.optional(), proposal: runProposalBindingSchema.optional(),
   schemaVersion: z.literal(3), runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema, registryRevision: identitySchema, pool: runPoolObservationSchema.optional(),
   /** PARALLEL-S3 (additive): DAG summary from the same domain projection the monitor uses; always set by `projectRunView`. */
   graphSummary: taskGraphSummarySchema.optional(),
   branch: branchDecisionSchema.unwrap().omit({ sourceGraph: true }).optional(),
-  criteria: z.array(z.object({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly(),
+  criteria: z.array(z.strictObject({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).readonly()).readonly(),
   channelWaits: z.array(taskQuotaHoldSchema).readonly().optional(),
   quotaWaits: z.array(taskQuotaHoldSchema.unwrap().extend({ retryLimitReached: z.boolean() }).strict().readonly()).readonly().optional(),
   /** f3 (additive) `recoveryMode`: the recovery mode the Run froze at admission; absent: none frozen (recovery off, or admitted before the switch). */
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema, recoveryMode: z.enum(RECOVERY_RUN_MODES).optional(),
-  tasks: z.array(z.object({
+  tasks: z.array(z.strictObject({
     taskBrief: taskBriefSchema.optional(), resultBrief: resultBriefSchema.optional(),
-    custodyDisposition: z.enum(['hold-manual', 'released']).optional(), workerCustody: taskProgressSchema.unwrap().innerType().shape.workerCustody,
+    custodyDisposition: z.enum(['hold-manual', 'released']).optional(), workerCustody: taskProgressSchema.unwrap().shape.workerCustody,
     acceptance: acceptanceViewSchema.optional(),
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
     acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
     /** S6 (owner 2026-10-15): hits the operator's `execution.secretGate` lists lifted for this task's attempt (path, rule, lifting entry; never a value). */
-    configExclusions: z.object({ count: counterSchema.positive(), entries: z.array(workerTreeExclusionSchema).readonly() }).strict().readonly().optional(),
+    configExclusions: z.strictObject({ count: counterSchema.positive(), entries: z.array(workerTreeExclusionSchema).readonly() }).readonly().optional(),
     inputs: taskDefinitionSchema.unwrap().shape.inputs,
-    profile: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
-    phase: taskProgressSchema.unwrap().innerType().shape.phase,
-    notAcceptedReason: taskProgressSchema.unwrap().innerType().shape.notAcceptedReason,
-    skippedReason: taskProgressSchema.unwrap().innerType().shape.skippedReason, decision: taskProgressSchema.unwrap().innerType().shape.decision, acceptedEvidence: taskProgressSchema.unwrap().innerType().shape.acceptedEvidence,
+    profile: z.strictObject({ id: identitySchema, version: counterSchema.positive() }).readonly(),
+    phase: taskProgressSchema.unwrap().shape.phase,
+    notAcceptedReason: taskProgressSchema.unwrap().shape.notAcceptedReason,
+    skippedReason: taskProgressSchema.unwrap().shape.skippedReason, decision: taskProgressSchema.unwrap().shape.decision, acceptedEvidence: taskProgressSchema.unwrap().shape.acceptedEvidence,
     reasoningEffort: workerEffortSchema.optional(),
     unresolvedEffects: z.boolean(),
-    cancellation: z.object({ reason: z.enum(['prevented-before-launch', 'exited-under-cancellation']) }).strict().readonly().optional(),
-  }).strict().readonly()).readonly(),
-}).strict().readonly();
+    cancellation: z.strictObject({ reason: z.enum(['prevented-before-launch', 'exited-under-cancellation']) }).readonly().optional(),
+  }).readonly()).readonly(),
+}).readonly();
 export type RunView = z.infer<typeof runViewSchema>;
 export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = [], evaluations: readonly Readonly<{ identity: { taskId: string } }>[] = [],
   exclusions: readonly WorkerTreeExclusionRecord[] = []): RunView {

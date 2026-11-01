@@ -1,18 +1,18 @@
+import { persistedInteger, identitySchema, attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type WorkerIncarnation } from '#domain/index.js';
 import { z } from 'zod';
-import { identitySchema, attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type WorkerIncarnation } from '#domain/index.js';
 import { workerIncarnationSchema, type SandboxRequest, type ExecutionSupervisor } from '#engine/core/supervisor/index.js';
 import type { ResourceObservationSettings } from '#platform/index.js';
 const measured = z.number().finite().nonnegative();
-const incarnation = z.union([workerIncarnationSchema, z.object({ kind: z.literal('process'), pid: z.number().int().positive().safe(),
-  startedAt: z.string().min(1).max(128) }).strict().readonly()]);
+const incarnation = z.union([workerIncarnationSchema, z.strictObject({ kind: z.literal('process'), pid: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  startedAt: z.string().min(1).max(128) }).readonly()]);
 export const resourceGapSchema = z.enum(['starting', 'unsupported', 'denied', 'timeout', 'identity', 'invalid', 'overload', 'store-unavailable', 'queue-full', 'disabled', 'missing', 'counter-reset']);
 export type ResourceGap = z.infer<typeof resourceGapSchema>;
-export const resourceSampleSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
-  worker: incarnation.nullable(), observedAtMs: z.number().int().nonnegative().safe(),
-  cpuSeconds: measured.nullable(), cpuCores: measured.nullable(), memoryBytes: measured.int().safe().nullable(),
-  memoryLimitBytes: measured.int().safe().nullable(), kernelPeakBytes: measured.int().safe().nullable(),
+export const resourceSampleSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+  worker: incarnation.nullable(), observedAtMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  cpuSeconds: measured.nullable(), cpuCores: measured.nullable(), memoryBytes: measured.int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
+  memoryLimitBytes: measured.int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(), kernelPeakBytes: measured.int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).nullable(),
   gap: resourceGapSchema.nullable(), source: identitySchema,
-}).strict().readonly();
+}).readonly();
 export type ResourceSample = z.infer<typeof resourceSampleSchema>;
 export interface ResourceTrace { readonly samples: readonly ResourceSample[]; readonly trimmedBeforeMs: number | null }
 export interface ResourceTraceStore {

@@ -8,9 +8,9 @@ import { DispatchError, dispatchRecordSchema, type DispatchRecord } from './port
 import { dispatchFenceReceiptId } from './loss.js';
 
 /** Trusted application write, not a public command. No release or terminal result is inferred. */
-export const lostDispatchWriteSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+export const lostDispatchWriteSchema = z.strictObject({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   owner: identitySchema, expectedRunRevision: counterSchema, expectedAttemptRevision: counterSchema,
-  actor: verifiedPrincipalSchema, reasonCode: identitySchema, now: counterSchema }).strict().readonly();
+  actor: verifiedPrincipalSchema, reasonCode: identitySchema, now: counterSchema }).readonly();
 export type LostDispatchWrite = z.infer<typeof lostDispatchWriteSchema>;
 /** Same immutable command/snapshot envelope as RunStore, without a reverse dependency on its application. */
 export interface LostDispatchReceipt {

@@ -15,7 +15,7 @@ import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecre
  * backend (the behaviour before SECRET-K1). `store` has no schema default on purpose: the section stays absent from the default config, so
  * a healed or default-filled project file can never carry a selection that would override the installation's choice.
  */
-export const secretsConfigSchema = z.object({ store: z.string().max(128).regex(SECRET_STORE_ID_PATTERN) }).strict();
+export const secretsConfigSchema = z.strictObject({ store: z.string().max(128).regex(SECRET_STORE_ID_PATTERN) });
 export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
 
 // Core backends at construction; Enterprise/custom backends register before the section is registered (then the registry is sealed).

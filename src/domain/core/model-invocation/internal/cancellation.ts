@@ -7,15 +7,15 @@ import { MODEL_INVOCATION_NATIVE_JSON_LIMITS, ModelInvocationError, modelInvocat
 
 const envelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 /** Target the caller-known original command, even before its generated invocation id has been delivered. */
-export const modelInvocationCancellationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+export const modelInvocationCancellationCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   scopeId: identitySchema, targetCommandId: identitySchema, reference: modelReferenceSchema,
-  expectedRequestDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
+  expectedRequestDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly();
 export const modelInvocationCancellationCommandInputSchema = envelope.pipe(modelInvocationCancellationCommandSchema);
-export const modelInvocationCancellationReceiptSchema = z.object({ schemaVersion: z.literal(1),
+export const modelInvocationCancellationReceiptSchema = z.strictObject({ schemaVersion: z.literal(1),
   command: modelInvocationCancellationCommandSchema, claim: modelInvocationClaimSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, requestedAtMs: counterSchema,
   disposition: z.enum(['prevented', 'requested', 'already-terminal']),
-}).strict().superRefine((receipt, context) => {
+}).superRefine((receipt, context) => {
   if (receipt.command.scopeId !== receipt.claim.scopeId || receipt.command.targetCommandId !== receipt.claim.commandId
     || receipt.command.expectedRequestDigest !== receipt.claim.requestDigest) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_CANCELLATION_TARGET_INVALID' });
@@ -23,14 +23,14 @@ export const modelInvocationCancellationReceiptSchema = z.object({ schemaVersion
 }).readonly();
 /** Permission is an ambiguity boundary, never proof that the remote provider accepted or stopped work. */
 export const modelInvocationSendStateSchema = z.discriminatedUnion('state', [
-  z.object({ state: z.literal('pending') }).strict(),
-  z.object({ state: z.literal('permitted'), ownerId: identitySchema, permittedAtMs: counterSchema }).strict(),
-  z.object({ state: z.literal('prevented') }).strict(),
-  z.object({ state: z.literal('unobserved') }).strict(),
+  z.strictObject({ state: z.literal('pending') }),
+  z.strictObject({ state: z.literal('permitted'), ownerId: identitySchema, permittedAtMs: counterSchema }),
+  z.strictObject({ state: z.literal('prevented') }),
+  z.strictObject({ state: z.literal('unobserved') }),
 ]).readonly();
-export const modelInvocationControlRecordSchema = z.object({ schemaVersion: z.literal(1), claim: modelInvocationClaimSchema,
+export const modelInvocationControlRecordSchema = z.strictObject({ schemaVersion: z.literal(1), claim: modelInvocationClaimSchema,
   reference: modelReferenceSchema, send: modelInvocationSendStateSchema, cancellation: modelInvocationCancellationReceiptSchema.nullable(),
-}).strict().superRefine((record, context) => {
+}).superRefine((record, context) => {
   const cancellation = record.cancellation;
   const prevented = cancellation?.disposition === 'prevented';
   if ((record.send.state === 'prevented') !== prevented || (record.send.state === 'pending' && cancellation !== null)

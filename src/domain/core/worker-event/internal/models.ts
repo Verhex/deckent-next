@@ -11,12 +11,12 @@ import { workerProviderSchema, type WorkerEventSummary, type WorkerModelVerifica
  */
 const modelText = z.string().min(1).max(256);
 /** The frozen pin may carry the catalog's session-start evidence (`workerModelPinEvidenceShape`, owner K1/K2 2026-10-22). */
-export const workerModelPinSchema = z.object({ channelId: modelText, modelId: modelText,
-  auxiliaryModelIds: z.array(modelText).max(16).readonly(), ...workerModelPinEvidenceShape }).strict().readonly();
+export const workerModelPinSchema = z.strictObject({ channelId: modelText, modelId: modelText,
+  auxiliaryModelIds: z.array(modelText).max(16).readonly(), ...workerModelPinEvidenceShape }).readonly();
 export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
 export type WorkerProvider = z.infer<typeof workerProviderSchema>;
-const pinnedSubscriptionSchema = z.object({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() }).passthrough();
-const parametersSchema = z.object({ nativeSubscription: pinnedSubscriptionSchema }).passthrough();
+const pinnedSubscriptionSchema = z.looseObject({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() });
+const parametersSchema = z.looseObject({ nativeSubscription: pinnedSubscriptionSchema });
 
 /** The exact-model pin a native worker profile carries (nativeSubscription v2 `model`), or null: not a pinned worker profile. */
 export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence; reasoningEffort?: WorkerEffort }> | null {

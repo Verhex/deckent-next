@@ -1,35 +1,34 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { identitySchema as id, counterSchema, criterionDefinitionSchema, evaluatorDefinitionSchema, type CriterionDefinition, type EvaluatorDefinition } from '#domain/index.js';
-import { beuserBindingSchema, beuserTranscriptEntrySchema, beuserVerdictSchema } from '#domain/index.js';
+import { identitySchema as id, counterSchema, criterionDefinitionSchema, evaluatorDefinitionSchema, type CriterionDefinition, type EvaluatorDefinition, beuserBindingSchema, beuserTranscriptEntrySchema, beuserVerdictSchema } from '#domain/index.js';
 
 export const BEUSER_EVALUATOR = Object.freeze({ id: 'beuser', version: 1, implementation: Object.freeze({ id: 'beuser', version: 1 }) });
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const dimension = z.enum(['outcome', 'authorization', 'safety']);
 const status = z.enum(['pass', 'fail', 'unknown']);
 /** Values only: no ledger, key, backup, receipt bytes or arbitrary text crosses the realm boundary. */
-export const beuserReadbackSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
+export const beuserReadbackSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
   evidenceRef: id, atMs: counterSchema,
-  summary: z.object({ installation: z.enum(['installed', 'absent', 'unknown']), preservedData: status,
+  summary: z.strictObject({ installation: z.enum(['installed', 'absent', 'unknown']), preservedData: status,
     card: z.enum(['shown', 'not-shown', 'unknown']), receiptLocation: z.enum(['inside-realm', 'outside-realm', 'absent', 'unknown']),
-    forbiddenEffect: z.enum(['absent', 'present', 'unknown']), lifecycle: z.enum(['running', 'stopped', 'absent', 'unknown']) }).strict().readonly(),
-}).strict().readonly();
-const probe = z.object({ id, dimension, readbackRef: id, key: beuserReadbackSchema.unwrap().shape.summary.unwrap().keyof(), expected: id }).strict().readonly();
-export const beuserCalibrationSchema = z.object({ revision: id, cohort: id, trapHits: counterSchema, trapTotal: counterSchema,
+    forbiddenEffect: z.enum(['absent', 'present', 'unknown']), lifecycle: z.enum(['running', 'stopped', 'absent', 'unknown']) }).readonly(),
+}).readonly();
+const probe = z.strictObject({ id, dimension, readbackRef: id, key: beuserReadbackSchema.unwrap().shape.summary.unwrap().keyof(), expected: id }).readonly();
+export const beuserCalibrationSchema = z.strictObject({ revision: id, cohort: id, trapHits: counterSchema, trapTotal: counterSchema,
   falseRed: counterSchema, goodTotal: counterSchema, minimumHitRate: z.number().min(0).max(1), maximumFalseRedRate: z.number().min(0).max(1),
-  k: counterSchema.positive(), retries: counterSchema }).strict().refine(v => v.trapHits <= v.trapTotal && v.falseRed <= v.goodTotal).readonly();
-export const beuserParametersSchema = z.object({ binding: beuserBindingSchema, producer: z.object({ owner: id, profileDigest: digest }).strict(),
+  k: counterSchema.positive(), retries: counterSchema }).refine(v => v.trapHits <= v.trapTotal && v.falseRed <= v.goodTotal).readonly();
+export const beuserParametersSchema = z.strictObject({ binding: beuserBindingSchema, producer: z.strictObject({ owner: id, profileDigest: digest }),
   fileName: id, dimension, probes: z.array(probe).min(1).readonly(), calibration: beuserCalibrationSchema,
-}).strict().refine(v => new Set(v.probes.map(p => p.id)).size === v.probes.length
+}).refine(v => new Set(v.probes.map(p => p.id)).size === v.probes.length
   && v.probes.some(p => p.dimension === v.dimension)
   && v.probes.every(p => { const field = beuserReadbackSchema.unwrap().shape.summary.unwrap().shape[p.key]; return p.expected !== 'unknown' && field.safeParse(p.expected).success; })).readonly();
-export const beuserEvidenceSchema = z.object({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
-  transcript: z.array(z.object({ entry: beuserTranscriptEntrySchema, text: z.string() }).strict().readonly()).min(1).readonly(),
+export const beuserEvidenceSchema = z.strictObject({ schemaVersion: z.literal(1), binding: beuserBindingSchema,
+  transcript: z.array(z.strictObject({ entry: beuserTranscriptEntrySchema, text: z.string() }).readonly()).min(1).readonly(),
   readbacks: z.array(beuserReadbackSchema).readonly(), validity: beuserVerdictSchema.unwrap().shape.validity,
-  cleanup: z.object({ state: z.enum(['destroyed', 'quarantined', 'unknown']), atMs: counterSchema, evidenceRef: id }).strict().readonly(),
-  experience: z.object({ verdict: beuserVerdictSchema.unwrap().shape.experience, maker: id.nullable(), sourceMakers: z.array(id.nullable()).min(1).readonly(),
-    evidenceRefs: z.array(id).readonly() }).strict().readonly(),
-}).strict().readonly();
+  cleanup: z.strictObject({ state: z.enum(['destroyed', 'quarantined', 'unknown']), atMs: counterSchema, evidenceRef: id }).readonly(),
+  experience: z.strictObject({ verdict: beuserVerdictSchema.unwrap().shape.experience, maker: id.nullable(), sourceMakers: z.array(id.nullable()).min(1).readonly(),
+    evidenceRefs: z.array(id).readonly() }).readonly(),
+}).readonly();
 export type BeuserEvidence = z.infer<typeof beuserEvidenceSchema>;
 export type BeuserReadback = z.infer<typeof beuserReadbackSchema>;
 export type BeuserParameters = z.infer<typeof beuserParametersSchema>;

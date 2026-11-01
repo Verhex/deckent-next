@@ -12,21 +12,21 @@ const exactModelId = z.string().min(1).max(256).refine(value => value.trim() ===
 /** v2 (WORKER-CURRENCY-1): the admitted catalog reference — channel and exact model id, plus declared helper model ids. The host compares the
  * models the worker reports against it (model.verification); v1 profiles carry none and are refused for new Runs at admission. The pin may carry
  * the catalog's session-start names / provider-choice flag, stamped at admission (owner K1/K2 2026-10-22). */
-export const nativeSubscriptionSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
+export const nativeSubscriptionSchema = z.strictObject({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
-  model: z.object({ channelId: z.string().min(1).max(256), modelId: exactModelId, auxiliaryModelIds: z.array(exactModelId).max(8).readonly(),
-    ...workerModelPinEvidenceShape }).strict().readonly().optional(),
+  model: z.strictObject({ channelId: z.string().min(1).max(256), modelId: exactModelId, auxiliaryModelIds: z.array(exactModelId).max(8).readonly(),
+    ...workerModelPinEvidenceShape }).readonly().optional(),
   promptDelivery: nativePromptDeliverySchema.optional(),
-  finalReport: z.object({ schemaVersion: z.literal(1) }).strict().readonly().optional(),
-  preflight: z.object({ schemaVersion: z.literal(1), cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
+  finalReport: z.strictObject({ schemaVersion: z.literal(1) }).readonly().optional(),
+  preflight: z.strictObject({ schemaVersion: z.literal(1), cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
     discovery: z.enum(['disabled', 'repository']),
     helpArgs: z.array(z.enum(['exec', '--help'])).min(1).max(2).readonly(),
     requiredFlags: z.array(z.string().regex(/^--[a-z][a-z-]*$/).max(64)).min(1).max(20).readonly(),
-  }).strict().readonly().optional(),
+  }).readonly().optional(),
   /** C2: `disabled` discovery realised by checkout shaping — the worker's Git checkout leaves these paths out. Frozen at compilation, so the
    * ledger-pinned profile (never a file beside the checkout) is what allocation and patch capture read. Absent = full checkout. */
-  checkout: z.object({ schemaVersion: z.literal(1), hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly().optional(),
-}).strict().refine(value => (value.schemaVersion === 2) === (value.model !== undefined))
+  checkout: z.strictObject({ schemaVersion: z.literal(1), hiddenPaths: workspaceHiddenPathsSchema }).readonly().optional(),
+}).refine(value => (value.schemaVersion === 2) === (value.model !== undefined))
   .refine(value => value.checkout === undefined || value.preflight?.discovery === 'disabled').readonly();
 export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
 export class NativeConnectionError extends Error {

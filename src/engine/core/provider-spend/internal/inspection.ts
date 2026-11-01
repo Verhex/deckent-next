@@ -1,9 +1,8 @@
+import { persistedNumber, persistedInteger, immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_HOLD_PAGE_MAX, type ProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import { advanceProviderSpendPeriod, providerSpendPeriodUsedExact, providerSpendPeriodStateSchema } from './period.js';
 import { ceilProviderSpendExactMinorUnits } from './exact.js';
-import { immutableJsonObjectSchema, parseProviderSpendAccountQuery, PROVIDER_SPEND_SCOPE_BUDGET_ID, PROVIDER_SPEND_HOLD_PAGE_MAX,
-  type ProviderSpendAccountQuery, type ProviderSpendExactAccountQuery } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { parseProviderSpendAuditReceipt, type ProviderSpendAuditReceipt } from './audit-receipt.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from './checkpoint.js';
@@ -23,12 +22,12 @@ export interface ProviderSpendAccountReader {
 /** Settled totals may combine local calculations and provider-reported charges; source subtotals are not exposed.
  * Reserved amounts include held reservations; hold-reason breakdown is not exposed. Neither total is an invoice.
  * reservationCount counts financial records, not model-call quota. Checksums do not constitute a history audit. */
-const holdPageSchema = z.object({ entries: z.array(z.object({ invocationId: z.string().min(1), amountMinorUnits: z.number().int().nonnegative().safe(),
-  reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).max(PROVIDER_SPEND_HOLD_PAGE_MAX),
-  nextAfterInvocationId: z.string().min(1).nullable() }).strict().readonly();
+const holdPageSchema = z.strictObject({ entries: z.array(z.strictObject({ invocationId: z.string().min(1), amountMinorUnits: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  reason: z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) }).readonly()).max(PROVIDER_SPEND_HOLD_PAGE_MAX),
+  nextAfterInvocationId: z.string().min(1).nullable() }).readonly();
 export type ProviderSpendHoldPage = z.infer<typeof holdPageSchema>;
-const periodViewSchema = z.object({ schemaVersion: z.literal(1), asOfMs: z.number().int().nonnegative().safe(),
-  state: providerSpendPeriodStateSchema, localTimeZone: z.string().min(1).max(128), usedExactMinorUnits: z.string(), remainingMinorUnits: z.number().int().nonnegative().safe() }).strict().readonly();
+const periodViewSchema = z.strictObject({ schemaVersion: z.literal(1), asOfMs: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  state: providerSpendPeriodStateSchema, localTimeZone: z.string().min(1).max(128), usedExactMinorUnits: z.string(), remainingMinorUnits: persistedInteger().nonnegative().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export function providerSpendPeriodView(checkpoint: ProviderSpendCheckpoint, asOfMs: number, localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   const account = advanceProviderSpendPeriod(checkpoint.account, asOfMs);
   if (!account.period) return undefined;
@@ -40,9 +39,9 @@ export type ProviderSpendAccountInspection = Readonly<{ schemaVersion: 2 | 3; sc
   budgetRevision: number; checkpoint: ProviderSpendCheckpoint | null; audit: ProviderSpendAuditReceipt | null;
   spendingHistoryIntegrity: 'not-recorded' | 'consistent' | 'stale'; period?: z.infer<typeof periodViewSchema> | undefined; holds?: ProviderSpendHoldPage | undefined }>;
 
-const resultSchema = immutableJsonObjectSchema.pipe(z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), scopeId: z.string(),
-  budgetId: z.string(), budgetRevision: z.number(), checkpoint: z.unknown().nullable(),
-  audit: z.unknown().nullable(), spendingHistoryIntegrity: z.enum(['not-recorded', 'consistent', 'stale']), period: periodViewSchema.optional(), holds: holdPageSchema.optional() }).strict().readonly());
+const resultSchema = immutableJsonObjectSchema.pipe(z.strictObject({ schemaVersion: z.union([z.literal(2), z.literal(3)]), scopeId: z.string(),
+  budgetId: z.string(), budgetRevision: persistedNumber(z.number()), checkpoint: z.unknown().optional().nullable(),
+  audit: z.unknown().optional().nullable(), spendingHistoryIntegrity: z.enum(['not-recorded', 'consistent', 'stale']), period: periodViewSchema.optional(), holds: holdPageSchema.optional() }).readonly());
 
 export function parseProviderSpendAccountInspectionForQuery(queryInput: unknown, resultInput: unknown): ProviderSpendAccountInspection {
   let query: ProviderSpendAccountQuery;

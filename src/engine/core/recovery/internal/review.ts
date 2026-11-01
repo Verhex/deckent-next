@@ -23,7 +23,7 @@ export interface RecoveryReviewPorts extends RecoveryRolloutPorts {
   readonly policyRevision: string;
   now(): number;
 }
-const scopeSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict();
+const scopeSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema });
 const verdictSchema = scopeSchema.extend({ caseId: z.string().regex(/^[a-f0-9]{64}$/u), detection: z.enum(['lost', 'not-lost']), choice: z.enum(RECOVERY_DECISION_ACTIONS).nullable() })
   .strict().refine(value => (value.choice === null) === (value.detection === 'not-lost'));
 

@@ -1,24 +1,23 @@
-import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
+import { persistedInteger, clientCommandIdSchema, identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Effect class of a catalog operation. `read` never changes the target; `write` is a conditional, compensable-or-not change;
  * `irreversible` cannot be undone even by compensation (it must be approval-gated by catalog data). */
 export const effectClassSchema = z.enum(['read', 'write', 'irreversible']);
-export const operationRefSchema = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict().readonly();
+export const operationRefSchema = z.strictObject({ id: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly();
 export type OperationRef = z.infer<typeof operationRefSchema>;
 /** Catalog data (registry/config), not code: what an operation does and which guarantees its target must offer. */
-export const operationDescriptorSchema = z.object({
+export const operationDescriptorSchema = z.strictObject({
   schemaVersion: z.literal(1), operation: operationRefSchema, targetKind: identitySchema, effectClass: effectClassSchema,
   approval: z.enum(['policy', 'required']),
   precondition: z.enum(['record-version', 'none']),
   compensation: operationRefSchema.nullable(),
-  inputMaxBytes: z.number().int().positive().max(1_048_576),
+  inputMaxBytes: persistedInteger().positive().max(1_048_576),
   /** C12: how long an `allow` decision admits the approved command (from its decision time) before it is refused as expired; absent →
    * the installation's `approvals.requestTtlMs`. No schema default: a stored descriptor must re-parse byte for byte (intent CAS). */
-  admitWithinMs: z.number().int().positive().safe().optional(),
+  admitWithinMs: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
   /** POLICY-ADMIN I5-i: an `authority` operation changes who may do what. Every generic producer (CLI `deckent operation`, SDK, the
    * runtime service behind MCP `execute_operation`, agent tools) refuses it before any policy, ledger or target access
    * (`OPERATION_SURFACE_RESTRICTED`); only the authority producer runs it. Versioned code class, not a grant; absent = generic. */
@@ -30,7 +29,7 @@ export const operationDescriptorSchema = z.object({
   /** BeUser (lead 2026-10-28): how the approval card names each top-level input field (`field → label`, the catalog author's words). Absent:
    * the field's own name. No default (byte-for-byte re-parse); presentation only, never authority. */
   inputLabels: z.record(z.string().min(1).max(128), z.string().min(1).max(128)).refine(value => Object.keys(value).length <= 64).optional(),
-}).strict().superRefine((value, context) => {
+}).superRefine((value, context) => {
   if (value.effectClass === 'irreversible' && value.approval !== 'required') context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_REQUIRES_APPROVAL' });
   if (value.effectClass === 'irreversible' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_NOT_COMPENSABLE' });
   if (value.effectClass === 'read' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_READ_NOT_COMPENSABLE' });
@@ -38,24 +37,24 @@ export const operationDescriptorSchema = z.object({
 export type OperationDescriptor = z.infer<typeof operationDescriptorSchema>;
 /** Opaque, adapter-interpreted record address (ERP entity key, Git ref, ...). Never a URL or credential, and never a host path: the one
  * path-shaped address is the Core `workspace-file` target's workspace-relative path, resolved only through its workspace scope. */
-export const effectTargetRefSchema = z.object({ kind: identitySchema, id: z.string().min(1).max(512)
-  .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) }).strict().readonly();
+export const effectTargetRefSchema = z.strictObject({ kind: identitySchema, id: z.string().min(1).max(512)
+  .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) }).readonly();
 export type EffectTargetRef = z.infer<typeof effectTargetRefSchema>;
-export const effectCommandSchema = z.object({
+export const effectCommandSchema = z.strictObject({
   schemaVersion: z.literal(1), commandId: clientCommandIdSchema, scopeId: identitySchema, operation: operationRefSchema,
-  target: effectTargetRefSchema, idempotencyKey: identitySchema, input: z.unknown(),
+  target: effectTargetRefSchema, idempotencyKey: identitySchema, input: z.unknown().optional(),
   /** The record version the caller based its decision on; required when the catalog demands a record-version precondition. */
   expectedVersion: z.string().min(1).max(256).nullable(),
   /** Set only by a compensation command: the settled command it compensates. */
   compensates: identitySchema.optional(),
-}).strict().readonly();
+}).readonly();
 export type EffectCommand = z.infer<typeof effectCommandSchema>;
-const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
+const actorSchema = z.strictObject({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).readonly();
 /** S6R-1: which execution produced an intent — the Attempt that ran it, or `principal`: the actor's own direct command (CLI, SDK, runtime peer,
  * chat turn) with no Attempt. Set by the trusted composition that builds the effect application, never by the wire. */
 export const effectProducerSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('attempt'), identity: attemptIdentitySchema }).strict(),
-  z.object({ kind: z.literal('principal') }).strict(),
+  z.strictObject({ kind: z.literal('attempt'), identity: attemptIdentitySchema }),
+  z.strictObject({ kind: z.literal('principal') }),
 ]).readonly();
 export type EffectProducer = z.infer<typeof effectProducerSchema>;
 /** The producer of every direct command (no Attempt): CLI/SDK/runtime-peer operations, chat-turn tools, policy and instruction writers. */
@@ -66,7 +65,7 @@ export const effectStateSchema = z.enum(['claimed', 'settled', 'unknown', 'refus
 export const effectRefusalSchema = z.enum(['EFFECT_PRECONDITION_CHANGED', 'EFFECT_REJECTED']);
 export type EffectState = z.infer<typeof effectStateSchema>;
 /** Durable intent recorded before any effect; `inputDigest` binds the canonical payload and `idempotencyKeyHash` the scoped key. */
-export const effectIntentSchema = z.object({
+export const effectIntentSchema = z.strictObject({
   schemaVersion: z.literal(1), command: effectCommandSchema, descriptor: operationDescriptorSchema, actor: actorSchema,
   idempotencyKeyHash: digest, inputDigest: digest,
   /** The only idempotency key the target ever sees: namespaced by scope, target and operation, so two scopes (or two
@@ -76,19 +75,19 @@ export const effectIntentSchema = z.object({
   targetBinding: digest.optional(),
   /** The operation approval this intent consumed (C12 G2): the claim is the single use of that approval; every later gate pass of this
    * command verifies the referenced record instead of the admission window. Absent when policy allowed the command outright. */
-  approval: z.object({ approvalId: identitySchema, actionDigest: digest }).strict().readonly().optional(),
+  approval: z.strictObject({ approvalId: identitySchema, actionDigest: digest }).readonly().optional(),
   /** Mandatory for every intent claimed from S6R-1 on (the store refuses a new intent without it); absent only on older intents, which
    * recovery treats by the fail-closed window rule, never as a match. */
   producer: effectProducerSchema.optional(),
-}).strict().readonly();
+}).readonly();
 export type EffectIntent = z.infer<typeof effectIntentSchema>;
 export type EffectIntentApproval = NonNullable<EffectIntent['approval']>;
 /** Target evidence that this intent's effect happened (idempotency record, fence). `version` is the record version after it. */
-export const effectEvidenceSchema = z.object({ kind: z.enum(['idempotency-record', 'fence']), version: z.string().min(1).max(256).nullable(),
-  observedAt: counterSchema }).strict().readonly();
+export const effectEvidenceSchema = z.strictObject({ kind: z.enum(['idempotency-record', 'fence']), version: z.string().min(1).max(256).nullable(),
+  observedAt: counterSchema }).readonly();
 export type EffectEvidence = z.infer<typeof effectEvidenceSchema>;
-export const effectRecordSchema = z.object({ intent: effectIntentSchema, sequence: z.number().int().positive().safe(), state: effectStateSchema,
-  evidence: effectEvidenceSchema.nullable(), refusal: effectRefusalSchema.nullable() }).strict().readonly()
+export const effectRecordSchema = z.strictObject({ intent: effectIntentSchema, sequence: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), state: effectStateSchema,
+  evidence: effectEvidenceSchema.nullable(), refusal: effectRefusalSchema.nullable() }).readonly()
   .refine(record => (record.state === 'settled') === (record.evidence !== null) && (record.state === 'refused') === (record.refusal !== null));
 export type EffectRecord = z.infer<typeof effectRecordSchema>;
 

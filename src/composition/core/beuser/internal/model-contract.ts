@@ -4,8 +4,8 @@ import { BeuserContractError, beuserSurfaceCommandSchema, type BeuserContext, ty
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength } from '#adapters/index.js';
 type ModelInvocationResult = Parameters<typeof extractOpenAiChatTextFromInvocation>[0];
 
-const registry = z.object({ schemaVersion: z.literal(1), revision: z.string().min(1), language: z.string().min(1),
-  walker: z.string().min(1), evaluator: z.string().min(1) }).strict().parse(instructions);
+const registry = z.strictObject({ schemaVersion: z.literal(1), revision: z.string().min(1), language: z.string().min(1),
+  walker: z.string().min(1), evaluator: z.string().min(1) }).parse(instructions);
 /** Only evaluator messages can contain sealed harness evidence. Persona and screen stay in the data message. */
 export function beuserModelMessages(role: BeuserModelRole, input: unknown, evidence?: unknown) {
   return [{ role: 'system' as const, content: `${registry.revision}\n${role === 'beuser-walker' ? registry.walker : registry.evaluator}` },
@@ -24,7 +24,7 @@ export function decodeBeuserWalkerOutput(value: ModelInvocationResult, binding: 
   if (!parsed.success) throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID');
   return parsed.data;
 }
-const experienceSchema = z.object({ verdict: z.enum(['pass', 'friction', 'fail', 'unknown']), evidenceRefs: z.array(z.string()) }).strict();
+const experienceSchema = z.strictObject({ verdict: z.enum(['pass', 'friction', 'fail', 'unknown']), evidenceRefs: z.array(z.string()) });
 export function decodeBeuserEvaluatorOutput(value: ModelInvocationResult, evidenceRefs: readonly string[]) {
   const parsed = experienceSchema.safeParse(modelJson(value));
   if (!parsed.success || !parsed.data.evidenceRefs.every(ref => evidenceRefs.includes(ref))) throw new BeuserContractError('BEUSER_MODEL_OUTPUT_INVALID');

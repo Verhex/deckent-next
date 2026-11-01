@@ -19,11 +19,11 @@ export class RecoveryError extends Error {
  * settled intent's operation declares `idempotencyScope: 'task'`), `not-declared` (one does not: a person decides) or `over-bound` (the fact list
  * would exceed the registry bound). `facts`: what a new Attempt may learn of the settled work; it is never re-executed.
  */
-export const recoveryEffectGateSchema = z.object({ schemaVersion: z.literal(1), result: z.enum(['clear', 'reconciled', 'open']), complete: z.boolean(),
+export const recoveryEffectGateSchema = z.strictObject({ schemaVersion: z.literal(1), result: z.enum(['clear', 'reconciled', 'open']), complete: z.boolean(),
   settled: z.enum(['none', 'task-idempotent', 'not-declared', 'over-bound']),
-  intents: z.array(z.object({ commandId: identitySchema, state: effectStateSchema, producer: z.enum(['attempt', 'legacy']) }).strict().readonly()).max(1024).readonly(),
-  facts: z.array(z.object({ commandId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema, version: z.string().min(1).max(256).nullable(),
-    observedAt: counterSchema }).strict().readonly()).max(256).readonly() }).strict().readonly();
+  intents: z.array(z.strictObject({ commandId: identitySchema, state: effectStateSchema, producer: z.enum(['attempt', 'legacy']) }).readonly()).max(1024).readonly(),
+  facts: z.array(z.strictObject({ commandId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema, version: z.string().min(1).max(256).nullable(),
+    observedAt: counterSchema }).readonly()).max(256).readonly() }).readonly();
 export type RecoveryEffectGate = z.infer<typeof recoveryEffectGateSchema>;
 const OPEN = new Set(['claimed', 'unknown']);
 

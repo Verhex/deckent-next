@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
 import type { FirstCommitGit } from './first-commit.js';
-const receiptSchema = z.object({ schemaVersion: z.literal(1), commit: z.string().regex(/^[a-f0-9]{40,64}$/u),
-  pathsDigest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict();
+const receiptSchema = z.strictObject({ schemaVersion: z.literal(1), commit: z.string().regex(/^[a-f0-9]{40,64}$/u),
+  pathsDigest: z.string().regex(/^[a-f0-9]{64}$/u) });
 export const recoveryNames = { receipt: 'deckent-first-commit-recovery.json', paths: 'deckent-first-commit-paths.nul' };
 const PRIVATE_ACCESS_MASK = 0o077;
 const GIT_ROW_OVERHEAD = 144; // mode, object type/hash and stage beside a maximum-size path.

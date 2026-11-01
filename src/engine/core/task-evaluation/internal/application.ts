@@ -1,4 +1,4 @@
-import { clientCommandIdSchema } from '#domain/index.js';
+import { clientCommandIdSchema, coreEvidenceTypeSchema } from '#domain/index.js';
 import { z } from 'zod';
 import { detectWorkerQuota } from './quota.js';
 import { readWorkspaceChange } from './workspace-change.js';
@@ -20,14 +20,13 @@ import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
 import { operationEvidenceBinding } from './operation-binding.js';
 import type { ReattemptEffects } from '#engine/core/workspace-patch/index.js';
-import { coreEvidenceTypeSchema } from '#domain/index.js';
 import { BEUSER_EVALUATOR, type BeuserEvidence } from '#capabilities/index.js';
 const RETAINED_OUTPUT_EVIDENCE = coreEvidenceTypeSchema.enum['retained-artifact'];
 /** R3 retry inputs: the installation backoff and the one adapter effect classifier (shared with the delivery re-attempt). */
 export interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
 
-export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
-  identity: attemptIdentitySchema, expectedRevision: counterSchema }).strict();
+export const taskEvaluationCommandSchema = z.strictObject({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
+  identity: attemptIdentitySchema, expectedRevision: counterSchema });
 export type TaskEvaluationCommand = z.infer<typeof taskEvaluationCommandSchema>;
 export interface TaskEvaluationAuthorization {
   authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void>;

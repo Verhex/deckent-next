@@ -50,7 +50,7 @@ export function createImmutableJsonObjectSchema(inputLimits: JsonValueLimits) {
   if (![limits.maxDepth, limits.maxNodes, limits.maxCodeUnits].every(value => Number.isSafeInteger(value) && value > 0)) {
     throw new TypeError('JSON_VALUE_LIMITS_INVALID');
   }
-  return z.unknown().transform((input, context): JsonObject => {
+  return z.unknown().optional().transform((input, context): JsonObject => {
     try {
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('JSON_VALUE_INVALID');
       return copyJson(input, limits) as JsonObject;
@@ -58,6 +58,9 @@ export function createImmutableJsonObjectSchema(inputLimits: JsonValueLimits) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'JSON_VALUE_INVALID' });
       return z.NEVER;
     }
-  });
+  }) as z.ZodType<JsonObject> & {
+    // The bounded JSON copy is deliberately wider than the next business schema; both parsers still run.
+    pipe<T extends z.ZodType>(schema: T): z.ZodPipe<z.ZodType<JsonObject>, T>;
+  };
 }
 export const immutableJsonObjectSchema = createImmutableJsonObjectSchema(JSON_VALUE_LIMITS);

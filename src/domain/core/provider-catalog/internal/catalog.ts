@@ -13,33 +13,33 @@ export const NATIVE_MODEL_ID_MAX_LENGTH = 1024;
 
 const nativeIdSchema = z.string().min(1).max(NATIVE_MODEL_ID_MAX_LENGTH).refine(value => value.trim() === value &&
   ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
-const capabilitySchema = z.object({
+const capabilitySchema = z.strictObject({
   id: identitySchema,
   version: counterSchema.positive(),
   state: z.enum(['supported', 'unsupported', 'unknown']),
-}).strict().readonly();
-export const providerProtocolSchema = z.object({
+}).readonly();
+export const providerProtocolSchema = z.strictObject({
   family: identitySchema,
   version: identitySchema,
   capabilities: z.array(capabilitySchema).readonly(),
-}).strict().readonly();
-const modelSchema = z.object({
+}).readonly();
+const modelSchema = z.strictObject({
   id: identitySchema,
   version: counterSchema.positive(),
   nativeId: nativeIdSchema,
   protocols: z.array(providerProtocolSchema).min(1).readonly(),
-}).strict().readonly();
-const providerSchema = z.object({
+}).readonly();
+const providerSchema = z.strictObject({
   id: identitySchema,
   version: counterSchema.positive(),
   models: z.array(modelSchema).readonly(),
-}).strict().readonly();
+}).readonly();
 /** Strict structural schema suitable for the config-section registry. Cross-reference admission lives in parseProviderCatalog. */
-export const providerCatalogObjectSchema = z.object({
+export const providerCatalogObjectSchema = z.strictObject({
   schemaVersion: z.literal(PROVIDER_CATALOG_SCHEMA_VERSION),
   revision: identitySchema,
   providers: z.array(providerSchema).readonly(),
-}).strict();
+});
 
 export type ProviderCatalog = Readonly<z.infer<typeof providerCatalogObjectSchema>>;
 export type ProviderCatalogErrorCode = 'PROVIDER_CATALOG_INVALID' | 'PROVIDER_CATALOG_DUPLICATE';

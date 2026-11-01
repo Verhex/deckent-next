@@ -10,32 +10,32 @@ import { parseProviderSpendMeasurement, type ProviderSpendMeasurement } from './
 
 const amount = counterSchema, digest = z.string().regex(/^[a-f0-9]{64}$/);
 const holdReason = z.enum(['unknown', 'missing-usage', 'invalid-usage', 'price-unavailable', 'overrun']);
-const accountSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), period: providerSpendPeriodStateSchema.optional(), budget: providerSpendBudgetSchema,
-  reservedMinorUnits: amount, settledMinorUnits: amount, settledExactMinorUnits: z.string(), frozen: z.boolean(), budgetRevisionDigest: digest.optional(), budgetRevisionCommandId: identitySchema.optional(), unfrozenAtBudgetRevision: counterSchema.positive().optional() }).strict().readonly();
+const accountSchema = z.strictObject({ schemaVersion: z.union([z.literal(2), z.literal(3)]), period: providerSpendPeriodStateSchema.optional(), budget: providerSpendBudgetSchema,
+  reservedMinorUnits: amount, settledMinorUnits: amount, settledExactMinorUnits: z.string(), frozen: z.boolean(), budgetRevisionDigest: digest.optional(), budgetRevisionCommandId: identitySchema.optional(), unfrozenAtBudgetRevision: counterSchema.positive().optional() }).readonly();
 const settlementSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('not-sent'), evidenceDigest: digest }).strict(),
-  z.object({ kind: z.literal('rejected-no-charge'), evidenceDigest: digest }).strict(),
-  z.object({ kind: z.literal('measured-local'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
-  z.object({ kind: z.literal('measured-tariff'), measurement: z.unknown(), evidenceDigest: digest }).strict(),
-  z.object({ kind: z.literal('provider-reported'), measurement: z.unknown(), evidenceDigest: digest }).strict(),
-  z.object({ kind: z.literal('hold'), reason: holdReason.exclude(['overrun']), evidenceDigest: digest }).strict(),
+  z.strictObject({ kind: z.literal('not-sent'), evidenceDigest: digest }),
+  z.strictObject({ kind: z.literal('rejected-no-charge'), evidenceDigest: digest }),
+  z.strictObject({ kind: z.literal('measured-local'), amountMinorUnits: amount, evidenceDigest: digest }),
+  z.strictObject({ kind: z.literal('measured-tariff'), measurement: z.unknown().optional(), evidenceDigest: digest }),
+  z.strictObject({ kind: z.literal('provider-reported'), measurement: z.unknown().optional(), evidenceDigest: digest }),
+  z.strictObject({ kind: z.literal('hold'), reason: holdReason.exclude(['overrun']), evidenceDigest: digest }),
 ]).readonly();
 const dispositionSchema = z.discriminatedUnion('state', [
-  z.object({ state: z.literal('reserved') }).strict(),
-  z.object({ state: z.literal('released-not-sent'), evidenceDigest: digest }).strict(),
-  z.object({ state: z.literal('released-no-charge'), evidenceDigest: digest }).strict(),
-  z.object({ state: z.literal('settled-local'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
-  z.object({ state: z.literal('settled-measured-tariff'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
-  z.object({ state: z.literal('settled-provider-reported'), amountMinorUnits: amount, evidenceDigest: digest }).strict(),
-  z.object({ state: z.literal('held'), reason: holdReason, observedMinorUnits: amount.nullable(), evidenceDigest: digest }).strict(),
+  z.strictObject({ state: z.literal('reserved') }),
+  z.strictObject({ state: z.literal('released-not-sent'), evidenceDigest: digest }),
+  z.strictObject({ state: z.literal('released-no-charge'), evidenceDigest: digest }),
+  z.strictObject({ state: z.literal('settled-local'), amountMinorUnits: amount, evidenceDigest: digest }),
+  z.strictObject({ state: z.literal('settled-measured-tariff'), amountMinorUnits: amount, evidenceDigest: digest }),
+  z.strictObject({ state: z.literal('settled-provider-reported'), amountMinorUnits: amount, evidenceDigest: digest }),
+  z.strictObject({ state: z.literal('held'), reason: holdReason, observedMinorUnits: amount.nullable(), evidenceDigest: digest }),
 ]).readonly();
-const reservationSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]), descriptor: providerSpendReservationDescriptorSchema,
-  disposition: dispositionSchema, measurement: z.unknown().nullable(), reconciliation: z.object({
+const reservationSchema = z.strictObject({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]), descriptor: providerSpendReservationDescriptorSchema,
+  disposition: dispositionSchema, measurement: z.unknown().optional().nullable(), reconciliation: z.strictObject({
     commandId: identitySchema, budgetRevision: counterSchema.positive(), resolution: z.enum(['settle', 'release', 'write-off']), exactMinorUnits: z.string(),
     evidenceKind: z.enum(['provider-usage', 'console-figure', 'write-off']), evidenceDigest: digest, receiptDigest: digest,
-  }).strict().readonly().optional(), recovery: z.object({ schemaVersion: z.literal(1), recordedAtMs: counterSchema, previousSchemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
+  }).readonly().optional(), recovery: z.strictObject({ schemaVersion: z.literal(1), recordedAtMs: counterSchema, previousSchemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]),
     previousDisposition: dispositionSchema, previousDigest: digest, certificationDigest: digest, digest,
-  }).strict().readonly().optional() }).strict().readonly();
+  }).readonly().optional() }).readonly();
 export type ProviderSpendAccount = z.infer<typeof accountSchema>;
 export type ProviderSpendReservation = Omit<z.infer<typeof reservationSchema>, 'measurement'> & {
   readonly measurement: ProviderSpendMeasurement | null;
@@ -53,7 +53,7 @@ export function providerSpendQuoteDigest(input: unknown): string {
     || providerSpendEvidenceDigest(quote.meter.evidence) !== quote.meter.evidenceDigest) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   return createHash('sha256').update(`deckent.provider-spend-quote.v1\n${JSON.stringify(quote)}`).digest('hex');
 }
-function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): T {
+function parse<T>(schema: z.ZodType<T, unknown>, input: unknown): T {
   const copied = immutableJsonObjectSchema.safeParse(input), parsed = copied.success && schema.safeParse(copied.data);
   if (!parsed || !parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   return parsed.data;

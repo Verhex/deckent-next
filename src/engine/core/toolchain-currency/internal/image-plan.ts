@@ -1,5 +1,6 @@
-import { z } from 'zod';
+import { persistedUrl } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
+import { z } from 'zod';
 
 /** No credential or token can become Dockerfile text, an argument or retained evidence. */
 export function workerSourceUrl(value: string, proxy = false): string {
@@ -12,14 +13,14 @@ export function workerSourceUrl(value: string, proxy = false): string {
 const version = z.string().regex(/^r[1-9][0-9]*-\d{8}$/u);
 const id = z.string().regex(/^[a-z0-9]{1,32}$/u);
 const installer = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('npm'), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/u) }).strict(),
-  z.object({ kind: z.literal('vendor-script'), url: z.string().url(), home: z.string().regex(/^\/opt\/[a-z0-9][\w.-]{0,63}$/u), bin: z.array(z.string().regex(/^[a-z0-9][\w.-]{0,63}$/u)).nonempty() }).strict(),
+  z.strictObject({ kind: z.literal('npm'), package: z.string().regex(/^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/u) }),
+  z.strictObject({ kind: z.literal('vendor-script'), url: persistedUrl(), home: z.string().regex(/^\/opt\/[a-z0-9][\w.-]{0,63}$/u), bin: z.array(z.string().regex(/^[a-z0-9][\w.-]{0,63}$/u)).nonempty() }),
 ]);
-export const layeredWorkerRecipeSchema = z.object({ schemaVersion: z.literal(3), repository: z.string().min(1), baseRepository: z.string().min(1),
-  imageVersion: version, previousVersion: version.nullable(), npmRegistry: z.string().url(),
-  base: z.object({ image: z.string().min(1), apt: z.array(z.string().regex(/^[a-z0-9][a-z0-9+.-]*$/u)).nonempty() }).strict(),
-  providers: z.array(z.object({ id, installer, command: z.string().regex(/^[a-z0-9][\w.-]{0,63}$/u), helpArgs: z.array(z.string()), requiredFlags: z.array(z.string()) }).strict()).nonempty(),
-}).strict();
+export const layeredWorkerRecipeSchema = z.strictObject({ schemaVersion: z.literal(3), repository: z.string().min(1), baseRepository: z.string().min(1),
+  imageVersion: version, previousVersion: version.nullable(), npmRegistry: persistedUrl(),
+  base: z.strictObject({ image: z.string().min(1), apt: z.array(z.string().regex(/^[a-z0-9][a-z0-9+.-]*$/u)).nonempty() }),
+  providers: z.array(z.strictObject({ id, installer, command: z.string().regex(/^[a-z0-9][\w.-]{0,63}$/u), helpArgs: z.array(z.string()), requiredFlags: z.array(z.string()) })).nonempty(),
+});
 export type LayeredWorkerRecipe = z.infer<typeof layeredWorkerRecipeSchema>;
 export type WorkerInstallInput = Readonly<{ kind: 'npm'; package: string; version: string } | { kind: 'vendor-script'; url: string; sha256: string }>;
 export type WorkerBuildPlan = Readonly<{ schemaVersion: 1; imageVersion: string; previousVersion: string | null; base: { image: string; pull: boolean }; buildTimeoutMs: number;

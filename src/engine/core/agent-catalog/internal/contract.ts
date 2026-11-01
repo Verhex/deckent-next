@@ -1,32 +1,30 @@
+import { persistedInteger, agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, identitySchema, signerPublicKeySchema, skillContentSchema, skillSignatureSchema, skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type ReadableSkillDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { z } from 'zod';
-import { agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, identitySchema, signerPublicKeySchema, skillContentSchema, skillSignatureSchema,
-  skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type ReadableSkillDefinition,
-  type VerifiedPrincipal } from '#domain/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { CatalogEvolutionChange, CatalogLessonRef, CatalogSuggestion, CatalogSuggestionState, StoredCatalogSuggestion } from './suggestions.js';
 
 const scoped = { schemaVersion: z.literal(1), scopeId: identitySchema };
-const limit = z.number().int().min(1).max(AGENT_CATALOG_LIMITS.pageMax);
+const limit = persistedInteger().min(1).max(AGENT_CATALOG_LIMITS.pageMax);
 /** null creates the id; a number revises exactly that current revision (compare-and-set). */
 const expectedRevision = counterSchema.positive().nullable();
 /** S8-5 `signed`: an externally held AI/system key's signature over the `catalog-action:1` bytes (host-custody principals are signed by the signer service). */
 const signed = catalogSignatureSchema.optional();
 /** S8-4 `fromSuggestion`: the open suggestion this define decides (a person's draft card; the revision names it in `provenance.origin`). */
 const fromSuggestion = z.string().regex(/^[a-f0-9]{64}$/).optional();
-export const agentDefineCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, agentId: catalogIdSchema, expectedRevision, content: agentContentSchema, signed, fromSuggestion }).strict();
-export const skillDefineCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema, signed, fromSuggestion }).strict();
+export const agentDefineCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, agentId: catalogIdSchema, expectedRevision, content: agentContentSchema, signed, fromSuggestion });
+export const skillDefineCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema, signed, fromSuggestion });
 /** An import bundle: the bytes, the publisher's pin and signature. Nullable pin and signature reach the floor, which refuses them with their own code. */
-export const skillImportCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema,
-  source: z.object({ ref: skillSourceRefSchema }).strict(), pin: z.string().regex(/^[a-f0-9]{64}$/).nullable(), signature: skillSignatureSchema.nullable(), signed }).strict();
-const principalRef = z.object({ issuer: identitySchema, subject: identitySchema }).strict();
+export const skillImportCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema,
+  source: z.strictObject({ ref: skillSourceRefSchema }), pin: z.string().regex(/^[a-f0-9]{64}$/).nullable(), signature: skillSignatureSchema.nullable(), signed });
+const principalRef = z.strictObject({ issuer: identitySchema, subject: identitySchema });
 const signerLabel = z.string().min(1).max(AGENT_CATALOG_LIMITS.nameMaxBytes);
 /** S8-5 signer cards (a person's terminal act): enrol generates a host-custody action key for an AI/system principal; add registers an external public key. */
-export const signerEnrolCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, principal: principalRef, label: signerLabel }).strict();
-export const signerAddCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, purpose: z.enum(SIGNER_PURPOSES), publicKey: signerPublicKeySchema,
-  principal: principalRef.nullable(), label: signerLabel }).strict();
-export const signerRevokeCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, keyId: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
-export const signerRepairCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema }).strict();
-export const signerListQuerySchema = z.object({ ...scoped }).strict();
+export const signerEnrolCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, principal: principalRef, label: signerLabel });
+export const signerAddCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, purpose: z.enum(SIGNER_PURPOSES), publicKey: signerPublicKeySchema,
+  principal: principalRef.nullable(), label: signerLabel });
+export const signerRevokeCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema, keyId: z.string().regex(/^[a-f0-9]{64}$/) });
+export const signerRepairCommandSchema = z.strictObject({ ...scoped, commandId: clientCommandIdSchema });
+export const signerListQuerySchema = z.strictObject({ ...scoped });
 export type SignerEnrolCommand = z.infer<typeof signerEnrolCommandSchema>;
 export type SignerAddCommand = z.infer<typeof signerAddCommandSchema>;
 export type SignerRevokeCommand = z.infer<typeof signerRevokeCommandSchema>;
@@ -35,19 +33,19 @@ export type SignerListQuery = z.infer<typeof signerListQuerySchema>;
 /** A signer row as people see it, with how many committed catalog rows it signed (kept on revoke and marked "signer revoked", owner Q-S13). */
 export interface SignerListing { readonly schemaVersion: 1; readonly scopeId: string; readonly items: readonly (SignerKey & { readonly signedRows: number })[]; readonly log: 'ok' | 'broken' }
 export interface SignerMutation { readonly schemaVersion: 1; readonly replayed: boolean; readonly item: SignerKey; readonly signedRows?: number; readonly logged?: boolean }
-export const agentListQuerySchema = z.object({ ...scoped, limit }).strict();
-export const agentInspectQuerySchema = z.object({ ...scoped, agentId: catalogIdSchema }).strict();
-export const skillListQuerySchema = z.object({ ...scoped, limit }).strict();
-export const skillInspectQuerySchema = z.object({ ...scoped, skillId: catalogIdSchema }).strict();
+export const agentListQuerySchema = z.strictObject({ ...scoped, limit });
+export const agentInspectQuerySchema = z.strictObject({ ...scoped, agentId: catalogIdSchema });
+export const skillListQuerySchema = z.strictObject({ ...scoped, limit });
+export const skillInspectQuerySchema = z.strictObject({ ...scoped, skillId: catalogIdSchema });
 /** A person's definition file (CLI and later surfaces): the agent's requirements, each skill by id and optionally a revision (default: the current one);
  * the surface resolves every skill to its exact pin before it builds the define command. A skill file is its id plus its content. */
 export const agentDefinitionFileSchema = agentContentSchema.unwrap().omit({ skills: true, parentAgentId: true }).extend({ agentId: catalogIdSchema,
-  skills: z.array(z.object({ skillId: catalogIdSchema, revision: counterSchema.positive().optional() }).strict()).max(AGENT_CATALOG_LIMITS.skillsPerAgentMax).default([]),
-  parentAgentId: catalogIdSchema.nullable().default(null) }).strict();
+  skills: z.array(z.strictObject({ skillId: catalogIdSchema, revision: counterSchema.positive().optional() })).max(AGENT_CATALOG_LIMITS.skillsPerAgentMax).prefault([]),
+  parentAgentId: catalogIdSchema.nullable().prefault(null) }).strict();
 export const skillDefinitionFileSchema = skillContentSchema.unwrap().extend({ skillId: catalogIdSchema }).strict();
 /** BeUser E-02: the `agents import-skill --input` file (the command adds scope, command id and revision); one schema for `--schema` and field refusals. */
-export const skillImportFileSchema = skillContentSchema.unwrap().extend({ skillId: catalogIdSchema, source: z.object({ ref: skillSourceRefSchema }).strict(),
-  pin: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null), signature: skillSignatureSchema.nullable().default(null) }).strict();
+export const skillImportFileSchema = skillContentSchema.unwrap().extend({ skillId: catalogIdSchema, source: z.strictObject({ ref: skillSourceRefSchema }),
+  pin: z.string().regex(/^[a-f0-9]{64}$/).nullable().prefault(null), signature: skillSignatureSchema.nullable().prefault(null) }).strict();
 export type AgentDefineCommand = z.infer<typeof agentDefineCommandSchema>;
 export type SkillDefineCommand = z.infer<typeof skillDefineCommandSchema>;
 export type SkillImportCommand = z.infer<typeof skillImportCommandSchema>;

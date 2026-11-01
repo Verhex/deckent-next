@@ -3,12 +3,12 @@ import { Buffer } from 'node:buffer';
 import { attemptIdentitySchema, identitySchema } from '#domain/index.js';
 import { dispatchTerminalSchema, type DispatchInventoryPage } from '#engine/core/dispatch/index.js';
 
-const inputSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable() }).strict().readonly();
-const entrySchema = z.object({
+const inputSchema = z.strictObject({ schemaVersion: z.literal(1), scopeId: identitySchema, after: identitySchema.nullable() }).readonly();
+const entrySchema = z.strictObject({
   fenced: z.boolean().optional(), identity: attemptIdentitySchema, owner: identitySchema, launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
   terminal: dispatchTerminalSchema.nullable(), cancellationRequested: z.boolean(), outputRecorded: z.boolean(),
-}).strict();
-const pageSchema = z.object({ entries: z.array(entrySchema), nextAfter: identitySchema.nullable() }).strict();
+});
+const pageSchema = z.strictObject({ entries: z.array(entrySchema), nextAfter: identitySchema.nullable() });
 export type ReconciliationRecoveryCommand = z.infer<typeof inputSchema>;
 export interface ReconciliationRecoveryInventory { inspect(command: ReconciliationRecoveryCommand & { limit: number }): Promise<DispatchInventoryPage> }
 export interface ReconciliationRecoveryExecutor {
@@ -21,7 +21,7 @@ export type ReconciliationRecoveryOutcome = Readonly<{ identity: z.infer<typeof 
 export type ReconciliationRecoveryPage = Readonly<{ nextAfter: string | null; outcomes: readonly ReconciliationRecoveryOutcome[] }>;
 
 function failureReason(error: unknown): 'denied' | 'unavailable' {
-  const code = z.object({ code: z.string() }).passthrough().safeParse(error);
+  const code = z.looseObject({ code: z.string() }).safeParse(error);
   return code.success && ['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED', 'POLICY_DENIED',
     'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(code.data.code)
     ? 'denied' : 'unavailable';

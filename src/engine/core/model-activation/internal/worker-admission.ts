@@ -1,5 +1,5 @@
+import { persistedNumber, catalogModelRetired, workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { z } from 'zod';
-import { catalogModelRetired, workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
@@ -40,11 +40,11 @@ export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean
 export class WorkerModelAdmissionError extends Error {
   constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
 }
-const pinned = z.object({ channelId: z.string(), modelId: z.string(), auxiliaryModelIds: z.array(z.string()).readonly(), ...workerModelPinEvidenceShape }).strict();
-const subscriptionSchema = z.object({ schemaVersion: z.number(), provider: z.enum(['claude', 'codex', 'cursor']),
+const pinned = z.strictObject({ channelId: z.string(), modelId: z.string(), auxiliaryModelIds: z.array(z.string()).readonly(), ...workerModelPinEvidenceShape });
+const subscriptionSchema = z.looseObject({ schemaVersion: persistedNumber(z.number()), provider: z.enum(['claude', 'codex', 'cursor']),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
-  preflight: z.object({ cliVersion: z.string() }).passthrough().optional(), model: pinned.optional() }).passthrough();
-const taskSchema = z.object({ taskId: z.string(), profile: z.object({ parameters: z.object({ nativeSubscription: z.unknown().optional() }).passthrough() }).passthrough() }).passthrough();
+  preflight: z.looseObject({ cliVersion: z.string() }).optional(), model: pinned.optional() });
+const taskSchema = z.looseObject({ taskId: z.string(), profile: z.looseObject({ parameters: z.looseObject({ nativeSubscription: z.unknown().optional() }) }) });
 const today = (nowMs: number) => new Date(nowMs).toISOString().slice(0, 10);
 /** The UTC day a catalog lifecycle date is compared with (admission, the activation cascade and an explicit activation). */
 export const catalogDay = today;

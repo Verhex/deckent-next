@@ -1,3 +1,4 @@
+import { persistedInteger } from '#platform/index.js';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
@@ -26,19 +27,19 @@ export const WORKSPACE_FILE_WRITE_OPERATION = Object.freeze({ schemaVersion: 1 a
   targetKind: WORKSPACE_FILE_TARGET_KIND, effectClass: 'write' as const, approval: 'policy' as const, precondition: 'record-version' as const,
   compensation: null, inputMaxBytes: 1_048_576 });
 
-const inputSchema = z.object({ content: z.string() }).strict();
+const inputSchema = z.strictObject({ content: z.string() });
 /**
  * SHELL-OVERLAY: one entry of a sandbox write set (the same `workspace.file.write@1`, a target-internal input form): write the bytes the
  * sandboxed command left in the overlay upper directory at `ref.id` (verified against `digest`, permission bits `mode`), or remove the file.
  * The content never rides the input (the ledger keeps only the input's digest either way); only a target constructed with that upper
  * directory accepts this form — the edit tools' target refuses it.
  */
-const writeSetInputSchema = z.object({ writeSet: z.discriminatedUnion('change', [
-  z.object({ change: z.literal('write'), digest: z.string().regex(/^[0-9a-f]{64}$/), mode: z.number().int().min(0).max(0o777) }).strict(),
-  z.object({ change: z.literal('delete') }).strict(),
+const writeSetInputSchema = z.strictObject({ writeSet: z.discriminatedUnion('change', [
+  z.strictObject({ change: z.literal('write'), digest: z.string().regex(/^[0-9a-f]{64}$/), mode: persistedInteger().min(0).max(0o777) }),
+  z.strictObject({ change: z.literal('delete') }),
   // An empty directory the command removed (its files' removals are their own entries, applied first); version `empty-directory`.
-  z.object({ change: z.literal('rmdir') }).strict(),
-]) }).strict();
+  z.strictObject({ change: z.literal('rmdir') }),
+]) });
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 /** The bytes of `rel` under the (private, settled) upper directory, opened one component at a time with no link followed. */
 async function readUpperFile(upper: string, rel: string, maxBytes: number): Promise<Buffer | null> {
@@ -56,8 +57,8 @@ async function readUpperFile(upper: string, rel: string, maxBytes: number): Prom
   } catch { return null; } finally { await current.close().catch(() => undefined); }
 }
 /** Journal v2 (Astra 2094 R1): the attempt's own evidence. v1 files (content-equality recovery) were never live and read as unknown. */
-const journalSchema = z.object({ schemaVersion: z.literal(2), rel: z.string(), expected: z.string(), next: z.string(), temporary: z.string().min(1),
-  state: z.enum(['prepared', 'committed', 'aborted', 'escaped']), escapedTo: z.string().nullable() }).strict();
+const journalSchema = z.strictObject({ schemaVersion: z.literal(2), rel: z.string(), expected: z.string(), next: z.string(), temporary: z.string().min(1),
+  state: z.enum(['prepared', 'committed', 'aborted', 'escaped']), escapedTo: z.string().nullable() });
 type Journal = z.infer<typeof journalSchema>;
 
 /**

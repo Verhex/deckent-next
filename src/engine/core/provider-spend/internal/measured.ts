@@ -6,16 +6,16 @@ import { parseProviderSpendReportedMeasurement, type ProviderSpendReportedMeasur
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const rate = z.string().regex(/^(0|[1-9]\d*)(\.\d{1,4})?$/);
-const dimensionSchema = z.object({ field: identitySchema, tokens: counterSchema, usdPerMillionTokens: rate }).strict();
+const dimensionSchema = z.strictObject({ field: identitySchema, tokens: counterSchema, usdPerMillionTokens: rate });
 const dimensionsSchema = z.array(dimensionSchema).min(1).max(8).readonly();
-const schema = z.object({ schemaVersion: z.literal(1), basis: z.literal('measured-tariff'),
+const schema = z.strictObject({ schemaVersion: z.literal(1), basis: z.literal('measured-tariff'),
   currency: z.string().regex(/^[A-Z]{3}$/), exactMinorUnits: z.string(), roundedMinorUnits: counterSchema,
   quoteDigest: digest, requestDigest: digest, profileDigest: digest, responseContentDigest: digest,
-  source: z.object({ id: identitySchema, version: counterSchema.positive(), modelId: identitySchema, tariffDigest: digest,
+  source: z.strictObject({ id: identitySchema, version: counterSchema.positive(), modelId: identitySchema, tariffDigest: digest,
     tier: counterSchema.or(z.literal('upper-bound')).nullable(), serviceTier: z.union([z.literal('default'), z.literal('flex'), z.literal('priority')]).optional(), cacheSplit: z.enum(['reported', 'dearest', 'none']),
     dimensions: dimensionsSchema,
-  }).strict().readonly(),
-}).strict().readonly();
+  }).readonly(),
+}).readonly();
 export type ProviderSpendTariffMeasurement = z.infer<typeof schema>;
 export type ProviderSpendMeasurement = ProviderSpendReportedMeasurement | ProviderSpendTariffMeasurement;
 /** Integer rate units of 0.0001 USD/MTok; convert once to exact cents, without binary floating point. */

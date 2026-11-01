@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { refuse } from './files.js';
 /** Recovery envelope v1: fixed KDF costs cannot be supplied by an untrusted set. 64 MiB scrypt, AES-256-GCM, fresh salt and nonce. */
 const SCRYPT_MEMORY_CEILING = 100663296;
-const envelope = z.object({ schemaVersion: z.literal(1), kdf: z.literal('scrypt'), cipher: z.literal('aes-256-gcm'),
+const envelope = z.strictObject({ schemaVersion: z.literal(1), kdf: z.literal('scrypt'), cipher: z.literal('aes-256-gcm'),
   salt: z.string().regex(/^[0-9a-f]{32}$/), iv: z.string().regex(/^[0-9a-f]{24}$/), tag: z.string().regex(/^[0-9a-f]{32}$/),
-  ciphertext: z.string().regex(/^[0-9a-f]{64}$/) }).strict();
+  ciphertext: z.string().regex(/^[0-9a-f]{64}$/) });
 function derive(passphrase: string, salt: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => scrypt(passphrase, salt, 32, { N: 65536, r: 8, p: 1, maxmem: SCRYPT_MEMORY_CEILING },
     (error, key) => error ? reject(error) : resolve(key)));

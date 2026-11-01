@@ -6,7 +6,7 @@ import type { WorkerObservation } from '#engine/core/worker-observation/index.js
 import { z } from 'zod';
 
 /** Exact installation/source id; absence retains collection of every configured Next source. */
-export const monitorQuerySchema = z.object({ schemaVersion: z.literal(1), install: z.string().min(1).optional() }).strict();
+export const monitorQuerySchema = z.strictObject({ schemaVersion: z.literal(1), install: z.string().min(1).optional() });
 export type MonitorQuery = z.infer<typeof monitorQuerySchema>;
 
 /**

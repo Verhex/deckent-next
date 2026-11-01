@@ -1,8 +1,7 @@
+import { persistedInteger, identitySchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
-import { identitySchema } from '#domain/core/primitives/index.js';
 import { operationDescriptorSchema } from '#domain/core/effect/index.js';
 import { operationKey } from './catalog.js';
-
 /** Version of the Core port contract a target adapter module binds to (`EffectTarget`, `OperationCatalog`). Bumps only when
  * those ports change incompatibly; a manifest whose range excludes it is refused before anything is registered. */
 export const CORE_API_VERSION = 1;
@@ -11,23 +10,23 @@ export const moduleTierSchema = z.enum(['core', 'base', 'enterprise', 'custom', 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Room for signed Enterprise manifests (owner Q7). Present in v1 so the shape need not change; verification arrives with A04-3,
  * and until then a non-null signature is refused rather than accepted unverified. */
-export const manifestSignatureSchema = z.object({ algorithm: z.literal('ed25519'), keyId: identitySchema, digest, value: z.string().min(1).max(4096) }).strict().readonly();
+export const manifestSignatureSchema = z.strictObject({ algorithm: z.literal('ed25519'), keyId: identitySchema, digest, value: z.string().min(1).max(4096) }).readonly();
 /** Manifest v1: pure data describing one adapter module. Every level, including the `provides` collections, is frozen on parse so
  * an admitted manifest cannot be edited through a returned reference (Astra 2126 R2). `namespace: null` means the root (unprefixed ids) and is only honoured
  * for modules the Core composition passes at registry construction; overlays must own a dotted namespace. Adapter and operation
  * ids provided by a namespaced module must live under `<namespace>.`. `provides.operations` are validated for the adds-only rule
  * (no redefinition of a registered `id@version`) and feed the unified catalog (A04-2) next to the config catalog. */
-export const adapterModuleManifestSchema = z.object({
+export const adapterModuleManifestSchema = z.strictObject({
   schemaVersion: z.literal(1),
-  module: z.object({ id: identitySchema, version: identitySchema, tier: moduleTierSchema, namespace: identitySchema.nullable() }).strict().readonly(),
-  requires: z.object({ coreApi: z.object({ min: z.number().int().positive().safe(), max: z.number().int().positive().safe() }).strict()
-    .refine(range => range.max >= range.min).readonly() }).strict().readonly(),
-  provides: z.object({
-    targetAdapters: z.array(z.object({ adapterId: identitySchema, version: z.number().int().positive().safe() }).strict().readonly()).max(64).readonly(),
+  module: z.strictObject({ id: identitySchema, version: identitySchema, tier: moduleTierSchema, namespace: identitySchema.nullable() }).readonly(),
+  requires: z.strictObject({ coreApi: z.strictObject({ min: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER), max: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) })
+    .refine(range => range.max >= range.min).readonly() }).readonly(),
+  provides: z.strictObject({
+    targetAdapters: z.array(z.strictObject({ adapterId: identitySchema, version: persistedInteger().positive().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER) }).readonly()).max(64).readonly(),
     operations: z.array(operationDescriptorSchema).max(1024).readonly(),
-  }).strict().readonly(),
+  }).readonly(),
   signature: manifestSignatureSchema.nullable(),
-}).strict().readonly();
+}).readonly();
 export type AdapterModuleManifest = z.infer<typeof adapterModuleManifestSchema>;
 export type ModuleTier = z.infer<typeof moduleTierSchema>;
 
